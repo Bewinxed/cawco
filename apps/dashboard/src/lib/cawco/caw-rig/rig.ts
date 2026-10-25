@@ -27,8 +27,6 @@ const PIVOT = CAW_ART.pivots;
 /** An SVG transform matrix `[a, b, c, d, e, f]`. */
 export type Matrix = readonly [number, number, number, number, number, number];
 
-const IDENTITY: Matrix = [1, 0, 0, 1, 0, 0];
-
 export function multiply(m: Matrix, n: Matrix): Matrix {
   return [
     m[0] * n[0] + m[2] * n[1],
@@ -74,6 +72,7 @@ export const BLEND_MS = 640;
 interface Channels {
   aL: number;
   aR: number;
+  beak: number;
   breath: number;
   eL: number;
   eR: number;
@@ -96,6 +95,7 @@ function channels(p: Pose): Channels {
     gx: p.gaze[0],
     gy: p.gaze[1],
     lid: p.lid,
+    beak: p.beak,
     breath: p.breath,
     weight: p.weight,
   };
@@ -198,10 +198,15 @@ export interface EyeFrame {
   upper: number;
 }
 
+/** Where a prop is drawn: under a wing's primaries (held), or on the ground before him. */
+export type PropHome = "handL" | "handR" | "ground";
+
 export interface PropFrame {
+  home: PropHome;
+  /** One per prop: the same object travels from one place to the next. */
   key: string;
+  /** Its matrix in its home's own coordinates (a hand's, for a held prop). */
   m: Matrix;
-  opacity: number;
   prop: PropName;
 }
 
@@ -217,6 +222,7 @@ export interface RigFrame {
     handL: Matrix;
     handR: Matrix;
     head: Matrix;
+    jaw: Matrix;
     legL: Matrix;
     legR: Matrix;
     tail: Matrix;
@@ -259,20 +265,124 @@ function accentOn(
   return a && a.on === hand ? a.amp * beat(t, period, a.every) : 0;
 }
 
-function propFrame(
-  key: string,
-  place: Held | Standing,
-  hands: { handL: Matrix; handR: Matrix },
-  weight: number
-): PropFrame {
-  const base = place.on === "ground" ? IDENTITY : hands[place.on];
-  // Nothing appears from nothing: in from 0.92 of its size as it fades in.
-  const grow = 0.92 + 0.08 * EASE_OUT(weight);
-  const m = multiply(
-    multiply(base, move(place.at[0], place.at[1])),
-    multiply(turn(place.rotate, [0, 0]), scaleAbout(grow, grow, [0, 0]))
+/** The inverse of an affine matrix. */
+function invert(m: Matrix): Matrix {
+  const det = m[0] * m[3] - m[1] * m[2];
+  return [
+    m[3] / det,
+    -m[1] / det,
+    -m[2] / det,
+    m[0] / det,
+    (m[2] * m[5] - m[3] * m[4]) / det,
+    (m[1] * m[4] - m[0] * m[5]) / det,
+  ];
+}
+
+/** A matrix of turn, scale and move only, `k` of the way from `a` to `b` along each. */
+function between(a: Matrix, b: Matrix, k: number): Matrix {
+  const angle = (m: Matrix) => Math.atan2(m[1], m[0]);
+  const size = (m: Matrix) => Math.hypot(m[0], m[1]);
+  let turnBy = angle(b) - angle(a);
+  turnBy -= Math.round(turnBy / (2 * Math.PI)) * 2 * Math.PI;
+  const r = angle(a) + turnBy * k;
+  const sc = size(a) + (size(b) - size(a)) * k;
+  return [
+    Math.cos(r) * sc,
+    Math.sin(r) * sc,
+    -Math.sin(r) * sc,
+    Math.cos(r) * sc,
+    a[4] + (b[4] - a[4]) * k,
+    a[5] + (b[5] - a[5]) * k,
+  ];
+}
+
+/** A prop where its pose places it, in its home's coordinates. */
+function placed(place: Held | Standing, scale = place.scale ?? 1): Matrix {
+  return multiply(
+    move(place.at[0], place.at[1]),
+    multiply(turn(place.rotate, [0, 0]), scaleAbout(scale, scale, [0, 0]))
   );
-  return { key, prop: place.prop, m, opacity: EASE_OUT(weight) };
+}
+
+/**
+ * Where a held prop waits before the wing brings it out: tucked small under
+ * the coverts at the primaries' root, inside his black, where it cannot be
+ * seen. Where a standing prop waits: this far below where it stands, under
+ * the ground line its home is clipped at.
+ */
+const TUCK_SCALE = 0.6;
+const RISE = 120;
+
+/**
+ * A prop `w` of the way out (0 tucked away, 1 in place): a held one slides
+ * out from under the coverts to the feathers' tips, growing to its size; a
+ * standing one rises from below the ground. It is never faded in: what is not
+ * yet out is hidden by his black or the ground.
+ */
+function comingOut(place: Held | Standing, w: number): PropFrame {
+  const out = EASE_OUT(w);
+  if (place.on === "ground") {
+    return {
+      key: place.prop,
+      prop: place.prop,
+      home: "ground",
+      m: multiply(move(0, RISE * (1 - out)), placed(place)),
+    };
+  }
+  const root = PIVOT[place.on];
+  const tucked = placed(
+    { ...place, at: [root[0], root[1]] },
+    (place.scale ?? 1) * TUCK_SCALE
+  );
+  return {
+    key: place.prop,
+    prop: place.prop,
+    home: place.on,
+    m: between(tucked, placed(place), out),
+  };
+}
+
+/**
+ * The props of a blend at progress `k`. The same prop in both poses is one
+ * object: it travels from where it was to where it goes (from his wing down to
+ * the ground, or back up), drawn in the wing that holds it at either end. A
+ * prop only one pose has comes out of his wing or up from the ground, or goes
+ * back the same way.
+ */
+function propsOf(
+  blend: Blend,
+  k: number,
+  hands: { handL: Matrix; handR: Matrix }
+): PropFrame[] {
+  const from = blend.from.prop;
+  const to = blend.to.prop;
+  if (from && to && from.prop === to.prop) {
+    const world = (p: Held | Standing) =>
+      p.on === "ground" ? placed(p) : multiply(hands[p.on], placed(p));
+    let home: PropHome = "ground";
+    if (to.on !== "ground") {
+      home = to.on;
+    } else if (from.on !== "ground") {
+      home = from.on;
+    }
+    const at = between(world(from), world(to), k);
+    return [
+      {
+        key: to.prop,
+        prop: to.prop,
+        home,
+        m: home === "ground" ? at : multiply(invert(hands[home]), at),
+      },
+    ];
+  }
+  const shown: PropFrame[] = [];
+  if (to) {
+    shown.push(comingOut(to, k));
+  }
+  if (from && k < 1) {
+    shown.push(comingOut(from, 1 - k));
+  }
+  return shown;
 }
 
 /**
@@ -394,36 +504,11 @@ export function solve(
     ),
   };
 
-  // Props: the leaving pose's fades out as the arriving pose's fades in.
-  const wingMatrix = {
+  // Props: carried by the wing or the ground, never faded (propsOf).
+  const props = propsOf(blend, k, {
     handL: multiply(body, multiply(wingL, handL)),
     handR: multiply(body, multiply(wingR, handR)),
-  };
-  const props: PropFrame[] = [];
-  const fromProp = blend.from.prop;
-  const toProp = blend.to.prop;
-  const sameProp =
-    fromProp &&
-    toProp &&
-    fromProp.prop === toProp.prop &&
-    fromProp.on === toProp.on &&
-    fromProp.at[0] === toProp.at[0] &&
-    fromProp.at[1] === toProp.at[1];
-  if (toProp) {
-    props.push(
-      propFrame(
-        `${toProp.prop}@${toProp.on}`,
-        toProp,
-        wingMatrix,
-        sameProp ? 1 : k
-      )
-    );
-  }
-  if (fromProp && !sameProp && 1 - k > 0) {
-    props.push(
-      propFrame(`${fromProp.prop}@${fromProp.on}`, fromProp, wingMatrix, 1 - k)
-    );
-  }
+  });
 
   // A wing's edge line stays on his body only while the wing lies over it.
   const lying = (a: number, still: number) =>
@@ -436,6 +521,7 @@ export function solve(
       legR,
       tail,
       head,
+      jaw: turn(c.beak, PIVOT.jaw),
       tuft,
       face,
       beak,

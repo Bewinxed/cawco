@@ -122,14 +122,14 @@
     layers
       .get("line-wingR")
       ?.setAttribute("opacity", String(frame.lines.wingR));
-    const keys = frame.props.map((p) => p.key).join();
-    if (keys !== shown.map((p) => p.key).join()) {
+    // A prop that changes home (from his wing to the ground) is drawn there anew, in place.
+    const homes = (list: PropFrame[]) =>
+      list.map((p) => `${p.key}@${p.home}`).join();
+    if (homes(frame.props) !== homes(shown)) {
       shown = frame.props;
     }
     for (const p of frame.props) {
-      const el = layers.get(`prop-${p.key}`);
-      el?.setAttribute("transform", matrixText(p.m));
-      el?.setAttribute("opacity", String(p.opacity));
+      layers.get(`prop-${p.key}`)?.setAttribute("transform", matrixText(p.m));
     }
   }
 
@@ -209,7 +209,25 @@
   export function frameAt(t: number): RigFrame {
     return solve(t, now, blend, tracks);
   }
+
+  /** For a probe: the rig's numbers `ms` into the pose change now running, at the clock's time. */
+  export function frameInBlend(ms: number): RigFrame {
+    return solve(clock.state.t, blend.start + ms, blend, tracks);
+  }
 </script>
+
+<!-- A prop, held under a wing's primaries (their tips curl over it) or standing on the ground. -->
+{#snippet prop(p: PropFrame)}
+  <g data-layer="prop-{p.key}" data-part="prop" transform={matrixText(p.m)}>
+    {#each PROPS[p.prop].shapes as shape, i (i)}
+      {#if shape.ink === "paper"}
+        <path class="fill-paper" d={shape.d} />
+      {:else}
+        <path d={shape.d} fill={A.inks.black} />
+      {/if}
+    {/each}
+  </g>
+{/snippet}
 
 <div
   class={["relative size-(--caw-size) shrink-0", className]}
@@ -231,6 +249,10 @@
       <clipPath id="{uid}-head"><path d={A.head.black} /></clipPath>
       <clipPath id="{uid}-lid-big"><path d={A.eyes.big.lid} /></clipPath>
       <clipPath id="{uid}-lid-small"><path d={A.eyes.small.lid} /></clipPath>
+      <!-- The ground line under his feet: a standing prop rises from below it. -->
+      <clipPath id="{uid}-ground"
+        ><rect height="882" width="912" x="-200" y="-400" /></clipPath
+      >
       <filter
         id="{uid}-rim"
         color-interpolation-filters="sRGB"
@@ -280,6 +302,9 @@
         />
         <g data-layer="wingR" data-part="wing" data-side="R">
           <g data-layer="handR" data-part="primaries">
+            {#each shown.filter((p) => p.home === "handR") as p (p.key)}
+              {@render prop(p)}
+            {/each}
             <path d={A.wingR.hand.vermilion} fill={A.inks.vermilion} />
           </g>
           <path d={A.wingR.arm.black} fill={A.inks.black} />
@@ -329,28 +354,27 @@
             </g>
           </g>
           <g data-layer="beak" data-part="beak">
-            <path d={A.beak.lower} fill={A.inks.black} />
+            <g data-layer="jaw" data-part="jaw">
+              <path d={A.beak.lower} fill={A.inks.black} />
+            </g>
             <path d={A.beak.plane} fill={A.inks.plane} />
           </g>
         </g>
         <g data-layer="wingL" data-part="wing" data-side="L">
           <g data-layer="handL" data-part="primaries">
+            {#each shown.filter((p) => p.home === "handL") as p (p.key)}
+              {@render prop(p)}
+            {/each}
             <path d={A.wingL.hand.vermilion} fill={A.inks.vermilion} />
           </g>
           <path d={A.wingL.arm.black} fill={A.inks.black} />
         </g>
       </g>
-      {#each shown as p (p.key)}
-        <g data-layer="prop-{p.key}" data-part="prop" opacity="0">
-          {#each PROPS[p.prop].shapes as shape, i (i)}
-            {#if shape.ink === "paper"}
-              <path class="fill-paper" d={shape.d} />
-            {:else}
-              <path d={shape.d} fill={A.inks.black} />
-            {/if}
-          {/each}
-        </g>
-      {/each}
+      <g clip-path="url(#{uid}-ground)">
+        {#each shown.filter((p) => p.home === "ground") as p (p.key)}
+          {@render prop(p)}
+        {/each}
+      </g>
     </g>
   </svg>
 </div>

@@ -180,6 +180,9 @@ def trace(mask: np.ndarray, *, smooth: float = 1.0) -> str:
 # The neck: above it is his head, below it his body. It runs between the two notches where his
 # head's outline meets his body's (left at 174, 243; right at 369, 247).
 NECK = [(130, 236), (174, 243), (215, 257), (272, 263), (325, 257), (369, 247), (430, 240)]
+# Under the neck on his right his head runs on as the ball it is (over his body, black on black),
+# so a head tilted down over the right notch shows its own round cheek, never the cut's line.
+HEAD_BALL = (272, 215, 104, 104)
 HEAD = [(130, 0), (430, 0), *NECK[::-1]]
 # The tuft: his two head feathers, and the dome of his head under them (a cubic through the
 # outline either side, so the head without the tuft is round).
@@ -197,6 +200,14 @@ def cubic(p0, p1, p2, p3, n=24):
 
 
 DOME = [*cubic((204, 148), (225, 120), (246, 110), (270, 106)), (310, 104), (310, 260), (204, 260)]
+# His shoulders under his head: the top of his body where the head covers it, a smooth round rise
+# from each neck notch in under the head. A tilted head lifts off one side of it, and what shows
+# there is this one smooth curve, never a scrap of the head's own outline.
+SHOULDERS = [
+    *cubic((172, 246), (176, 228), (196, 210), (230, 204)),
+    *cubic((314, 204), (346, 208), (362, 226), (369, 248)),
+    (369, 300), (172, 300),
+]
 # The beak: what stands out of his face, right of the outline at its base.
 BEAK = [(364, 163), (378, 146), (462, 146), (462, 234), (376, 234), (373, 207), (369, 185)]
 # The beak's lighter upper plane, read off the still (its pixels sit 5 levels over his black):
@@ -209,8 +220,11 @@ PLANE = [*PLANE_LOWER, *PLANE_UPPER, (378, 146), (462, 146), (462, 171)]
 # slides on a head turn): the plane's upper edge, then the lower beak's edge carried on into him.
 BEAK_ROOT = [*PLANE_UPPER, (369, 185), (373, 207), (352, 217), (328, 221), (306, 216)]
 # The lower beak runs from 6 units above the plane's lower edge down, so its edge never lies on
-# the plane's (one edge each, no seam).
-LOWER_BAND = [(x, y - 6) for x, y in PLANE_LOWER] + [(300, 214), (300, 240), (470, 240), (470, 160)]
+# the plane's (one edge each, no seam); toward the tip that tapers to nothing, so the upper beak
+# keeps its whole tip when the lower one drops open.
+LOWER_BAND = [
+    (x, y - min(6, 0.12 * math.hypot(x - PLANE_LOWER[0][0], y - PLANE_LOWER[0][1]))) for x, y in PLANE_LOWER
+] + [(300, 214), (300, 240), (470, 240), (470, 178)]
 
 BIG_EYE_BOX = [(226, 136), (310, 136), (310, 240), (226, 240)]
 SMALL_EYE_BOX = [(314, 122), (360, 122), (360, 172), (314, 172)]
@@ -251,6 +265,8 @@ PIVOTS = {
     "head": (272, 258),  # the neck
     "tuft": (240, 122),
     "beak": (370, 186),
+    # The gape: where the lower beak hinges, at the corner of his mouth on his face's outline.
+    "jaw": (370, 203),
     "wingL": (205, 305),  # shoulder
     # The primaries' root: the middle of the line they leave the coverts along (L: 103, 262 to
     # 158, 370; R: 428, 267 to 361, 379, measured off the still), 10 units in under the coverts.
@@ -343,17 +359,18 @@ def parts(ink: dict[str, np.ndarray]) -> dict:
     torso = poly(TORSO)
 
     tuft = S & tuft_r
-    neck_band = poly(band_above(NECK, 24))  # down to 24 below the neck
-    head = (S & head_r & ~shrink(tuft_r & ~dome, overlap) & ~beak_r) | (shrink(S, 5) & neck_band & ~head_r & torso)
+    # The head runs 3 units on past the neck over the body, so the cut never shows at frame 0, but
+    # not along his outline: there a scrap of the body's edge would turn with the head and stick out.
+    # Only on his right: on his left the cut already leaves the outline going down into him.
+    ball = ellipse(*HEAD_BALL) & S & ~head_r & torso & ~poly(WING_R) & poly([(300, 200), (512, 200), (512, 330), (300, 330)])
+    head = S & (head_r | (grow(head_r, 3) & shrink(S, 1.5)) | ball) & ~shrink(tuft_r & ~dome, overlap) & ~beak_r
 
     plane = S & poly(PLANE) & ~grow(whites, 1)
     lower = (S & beak_r | root_r) & poly(LOWER_BAND)
 
-    near_neck = head_r & grow(~head_r, overlap)
-    under_head = head_r & shrink(S, 6) & (yy > 205)
-    # The band over the neck catches a head-feather tip at its right end, off the body: the head
+    # The torso's corner over the right notch catches a head-feather tip, off the body: the head
     # draws it, so the body keeps its one piece (the coverage count proves nothing is lost).
-    body = main_piece(S & torso & (~head_r | near_neck | under_head))
+    body = main_piece(S & torso & (~head_r | poly(SHOULDERS)))
 
     def under_body(region):
         r = poly(region)
@@ -553,7 +570,7 @@ def svg(a: dict) -> str:
         path(a["head"]["black"], k["black"])
         + g("tuft", path(a["tuft"]["black"], k["black"]))
         + f'<g id="caw-face" data-part="face" clip-path="url(#caw-head-clip)">{eye("big")}{eye("small")}</g>'
-        + g("beak", path(a["beak"]["lower"], k["black"]) + path(a["beak"]["plane"], k["plane"])),
+        + g("beak", g("jaw", path(a["beak"]["lower"], k["black"])) + path(a["beak"]["plane"], k["plane"])),
     )
     layers = (
         g("tail", path(a["tail"]["black"], k["black"]) + path(a["tail"]["line"]["d"], a["tail"]["line"]["ink"]))

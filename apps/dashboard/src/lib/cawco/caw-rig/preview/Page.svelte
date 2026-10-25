@@ -51,6 +51,7 @@
     seek: (name: string, t: number) => rigs[name]?.seek(t),
     release: (name: string) => rigs[name]?.release(),
     frameAt: (name: string, t: number) => rigs[name]?.frameAt(t),
+    blendFrame: (name: string, ms: number) => rigs[name]?.frameInBlend(ms),
     pose: (next: PoseName) => {
       pose = next;
     },

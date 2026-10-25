@@ -17,6 +17,14 @@
  * - a new pose never teleports: switched from ready to cheer while he runs,
  *   his near wing leaves from where it stood (one frame later it has moved
  *   a few degrees at most), is between at 200 ms, and has arrived by 900;
+ * - his face: cheer, waving and shrug open his beak (the lower beak turned
+ *   down about the corner of his mouth, the upper beak where it was), ready
+ *   keeps it shut;
+ * - props: the phone in phoneUp stands upright, drawn under his near wing's
+ *   primaries so their tips curl over it; nothing pops in: a held phone comes
+ *   out from under the coverts, a standing one rises from below the ground,
+ *   and one going from his wing to the ground travels there as one object,
+ *   each step between frames of the change a short one;
  * - reduced motion: every clock stands at 0 and draws no frame, nothing
  *   moves, and a new pose is simply there;
  * - nothing runs unseen: a Caw scrolled off screen draws no frame (its rAF
@@ -50,6 +58,7 @@ interface Clock {
 }
 
 interface PreviewApi {
+  blendFrame: (name: string, ms: number) => unknown;
   clock: (name: string) => Clock;
   frameAt: (name: string, t: number) => unknown;
   idle: (name: string) => void;
@@ -619,6 +628,145 @@ async function blendLegs(kit: Kit, page: Page, engine: Engine) {
   await wait(page, 900);
 }
 
+type M = number[];
+const mul = (m: M, n: M): M => [
+  m[0] * n[0] + m[2] * n[1],
+  m[1] * n[0] + m[3] * n[1],
+  m[0] * n[2] + m[2] * n[3],
+  m[1] * n[2] + m[3] * n[3],
+  m[0] * n[4] + m[2] * n[5] + m[4],
+  m[1] * n[4] + m[3] * n[5] + m[5],
+];
+const angleOf = (m: M) => (Math.atan2(m[1], m[0]) * 180) / Math.PI;
+
+interface RigRead {
+  m: Record<string, M>;
+  props: { home: string; key: string; m: M; prop: string }[];
+}
+
+/** A prop's matrix on the page's drawing: its home's chain, then its own. */
+function propWorld(f: RigRead, p: RigRead["props"][number]): M {
+  if (p.home === "ground") {
+    return p.m;
+  }
+  const side = p.home === "handL" ? "L" : "R";
+  return mul(mul(mul(f.m.body, f.m[`wing${side}`]), f.m[`hand${side}`]), p.m);
+}
+
+/** His beak opens for cheer, waving and shrug about the corner of his mouth; the upper beak holds. */
+async function beakLegs(kit: Kit, page: Page, engine: Engine) {
+  const read = async (pose: string) =>
+    (await api<RigRead>(page, "frameAt", `pose-${pose}-160`, 0)).m;
+  const said: string[] = [];
+  const wrong: string[] = [];
+  for (const [pose, open] of [
+    ["ready", false],
+    ["cheer", true],
+    ["waving", true],
+    ["shrug", true],
+  ] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one pose's frame at a time
+    const m = await read(pose);
+    const jaw = angleOf(m.jaw);
+    const upper = angleOf(m.beak);
+    said.push(`${pose} ${jaw.toFixed(1)}°`);
+    if ((open ? jaw < 4 : Math.abs(jaw) > 0.01) || Math.abs(upper) > 0.01) {
+      wrong.push(
+        `${pose}: lower beak ${jaw.toFixed(2)}°, upper ${upper.toFixed(2)}°`
+      );
+    }
+  }
+  kit.check(
+    `${engine}: cheer, waving and shrug open his beak (the lower beak down, the upper where it was) and ready keeps it shut (${said.join(", ")})`,
+    wrong.length === 0,
+    wrong.join("; ")
+  );
+  // The held phone, read at rest, upright and under the primaries in the DOM.
+  const f = await api<RigRead>(page, "frameAt", "pose-phoneUp-160", 0);
+  const phone = f.props.find((p) => p.key === "phone");
+  const upright = phone ? angleOf(propWorld(f, phone)) : Number.NaN;
+  const under = await page.evaluate(() => {
+    const hand = document.querySelector(
+      '[data-rig-name="pose-phoneUp-160"] [data-layer="handL"]'
+    );
+    const kids = [...(hand?.children ?? [])];
+    const prop = kids.findIndex(
+      (el) => el.getAttribute("data-part") === "prop"
+    );
+    const fan = kids.findIndex((el) => el.tagName.toLowerCase() === "path");
+    return prop >= 0 && fan > prop;
+  });
+  kit.check(
+    `${engine}: in phoneUp the phone stands upright (${upright.toFixed(1)}° on the page) and is drawn under his near wing's primaries, their tips over it`,
+    phone?.home === "handL" && Math.abs(upright) < 3 && under
+  );
+}
+
+/**
+ * Nothing pops in: the stage switched while he runs, the change read off the
+ * rig at 0 to 640 ms. A prop's place moves in short steps from where it waits
+ * (under the coverts, or below the ground) or from where it was.
+ */
+async function propLegs(kit: Kit, page: Page, engine: Engine) {
+  const name = "stage-160";
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const legs: [string, string, string][] = [
+    ["ready", "phoneUp", "comes out from under his coverts"],
+    ["phoneUp", "letGo", "travels from his wing to the ground"],
+    ["letGo", "ready", "sinks below the ground"],
+    ["ready", "letGo", "rises from below the ground"],
+    ["letGo", "phoneUp", "travels from the ground up into his wing"],
+    ["phoneUp", "ready", "goes back under his coverts"],
+  ];
+  for (const [from, to, how] of legs) {
+    // biome-ignore lint/performance/noAwaitInLoops: one change at a time on one stage
+    await api(page, "pose", from);
+    await wait(page, 800);
+    await api(page, "pose", to);
+    const reads = await page.evaluate((n) => {
+      const pv = (
+        window as unknown as {
+          preview: { blendFrame: (a: string, ms: number) => unknown };
+        }
+      ).preview;
+      const out: unknown[] = [];
+      for (let ms = 0; ms <= 640; ms += 32) {
+        out.push(pv.blendFrame(n, ms));
+      }
+      return out;
+    }, name);
+    const places = (reads as RigRead[]).map((f) => {
+      const p = f.props.find((q) => q.key === "phone");
+      return p ? propWorld(f, p) : null;
+    });
+    // A prop leaving is gone once it is all the way under his coverts or the ground: at the end.
+    const missing = places.slice(0, -1).filter((m) => m === null).length;
+    const steps: number[] = [];
+    for (let i = 1; i < places.length; i += 1) {
+      const a = places[i - 1];
+      const b = places[i];
+      if (a && b) {
+        steps.push(Math.hypot(b[4] - a[4], b[5] - a[5]));
+      }
+    }
+    const mean =
+      steps.reduce((sum, v) => sum + v, 0) / Math.max(1, steps.length);
+    const longest = Math.max(...steps);
+    const [first] = places;
+    const last = places.at(-2);
+    const ends = `${first ? `(${first[4].toFixed(0)}, ${first[5].toFixed(0)})` : "none"} → ${last ? `(${last[4].toFixed(0)}, ${last[5].toFixed(0)})` : "none"}`;
+    // No jump: it leaves from where it was (its first 32 ms under 6 units) and no step is a leap.
+    // The house's ease-in-out, cubic-bezier(0.77, 0, 0.175, 1), peaks at 4.95 times its mean
+    // speed; a 32 ms step past 5.5 times the mean is more than the curve can make.
+    kit.check(
+      `${engine}: ${from} → ${to}: the phone ${how}, drawn at every step, never faded, leaving from where it was (${(steps[0] ?? 0).toFixed(1)} units in the first 32 ms) with no leap (longest step ${longest.toFixed(1)}, ${(longest / mean).toFixed(1)}× the mean; ${ends})`,
+      missing === 0 && (steps[0] ?? 0) < 6 && longest <= 5.5 * mean
+    );
+  }
+  await api(page, "pose", "ready");
+  await wait(page, 800);
+}
+
 /** With reduced motion: every clock at 0, no frame drawn, nothing moves, a new pose simply there. */
 async function reducedLegs(kit: Kit, page: Page, engine: Engine) {
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -838,6 +986,8 @@ const spec: Spec = {
         await loopLegs(kit, page, engine);
         await scrubLegs(kit, page, engine);
         await blendLegs(kit, page, engine);
+        await beakLegs(kit, page, engine);
+        await propLegs(kit, page, engine);
         await reducedLegs(kit, page, engine);
         await unseenLegs(kit, page, engine);
         await rimLegs(kit, page, engine);

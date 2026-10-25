@@ -16,7 +16,12 @@ export interface Wing {
   e: number;
 }
 
-/** A prop held in a wing's primaries, in the drawing's units as the still lays them out. */
+/**
+ * A prop held in a wing's primaries, in the drawing's units as the still lays
+ * them out. It is drawn under the feathers, so their tips curl over it and
+ * hold it, and it comes and goes from under the coverts as the wing moves
+ * (rig.ts), never popping in.
+ */
 export interface Held {
   /** Where its middle sits, in the still's units, before the wing turns. */
   at: readonly [number, number];
@@ -24,14 +29,16 @@ export interface Held {
   prop: PropName;
   /** Its turn, so it stands as wanted once the wing has turned (see `upright`). */
   rotate: number;
+  scale?: number;
 }
 
-/** A prop standing on the ground beside his feet. */
+/** A prop standing on the ground beside his feet: it rises from below the ground line to stand. */
 export interface Standing {
   at: readonly [number, number];
   on: "ground";
   prop: PropName;
   rotate: number;
+  scale?: number;
 }
 
 /** A beat that repeats while the pose holds: a wave of the primaries, a flutter. */
@@ -45,6 +52,8 @@ export interface Accent {
 
 export interface Pose {
   accent?: Accent;
+  /** His beak open: the lower beak dropped this many degrees about the corner of his mouth. */
+  beak: number;
   /** Breathing depth: 1 his usual, 0 none. */
   breath: number;
   /** Where he looks, in his big eye's own travel: [-1, 1] across, [-1, 1] down. */
@@ -81,7 +90,8 @@ export function upright(side: "L" | "R", wing: Wing): number {
   return side === "L" ? -turn : turn;
 }
 
-const phoneUp: Wing = { a: 128, e: 14 };
+/** His near wing up, its primaries curled over the phone so their tips hold it. */
+const phoneUp: Wing = { a: 128, e: 24 };
 
 /** His poses. `ready` is his still, exactly: frame 0 of every other pose's idle is its own pose. */
 export const POSES = {
@@ -92,10 +102,11 @@ export const POSES = {
     yaw: 0,
     gaze: STILL_GAZE,
     lid: 0,
+    beak: 0,
     breath: 1,
     weight: 0,
   },
-  /** A hello: his near wing up, its primaries waving, turned a little toward you. */
+  /** A hello: his near wing up, its primaries waving, turned a little toward you, beak open on a caw. */
   waving: {
     wingL: { a: 124, e: 18 },
     wingR: { a: 52, e: -8 },
@@ -103,6 +114,7 @@ export const POSES = {
     yaw: -0.22,
     gaze: [0.2, 0.05],
     lid: 0,
+    beak: 8,
     breath: 1,
     weight: -0.4,
     accent: { on: "handL", amp: 12, every: 760 },
@@ -115,16 +127,18 @@ export const POSES = {
     yaw: -0.3,
     gaze: [-0.75, -0.7],
     lid: 0,
+    beak: 0,
     breath: 1,
     weight: 0.35,
     prop: {
       prop: "phone",
       on: "handL",
-      at: [44, 300],
+      at: [32, 270],
       rotate: upright("L", phoneUp),
+      scale: 1.08,
     },
   },
-  /** Approved: both wings up, a small flutter in the near one. */
+  /** Approved: both wings up, a small flutter in the near one, beak open in a happy caw. */
   cheer: {
     wingL: { a: 138, e: 20 },
     wingR: { a: 124, e: 18 },
@@ -132,6 +146,7 @@ export const POSES = {
     yaw: -0.18,
     gaze: [-0.2, -0.45],
     lid: 0,
+    beak: 17,
     breath: 1.3,
     weight: 0,
     accent: { on: "handL", amp: 5, every: 520 },
@@ -144,6 +159,7 @@ export const POSES = {
     yaw: -0.12,
     gaze: [0.45, -0.8],
     lid: 0,
+    beak: 5,
     breath: 1,
     weight: 0.15,
   },
@@ -155,6 +171,7 @@ export const POSES = {
     yaw: 0.08,
     gaze: [0.55, 0.75],
     lid: 0,
+    beak: 0,
     breath: 0.8,
     weight: 0.2,
     prop: { prop: "phone", on: "ground", at: [410, 442], rotate: 0 },
