@@ -230,19 +230,19 @@
     margin-block-end: var(--space-4);
   }
 
-  /* The letter run's row: on the code's moments only, the kpi line and
-     space-4 under the paper; folded away on the device's (the Checking
-     board folds it as the letters travel, New code grows it back). */
+  /* The letter run's row: the kpi line and space-4 under the paper while the
+     code's letters stand (Waiting, Last minute, Wrong code, Expired), 0
+     otherwise. The run is anchored at the row's block-end and the row never
+     clips, so as it opens the glyphs come down out of the paper's edge. */
   .run-row {
-    display: block flow-root;
+    display: block grid;
+    align-content: end;
+    justify-items: center;
     justify-self: stretch;
-    block-size: calc(1.2 * var(--text-kpi) + var(--space-4));
-    overflow: clip;
-    > .run {
-      margin-block-start: var(--space-4);
-    }
-    [data-kind="device"] & {
-      block-size: 0;
+    block-size: 0;
+    overflow: visible;
+    [data-row] & {
+      block-size: calc(1.2 * var(--text-kpi) + var(--space-4));
     }
   }
 

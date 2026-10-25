@@ -52,6 +52,12 @@ name and address (`tailscale status`: `iphone182-1`, 100.99.18.79). Over the
 public internet and the LAN the hub records no address, so Checking shows no
 address line there. The hub is obelisk-of-light.
 
+The letter run's row stands only while the code's letters do (Waiting, Last
+minute, Wrong code, Expired): the kpi line and `space-4`. It opens with the
+typing on Asking → Waiting, folds with the letters' travel on the scan and
+closes as the struck letters leave on New code; the phone's words ride with
+it on its clock, and on the desk nothing else moves.
+
 ## Motion
 
 Each change is the spec's storyboard (§7). Every board has one lead, its
@@ -60,5 +66,8 @@ lead's runs are `lead:*`; cues (`cue:*`) draw nothing and change Caw's file,
 land the hub's record or start the drift, so one clock holds every beat. The
 proof reads each board's first frame on that held clock (the DevTools
 Animation domain on Chromium) and checks that it holds the lead's runs alone.
-What leaves a place it keeps leaves as a copy where it stood. What stays and
+A cue fires once its clock reaches its time, read each frame, so a scrub
+through the Animation domain passes Caw's cues too: sought past one, his
+file changes and his own (Rive) leave and enter play. What leaves a place
+it keeps leaves as a copy where it stood. What stays and
 moves slides from where it stood (FLIP), at the board's `follow` beat.

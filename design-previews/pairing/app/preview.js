@@ -628,6 +628,7 @@ function build() {
     },
     moment: "open",
     runs: [],
+    cues: [],
     timers: [],
     pingRun: null,
     pingTail: null,
@@ -637,7 +638,8 @@ function build() {
     recordIn: true,
     figure0: "0:42",
   };
-  S.primaryText = new TextMorph(S.btn.primary);
+  // The morph writes into the button's label, so the button's own gap never opens between the parts it keeps.
+  S.primaryText = new TextMorph(S.btn.primary.querySelector(".label"));
 
   // The head: Caw's app icon, its open face and its shut face in one cell.
   for (const [cls, src] of [
@@ -896,8 +898,33 @@ function cue(at, fn, what) {
     fill: "none",
     id: `cue:${what}`,
   });
-  anim.finished.then(fn, () => undefined);
+  S.cues.push({ anim, at: Math.max(at, 1), fn });
+  watchCues();
   return anim;
+}
+
+let watching = 0;
+/**
+ * Fires each cue once its clock reaches its time, read every frame: a clock
+ * played, or held and sought (the proof's scrub through the Animation
+ * domain), passes its cues the same way. A cancelled cue (a new rest) never
+ * fires.
+ */
+function watchCues() {
+  watching ||= requestAnimationFrame(() => {
+    watching = 0;
+    for (const c of S.cues) {
+      const time = c.anim.currentTime;
+      if (!c.fired && time !== null && (Number(time) >= c.at || c.anim.playState === "finished")) {
+        c.fired = true;
+        c.fn();
+      }
+    }
+    S.cues = S.cues.filter((c) => !c.fired && c.anim.playState !== "idle");
+    if (S.cues.length > 0) {
+      watchCues();
+    }
+  });
 }
 
 const SHOWN = { opacity: 1, transform: "none", filter: "blur(0px)" };
@@ -1134,6 +1161,7 @@ function rest(m, { keepPing = false, keepTail = false, recordIn = true } = {}) {
     run.cancel();
   }
   S.runs = [];
+  S.cues = [];
   for (const ghost of S.stage.querySelectorAll(".leaving")) {
     ghost.remove();
   }
@@ -1174,6 +1202,8 @@ function rest(m, { keepPing = false, keepTail = false, recordIn = true } = {}) {
   placeHead(R.head);
 
   S.run.style.opacity = R.run ? "1" : "0";
+  // The run's row stands while the code's letters do (Waiting, Last minute, Wrong code, Expired).
+  S.stage.toggleAttribute("data-row", Boolean(R.run));
   S.strike.style.transform = R.run === "struck" ? "none" : "scaleX(0)";
   S.ping.toggleAttribute("data-warm", R.ping === "warm");
 
@@ -1500,6 +1530,14 @@ const BOARDS = {
         pop(eye, D.control, "eyes");
       }
       // The letters type in: six glyphs, a pop each, 28ms apart, a step's gap between the groups.
+      // The run's row opens with the typing, the glyphs coming down out of the paper's edge; the
+      // phone's words ride down with it on the same clock.
+      part(S.runRow, [{ blockSize: "0px" }, { blockSize: `${S.runRow.getBoundingClientRect().height}px` }], {
+        delay: 700,
+        duration: D.settle,
+        easing: E.out,
+        id: "run-row",
+      });
       [0, 1, 2, 4, 5, 6].forEach((step, i) => pop(S.runGlyphs[i], 700 + step * 28, "letters"));
       cue(700, () => setCaw({ status: "ready" }), "caw");
       startPing(1200);
@@ -1695,7 +1733,7 @@ const BOARDS = {
   // New code. LEAD the press; New code exits.
   "expired>asking": {
     w: { exits: { primary: 0, line1: 400 }, exitIds: { line1: "exit" }, enters: { line1: [610, "swap", 210] }, title: 400 },
-    object() {
+    object(was) {
       // The strike withdraws right to left.
       part(S.strike, [{ transform: "none" }, { transform: "scaleX(0)" }], {
         delay: 120,
@@ -1712,6 +1750,13 @@ const BOARDS = {
         S.run.style.opacity = S.rest.run ? "1" : "0";
       });
       liftIntoCloud(160);
+      // The run's row closes as the struck letters leave, on the lift's clock; the phone's words ride up.
+      part(S.runRow, [{ blockSize: `${was.runRow}px` }, { blockSize: "0px" }], {
+        delay: 160,
+        duration: D.settle,
+        easing: E.out,
+        id: "run-row",
+      });
       for (const eye of S.eyes) {
         part(eye, [{ opacity: V["qr-dim-opacity"], transform: "none" }, { opacity: 0, transform: `scale(${V["pop-scale"]})` }], {
           delay: 160,
@@ -1909,13 +1954,6 @@ function deviceToCloud(was, mark) {
     S.device.style.opacity = "1";
   });
   pop(S.paper, 160, "paper");
-  // The run's row grows back with the paper: the code's moments have it, the device's do not.
-  part(S.runRow, [{ blockSize: "0px" }, { blockSize: `${S.runRow.getBoundingClientRect().height}px` }], {
-    delay: 160,
-    duration: D.settle,
-    easing: E.out,
-    id: "run-row",
-  });
   fadeCloudIn(220);
   pop(S.head, 280, "head");
   cue(400, () => setCaw({ status: "loading" }), "caw");
@@ -2002,7 +2040,8 @@ function flip(el, from, to, at, duration, easing, id) {
 
 /** FLIP for one letter: from the run's glyph box (page px) onto the screen's, scaled by the two sizes. */
 function flipGlyph(el, from, at, duration, easing) {
-  const to = el.getBoundingClientRect();
+  const box = el.getBoundingClientRect();
+  const to = { left: box.left + window.scrollX, top: box.top + window.scrollY, height: box.height };
   const k = from.h / to.height;
   part(
     el,
@@ -2026,7 +2065,8 @@ function readObject() {
     head: h ? { x: h.left - slot.left, y: h.top - slot.top, w: h.width, h: h.height } : null,
     glyphs: S.runGlyphs.map((g) => {
       const r = g.getBoundingClientRect();
-      return { x: r.left, y: r.top, h: r.height };
+      // In the document's coordinates: setting the next moment can move the window's (scroll anchoring).
+      return { x: r.left + window.scrollX, y: r.top + window.scrollY, h: r.height };
     }),
     pingInk: getComputedStyle(S.ping).borderColor,
     runRow: S.runRow.getBoundingClientRect().height,
@@ -2197,7 +2237,20 @@ function setPick(name, value) {
   return Promise.resolve();
 }
 
+/**
+ * The page's stylesheet has landed: its tokens are what every board is timed
+ * by. WebKit ran this module before the built sheet linked in the head had
+ * loaded, and read every token empty.
+ */
+async function sheetsLoaded() {
+  const sheets = [...document.querySelectorAll('link[rel="stylesheet"]')].filter((link) => !link.sheet);
+  await Promise.all(
+    sheets.map((link) => new Promise((done) => link.addEventListener("load", done, { once: true })))
+  );
+}
+
 export async function start() {
+  await sheetsLoaded();
   readTokens();
   build();
   applyLayout();
@@ -2276,6 +2329,10 @@ window.preview = {
   pick: setPick,
   /** The board a play from where the surface stands to `to` runs, or none. */
   boardFor: (to) => (boardOf(S.moment, to) ? boardName(S.moment, to) : null),
+  /** The status Caw's file is on now. */
+  get cawStatus() {
+    return caw.status;
+  },
   get moment() {
     return S.moment;
   },

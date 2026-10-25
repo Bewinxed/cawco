@@ -57,7 +57,9 @@ prepareZXingModule({
 });
 
 const LEGS = new Set(
-  (process.env.PAIRING_LEGS ?? "frames,rest,leads,qr,strike").split(",")
+  (
+    process.env.PAIRING_LEGS ?? "frames,rest,night,leads,ride,scrub,qr,strike"
+  ).split(",")
 );
 
 /** Every moment at rest, with the owner's picks it is read in. */
@@ -114,6 +116,8 @@ function holdsOf(m: string): string {
 
 /** Every board (spec §7), from → to, with the owner's picks it needs and what leads it. */
 const BOARDS: {
+  /** Runs the board must not make. */
+  absent?: string[];
   /** Beats the rulings set, each a run by its name (and element) starting at `at`, `dur` long. */
   beats?: { at: number; dur: number; name: string; target?: string }[];
   from: string;
@@ -129,7 +133,16 @@ const BOARDS: {
     lead: "Caw's loading enter (Rive, no Web Animation)",
     rive: true,
   },
-  { from: "asking", to: "waiting", lead: "the dots lock on, ink 0.3 → 1" },
+  {
+    from: "asking",
+    to: "waiting",
+    lead: "the dots lock on, ink 0.3 → 1",
+    // The run's row opens with the typing (the designer's ruling on ruling 1's regrowth).
+    beats: [
+      { name: "run-row", at: 700, dur: 400 },
+      { name: "letters", at: 700, dur: 260 },
+    ],
+  },
   {
     from: "waiting",
     to: "lastminute",
@@ -164,13 +177,19 @@ const BOARDS: {
     ],
   },
   { from: "lastminute", to: "expired", lead: "the figure ticks 0:01 → 0:00" },
-  { from: "expired", to: "asking", lead: "New code exits" },
+  {
+    from: "expired",
+    to: "asking",
+    lead: "New code exits",
+    // The run's row closes as the struck letters leave, on the dim dots' lift.
+    beats: [{ name: "run-row", at: 160, dur: 400 }],
+  },
   {
     from: "denied",
     to: "asking",
     lead: "New code exits; the lock leaves",
-    // The run's row grows back with the paper (ruling 1).
-    beats: [{ name: "run-row", at: 160, dur: 400 }],
+    // The run's row stays folded through Asking: it opens on Asking → Waiting, with the typing.
+    absent: ["run-row"],
   },
   {
     from: "waiting",
@@ -204,7 +223,9 @@ const BOARDS: {
 ];
 
 interface Preview {
+  answer: () => void;
   boardFor: (to: string) => string | null;
+  cawStatus: string;
   dotsOf: () => {
     dots: { cx: number; cy: number; o: number; r: number }[];
     live: boolean;
@@ -241,12 +262,18 @@ function serve() {
   });
 }
 
+/**
+ * The preview on a page of its own, in `theme`: the kit pins the scheme and
+ * the dashboard's stored theme (`cawco-theme`) for the page's whole life,
+ * so a night read opens its own page rather than emulating the scheme.
+ */
 async function openPreview(
   kit: Kit,
   url: string,
-  engine: Engine
+  engine: Engine,
+  theme: "light" | "dark" = "light"
 ): Promise<{ page: Page; errors: string[] }> {
-  const page = await kit.page("desk", { engine, scale: 1 });
+  const page = await kit.page("desk", { engine, scale: 1, theme });
   const errors: string[] = [];
   page.on("console", (message) => {
     if (message.type() === "error") {
@@ -256,7 +283,13 @@ async function openPreview(
   page.on("pageerror", (error) => errors.push(String(error)));
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(url);
-  await page.waitForSelector("html[data-ready]", { timeout: 30_000 });
+  await page
+    .waitForSelector("html[data-ready]", { state: "attached", timeout: 30_000 })
+    .catch((error: unknown) => {
+      throw new Error(
+        `the preview never said it was ready (${theme}): ${String(error).split("\n")[0]}; page errors: ${errors.join(" | ") || "none"}`
+      );
+    });
   await page.evaluate(() => {
     const p = (window as unknown as W).preview;
     p.manualHub(true);
@@ -382,6 +415,8 @@ interface RestRead {
   empty: string[];
   /** What the object slot draws: the paper (and the head on it), or the device with its screen's one thing. */
   holds: string;
+  /** The letters on the device drawn inside its screen, where they show. */
+  onScreen: boolean;
   /** The letter run's row: its height, and the kpi line (1.2 × the run's size) plus space-4. */
   runRow: { h: number; line: number };
   slot: string;
@@ -532,10 +567,22 @@ function readRest(): RestRead {
     ink = lit / (copy.width * copy.height);
   }
   const run = stage.querySelector(".run") as HTMLElement;
+  const screen = (
+    stage.querySelector(".screen") as HTMLElement
+  ).getBoundingClientRect();
+  const letters = stage.querySelector(".screen-letters") as HTMLElement;
+  const lettersBox = letters.getBoundingClientRect();
+  const onScreen =
+    !drawn(letters) ||
+    (lettersBox.left >= screen.left - 0.5 &&
+      lettersBox.right <= screen.right + 0.5 &&
+      lettersBox.top >= screen.top - 0.5 &&
+      lettersBox.bottom <= screen.bottom + 0.5);
   const space4 = Number.parseFloat(
     getComputedStyle(document.documentElement).getPropertyValue("--space-4")
   );
   return {
+    onScreen,
     runRow: {
       h: (
         stage.querySelector(".run-row") as HTMLElement
@@ -592,13 +639,23 @@ async function restLeg(kit: Kit, page: Page, engine: Engine) {
       const name = `${m}${picks ? ` (${picks.map(([n, v]) => `${n} ${v}`).join(", ")})` : ""}`;
       const r = await page.evaluate(readRest);
       slots.add(r.slot);
-      const rowWant = holdsOf(m).startsWith(".paper") ? r.runRow.line : 0;
+      // The row stands while the code's letters do: Waiting, Last minute, Wrong code, Expired.
+      const rowWant =
+        ["waiting", "lastminute", "expired"].includes(m) ||
+        m.startsWith("nomatch")
+          ? r.runRow.line
+          : 0;
       rows.add(
         `${m.startsWith("checking") || ["approved", "denied", "removed"].includes(m) ? "device" : "code"} ${r.runRow.h.toFixed(1)}`
       );
       if (Math.abs(r.runRow.h - rowWant) > 0.5) {
         faults.row.push(
           `${name}: ${r.runRow.h.toFixed(1)}px, want ${rowWant.toFixed(1)}px`
+        );
+      }
+      if (!r.onScreen) {
+        faults.holds.push(
+          `${name}: the letters stand outside the device's screen`
         );
       }
       if (r.holds !== holdsOf(m)) {
@@ -647,12 +704,12 @@ async function restLeg(kit: Kit, page: Page, engine: Engine) {
       slots.size === 1
     );
     kit.check(
-      `${tag}: the letter run's row on the code's moments only, the kpi line and space-4 (${[...rows].join(", ")})`,
+      `${tag}: the letter run's row only while the code's letters stand (Waiting, Last minute, Wrong code, Expired), the kpi line and space-4 (${[...rows].join(", ")})`,
       faults.row.length === 0,
       faults.row.slice(0, 4).join("; ")
     );
     kit.check(
-      `${tag}: the slot holds its one object in every moment: the paper (its head on it while the code is good), or the device with the icon and the code on its screen or one outcome's mark`,
+      `${tag}: the slot holds its one object in every moment: the paper (its head on it while the code is good), or the device with the icon and the code inside its screen or one outcome's mark`,
       faults.holds.length === 0,
       faults.holds.slice(0, 4).join("; ")
     );
@@ -689,6 +746,7 @@ async function restLeg(kit: Kit, page: Page, engine: Engine) {
 /* ------------------------------------------------------------- leads */
 
 /** Each board's runs in its first frame: every one the lead's. */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: every board read whole: its lead, its beats, its runs' ends and its resting row, each said as it is checked
 async function leadsLeg(kit: Kit, page: Page, engine: Engine) {
   await setWidth(page, 1440);
   for (const b of BOARDS) {
@@ -753,6 +811,16 @@ async function leadsLeg(kit: Kit, page: Page, engine: Engine) {
         .map((run) => `${run.name} on ${run.target} at ${at(run).toFixed(0)}ms`)
         .join("; ")
     );
+    for (const name of b.absent ?? []) {
+      kit.check(
+        `${engine} ${b.from} → ${b.to}: no ${name} run`,
+        !drawnRuns.some((run) => run.name === name),
+        drawnRuns
+          .filter((run) => run.name === name)
+          .map((run) => `${run.target} at ${at(run).toFixed(0)}ms`)
+          .join("; ")
+      );
+    }
     for (const beat of b.beats ?? []) {
       const hit = drawnRuns.find(
         (run) =>
@@ -783,8 +851,211 @@ async function leadsLeg(kit: Kit, page: Page, engine: Engine) {
         .join("; ")
     );
     await settled(page);
+    if (b.to === "asking") {
+      const row = await page.evaluate(
+        () =>
+          (
+            document.querySelector(".run-row") as HTMLElement
+          ).getBoundingClientRect().height
+      );
+      kit.check(
+        `${engine} ${b.from} → ${b.to}: the run's row rests at 0 on Asking (${row}px)`,
+        row === 0
+      );
+    }
   }
   await picksTo(page);
+}
+
+/** The words column top and the run's row height through a board, on the held clock. */
+async function rideRead(
+  page: Page,
+  from: string,
+  to: string,
+  fractions: number[]
+) {
+  await page.evaluate(
+    async ({ f, t }) => {
+      const p = (window as unknown as W).preview;
+      await p.snap(f, { figure: t === "expired" ? "0:01" : undefined });
+      p.landRecord();
+    },
+    { f: from, t: to }
+  );
+  await settled(page);
+  const read = await readMotion(
+    page,
+    () => page.evaluate((t) => (window as unknown as W).preview.go(t), to),
+    ".frame",
+    {
+      fractions,
+      of: "cue:end",
+      // In the document's coordinates: the browser's scroll anchoring moves the window's.
+      read: () =>
+        page.evaluate(() => ({
+          row: (
+            document.querySelector(".run-row") as HTMLElement
+          ).getBoundingClientRect().height,
+          words:
+            (
+              document.querySelector(".words") as HTMLElement
+            ).getBoundingClientRect().top + window.scrollY,
+          slot:
+            (
+              document.querySelector(".slot") as HTMLElement
+            ).getBoundingClientRect().top + window.scrollY,
+          letters:
+            (
+              document.querySelector(".screen-letters .g") as HTMLElement
+            ).getBoundingClientRect().top + window.scrollY,
+          run:
+            (
+              document.querySelector(".run .g") as HTMLElement
+            ).getBoundingClientRect().top + window.scrollY,
+          label: (
+            document.querySelector(
+              '[data-slot="primary"] .label'
+            ) as HTMLElement
+          ).getBoundingClientRect().width,
+        })),
+    }
+  );
+  await settled(page);
+  return read.at.map((one) => one.value);
+}
+
+/**
+ * The run's row and the words on one clock: on the phone the words block
+ * rides with the row (its top less the row's height holds still through
+ * the board); on the desk nothing but the row moves. And Done's label
+ * mid-board is the width it rests at: the button's gap never opens
+ * between the parts the morph keeps.
+ */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: three boards on two frames and Done's label, each read said as it is checked
+async function rideLeg(kit: Kit, page: Page, engine: Engine) {
+  const fractions = Array.from({ length: 21 }, (_, i) => i / 20);
+  for (const width of [390, 1440]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one frame at a time
+    await setWidth(page, width);
+    for (const [from, to] of [
+      ["asking", "waiting"],
+      ["expired", "asking"],
+      ["waiting", "checking-tailnet"],
+    ] as const) {
+      // biome-ignore lint/performance/noAwaitInLoops: one held clock at a time
+      const reads = await rideRead(page, from, to, fractions);
+      if (to === "checking-tailnet") {
+        // The letters travel from the run: as the board starts they stand where the run's letters stood.
+        const apart = Math.abs((reads[0]?.letters ?? 0) - (reads[0]?.run ?? 0));
+        kit.check(
+          `${engine} ${width === 390 ? "Phone" : "Desk"} ${from} → ${to}: the travelling letters start on the run's letters, under the paper and above the title (${apart.toFixed(2)}px apart)`,
+          apart <= 1
+        );
+      }
+      const rows = reads.map((r) => r.row);
+      const span = Math.max(...rows) - Math.min(...rows);
+      const tag = `${engine} ${width === 390 ? "Phone" : "Desk"} ${from} → ${to}`;
+      if (width === 390) {
+        const held = reads.map((r) => r.words - r.row);
+        const drift = Math.max(...held) - Math.min(...held);
+        kit.check(
+          `${tag}: the words ride with the run's row on one clock (the row ${rows[0]?.toFixed(1)} → ${rows.at(-1)?.toFixed(1)}px; the words' top less the row moves ${drift.toFixed(2)}px over ${reads.length} reads)`,
+          span > 30 && drift <= 0.5
+        );
+      } else {
+        const words = reads.map((r) => r.words);
+        const slots = reads.map((r) => r.slot);
+        const moved =
+          Math.max(...words) -
+          Math.min(...words) +
+          Math.max(...slots) -
+          Math.min(...slots);
+        kit.check(
+          `${tag}: on the desk nothing but the row moves (the row ${rows[0]?.toFixed(1)} → ${rows.at(-1)?.toFixed(1)}px; the words and the slot move ${moved.toFixed(2)}px over ${reads.length} reads)`,
+          span > 30 && moved <= 0.5
+        );
+      }
+    }
+    // Done's label at 380ms (its morph landed at 260, the board held) against its width at rest.
+    const reads = await rideRead(page, "checking-tailnet", "approved", [
+      380 / 1900,
+      1,
+    ]);
+    const [mid, end] = reads.map((r) => r.label);
+    kit.check(
+      `${engine} at ${width}: Done's label mid-board is its resting width, no gap inside it (${mid?.toFixed(2)} at 380ms, ${end?.toFixed(2)} at rest)`,
+      mid !== undefined && end !== undefined && Math.abs(mid - end) <= 1
+    );
+  }
+}
+
+/**
+ * Caw follows a scrub: sought past a board's Caw cue, the page changes his
+ * file (Rive runs on its own clock, so his leave and enter then play). The
+ * Expired board at ¼ (420ms, before his cue at 860) and ¾ (1260ms, after).
+ */
+async function scrubCawLeg(kit: Kit, page: Page, engine: Engine) {
+  await setWidth(page, 1440);
+  await page.evaluate(async () => {
+    const p = (window as unknown as W).preview;
+    await p.snap("lastminute", { figure: "0:01" });
+  });
+  await settled(page);
+  const read = await readMotion(
+    page,
+    () => page.evaluate(() => (window as unknown as W).preview.go("expired")),
+    ".frame",
+    {
+      fractions: [420 / 1680, 1260 / 1680],
+      of: "cue:end",
+      read: async () => {
+        await cawSettles(page);
+        return page.evaluate(() => (window as unknown as W).preview.cawStatus);
+      },
+    }
+  );
+  await settled(page);
+  const seen = read.at.map((one) => one.value);
+  kit.check(
+    `${engine} lastminute → expired scrubbed: Caw is on ${seen[0]} at 420ms and ${seen[1]} at 1260ms (his cue at 860)`,
+    seen[0] === "ready" && seen[1] === "sleeping"
+  );
+}
+
+/** By night: the dashboard's dark scheme drawn, and the house rules (contrast first) in every moment at 390 and 1440. */
+async function nightLeg(kit: Kit, url: string, engine: Engine) {
+  const { page, errors } = await openPreview(kit, url, engine, "dark");
+  const house = new HouseRules(kit, `${engine} night`, {
+    scope: ".stage",
+    views: ".stage",
+    marks: ".mark-cell svg, .screen-mark svg",
+  });
+  const scheme = await page.evaluate(() => ({
+    dark: document.documentElement.classList.contains("dark"),
+    scheme: getComputedStyle(document.documentElement).colorScheme,
+    ground: getComputedStyle(document.body).backgroundColor,
+  }));
+  kit.check(
+    `${engine} night: the page draws the dark scheme (html.dark ${scheme.dark}, color-scheme ${scheme.scheme}, ground ${scheme.ground})`,
+    scheme.dark && scheme.scheme === "dark"
+  );
+  for (const width of [390, 1440]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one window width at a time
+    await setWidth(page, width);
+    for (const { m, picks } of RESTS) {
+      // biome-ignore lint/performance/noAwaitInLoops: one moment at a time on one page
+      await picksTo(page, picks);
+      await restIn(page, m);
+      await house.at(page, `${m} at ${width} by night`);
+    }
+  }
+  house.report();
+  kit.check(
+    `${engine} night: no console error`,
+    errors.length === 0,
+    errors.slice(0, 4).join(" | ")
+  );
+  await page.close();
 }
 
 /** When the first of `times` falls, said; "none" where there is none. */
@@ -946,11 +1217,7 @@ async function shootRests(
     // biome-ignore lint/performance/noAwaitInLoops: one moment at a time on one page
     await picksTo(page, picks);
     await restIn(page, m);
-    await page.evaluate(() => {
-      for (const run of document.getAnimations()) {
-        run.pause();
-      }
-    });
+    await holdForShot(page);
     const v = picks ? `-${picks.map(([, value]) => value).join("-")}` : "";
     const file = `${m}${v}-${frame}-${width}-${scheme === "light" ? "day" : "night"}.png`;
     await page.locator(".frame").screenshot({ path: join(out, file) });
@@ -965,14 +1232,56 @@ async function shootRests(
   return shots;
 }
 
-/** One board scrubbed to ¼, ½ and ¾ of its length on the held clock, the frame shot at each. */
+/**
+ * Every run held for a still: each loop (the ping, the drift, the live
+ * dot's breath) at its start, as the kit's settle holds them, so a moment
+ * reads the same at every width; every other run where it stands.
+ */
+const holdForShot = (page: Page) =>
+  page.evaluate(() => {
+    for (const run of document.getAnimations()) {
+      run.pause();
+      const iterations = Number(
+        run.effect?.getComputedTiming().iterations ?? 1
+      );
+      if (iterations > 1) {
+        run.currentTime = 0;
+      }
+    }
+  });
+
+/**
+ * Caw at the scrubbed time: his file is Rive's, on its own clock, so once a
+ * seek passes a board's Caw cue the page changes his file and his
+ * component's leave and enter run; the shot waits until one Caw stands.
+ */
+const cawSettles = (page: Page) =>
+  page
+    .waitForFunction(
+      () => {
+        const shown = document.querySelectorAll(
+          ".caw-slot canvas[data-caw-shown]"
+        );
+        return (
+          shown.length === 1 &&
+          (shown[0] as HTMLElement)
+            .getAnimations()
+            .every((run) => run.playState !== "running")
+        );
+      },
+      undefined,
+      { timeout: 3000 }
+    )
+    .catch(() => undefined);
+
+/** One board scrubbed to each of `times` (ms after its trigger) on the held clock, the frame shot at each. */
 async function shootBoard(
   page: Page,
   out: string,
   width: number,
-  from: string,
-  to: string
+  scrub: (typeof SCRUBBED)[number]
 ): Promise<Shot[]> {
+  const { from, to, end, times } = scrub;
   const frame = width === 1440 ? "desk" : "phone";
   const shots: Shot[] = [];
   await page.evaluate(
@@ -984,7 +1293,7 @@ async function shootBoard(
     { f: from, t: to }
   );
   await settled(page);
-  const fractions = [0.25, 0.5, 0.75];
+  const fractions = times.map((ms) => ms / end);
   let i = 0;
   await readMotion(
     page,
@@ -994,15 +1303,32 @@ async function shootBoard(
       fractions,
       of: "cue:end",
       read: async () => {
-        const f = fractions[i] ?? 0;
+        const ms = times[i] ?? 0;
         i += 1;
-        const file = `board-${to}-${frame}-${width}-at-${Math.round(f * 100)}.png`;
+        await cawSettles(page);
+        const caw = await page.evaluate(
+          () => (window as unknown as W).preview.cawStatus
+        );
+        // Where the title, the travelling letters and the device's screen stand, frame px, said with the shot.
+        const where = await page.evaluate(() => {
+          const f = (
+            document.querySelector(".frame") as HTMLElement
+          ).getBoundingClientRect();
+          const at = (sel: string) => {
+            const r = (
+              document.querySelector(sel) as HTMLElement
+            ).getBoundingClientRect();
+            return `${Math.round(r.top - f.top)}–${Math.round(r.bottom - f.top)}`;
+          };
+          return `title y ${at(".title")}, letters y ${at(".screen-letters .g")}, screen y ${at(".screen")}, Done x ${Math.round((document.querySelector('[data-slot="primary"]') as HTMLElement).getBoundingClientRect().left - f.left)} y ${at('[data-slot="primary"]')}`;
+        });
+        const file = `board-${to}-${frame}-${width}-at-${ms}ms.png`;
         await page
           .locator(".frame")
           .screenshot({ path: join(out, file), animations: "allow" });
         shots.push({
           file,
-          caption: `${LABEL[from]} → ${LABEL[to]}, scrubbed to ${f * 100}% on the Animation domain, ${frame} at ${width}`,
+          caption: `${LABEL[from]} → ${LABEL[to]}, scrubbed to ${ms}ms of ${end}ms (${Math.round((ms / end) * 100)}%) on the Animation domain, ${frame} at ${width}; Caw on ${caw}; ${where}`,
         });
       },
     }
@@ -1011,34 +1337,71 @@ async function shootBoard(
   return shots;
 }
 
-/** The boards the owner judges scrubbed (spec §8): Expired, Checking and Paired. */
+/**
+ * The boards the owner judges scrubbed (spec §8): Expired, Checking and
+ * Paired at ¼, ½ and ¾ of their length, and Paired at 300ms too, inside
+ * ruling 5's move (the facts and Done at 160→440).
+ */
 const SCRUBBED = [
-  ["lastminute", "expired"],
-  ["waiting", "checking-tailnet"],
-  ["checking-tailnet", "approved"],
+  { from: "lastminute", to: "expired", end: 1680, times: [420, 840, 1260] },
+  {
+    from: "waiting",
+    to: "checking-tailnet",
+    end: 2000,
+    times: [500, 1000, 1500],
+  },
+  {
+    from: "checking-tailnet",
+    to: "approved",
+    end: 1900,
+    times: [300, 475, 950, 1425],
+  },
 ] as const;
 
-async function capturesLeg(kit: Kit, page: Page, engine: Engine) {
+async function capturesLeg(kit: Kit, page: Page, url: string, engine: Engine) {
   const out = process.env.PAIRING_CAPTURES ?? join(kit.out, "captures");
   mkdirSync(out, { recursive: true });
   const shots: Shot[] = [];
-  for (const scheme of ["light", "dark"] as const) {
-    for (const width of [1440, 390]) {
-      // biome-ignore lint/performance/noAwaitInLoops: one scheme and window width at a time on one page
-      await page.emulateMedia({ colorScheme: scheme });
-      await setWidth(page, width);
-      shots.push(...(await shootRests(page, out, scheme, width)));
-    }
+  for (const width of [1440, 390]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one window width at a time on one page
+    await setWidth(page, width);
+    shots.push(...(await shootRests(page, out, "light", width)));
   }
-  await page.emulateMedia({ colorScheme: "light" });
+  // By night on a page of its own, the dashboard's theme pinned dark.
+  const night = await openPreview(kit, url, engine, "dark");
+  for (const width of [1440, 390]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one window width at a time on one page
+    await setWidth(night.page, width);
+    shots.push(...(await shootRests(night.page, out, "dark", width)));
+  }
+  await night.page.close();
   await picksTo(page);
+  // The record's skeleton (ruling 11): Checking before the hub's record lands.
+  for (const width of [1440, 390]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one window width at a time
+    await setWidth(page, width);
+    await page.evaluate(async () => {
+      const p = (window as unknown as W).preview;
+      await p.snap("waiting");
+      p.go("checking-tailnet");
+    });
+    await settled(page);
+    await holdForShot(page);
+    const frame = width === 1440 ? "desk" : "phone";
+    const file = `checking-tailnet-skeleton-${frame}-${width}-day.png`;
+    await page.locator(".frame").screenshot({ path: join(out, file) });
+    shots.push({
+      file,
+      caption: `Checking, tailnet, before the hub's record lands (its facts as skeletons), the ${frame === "desk" ? "Desk" : "Phone"} frame at ${width}, by day`,
+    });
+  }
   // The Animation domain's clock is Chromium's.
   if (engine === "chromium") {
     for (const width of [1440, 390]) {
-      for (const [from, to] of SCRUBBED) {
+      for (const scrub of SCRUBBED) {
         // biome-ignore lint/performance/noAwaitInLoops: one held clock at a time
         await setWidth(page, width);
-        shots.push(...(await shootBoard(page, out, width, from, to)));
+        shots.push(...(await shootBoard(page, out, width, scrub)));
       }
     }
   }
@@ -1056,6 +1419,7 @@ async function capturesLeg(kit: Kit, page: Page, engine: Engine) {
 
 const spec: Spec = {
   name: "pairing-preview",
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the legs PAIRING_LEGS names, in order, one engine at a time
   async run(kit: Kit) {
     const server = serve();
     const url = `http://127.0.0.1:${server.port}/`;
@@ -1078,11 +1442,20 @@ const spec: Spec = {
         if (LEGS.has("rest")) {
           await restLeg(kit, page, engine);
         }
+        if (LEGS.has("ride")) {
+          await rideLeg(kit, page, engine);
+        }
+        if (LEGS.has("scrub")) {
+          await scrubCawLeg(kit, page, engine);
+        }
+        if (LEGS.has("night")) {
+          await nightLeg(kit, url, engine);
+        }
         if (LEGS.has("leads")) {
           await leadsLeg(kit, page, engine);
         }
         if (LEGS.has("captures")) {
-          await capturesLeg(kit, page, engine);
+          await capturesLeg(kit, page, url, engine);
         }
         kit.check(
           `${engine}: no console error`,
