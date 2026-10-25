@@ -24,12 +24,16 @@
  * HOW. Every launch runs with `PROBE_KIT_BROWSER=<run>-<n>` in its
  * environment ({@link launchEnv}); a process the browser starts, however far
  * it forks away, inherits it. Once its browsers have closed, {@link leftBehind}
- * reads `/proc/<pid>/environ` of every process this user can read and names
+ * reads the environment of every process this user can read (core
+ * `processArgs`: `/proc` on Linux, `KERN_PROCARGS2` on macOS) and names
  * those carrying one of the tags. Chromium writes over its own environ with
  * its process titles, so the tag finds what it forked off and exec'd (the
  * handlers); its own processes are the run's children, which Playwright ends.
  */
-import { readdir, readFile } from "node:fs/promises";
+import {
+  commandLines,
+  processArgs,
+} from "../../packages/core/src/process-identity";
 
 const TAG = "PROBE_KIT_BROWSER";
 
@@ -68,31 +72,16 @@ export function takeLaunches(keep: ReadonlySet<string> = new Set()): string[] {
   return taken;
 }
 
-/** A process's folder in `/proc`. */
-const PID = /^\d+$/;
-
-/** `<pid> <command line>` of every process that carries one of `tags`. */
+/** `<pid> <command line>` of every process that carries one of `tags`, read with core's process readers on Linux and macOS alike. */
 async function carrying(tags: ReadonlySet<string>): Promise<string[]> {
-  const pids = (await readdir("/proc")).filter((name) => PID.test(name));
   const found = await Promise.all(
-    pids.map(async (pid) => {
+    (await commandLines()).map(async ({ pid, command }) => {
       // A process of another user, or one that has ended, reads as nothing.
-      const environ = await readFile(`/proc/${pid}/environ`, "utf8").catch(
-        () => ""
+      const tagged = (await processArgs(pid))?.env.some(
+        (line) =>
+          line.startsWith(`${TAG}=`) && tags.has(line.slice(TAG.length + 1))
       );
-      const tagged = environ
-        .split("\0")
-        .some(
-          (line) =>
-            line.startsWith(`${TAG}=`) && tags.has(line.slice(TAG.length + 1))
-        );
-      if (!tagged) {
-        return null;
-      }
-      const command = await readFile(`/proc/${pid}/cmdline`, "utf8").catch(
-        () => ""
-      );
-      return `${pid} ${command.split("\0").join(" ").trim().slice(0, 200)}`;
+      return tagged ? `${pid} ${command.trim().slice(0, 200)}` : null;
     })
   );
   return found.filter((line): line is string => line !== null);
@@ -107,7 +96,7 @@ const GRACE_MS = 5000;
  * browser left nothing behind. Linux alone has `/proc`; elsewhere none.
  */
 export async function leftBehind(tags: readonly string[]): Promise<string[]> {
-  if (tags.length === 0 || process.platform !== "linux") {
+  if (tags.length === 0) {
     return [];
   }
   const wanted = new Set(tags);

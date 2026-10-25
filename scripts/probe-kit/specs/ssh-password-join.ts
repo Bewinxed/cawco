@@ -60,6 +60,11 @@ import {
 import { dirname, join } from "node:path";
 import type { AuthContext } from "ssh2";
 import type { SshJoinJob } from "../../../packages/core/src/join";
+import {
+  commandLines,
+  processArgs,
+  processGroup,
+} from "../../../packages/core/src/process-identity";
 import { listedPid, signal } from "../../../packages/core/src/signal";
 import { connectWords } from "../../../packages/core/src/words/connect";
 import { until } from "../../scratch-fleet";
@@ -89,60 +94,39 @@ const CARRYING = "cawco-install: carrying this hub to the machine on its port ";
 /** The install script's own first refusal on a machine with no `tar`. */
 const NO_TAR = "cawco: tar is needed";
 
-const PROCESS_ID = /^\d+$/;
 /** The locale the hub runs under: ssh's words, in any language, decide nothing. */
 const HUB_LOCALE = "de_DE.UTF-8";
 /** The step join.ts `refusalStep` names for a machine whose sshd refuses forwarding. */
 const FORWARDING_REFUSED =
   "forwarding a port on the machine to this hub, which its SSH server refuses";
 
-/** A process's group, from /proc/<pid>/stat (the third field after the name). */
-const groupOf = (pid: number): number | null => {
-  try {
-    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-    return Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[2]);
-  } catch {
-    return null;
-  }
-};
-
-/** Whether `pid`'s environment holds `entry` (`NAME=value`), read from /proc. */
-const environHolds = (pid: number, entry: string): boolean => {
-  try {
-    return readFileSync(`/proc/${pid}/environ`, "utf8")
-      .split("\0")
-      .includes(entry);
-  } catch {
-    return false;
-  }
-};
+/** A process's group (core `processGroup`, Linux and macOS alike), or null when it is gone. */
+const groupOf = (pid: number): number | null => processGroup(pid) ?? null;
 
 /**
- * Every live process whose argv holds all of `parts`, or whose group is
- * `group`; with `run`, only those whose environment holds it (leg (l)'s
- * {@link RUN_ENV} marker, so a process an earlier run left behind is never
- * read as this run's).
+ * Every live process whose command line holds all of `parts`, or whose
+ * group is `group`; with `run`, only those whose environment holds it (leg
+ * (l)'s {@link RUN_ENV} marker, so a process an earlier run left behind is
+ * never read as this run's). Read with core's process readers, on Linux and
+ * macOS alike.
  */
-const processes = (
+const processes = async (
   match: ({ parts: string[] } | { group: number }) & { run?: string }
-): number[] =>
-  readdirSync("/proc")
-    .filter((entry) => PROCESS_ID.test(entry))
-    .map(Number)
-    .filter((pid) => {
-      if (match.run !== undefined && !environHolds(pid, match.run)) {
-        return false;
-      }
-      if ("group" in match) {
-        return groupOf(pid) === match.group;
-      }
-      try {
-        const argv = readFileSync(`/proc/${pid}/cmdline`, "utf8");
-        return match.parts.every((part) => argv.includes(part));
-      } catch {
-        return false;
-      }
-    });
+): Promise<number[]> => {
+  const found = await Promise.all(
+    (await commandLines()).map(async ({ pid, command }) => {
+      const ofRun =
+        match.run === undefined ||
+        (await processArgs(pid))?.env.includes(match.run) === true;
+      const matches =
+        "group" in match
+          ? groupOf(pid) === match.group
+          : match.parts.every((part) => command.includes(part));
+      return ofRun && matches ? pid : null;
+    })
+  );
+  return found.filter((pid): pid is number => pid !== null);
+};
 
 /**
  * The variable leg (l)'s sshd sets on every session (`SetEnv`), with a value
@@ -151,24 +135,27 @@ const processes = (
  */
 const RUN_ENV = "CAWCO_PROBE_RUN";
 
-/** Every process's argv and environment that holds `secret`, read from /proc. */
-const holders = (secret: string): string[] => {
-  const found: string[] = [];
-  for (const entry of readdirSync("/proc")) {
-    if (!PROCESS_ID.test(entry)) {
-      continue;
-    }
-    for (const part of ["cmdline", "environ"]) {
-      try {
-        if (readFileSync(`/proc/${entry}/${part}`).includes(secret)) {
-          found.push(`${entry}/${part}`);
-        }
-      } catch {
-        // Gone, or another user's: neither is one this hub started.
-      }
-    }
-  }
-  return found;
+/**
+ * Every process whose arguments or environment hold `secret`, as
+ * `<pid>/argv` or `<pid>/env`; read with core `processArgs` on Linux and
+ * macOS alike. A process gone, or another user's, reads as nothing: neither
+ * is one this hub started.
+ */
+const holders = async (secret: string): Promise<string[]> => {
+  const found = await Promise.all(
+    (await commandLines()).map(async ({ pid }) => {
+      const args = await processArgs(pid);
+      return [
+        ...(args?.argv.some((one) => one.includes(secret))
+          ? [`${pid}/argv`]
+          : []),
+        ...(args?.env.some((one) => one.includes(secret))
+          ? [`${pid}/env`]
+          : []),
+      ];
+    })
+  );
+  return found.flat();
 };
 
 /** One add as a reviewer reads it in a PASS or FAIL line. */
@@ -183,8 +170,8 @@ const stopAdd = (fleet: KitFleet, id: string) =>
   );
 
 /** The group of the first live process whose argv holds all of `parts`. */
-const sshGroup = (parts: string[]): number | null => {
-  const pid = processes({ parts }).at(0);
+const sshGroup = async (parts: string[]): Promise<number | null> => {
+  const pid = (await processes({ parts })).at(0);
   return pid === undefined ? null : groupOf(pid);
 };
 
@@ -279,8 +266,8 @@ async function realSshd(
   const read = (id: string) => fleet.api<SshJoinJob>(`/api/machines/ssh/${id}`);
   const holding = () => processes({ parts: HELD, run: marker });
   const watchdogs = () => processes({ parts: ["while ps -p"], run: marker });
-  const inGroup = (group: number | null) =>
-    group === null ? [] : processes({ group, run: marker });
+  const inGroup = async (group: number | null): Promise<number[]> =>
+    group === null ? [] : await processes({ group, run: marker });
   const hold = join(machine.home, ".hold");
   try {
     await Promise.all([sshd.listening, closed.listening]);
@@ -288,7 +275,7 @@ async function realSshd(
     const held = await begin();
     const step = await until(
       "the machine's install step held",
-      () => holding().at(0),
+      async () => (await holding()).at(0),
       Boolean,
       30_000
     ).catch(() => undefined);
@@ -296,8 +283,9 @@ async function realSshd(
     const stopped = await stopAdd(fleet, held.id);
     const gone = await until(
       "the machine's step and its group gone",
-      () =>
-        holding().length === 0 && inGroup(stepGroup).length === 0
+      async () =>
+        (await holding()).length === 0 &&
+        (await inGroup(stepGroup)).length === 0
           ? true
           : undefined,
       Boolean,
@@ -306,7 +294,7 @@ async function realSshd(
     kit.check(
       "l: on a real sshd, Stop ends what the add runs on the machine: its held step and every process of that group are gone within 10 s",
       stopped.job?.state === "stopped" && step !== undefined && gone === true,
-      `stop answered ${stopped.said}; machine's step ${step} (group ${stepGroup}); left ${JSON.stringify(holding())} and in the group ${JSON.stringify(inGroup(stepGroup))}`
+      `stop answered ${stopped.said}; machine's step ${step} (group ${stepGroup}); left ${JSON.stringify(await holding())} and in the group ${JSON.stringify(await inGroup(stepGroup))}`
     );
     rmSync(hold, { force: true });
     const ran = await begin();
@@ -318,14 +306,14 @@ async function realSshd(
     ).catch(() => read(ran.id));
     const strays = await until(
       "no watchdog left on the machine",
-      () => (watchdogs().length === 0 ? true : undefined),
+      async () => ((await watchdogs()).length === 0 ? true : undefined),
       Boolean,
       5000
     ).catch(() => false);
     kit.check(
       "l: on a real sshd, an add that runs to its end ran the install through the hub's connection, exits with its own failure and leaves no watchdog behind",
       ended.state === "failed" && installed(ended) && strays === true,
-      `${seen(ended)}; watchdogs left ${JSON.stringify(watchdogs())}`
+      `${seen(ended)}; watchdogs left ${JSON.stringify(await watchdogs())}`
     );
     const refused = await beginOn(closed.port);
     const said = await until(
@@ -345,8 +333,8 @@ async function realSshd(
     sshd.proc.kill();
     closed.proc.kill();
     // Whatever of this run still lives (a watchdog that failed, its step):
-    // it goes, by the pid /proc lists now.
-    for (const pid of processes({ parts: [], run: marker })) {
+    // it goes, by the pid the process table lists now.
+    for (const pid of await processes({ parts: [], run: marker })) {
       signal(listedPid(pid), "SIGKILL");
     }
   }
@@ -445,7 +433,8 @@ async function run(kit: Kit): Promise<void> {
   const authorized = join(home, ".ssh", "authorized_keys");
   const signedIn: string[] = [];
   const triedPasswords: string[] = [];
-  const holdersAtSignIn: string[] = [];
+  /** Who held the password, each read begun as a sign-in took it. */
+  const holdersAtSignIn: Promise<string[]>[] = [];
   /** How many sign-ins were met with silence ({@link SILENCED}). */
   let silenced = 0;
   /** Whether `password` signs in by `way`, noting every try and, as it signs in, who held it. */
@@ -454,7 +443,7 @@ async function run(kit: Kit): Promise<void> {
     if (password !== PASSWORD) {
       return false;
     }
-    holdersAtSignIn.push(...holders(PASSWORD));
+    holdersAtSignIn.push(holders(PASSWORD));
     signedIn.push(way);
     return true;
   };
@@ -592,10 +581,11 @@ async function run(kit: Kit): Promise<void> {
         installed(first),
       `${seen(first)}; signed in by ${signedIn.join(", ")}; key lines ${JSON.stringify(keyLines())}; modes ${modes}`
     );
+    const heldBy = (await Promise.all(holdersAtSignIn)).flat();
     kit.check(
       "c: no process's argv or environment held the password while it signed in",
-      holdersAtSignIn.length === 0,
-      holdersAtSignIn.join(", ")
+      heldBy.length === 0,
+      heldBy.join(", ")
     );
 
     // (d) Again: append only when absent.
@@ -619,13 +609,14 @@ async function run(kit: Kit): Promise<void> {
     const sshArgv = ["/usr/bin/ssh", `${USER}@127.0.0.1`, String(port)];
     const pid = await until(
       "the add's ssh signing in",
-      () => (silenced > 0 ? processes({ parts: sshArgv }).at(0) : undefined),
+      async () =>
+        silenced > 0 ? (await processes({ parts: sshArgv })).at(0) : undefined,
       Boolean,
       15_000
     ).catch(() => undefined);
-    const group = sshGroup(sshArgv);
+    const group = await sshGroup(sshArgv);
     const stopped = await stopAdd(fleet, held.id);
-    const left = processes({ group: group ?? -1 });
+    const left = await processes({ group: group ?? -1 });
     const reread = await read(held.id);
     jobs.push(reread);
     kit.check(
@@ -634,7 +625,7 @@ async function run(kit: Kit): Promise<void> {
         reread.state === "stopped" &&
         group === pid &&
         left.length === 0 &&
-        processes({ parts: sshArgv }).length === 0 &&
+        (await processes({ parts: sshArgv })).length === 0 &&
         !reread.lines.some((line) => line.startsWith("cawco-install: ")),
       `stop answered ${stopped.said}; ssh pid ${pid}, group ${group}, left in the group ${JSON.stringify(left)}`
     );

@@ -7,7 +7,7 @@
  * The agent and sessiond start with `CLAUDE_CODE_SILENT_TURN_REMINDER=1`, as
  * a person's shell might hand them. One session is spawned and given a turn;
  * asserted: the CLI process sessiond holds for it has
- * `CLAUDE_CODE_SILENT_TURN_REMINDER=0` in `/proc/<pid>/environ` (Linux only).
+ * `CLAUDE_CODE_SILENT_TURN_REMINDER=0` in its environment.
  *
  * Not shown here: the reminder's absence from a request. It fires only after
  * a run of tool-only turns and its default is a server flag the mock does not
@@ -16,7 +16,7 @@
  *   bun scripts/probe-kit/run.ts claude-silent-reminder
  */
 import { CLAUDE_QUIET_ENV } from "../../../packages/agent/src/claude-env";
-import { until } from "../../scratch-fleet";
+import { envOf, until } from "../../scratch-fleet";
 import type { Spec } from "../kit";
 
 const NAME = "CLAUDE_CODE_SILENT_TURN_REMINDER";
@@ -56,10 +56,7 @@ const spec: Spec = {
       (found) => found !== undefined,
       30_000
     );
-    const value = (await Bun.file(`/proc/${pid}/environ`).text())
-      .split("\0")
-      .find((line) => line.startsWith(`${NAME}=`))
-      ?.slice(NAME.length + 1);
+    const value = await envOf(pid, NAME);
     kit.note(`pid ${pid}: ${NAME}=${value ?? "(unset)"}`);
     check(
       `the session's Claude Code runs with ${NAME}=${CLAUDE_QUIET_ENV[NAME]} over the person's ${PERSON[NAME]}`,

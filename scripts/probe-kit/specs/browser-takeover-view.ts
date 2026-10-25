@@ -74,10 +74,7 @@ const respond = (_request: Seen): Reply => ({ everyMs: 5, words: ["ok"] });
 
 /** A session's process's own credential (its environment). */
 const credentialOf = async (fleet: KitFleet, id: string): Promise<string> =>
-  (await Bun.file(`/proc/${await fleet.sessionPid(id)}/environ`).text())
-    .split("\0")
-    .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
-    ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? "";
+  await fleet.sessionCredential(id);
 
 const post = async (fleet: KitFleet, path: string, body: object) => {
   const response = await fetch(`${fleet.base}${path}`, {

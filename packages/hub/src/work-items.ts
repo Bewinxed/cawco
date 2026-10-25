@@ -4035,8 +4035,9 @@ export const createWorkItems = ({
    * ({@link previewedBy}: once the artifact goes, the next settle ends it),
    * a project's folder is inside it ({@link placesIn}), or a message or
    * continuation is on its way to one of its sessions (its new turn's work
-   * is not left work). Why: a done delegate stays awake for its idle sleep
-   * (half an hour) so a handoff finds it warm, and until it slept what its
+   * is not left work). Why: a done delegate stays awake until it is at rest
+   * (server.ts `sleepFinished` then puts it to sleep), or for its idle half
+   * hour while its session is kept warm, and until it slept what its
    * commands left ran on; on 2026-10-24 its parent was told to end three
    * pids it left, already gone by the time it looked.
    */

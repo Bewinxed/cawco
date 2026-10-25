@@ -644,11 +644,7 @@ const spec: Spec = {
     const parent = await fleet.spawn("claude", "Parent", src, {
       projectId: project.id,
     });
-    const credential =
-      (await Bun.file(`/proc/${await fleet.sessionPid(parent)}/environ`).text())
-        .split("\0")
-        .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
-        ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? "";
+    const credential = await fleet.sessionCredential(parent);
 
     const workspaceOf = (id: string) =>
       fleet.query<Workspace>(

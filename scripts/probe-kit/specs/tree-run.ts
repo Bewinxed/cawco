@@ -50,7 +50,12 @@
  *   so neither its parent nor its process group is the harness's) is
  *   running 5 s before the harness is killed alone (SIGKILL): within
  *   seconds it is gone, ended and named in its keeper's log (sessiond
- *   server.ts `#sweep`, found by the tree mark it inherited).
+ *   server.ts `#sweep`, found by the tree mark it inherited). The helper is
+ *   the runtime itself (perl's `setsid`, then `exec` of bun): macOS
+ *   withholds the environment of its own platform binaries (`/usr/bin/perl`,
+ *   `/bin/sleep`), so there the mark finds only a helper installed apart
+ *   from the system, as sessiond's `#survey` says; such a helper is what
+ *   m1 reads on either system.
  * - u1. A delegate's process is killed while its agent is down, and the
  *   agent comes back with its sessiond frozen: while the machine's custody
  *   is undecided the item stays live and its parent hears nothing.
@@ -353,19 +358,6 @@ const parentHeard = (fleet: KitFleet, from: number): string =>
     .map((one) => one.all)
     .join("\n");
 
-/** A session's credential, read off its process's environment. */
-const credentialOf = async (fleet: KitFleet, id: string): Promise<string> => {
-  const environ = await Bun.file(
-    `/proc/${await fleet.sessionPid(id)}/environ`
-  ).text();
-  return (
-    environ
-      .split("\0")
-      .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
-      ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? ""
-  );
-};
-
 /** k1. */
 const keyedLeg = async (
   kit: Kit,
@@ -375,7 +367,7 @@ const keyedLeg = async (
   const session = {
     base: fleet.base,
     id: parent,
-    credential: await credentialOf(fleet, parent),
+    credential: await fleet.sessionCredential(parent),
   };
   const ask = {
     title: "Keyed delegate",
@@ -682,7 +674,7 @@ const routineLeg = async (
     {
       base: fleet.base,
       id: maker,
-      credential: await credentialOf(fleet, maker),
+      credential: await fleet.sessionCredential(maker),
     },
     "routine_create",
     {
@@ -878,18 +870,10 @@ const ancestryOf = async (command: string): Promise<string> => {
 };
 
 /** What a session's harness reads, off its process's environment: its Claude config dir. */
-const configDirOf = async (
+const configDirOf = (
   fleet: KitFleet,
   id: string
-): Promise<string | undefined> => {
-  const environ = await Bun.file(
-    `/proc/${await fleet.sessionPid(id)}/environ`
-  ).text();
-  return environ
-    .split("\0")
-    .find((line) => line.startsWith("CLAUDE_CONFIG_DIR="))
-    ?.slice("CLAUDE_CONFIG_DIR=".length);
-};
+): Promise<string | undefined> => fleet.sessionEnv(id, "CLAUDE_CONFIG_DIR");
 
 /** m1. */
 const mcpOrphanLeg = async (
@@ -908,7 +892,7 @@ const mcpOrphanLeg = async (
     `#!/bin/sh
 [ -e '${flag}' ] || exit 0
 rm -f '${flag}'
-perl -MPOSIX -e 'POSIX::setsid(); sleep 3604' ${marker} </dev/null >/dev/null 2>&1 &
+perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV' '${process.execPath}' -e 'setTimeout(() => {}, 3604000)' ${marker} </dev/null >/dev/null 2>&1 &
 exit 0
 `,
     { mode: 0o755 }

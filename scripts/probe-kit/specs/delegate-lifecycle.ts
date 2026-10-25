@@ -180,10 +180,7 @@ interface ItemRow {
 
 /** The parent's own credential, as its tools call the hub with it. */
 const credentialOf = async (fleet: KitFleet, parent: string): Promise<string> =>
-  (await Bun.file(`/proc/${await fleet.sessionPid(parent)}/environ`).text())
-    .split("\0")
-    .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
-    ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? "";
+  await fleet.sessionCredential(parent);
 
 /** A CawCo tool called as the parent, through the door its MCP server and the CLI share: its words, or with `record` the hub's record. */
 const callAs = async (

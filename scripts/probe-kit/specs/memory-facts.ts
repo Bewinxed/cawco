@@ -417,14 +417,7 @@ const standUp = async (kit: Kit, jevUrl: string) => {
     const id = await fleet.spawn("claude", title, fleet.workdir, {
       projectId,
     });
-    const environ = await Bun.file(
-      `/proc/${await fleet.sessionPid(id)}/environ`
-    ).text();
-    const credential =
-      environ
-        .split("\0")
-        .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
-        ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? "";
+    const credential = await fleet.sessionCredential(id);
     return { id, credential };
   };
   /** One tool call through the hub's REST door, as `as`: refused or not, and its words. */

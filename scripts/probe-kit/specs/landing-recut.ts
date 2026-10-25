@@ -613,15 +613,7 @@ const run = async (kit: Kit) => {
   const callAsParent = async (parent: string, name: string, args: object) => {
     let credential = credentials.get(parent);
     if (credential === undefined) {
-      credential =
-        (
-          await Bun.file(
-            `/proc/${await fleet.sessionPid(parent)}/environ`
-          ).text()
-        )
-          .split("\0")
-          .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
-          ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? "";
+      credential = await fleet.sessionCredential(parent);
       credentials.set(parent, credential);
     }
     const said = await toolWords(

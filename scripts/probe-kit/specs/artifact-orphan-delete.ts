@@ -124,10 +124,7 @@ interface Started {
 
 /** A session's own credential, as its tools call the hub with it. */
 const credentialOf = async (fleet: KitFleet, id: string): Promise<string> =>
-  (await Bun.file(`/proc/${await fleet.sessionPid(id)}/environ`).text())
-    .split("\0")
-    .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
-    ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? "";
+  await fleet.sessionCredential(id);
 
 /** A CawCo tool called as session `as`, through the door its MCP server and the CLI share: its words. */
 const callAs = async (
