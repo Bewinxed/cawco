@@ -117,6 +117,7 @@ import {
   endView,
   ensureView,
   type Layer,
+  type LayerForm,
   layerDir,
   layerOf,
   makeLayer,
@@ -1969,29 +1970,34 @@ const swiftPackages = async (dir: string, depth = 6): Promise<string[]> => {
 
 /**
  * The folders in the workspaces' cache (paths.ts `workspaceCacheDir`) that
- * belong to the clone at `clone` alone, each built from it and read by
- * nothing else:
+ * belong to workspace `id` alone, its copy at `clone`, each built from it and
+ * read by nothing else:
+ * - on Linux, the folder its `node_modules` links to, `modules/<id>`
+ *   (workspace-modules.ts): a view's only one, since a view's path is the
+ *   person's folder, which names nothing of the workspace's;
  * - its Apple build root, `xdg/cawco-apple.noindex/<clone's folder name>`,
  *   where build-both.sh syncs, builds (DerivedData) and logs (~5 GB), and
  *   its lock;
- * - on Linux, the folder its `node_modules` links to,
- *   `modules/<clone's folder name>` (workspace-modules.ts);
  * - on macOS, Xcode's DerivedData folders whose `info.plist` names a project
  *   inside the clone (the boundary's xcodebuild puts every build's in
  *   `DerivedData.noindex/`), and SwiftPM's build dirs for each of the clone's
  *   packages, `swiftpm/build/<md5 of the package dir>` (boundary.ts's swift
  *   shim names them so).
- * Read before the clone goes: its packages are found in it.
+ * Read before the copy goes: its packages are found in it.
  */
-const cacheOfClone = async (clone: string): Promise<string[]> => {
+const cacheOfWorkspace = async (
+  id: string,
+  clone: string,
+  form: LayerForm
+): Promise<string[]> => {
+  const modules = workspaceModulesRoot(id);
+  if (form === "overlay") {
+    return [modules];
+  }
   const cache = workspaceCacheDir();
   const apple = join(cache, "xdg", "cawco-apple.noindex");
   const name = basename(clone);
-  const owned = [
-    join(apple, name),
-    join(apple, ".locks", name),
-    workspaceModulesRoot(clone),
-  ];
+  const owned = [join(apple, name), join(apple, ".locks", name), modules];
   if (process.platform !== "darwin") {
     return owned;
   }
@@ -2150,7 +2156,7 @@ const carryChanged = async (
  * ({@link holding}, {@link WorkspaceUnlanded}). Anything there keeps the
  * clone, its state and scratch dirs, and answers `held`: nothing is
  * deleted. Holding nothing, the clone is deleted with what it owns in the
- * workspaces' cache ({@link cacheOfClone}), the files a tracked
+ * workspaces' cache ({@link cacheOfWorkspace}), the files a tracked
  * `.gitignore` covers with it;
  * `closeBoundary` takes its state and scratch dirs.
  */
@@ -2500,7 +2506,7 @@ const readAndClose = async (
               )
             : undefined,
       };
-  const cached = access.layer.form === "copy" ? await cacheOfClone(path) : [];
+  const cached = await cacheOfWorkspace(request.id, path, access.layer.form);
   await removeLayer(request.id, access.layer);
   await closeBoundary(workspace);
   await Promise.all(cached.map(removeTree));
