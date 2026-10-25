@@ -18,7 +18,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { writeStateFile, writeStateFileSync } from "@cawco/core/state-file";
+import { writeStateFile } from "@cawco/core/state-file";
 import { DB_PATH } from "./config";
 
 export const MEDIA_DIR = join(dirname(DB_PATH), "media");
@@ -35,6 +35,15 @@ const MEDIA_NAME = /^[a-f0-9]{64}\.(png|jpg|gif|webp)$/;
 
 let ready = false;
 
+/**
+ * Pictures on their way to their files, by name: what a read of one answers
+ * until its file lands. The write is the store's own (whole, synced), off the
+ * loop: written in line, a window of a session's screenshots held the hub's
+ * loop for each one's fsync (80 ms for one window of a real session, 860 ms
+ * on a loaded machine).
+ */
+const writing = new Map<string, Buffer>();
+
 function store(type: string, data: string): string {
   const bytes = Buffer.from(data, "base64");
   const hash = createHash("sha256").update(bytes).digest("hex");
@@ -45,10 +54,33 @@ function store(type: string, data: string): string {
     ready = true;
   }
   // Whole or not at all: a name that is there is its hash's bytes.
-  if (!existsSync(path)) {
-    writeStateFileSync(path, bytes);
+  if (!(writing.has(name) || existsSync(path))) {
+    writing.set(name, bytes);
+    writeStateFile(path, bytes)
+      .catch((error: unknown) =>
+        console.error(
+          `[media] ${name} could not be kept: ${error instanceof Error ? error.message : String(error)}`
+        )
+      )
+      .finally(() => writing.delete(name));
   }
   return `/api/media/${name}`;
+}
+
+/** A picture's bytes while its write is under way ({@link writing}); undefined once its file is there. */
+export function mediaWriting(name: string): Buffer | undefined {
+  return writing.get(name);
+}
+
+/** A stored picture's bytes by its name, its write still under way or done; undefined for a name this store never minted or a file gone. */
+export function mediaBytes(name: string): Uint8Array | undefined {
+  const path = mediaFilePath(name);
+  if (!path) {
+    return;
+  }
+  return (
+    writing.get(name) ?? (existsSync(path) ? readFileSync(path) : undefined)
+  );
 }
 
 interface Base64Image {
@@ -123,10 +155,8 @@ export function mediaFilePath(name: string): string | undefined {
  * file is gone.
  */
 export function mediaBase64(url: string): string | undefined {
-  const path = mediaFilePath(url.replace(MEDIA_URL_PREFIX, ""));
-  return path && existsSync(path)
-    ? readFileSync(path).toString("base64")
-    : undefined;
+  const bytes = mediaBytes(url.replace(MEDIA_URL_PREFIX, ""));
+  return bytes ? Buffer.from(bytes).toString("base64") : undefined;
 }
 
 const MEDIA_URL_PREFIX = /^\/api\/media\//;

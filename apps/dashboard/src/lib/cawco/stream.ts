@@ -68,6 +68,12 @@ export interface SessionCursor {
   /** Consecutive resumes that failed to heal the gap — see {@link MAX_RESYNC_ATTEMPTS}. */
   resyncFailures: number;
   /**
+   * The hub run whose numbering {@link lastSeq} counts in: the run of the
+   * page it was adopted from (`TranscriptPage.hubRun`). A stream resumes from
+   * it only on a socket of that run. Null until a page is adopted.
+   */
+  run: string | null;
+  /**
    * Whether any event has been applied. Before the first one the client has no
    * origin, so it adopts whatever seq the hub sends first rather than reading
    * `lastSeq = 0` as a hole back to the beginning of the session.
@@ -229,6 +235,7 @@ function newCursor(): SessionCursor {
     subscribed: false,
     resyncAfter: null,
     resyncFailures: 0,
+    run: null,
     warned: false,
   };
 }
@@ -279,12 +286,11 @@ function dispatch(
  * a reset), or, without it, from the next event on (a session this tab just
  * started).
  *
- * Never from a cursor a connection before left behind: the hub numbers a
- * session's stream in memory, from 1 again when its process restarts, so
- * that cursor may sit inside another process's numbering, and a resume from
- * it would replay that process's events onto rows they do not follow. A
- * reconnect reads each followed transcript again instead, and that read
- * subscribes it ({@link adoptPage}).
+ * Never from a place another hub run numbered: the hub numbers a session's
+ * stream in memory, from 1 again when its process restarts, so that place
+ * sits inside another process's numbering, and a resume from it would replay
+ * that process's events onto rows they do not follow ({@link resumeHeld}
+ * holds to the run).
  */
 export function subscribeSession(
   state: StreamState,
@@ -354,17 +360,19 @@ export function beginRead(state: StreamState, sessionId: string): void {
 }
 
 /**
- * A transcript page landed, read at `seq`: the session's stream resumes from
- * there when the dashboard follows it. The hub replays what came after out of
- * its ring, or resets honestly when the page took longer than the ring holds.
- * One it does not follow keeps no cursor, so it is read again when it is
- * followed (client.svelte.ts `syncSubscriptions`).
+ * A transcript page landed, read at `seq` in hub run `run`: the session's
+ * stream resumes from there when the dashboard follows it. The hub replays
+ * what came after out of its ring, or resets honestly when the page took
+ * longer than the ring holds. `connected`: the socket's board is in, and
+ * names that run. Before it is, the cursor keeps the place, and the socket
+ * resumes from it when its hub is of the same run ({@link resumeHeld}). One it does not follow keeps no cursor, so it is
+ * read again when it is followed (client.svelte.ts `syncSubscriptions`).
  */
 export function adoptPage(
   state: StreamState,
   host: StreamHost,
   sessionId: string,
-  seq: number
+  page: { connected: boolean; run: string | null; seq: number }
 ): void {
   if (!host.follows(sessionId)) {
     letGo(state, host, sessionId);
@@ -372,11 +380,44 @@ export function adoptPage(
   }
   const cursor = cursorFor(state, sessionId);
   cursor.reading = false;
-  cursor.lastSeq = seq;
+  cursor.lastSeq = page.seq;
   cursor.seen = true;
+  cursor.run = page.run;
   cursor.resyncFailures = 0;
   cursor.warned = false;
-  subscribeSession(state, host, sessionId, seq);
+  if (page.connected) {
+    subscribeSession(state, host, sessionId, page.seq);
+  }
+}
+
+/**
+ * A session this socket does not follow yet, resumed from the place its
+ * cursor holds when that place counts in the socket's hub run (`socketRun`,
+ * the board's): the `seq` of a page that landed before the socket's board,
+ * or the last event a dropped socket applied. The answer is true then. False
+ * when there is no such place (a read still out, none landed, a session this
+ * tab started whose run no page named) or its run is another's: the hub
+ * numbers streams from 1 again in every run, so that place counts in a
+ * numbering this socket does not, and the session is read again.
+ */
+export function resumeHeld(
+  state: StreamState,
+  host: StreamHost,
+  sessionId: string,
+  socketRun: string
+): boolean {
+  const cursor = state.cursors[sessionId];
+  if (
+    !cursor ||
+    cursor.reading ||
+    cursor.subscribed ||
+    !cursor.seen ||
+    cursor.run !== socketRun
+  ) {
+    return false;
+  }
+  subscribeSession(state, host, sessionId, cursor.lastSeq);
+  return cursor.subscribed;
 }
 
 /**
@@ -393,11 +434,11 @@ export function following(state: StreamState, sessionId: string): boolean {
  * The socket dropped.
  *
  * Every subscription and every resume died with the connection, and so did
- * any acknowledgement still owed. The cursors stay only as a session's place
- * on this side: nothing resumes from them, because the next socket may reach
- * another hub process that numbers its streams from 1 again. The next
- * connection reads each followed transcript again, and that read subscribes
- * it ({@link adoptPage}).
+ * any acknowledgement still owed. The cursors keep each session's place: the
+ * next connection resumes from it when its board names the same hub run
+ * ({@link resumeHeld}), and reads the transcript again when it names another
+ * (the hub restarted, its streams numbered from 1 again), that read
+ * subscribing it ({@link adoptPage}).
  *
  * `host` is optional for the same reason it is on {@link sweepCommands}, and
  * carries the same warning: without it these failures are recorded but not

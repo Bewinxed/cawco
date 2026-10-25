@@ -55,7 +55,6 @@ export { default as IconBook2 } from "~icons/solar/book-2-bold-duotone";
 export { default as IconBook } from "~icons/solar/book-bold-duotone";
 export { default as IconBox } from "~icons/solar/box-bold-duotone";
 export { default as IconSubagent } from "~icons/solar/branching-paths-down-bold-duotone";
-export { default as IconFork } from "~icons/solar/branching-paths-up-bold-duotone";
 /** A release's Fixed section (ReleaseNotes). */
 export { default as IconBug } from "~icons/solar/bug-bold-duotone";
 /** Work set for dates: a Caw starter that plans on the calendar. */
@@ -135,6 +134,8 @@ export {
   default as IconAgent,
   default as IconGhost,
 } from "~icons/solar/ghost-smile-bold-duotone";
+/** Fork, Spin off: a session forked from another (the bare cut, no enclosure). */
+export { default as IconFork } from "~icons/solar/git-fork-bold-duotone";
 export {
   default as IconGlobe,
   default as IconToolWeb,
@@ -164,7 +165,13 @@ export { default as IconListRows } from "~icons/solar/list-bold-duotone";
 export { default as IconListCheck } from "~icons/solar/list-check-bold-duotone";
 /** Waits on another task that has not landed. */
 export { default as IconLock } from "~icons/solar/lock-keyhole-minimalistic-bold-duotone";
-export { default as IconLogout } from "~icons/solar/logout-2-bold-duotone";
+/** A design graph clip that brings its element in. */
+export { default as IconClipEnter } from "~icons/solar/login-2-bold-duotone";
+/** A design graph clip that takes its element away. */
+export {
+  default as IconLogout,
+  default as IconClipExit,
+} from "~icons/solar/logout-2-bold-duotone";
 export { default as IconSparkles } from "~icons/solar/magic-stick-3-bold-duotone";
 export {
   default as IconSearch,
@@ -175,6 +182,7 @@ export { default as IconMaximize } from "~icons/solar/maximize-bold-duotone";
 export { default as IconMore } from "~icons/solar/menu-dots-bold-duotone";
 export { default as IconMic } from "~icons/solar/microphone-bold-duotone";
 export { default as IconZoomIn } from "~icons/solar/minimalistic-magnifer-zoom-in-bold-duotone";
+export { default as IconZoomOut } from "~icons/solar/minimalistic-magnifer-zoom-out-bold-duotone";
 export { default as IconMinimize } from "~icons/solar/minimize-bold-duotone";
 /** A routine that has not run yet, or a run that ended without an outcome (cancelled, skipped, denied): the neutral status. */
 export { default as IconMinusCircle } from "~icons/solar/minus-circle-bold-duotone";
@@ -228,14 +236,18 @@ export {
   default as IconRenew,
   default as IconWorking,
 } from "~icons/solar/refresh-circle-bold-duotone";
+/** Loop: the design graph's dock plays its move again and again. */
+export { default as IconRepeat } from "~icons/solar/repeat-bold-duotone";
 /** Reopen a resolved pin. */
 export { default as IconReopen } from "~icons/solar/restart-bold-duotone";
+export { default as IconRocket } from "~icons/solar/rocket-2-bold-duotone";
 /*
  * The marks a folder can be given by hand (see `FOLDER_MARKS` in
  * lib/cawco/folder-prefs.svelte.ts), picked to span the kinds of work a
  * directory holds rather than to be a complete icon set.
  */
-export { default as IconRocket } from "~icons/solar/rocket-2-bold-duotone";
+/** A design graph clip that changes its element where it stands. */
+export { default as IconClipChange } from "~icons/solar/round-transfer-horizontal-bold-duotone";
 /** Hooks: a lifecycle event branching into what runs. */
 export { default as IconHook } from "~icons/solar/routing-2-bold-duotone";
 /** A design system: the project's look, written down (StarterCards' `system`). */
@@ -258,7 +270,12 @@ export { default as IconUndock } from "~icons/solar/sidebar-minimalistic-bold-du
 export { default as IconSidebar } from "~icons/solar/sidebar-minimalistic-line-duotone";
 export { default as IconToolGeneric } from "~icons/solar/sledgehammer-bold-duotone";
 export { default as IconPhone } from "~icons/solar/smartphone-bold-duotone";
-export { default as IconSort } from "~icons/solar/sort-bold-duotone";
+/*
+ * Sort: Solar's bare cut of it, the bars and their arrow with no squircle
+ * round them (the owner, 10-24: "u need to draw similar style icons that are
+ * without their containers").
+ */
+export { default as IconSort } from "~icons/solar/sort-from-top-to-bottom-bold-duotone";
 export { default as IconUnfold } from "~icons/solar/sort-vertical-bold-duotone";
 export { default as IconCollapseOthers } from "~icons/solar/square-double-alt-arrow-up-bold-duotone";
 export { default as IconExternal } from "~icons/solar/square-top-down-bold-duotone";

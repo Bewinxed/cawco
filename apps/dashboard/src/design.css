@@ -1850,7 +1850,13 @@
    alphabetic baseline up 1ex) and given back the room the trim took as
    padding, half above and half below: the run keeps its line's height, and
    the middle of its box is the middle of its x-height. `mark-text` is that
-   run standing alone (a pill's own words, a grid cell's label). */
+   run standing alone (a pill's own words, a grid cell's label). A run is a
+   block container: the trim reaches no flex, grid or table container (CSS
+   Inline 3: "does not apply to, or propagate through, flex, grid, or table
+   formatting contexts", in Chromium and WebKit alike), which keeps its whole
+   line and takes the padding on top (a run made a grid of two stacked
+   wordings stood 33px around its 20px line). Its layout goes inside it, or
+   it says `data-box`; `bun run check` refuses one (mark-line-check.ts). */
 @utility mark-text {
   :where(&) {
     text-box: trim-both ex alphabetic;

@@ -87,6 +87,7 @@ import {
   scrollMoves,
   unpadFoot,
 } from "./scrollers";
+import { stagePath } from "./stage-path";
 
 const SVG = "http://www.w3.org/2000/svg";
 
@@ -1329,7 +1330,12 @@ export function startPins(deps: PinsDeps): Pins {
   };
 
   /** A new pin written whole (its head, place and thread its own keys). */
-  const write = (pin: Pin) => writePin(artifact.doc(), pin);
+  /** A new pin written: placed while the design graph keeps a state, it records that state's path (stage-path.ts). */
+  const write = (pin: Pin) =>
+    writePin(
+      artifact.doc(),
+      stagePath() ? { ...pin, state: stagePath() } : pin
+    );
   /** The number a new pin takes: one past the highest; a deleted pin's is never reused while a higher one stands. */
   const nextNumber = () =>
     Math.max(0, ...[...pinsMap().values()].map((pin) => pin.number)) + 1;

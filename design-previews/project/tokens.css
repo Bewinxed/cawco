@@ -743,8 +743,6 @@
     --c-pin-card-w: 280px;
     /* A comment's composer and its thread beside its pin over the page (DESIGN.md, Placing a comment; A thread beside its pin; the owner's pick "Beside the comment", comment-card-sizing): one width for both, so a card never changes width as it goes from composer to thread. Two fifths of the well (the pin room is the size container), held between 280px and 480px: 415px at a 1357px pane with the 320px rail open, about 50 characters a line (Google Docs: 35 to 50; Radix Themes maxWidth 480). Web only. */
     --c-pin-card-reading-w: clamp(280px, 40cqi, 480px);
-    /* The room from where a thread beside its pin stands to the well's foot under which it stops hanging from the pill and takes the well's height, its foot on the well's (DESIGN.md, A thread beside its pin). Web only. */
-    --c-pin-card-reading-room: 320px;
     /* The overlay's line round a chosen target and the page's root in Comment mode: the content's own edge weight, never the focus ring's (DESIGN.md, The One Target Rule). */
     --c-target-stroke: 1px;
     /* How far outside a bare chosen target (no border and no background of its own: a bare text container, a label-and-field group) the overlay's line stands, so it never touches the glyphs; its corners grow with it. A target that draws its own box takes the line on its border box, at 0 (DESIGN.md, The One Target Rule). */
@@ -759,7 +757,7 @@
     --c-canvas-skeleton-w: 240px;
     /* A component canvas's frame on its way: the skeleton's height, two rows of a card's content, so the frames that land under it move the layout least (DESIGN.md Artifact panel, canvas and ink; Skeleton). */
     --c-canvas-skeleton-h: 96px;
-    /* An edge's stroke on a graph canvas: the decision graph's and a component canvas's map, from one card to the next (DESIGN.md Artifact panel, canvas and ink). */
+    /* An edge's stroke on a graph canvas: a component canvas's map, from one card to the next (DESIGN.md Artifact panel, canvas and ink). */
     --c-graph-edge: 1.5px;
     /* A component on a canvas's map: its name, file and counts over its frames at 16:10, live when chosen; the widest that keeps five across a desk pane at the map's fit (DESIGN.md Artifact panel, canvas and ink). */
     --c-map-node-w: 264px;
@@ -1148,22 +1146,16 @@
     --c-block-refused-basis: 18rem;
     /* The composer canvas's top grab strip. */
     --c-canvas-grab-w: 160px;
-    /* A decision page head's title group: how narrow it goes beside ‹ Decisions before it wraps. */
-    --c-decision-head-what: 14rem;
-    /* The decisions graph's least height. */
-    --c-decision-graph-min-h: 24rem;
-    /* A decision card's width; the hub's graph layout assumes the same box (DecisionGraph CARD). */
-    --c-decision-node-w: 148px;
-    /* A decision card's least height (DecisionGraph CARD.height). */
-    --c-decision-node-h: 56px;
-    /* A decision page's one centred column (decisions/host): two option columns side by side, each a 60ch line at the label size, and the gap between. */
-    --c-decision-page-w: 920px;
+    /* The widest a decision page's one centred column stands (decisions/host): three option columns at the 60ch label measure (416px each), their two gaps and the page's and card's insets; under it the column is the room. */
+    --c-decision-page-max: 1348px;
     /* The length of a decision page's count bar in its sticky foot, beside "1 of 5 picked". */
     --c-decision-meter-w: 120px;
     /* The narrowest a decision card's option column stands before the options stand one under another. */
     --c-decision-option-min: 190px;
     /* The tallest a decision card's media well draws its piece: a canvas, a frame and a diagram each fit to it (a diagram never under its words' 10px floor). */
     --c-media-max-h: 80vb;
+    /* The least a scaled design's words stand at: a decision card's Preview of a page-sized design (a page, a dev server's or a folder's preview, a sheet) wider than its card scales down no further than stands the least words the design itself sets (its overlay tells them) at this size. Past it the design scrolls sideways in its well at that scale. */
+    --c-media-words-floor: 10px;
     /* The artifact masonry's least card width: a thumbnail that still reads beside a dozen-character name. */
     --c-artifact-card-min: 148px;
     /* The rail width at and above which the Working/Finished header needs no squeeze: measured, the narrowest rail at which both labels stand whole beside three-digit counts at rest. */
@@ -1206,8 +1198,8 @@
     --c-find-head-h: 28px;
     /* The skeleton standing for a finder row with its reason. */
     --c-find-skeleton-tall: 54px;
-    /* A project head's name column: the width it holds before its actions wrap under it. */
-    --c-head-who-basis: 18rem;
+    /* A project head's one row: Caw's seat, which every control in it centres on. */
+    --c-project-head-h: 48px;
     /* The project details tray's content measure. */
     --c-project-details-measure: 32rem;
     /* The project details rows' label column. */
@@ -1318,6 +1310,8 @@
     --c-usage-strip-row: calc(
       var(--icon-md) + var(--space-1) + var(--c-usage-cap-lh)
     );
+    /* The clip over the usage strip's row, hiding a wrapped second row: the row and a space-1 of room above it for the time's glyphs, which reach past their 16px line. */
+    --c-usage-strip-clip: calc(var(--c-usage-strip-row) + var(--space-1));
     /* The usage strip's hit height on the home card. */
     --c-usage-strip-home-h: 56px;
     /* The week share's column: as wide as "100%" in the figure face. */
@@ -1420,16 +1414,6 @@
     --c-made-tile-min: 18rem;
     /* The Canvas view's least height, the floor its graph reads at (ViewCanvas). */
     --c-canvas-min-h: 280px;
-    /* A pipeline row's stage-name column at its narrowest (ViewPipeline). */
-    --c-pipeline-name-min: 6rem;
-    /* A pipeline row's stage-name column at its widest. */
-    --c-pipeline-name-max: 10rem;
-    /* A pipeline row's stage-kind column at its narrowest. */
-    --c-pipeline-kind-min: 4rem;
-    /* A pipeline row's stage-kind column at its widest. */
-    --c-pipeline-kind-max: 6rem;
-    /* A pipeline row's count column. */
-    --c-pipeline-count-w: 3rem;
     /* The gap between two cards of the phone's pane deck; equal to GAP in workspace/deck.svelte.ts, which sizes the drag travel. */
     --c-deck-gap: 12px;
     /* The new-project page's column. */

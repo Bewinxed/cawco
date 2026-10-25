@@ -11,7 +11,7 @@
  * design layer, then minified and lowered by Lightning CSS (page-css.ts), as
  * the canvas host is built (canvas-host.ts): the standalone binary carries it
  * prebuilt under `decision/` (`build-binary.ts`), and a source checkout builds
- * it on first request.
+ * it on first request, on a thread of its own (host-build.ts).
  *
  * Paths, on every preview origin: `/__cawco/decision/<file>`, the bundle's
  * entry (`host.js`, `host.css`), its chunks (Pele's diagram types, each
@@ -31,6 +31,7 @@ import { agentReact } from "./agent-react";
 import { refuseSchemeLowering } from "./bundle-css-guard";
 import { bundled } from "./bundled";
 import { unlayeredRules } from "./css-layers";
+import { hostFiles } from "./host-build";
 import { houseFaceSheet } from "./house-faces";
 import { compileSheets, pageFiles } from "./page-css";
 import { embeddedFile, standalone } from "./runtime";
@@ -340,50 +341,30 @@ export async function decisionHostAssets(
 ): Promise<[string, string][]> {
   await rm(outdir, { recursive: true, force: true });
   await mkdir(outdir, { recursive: true });
+  const files = await buildHostFiles();
+  await Promise.all(
+    [...files].map(([name, file]) => Bun.write(join(outdir, name), file))
+  );
+  return filesUnder(outdir, "decision");
+}
+
+const LEADING_SLASHES = /^\/+/;
+
+/** The host's files and DialKit's, the faces and the icon, by name: what a source checkout serves (host-build.ts builds them on a thread of its own). */
+export async function buildHostFiles(): Promise<Map<string, Blob>> {
   const [files, dials, faces, icon] = await Promise.all([
     buildDecisionHost(),
     dialFiles(),
     faceFiles(),
     iconFiles(),
   ]);
-  await Promise.all([
-    ...[...files, ...faces, ...icon].map(([name, file]) =>
-      Bun.write(join(outdir, name), file)
-    ),
-    ...[...dials].map(([name, text]) => Bun.write(join(outdir, name), text)),
+  return new Map<string, Blob>([
+    ...files,
+    ...faces,
+    ...icon,
+    ...[...dials].map(([name, text]) => [name, new Blob([text])] as const),
   ]);
-  return filesUnder(outdir, "decision");
 }
-
-const LEADING_SLASHES = /^\/+/;
-
-let built: Promise<Map<string, Blob>> | undefined;
-
-/** The host's files and DialKit's by name, built once per process; a failure clears the slot so the next request retries. */
-const bundle = (): Promise<Map<string, Blob>> => {
-  built ??= Promise.all([
-    buildDecisionHost(),
-    dialFiles(),
-    faceFiles(),
-    iconFiles(),
-  ])
-    .then(
-      ([files, dials, faces, icon]) =>
-        new Map<string, Blob>([
-          ...files,
-          ...faces,
-          ...icon,
-          ...[...dials].map(
-            ([name, text]) => [name, new Blob([text])] as const
-          ),
-        ])
-    )
-    .catch((error: unknown) => {
-      built = undefined;
-      throw error;
-    });
-  return built;
-};
 
 const TYPES: Record<string, string> = {
   css: "text/css; charset=utf-8",
@@ -422,7 +403,7 @@ export async function decisionHostFile(path: string): Promise<Response | null> {
       return null;
     }
   }
-  const output = (await bundle()).get(name);
+  const output = (await hostFiles("decision")).get(name);
   return output
     ? new Response(output, {
         headers: { "content-type": typeOf(name), "cache-control": cache },

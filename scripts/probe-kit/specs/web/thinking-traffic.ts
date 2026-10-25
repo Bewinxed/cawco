@@ -1,28 +1,98 @@
 /**
  * The reasoning lifecycle on the traffic bench (/motion/traffic), on the desk
- * and a phone in Chromium, read from the engine frame by frame: the thinking
- * indicator reserves its space as it comes, sits on the tool rows' type and
- * rail, keeps its first step as the next paragraph lands and folds from its
- * header; the call that takes its place opens from its height to its own;
- * the answer follows it pinned to the bottom; a direct answer crossfades in
- * over the reasoning in the one live row; a fast phase change keeps the
- * latest reasoning; a turn waiting on a permission draws no working
- * indicator; a reader scrolled up stays where they are; and nothing in the
- * thinking breaks a house rule (house-rules.ts). Each is the transcript's own
- * rule as Row.svelte, LiveRow.svelte and rows.ts `liveContent` write it.
+ * and a phone, in Chromium and in WebKit (Safari is how the owner reads
+ * CawCo on his phone): the thinking indicator opens its place as it comes,
+ * sits on the tool rows' type and rail, keeps its first step as the next
+ * paragraph lands and folds from its header; the call that takes its place
+ * opens from its height to its own; the answer follows it pinned to the
+ * bottom; a direct answer crossfades in over the reasoning in the one live
+ * row; a fast phase change keeps the latest reasoning; a turn waiting on a
+ * permission draws no working indicator; a reader scrolled up stays where
+ * they are; and nothing in the thinking breaks a house rule
+ * (house-rules.ts). Each is the transcript's own rule as Row.svelte,
+ * LiveRow.svelte and rows.ts `liveContent` write it.
+ *
+ * Each motion is read on a held clock, sought to fractions of its run
+ * (kit.ts `readMotion`), never filmed: sampled once a frame, headless WebKit
+ * drew two or three frames over a 240ms opening on a loaded machine and the
+ * tween read as one or two heights (`[[59],[58]]`), while the same run held
+ * and sought reads its whole opening on either engine.
  */
 import { HouseRules } from "../../house-rules";
-import { type Kit, open, type Spec, settle, type View } from "../../kit";
-// `window.__traffic` and the frames this spec keeps on `window`, read inside
-// each callback: one runs alone in the page.
+import {
+  type Engine,
+  type Kit,
+  open,
+  readMotion,
+  type Spec,
+  settle,
+  type View,
+} from "../../kit";
+// `window.__traffic` and what this spec keeps on `window`, read inside each
+// callback: one runs alone in the page.
 import "../../traffic-bench";
 
-const VIEWS_RUN: View[] = ["desk", "phone"];
+/** Every engine on both sizes: the motion is the same on Chromium and WebKit. */
+const LEGS: { engine: Engine; view: View }[] = [
+  { engine: "chromium", view: "desk" },
+  { engine: "chromium", view: "phone" },
+  { engine: "webkit", view: "desk" },
+  { engine: "webkit", view: "phone" },
+];
 
-async function lifecycle(kit: Kit, view: View) {
+const TR = '[data-slot="tr"]';
+/** Every twentieth of the clock. */
+const FRACTIONS = Array.from({ length: 21 }, (_, i) => i / 20);
+
+/** The height of the row the thinking indicator stands in; -1 where none stands. In the page. */
+function indicatorPlace(): number {
+  const row = document
+    .querySelector('[data-slot="thinking-indicator"]')
+    ?.closest('[data-slot="row"]');
+  return row ? Math.round(row.getBoundingClientRect().height) : -1;
+}
+
+/**
+ * The height of each row whose place a `block-size` tween holds, found at
+ * the read's first fraction and followed through the rest (a run sought to
+ * its end leaves `getAnimations()`). In the page.
+ */
+function placingHeights(): number[] {
+  if (window.__placing.length === 0) {
+    window.__placing = [
+      ...document.querySelectorAll('[data-slot="tr"] [data-slot="row"]'),
+    ].filter((row) =>
+      row
+        .getAnimations()
+        .some((run) =>
+          (run.effect as KeyframeEffect | null)
+            ?.getKeyframes()
+            .some((key) => "blockSize" in key)
+        )
+    );
+  }
+  return window.__placing.map((row) =>
+    Math.round(row.getBoundingClientRect().height)
+  );
+}
+
+/** Whether the indicator stands, and the live row's own faces (not its reasoning's label faces). In the page. */
+function liveFaces(): { faces: number; indicator: boolean } {
+  const tr = document.querySelector('[data-slot="tr"]') as HTMLElement;
+  const live = [...tr.querySelectorAll('[data-slot="live"]')].at(-1);
+  return {
+    indicator: !!tr.querySelector('[data-slot="thinking-indicator"]'),
+    faces: live?.querySelectorAll(':scope > [data-slot="face"]').length ?? 0,
+  };
+}
+
+/** Distinct values, in their order. */
+const distinct = (values: number[]) => [...new Set(values)];
+
+async function lifecycle(kit: Kit, engine: Engine, view: View) {
   const check = (what: string, ok: boolean, detail = "") =>
-    kit.check(`${view}: ${what}`, ok, detail);
-  const page = await kit.page(view);
+    kit.check(`${engine} ${view}: ${what}`, ok, detail);
+  const page = await kit.page(view, { engine });
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.stack ?? error.message));
   await open(
@@ -33,58 +103,30 @@ async function lifecycle(kit: Kit, view: View) {
   await page.evaluate(() => window.__traffic.reset(36));
   await page.waitForFunction(() => window.__traffic.landed());
   await settle(page, 1000);
-  await page.evaluate(() => {
-    const b = window;
-    b.__thinkingFrames = [];
-    b.__recordThinking = true;
-    const frame = () => {
-      const tr = document.querySelector('[data-slot="tr"]') as HTMLElement;
-      // The live tail (LiveRow) and the row its place is (Row): the last
-      // one, since a streamed answer that settled goes on drawing as one.
-      const live = [...tr.querySelectorAll('[data-slot="live"]')].at(-1);
-      const row = live?.closest('[data-slot="row"]');
-      const tweens = (el: Element | null | undefined) =>
-        (el?.getAnimations() ?? []).some((run) =>
-          (run.effect as KeyframeEffect | null)
-            ?.getKeyframes()
-            .some((key) => "blockSize" in key)
-        );
-      // Every row whose place is tweening now, by its place in the list.
-      const growing = [...tr.querySelectorAll('[data-slot="row"]')].flatMap(
-        (el, i): [number, number][] =>
-          tweens(el) ? [[i, el.getBoundingClientRect().height]] : []
-      );
-      b.__thinkingFrames.push({
-        time: performance.now(),
-        height: live?.getBoundingClientRect().height ?? 0,
-        reserved: row?.getBoundingClientRect().height ?? 0,
-        indicator: !!tr.querySelector('[data-slot="thinking-indicator"]'),
-        // The row's own faces, not the label faces inside its reasoning block.
-        faces:
-          live?.querySelectorAll(':scope > [data-slot="face"]').length ?? 0,
-        tweening: tweens(live) || tweens(row),
-        growing,
-      });
-      if (b.__recordThinking) {
-        requestAnimationFrame(frame);
-      }
-    };
-    requestAnimationFrame(frame);
-    b.__traffic.user("Check the reasoning lifecycle.");
-  });
+  // The indicator's place opens from nothing to its own height (Row
+  // `arrive`), read where it stands at each fraction.
+  const entry = await readMotion(
+    page,
+    () =>
+      page.evaluate(() =>
+        window.__traffic.user("Check the reasoning lifecycle.")
+      ),
+    TR,
+    { fractions: FRACTIONS, read: () => page.evaluate(indicatorPlace) }
+  );
   await page.locator('[data-slot="thinking-indicator"]').waitFor();
-  await page.waitForTimeout(700);
-  const entry = await page.evaluate(() => [
-    ...new Set(
-      window.__thinkingFrames
-        .filter((f) => f.indicator)
-        .map((f) => Math.round(f.reserved))
-    ),
-  ]);
+  const entryHeights = entry.at.map((one) => one.value);
+  const placed = entryHeights.filter((height) => height >= 0);
+  const entryOwn = await page.evaluate(indicatorPlace);
   check(
-    "the indicator reserves its space across frames",
-    entry.length >= 3,
-    `heights ${entry.join(", ")}`
+    "the indicator opens its place from nothing to its own height",
+    placed.length === entryHeights.length &&
+      (placed[0] ?? -1) <= 1 &&
+      placed.at(-1) === entryOwn &&
+      entryOwn > 0 &&
+      distinct(placed).length >= 3 &&
+      placed.every((height, i) => i === 0 || height >= (placed[i - 1] ?? 0)),
+    `by ${entry.by}: heights ${placed.join(", ")} of ${entryHeights.length} fractions, its own ${entryOwn}`
   );
 
   const type = await page.evaluate(() => {
@@ -180,7 +222,7 @@ async function lifecycle(kit: Kit, view: View) {
     `${shut} → ${opened}`
   );
 
-  const house = new HouseRules(kit, view, {
+  const house = new HouseRules(kit, `${engine} ${view}`, {
     scope: "[data-think]",
     noImpeccable:
       "its read lets go of the transcript's pin to its foot (scrolled back, the legs below found the answer 39px and 68px off it), and they read that pin",
@@ -188,31 +230,51 @@ async function lifecycle(kit: Kit, view: View) {
   await house.at(page, "the thinking, its steps open");
   house.report();
 
-  await page.evaluate(() => {
-    const b = window;
-    b.__exitAt = performance.now();
-    b.__traffic.patch({
-      openBlock: "tool",
-      thinkingStream: "",
-      currentTool: { toolId: "live-tool", name: "Read", glance: "src/main.ts" },
-    });
-  });
-  await page.waitForTimeout(700);
-  const exit = await page.evaluate(() =>
-    window.__thinkingFrames.filter((f) => f.time >= window.__exitAt)
-  );
   // The call in flight takes the reasoning's place (Row `takePlace`): it
   // opens from the reasoning's height to its own, so the place is never empty.
-  const byRow = new Map<number, Set<number>>();
-  for (const [row, height] of exit.flatMap((f) => f.growing)) {
-    byRow.set(row, (byRow.get(row) ?? new Set()).add(Math.round(height)));
-  }
-  const exitHeights = [...byRow.values()].map((heights) => [...heights]);
+  const reasoning = await page.evaluate(() => {
+    const live = [...document.querySelectorAll('[data-slot="live"]')].at(-1);
+    const row = live?.closest('[data-slot="row"]');
+    window.__placing = [];
+    return Math.round(row?.getBoundingClientRect().height ?? -1);
+  });
+  const exit = await readMotion(
+    page,
+    () =>
+      page.evaluate(() =>
+        window.__traffic.patch({
+          openBlock: "tool",
+          thinkingStream: "",
+          currentTool: {
+            toolId: "live-tool",
+            name: "Read",
+            glance: "src/main.ts",
+          },
+        })
+      ),
+    TR,
+    { fractions: FRACTIONS, read: () => page.evaluate(placingHeights) }
+  );
+  const exitOwn = await page.evaluate(() =>
+    window.__placing.map((row) =>
+      Math.round(row.getBoundingClientRect().height)
+    )
+  );
+  // Each tweening row's heights through the clock.
+  const exitHeights = exitOwn.map((_, row) =>
+    exit.at.map((one) => one.value[row] ?? -1)
+  );
+  const taker = exitHeights.findIndex(
+    (heights) => Math.abs((heights[0] ?? -1) - reasoning) <= 1
+  );
+  const taken = exitHeights[taker] ?? [];
   check(
     "the call that takes the reasoning's place tweens from its height to its own",
-    exitHeights.some((heights) => heights.length >= 3) &&
+    taker >= 0 &&
+      taken.at(-1) === exitOwn[taker] &&
+      distinct(taken).length >= 3 &&
       (await page.locator('[data-slot="thinking-indicator"]').count()) === 0,
-    `heights while tweening, by row ${JSON.stringify(exitHeights)}`
+    `by ${exit.by}: the reasoning stood ${reasoning}px; heights through the clock, by tweening row ${JSON.stringify(exitHeights.map(distinct))}, each one's own ${JSON.stringify(exitOwn)}`
   );
 
   await page.evaluate(() => {
@@ -242,27 +304,31 @@ async function lifecycle(kit: Kit, view: View) {
     window.__traffic.thinking("Reasoning that goes directly into an answer.")
   );
   await page.waitForTimeout(350);
-  await page.evaluate(() => {
-    window.__directAt = performance.now();
-    window.__traffic.patch({
-      openBlock: null,
-      thinkingStream: "",
-      streaming: "A direct answer.",
-    });
-  });
-  await page.waitForTimeout(400);
-  const direct = await page.evaluate(() =>
-    window.__thinkingFrames.filter((f) => f.time >= window.__directAt)
+  const direct = await readMotion(
+    page,
+    () =>
+      page.evaluate(() =>
+        window.__traffic.patch({
+          openBlock: null,
+          thinkingStream: "",
+          streaming: "A direct answer.",
+        })
+      ),
+    TR,
+    { fractions: FRACTIONS, read: () => page.evaluate(liveFaces) }
   );
   const faces = await page
     .locator('[data-slot="live"]')
     .last()
     .locator(':scope > [data-slot="face"]')
     .count();
+  const over = direct.at.filter(
+    (one) => one.value.indicator && one.value.faces === 2
+  );
   check(
     "a direct answer enters over the reasoning in one container, then stands alone",
-    direct.some((f) => f.indicator && f.faces === 2) && faces === 1,
-    `two faces seen ${direct.some((f) => f.faces === 2)}; faces now ${faces}`
+    over.length > 0 && faces === 1,
+    `by ${direct.by}: two faces over the reasoning at ${over.map((one) => one.fraction).join(", ") || "no fraction"}; faces now ${faces}`
   );
   await page.evaluate(() =>
     window.__traffic.patch({ streaming: "", busy: true })
@@ -365,9 +431,6 @@ async function lifecycle(kit: Kit, view: View) {
     "with reduced motion the indicator goes at once",
     (await page.locator('[data-slot="thinking-indicator"]').count()) === 0
   );
-  await page.evaluate(() => {
-    window.__recordThinking = false;
-  });
   check("no page error", errors.length === 0, errors.join(" | "));
   await page.close();
 }
@@ -419,9 +482,9 @@ async function stepInk(kit: Kit) {
 const spec: Spec = {
   name: "thinking-traffic",
   run: async (kit) => {
-    for (const view of VIEWS_RUN) {
-      // biome-ignore lint/performance/noAwaitInLoops: each view's scenario runs alone, timed
-      await lifecycle(kit, view);
+    for (const { engine, view } of LEGS) {
+      // biome-ignore lint/performance/noAwaitInLoops: each leg's scenario runs alone, timed
+      await lifecycle(kit, engine, view);
     }
     await stepInk(kit);
   },

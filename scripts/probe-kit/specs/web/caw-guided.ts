@@ -34,8 +34,8 @@
  *    animation is left on any card. With the tasks on the board, at 1440
  *    and 680 the panel stands where it stood over the empty board and
  *    covers no column, and the name's start edge has not moved.
- * 5. A name with a word longer than its column breaks only at its spaces
- *    (1280, 390), never under the head's actions.
+ * 5. A long name stays on the head's one row (1280, 390), never under the
+ *    head's actions, its whole text in its tip.
  * 6. New project lands on the project's page with Caw's panel open on its
  *    Setup thread.
  * 2b. (Run after 1, the board still empty.) Caw's mark and the hero's title stand on the hero's axis (thread,
@@ -334,11 +334,14 @@ const readPanel = (page: Page) =>
             '[data-slot="project-head"] [data-slot="name"]'
           )
         ),
-        act: words(document.querySelector("[data-new-session]")),
-        // Its label and its pending wording stand in one cell (DESIGN.md, Buttons).
+        // The head's capsule holds bare symbols, each named for a screen reader.
+        act:
+          document
+            .querySelector("[data-new-session]")
+            ?.getAttribute("aria-label") ?? "",
         spinOff: [
           ...document.querySelectorAll('[data-slot="project-head"] button'),
-        ].some((button) => words(button).startsWith(spinOffLabel)),
+        ].some((button) => button.getAttribute("aria-label") === spinOffLabel),
         // Each column of the board as it shows: a column scrolled past the
         // board's edge is cut by it.
         columns: [...document.querySelectorAll('[data-slot="column"]')]
@@ -571,7 +574,7 @@ const dockChecks = (
   clear(kit, tag, at);
   kit.check(
     `${tag}: the head's actions are Ask Caw and Spin off`,
-    at.act === "Ask Caw" && at.spinOff,
+    at.act === projectWords.askCaw && at.spinOff,
     JSON.stringify({ act: at.act, spinOff: at.spinOff })
   );
   const foot = at.shell ? at.vh - at.shell.bottom : Number.NaN;
@@ -1227,7 +1230,7 @@ const filedLegs = async (
   }
 };
 
-/** 5. A long name breaks only at its spaces, and never under the actions. */
+/** 5. A long name stays on the head's one row, and never under the actions. */
 const longName = async (kit: Kit, setup: Setup) => {
   for (const one of [
     { name: "1280", view: "desk", width: 1280 },
@@ -1292,10 +1295,8 @@ const longName = async (kit: Kit, setup: Setup) => {
         read.name.bottom <= read.acts.top + 0.5 ||
         read.acts.bottom <= read.name.top + 0.5);
     kit.check(
-      `${one.name}: the name breaks only at its spaces, never under the actions, its whole text in its tip`,
-      read.breaks.every((each) => each.before === " ") &&
-        apart &&
-        read.tip.includes(LONG_NAME),
+      `${one.name}: the name stays on one line, never under the actions, its whole text in its tip`,
+      read.breaks.length === 0 && apart && read.tip.includes(LONG_NAME),
       JSON.stringify(read)
     );
     await page.close();

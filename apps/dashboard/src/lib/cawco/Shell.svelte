@@ -504,7 +504,8 @@
   // with it. The URL is the address, and the browser follows it before
   // anything is drawn, as the server did.
   workspace.serve(
-    (page.data as { workspace?: WorkspaceV1 | null }).workspace ?? null
+    (page.data as { workspace?: WorkspaceV1 | null }).workspace ?? null,
+    (page.data as { resolved?: string[] }).resolved ?? []
   );
   if (browser) {
     workspace.followUrl(location.href);
@@ -924,6 +925,11 @@
     files.sheet = true;
   }
 
+  /** A project's page, whose head names it (ProjectHead). */
+  const onProject = $derived(
+    !routeError && page.route.id === "/(app)/project/[id]"
+  );
+
   /**
    * What the bar names: the page's own name where it has one (a
    * conversation's title, a project's name), else its section.
@@ -1108,16 +1114,16 @@
            stand on: two steps below the transcript and one below an
            unchosen tab, so the chosen tab (a sheet in the transcript's own
            surface) reads as the page it opens. The hairline sits in the
-           bar's bottom pixel, where the sheet ends and covers it. The narrow
-           bar (NARROW_QUERY: under 900px, or a finger held portrait) draws
-           itself raised even while hosting, so the shelf is the wide bar's
-           alone (`desk:` with `not-coarse:` or `not-portrait:`).
-           Floating over the phone's tab row it draws nothing. -->
+           bar's bottom pixel, where the sheet ends and covers it. The shelf
+           is the wide bar's alone (`desk:` with `not-coarse:` or
+           `not-portrait:`); anywhere else the bar draws no ground of its
+           own, no fill and no hairline (DESIGN.md, No bar ground): the
+           field it stands on is its ground. -->
       <header
         data-slot="top"
         data-floating={floating || undefined}
         data-hosting={hosting || undefined}
-        class="group/top peer/top h-c-top-bar-h shrink-0 flex items-center gap-space-2 py-0 ps-0 pe-(--top-end) bg-surface-raised border-b border-b-border-hairline coarse:portrait:desk:ps-space-7 max-desk:ps-(--top-inset-start) max-desk:pe-(--top-inset-end) max-desk:data-floating:relative max-desk:data-floating:-mbe-c-top-bar-h max-desk:data-floating:z-(--layer-bar) max-desk:data-floating:pointer-events-none desk:not-coarse:data-hosting:border-b-none desk:not-coarse:data-hosting:shelf-hairline desk:not-portrait:data-hosting:border-b-none desk:not-portrait:data-hosting:shelf-hairline max-desk:data-floating:border-b-none max-desk:data-floating:bg-transparent"
+        class="group/top peer/top h-c-top-bar-h shrink-0 flex items-center gap-space-2 py-0 ps-0 pe-(--top-end) coarse:portrait:desk:ps-space-7 max-desk:ps-(--top-inset-start) max-desk:pe-(--top-inset-end) max-desk:data-floating:relative max-desk:data-floating:-mbe-c-top-bar-h max-desk:data-floating:z-(--layer-bar) max-desk:data-floating:pointer-events-none desk:not-coarse:data-hosting:shelf-hairline desk:not-portrait:data-hosting:shelf-hairline"
         style:--top-end="calc(var(--space-6) + env(safe-area-inset-right, 0px))"
         style:--top-inset-start="env(safe-area-inset-left, 0px)"
         style:--top-inset-end="env(safe-area-inset-right, 0px)"
@@ -1128,16 +1134,19 @@
              the screen's, its centre on the tabs' centre line, which stand
              on the bar's floor, in a 44px touch area that starts at the
              screen's edge (its glyph padded in, so the box and its focus
-             ring never run past the screen). Tactile press: it dips under the finger, with
+             ring never run past the screen) and fills the 44px bar top to
+             floor: the glyph is padded down to the tabs' centre line (twice
+             its drop from the box's own centre), never the box moved, so the
+             box stays inside its bar. Tactile press: it dips under the finger, with
              less motion not at all. -->
         <button
           data-slot="burger"
           aria-label={sidebarWords.openNavigation}
-          class="select-none desk:hidden size-c-btn-h-lg -ms-space-2 grid place-items-center border-none border-current bg-transparent rounded-sm text-ink-strong transition-[background] duration-(--dur-control) ease-in-out hover:bg-surface-hover motion-safe:active:scale-(--press-scale) max-desk:self-start max-desk:ms-0 max-desk:ps-c-bar-phone-edge max-desk:justify-items-start max-desk:focus-inset max-desk:mt-(--burger-top) max-desk:text-ink-muted max-desk:group-data-floating/top:pointer-events-auto"
+          class="select-none desk:hidden size-c-btn-h-lg -ms-space-2 grid place-items-center border-none border-current bg-transparent rounded-sm text-ink-strong transition-[background] duration-(--dur-control) ease-in-out hover:bg-surface-hover motion-safe:active:scale-(--press-scale) max-desk:self-start max-desk:ms-0 max-desk:ps-c-bar-phone-edge max-desk:justify-items-start max-desk:focus-inset max-desk:pt-(--burger-drop) max-desk:text-ink-muted max-desk:group-data-floating/top:pointer-events-auto"
           onclick={() => {
             railOpen = true;
           }}
-          style:--burger-top={"calc(var(--c-top-bar-h) - var(--c-tab-row-h) / 2 - var(--c-btn-h-lg) / 2)"}
+          style:--burger-drop={"calc(2 * (var(--c-top-bar-h) - var(--c-tab-row-h) / 2 - var(--c-btn-h-lg) / 2))"}
           type="button"
           bind:this={burger}
         >
@@ -1218,9 +1227,11 @@
               {/if}
             </div>
           {/if}
-          {#if hosting || stripHosted || (!railed && onSession)}
+          {#if hosting || stripHosted || (!railed && onSession) || onProject}
             <!-- The strips above have the slot; on a phone the session's tabs
-               are its own row, and the board needs no name over it. -->
+               are its own row, and the board needs no name over it. A
+               project's page names itself in its head (ProjectHead), so the
+               bar doesn't say its name twice. -->
           {:else if narrow && page.url.pathname.startsWith("/config/")}
             <!-- Inside a section on a phone the rail is its own page, so the bar
                leads back to it. -->

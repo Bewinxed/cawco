@@ -257,11 +257,15 @@ async function gatedStart(
           session
         )
       ).result?.result;
+    // On the dashboard's origin, at whatever conversation it shows: a wide
+    // window with nothing open lands on the latest work (SessionSurface
+    // `land`, home `landing`), P here, so `/session` is `/session/<P>` by
+    // the time its socket opens.
     await until(
       "the gated page's dashboard connected to the hub",
       () =>
         evaluate(
-          "location.pathname === '/session' && globalThis.__cawcoSocket?.readyState === 1"
+          `location.origin === ${JSON.stringify(new URL(base).origin)} && globalThis.__cawcoSocket?.readyState === 1`
         ),
       (value) => (value as { value?: unknown } | undefined)?.value === true,
       90_000

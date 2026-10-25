@@ -11,6 +11,8 @@ import {
   accountConfigDir,
 } from "../../packages/core/src/paths";
 import { WIRE_PROTOCOL } from "../../packages/core/src/stream";
+import { loopWords } from "../../packages/core/src/words/loop";
+import { SECTION, SHORT_HOLD_MS } from "./proof-loop-held";
 
 const home = process.env.HOME ?? "";
 if (!home?.includes("binary")) {
@@ -50,6 +52,54 @@ async function exec(verb: string) {
   if ((await child.exited) !== 0) {
     throw new Error(`${verb} failed; see scratch logs`);
   }
+}
+/**
+ * The loop watch's thread, started from the binary's embedded entry, says a
+ * held loop while it lasts, in the section that holds it, and its end
+ * (proof-loop-held.ts, its short hold: the 10 s saying alone).
+ */
+async function loopHeldSaid() {
+  const child = Bun.spawn([process.execPath, "proof-loop-held", "short"], {
+    env: process.env,
+    stdout: "pipe",
+    stderr: "pipe",
+    stdin: "ignore",
+  });
+  children.push(child);
+  const [err, out, code] = await Promise.all([
+    new Response(child.stderr).text(),
+    new Response(child.stdout).text(),
+    child.exited,
+  ]);
+  await Promise.all([
+    Bun.write(join(home, `proof-loop-held-${child.pid}.out.log`), out),
+    Bun.write(join(home, `proof-loop-held-${child.pid}.err.log`), err),
+  ]);
+  const lines = `${err}${out}`
+    .split("\n")
+    .filter((line) => line.includes("[loop]"));
+  const held = lines.filter((line) =>
+    [10, 30].some((at) => line.includes(loopWords.heldNow(at)))
+  );
+  const atTen = held.find((line) => line.includes(loopWords.heldNow(10)));
+  const seconds = SHORT_HOLD_MS / 1000;
+  const again = lines.find((line) =>
+    [seconds - 1, seconds, seconds + 1, seconds + 2].some((at) =>
+      line.includes(loopWords.answersAgain(at))
+    )
+  );
+  if (
+    code !== 0 ||
+    held.length !== 1 ||
+    !atTen?.includes(loopWords.lastSection(SECTION, false)) ||
+    !again
+  ) {
+    throw new Error(
+      `The loop watch did not say the binary's ${seconds} s hold (exit ${code}): ${JSON.stringify(lines)}\n${err}`
+    );
+  }
+  console.log(atTen);
+  console.log(again);
 }
 async function command(args: string[]) {
   const child = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
@@ -321,6 +371,7 @@ try {
   }
   console.log("cross-origin form refused with 403");
   await exec("proof-worker");
+  await loopHeldSaid();
   // The packages the binary runs from their published trees, and pi's
   // workers by the names pi gives them (proof-runtime.ts).
   await exec("proof-playwright");

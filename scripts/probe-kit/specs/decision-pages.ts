@@ -119,9 +119,10 @@
  *     held {@link HEAVY_HOLD_MS} as the hops to a stage hold it. Every
  *     Preview stands at its drawn shape, none says "didn't load", and every
  *     story it names has a rest frame with a box past 0 by 0; and the page
- *     fetched them one at a time, each embed given its address only once the
- *     whole graph of the one before it had arrived (its page's preloads all
- *     answered: stage-host host.ts `graphPreloads`). The page is six cards tall, and
+ *     fetched their graphs together within its budget (dashboard decisions
+ *     host embed-turns.ts): more than one at once, no request failed past
+ *     Chromium's cap (`net::ERR_INSUFFICIENT_RESOURCES`) and never 2,700 in
+ *     flight. The page is six cards tall, and
  *     scrolled to its middle the moment its last card stands: no picture out
  *     of view gets its turn while one in view still waits. Sampled every 50
  *     ms, a picture not yet drawn is never an empty box: its skeleton stands
@@ -135,8 +136,8 @@
  *     pairing page of twelve such Previews drew two: Chromium fails a
  *     renderer's requests past 2,700 in flight
  *     (`net::ERR_INSUFFICIENT_RESOURCES`), and the twelve asked for some
- *     7,500 modules at once; a page's canvases now load one at a time
- *     (dashboard decisions host embed-turns.ts), and an embed says its shape,
+ *     7,500 modules at once; a page's canvases now fetch within one budget
+ *     of requests in flight (dashboard decisions host embed-turns.ts), and an embed says its shape,
  *     which ends its turn, only once it drew (canvas runtime.ts `sayShape`;
  *     said at boot, 11 of these twelve began before the one before them
  *     drew, and caw-panel's 33 had ten say "didn't load").
@@ -4745,7 +4746,8 @@ function dozenRead() {
 
 /**
  * (r)'s clock, in every frame of the page: the decision page stamps each
- * iframe with when it got its address (`data-kit-src-at`); an embed keeps
+ * iframe with when it got its turn to fetch its graph (`data-kit-turn-at`,
+ * as its Preview's `data-turn` leaves `waiting`); an embed keeps
  * when its stories stood mounted, its states file's whole graph fetched
  * (a rest frame in its grid, runtime.ts `showSection`), or its section said
  * it failed (`__kitDrewAt`). Wall-clock ms, one clock across the frames.
@@ -4783,9 +4785,6 @@ function dozenClock(): void {
     return;
   }
   const kit = window as unknown as { __kitScrolled?: number };
-  const wells = () => [
-    ...document.querySelectorAll<HTMLElement>("[data-slot=media]"),
-  ];
   /** The page's own scroller (Decisions.svelte `page-scroll`): its cards scroll in it, not in the window. */
   const scroller = () =>
     document.querySelector<HTMLElement>("[data-slot=page-scroll]");
@@ -4797,22 +4796,16 @@ function dozenClock(): void {
       box.top < (view?.bottom ?? window.innerHeight)
     );
   };
-  const embedOf = (well: Element) =>
-    well.querySelector<HTMLIFrameElement>("iframe[data-slot=embed]");
   const stamp = (el: Node) => {
     if (
       el instanceof HTMLIFrameElement &&
-      el.getAttribute("src") &&
-      !el.dataset.kitSrcAt
+      (el.dataset.turn === "fetching" || el.dataset.turn === "fetched") &&
+      !el.dataset.kitTurnAt
     ) {
-      el.dataset.kitSrcAt = String(Date.now());
-      // Where its picture stood as it got its turn, and how many in view still waited for theirs.
+      el.dataset.kitTurnAt = String(Date.now());
+      // Where its picture stood as it got its turn.
       const well = el.closest("[data-slot=media]");
       el.dataset.kitInView = well && inView(well) ? "1" : "0";
-      el.dataset.kitWaitingInView = String(
-        wells().filter((one) => one !== well && inView(one) && !embedOf(one))
-          .length
-      );
     }
   };
   // The page scrolled to its middle the moment its last card stands, before any Preview has its turn.
@@ -4842,7 +4835,7 @@ function dozenClock(): void {
       }
     }
   }).observe(document, {
-    attributeFilter: ["src"],
+    attributeFilter: ["data-turn"],
     attributes: true,
     childList: true,
     subtree: true,
@@ -4944,18 +4937,17 @@ function dozenWaits(): void {
 
 /** One embed of (r)'s page, as its Preview named it and as it drew. */
 interface DozenEmbed {
-  /** When its frame got its address, when its whole graph arrived, and when it mounted its stories (`dozenClock`). */
+  /** When it got its turn to fetch its graph, when its whole graph arrived, and when it mounted its stories (`dozenClock`). */
   at: number;
   drew: number | null;
   fetched: number | null;
-  /** Its picture stood in view as it got its turn, and how many in view still waited for theirs then. */
+  /** Its picture stood in view as it got its turn. */
   inView: boolean;
   named: string[];
   read: ReturnType<typeof dozenRead> | null;
   take: string;
   /** Its frame's height on the page, px: the shape it said. */
   tall: number;
-  waitingInView: number;
   /** Its frame's width on the page, px. */
   wide: number;
 }
@@ -4971,11 +4963,8 @@ async function dozenEmbeds(page: Page): Promise<DozenEmbed[]> {
     embeds.push({
       named,
       take: named.join("+"),
-      at: Number(await handle.getAttribute("data-kit-src-at")),
+      at: Number(await handle.getAttribute("data-kit-turn-at")),
       inView: (await handle.getAttribute("data-kit-in-view")) === "1",
-      waitingInView: Number(
-        await handle.getAttribute("data-kit-waiting-in-view")
-      ),
       read: frame ? await frame.evaluate(dozenRead) : null,
       ...(await handle.boundingBox().then((box) => ({
         tall: Math.round(box?.height ?? 0),
@@ -5014,20 +5003,22 @@ const dozenFaults = (one: DozenEmbed): string[] => {
   ];
 };
 
-/** Each embed that got its address before the one given its address before it had its whole graph (else, a page with no graph to preload, before it mounted its stories). */
-const dozenOverlaps = (order: DozenEmbed[]): string[] =>
-  order.flatMap((one, at) => {
-    const before = order[at - 1];
-    const done = before?.fetched ?? before?.drew ?? null;
-    if (!before || (done !== null && one.at >= done)) {
-      return [];
-    }
-    return [
-      done === null
-        ? `${one.take} began with ${before.take}'s graph never fetched`
-        : `${one.take} began ${done - one.at} ms before ${before.take}'s graph arrived`,
-    ];
-  });
+/** Chromium's cap on one renderer's requests in flight (services/network/network_context.h `kMaxOutstandingRequestsPerProcess`). */
+const RENDERER_CAP = 2700;
+
+/** The most embeds fetching their graphs at once: each from its turn until its graph arrived. */
+const mostAtOnce = (order: DozenEmbed[]): number =>
+  Math.max(
+    0,
+    ...order.map(
+      (one) =>
+        order.filter(
+          (other) =>
+            other.at <= one.at &&
+            (other.fetched ?? Number.POSITIVE_INFINITY) > one.at
+        ).length
+    )
+  );
 
 /**
  * (r)'s canvas drawn on the stage's own port, twice, as a canvas the person
@@ -5076,6 +5067,23 @@ async function dozenOn(
     theme: "light",
     init: [CAWCO_BRIDGE, dozenClock, dozenWaits],
   });
+  // The page's requests in flight, its frames' included, and any refused past the renderer's cap.
+  let inFlight = 0;
+  let peak = 0;
+  const capped: string[] = [];
+  page.on("request", () => {
+    inFlight += 1;
+    peak = Math.max(peak, inFlight);
+  });
+  page.on("requestfinished", () => {
+    inFlight -= 1;
+  });
+  page.on("requestfailed", (request) => {
+    inFlight -= 1;
+    if (request.failure()?.errorText.includes("INSUFFICIENT_RESOURCES")) {
+      capped.push(request.url());
+    }
+  });
   const started = Date.now();
   await page.goto(pageUrl, { waitUntil: "load" });
   const shaped = await until(
@@ -5107,19 +5115,21 @@ async function dozenOn(
       ),
     ].join("\n    ")
   );
-  // One at a time: each embed got its address only once the one before it had mounted its stories (Preview's turn, ended by the embed's shape, said once it drew).
+  // Together within the budget: several graphs fetched at once, none refused past the renderer's cap.
   const order = [...embeds].sort((a, b) => a.at - b.at);
-  const overlaps = dozenOverlaps(order);
+  const together = mostAtOnce(order);
   kit.check(
-    `${leg}: the page fetches its canvases one at a time, each once the graph of the one before it arrived (${overlaps.length} began early)`,
+    `${leg}: the page fetches its canvases' graphs together within its budget (${together} at once; ${capped.length} requests refused past the renderer's cap, at most ${peak} in flight, cap ${RENDERER_CAP})`,
     embeds.length === HEAVY_TAKES.length &&
       embeds.every((one) => one.at > 0) &&
-      overlaps.length === 0,
+      together > 1 &&
+      capped.length === 0 &&
+      peak < RENDERER_CAP,
     [
-      ...overlaps,
+      ...capped.slice(0, 5),
       ...order.map(
         (one) =>
-          `${one.take}: address at +${one.at - started} ms, graph at ${one.fetched === null ? "none" : `+${one.fetched - started} ms`}, drew at ${one.drew === null ? "never" : `+${one.drew - started} ms`}`
+          `${one.take}: turn at +${one.at - started} ms, graph at ${one.fetched === null ? "none" : `+${one.fetched - started} ms`}, drew at ${one.drew === null ? "never" : `+${one.drew - started} ms`}`
       ),
     ].join("\n    ")
   );
@@ -5213,7 +5223,12 @@ async function waitAndViewChecks(
       wait.still === 0,
     (wait.empty ?? []).join("\n    ") || "none empty"
   );
-  const early = order.filter((one) => !one.inView && one.waitingInView > 0);
+  // An embed out of view whose turn came before one in view got its own: turns given together come in one task, at one ms.
+  const lastInView = Math.max(
+    0,
+    ...order.filter((one) => one.inView).map((one) => one.at)
+  );
+  const early = order.filter((one) => !one.inView && one.at < lastInView);
   const seen = order.filter((one) => one.inView).length;
   kit.check(
     `${leg}: scrolled to the page's middle (${wait.scrolled ?? "not scrolled"} px), the pictures in view get their turn before those above and below (${seen} in view as their turn came, ${order.length - seen} out of it; ${early.length} out of view went ahead of one in view)`,
@@ -5225,7 +5240,7 @@ async function waitAndViewChecks(
     order
       .map(
         (one) =>
-          `${one.take}: ${one.inView ? "in view" : "out of view"}, ${one.waitingInView} in view still waiting`
+          `${one.take}: ${one.inView ? "in view" : "out of view"}, turn at ${one.at}`
       )
       .join("\n    ")
   );

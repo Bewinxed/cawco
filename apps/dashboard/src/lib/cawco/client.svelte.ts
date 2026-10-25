@@ -216,6 +216,7 @@ import {
   handleStreamMessage,
   latestCommand,
   noteDisconnect,
+  resumeHeld,
   resumePendingSends,
   SETTLED_COMMAND_LIMIT,
   SETTLED_COMMAND_TTL_MS,
@@ -238,7 +239,7 @@ import { speakerName } from "./transcript/speaker";
 import type { DelegateAskEvent, Message } from "./types";
 import { type MissedRead, TRY_AGAIN, unansweredWords } from "./unanswered";
 import { updates } from "./updates/updates.svelte";
-import { workspace } from "./workspace/workspace.svelte";
+import { contextOf, workspace } from "./workspace/workspace.svelte";
 
 export type ConnectionStatus =
   "connecting" | "connected" | "disconnected" | "error";
@@ -3881,7 +3882,7 @@ const streamHost: StreamHost = {
     trackWorking(target);
     target.lastActivityAt = new Date();
   },
-  follows: (sessionId) => subscriptionIds().includes(sessionId),
+  follows: (sessionId) => watchedIds().includes(sessionId),
   // The newest page again, which resumes the stream from the `seq` it carries.
   rereadHistory: (sessionId, cause) => {
     // biome-ignore lint/complexity/noVoid: fire-and-forget — the read adopts the page and resumes the stream when it lands
@@ -5306,8 +5307,14 @@ function isSubscribed(instanceId: string): boolean {
   return workspace.openIds.includes(instanceId) || peekedId === instanceId;
 }
 
-/** The full set of instance ids this dashboard wants `frame` frames for. */
-function subscriptionIds(): string[] {
+/**
+ * Every session something on this page shows: the tabs, the peek, the
+ * delegate cards. A thread's tab streams no frames of its own: they come with
+ * the thread frames, which every dashboard receives. Its streams' places
+ * ({@link forgetUnwatched}) are kept for all of them, a tab waiting on its
+ * name included, so a page read before the tab was asked keeps its `seq`.
+ */
+function watchedIds(): string[] {
   const ids = new Set(workspace.openIds);
   if (peekedId) {
     ids.add(peekedId);
@@ -5315,10 +5322,16 @@ function subscriptionIds(): string[] {
   for (const id of watchedDelegates.keys()) {
     ids.add(id);
   }
-  // A thread's tab streams no frames of its own: they come with the thread
-  // frames, which every dashboard receives. A tab the hub has not named yet
-  // is followed once it has (workspace `named`).
-  return [...ids].filter((id) => !isThreadTab(id) && workspace.named(id));
+  return [...ids].filter((id) => !isThreadTab(id));
+}
+
+/**
+ * The full set of instance ids this dashboard wants `frame` frames for: the
+ * watched ones the hub has named; a tab not named yet is followed once it
+ * has (workspace `named`).
+ */
+function subscriptionIds(): string[] {
+  return watchedIds().filter((id) => workspace.named(id));
 }
 
 /** The last watched set synced, so an unchanged set of tabs stays quiet. */
@@ -5341,34 +5354,61 @@ export function syncSubscriptions(): void {
   }
   lastSubscriptionKey = key;
   untrack(() => {
-    forgetUnwatched(streamState, streamHost, ids);
+    forgetUnwatched(streamState, streamHost, watchedIds());
     followHeld(ids, "follow");
   });
 }
 
 /**
  * A watched transcript this tab holds (its rows, or a read of it that went
- * out or failed) and does not follow on the socket open now, read again: its
- * page subscribes it from the page's own `seq` ({@link adoptPage}). Held rows
- * stand for everything the session said up to the moment its stream was let
- * go (its tab closed or re-addressed, its read landing while it was not
- * watched, the socket gone), and a reader shown them again with no read
- * behind them sees that moment for good.
+ * out, landed or failed) and does not follow on the socket open now, read
+ * again: its page subscribes it from the page's own `seq` ({@link adoptPage}).
+ * Held rows stand for everything the session said up to the moment its stream
+ * was let go (its tab closed or re-addressed, its read landing while it was
+ * not watched, the socket gone), and a reader shown them again with no read
+ * behind them sees that moment for good. A read that landed holds the
+ * transcript though it held no rows: a session just started is empty, and a
+ * page's first visit names its tabs again (workspace `restore`), unwatching
+ * the pane's tab while its read is out; landing then, the read follows
+ * nothing, and with nothing read again the pane shows that empty moment for
+ * good, the agent's every word after it never drawn.
  *
- * `reconnect`: the socket is new, so every one of them is read again, and a
- * read in flight was asked of the connection before (a page's first
- * connection had none before it, and joins its read).
+ * A stream whose place counts in this socket's hub run resumes from it
+ * instead ({@link resumeHeld}): a page that landed before the socket's
+ * board (or before its tab was named), or the last event a dropped socket
+ * applied, when the socket that replaces it reaches the same hub run. The hub
+ * replays what came after out of its ring, or resets, and the reset reads the
+ * page again. Only a place in another run (the hub restarted) is read again.
+ *
+ * `reconnect`: the socket is new, and a read in flight was asked of the
+ * connection before: it is ended and read again. A page's first connection
+ * had none before it: a read in flight is joined, and one whose read failed
+ * is left to the read again that failure scheduled.
  */
 function followHeld(ids: string[], cause: "follow" | "reconnect"): void {
   if (state.status !== "connected") {
     return;
   }
   const fresh = cause === "reconnect" && connections > 1;
+  const first = connections === 1;
   for (const id of ids) {
+    if (
+      socketRun !== null &&
+      resumeHeld(streamState, streamHost, id, socketRun)
+    ) {
+      continue;
+    }
     const held = state.sessions[id];
+    // A read that failed before the first board already waits on what can
+    // answer it (`readFailed`: the backoff, the machine's deadline, or the
+    // board listing its machine online), and a 404 is the hub's answer.
+    if (first && !pageReads.has(id) && (held?.readFault || held?.behind)) {
+      continue;
+    }
     const holds = Boolean(
       streamState.cursors[id] ||
       held?.blocks.length ||
+      held?.reads ||
       held?.loading ||
       held?.readFault ||
       held?.behind
@@ -5564,27 +5604,33 @@ function connect(): void {
 }
 
 /**
- * A new connection: every transcript the dashboard follows is read again,
- * merged into the rows held ({@link mergeRows}), with this tab's own
- * sends kept in `local` until the hub places them, and the read's page
- * subscribes it on this socket ({@link adoptPage}). Never resumed from the
- * cursor the last connection left: the hub numbers a session's stream in
- * memory, from 1 again after a restart, so that cursor may sit inside
- * another hub process's numbering, and a resume from it would replay that
- * process's events onto rows they do not follow (iOS does the same,
- * `SessionsStore.reconnected`). An open tab never read yet waits for its
- * pane's own read.
+ * A new connection: every transcript the dashboard follows resumes its
+ * stream from the place it holds when that place counts in the board's hub
+ * run ({@link followHeld}), and is read again otherwise, merged into the rows
+ * held ({@link mergeRows}), with this tab's own sends kept in `local` until
+ * the hub places them, the read's page subscribing it on this socket
+ * ({@link adoptPage}). Never resumed across hub runs: the hub numbers a
+ * session's stream in memory, from 1 again after a restart, so a place from
+ * another run sits inside another process's numbering, and a resume from it
+ * would replay that process's events onto rows they do not follow. An open
+ * tab never read yet waits for its pane's own read.
  */
 function rereadFollowed(): void {
   connections += 1;
   const ids = subscriptionIds().sort();
   lastSubscriptionKey = ids.join("\u0000");
-  forgetUnwatched(streamState, streamHost, ids);
+  forgetUnwatched(streamState, streamHost, watchedIds());
   followHeld(ids, "reconnect");
 }
 
 /** How many times this page has reached the hub: past one, a connection is a reconnect. */
 let connections = 0;
+/**
+ * The hub run the open socket's board named (`InstancesFrame.hubRun`): the
+ * numbering its streams count in. A page's `seq` resumes a stream on it only
+ * when the page names the same run. Null before the first board.
+ */
+let socketRun: string | null = null;
 
 /** The hub answered on the socket `connect` opened: everything a connection is owed. */
 function hubReached(): void {
@@ -5779,11 +5825,12 @@ function takeMessage(message: unknown): void {
   // message either: until the board is applied the store holds the last
   // hub's machines and rows, and "connected" over them let a page asking
   // after a hub restart ask a machine that wasn't back yet. The board is
-  // applied in this same turn, before anything reads the status.
-  if (
-    state.status !== "connected" &&
-    (message as { payload?: FramePayload }).payload?.kind === "instances"
-  ) {
+  // applied in this same turn, before anything reads the status. Its run is
+  // the numbering this socket's streams count in, read before the
+  // connection's follows are.
+  const board = (message as { payload?: FramePayload }).payload;
+  if (state.status !== "connected" && board?.kind === "instances") {
+    socketRun = board.hubRun;
     hubReached();
   }
   if (olderThanHub(message)) {
@@ -7909,6 +7956,18 @@ export function clearReadFault(instanceId: string): void {
 }
 
 /**
+ * The server's read of this load found the view's machine away (its served
+ * tail's 503): that is this load's read, kept as the view's fault, and the
+ * view is read again on what can answer it ({@link readFailed}: the machine's
+ * deadline, the board listing it online), never asked again meanwhile.
+ */
+export function keepServedAway(viewId: string, fault: ReadFault): void {
+  if (fault.reason === "offline") {
+    readFailed(session(viewId), fault);
+  }
+}
+
+/**
  * The newest transcript page the server read for a view, or how the hub
  * refused it — what `/session/[id]`'s server load hands the pane it names.
  */
@@ -7941,15 +8000,22 @@ export function readFaultOf(
   away: string | null,
   reconnectingUntil: number | null = null
 ): ReadFault {
-  if (away) {
-    return {
-      reason: "offline",
-      machineId: away,
-      ...(reconnectingUntil === null ? {} : { reconnectingUntil }),
-      message: `${machineName(away)} is offline, so its stored transcript can't be read right now`,
-    };
-  }
-  return { reason: "failed", message: failure.detail };
+  return away
+    ? awayFault(away, reconnectingUntil)
+    : { reason: "failed", message: failure.detail };
+}
+
+/** A read's machine away, as its fault says it ({@link readFaultOf}). */
+function awayFault(
+  machineId: string,
+  reconnectingUntil: number | null
+): ReadFault {
+  return {
+    reason: "offline",
+    machineId,
+    ...(reconnectingUntil === null ? {} : { reconnectingUntil }),
+    message: `${machineName(machineId)} is offline, so its stored transcript can't be read right now`,
+  };
 }
 
 /** A machine as the fleet list names it (its label), else its id. */
@@ -8025,7 +8091,12 @@ export type ReadCause =
    */
   | "deadline"
   /** The last read failed while the hub answered: read again on {@link READ_AGAIN_MS}. */
-  | "backoff";
+  | "backoff"
+  /**
+   * The page landed from another hub run than the socket's board names: its
+   * `seq` counts in a numbering this socket's streams do not.
+   */
+  | "otherRun";
 
 /**
  * A session's transcript, read once: the newest page the hub built, then its
@@ -8057,6 +8128,16 @@ export function readTranscript(
   if (cause === "open" && streamState.cursors[viewId]?.subscribed) {
     return Promise.resolve({ ok: true, skipped: true });
   }
+  // A conversation stored on a machine the board lists away is not asked:
+  // the hub could only refuse it (503). The view says the machine is away,
+  // as that refusal would have, and the board listing it online reads it
+  // (`readBehind`).
+  const away = storedAwayOn(viewId);
+  if (away) {
+    const fault = awayFault(away.machineId, away.reconnectingUntil ?? null);
+    readFailed(target, fault);
+    return Promise.resolve({ ok: false, ...fault });
+  }
   const controller = new AbortController();
   const read: Promise<TranscriptOutcome> = readNewestPage(
     target,
@@ -8070,6 +8151,49 @@ export function readTranscript(
   });
   pageReads.set(viewId, { read, cancel: () => controller.abort() });
   return read;
+}
+
+/**
+ * The machine a view's conversation is stored on, when the hub holds no row
+ * for it and the board lists that machine away: the hub reads such a
+ * conversation off its machine alone. A row is read whatever its machine:
+ * the hub may hold its transcript built. Null before the first board, whose
+ * machines are not known yet.
+ */
+function storedAwayOn(viewId: string): Machine | null {
+  const waits = storedReadWaits(viewId);
+  return waits?.on === "machine" ? waits.machine : null;
+}
+
+/** What a read off a stored conversation's machine waits on ({@link storedReadWaits}). */
+export type StoredWait = { on: "board" } | { machine: Machine; on: "machine" };
+
+/**
+ * What a read off a view's stored conversation waits on before it asks the
+ * hub, when the hub holds no row for it and the view names its machine: the
+ * hub reads it off that machine alone. `machine` while the board lists that
+ * machine away, its row; `board` before the first board, whose machines are
+ * not known yet; null when it can be asked. Read reactively: the board, the
+ * machines and the rows are all `$state`.
+ */
+export function storedReadWaits(viewId: string): StoredWait | null {
+  // Read first, so a reader that runs before the first board runs again
+  // when the board's machines land.
+  const { machines } = state;
+  if (instanceIndex.byId.has(viewId)) {
+    return null;
+  }
+  const machineId = contextOf(viewId)?.machine;
+  if (!machineId) {
+    return null;
+  }
+  if (socketRun === null) {
+    return { on: "board" };
+  }
+  const machine = machines.find((row) => row.machineId === machineId);
+  return machine && machine.status !== "online"
+    ? { on: "machine", machine }
+    : null;
 }
 
 /**
@@ -8298,7 +8422,10 @@ function readLanded(viewId: string): void {
 
 /**
  * The newest page into the view, and its stream resumed from the page's
- * `seq`.
+ * `seq` on the socket whose board names the page's hub run; a page that
+ * lands before any board keeps its place for the first one
+ * ({@link followHeld}), and one of another run than the open socket's is read
+ * again (`otherRun`).
  *
  * A READ AGAIN KEEPS EVERY ROW THE READER HAS. Over rows already held (a
  * resync, a retry, the socket or the machine back, the hub restarted), the
@@ -8355,6 +8482,13 @@ async function readNewestPage(
     if (cancel.aborted) {
       return { ok: true, skipped: true };
     }
+    // A page of another hub run than the open socket's (the hub restarted
+    // between the read and the socket's board) resumes nothing here: it is
+    // read again of the hub that answers now.
+    const run = answer.page.hubRun ?? null;
+    if (state.status === "connected" && run !== socketRun) {
+      return await readNewestPage(target, "otherRun", cancel);
+    }
     target.readFault = null;
     target.behind = null;
     readLanded(viewId);
@@ -8365,7 +8499,11 @@ async function readNewestPage(
       cursor: back.cursor,
     });
     target.olderFault = back.older;
-    adoptPage(streamState, streamHost, viewId, answer.page.seq ?? 0);
+    adoptPage(streamState, streamHost, viewId, {
+      seq: answer.page.seq ?? 0,
+      run,
+      connected: state.status === "connected",
+    });
     trackWorking(target);
     console.info(
       `[cawco] read ${viewId.slice(0, 8)} because ${cause}: ${answer.page.blocks.length} newest, ${back.blocks.length} read, ${heldBefore} held, ${target.blocks.length} rows`
@@ -8919,7 +9057,36 @@ function toolFrames(messages: Message[]): Set<string | undefined> {
   );
 }
 
+/**
+ * Each session's rewindable turns as last read, by the revision they were
+ * read at (`SessionState.rev`, which moves with every change to its
+ * messages). Every reader's turn asks as its row mounts, and read afresh
+ * each time, a wheel bringing in a few of them walked the whole session for
+ * each (1ms of a wheel's task, transcript-holds' steady wheel, profiled).
+ */
+const rewindable = new WeakMap<
+  SessionState,
+  { cursor: string | null; length: number; rev: number; turns: Set<string> }
+>();
+
 export function rewindableTurns(target: SessionState): Set<string> {
+  const { cursor, rev } = target;
+  const { length } = target.messages;
+  const kept = rewindable.get(target);
+  if (
+    kept &&
+    kept.rev === rev &&
+    kept.cursor === cursor &&
+    kept.length === length
+  ) {
+    return kept.turns;
+  }
+  const turns = readRewindable(target);
+  rewindable.set(target, { cursor, length, rev, turns });
+  return turns;
+}
+
+function readRewindable(target: SessionState): Set<string> {
   const turns = new Set<string>();
   const calls = toolFrames(target.messages);
   // An anchor on an older page is resolved by rewindPointBehind on demand.

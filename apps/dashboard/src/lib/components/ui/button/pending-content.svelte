@@ -245,8 +245,11 @@
 {#if label === undefined}
   <!-- Icon only: nothing to morph. -->
 {:else}
+  <!-- The run the mark line trims: a block, the reason a block under the
+       label, so the trim reaches its first and last lines (text-box-trim
+       reaches no flex or grid container, which kept its whole line and the
+       recipe's padding on top: a refused menu item stood 10px tall). -->
   <span
-    class="has-data-reason:inline-flex has-data-reason:flex-col has-data-reason:items-box-start"
     ><span
       data-slot="label-text"
       class="transition-[opacity] duration-(--dur-morph) ease-out covered-true:opacity-0"

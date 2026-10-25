@@ -20463,43 +20463,6 @@
         }
       }
     },
-    "/api/instances/{id}/tooling": {
-      "get": {
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "operationId": "getApiInstancesByIdTooling",
-        "responses": {
-          "200": {
-            "description": "getApiInstancesByIdTooling 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SessionTooling"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "getApiInstancesByIdTooling 404",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/instances/{id}/transcript": {
       "get": {
         "parameters": [
@@ -32064,6 +32027,10 @@
             "$ref": "#/components/schemas/TranscriptFacts",
             "description": "Newest page only: what the session has said about itself."
           },
+          "hubRun": {
+            "description": "Newest page only: the hub run that numbered `seq`, one value per hub\nstart (frames.ts `InstancesFrame.hubRun`). The hub numbers each stream from 1\nagain when it restarts, so a `seq` resumes a stream only on a socket\nwhose board names the same run.",
+            "type": "string"
+          },
           "queued": {
             "description": "Newest page only: the sends waiting to be read.",
             "type": "array",
@@ -36903,7 +36870,7 @@
         ]
       },
       "FrameState": {
-        "description": "What a browser drew of one frame: `unseen` until one drew it since its\nfile last changed; `unshown` when the page did not show it at its width (a\nphone's canvas shows one frame at a time), so it is neither drawn nor\nempty: `empty` is a frame shown that drew nothing.",
+        "description": "What a browser drew of one frame: `unseen` until one drew it since its\nfile last changed; `unshown` when the page laid it out nowhere (an\nembed's section holding none of the stories it draws), so it is neither\ndrawn nor empty: `empty` is a frame shown that drew nothing.",
         "type": "string",
         "enum": [
           "drawn",
@@ -38739,6 +38706,10 @@
           },
           "sentAt": {
             "description": "When it was first delivered to the session.",
+            "type": "string"
+          },
+          "state": {
+            "description": "The design graph's kept state when it was placed (Projects spec §5.10,\nthe owner's pick \"pins\"): its machine, state and variation in words,\nshown under the person's words; none on a page with no graph.",
             "type": "string"
           },
           "thread": {
@@ -45457,6 +45428,13 @@
               "string"
             ]
           },
+          "reconnectingUntil": {
+            "description": "Until when (epoch ms, the hub's clock, as `lostAt`) the hub reads this\nmachine as on its way back after its agent's link went: a read off it\nanswers so then (`Retry-After`), and offline after. Null while it is\nconnected or once it is offline. Live, as `status` is: never stored.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
           "status": {
             "type": "string"
           },
@@ -47355,40 +47333,6 @@
               "kind"
             ]
           }
-        ]
-      },
-      "SessionTooling": {
-        "description": "What a session's `init` says about its MCP servers and tools.",
-        "type": "object",
-        "properties": {
-          "servers": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string"
-                },
-                "status": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "name",
-                "status"
-              ]
-            }
-          },
-          "tools": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "servers",
-          "tools"
         ]
       },
       "BlockMetadata": {
@@ -57386,6 +57330,10 @@
           "hubBuild": {
             "$ref": "#/components/schemas/BuildInfo"
           },
+          "hubRun": {
+            "description": "This hub's run, one value per hub start: the numbering every stream on\nthis socket counts in. A newest transcript page names the run its `seq`\ncame from (`TranscriptPage.hubRun`); a page of this run resumes its\nstream here from that `seq`, and one of another run is read again.",
+            "type": "string"
+          },
           "instances": {
             "type": "array",
             "items": {
@@ -57436,6 +57384,7 @@
           "formerIds",
           "handoffs",
           "hubBuild",
+          "hubRun",
           "instances",
           "kind",
           "moves",

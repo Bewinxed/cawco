@@ -20,6 +20,9 @@
  *     and its pages, newest first, walk them all;
  * (e) a transcript deleted while it is paged reads as none, and no read
  *     throws;
+ * (f) the conversation as it was said reaches back to the first prompt,
+ *     across compactions whose logical parent was never written, and those
+ *     whose block the CLI wrote twice;
  * (d) (a) and (b) hold for pi sessions pi itself wrote (pi-transcripts.ts:
  *     tool calls, retried failures, compactions, background commands'
  *     notices, a branch left behind);
@@ -43,6 +46,7 @@ import {
 import type {
   SessionMessage,
   TranscriptBlock,
+  TranscriptEvent,
   WindowAsk,
 } from "../../../packages/core/src";
 import { TranscriptBuilder } from "../../../packages/core/src/transcript";
@@ -122,6 +126,20 @@ const entriesDiffer = (
     : `entry ${at} differs: whole ${whole[at]?.uuid}, windows ${joined[at]?.uuid}`;
 };
 
+/** The blocks `events` remove, taken out of the pages already served. */
+const dropRemoved = (
+  pages: TranscriptBlock[][],
+  events: readonly TranscriptEvent[]
+): void => {
+  for (const event of events) {
+    if (event.type === "block.remove") {
+      for (const [at, served] of pages.entries()) {
+        pages[at] = served.filter((block) => block.id !== event.id);
+      }
+    }
+  }
+};
+
 /**
  * The hub's page walk over a builder fed the newest window: older windows
  * read as a page reaches past what is held. The pages' blocks, oldest
@@ -139,7 +157,14 @@ const walkPages = (
       const window = older[next];
       next += 1;
       if (window) {
-        paged.prepend(window.entries, {}, window.older === null);
+        // A row the older window names first moves there: it leaves the
+        // pages already served, as the dashboard drops it on the remove.
+        const { events } = paged.prepend(
+          window.entries,
+          {},
+          window.older === null
+        );
+        dropRemoved(pages, events);
       }
     }
     const page = paged.page(PAGE, before);
@@ -286,6 +311,36 @@ const claudeParity = async (
   }
 };
 
+/**
+ * (f) The conversation as it was said reaches back to the transcript's
+ * first prompt across every compaction, those whose logical parent was
+ * never written and those whose block the CLI wrote twice too
+ * (claude-transcripts.ts `compaction`).
+ */
+const reachesFirstPrompt = async (
+  { check }: Kit,
+  dir: string,
+  path: string
+): Promise<void> => {
+  const head = await Bun.file(path)
+    .slice(0, 256 * 1024)
+    .text();
+  const first = head
+    .split("\n")
+    .slice(0, -1)
+    .map(
+      (line) =>
+        JSON.parse(line) as SessionMessage & { message?: { content?: unknown } }
+    )
+    .find((r) => r.type === "user" && typeof r.message?.content === "string");
+  const whole = await claudeReader(path).whole();
+  check(
+    `f: ${path.replace(dir, "written")}'s conversation as it was said (${whole.length} entries) starts at its first prompt, across compactions whose logical parent was never written or whose block was written twice`,
+    first !== undefined && whole.some((entry) => entry.uuid === first.uuid),
+    `first prompt ${first?.uuid}, the read's first entry ${whole[0]?.uuid}`
+  );
+};
+
 /** (e) A copy of `source`, paged (its line index built), then deleted: every read answers empty, none throws. */
 const deletedReadsAsNone = async (
   { check }: Kit,
@@ -351,6 +406,10 @@ export default {
       const named = process.env.CAWCO_TRANSCRIPTS;
       const real = named ? await transcriptsUnder(named) : [];
       await claudeParity(kit, dir, [...written, ...real]);
+      for (const path of written) {
+        // biome-ignore lint/performance/noAwaitInLoops: one transcript at a time
+        await reachesFirstPrompt(kit, dir, path);
+      }
       await deletedReadsAsNone(kit, dir, written[1] as string);
 
       // (d) pi: sessions pi itself wrote, read through the agent's pi reader.

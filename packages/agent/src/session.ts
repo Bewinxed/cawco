@@ -58,6 +58,7 @@ import {
   BOUNDARY_RELAUNCH,
   CAWCO_SCRATCH_TAG,
   CLI_OUTDATED,
+  COMPACT_RELAUNCH,
   CONTAINERS_ENDED,
   CONTAINERS_UNTRACKED,
   CONTROL_CARRY_SESSIONS,
@@ -1126,6 +1127,8 @@ export class SessionSupervisor {
   readonly #busy = new Set<string>();
   /** Attached sessions whose CLI runs a boundary hook that fails open, until the relaunch that replaces it ({@link BOUNDARY_RELAUNCH}). */
   readonly #failOpen = new Set<string>();
+  /** Claude processes that ran a manual `/compact`, until the relaunch that replaces them ({@link COMPACT_RELAUNCH}). */
+  readonly #compactedHere = new WeakSet<HarnessSession>();
   readonly #keepAlive = new Map<string, string>();
   /**
    * Each session's run of identical failed turns since its last send: the
@@ -3018,6 +3021,58 @@ export class SessionSupervisor {
     }
   }
 
+  /** A Claude process's manual `/compact` boundary: that process is replaced at rest ({@link COMPACT_RELAUNCH}). */
+  #noteCompact(
+    kind: HarnessKind,
+    session: HarnessSession | null,
+    message: NeutralMessage
+  ): void {
+    if (
+      kind === "claude" &&
+      session &&
+      message.type === "system" &&
+      message.subtype === "compact_boundary" &&
+      message.compact_metadata?.trigger === "manual"
+    ) {
+      this.#compactedHere.add(session);
+    }
+  }
+
+  /**
+   * At a turn's end of a Claude process that ran a manual `/compact`: asks
+   * the hub to relaunch it onto its conversation ({@link COMPACT_RELAUNCH})
+   * when it is at rest by the test a move's stop takes ({@link #stopForCarry}:
+   * no turn, no ask, no send on its way, nothing its resume would not bring
+   * back). Not at rest, it is asked again at its next turn's end.
+   */
+  async #askCompactRelaunch(
+    instanceId: string,
+    session: HarnessSession | null
+  ): Promise<void> {
+    if (
+      !(session && this.#compactedHere.has(session)) ||
+      this.#sessions.get(instanceId) !== session
+    ) {
+      return;
+    }
+    const awake = await this.#awake(instanceId, session, undefined, true, true);
+    if (awake || this.#queues.has(instanceId)) {
+      console.info(
+        `[compact] ${instanceId}: its process ran a manual /compact; it is replaced at a later turn's end, not now: ${awake?.why ?? "something sent to it is still on its way"}`
+      );
+      return;
+    }
+    console.info(
+      `[compact] ${instanceId}: its process ran a manual /compact and is at rest; the hub is asked to relaunch it`
+    );
+    this.#outbox.frame({
+      kind: "frame",
+      instanceId,
+      harness: session.harness,
+      message: { type: "system", subtype: COMPACT_RELAUNCH },
+    });
+  }
+
   #reuseRecovery(payload: SpawnPayload): boolean {
     const { instanceId, requestId: ack } = payload;
     if (
@@ -3633,6 +3688,7 @@ export class SessionSupervisor {
       frame: (message) => {
         this.#noteShell(instanceId, holder, message);
         this.#noteFailOpen(instanceId, message);
+        this.#noteCompact(adapter.kind, holder.session, message);
         this.#noteRead(instanceId, message);
         const ping = this.#keepAlive.get(instanceId);
         if (
@@ -3682,6 +3738,12 @@ export class SessionSupervisor {
           this.#keepAlive.delete(instanceId);
           if (!keepAlive) {
             this.#watchFailure(instanceId, adapter.kind, message, holder);
+            this.#askCompactRelaunch(instanceId, holder.session).catch(
+              (error: unknown) =>
+                warn(
+                  `asking ${instanceId}'s relaunch after its /compact failed: ${error}`
+                )
+            );
           }
         }
       },

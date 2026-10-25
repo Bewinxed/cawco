@@ -165,6 +165,7 @@ import {
   CLAUDE_CONVERSATION_GONE,
   CLAUDE_PROVIDER,
   CLI_OUTDATED,
+  COMPACT_RELAUNCH,
   COMPACTION_ORIGIN,
   CONFIGURE_BINARY_UPDATES,
   CONTAINERS_ENDED,
@@ -480,6 +481,7 @@ import { containerWords } from "@cawco/core/words/containers";
 import { leakWords } from "@cawco/core/words/leaks";
 import { machineReadWords } from "@cawco/core/words/machine-reads";
 import { noticeWords } from "@cawco/core/words/notices";
+import { type RelaunchFor, relaunchWords } from "@cawco/core/words/relaunch";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { turnWords } from "@cawco/core/words/turns";
 import { isPlace } from "@cawco/core/workspace-policy";
@@ -526,6 +528,7 @@ import {
   type PageFrom,
   SHOWN_WAIT_MS,
   type StageAt,
+  timedShowStep,
 } from "./artifacts/service";
 import {
   artifactPicture,
@@ -739,6 +742,7 @@ import {
   mediaBase64,
   mediaContentType,
   mediaFilePath,
+  mediaWriting,
   storedFilePath,
   storeFile,
 } from "./media";
@@ -1597,6 +1601,8 @@ interface SessionLocation {
  */
 type Located =
   | { kind: "found"; at: SessionLocation }
+  /** Kept on a machine that is away, by that machine's last catalog. */
+  | { kind: "away"; machineId: string }
   | { kind: "nowhere" }
   | { kind: "unanswered"; machines: string[] };
 
@@ -2786,6 +2792,21 @@ const UNREAD = {
 const STORED_TAIL = 50;
 
 /**
+ * How many stored entries a window of history asks for: two of the
+ * dashboard's pages and then some, so a newest page is cut from the first
+ * window read. Ours.
+ */
+const HISTORY_WINDOW = 300;
+
+/**
+ * How far before a pending send's acceptance (the hub's clock) a settle read
+ * reaches (the machine's clock, in the transcript's timestamps). Our call:
+ * clocks a few minutes apart, and the CLI dates an absorbed send when it was
+ * queued.
+ */
+const SETTLE_SKEW_MS = 10 * 60 * 1000;
+
+/**
  * Transcript reads to settle sends ({@link storedIn}) one machine is asked
  * at once; the rest wait their turn, their deadline starting when they are
  * asked. Our call: a machine coming back with hundreds of sessions was
@@ -3088,6 +3109,15 @@ export const createServer = (
   // a `sqlite3` session at 3am. A column nobody has to remember to distrust is
   // worth one write at startup.
   db.markAllAgentsOffline();
+
+  /**
+   * This hub's run, one value per start: the streams number each session
+   * from 1 again in every run, so a newest transcript page and every board
+   * snapshot name it (`TranscriptPage.hubRun`, `InstancesFrame.hubRun`), and
+   * a dashboard resumes a stream from a page's `seq` only on a socket of the
+   * same run.
+   */
+  const hubRun = crypto.randomUUID();
 
   /**
    * The system's laws, at the hub (laws.ts): a broken one fails its frame or
@@ -5304,6 +5334,11 @@ export const createServer = (
     // A turn that called finish_item ends with its process: what waited out
     // that turn is the next process's to read.
     if (!outlived) {
+      // And its transcript's tail says so: a process killed or crashed
+      // mid-turn sent no `result`, and the tail went on saying busy over a
+      // session doing nothing (a page read then drew Stop). One that outlived
+      // its agent may still be in its turn, which its adoption says.
+      transcripts.processGone(instanceId);
       workItems.turnOver(instanceId);
     }
     // A lead's turn ends with its process: its thread is no longer working.
@@ -5989,6 +6024,54 @@ export const createServer = (
   };
 
   /**
+   * The stored transcript a settle read decides the session's pending sends
+   * against: its newest {@link STORED_TAIL} entries, and windows before them
+   * until they reach back past the oldest pending send's acceptance (less
+   * {@link SETTLE_SKEW_MS}), for a send is stored only after it is handed.
+   * A send the CLI absorbed mid-turn is stored where it was read, and the
+   * turn can run on long after: 83 entries on in one session, which a tail
+   * of 50 missed, so the send was owed again and the session read it twice.
+   * Oldest first; a window the machine did not answer is the read's answer.
+   */
+  const settleWindows = async (
+    row: InstanceRow & { sessionId: string }
+  ): Promise<Awaited<ReturnType<typeof readAgent>>> => {
+    const unread = db.sendsIn(row.id, ["pending"]);
+    const since =
+      unread.length > 0
+        ? Math.min(...unread.map((send) => send.acceptedAt.getTime())) -
+          SETTLE_SKEW_MS
+        : Number.POSITIVE_INFINITY;
+    const windows: SessionMessage[][] = [];
+    let ask: WindowAsk = { end: "newest", limit: STORED_TAIL };
+    for (;;) {
+      // biome-ignore lint/performance/noAwaitInLoops: each window names the one before it
+      const answer = await readAgent(
+        row.machineId,
+        CONTROL_READ_TRANSCRIPT_WINDOW,
+        [row.sessionId, { dir: row.cwd || undefined, window: ask }],
+        READ_TIMEOUT_MS,
+        row.harness
+      );
+      if (answer.kind !== "answered" || !answer.value.ok) {
+        return answer;
+      }
+      const read = answer.value.result as Partial<TranscriptWindow> | null;
+      const entries = Array.isArray(read?.entries) ? read.entries : [];
+      windows.unshift(entries);
+      const first = entries.find((entry) => entry.timestamp)?.timestamp;
+      const older = read?.older ?? null;
+      if (older === null || !first || Date.parse(first) < since) {
+        return {
+          ...answer,
+          value: { ...answer.value, result: windows.flat() },
+        };
+      }
+      ask = { before: older, limit: HISTORY_WINDOW };
+    }
+  };
+
+  /**
    * One settle read of the session's transcript tail, asked once its backoff
    * is over and its machine has a turn for it. One its machine left
    * unanswered is logged with when it was asked and how long it waited, and
@@ -6003,13 +6086,7 @@ export const createServer = (
     await settleTurn(row.machineId);
     const askedAt = Date.now();
     try {
-      const answer = await readAgent(
-        row.machineId,
-        CONTROL_GET_SESSION_MESSAGES,
-        [row.sessionId, { dir: row.cwd || undefined, tail: STORED_TAIL }],
-        READ_TIMEOUT_MS,
-        row.harness
-      );
+      const answer = await settleWindows(row);
       if (answer.kind !== "unanswered") {
         settleBackoff.delete(row.id);
         return answer;
@@ -10235,6 +10312,16 @@ export const createServer = (
    */
   const locations = new Map<string, SessionLocation | null>();
 
+  /**
+   * Each machine's catalog of the conversations it keeps, by key, as its
+   * last report in this hub's run said it: its register's `resumable`, and
+   * the keys a beat's `resumableAt` dates (a harness server's catalog). A
+   * machine that is away answers no locate, and this is what tells a
+   * conversation it keeps (its machine away, `locateSession`) from one that
+   * is nowhere.
+   */
+  const keptOn = new Map<string, Set<string>>();
+
   /** Sends `frame` on `socket` and gives it back: what {@link awaitReply} sends again. */
   const sendAnswerable = <T extends Envelope>(
     socket: HubSocket,
@@ -12125,8 +12212,8 @@ export const createServer = (
     if (!("page" in source)) {
       // Its machine's listener under its artifact's own key, started now so
       // a refusal is the open's; one already serving this source stands.
-      const reached = await reachPreview(
-        keepEmbedTarget(artifact, source, machineId)
+      const reached = await timedShowStep("reach", artifact, instanceId, () =>
+        reachPreview(keepEmbedTarget(artifact, source, machineId))
       );
       if (!reached.ok) {
         return {
@@ -12138,7 +12225,10 @@ export const createServer = (
     }
     previewTargets.set(instanceId, target);
     db.artifacts.show(instanceId, artifact.id);
-    return { ok: true, frame: publishPreview(instanceId, "open", target) };
+    const frame = await timedShowStep("publish", artifact, instanceId, () =>
+      publishPreview(instanceId, "open", target)
+    );
+    return { ok: true, frame };
   };
 
   /**
@@ -14520,7 +14610,9 @@ export const createServer = (
    * against). Each harness the machine reports is asked, because the control
    * goes to ONE adapter and only the one that wrote the transcript can find
    * it; a machine whose harnesses have not reported yet is asked about every
-   * kind.
+   * kind. A machine that is away cannot be asked: one whose last catalog
+   * ({@link keptOn}) holds the id answers `away`, so its readers wait for it
+   * rather than hear that nothing goes by the id.
    *
    * The answer is kept, so a conversation is located once per hub lifetime
    * and every reader after the first is a map lookup. Deliberately in
@@ -14623,6 +14715,18 @@ export const createServer = (
       return { kind: "found", at: found };
     }
 
+    // A machine that is away keeps it, by its last catalog: not remembered,
+    // so the machine's return finds it.
+    const keeper = db
+      .listAgents()
+      .find(
+        (agent) =>
+          !registry.agent(agent.machineId) &&
+          keptOn.get(agent.machineId)?.has(id)
+      );
+    if (keeper) {
+      return { kind: "away", machineId: keeper.machineId };
+    }
     // Not known: nothing is cached, and the caller says who did not answer.
     if (silent.length > 0) {
       console.warn(
@@ -14675,6 +14779,7 @@ export const createServer = (
         return session(asked);
       case "nowhere":
         return { asked, kind: "none" };
+      case "away":
       case "unanswered":
         return { asked, kind: "unknown" };
       default:
@@ -16292,6 +16397,8 @@ export const createServer = (
         return finishedAnswer(await readMessages(located.at, false), ended);
       case "nowhere":
         return undefined;
+      case "away":
+        throw awayError(located.machineId);
       case "unanswered":
         throw new Error(unlocatedWords(id, located.machines));
       default:
@@ -16662,6 +16769,8 @@ export const createServer = (
             ? `session ${sourceId} has no transcript yet`
             : `no session ${sourceId}`
         );
+      case "away":
+        throw awayError(located.machineId);
       case "unanswered":
         throw new Error(unlocatedWords(sourceId, located.machines));
       case "found":
@@ -18060,9 +18169,17 @@ export const createServer = (
                 .map((owner) => owner.id),
             }
           : custody;
+      const away = machinePresence(row.machineId);
       return {
         ...row,
         custody: visibleCustody,
+        // Live, like `status`: the window a read off it answers
+        // `reconnecting` in (awayHeaders), so a reader that does not ask it
+        // says the same.
+        reconnectingUntil:
+          away.kind === "reconnecting" && !registry.agent(row.machineId)
+            ? away.until
+            : null,
         // Online while its agent holds a link and, when it speaks this
         // hub's contract, once it has answered its welcome (fleet-sync.ts).
         status:
@@ -18143,8 +18260,8 @@ export const createServer = (
    * no `tooling`. A session's MCP servers and tools were 62% of the first
    * dashboard frame (1.29 MB of 2.1 MB over 1,095 rows) and only the `/`
    * palette of an open session reads them, so they travel per session
-   * instead: `GET /api/instances/:id/tooling` when a view opens, and the live
-   * `init` frame after that.
+   * instead: on the newest transcript page's facts when a view opens, and the
+   * live `init` frame after that.
    */
   const withDelegates = <Row extends { id: string }>(rows: Row[]) => {
     const counts = db.runningDelegateCounts();
@@ -18929,6 +19046,9 @@ export const createServer = (
     // a page built for an older one reloads itself on its first frame.
     hubBuild,
     protocol: WIRE_PROTOCOL,
+    // The numbering this socket's streams count in: a page of the same run
+    // resumes from its `seq`.
+    hubRun,
   });
 
   const instancesFrame = (
@@ -22121,6 +22241,13 @@ export const createServer = (
       switch (located.kind) {
         case "nowhere":
           return { fault: "missing", message: `no session ${instanceId}` };
+        // Its machine's last catalog keeps it: the read waits for the machine.
+        case "away":
+          return {
+            fault: "offline",
+            machineId: located.machineId,
+            message: machineFault(located.machineId, "offline"),
+          };
         case "unanswered":
           return {
             fault: "timeout",
@@ -22275,13 +22402,6 @@ export const createServer = (
 
   /** A history read that took this long or longer says so in the log, part by part. */
   const SLOW_HISTORY_MS = 1000;
-
-  /**
-   * How many stored entries a window of history asks for: two of the
-   * dashboard's pages and then some, so a newest page is cut from the first
-   * window read. Ours.
-   */
-  const HISTORY_WINDOW = 300;
 
   /**
    * A session's newest stored window, from its machine, with the records of
@@ -22679,6 +22799,7 @@ export const createServer = (
       streams.sequence(instanceId, frame);
     },
     head: (instanceId) => streams.head(instanceId),
+    hubRun,
     followed: (instanceId) => streams.followerCount(instanceId) > 0,
     live: (instanceId) => {
       const [row] = db.getInstancesByIds([instanceId]);
@@ -25768,31 +25889,60 @@ export const createServer = (
     );
   };
 
-  /** Sessions a boundary relaunch was sent for, so a second word on it before the spawn lands sends no second one. */
-  const relaunching = new Set<string>();
+  /**
+   * Sessions a boundary relaunch was sent for, held {@link RELAUNCH_SETTLE_MS}
+   * so a second word on it before the spawn lands sends no second one. An ask
+   * that comes while it is held is said in the log and asked again as the
+   * hold ends (`askedAgain`, the machine it came from), rather than left to
+   * the session's next turn's end; once only: a relaunch that was itself
+   * that second ask (`second`) leaves a further one to its next turn's end,
+   * so a process that comes back on a hook that fails open is not relaunched
+   * every hold while it is idle.
+   */
+  const relaunching = new Map<
+    string,
+    { askedAgain?: string; second: boolean }
+  >();
   const RELAUNCH_SETTLE_MS = 60_000;
 
   /**
-   * A session whose CLI runs a boundary hook that fails open, as its machine
-   * says at the attach and at each of its turns' ends ({@link BOUNDARY_RELAUNCH}):
-   * relaunched on its conversation, account and config dir — the at-limit
-   * move's path — so it comes back with the workspace's hook that refuses
-   * instead. Only between turns: one mid-turn, or with a send or an ask
-   * outstanding, is left to its next turn's end, which says so again. A send
-   * that follows the spawn waits behind it on the machine and reaches the new
-   * process.
+   * A session its machine asks to have relaunched at a turn's end: its CLI
+   * runs a boundary hook that fails open ({@link BOUNDARY_RELAUNCH}, said at
+   * the attach and at each of its turns' ends), so it comes back with the
+   * workspace's hook that refuses instead; or its Claude Code process ran a
+   * manual `/compact` ({@link COMPACT_RELAUNCH}), so its next one runs in a
+   * process that never held the history before it. Relaunched on its
+   * conversation, account and config dir — the at-limit move's path. Only
+   * between turns: one mid-turn, or with a send or an ask outstanding, is
+   * left to its next turn's end, which says so again. A send that follows the
+   * spawn waits behind it on the machine and reaches the new process.
    */
-  const relaunchOntoHook = async (
+  const relaunchAtRest = async (
     machineId: string,
-    instanceId: string
+    instanceId: string,
+    why: RelaunchFor,
+    /** The ask a hold kept back, asked again as it ended ({@link relaunching}). */
+    second = false
   ): Promise<void> => {
-    if (relaunching.has(instanceId)) {
+    // A compaction's ask comes only from the process that ran it, and a
+    // launch on its way already refuses a second ({@link inFlightRefusal}):
+    // held for {@link RELAUNCH_SETTLE_MS}, a second `/compact` within it
+    // would run in the process its first was relaunched into, and go on.
+    const held = why === "boundary" ? relaunching.get(instanceId) : undefined;
+    if (held) {
+      const holdSeconds = RELAUNCH_SETTLE_MS / 1000;
+      if (held.second) {
+        console.info(relaunchWords.heldTwice(instanceId, holdSeconds));
+      } else if (held.askedAgain === undefined) {
+        console.info(relaunchWords.heldBack(instanceId, holdSeconds));
+        held.askedAgain = machineId;
+      }
       return;
     }
     const [row] = db.getInstancesByIds([instanceId]);
     const agent = registry.agent(machineId);
     // One put to sleep at that boundary has no process left to replace: its
-    // next wake launches it onto the hook that refuses.
+    // next wake launches it afresh.
     if (
       !(row?.sessionId && agent && row.machineId === machineId) ||
       row.status === "sleeping"
@@ -25800,18 +25950,30 @@ export const createServer = (
       return;
     }
     if (!(await sessionIdle(row))) {
-      console.info(
-        `[hub] boundary: ${instanceId} is mid-turn; it is relaunched onto the fail-closed hook at its next turn's end`
-      );
+      console.info(relaunchWords.midTurn(why, instanceId));
       return;
     }
     const { sessionId } = row;
-    relaunching.add(instanceId);
-    lifetime.after(RELAUNCH_SETTLE_MS, () => relaunching.delete(instanceId));
+    if (why === "boundary") {
+      const hold: { askedAgain?: string; second: boolean } = { second };
+      relaunching.set(instanceId, hold);
+      lifetime.after(RELAUNCH_SETTLE_MS, () => {
+        relaunching.delete(instanceId);
+        const from = hold.askedAgain;
+        if (from === undefined) {
+          return;
+        }
+        console.info(relaunchWords.holdEnded(instanceId));
+        relaunchAtRest(from, instanceId, "boundary", true).catch(
+          (error: unknown) =>
+            console.error(
+              `[hub] boundary: relaunching ${instanceId} failed: ${String(error)}`
+            )
+        );
+      });
+    }
     resumeSpawn(agent, machineId, { ...row, sessionId }, true);
-    console.info(
-      `[hub] boundary: relaunching ${instanceId} onto the fail-closed hook`
-    );
+    console.info(relaunchWords.relaunching(why, instanceId));
   };
 
   /**
@@ -29562,11 +29724,13 @@ export const createServer = (
       // name can only ever mean the same picture, so the browser keeps it.
       .get("/api/media/:name", async ({ params, status }) => {
         const path = mediaFilePath(params.name);
-        const file = path ? Bun.file(path) : undefined;
-        if (!(file && (await file.exists()))) {
+        // Its write may still be under way (media.ts `writing`).
+        const writing = path ? mediaWriting(params.name) : undefined;
+        const file = path && !writing ? Bun.file(path) : undefined;
+        if (!(writing || (file && (await file.exists())))) {
           return status(404, "no such media");
         }
-        return new Response(file, {
+        return new Response(writing ? new Uint8Array(writing) : file, {
           headers: {
             "Content-Type": mediaContentType(params.name),
             "Cache-Control": "public, max-age=31536000, immutable",
@@ -29632,24 +29796,15 @@ export const createServer = (
       // transcript under. An id with no row is a stored session key, located
       // by `locateSession`.
       //
-      // The MCP servers and tools the session's newest `init` announced, as
-      // stored on its row. Read when a view opens, beside its transcript: the
-      // board's rows do not carry them (see boardRows). A session whose
-      // harness announces neither answers empty lists.
-      .get("/api/instances/:id/tooling", ({ params, status }) => {
-        const tooling = db.instanceTooling(params.id);
-        if (tooling === undefined) {
-          return status(404, `no session ${params.id}`);
-        }
-        return tooling ?? { servers: [], tools: [] };
-      })
       // A page of a session's transcript as blocks the hub built, newest
       // first: the newest page carries the sends waiting, the live tail, the
       // session's facts and the stream position it is consistent with, so a
       // reader subscribes with `afterSeq: seq` and applies what follows. An
       // older page is everything before `before`, a block id a newer page
       // named as its cursor. Addressed by id alone: the hub's row names a
-      // session it holds, and any other id is a stored key, located.
+      // session it holds, and any other id is a stored key, located; one
+      // only a machine that is away keeps (its last catalog) is that
+      // machine away, 503, never a 404.
       .get(
         "/api/instances/:id/transcript",
         {
@@ -33399,6 +33554,12 @@ export const createServer = (
                   locations.delete(id);
                 }
               }
+              // Its catalog, as this register reads it: what it keeps while
+              // it is away. A register that could not read it keeps the last.
+              const resumable = peekResumable(message.payload);
+              if (resumable) {
+                keptOn.set(message.machineId, new Set(resumable));
+              }
               // An agent that speaks this hub's contract is online once it has
               // written the fleet's policy its welcome carries (READY,
               // fleet-sync.ts); one older is online as it registers, its
@@ -34087,11 +34248,19 @@ export const createServer = (
               }
               // When the conversations a harness's server lists last moved,
               // read after the register so the register never waits on that
-              // server's start.
+              // server's start. They join the machine's catalog.
+              const served = peekResumableAt(message.payload);
+              if (served) {
+                const kept = keptOn.get(message.machineId) ?? new Set();
+                for (const key of Object.keys(served)) {
+                  kept.add(key);
+                }
+                keptOn.set(message.machineId, kept);
+              }
               const dated = db.dateStoredSessions(
                 message.machineId,
                 beatIds,
-                peekResumableAt(message.payload),
+                served,
                 () => publishInstances(message.machineId)
               );
               if (
@@ -34881,17 +35050,23 @@ export const createServer = (
                   }
                   break;
                 }
-                // A session whose boundary hook fails open, at a turn
-                // boundary: relaunched onto the one that refuses when idle.
+                // A session whose boundary hook fails open, or whose Claude
+                // Code process ran a manual /compact, at a turn boundary:
+                // relaunched on its conversation when idle.
                 if (
                   frame.message.type === "system" &&
-                  frame.message.subtype === BOUNDARY_RELAUNCH
+                  (frame.message.subtype === BOUNDARY_RELAUNCH ||
+                    frame.message.subtype === COMPACT_RELAUNCH)
                 ) {
                   const { machineId, instanceId } = message;
-                  relaunchOntoHook(machineId, instanceId).catch(
+                  const why =
+                    frame.message.subtype === BOUNDARY_RELAUNCH
+                      ? "boundary"
+                      : "compact";
+                  relaunchAtRest(machineId, instanceId, why).catch(
                     (error: unknown) =>
                       console.error(
-                        `[hub] boundary: relaunching ${instanceId} failed: ${String(error)}`
+                        `[hub] ${why}: relaunching ${instanceId} failed: ${String(error)}`
                       )
                   );
                   break;

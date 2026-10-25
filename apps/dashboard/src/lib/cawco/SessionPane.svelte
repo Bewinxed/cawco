@@ -36,6 +36,7 @@
     clearRestore,
     commandFault,
     faultMessage,
+    keepServedAway,
     latestCommandFor,
     loadMcpServers,
     machineConnected,
@@ -416,11 +417,38 @@
     // rebuild. That was the tab-switch scroll hijack. The stream heals any gap
     // on its own.
     const held = cawco.session(id);
-    if (held?.initialized && held.messages.length > 0) {
+    // A newest page taken is the transcript in hand, an empty one too (a
+    // session nothing has been said in): its stream follows it, resumed by
+    // the socket's next connection, and the socket's status moving asks
+    // nothing more of it.
+    if (
+      held &&
+      ((held.initialized && held.messages.length > 0) ||
+        (nextCause === "open" && held.reads > 0))
+    ) {
       // The transcript is in hand, which answers any earlier failed read.
       untrack(() => {
         missing = false;
       });
+      return;
+    }
+    // A read that failed waits on what can answer it (client.svelte.ts
+    // `readFailed`: the backoff, its machine's deadline or return) or on Try
+    // again: the socket's status moving is neither, and read again on it, a
+    // transcript whose machine is away was asked once per status it passed.
+    if (
+      nextCause === "open" &&
+      untrack(() => Boolean(held?.readFault || held?.behind))
+    ) {
+      return;
+    }
+    // The server's read of this load found the machine away: that read
+    // stands for this one, and the machine's return reads it.
+    const servedAway = untrack(() =>
+      servedFault?.reason === "offline" ? servedFault : null
+    );
+    if (nextCause === "open" && servedAway) {
+      untrack(() => keepServedAway(id, servedAway));
       return;
     }
     untrack(() => {

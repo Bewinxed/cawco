@@ -3,9 +3,9 @@
    * The project's details, changed where they are shown (DESIGN.md, The Stay
    * In Context Rule; project-details-wireframe.md): a tray that unfolds under
    * the project head, in the forget tray's frame (ForgetProjectTray, StopTray),
-   * with the board live under it (The Open Page Rule). The head's place line
-   * opens it, `· N places` opens it at its places, and so does ⋯ › Project
-   * details…; Done, Escape or the line again folds it.
+   * with the board live under it (The Open Page Rule). The head's place (its
+   * machine's mark, or the hub's folder) opens it, and so does ⋯ › Project
+   * details…; Done, Escape or the place again folds it.
    *
    * One row per fact, each changed on its own row:
    * - Place: where it lives, which CawCo can't move, and its places: a
@@ -102,7 +102,6 @@
     machine,
     lead,
     place,
-    placesAsked = 0,
     onclose,
   }: {
     project: ProjectRow;
@@ -111,8 +110,6 @@
     lead: CawLead;
     /** Where it lives, in the head's own words. */
     place: string;
-    /** Each time `· N places` asks: its places list opens, in view. */
-    placesAsked?: number;
     onclose: () => void;
   } = $props();
 
@@ -514,21 +511,7 @@
   /* ── Places ─────────────────────────────────────────────────────── */
 
   let listOpen = $state(false);
-  let placesRow = $state<HTMLElement | null>(null);
-
-  // `· N places` asked: the list opens, and the row comes into view once
-  // the tray has drawn it.
-  $effect(() => {
-    if (placesAsked === 0) {
-      return;
-    }
-    listOpen = true;
-    const frame = requestAnimationFrame(() =>
-      placesRow?.scrollIntoView({ block: "nearest" })
-    );
-    return () => cancelAnimationFrame(frame);
-  });
-  /** Its places on machines, as the head's line counts them. */
+  /** Its places on machines (its folder on the hub is every project's). */
   const checkouts = $derived(
     project.places.filter((each) => each.kind !== "hub").length
   );
@@ -702,7 +685,6 @@
       data-slot="row"
       class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
       data-detail="place"
-      bind:this={placesRow}
     >
       <p
         data-slot="project-details-label"
@@ -714,7 +696,7 @@
         data-slot="value"
         class="flex min-w-0 flex-col gap-space-1 pt-space-1"
       >
-        <!-- mark-line: the machine's mark heads its whole folder, which wraps (the head's line cuts it short): it stands in a mark cell, one line tall, on the first line -->
+        <!-- mark-line: the machine's mark heads its whole folder, which wraps: it stands in a mark cell, one line tall, on the first line -->
         <p
           class="type-label flex min-w-0 items-start gap-space-2 wrap-anywhere text-ink-strong"
         >

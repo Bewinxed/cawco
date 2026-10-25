@@ -77,8 +77,8 @@ export interface RelayOptions {
     send: (text: string) => void,
     app: ServerWebSocket<Pipe>
   ) => string | undefined;
-  /** What the app said to the hub, read as it passes. */
-  toHub?: (text: string) => void;
+  /** What the app said to the hub, read as it passes; a string returned goes to the hub in its place. */
+  toHub?: (text: string) => string | undefined;
 }
 
 /** A request as {@link Relay.breakAnswer}'s `match` reads it. */
@@ -293,11 +293,11 @@ export function relay(hubBase: string, options: RelayOptions = {}): Relay {
             fault.mutedAt = Date.now();
           }
         }
-        options.toHub?.(text);
+        const passed = options.toHub?.(text) ?? text;
         if (app.data.hub) {
-          app.data.hub.send(text);
+          app.data.hub.send(passed);
         } else {
-          app.data.held.push(text);
+          app.data.held.push(passed);
         }
       },
       drain(app) {

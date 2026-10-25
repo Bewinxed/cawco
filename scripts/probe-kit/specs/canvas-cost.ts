@@ -1086,6 +1086,8 @@ addEventListener("message", (e) => {
     if (h.said === urls.length && h.settledAt === null) h.settledAt = performance.now();
   }
   if (type === "cawco:embed-fetched" && f === current) done();
+  // Its graph told (core CANVAS_EMBED_GRAPH): its whole graph its own share, nothing more to wait on, as a page with this one frame fetching gives it.
+  if (type === "cawco:embed-graph") { e.source.postMessage({ type: "cawco:embed-go", urls: e.data.urls }, "*"); e.source.postMessage({ type: "cawco:embed-ready", urls: [] }, "*"); }
 });
 next();
 </script>`;

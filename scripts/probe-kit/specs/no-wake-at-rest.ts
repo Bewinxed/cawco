@@ -160,7 +160,7 @@ const answered = async (fleet: KitFleet, title: string) => {
 };
 
 /** Asks `id` to sleep (again every 15 s: a machine refuses one not at rest) until its row reads sleeping. */
-const asleep = (fleet: KitFleet, id: string) => {
+export const asleep = (fleet: KitFleet, id: string) => {
   let askedAt = 0;
   return until(
     `${id.slice(0, 8)} asleep`,
@@ -178,7 +178,7 @@ const asleep = (fleet: KitFleet, id: string) => {
 };
 
 /** The file Claude Code keeps conversation `sessionId` in, under `home`. */
-const conversationFile = (home: string, sessionId: string) => {
+export const conversationFile = (home: string, sessionId: string) => {
   const name = `${sessionId}.jsonl`;
   const found = (readdirSync(home, { recursive: true }) as string[]).find(
     (path) => path.endsWith(`/${name}`)
@@ -194,7 +194,7 @@ interface Column {
  * Copies of row `templateId` in `instances`, each a session of its own with
  * its own conversation (`sessionIds`), as `overrides` says.
  */
-const seedRows = (
+export const seedRows = (
   path: string,
   templateId: string,
   rows: { id: string; overrides: Record<string, number | string | null> }[]

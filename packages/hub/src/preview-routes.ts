@@ -71,11 +71,13 @@ export const previewRoutes = (deps: {
         },
         async ({ body }) => {
           try {
-            const settings = await deps.listeners.set(body);
-            deps.republish();
-            return settings;
+            return await deps.listeners.set(body);
           } catch (error) {
             return refused(error);
+          } finally {
+            // Every listener stopped for the change, a refused one too: each
+            // shown preview opens again where the mode now standing serves it.
+            deps.republish();
           }
         }
       )

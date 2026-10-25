@@ -233,6 +233,31 @@ export const EFFORT_READ = "effort";
 export const BOUNDARY_RELAUNCH = "boundary_relaunch";
 
 /**
+ * The `system` subtype an agent says for a Claude session whose process ran
+ * a manual `/compact`, at the end of each turn it is at rest after it (no
+ * turn, no ask, nothing a resume would not bring back). The hub relaunches the
+ * session onto its conversation, as for {@link BOUNDARY_RELAUNCH}, so the
+ * next `/compact` runs in a process that never held the epoch before it.
+ *
+ * Why: a second manual `/compact` in one Claude Code process writes every
+ * row before the first boundary to the session's `.jsonl` again, with their
+ * original uuids; each later one in the same process repeats more
+ * (https://github.com/anthropics/claude-code/issues/92089, "a later
+ * `/compact` in the same process first re-appends … a copy of every
+ * message the process has held"). Claude Code 2.1.309 in a probe session:
+ * two compactions in one process wrote 19 rows twice (6.2 MB); with the
+ * process resumed after each, none. `CLAUDE_CODE_DISABLE_PRECOMPACT_SKIP`
+ * does not stop it (20 rows twice). An automatic compaction leaves no
+ * epoch behind to replay: in one process an auto one followed by a manual
+ * one wrote 2 rows twice, two auto ones 4, each the prompt that set off an
+ * auto compaction and its attachment, written again beside its boundary,
+ * the first one in a fresh process too; so none asks for a relaunch. A
+ * manual one followed by an auto one replays (21 rows), and is relaunched
+ * by the manual one's ask. It never reaches a screen.
+ */
+export const COMPACT_RELAUNCH = "compact_relaunch";
+
+/**
  * The `system` subtype an agent passes a Claude session's `rate_limit_event`
  * on in, its `rate_limit_info` as Claude Code reported it. The hub reads it as
  * the session's account's limit reading; it never reaches a screen.

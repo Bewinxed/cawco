@@ -247,11 +247,49 @@ async function leg(kit: Kit, bench: string, engine: Engine, width: number) {
     const glyph = document
       .querySelector("header[data-slot='top'] [data-slot='burger'] svg")
       ?.getBoundingClientRect();
-    return { edge, glyphLeft: glyph?.left ?? null };
+    const bar = document
+      .querySelector("header[data-slot='top']")
+      ?.getBoundingClientRect();
+    const box = document
+      .querySelector("header[data-slot='top'] [data-slot='burger']")
+      ?.getBoundingClientRect();
+    const sizeOf = (name: string) => {
+      probe.style.cssText = `position:absolute;display:block;block-size:var(${name})`;
+      document.body.append(probe);
+      const size = probe.getBoundingClientRect().height;
+      probe.remove();
+      return size;
+    };
+    // The tabs' centre line: they stand on the bar's floor.
+    const line =
+      (bar?.top ?? 0) + sizeOf("--c-top-bar-h") - sizeOf("--c-tab-row-h") / 2;
+    return {
+      edge,
+      glyphLeft: glyph?.left ?? null,
+      glyphMid: glyph ? (glyph.top + glyph.bottom) / 2 : null,
+      line,
+      box:
+        box && bar
+          ? {
+              top: box.top - bar.top,
+              bottom: box.bottom - bar.top,
+              bar: bar.height,
+            }
+          : null,
+    };
   });
   kit.check(
     `${at}: the sidebar toggle's glyph still stands --c-bar-phone-edge (${toggle.edge}px) in from the leading edge (${toggle.glyphLeft})`,
     toggle.glyphLeft !== null && Math.abs(toggle.glyphLeft - toggle.edge) < 0.5
+  );
+  kit.check(
+    `${at}: the sidebar toggle's glyph centres on the tabs' centre line (${toggle.glyphMid} at ${toggle.line}) and its 44px box stays inside its bar (${JSON.stringify(toggle.box)})`,
+    toggle.glyphMid !== null &&
+      Math.abs(toggle.glyphMid - toggle.line) < 0.5 &&
+      !!toggle.box &&
+      toggle.box.top >= -0.5 &&
+      toggle.box.bottom <= toggle.box.bar + 0.5 &&
+      toggle.box.bottom - toggle.box.top >= 44 - 0.5
   );
   const house = new HouseRules(kit, at);
   await settle(page);

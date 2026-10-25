@@ -286,7 +286,7 @@ orchestrate() {
   # cca90e213: "Cannot find module '../../packages/core/src/bounded' from '/shared/stage2-send.ts'").
   machine_helpers() {
     local dir=$1 helper
-    for helper in start-session stop-session send sends during-install hook-calls preview-port; do
+    for helper in start-session stop-session send sends signin during-install hook-calls preview-port; do
       bun build "$here/stage2-$helper.ts" --target=bun --outfile "$dir/stage2-$helper.ts" || return 1
     done
   }
@@ -1153,28 +1153,23 @@ export -f check_hub_dashboard_3455 install_hub join_machine signed_in_on new_acc
 # update_outcomes_start CONTAINER MACHINE SESSION [nosends], called by the update's check before the update is asked
 # for, on the machine that updates and a session running there (its pid kept): from then the machine's Claude Code
 # answers `--version` and `auth status` CLAUDE_LATE_S late (claude-late.sh), what the hub says of the machine's
-# sign-in is sampled every second, and,
+# sign-in is sampled every second (stage2-signin.ts), and,
 # unless `nosends`, a message goes to the session every 3 s (stage2-sends.ts), through the update and the hub's own
 # restarts, until update_sends_stop. Sampling and sending run on in the background past the check that started them;
 # the checks below end them.
-# Fails when the hub does not answer. Not a pipe from hub_api: a check's shell has no pipefail (`bash -eEx -c`), and
-# `json` reads no input as no value, so a hub that was away read as `none` (nightly d0ca43009: handover's one `none`
-# at 19:18:38.920, the hub's helper "the hub does not answer" at 19:18:38.778, its restart in the update).
-signin_state() {
-  local accounts
-  accounts=$(hub_api /api/accounts) || return 1
-  json "d => d.signins.find(s => s.accountId === '$1' && s.machineId === '$2')?.state" <<< "$accounts"
-}
-# `<epoch ms> <state>` every second until the stop file is there; `hub-away` while the hub does not answer.
-signin_sampler() {
-  local machine=$1 file=$2 stop=$3 aid state
-  aid=$(cat "$rigdir/account-id")
-  while [[ ! -e $stop ]]; do
-    state=$(signin_state "$aid" "$machine" 2> /dev/null) || state=hub-away
-    echo "$(now_ms) ${state:-none}" >> "$file"
-    sleep 1
-  done
-}
+#
+# The sampler is one Bun process in the hub's container, asking the hub's /api/accounts over its loopback once a second
+# whether or not the asks before have answered, each sample `<epoch ms> <state>` stamped when the hub was asked and
+# written to $rigdir/outcomes-signin.txt as its answer comes (`hub-away` for no 2xx answer in 30 s, `none` for no such
+# sign-in), until /tmp/outcomes-signin.stop is there in the hub's container. Not a podman exec and a Bun per sample
+# from the host: on a loaded host those took seconds each (load average 44, nightly a3d9e8ed1's keeperkilled: 4
+# samples in the 22.6 s after the last read), and the check below holds only while samples come faster than reads end.
+signin_stop() { as_user "$hubc" touch /tmp/outcomes-signin.stop; }
+# The samples in file $1 where the hub answered and said other than signed-in.
+signin_bad() { awk '$2 != "signed-in" && $2 != "hub-away"' "$1"; }
+# How many samples in file $1 asked the hub after epoch ms $2 and heard signed-in, and how long after $2 the newest of
+# them asked: `<count> <ms>`, `0 0` for none. The newest by its stamp, not its line: lines come as answers do.
+signin_heard_after() { awk -v t="$2" '$1 > t && $2 == "signed-in" { n++; if ($1 - t > past) past = $1 - t } END { print n + 0, past + 0 }' "$1"; }
 claude_late() { as_user "$1" sh /shared/claude-late.sh "$2"; }
 claude_calls() { as_user "$1" sh -c 'cat "$HOME/.cawco-proof/claude-calls.log" 2> /dev/null || true'; }
 # The late `auth status` reads of machine $1's Claude Code that have ended since $2 (epoch ms): answered, or `cut` by
@@ -1203,9 +1198,13 @@ update_outcomes_start() {
   [[ "$(cut -d' ' -f2 "$rigdir/outcomes-session.txt")" =~ ^[0-9]+$ ]] || { echo "the session $session holds no one process: $(cat "$rigdir/outcomes-session.txt")"; return 1; }
   echo "$c $machine $session $(now_ms) $sends" > "$rigdir/outcomes-of"
   claude_late "$c" "$CLAUDE_LATE_S"
-  rm -f "$rigdir/outcomes-signin.stop"
+  as_user "$hubc" rm -f /tmp/outcomes-signin.stop
   : > "$rigdir/outcomes-signin.txt"
-  signin_sampler "$machine" "$rigdir/outcomes-signin.txt" "$rigdir/outcomes-signin.stop" < /dev/null > /dev/null 2>&1 &
+  # Its stdout is samples alone: its errors, and this subshell's trace, go beside it.
+  ( set +x; run_script "$hubc" /shared/stage2-signin.ts http://127.0.0.1:3456 "$(cat "$rigdir/account-id")" "$machine" \
+    /tmp/outcomes-signin.stop < /dev/null > "$rigdir/outcomes-signin.txt" 2> "$rigdir/outcomes-signin.err" ) &
+  wait_until 60 '[[ -s "$rigdir/outcomes-signin.txt" ]]' \
+    || { echo "the sign-in sampler wrote no sample in 60 s:"; cat "$rigdir/outcomes-signin.err"; return 1; }
   [[ $sends != nosends ]] || return 0
   as_user "$hubc" rm -f /tmp/outcomes-sends.stop
   # The file holds the sender's own words and nothing of the check's: its trace (-x) is off in the subshell before the
@@ -1257,25 +1256,31 @@ update_sends_delivered() {
 # CLAUDE_LATE_S late, past the agent's 20 s bound on it (accounts.ts `authStatusIn`): from before the update until a
 # late read of it had ended (cut at the bound, or answered under a longer one) and 15 s past the last read that ended
 # (the agent's report follows its reads within 2 s, slow-harness-cli.ts), the hub said signed-in at every sample it
-# answered. The 15 s run from the last read, not the first: the agent reads each minute (a sixth of one here, the
+# answered, and it was heard saying so at least 5 times after the last read that ended, the newest asked 15 s or more
+# past it. The 15 s run from the last read, not the first: the agent reads each minute (a sixth of one here, the
 # proof's pace), and a fixed wait after the first could end a moment after another read, with no sample of the hub's
-# word on it.
+# word on it. The check waits for those samples, up to 240 s, rather than for 15 s of the clock: the samples come each
+# second (stage2-signin.ts), but the reads of the calls log that find the last read are podman execs on a loaded host.
+# The last read is read again at each look, so a read that ends meanwhile starts the count again; a sample that says
+# otherwise ends the wait at once.
 update_signin_kept() {
-  local c machine since bad last
+  local c machine since bad last=0 heard=0 past=0 file="$rigdir/outcomes-signin.txt"
   [[ -s "$rigdir/outcomes-of" ]] || { echo "ASSERTION FAILED: the update's check ended before the sign-in was watched"; return 1; }
   read -r c machine _ since _ < "$rigdir/outcomes-of"
-  on_exit "touch \"\$rigdir/outcomes-signin.stop\"; claude_late $c 0"
+  on_exit "signin_stop; claude_late $c 0"
   wait_until 300 '(( $(auth_reads_ended_since "$c" "$since") >= 1 ))' \
     || { echo "ASSERTION FAILED: no late read of the machine's account ended after its update began, so none was proven"; claude_calls "$c"; return 1; }
-  wait_until 120 'last=$(auth_read_last_ended "$c") && (( $(now_ms) - last >= 15000 ))'
-  touch "$rigdir/outcomes-signin.stop"
+  wait_until 240 '[[ -n $(signin_bad "$file") ]] || { last=$(auth_read_last_ended "$c") &&
+    read -r heard past <<< "$(signin_heard_after "$file" "$last")" && (( heard >= 5 && past >= 15000 )); }' || true
+  signin_stop
   echo "== the Claude Code stand-in's late calls (<epoch ms> start|answered|cut <pid> <args>)"
   claude_calls "$c"
-  bad=$(awk '$2 != "signed-in" && $2 != "hub-away"' "$rigdir/outcomes-signin.txt")
-  echo "the hub's word on the sign-in: $(wc -l < "$rigdir/outcomes-signin.txt") samples since $since, $(awk '$2 == "hub-away"' "$rigdir/outcomes-signin.txt" | wc -l) while the hub was away"
+  bad=$(signin_bad "$file")
+  echo "the hub's word on the sign-in: $(wc -l < "$file") samples since $since, $(awk '$2 == "hub-away"' "$file" | wc -l) while the hub was away"
   [[ -z $bad ]] || { echo "ASSERTION FAILED: a read that timed out changed the machine's account: the hub said"; awk '{ print $1, $2 }' <<< "$bad" | uniq -f 1 | head -n 20; return 1; }
-  (( $(awk -v t="$last" '$1 > t && $2 == "signed-in"' "$rigdir/outcomes-signin.txt" | wc -l) >= 5 )) \
-    || { echo "ASSERTION FAILED: the hub said nothing of the sign-in after the last read that timed out"; return 1; }
+  echo "after the last read that ended, at $last: $heard samples heard signed-in, the newest asked $past ms after it"
+  (( heard >= 5 && past >= 15000 )) \
+    || { echo "ASSERTION FAILED: in 240 s the hub was heard on the sign-in $heard times after the last read that timed out (at $last), the newest asked $past ms after it: the check needs 5, the newest 15000 ms or more past the read"; return 1; }
 }
 # The session running on the machine before its update is the same process after it, reattached and running, though
 # the keeper holding it, retiring, answers its listing late.
@@ -1287,7 +1292,7 @@ update_session_reattached() {
   cat "$rigdir/outcomes-session.txt"
   survived "$c" "$rigdir/outcomes-session.txt"
 }
-export -f signin_state signin_sampler claude_late claude_calls auth_reads_ended_since auth_read_last_ended turns_on turns_of all_reached \
+export -f signin_stop signin_bad signin_heard_after claude_late claude_calls auth_reads_ended_since auth_read_last_ended turns_on turns_of all_reached \
   update_outcomes_start update_sends_stop update_sends_delivered update_signin_kept update_session_reattached
 
 # ================================================================ THE RIGS
@@ -2572,11 +2577,17 @@ ws_served_pid() { as_user "$joinerc" pgrep -o -f "^socat TCP-LISTEN:$WS_SERVED_P
 # answer is kept in $rigdir/ws-preview-open: its record (`--record`, the hub's record as one line of JSON, core
 # tool-answer.ts), whose id closes it. The hub's preview port for it is read as the dashboard learns it.
 ws_preview_open() { ws_exec_as_session "/home/cawco/.local/bin/cawco tool artifact_create --record '{\"kind\":\"preview\",\"does\":\"try\",\"ask\":\"Try the served page and say whether it answers\",\"name\":\"proof-served\",\"port\":$WS_SERVED_PORT,\"serve\":{\"command\":\"socat TCP-LISTEN:\$PORT,fork,reuseaddr EXEC:\$TMPDIR/served.sh\"}}'" > "$rigdir/ws-preview-open"; cat "$rigdir/ws-preview-open"; }
+# The preview's artifact id, from the record its create answered.
+ws_preview_artifact() {
+  local id
+  id=$(grep -E '^[{]' "$rigdir/ws-preview-open" | tail -n 1 | json '(d) => d.id')
+  [[ $id =~ ^[0-9a-f-]{36}$ ]] || { echo "the preview's create answered no record with an id: $(cat "$rigdir/ws-preview-open")" >&2; return 1; }
+  echo "$id"
+}
 # The delegate removes that preview (artifact_delete): its server's last artifact, so the stage stops it.
 ws_preview_close() {
   local id
-  id=$(grep -E '^[{]' "$rigdir/ws-preview-open" | tail -n 1 | json '(d) => d.id')
-  [[ $id =~ ^[0-9a-f-]{36}$ ]] || { echo "the preview's create answered no record with an id: $(cat "$rigdir/ws-preview-open")"; return 1; }
+  id=$(ws_preview_artifact) || return 1
   # tool answer: words (it only has to succeed)
   ws_exec_as_session "/home/cawco/.local/bin/cawco tool artifact_delete '{\"id\":\"$id\"}'"
 }
@@ -2597,7 +2608,20 @@ ws_preview_mode() {
   as_user "$hubc" curl -sS -w '\nHTTP %{http_code}' -X PUT http://127.0.0.1:3456/api/preview-settings -H 'content-type: application/json' -d "$body"
 }
 # The preview's host-mode name (`p-<port>.localtest.me:<listener port>`): the host of the origin the hub gives a client.
-ws_preview_host() { ws_post "/api/instances/$(cat "$rigdir/ws-delegate")/preview-address" '{}' | sed '$d' | json 'd => d.origin ? new URL(d.origin).host : ""'; }
+# A machine's preview is served on its artifact's own origin, never its session's (hub server.ts frameAddress, f536f2675).
+ws_preview_host() { ws_post "/api/artifacts/$(ws_preview_artifact)/preview-address" '{}' | sed '$d' | json 'd => d.origin ? new URL(d.origin).host : ""'; }
+# The session's own host-mode name, where the hub serves what it holds for the session.
+ws_session_host() { ws_post "/api/instances/$(cat "$rigdir/ws-delegate")/preview-address" '{}' | sed '$d' | json 'd => d.origin ? new URL(d.origin).host : ""'; }
+# Every one of $2 requests (8 if not given) to host-mode name $1 without a pass gets the lock's 401 page. Each request is a
+# connection of its own, so a second socket bound to the listener's port with `reusePort`, which the kernel hands a
+# share of the connections, is met (f536f2675's run: one of them served the preview with no pass).
+ws_preview_locked() {
+  local host=$1 times=${2:-8} answer i
+  for ((i = 0; i < times; i++)); do
+    answer=$(ws_preview_by_host "$host")
+    [[ "$answer" == *"HTTP 401" && "$answer" == *cawco-preview-locked* ]] || { echo "ASSERTION FAILED: request $((i + 1)) of $times to $host without a pass got: $answer"; return 1; }
+  done
+}
 # One request to the preview's host-mode name ($1), with the pass cookie $2 or none: its body, then `HTTP <status>`.
 ws_preview_by_host() {
   local host=$1 cookie=${2:-}
@@ -2881,7 +2905,9 @@ workspace_across_update() {
   answer=$(ws_exec_reach)
   [[ "$answer" == *gen-old* ]] || { echo "ASSERTION FAILED: with the job gone the next command reached no listener: $answer"; ws_listener_why "$old_inner"; return 1; }
   wait_until 60 '[[ "$(ws_preview_says)" == *"served '"$old_ns"'"* ]]' || { echo "the preview answered: $(ws_preview_says)"; ws_listener_why "$old_inner"; return 1; }
-  # The same in host mode, the owner's: a request without a pass gets the lock's 401 page; one with the pass a
+  # The same in host mode, the owner's, switched to live as Settings › Previews does: the preview's own origin, which
+  # held the range's first port in port mode, moves off it, since that port is host mode's listener's alone; every
+  # request without a pass, to the preview's name and to its session's, gets the lock's 401 page; one with the pass a
   # ticket bought reaches the listener in the generation kept for it.
   answer=$(ws_preview_mode host)
   echo "the hub answered host mode: $answer"
@@ -2889,8 +2915,10 @@ workspace_across_update() {
   on_exit 'ws_preview_mode port > /dev/null'
   ws_preview_host > "$rigdir/ws-preview-host"
   [[ "$(cat "$rigdir/ws-preview-host")" == p-*.localtest.me:* ]] || { echo "the preview's host-mode name: '$(cat "$rigdir/ws-preview-host")'"; return 1; }
-  answer=$(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")")
-  [[ "$answer" == *"HTTP 401" && "$answer" == *cawco-preview-locked* ]] || { echo "ASSERTION FAILED: a request without a pass got: $answer"; return 1; }
+  [[ "$(cat "$rigdir/ws-preview-host")" != "p-$preview_first."* ]] || { echo "ASSERTION FAILED: in host mode the preview's own origin still holds host mode's port: $(cat "$rigdir/ws-preview-host")"; return 1; }
+  echo "in host mode the preview is served at $(cat "$rigdir/ws-preview-host")"
+  ws_preview_locked "$(cat "$rigdir/ws-preview-host")" || return 1
+  ws_preview_locked "$(ws_session_host)" || return 1
   ws_preview_enter "$(cat "$rigdir/ws-preview-host")" > "$rigdir/ws-preview-pass"
   [[ "$(cat "$rigdir/ws-preview-pass")" == __Secure-cawco-pass=* ]] || { echo "the entry set no pass: '$(cat "$rigdir/ws-preview-pass")'"; return 1; }
   wait_until 60 '[[ "$(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")" == *"served '"$old_ns"'"*"HTTP 200" ]]' || { echo "host mode answered: $(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")"; return 1; }
@@ -2926,18 +2954,21 @@ workspace_across_update() {
   ws_descends "$(ws_listener_pid gen-new)" "$new_inner" || return 1
   answer=$(ws_exec_reach)
   [[ "$answer" == *gen-new* ]] || { echo "ASSERTION FAILED: the next command reached no listener in the new generation: $answer"; ws_listener_why "$new_inner"; return 1; }
-  # The delegate shows its server again, and the stage runs it in the new generation. The session's preview reaches it
-  # there: in host mode with the same pass, then by port once the fleet is back in port mode.
+  # The delegate shows its server again, and the stage runs it in the new generation. The new preview's own origin
+  # reaches it there: in host mode with the same pass (it covers every name under the domain), never without one, then
+  # by port once the fleet is back in port mode.
   ws_preview_open
   [[ "$(ws_served_pid)" =~ ^[0-9]+$ ]] || { echo "ASSERTION FAILED: no served listener runs once its preview was made again: $(cat "$rigdir/ws-preview-open")"; return 1; }
   ws_descends "$(ws_served_pid)" "$new_inner" || return 1
+  ws_preview_host > "$rigdir/ws-preview-host"
+  [[ "$(cat "$rigdir/ws-preview-host")" == p-*.localtest.me:* && "$(cat "$rigdir/ws-preview-host")" != "p-$preview_first."* ]] || { echo "ASSERTION FAILED: the new preview's host-mode name: '$(cat "$rigdir/ws-preview-host")'"; return 1; }
   wait_until 60 '[[ "$(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")" == *"served '"$(ns_of "$new_inner")"'"*"HTTP 200" ]]' || { echo "host mode answered: $(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")"; ws_listener_why "$new_inner"; return 1; }
-  [[ "$(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")")" == *"HTTP 401" ]] || { echo "ASSERTION FAILED: host mode answered a request without a pass"; return 1; }
+  ws_preview_locked "$(cat "$rigdir/ws-preview-host")" || return 1
   answer=$(ws_preview_mode port)
   echo "the hub answered port mode: $answer"
   [[ "$answer" == *"HTTP 200" ]]
-  # The session's port is read again, as a dashboard learns it: host mode bars the range's first port to sessions, so
-  # a session that kept it moved to another as host mode began, and keeps that one (packages/hub/src/preview.ts
+  # The preview's port is read again, as a dashboard learns it: host mode bars the range's first port to every origin,
+  # so one that kept it moved to another as host mode began, and keeps that one (packages/hub/src/preview.ts
   # `barred`, `portFor`).
   wait_until 60 'ws_preview_port > "$rigdir/ws-preview-port" 2> "$rigdir/ws-preview-port.err"' || { cat "$rigdir/ws-preview-port.err"; return 1; }
   echo "back in port mode the preview is served on the hub's port $(cat "$rigdir/ws-preview-port")"
@@ -3029,7 +3060,7 @@ workspace_archive_ends_all() {
   [[ -z "$(ws_served_pid)" ]] || { echo "ASSERTION FAILED: a served listener $(ws_served_pid) runs after the archive"; return 1; }
   wait_until 60 '[[ -z "$(child_pids "$joinerc" "boundary-'"$id"'-'"$gen"'")" ]] && ! as_user "$joinerc" test -e "$(ws_state)"'
 }
-export -f ws_state ws_json ws_gen ws_decisions ws_decisions_said ws_kept_listening ws_exec ws_session_env ws_exec_as_session ws_place ws_same_sandbox ns_of ws_listener_start ws_listener_pid ws_exec_reach ws_listener_why ws_served_script ws_served_pid ws_preview_open ws_preview_close ws_preview_port ws_preview_says ws_preview_mode ws_preview_host ws_preview_by_host ws_preview_enter ws_tree ws_ancestry ws_descends ws_post json_string ws_item ws_item_says ws_item_live ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered ws_hook_calls_clean ws_hook_calls_after ws_judge_answers_after_update workspace_opens workspace_across_update workspace_updated_serving workspace_archive_ends_all
+export -f ws_state ws_json ws_gen ws_decisions ws_decisions_said ws_kept_listening ws_exec ws_session_env ws_exec_as_session ws_place ws_same_sandbox ns_of ws_listener_start ws_listener_pid ws_exec_reach ws_listener_why ws_served_script ws_served_pid ws_preview_open ws_preview_artifact ws_preview_close ws_preview_port ws_preview_says ws_preview_mode ws_preview_host ws_session_host ws_preview_locked ws_preview_by_host ws_preview_enter ws_tree ws_ancestry ws_descends ws_post json_string ws_item ws_item_says ws_item_live ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered ws_hook_calls_clean ws_hook_calls_after ws_judge_answers_after_update workspace_opens workspace_across_update workspace_updated_serving workspace_archive_ends_all
 export WS_LISTENER_PORT WS_SERVED_PORT WS_SERVED_ANSWER
 rig_workspace() {
   # Check names are written out in full: the rig's check list (rig_checks) reads them from

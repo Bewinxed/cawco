@@ -1,10 +1,16 @@
 /**
- * The two rules every journey step is held to, read from the engine:
+ * The three rules every journey step is held to, read from the engine:
  *
  *  - nothing spills: no text or control shows past the screen's edge (the
  *    page itself never scrolls sideways), text inside a control stays inside
  *    it, and flowing text stays inside the box it is drawn in (the nearest
  *    ancestor with a fill or an edge);
+ *  - no control runs out of its row: a control's box stays inside the box
+ *    it is laid out in (its nearest ancestor that clips, draws a fill or an
+ *    edge, or is a flex or grid row), whether or not the page scrolls
+ *    sideways; a negative margin's overhang is its own, a scroller's
+ *    scrolling axis holds what scrolls, and a control placed absolutely or
+ *    fixed is placed on purpose;
  *  - nothing overlaps: no interactive control's box intersects a text
  *    node's box in the same block (the control's nearest block ancestor).
  *    A control's box is what it paints: its own words and glyphs, and,
@@ -408,6 +414,91 @@ export function scan(): string[] {
         );
         break;
       }
+    }
+  }
+
+  // Every control inside the row, card or panel it is laid out in: its
+  // nearest ancestor that clips, draws a fill or an edge, or lays out a row
+  // (flex or grid). A button pushed past its row by its neighbours widens
+  // nothing when a panel clips it, or when the screen still has room, and
+  // its words stay inside its own box, so the rules above never meet it.
+  // What a box declares it hangs out by (a negative margin, its own or a
+  // wrapper's on the way up) is its own; past a scroller's edge along the
+  // way it scrolls is content to scroll to; a control placed absolutely or
+  // fixed, or inside a box so placed before any row, is placed on purpose;
+  // and one no clip leaves showing (a carousel's next slide) is not read.
+  // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
+  const SCROLLS = /^(auto|scroll)$/;
+  // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
+  const ROW = /flex|grid/;
+  const describe = (el: Element) => {
+    const slot = el.getAttribute("data-slot");
+    const cls = [...el.classList].slice(0, 2).join(".");
+    return `${el.tagName.toLowerCase()}${slot ? `[data-slot=${slot}]` : ""}${cls ? `.${cls}` : ""}`;
+  };
+  for (const control of controls) {
+    const placed = (el: Element) =>
+      style(el).position === "absolute" || style(el).position === "fixed";
+    if (placed(control)) {
+      continue;
+    }
+    const own = plain(control.getBoundingClientRect());
+    if (seen([own], clippers(control)).length === 0) {
+      continue;
+    }
+    const hang = { left: 0, right: 0, top: 0, bottom: 0 };
+    const declares = (el: Element) => {
+      const s = style(el);
+      hang.left += Math.max(0, -Number.parseFloat(s.marginLeft) || 0);
+      hang.right += Math.max(0, -Number.parseFloat(s.marginRight) || 0);
+      hang.top += Math.max(0, -Number.parseFloat(s.marginTop) || 0);
+      hang.bottom += Math.max(0, -Number.parseFloat(s.marginBottom) || 0);
+    };
+    declares(control);
+    let holder: Element | null = null;
+    for (
+      let up = control.parentElement;
+      up && up !== document.body && up !== document.documentElement;
+      up = up.parentElement
+    ) {
+      const s = style(up);
+      if (INLINE.test(s.display)) {
+        continue;
+      }
+      if (clipsOverflow(s) || painted(up) || ROW.test(s.display)) {
+        holder = up;
+        break;
+      }
+      if (placed(up)) {
+        break;
+      }
+      declares(up);
+    }
+    if (!holder) {
+      continue;
+    }
+    const frame = plain(holder.getBoundingClientRect());
+    const s = style(holder);
+    const sideways = !SCROLLS.test(s.overflowX);
+    const down = !SCROLLS.test(s.overflowY);
+    const past = [
+      sideways && frame.left - hang.left - own.left > TOLERANCE
+        ? `${(frame.left - own.left).toFixed(0)}px past its left`
+        : "",
+      sideways && own.right - frame.right - hang.right > TOLERANCE
+        ? `${(own.right - frame.right).toFixed(0)}px past its right`
+        : "",
+      down && frame.top - hang.top - own.top > TOLERANCE
+        ? `${(frame.top - own.top).toFixed(0)}px past its top`
+        : "",
+      down && own.bottom - frame.bottom - hang.bottom > TOLERANCE
+        ? `${(own.bottom - frame.bottom).toFixed(0)}px past its foot`
+        : "",
+    ].filter(Boolean);
+    if (past.length > 0) {
+      say(
+        `the control “${name(control)}” (${px(own)}) runs out of the box it is laid out in (${describe(holder)} ${px(frame)}): ${past.join(", ")}`
+      );
     }
   }
   return found;

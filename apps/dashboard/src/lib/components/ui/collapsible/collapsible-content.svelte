@@ -3,6 +3,7 @@
   import { untrack } from "svelte";
   import { CURVE } from "#lib/cawco/motion/curves.svelte.js";
   import { fold } from "#lib/cawco/motion/fold.svelte.js";
+  import { rootOpen } from "./opened";
 
   let {
     ref = $bindable(null),
@@ -35,16 +36,40 @@
   const OPEN_MS = 240;
   const SHUT_MS = 160;
 
+  /**
+   * THE BODY IS BUILT THE FIRST TIME IT IS OPENED. bits-ui's Content renders
+   * its children while closed (`hidden`) and measures itself after every
+   * tick it is mounted or toggled (2.20.2: `CollapsibleContentState`,
+   * `afterTick` → `measureWithoutAnimation`), so a closed disclosure built
+   * its whole body and laid the page out for nobody: a transcript scrolled
+   * through a page of notes and Reasoning rows built and measured every one.
+   * Under the kit's Root (`opened.ts`), nothing is mounted until the Root
+   * is first open; then it stays, so a fold shut plays and a reopen turns
+   * back from where it is. A body built by the opening grows open from
+   * nothing (`entering`); one open as it mounts is drawn open. Under any
+   * other Root it mounts at once, as bits-ui's does.
+   */
+  const open = rootOpen();
+  const openAtMount = untrack(() => open?.() ?? true);
+  let ever = openAtMount;
+  const built = $derived.by(() => {
+    if (!ever && (open?.() ?? true)) {
+      ever = true;
+    }
+    return ever;
+  });
+  const grows = $derived(entering || !openAtMount);
+
   $effect(() => {
     const node = ref;
     if (!(reveal && node)) {
       return;
     }
-    const run = (open: boolean, from?: number) => {
+    const run = (opening: boolean, from?: number) => {
       const animation = fold(
         node,
-        open,
-        { ms: open ? OPEN_MS : SHUT_MS, easing: CURVE.out, fade },
+        opening,
+        { ms: opening ? OPEN_MS : SHUT_MS, easing: CURVE.out, fade },
         from
       );
       if (!animation) {
@@ -61,16 +86,16 @@
     // open (a first render, a row the virtualiser rebuilt) does not animate.
     const openNow = () =>
       node.getAttribute("data-state") === "open" && !node.hidden;
-    let shown = untrack(() => !entering) && openNow();
+    let shown = untrack(() => !grows) && openNow();
     if (!shown && openNow()) {
       shown = true;
       run(true, 0);
     }
     const watch = new MutationObserver(() => {
-      const open = openNow();
-      if (open !== shown) {
-        shown = open;
-        run(open, open ? 0 : undefined);
+      const now = openNow();
+      if (now !== shown) {
+        shown = now;
+        run(now, now ? 0 : undefined);
       }
     });
     watch.observe(node, {
@@ -81,8 +106,10 @@
   });
 </script>
 
-<CollapsiblePrimitive.Content
-  data-slot="collapsible-content"
-  bind:ref
-  {...restProps}
-/>
+{#if built}
+  <CollapsiblePrimitive.Content
+    data-slot="collapsible-content"
+    bind:ref
+    {...restProps}
+  />
+{/if}

@@ -12,18 +12,30 @@
  *
  * A scratch fleet (real hub, agent and sessiond; the real Claude Code CLI
  * against the mock model) with two Claude accounts. One session says its
- * turns, each a read and a command and an answer: compacted by Claude
- * Code's own `/compact`, moved between the accounts twice before that
- * compaction, continued at another session's ask (its conversation folded
- * into the one it went on in), then compacted again near its end, so the
- * stretch since the last compaction is shorter than a page.
+ * turns, each reasoned over (a Reasoning row), then a read and a command
+ * and an answer: compacted by Claude Code's own `/compact`, moved between
+ * the accounts twice before that compaction, continued at another
+ * session's ask (its conversation folded into the one it went on in), then
+ * compacted again near its end, so the stretch since the last compaction is
+ * shorter than a page.
  *
- * Then, on Chromium and WebKit at 1440 and 390, two pages: one scrolled up
- * mid-history (every page read first), one at the tail. After each of a
- * socket drop, the agent registering again, the hub restarting with the
- * agent up, the hub restarting with the agent down first, a new turn, a
- * reload, and (once on each engine) a `/clear` that changes the session's
- * key:
+ * Then, on Chromium and WebKit at 1440 and 390, two pages, each holding the
+ * session's tab and the lead's: one scrolled up mid-history, one at the
+ * tail. The one scrolled up reads every page first by wheel, from the tail
+ * up (`readBack`): each page lands with the reader at rest, and the row at
+ * the top of the view stays within 1 px on every painted frame while it
+ * lands; then a steady wheel back down to the tail. On Chromium, traced,
+ * the longest task of each landing and of the steady wheel takes no more
+ * than {@link LONG_TASK_MS} on a CPU {@link SLOWER} times slower (its thread
+ * clock times {@link SLOWER}, as two-pane-perf and tab-return read it); on
+ * WebKit, which Playwright gives no trace, the longest frames are noted.
+ * After each of a socket drop, the agent registering again, the hub
+ * restarting with the agent up, the hub restarting with the agent down
+ * first, a new turn, a warm switch back to the session's tab after a turn
+ * it missed (a person's press: the pointer rests on the tab first; the
+ * frames behind the press, the catch-up's, hold no task past the same bound
+ * on Chromium; the reach and the press are noted), a reload, and (once on
+ * each engine) a `/clear` that changes the session's key:
  *  - each page's list holds every row it held (the store, by id);
  *  - the hub's paged walk holds every turn its walk held, and every turn
  *    said, from the first, across the compactions and the continuation;
@@ -35,9 +47,11 @@
  * new turn ends with every look refused at the network, as while the hub is
  * down: no console error says so, and the look reaches the hub once the
  * pages are connected again; on Chromium, at 4x CPU throttle and traced, no
- * frame of its reply forces a layout from a row handing its place on
- * (Transcript.svelte `handOn`), and the reads the long frames forced
- * elsewhere at Transcript.svelte are noted. No console error on any page.
+ * frame of its reply forces a style or layout pass from Transcript.svelte or
+ * Row.svelte. At the leg's end, the page read back to the start mounts a
+ * disclosure's body only once it is opened: as many collapsible bodies as
+ * disclosures opened, before and after a Reasoning row is opened. No
+ * console error on any page.
  * Once at the end, the idle sweep: the session put to sleep and no page
  * open past the hub's idle time, then opened again: the walk holds every
  * turn, and a page opens at the place it was left.
@@ -53,7 +67,7 @@ import { join } from "node:path";
 import type { Page, Route } from "playwright-core";
 import { CLAUDE_JSON_NAME } from "../../../../packages/core/src/claude-dirs";
 import { ACCOUNT, until } from "../../../scratch-fleet";
-import { traceMain } from "../../frames";
+import { type MainThread, SCROLLER, traceMain } from "../../frames";
 import {
   type Engine,
   type Kit,
@@ -64,6 +78,7 @@ import {
   settle,
   type View,
 } from "../../kit";
+import { LONG_TASK_MS, REACH_MS, SLOWER } from "../two-pane-perf";
 
 /** A second account signed in on the fleet's machine. */
 const SECOND = "acct-holds-other";
@@ -83,6 +98,19 @@ const TURNS = 44;
 const MOVES = new Set([2, 4]);
 /** `/compact` after these turns: one in the first conversation, one near the end. */
 const COMPACTS = new Set([8, 38]);
+/**
+ * What the agent reasons before each turn's calls, a piece a delta: three
+ * paragraphs, so every turn draws a Reasoning row with steps behind its
+ * fold (Thinking.svelte), as the owner's long sessions do.
+ */
+const REASONING = [
+  "The person wants the note read again, so the **first** step is the file ",
+  "itself: `note.txt` in the working directory, read whole.\n\n",
+  "Then a command to say it was checked. Nothing in it writes, so it can ",
+  "run without asking, and its output is one line.\n\n",
+  "Last, a short answer: the note is unchanged and the check ran. No need ",
+  "to repeat what the tools already show.",
+];
 
 const LEGS: { engine: Engine; view: View; label: string }[] = [
   { engine: "chromium", view: "desk", label: "chromium 1440" },
@@ -141,6 +169,7 @@ async function standUp(kit: Kit): Promise<KitFleet> {
     }
     return {
       everyMs: 5,
+      thinking: REASONING,
       words: ["Checking first."],
       tools: [
         { name: "Read", input: { file_path: join(fleet.workdir, NOTE) } },
@@ -493,21 +522,22 @@ const forcedPass = (pass: { at: string }): boolean => pass.at.includes("@");
 /** A frame longer than this is long (headless Chromium's 16.67ms grid, two frames: decision-pages (o)). */
 const LONG_FRAME_MS = 33.4;
 
-/** A forced pass whose reading call is Transcript.svelte's own. */
-const atTranscript = (pass: { at: string }): boolean =>
-  (pass.at.split(" ← ")[0] ?? "").includes("Transcript.svelte");
-
-/** A forced pass read by a row handing its place on (Transcript.svelte `handOn`, be88156f's read). */
-const atHandOn = (pass: { at: string }): boolean =>
-  (pass.at.split(" ← ")[0] ?? "").startsWith("handOn@");
+/**
+ * A forced pass whose reading call is the transcript's own list: Transcript.svelte
+ * or a row of it (Row.svelte). The call that read is the stack's first frame.
+ */
+const atOwn = (pass: { at: string }): boolean => {
+  const reader = pass.at.split(" ← ")[0] ?? "";
+  return reader.includes("Transcript.svelte") || reader.includes("Row.svelte");
+};
 
 /**
  * A turn's reply on `page` at 4x CPU throttle, traced (Chromium): its long
  * frames (the page's own frame clock, `requestAnimationFrame`, past
  * {@link LONG_FRAME_MS}), each with the style and layout passes script forced
- * in the tasks that started in it; the passes forced at Transcript.svelte in
- * those frames (`inLong`), and those a row handing its place on forced in
- * any frame of the reply (`handOn`).
+ * in the tasks that started in it; the passes Transcript.svelte or Row.svelte
+ * forced in any frame of the reply (`own`), and those any other script
+ * forced in its long frames (`inLong`).
  */
 async function forcedInTurn(page: Page, act: () => Promise<void>) {
   const cdp = await page.context().newCDPSession(page);
@@ -576,7 +606,7 @@ async function forcedInTurn(page: Page, act: () => Promise<void>) {
       );
       inLong.push(
         ...forced
-          .filter(({ pass }) => atTranscript(pass) && !atHandOn(pass))
+          .filter(({ pass }) => !atOwn(pass))
           .map(({ task, pass }) => said(task, pass))
       );
       long.push(
@@ -587,15 +617,11 @@ async function forcedInTurn(page: Page, act: () => Promise<void>) {
         }`
       );
     }
-    // The row handoff's reads in any frame of the reply, long or not.
-    const handOn = main.tasks.flatMap((task) =>
-      task.passes
-        .filter((pass) => forcedPass(pass) && atHandOn(pass))
-        .map((pass) => said(task, pass))
-    );
+    // The list's own reads in any frame of the reply, long or not.
+    const own = ownForced(main);
     return {
       frames: frames.length,
-      handOn,
+      own,
       inLong,
       long,
     };
@@ -604,6 +630,555 @@ async function forcedInTurn(page: Page, act: () => Promise<void>) {
     await cdp.detach();
   }
 }
+
+/** Every pass Transcript.svelte or Row.svelte forced in a trace, each said with its task. */
+function ownForced(main: MainThread): string[] {
+  return main.tasks.flatMap((task) =>
+    task.passes
+      .filter((pass) => forcedPass(pass) && atOwn(pass))
+      .map(
+        (pass) =>
+          `${pass.name} ${pass.ms.toFixed(1)}ms at ${pass.at} (in a ${Math.round(task.wall)}ms task, ${task.ran})`
+      )
+  );
+}
+
+/**
+ * A span of a journey the spec marks in the page (`performance.mark` at its
+ * start and its end, and the page's clock beside each): a page landing, a
+ * steady wheel, a switch.
+ */
+interface Span {
+  /** Its end, the page's clock, ms. */
+  end: number;
+  name: string;
+  /** Its start, the page's clock, ms. */
+  start: number;
+}
+
+/** How long a span took at its worst, by what the engine can tell. */
+interface Worst {
+  /** Chromium: the longest task in it by thread clock, ms, and what it ran; WebKit: none. */
+  cpu: number | null;
+  /** The longest gap between two of the page's animation frames in it, ms. */
+  frame: number;
+  name: string;
+  /** What the longest task ran and what it forced, said (Chromium). */
+  what: string;
+}
+
+/**
+ * `act` on `page` with a frame clock running in the page (every animation
+ * frame's time) and the spans it marks (`mark(name, "start" | "end")`);
+ * traced on Chromium. Each span's worst: its longest task by thread clock
+ * (Chromium) and its longest frame gap; and the passes Transcript.svelte or
+ * Row.svelte forced anywhere in it (Chromium).
+ */
+async function inSpans(
+  page: Page,
+  engine: Engine,
+  act: (
+    mark: (name: string, edge: "start" | "end") => Promise<void>
+  ) => Promise<void>
+): Promise<{ forced: string[]; worst: Worst[] }> {
+  const spans: Span[] = [];
+  const started = new Map<string, number>();
+  const mark = async (name: string, edge: "start" | "end") => {
+    const at = await page.evaluate((tag) => {
+      performance.mark(tag);
+      return performance.now();
+    }, `${name}:${edge}`);
+    if (edge === "start") {
+      started.set(name, at);
+    } else {
+      spans.push({ name, start: started.get(name) ?? at, end: at });
+    }
+  };
+  let ticks: number[] = [];
+  const run = async () => {
+    await page.evaluate(() => {
+      const clock: { on: boolean; ticks: number[] } = { on: true, ticks: [] };
+      (globalThis as unknown as { __spanClock?: typeof clock }).__spanClock =
+        clock;
+      const tick = (now: number) => {
+        if (clock.on) {
+          clock.ticks.push(now);
+          requestAnimationFrame(tick);
+        }
+      };
+      requestAnimationFrame(tick);
+      performance.mark("spans");
+    });
+    await act(mark);
+    ticks = await page.evaluate(() => {
+      const clock = (
+        globalThis as unknown as {
+          __spanClock?: { on: boolean; ticks: number[] };
+        }
+      ).__spanClock;
+      if (clock) {
+        clock.on = false;
+      }
+      return clock?.ticks ?? [];
+    });
+  };
+  const gapIn = (span: Span) => {
+    let most = 0;
+    for (let at = 1; at < ticks.length; at += 1) {
+      if (ticks[at] > span.start && ticks[at - 1] < span.end) {
+        most = Math.max(most, ticks[at] - ticks[at - 1]);
+      }
+    }
+    return most;
+  };
+  if (engine !== "chromium") {
+    await run();
+    return {
+      forced: [],
+      worst: spans.map((span) => ({
+        name: span.name,
+        cpu: null,
+        frame: gapIn(span),
+        what: "",
+      })),
+    };
+  }
+  const main = await traceMain(page, run, { passes: true, profile: PROFILE });
+  const markAt = (tag: string) =>
+    main.marks.find((one) => one.name === tag)?.at ?? 0;
+  return {
+    forced: ownForced(main),
+    worst: spans.map((span) => {
+      const from = markAt(`${span.name}:start`);
+      const to = markAt(`${span.name}:end`);
+      const tasks = main.tasks
+        .filter((task) => task.end > from && task.at < to)
+        .sort((a, b) => b.cpu - a.cpu);
+      const [top] = tasks;
+      return {
+        name: span.name,
+        cpu: top?.cpu ?? 0,
+        frame: gapIn(span),
+        what: top
+          ? `+${Math.round((top.at - from) / 1000)}ms into it: ${taskWords(top)}${
+              PROFILE
+                ? `; its heaviest: ${main
+                    .selfTime(top.at, top.end)
+                    .slice(0, 8)
+                    .map(([fn, ms]) => `${fn} ${ms.toFixed(1)}ms`)
+                    .join(", ")}; with what they called: ${main
+                    .inclusive(top.at, top.end)
+                    .filter(([fn]) => !SVELTE_RUNTIME.test(fn))
+                    .slice(0, 18)
+                    .map(([fn, ms]) => `${fn} ${ms.toFixed(1)}ms`)
+                    .join(", ")}`
+                : ""
+            }; next: ${tasks
+              .slice(1, 3)
+              .map(
+                (task) =>
+                  `${task.cpu.toFixed(1)}ms +${Math.round((task.at - from) / 1000)}ms (${taskWords(task)})`
+              )
+              .join(", ")}`
+          : "no task",
+      };
+    }),
+  };
+}
+
+/**
+ * `PROBE_PROFILE=1`: the traced spans sample the main thread's script too,
+ * and a span's longest task names its heaviest functions, by their own
+ * time and with what they called (frames.ts `selfTime`, `inclusive`). Off by default: sampling costs the thread time it measures.
+ */
+const PROFILE = process.env.PROBE_PROFILE === "1";
+/** Svelte's own runtime and the page's bundled chunks: left out of a task's callers, which name the app's own. */
+const SVELTE_RUNTIME =
+  /@(runtime|client|legacy-client|events|chunk)-[\w-]+\.js/;
+
+/** A task said: what it ran, its wall time, its style and layout, and what script forced. */
+const taskWords = (task: MainThread["tasks"][number]): string => {
+  const forced = task.passes.filter(forcedPass);
+  const phases = task.rendering
+    .slice(0, 4)
+    .map(([name, ms]) => `${name} ${ms.toFixed(1)}ms`)
+    .join(", ");
+  return `${task.ran}, ${Math.round(task.wall)}ms wall, style ${task.styleMs.toFixed(1)}ms (${task.restyled} elements), layout ${task.layoutMs.toFixed(1)}ms${phases ? `, ${phases}` : ""}${forced.length > 0 ? `, forced: ${forced.map((pass) => `${pass.name} ${pass.ms.toFixed(1)}ms at ${pass.at.split(" ← ")[0]}`).join("; ")}` : ""}`;
+};
+
+/** A span's worst, said: its longest task on Chromium (and that, `SLOWER` times slower), its longest frame. */
+const worstWords = (worst: Worst): string =>
+  worst.cpu === null
+    ? `${worst.name}: longest frame ${Math.round(worst.frame)}ms`
+    : `${worst.name}: longest task ${worst.cpu.toFixed(1)}ms of CPU (${(worst.cpu * SLOWER).toFixed(0)}ms ${SLOWER}x slower; ${worst.what}), longest frame ${Math.round(worst.frame)}ms`;
+
+/** Whether a span's longest task fits the budget on a CPU `SLOWER` times slower (Chromium; WebKit has none read). */
+const withinBudget = (worst: Worst): boolean =>
+  worst.cpu === null || worst.cpu * SLOWER <= LONG_TASK_MS;
+
+/** The session's store as the page holds it (dev's `__cawcoDebug`): its blocks, its cursor, a page out. */
+const storeOf = (
+  page: Page,
+  id: string
+): Promise<{ blocks: number; cursor: boolean; hydrating: boolean }> =>
+  page.evaluate((viewId) => {
+    const one = (
+      globalThis as unknown as {
+        __cawcoDebug?: {
+          state?: {
+            sessions?: Record<
+              string,
+              {
+                blocks?: unknown[];
+                cursor?: string | null;
+                hydrating?: boolean;
+              }
+            >;
+          };
+        };
+      }
+    ).__cawcoDebug?.state?.sessions?.[viewId];
+    return {
+      blocks: one?.blocks?.length ?? 0,
+      cursor: !!one?.cursor,
+      hydrating: !!one?.hydrating,
+    };
+  }, id);
+
+/** A wheel step: a notch, as a mouse gives it. */
+const WHEEL_PX = 120;
+/** Between wheel steps: a steady hand. */
+const WHEEL_MS = 50;
+/** How long a landed page's rows are read on, frame by frame, once it is in. */
+const LANDED_MS = 1500;
+/**
+ * How long each older page's answer is held at the network: the reader's
+ * last wheel comes to rest (`REST_MS`) well before the page lands, so what
+ * moves the rows then is the landing alone.
+ */
+const PAGE_HELD_MS = 1200;
+/** From the wheel that asked for a page to the reader at rest. */
+const REST_MS = 300;
+/** An older page's request (links.ts `transcriptUrl` with `before`). */
+const olderPageUrl = (url: URL): boolean =>
+  url.pathname.endsWith("/transcript") && url.searchParams.has("before");
+
+/** One page landing with the reader at rest, as `readBack` read it. */
+interface Landing {
+  /** The anchor row's key: the first row wholly in view as the page was asked for. */
+  anchor: string;
+  /** Blocks the store took. */
+  blocks: number;
+  /** Painted frames read while it landed. */
+  frames: number;
+  /** Frames the anchor row was not drawn in. */
+  missing: number;
+  /** The most the anchor row moved from where it stood, px. */
+  moved: number;
+  /** Each frame it stood somewhere new: the frame, and how far from where it stood, px. */
+  path: [number, number][];
+}
+
+/**
+ * The anchor row's place in the view on every painted frame (read after the
+ * frame, in a task behind its `requestAnimationFrame`, as frames.ts's
+ * watcher reads), from now until `stop`.
+ */
+const followAnchor = (page: Page) =>
+  page.evaluate((sel) => {
+    const scroller = document.querySelector<HTMLElement>(sel);
+    if (!scroller) {
+      return null;
+    }
+    const view = scroller.getBoundingClientRect();
+    const [top] = [...scroller.querySelectorAll<HTMLElement>("[data-row]")]
+      .map((one) => ({ one, box: one.getBoundingClientRect() }))
+      .filter(({ box }) => box.height > 0 && box.top >= view.top)
+      .sort((a, b) => a.box.top - b.box.top);
+    const key = top?.one.dataset.row;
+    if (!key) {
+      return null;
+    }
+    const follow: { key: string; on: boolean; ys: (number | null)[] } = {
+      key,
+      on: true,
+      ys: [],
+    };
+    (globalThis as unknown as { __anchor?: typeof follow }).__anchor = follow;
+    const channel = new MessageChannel();
+    const read = () => {
+      if (!follow.on) {
+        return;
+      }
+      const row = scroller.querySelector<HTMLElement>(
+        `[data-row="${CSS.escape(key)}"]`
+      );
+      follow.ys.push(
+        row
+          ? row.getBoundingClientRect().top -
+              scroller.getBoundingClientRect().top
+          : null
+      );
+      requestAnimationFrame(() => channel.port2.postMessage(0));
+    };
+    channel.port1.onmessage = read;
+    requestAnimationFrame(() => channel.port2.postMessage(0));
+    return key;
+  }, SCROLLER);
+
+const anchorRead = (page: Page) =>
+  page.evaluate(() => {
+    const follow = (
+      globalThis as unknown as {
+        __anchor?: { key: string; on: boolean; ys: (number | null)[] };
+      }
+    ).__anchor;
+    if (follow) {
+      follow.on = false;
+    }
+    return follow?.ys ?? [];
+  });
+
+/**
+ * A notch of scroll as the leg's device gives it: the mouse's wheel, over
+ * the transcript; on a phone's WebKit, which Playwright gives no wheel and
+ * no touch drag ("Mouse wheel is not supported in mobile WebKit"), the same
+ * distance scrolled from code, as pin-working's code scroll is.
+ */
+const notch = (page: Page, leg: { engine: Engine; view: View }, dy: number) =>
+  leg.engine === "webkit" && leg.view === "phone"
+    ? page.evaluate(
+        ([sel, by]) =>
+          document.querySelector<HTMLElement>(sel)?.scrollBy(0, by),
+        [SCROLLER, dy] as const
+      )
+    : page.mouse.wheel(0, dy);
+
+/**
+ * Every page read in by wheel, as a reader scrolling up reads them: from the
+ * tail up in steady notches until a page is asked for, then still while it
+ * lands (its rows read frame by frame), and on, until the conversation's
+ * start is in hand and the view at its top; then a steady wheel back down to
+ * the tail. Marked as spans for `inSpans`: each `wheel up n`, `landing n`,
+ * and the `steady wheel down`.
+ */
+async function readBack(
+  page: Page,
+  id: string,
+  leg: { engine: Engine; view: View },
+  mark: (name: string, edge: "start" | "end") => Promise<void>
+): Promise<Landing[]> {
+  const box = await page.locator(SCROLLER).first().boundingBox();
+  if (!box) {
+    throw new Error("transcript-holds: the transcript has no box to wheel");
+  }
+  if (!(leg.engine === "webkit" && leg.view === "phone")) {
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  }
+  const landings: Landing[] = [];
+  const held = async (route: Route) => {
+    await Bun.sleep(PAGE_HELD_MS);
+    await route.continue().catch(() => undefined);
+  };
+  await page.route(olderPageUrl, held);
+  try {
+    for (let n = 1; n <= 40; n += 1) {
+      const before = await storeOf(page, id);
+      if (!before.cursor && (await atTopOf(page))) {
+        break;
+      }
+      await mark(`wheel up ${n}`, "start");
+      const asked = await wheelUntilAsked(page, id, leg, before);
+      await mark(`wheel up ${n}`, "end");
+      if (!asked) {
+        break;
+      }
+      // Still, as a reader waiting at the top of what is held: the last
+      // wheel at rest, then the page lands under the row at the top.
+      await page.waitForTimeout(REST_MS);
+      await mark(`landing ${n}`, "start");
+      landings.push(await landAtRest(page, id, before.blocks));
+      await mark(`landing ${n}`, "end");
+    }
+  } finally {
+    await page.unroute(olderPageUrl, held);
+  }
+  await mark("steady wheel down", "start");
+  await wheelToTail(page, leg);
+  await mark("steady wheel down", "end");
+  return landings;
+}
+
+/** Whether the transcript's view is at its top. */
+const atTopOf = (page: Page): Promise<boolean> =>
+  page.evaluate(
+    (sel) => (document.querySelector<HTMLElement>(sel)?.scrollTop ?? 0) <= 0,
+    SCROLLER
+  );
+
+/** Wheels up a notch at a time until a page is asked for; false once the start is in hand at the top. */
+async function wheelUntilAsked(
+  page: Page,
+  id: string,
+  leg: { engine: Engine; view: View },
+  before: { blocks: number; hydrating: boolean }
+): Promise<boolean> {
+  if (before.hydrating) {
+    return true;
+  }
+  for (let steps = 0; steps < 400; steps += 1) {
+    await notch(page, leg, -WHEEL_PX);
+    await page.waitForTimeout(WHEEL_MS);
+    const now = await storeOf(page, id);
+    if (now.hydrating || now.blocks > before.blocks) {
+      return true;
+    }
+    if (!now.cursor && (await atTopOf(page))) {
+      return false;
+    }
+  }
+  return false;
+}
+
+/** The page asked for, landed with the reader at rest: the row at the top of the view followed, frame by frame. */
+async function landAtRest(
+  page: Page,
+  id: string,
+  blocks: number
+): Promise<Landing> {
+  const anchor = await followAnchor(page);
+  const landedBy = Date.now() + 60_000;
+  while (Date.now() < landedBy && (await storeOf(page, id)).hydrating) {
+    await page.waitForTimeout(100);
+  }
+  await page.waitForTimeout(LANDED_MS);
+  const ys = await anchorRead(page);
+  const seen = ys.filter((y): y is number => y !== null);
+  const first = seen[0] ?? 0;
+  const path: [number, number][] = [];
+  ys.forEach((y, frame) => {
+    if (
+      y !== null &&
+      (frame === 0 || y !== ys[frame - 1]) &&
+      path.length < 12
+    ) {
+      path.push([frame, Number((y - first).toFixed(3))]);
+    }
+  });
+  return {
+    anchor: anchor ?? "",
+    blocks: (await storeOf(page, id)).blocks - blocks,
+    frames: ys.length,
+    missing: ys.length - seen.length,
+    moved: Math.max(0, ...seen.map((y) => Math.abs(y - first))),
+    path,
+  };
+}
+
+/** A steady wheel down, a notch at a time, to the tail. */
+async function wheelToTail(
+  page: Page,
+  leg: { engine: Engine; view: View }
+): Promise<void> {
+  for (let steps = 0; steps < 600; steps += 1) {
+    await notch(page, leg, WHEEL_PX);
+    await page.waitForTimeout(WHEEL_MS);
+    const left = await page.evaluate((sel) => {
+      const scroller = document.querySelector<HTMLElement>(sel);
+      return scroller
+        ? scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop
+        : 0;
+    }, SCROLLER);
+    if (left <= 1) {
+      return;
+    }
+  }
+}
+
+/**
+ * The person's own press on a session's tab in the strip, as two-pane-perf
+ * points: the pointer comes onto the tab, rests `REACH_MS` (the reach warms
+ * the pane: warm.svelte.ts), and presses; the pointer's input as the
+ * browser takes it from a mouse on Chromium (CDP), the page's mouse on a
+ * desk's WebKit, and a finger's tap on a phone's.
+ */
+async function pressTab(
+  page: Page,
+  leg: { engine: Engine; view: View },
+  id: string,
+  /** Said as the reach begins, as the press begins, and as it has been taken. */
+  phase: (now: "reach" | "press" | "pressed") => Promise<void> = async () => {
+    /* unmarked */
+  }
+): Promise<void> {
+  const tab = page
+    .locator(`[data-session-tab="${id}"]`)
+    .filter({ visible: true })
+    .first();
+  await tab.scrollIntoViewIfNeeded();
+  const box = await tab.boundingBox();
+  if (!box) {
+    throw new Error(`transcript-holds: the tab of ${id} has no box`);
+  }
+  const at = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  if (leg.engine === "webkit" && leg.view === "phone") {
+    // A finger: nothing rests over the tab before it lands.
+    await phase("reach");
+    await phase("press");
+    await page.touchscreen.tap(at.x, at.y);
+    await phase("pressed");
+    return;
+  }
+  if (leg.engine !== "chromium") {
+    await phase("reach");
+    await page.mouse.move(at.x, at.y);
+    await page.waitForTimeout(REACH_MS);
+    await phase("press");
+    await page.mouse.down();
+    await page.mouse.up();
+    await phase("pressed");
+    return;
+  }
+  const input = await page.context().newCDPSession(page);
+  const mouse = (type: "mouseMoved" | "mousePressed" | "mouseReleased") =>
+    input.send("Input.dispatchMouseEvent", {
+      type,
+      ...at,
+      button: type === "mouseMoved" ? "none" : "left",
+      buttons: type === "mousePressed" ? 1 : 0,
+      clickCount: type === "mouseMoved" ? 0 : 1,
+    });
+  try {
+    await phase("reach");
+    await mouse("mouseMoved");
+    await page.waitForTimeout(REACH_MS);
+    await phase("press");
+    await mouse("mousePressed");
+    await mouse("mouseReleased");
+    await phase("pressed");
+  } finally {
+    await input.detach();
+  }
+}
+
+/** How long after a switch its frames are its own: the catch-up behind it (two-pane-perf's `SETTLE_MS`, and room). */
+const SWITCH_MS = 2500;
+
+/**
+ * The transcript's disclosures on `page`: how many collapsible bodies are
+ * mounted (bits-ui's `[data-collapsible-content]`), how many disclosures
+ * are open (`aria-expanded="true"`), and how many Reasoning rows.
+ */
+const disclosures = (page: Page) =>
+  page.evaluate((sel) => {
+    const scroller = document.querySelector<HTMLElement>(sel);
+    return {
+      bodies:
+        scroller?.querySelectorAll("[data-collapsible-content]").length ?? 0,
+      open: scroller?.querySelectorAll('[aria-expanded="true"]').length ?? 0,
+      reasoning: scroller?.querySelectorAll("[data-think]").length ?? 0,
+    };
+  }, SCROLLER);
 
 interface Watched {
   errors: string[];
@@ -614,7 +1189,9 @@ async function sessionPage(
   kit: Kit,
   base: string,
   source: string,
-  leg: { engine: Engine; view: View }
+  leg: { engine: Engine; view: View },
+  /** Another session's tab beside it, behind it in the strip (a warm switch's other side). */
+  beside?: string
 ): Promise<Watched> {
   const page = await kit.page(leg.view, { theme: "light", engine: leg.engine });
   const watched: Watched = { page, errors: [] };
@@ -635,7 +1212,7 @@ async function sessionPage(
         localStorage.setItem("cawco-workspace", tree);
       }
     },
-    treeOf([source])
+    treeOf(beside ? [source, beside] : [source])
   );
   await open(
     page,
@@ -733,9 +1310,17 @@ async function scrollIntoTurn(page: Page, fraction: number): Promise<void> {
   await page.waitForTimeout(400);
 }
 
-/** Reloads the page as an update does; whether its list was drawn. */
+/**
+ * Reloads the page as an update does; whether its list was drawn. The new
+ * document's: waited for from the page's `location.reload()` alone, the old
+ * document's list answered before the navigation committed, and the place
+ * was read off the new one's server markup before it hydrated (WebKit, under
+ * load: no transcript of the new document had run, its view at the strip).
+ */
 async function reload(page: Page): Promise<boolean> {
+  const loaded = page.waitForEvent("load");
   await page.evaluate(() => location.reload());
+  await loaded;
   return page
     .waitForSelector("[data-transcript-shown]", { timeout: 60_000 })
     .then(
@@ -850,13 +1435,57 @@ async function legOf(
   fleet: KitFleet,
   base: string,
   source: { id: string },
+  lead: string,
   leg: Leg,
   first: boolean
 ): Promise<string[]> {
-  const tail = await sessionPage(kit, base, source.id, leg);
-  const up = await sessionPage(kit, base, source.id, leg);
+  const tail = await sessionPage(kit, base, source.id, leg, lead);
+  const up = await sessionPage(kit, base, source.id, leg, lead);
   const pages = { tail, up };
-  await readToStart(up.page);
+  // Every page read in by wheel from the tail, each landing with the reader
+  // at rest, then a steady wheel back down.
+  let landings: Landing[] = [];
+  const wheel = await inSpans(up.page, leg.engine, async (mark) => {
+    landings = await readBack(up.page, source.id, leg, mark);
+  });
+  const landed = wheel.worst.filter((one) => one.name.startsWith("landing"));
+  const wheeled = wheel.worst.filter((one) => one.name.startsWith("wheel up"));
+  const steady = wheel.worst.filter((one) => one.name === "steady wheel down");
+  kit.check(
+    `${leg.label}, every older page read by wheel from the tail (${landings.length} landings, ${landings.reduce((sum, one) => sum + one.blocks, 0)} blocks): the row at the top of the view stays within 1 px on every painted frame while each lands`,
+    landings.length > 0 &&
+      landings.every(
+        (one) => one.frames > 0 && one.missing === 0 && one.moved <= 1
+      ),
+    JSON.stringify(landings)
+  );
+  if (leg.engine === "chromium") {
+    kit.check(
+      `${leg.label}, every older page landing: no task longer than ${LONG_TASK_MS}ms on a CPU ${SLOWER}x slower (${landed.map(worstWords).join(" | ")})`,
+      landed.length > 0 && landed.every(withinBudget),
+      landed
+        .filter((one) => !withinBudget(one))
+        .map(worstWords)
+        .join("\n    ")
+    );
+    kit.check(
+      `${leg.label}, a steady wheel down the whole transcript: no task longer than ${LONG_TASK_MS}ms on a CPU ${SLOWER}x slower (${steady.map(worstWords).join(" | ")})`,
+      steady.length === 1 && steady.every(withinBudget),
+      steady.map(worstWords).join("\n    ")
+    );
+    kit.note(
+      `${leg.label}, the wheel up between landings: ${wheeled.map(worstWords).join(" | ")}`
+    );
+    if (wheel.forced.length > 0) {
+      kit.note(
+        `${leg.label}, reads Transcript.svelte or Row.svelte forced while the pages were read by wheel: ${wheel.forced.slice(0, 12).join(" | ")}`
+      );
+    }
+  } else {
+    kit.note(
+      `${leg.label}, read by wheel (no trace on this engine): ${[...landed, ...steady].map(worstWords).join(" | ")}`
+    );
+  }
   await scrollIntoTurn(up.page, 0.45);
   await scrollTo(tail.page, 1);
   const id = () => source.id;
@@ -948,13 +1577,13 @@ async function legOf(
       // layout is read after a write from the transcript's own code.
       const read = await forcedInTurn(tail.page, turn);
       kit.check(
-        `${leg.label}, a new turn at the tail, 4x CPU throttle: the long-frame check names no forced read at Transcript.svelte's row handoff (handOn), in any frame of the reply (${read.frames} frames, ${read.long.length} past ${LONG_FRAME_MS}ms: ${read.long.join(" | ") || "none"})`,
-        read.frames > 0 && read.handOn.length === 0,
-        read.handOn.slice(0, 8).join("\n    ")
+        `${leg.label}, a new turn at the tail, 4x CPU throttle: no frame of the reply forces a style or layout pass from Transcript.svelte or Row.svelte (${read.frames} frames, ${read.long.length} past ${LONG_FRAME_MS}ms: ${read.long.join(" | ") || "none"})`,
+        read.frames > 0 && read.own.length === 0,
+        read.own.slice(0, 12).join("\n    ")
       );
       if (read.inLong.length > 0) {
         kit.note(
-          `${leg.label}, a new turn at the tail: reads forced at Transcript.svelte in its long frames, outside the row handoff: ${read.inLong.slice(0, 12).join(" | ")}`
+          `${leg.label}, a new turn at the tail: passes other scripts forced in its long frames: ${read.inLong.slice(0, 12).join(" | ")}`
         );
       }
     } else {
@@ -990,6 +1619,77 @@ async function legOf(
       JSON.stringify({ errors: seenErrors() - errorsBefore, unseen, seen })
     );
   });
+  const away = `while away for ${leg.label}`;
+  await through(
+    kit,
+    fleet,
+    id,
+    pages,
+    leg,
+    "a warm switch back to the session after a turn it missed",
+    async () => {
+      // The page at the tail looks at the lead's tab while the session
+      // says a turn, then comes back to it: the catch-up behind the switch.
+      await pressTab(tail.page, leg, lead);
+      await tail.page.waitForTimeout(1000);
+      await say(fleet, source.id, away);
+      await until(
+        `"${away}" in the page's store`,
+        async () =>
+          (await drawnRows(tail.page, source.id)).some(
+            (one) => one.text === away
+          ),
+        (held) => held,
+        60_000
+      );
+      // Its rows built on the hidden pane's slow turns, and the strip at rest.
+      await tail.page.waitForTimeout(3000);
+      // The reach (the pointer resting on the tab), the press (its input
+      // shows the pane), and the frames behind it: the catch-up (Transcript
+      // `hold`: the rows the turn added, after the press's frame paints).
+      const switched = await inSpans(tail.page, leg.engine, async (mark) => {
+        await pressTab(tail.page, leg, source.id, async (now) => {
+          if (now === "reach") {
+            await mark("switch reach", "start");
+          } else if (now === "press") {
+            await mark("switch reach", "end");
+            await mark("switch press", "start");
+          } else {
+            await mark("switch press", "end");
+            await mark("switch catch-up", "start");
+          }
+        });
+        await tail.page.waitForTimeout(SWITCH_MS);
+        await mark("switch catch-up", "end");
+      });
+      const back = switched.worst.find((one) => one.name === "switch catch-up");
+      if (leg.engine === "chromium" && back) {
+        kit.check(
+          `${leg.label}, a warm switch back to the session after a turn it missed: no task longer than ${LONG_TASK_MS}ms on a CPU ${SLOWER}x slower in the frames behind the press, the catch-up's (${worstWords(back)})`,
+          withinBudget(back),
+          worstWords(back)
+        );
+        kit.note(
+          `${leg.label}, the warm switch's reach and press: ${switched.worst
+            .filter((one) => one !== back)
+            .map(worstWords)
+            .join(" | ")}`
+        );
+        if (switched.forced.length > 0) {
+          kit.note(
+            `${leg.label}, the warm switch: reads Transcript.svelte or Row.svelte forced: ${switched.forced.slice(0, 12).join(" | ")}`
+          );
+        }
+      } else {
+        kit.note(
+          `${leg.label}, a warm switch back to the session after a turn it missed (no trace on this engine): ${switched.worst.map(worstWords).join(" | ")}`
+        );
+      }
+      await tail.page.getByText(away, { exact: true }).first().waitFor({
+        timeout: 30_000,
+      });
+    }
+  );
   if (first) {
     await through(
       kit,
@@ -1101,6 +1801,32 @@ async function legOf(
     heldUp.length > 0 && lost.length === 0,
     `${lost.length} lost: ${JSON.stringify(lost.slice(0, 4))}`
   );
+  // A disclosure's body is built once it is opened, and only then: at the
+  // start, read back, as many bodies as disclosures open; one more once the
+  // first Reasoning row in view is opened.
+  const closed = await disclosures(up.page);
+  const header = up.page
+    .locator(
+      `${SCROLLER} [data-think] [data-slot="thinking-steps-header"]:enabled`
+    )
+    .filter({ visible: true })
+    .first();
+  const opens = (await header.count()) > 0;
+  if (opens) {
+    // A finger on a phone, the pointer at a desk.
+    await (leg.view === "phone" ? header.tap() : header.click());
+    await up.page.waitForTimeout(800);
+  }
+  const opened = await disclosures(up.page);
+  kit.check(
+    `${leg.label}, read back to the start: a disclosure's body is mounted only once it is opened (${closed.reasoning} Reasoning rows mounted: ${closed.bodies} bodies for ${closed.open} open; one opened: ${opened.bodies} bodies for ${opened.open} open)`,
+    closed.reasoning > 0 &&
+      opens &&
+      closed.bodies === closed.open &&
+      opened.open === closed.open + 1 &&
+      opened.bodies === opened.open,
+    JSON.stringify({ closed, opened, opens })
+  );
   const errors = [...up.errors, ...tail.errors].map(
     (one) => `${leg.label}: ${one}`
   );
@@ -1207,7 +1933,9 @@ const spec: Spec = {
       // Each engine's first leg runs the /clear too.
       const engineFirst =
         legs.findIndex((one) => one.engine === leg.engine) === index;
-      errors.push(...(await legOf(kit, fleet, base, source, leg, engineFirst)));
+      errors.push(
+        ...(await legOf(kit, fleet, base, source, lead, leg, engineFirst))
+      );
     }
     if (process.env.PROBE_IDLE !== "0") {
       errors.push(...(await idleLeg(kit, fleet, base, source.id)));

@@ -54,6 +54,9 @@ import { parse } from "@babel/parser";
 import { hostEnvironment } from "@cawco/core/session-env";
 import {
   AS_PAGE,
+  CANVAS_EMBED_GO,
+  CANVAS_EMBED_GRAPH,
+  CANVAS_EMBED_READY,
   CANVAS_GRAPH_FETCHED,
   CANVAS_PATH,
   CANVAS_PLAN_ID,
@@ -245,17 +248,13 @@ const VIRTUAL = "cawco:sheet/";
 /** The canvas's own modules: its entry, runtime, adapter and Svelte props holder. */
 const VIRTUAL_STAGE = "cawco:stage/";
 
-/** Bundled in by build.ts: the canvas's browser runtime (canvas/runtime.ts), CawCo's tokens, and DialKit's vanilla build and stylesheet. */
+/** Bundled in by build.ts: the canvas's browser runtime (canvas/runtime.ts), CawCo's tokens and the house faces. */
 declare const __CANVAS_RUNTIME__: string;
 declare const __CANVAS_TOKENS__: string;
-declare const __DIALKIT_JS__: string;
-declare const __DIALKIT_CSS__: string;
 declare const __CANVAS_FACES__: string;
 declare const __CANVAS_FACE_FILES__: Record<string, string>;
 const CANVAS_RUNTIME = __CANVAS_RUNTIME__;
 const CANVAS_TOKENS = __CANVAS_TOKENS__;
-const DIALKIT_JS = __DIALKIT_JS__;
-const DIALKIT_CSS = __DIALKIT_CSS__;
 const CANVAS_FACES = __CANVAS_FACES__;
 const root = process.cwd();
 const port = Number(process.env.CAWCO_STAGE_PORT);
@@ -889,9 +888,12 @@ function canvasPage(): string {
   const viewport = VIEWPORT_META.test(html)
     ? ""
     : '<meta name="viewport" content="width=device-width, initial-scale=1" />';
+  // Its encoding said in the page too, first in its head, where a shell declares none (a Vite app with no index.html): with only the header to go by, WebKit drew the probe's canvas page as windows-1252 (its `document.characterSet`), and the overlay's "·" stood as "Â·" in every pin's title.
+  const charset = CHARSET_META.test(html) ? "" : '<meta charset="utf-8" />';
   return html
     .replace(PLACEHOLDER, "")
     .replace(INLINE_SCRIPT, "")
+    .replace(HEAD_TAG, (open) => `${open}${charset}`)
     .replace("</head>", `${viewport}${COLLECTOR}</head>`)
     .replace(
       "</body>",
@@ -1105,14 +1107,11 @@ async function reportOf(files: string[]): Promise<RenderReport> {
 }
 
 /**
- * DialKit's vendored vanilla build and stylesheet (decision-page kit, MIT),
- * served beside the canvas for its timeline and dials, and the house faces'
- * woff2 pieces (core house-faces.ts, cut from the repository's own Figtree
- * and JetBrains Mono, OFL) its `faces` rules name, at `faces/<file>`.
+ * The house faces' woff2 pieces (core house-faces.ts, cut from the
+ * repository's own Figtree and JetBrains Mono, OFL) the canvas's `faces`
+ * rules name, at `faces/<file>`.
  */
 const CANVAS_ASSETS: Record<string, { body: string | Buffer; type: string }> = {
-  "/@cawco/dialkit.js": { body: DIALKIT_JS, type: "text/javascript" },
-  "/@cawco/dialkit.css": { body: DIALKIT_CSS, type: "text/css" },
   ...Object.fromEntries(
     Object.entries(__CANVAS_FACE_FILES__).map(([name, base64]) => [
       `/@cawco/faces/${name}`,
@@ -1123,6 +1122,11 @@ const CANVAS_ASSETS: Record<string, { body: string | Buffer; type: string }> = {
 
 const BODY = /(<body\b[^>]*>)[\s\S]*(<\/body>)/i;
 const VIEWPORT_META = /<meta\b[^>]*\bname=["']viewport["']/i;
+/** A page's head tag, where its encoding goes first. */
+const HEAD_TAG = /<head\b[^>]*>/i;
+/** A page's own declared encoding: `<meta charset>` or its `http-equiv` form. */
+const CHARSET_META =
+  /<meta\b[^>]*\b(?:charset|http-equiv=["']content-type["'])/i;
 /** `%sveltekit.head%`, `%sveltekit.assets%` … and a project's own (`%cawco.tab-icon%`). */
 const PLACEHOLDER = /%[\w.-]+%/g;
 const INLINE_SCRIPT = /<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/gi;
@@ -1149,11 +1153,33 @@ const json = (res: ServerResponse, status: number, body: unknown) => {
  * and `error` reach it in their capture phase), never by a handler of its
  * own: a handler attribute is a script the frame compiles, 665 of them for
  * a 665-module graph.
+ *
+ * A Preview's page (`embed`, framed) asks for none of its graph until the
+ * page holding it says so (dashboard decisions host embed-turns.ts: a
+ * page's embeds fetch together, each module asked of the network once): it
+ * tells that page every module's address (core `CANVAS_EMBED_GRAPH`),
+ * preloads its share on `CANVAS_EMBED_GO` (counted as above: its `asked`),
+ * and the rest of its graph, which another frame's fetch has put in the
+ * renderer's cache, on `CANVAS_EMBED_READY`, which settles the graph's `go`
+ * (the runtime loads its stories after it). Any other page, or one opened
+ * on its own, preloads its graph as it is read.
  */
-const graphPreloads = (urls: string[]): string =>
-  `<script>(function(){var g=window.__cawcoGraph={asked:${urls.length},done:0,whole:false};function heard(e){var t=e.target;if(!(t instanceof HTMLLinkElement&&t.rel==="modulepreload"))return;g.done+=1;if(!g.whole&&g.done>=g.asked){g.whole=true;document.removeEventListener("load",heard,true);document.removeEventListener("error",heard,true);dispatchEvent(new Event(${JSON.stringify(CANVAS_GRAPH_FETCHED)}))}}document.addEventListener("load",heard,true);document.addEventListener("error",heard,true)})();</script>${urls
-    .map((url) => `<link rel="modulepreload" href="${escapeAttr(url)}">`)
-    .join("")}`;
+const graphPreloads = (urls: string[], embed: boolean, key: string): string => {
+  const count = `var g=window.__cawcoGraph={asked:${urls.length},done:0,whole:false,go:null};function check(){if(!g.whole&&g.done>=g.asked){g.whole=true;document.removeEventListener("load",heard,true);document.removeEventListener("error",heard,true);dispatchEvent(new Event(${JSON.stringify(CANVAS_GRAPH_FETCHED)}))}}function heard(e){var t=e.target;if(!(t instanceof HTMLLinkElement&&t.rel==="modulepreload"))return;g.done+=1;check()}document.addEventListener("load",heard,true);document.addEventListener("error",heard,true);`;
+  if (!embed) {
+    return `<script>(function(){${count}g.go=Promise.resolve()})();</script>${urls
+      .map((url) => `<link rel="modulepreload" href="${escapeAttr(url)}">`)
+      .join("")}`;
+  }
+  // At the page's key, as `keyedPage` keys its tags (the modules' own imports ask for them so); JSON in a script element: no `<` closes it early.
+  const list = JSON.stringify(urls.map((url) => keyedUrl(url, key))).replaceAll(
+    "<",
+    "\\u003c"
+  );
+  const go = JSON.stringify(CANVAS_EMBED_GO);
+  const ready = JSON.stringify(CANVAS_EMBED_READY);
+  return `<script>(function(){var u=${list};${count}function preload(list){var f=document.createDocumentFragment();list.forEach(function(x){var l=document.createElement("link");l.rel="modulepreload";l.href=x;f.appendChild(l)});document.head.appendChild(f)}g.go=new Promise(function(go){if(window.parent===window){preload(u);go();return}addEventListener("message",function hear(e){var d=e.data;if(e.source!==window.parent||!d||!Array.isArray(d.urls))return;if(d.type===${go}){g.asked=d.urls.length;preload(d.urls);check()}else if(d.type===${ready}){removeEventListener("message",hear);preload(d.urls);go()}});window.parent.postMessage({type:${JSON.stringify(CANVAS_EMBED_GRAPH)},urls:u.map(function(x){return new URL(x,location.href).href})},"*")})})();</script>`;
+};
 
 /** The canvas's page, through the project's own HTML transforms. */
 async function serveCanvas(
@@ -1167,9 +1193,11 @@ async function serveCanvas(
     const files = asked.getAll("file");
     // JSON in a script element: no `<` closes it early.
     const plan = JSON.stringify(planOf(files)).replaceAll("<", "\\u003c");
-    const preloads = graphPreloads(
-      await settledClosureOf(dev, files, asked.get("by") === "embed")
-    );
+    const embed = asked.get("by") === "embed";
+    const urls = await settledClosureOf(dev, files, embed);
+    // One key for the page's tags and its graph's list, read once its graph has settled.
+    const key = generationOf(dev);
+    const preloads = graphPreloads(urls, embed, key);
     const html = keyedPage(
       await dev.transformIndexHtml(
         req.url ?? CANVAS_PATH,
@@ -1179,9 +1207,10 @@ async function serveCanvas(
         ),
         (req as IncomingMessage & { originalUrl?: string }).originalUrl
       ),
-      generationOf(dev)
+      key
     );
-    res.setHeader("content-type", "text/html");
+    // Written from strings, so UTF-8 whatever the app's shell declares (a Vite app with no index.html declares none): the page and every script it loads without a charset of its own, the overlay's among them, read as written.
+    res.setHeader("content-type", "text/html; charset=utf-8");
     res.setHeader("cache-control", "no-store");
     res.end(html);
   } catch (error) {

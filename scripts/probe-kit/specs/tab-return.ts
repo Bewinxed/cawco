@@ -146,6 +146,15 @@ const HEAVY_MS = 8;
  * harness's round trip): how many turns an absence lets through.
  */
 const TURN_MS = 3000;
+/**
+ * Live turns streamed into the busy session, its tab away, before the first
+ * return: more turns than the rows a return mounts at its tail (23), so each
+ * busy return reads a tail of the same rows. A live turn's rows hold more
+ * than a seeded turn's, and the tail 1a and 1c read held 591, 786 or 1111
+ * elements as the live turns behind it differed: those that ran before the
+ * seed was seen, and three more for each contended try.
+ */
+const PRIMED_TURNS = 20;
 /** The most a leg's released turns may take. */
 const RELEASE_MS = 5 * 60_000;
 /** After the last released turn, for its frames to reach the page. */
@@ -507,9 +516,14 @@ function sceneModel() {
   const tag = crypto.randomUUID().slice(0, 6);
   const mark = (name: string) => `tab-return ${name} ${tag}`;
   const counts: { busy?: number } = {};
-  /** The last busy request let through; null while the turns run freely. */
-  const pace: { upTo: number | null; open: (() => void) | null } = {
-    upTo: null,
+  /**
+   * The last busy request let through: the seed's, then each as a leg lets
+   * it. No live turn runs on its own: those that ran while a poll was still
+   * to see the seed changed, run to run, what the tail every busy return
+   * reads was made of.
+   */
+  const pace: { upTo: number; open: (() => void) | null } = {
+    upTo: SEED,
     open: null,
   };
   const turn = () =>
@@ -519,7 +533,7 @@ function sceneModel() {
   /** The busy session's `n`th turn: seeded fast, then live (30 words at 40ms, a second's tool), once its leg lets it. */
   const busyTurn = async (n: number): Promise<Reply> => {
     const live = n > SEED;
-    while (live && pace.upTo !== null && n > pace.upTo) {
+    while (live && n > pace.upTo) {
       await turn();
     }
     const id = String(n).padStart(5, "0");
@@ -552,13 +566,9 @@ function sceneModel() {
     }
     return { everyMs: 5, words: ["Done."] };
   };
-  /** From now on a busy turn waits for its leg. */
-  const hold = () => {
-    pace.upTo = counts.busy ?? 0;
-  };
   /** Lets `turns` more busy turns run, and answers once each has run whole: its tool's output sent back, the next turn waiting. */
   const release = async (turns: number) => {
-    const upTo = (pace.upTo ?? 0) + turns;
+    const upTo = pace.upTo + turns;
     pace.upTo = upTo;
     const began = Date.now();
     while ((counts.busy ?? 0) <= upTo && Date.now() - began < RELEASE_MS) {
@@ -571,7 +581,7 @@ function sceneModel() {
       );
     }
   };
-  return { counts, hold, mark, release, respond };
+  return { counts, mark, release, respond };
 }
 
 /** The pane's frame for `id` and the press's input, the reach first, as two-pane-perf's `point`. */
@@ -649,7 +659,12 @@ function watchHiddenRemovals(): void {
         .map(([what, count]) => ({ what, count }))
         .sort((a, b) => b.count - a.count),
   };
-  /** A node's mark: its tag and `data-slot`, or `#text` and its first words. */
+  /**
+   * A node's mark: its tag and `data-slot`, or `#text` and its first words;
+   * a transcript's list item (virtua's) also says what kind of row it held,
+   * its key's prefix (rows.ts: `tool:` a call in flight, `live:` a turn's
+   * words in flight, `am:` a message, `tools:` a run of calls).
+   */
   const markOf = (node: Node | null): string => {
     if (!(node instanceof Element)) {
       return node
@@ -657,7 +672,10 @@ function watchHiddenRemovals(): void {
         : "";
     }
     const slot = node.getAttribute("data-slot");
-    return `${node.localName}${slot ? `[${slot}]` : ""}`;
+    const row = node.hasAttribute("data-item")
+      ? node.querySelector<HTMLElement>(":scope > [data-row]")?.dataset.row
+      : undefined;
+    return `${node.localName}${slot ? `[${slot}]` : ""}${row === undefined ? "" : `{${row.split(":")[0]}}`}`;
   };
   const note = (parent: Node | null, child: Node | null) => {
     if (!(
@@ -2181,8 +2199,12 @@ function checkPage(kit: Kit, back: Back): void {
   }
 }
 
-/** The detached kinds the leg holds at zero growth (audit 0d8f70d1: +192 div, +113 svg, +1688 text per 30 switches). */
+/** The detached kinds the leg reads (audit 0d8f70d1: +192 div, +113 svg, +1688 text per 30 switches). */
 const DETACHED_KINDS = ["SVGSVGElement", "div", "Text"] as const;
+/** A step of a retaining path at an element that sits in a pane put away (heap.ts' `[away]`, `markAway`). */
+const AWAY_STEP = /^native <.* \[away\]/;
+/** A step of a retaining path that is the engine's own, not script's (an element, a layout object, a fragment). */
+const NATIVE_STEP = /^native /;
 /** A step of a retaining path that is a DOM node. */
 const DOM_STEP = /^native (<|SVG\w*Element|Text|Comment|DocumentFragment)/;
 /** A context's heap id in a retaining path's step. */
@@ -2195,6 +2217,64 @@ const STREAM_TURNS = 12;
 const SWITCHES = 30;
 /** How long each switch is left to land before the next: live-perf's memory leg's. */
 const SWITCH_REST_MS = 1300;
+/**
+ * A settled transcript row taken out of its list (`watchHiddenRemovals`'
+ * mark): virtua's item, the list container's own child, so no slot sits
+ * between, holding any row but one in flight. A call or a turn's words in
+ * flight (`tool:`, `live:`) leave the list as they land, the session's own
+ * change (rows.ts `liveTail`), not the list's cut.
+ */
+const LIST_ROW = /^div\{(?!tool\}|live\})[^}]*\} in {2}\(list \d+/;
+/** A row in flight taken out of its list as it landed (`LIST_ROW`). */
+const IN_FLIGHT_ROW = /^div\{(tool|live)\} in {2}\(list \d+/;
+/** Any node taken out (`watchHiddenRemovals`' mark). */
+const ANY_NODE = /./;
+
+/**
+ * Every element in a pane put away (`[data-pane-hidden]`) marked
+ * `data-probe-away`, and no other: what heap.ts says as `[away]` in a path.
+ */
+async function markAway(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    for (const el of document.querySelectorAll("[data-probe-away]")) {
+      el.removeAttribute("data-probe-away");
+    }
+    for (const pane of document.querySelectorAll("[data-pane-hidden]")) {
+      for (const el of pane.querySelectorAll("*")) {
+        el.setAttribute("data-probe-away", "");
+      }
+    }
+  });
+}
+
+/**
+ * The detached nodes of `kind` in `heap` that `before` did not have and a
+ * pane put away holds: their path from the root reaches an element in such
+ * a pane (`markAway`), and from there to the node runs through the engine's
+ * own objects alone (the element's layout, its fragments, the node), no
+ * script between. A node script holds (an effect, a listener's closure) is
+ * script's, wherever its path passes: Svelte's deferred branch keeps its
+ * anchor so for as long as the branch lives (svelte 5.57.2 branches.js
+ * `ensure`), and the path to it can pass a button's listeners in a pane put
+ * away.
+ */
+function heldAway(
+  before: Heap,
+  heap: Heap,
+  kind: string
+): { at: number; path: string[] }[] {
+  const had = new Set(before.detachedOf(kind).map(before.idOf));
+  return heap
+    .detachedOf(kind)
+    .filter((at) => !had.has(heap.idOf(at)))
+    .map((at) => ({ at, path: heap.pathTo(at) }))
+    .filter(({ path }) => {
+      const pane = path.findLastIndex((step) => AWAY_STEP.test(step));
+      return (
+        pane !== -1 && path.slice(pane).every((step) => NATIVE_STEP.test(step))
+      );
+    });
+}
 
 /**
  * What holds each detached node of `DETACHED_KINDS` in `heap` that `before`
@@ -2233,13 +2313,19 @@ function holders(before: Heap, heap: Heap): string[] {
  * `QUIET_TABS` more in one pane, each shown once, so each pane has built
  * what it builds on its first visit; the heap read after a collection
  * (heap.ts); thirty pointer presses round the tabs while the busy session
- * streams `STREAM_TURNS` turns; read again. Asserted: no growth in detached
- * `<svg>`, `<div>` and text nodes. Then every pane is shown once more, the
+ * streams `STREAM_TURNS` turns; read again. Asserted: no detached `<svg>`,
+ * `<div>` or text node that the first reading did not have is held by a pane
+ * put away (`heldAway`: its path reaches an element there and runs on through
+ * the engine's own objects; raw growth is noted). Then every pane is shown once more, the
  * busy one left in front, and read a third time (noted): what a pane put
  * away still holds is let go once it is laid out again. What holds each
  * node the later readings find that the first did not, root to node, is
  * written to `detached.txt`, each transcript's list named in the path by
- * its index (`data-probe`).
+ * its index (`data-probe`). On every engine (`PROBE_ENGINE=webkit` for
+ * Safari's, whose heap no protocol reads) it asserts what Chromium held
+ * there: no transcript row taken out of a pane put away over the switches
+ * (`watchHiddenRemovals`; Chromium kept each such row, its boxes and its
+ * text, in the list's last layout until the pane was shown again).
  */
 async function detachedLeg(
   kit: Kit,
@@ -2255,6 +2341,9 @@ async function detachedLeg(
       .first()
       .click();
   const page = await kit.page("desk", { init: [watchHiddenRemovals] });
+  // The heap is read through the DevTools protocol, Chromium's alone; on
+  // every engine, what is taken out of a pane put away is counted.
+  const engine = page.context().browser()?.browserType().name() ?? "chromium";
   await page.addInitScript(
     ([held, active]) => {
       localStorage.setItem(
@@ -2289,8 +2378,10 @@ async function detachedLeg(
       );
     }
   });
-  const cdp = await page.context().newCDPSession(page);
-  const before = await heapOf(cdp);
+  const cdp =
+    engine === "chromium" ? await page.context().newCDPSession(page) : null;
+  await markAway(page);
+  const before = cdp ? await heapOf(cdp) : null;
   await page.evaluate(() =>
     (
       window as unknown as { __hiddenRemovals: { start: () => void } }
@@ -2305,7 +2396,8 @@ async function detachedLeg(
   await press(page, tabs[0] as string);
   await streaming;
   await page.waitForTimeout(SWITCH_REST_MS);
-  const after = await heapOf(cdp);
+  await markAway(page);
+  const after = cdp ? await heapOf(cdp) : null;
   const removals = await page.evaluate(() =>
     (
       window as unknown as {
@@ -2320,7 +2412,8 @@ async function detachedLeg(
     await page.waitForTimeout(SWITCH_REST_MS);
   }
   await page.waitForTimeout(3000);
-  const shownAgain = await heapOf(cdp);
+  await markAway(page);
+  const shownAgain = cdp ? await heapOf(cdp) : null;
   // Where each transcript's list stands: its pane, and whether it is drawn.
   const listings = await page.evaluate(() =>
     [...document.querySelectorAll('[data-slot="listing"]')].map((el) => ({
@@ -2329,19 +2422,46 @@ async function detachedLeg(
       items: el.querySelectorAll("[data-item]").length,
     }))
   );
+  const taken = (pattern: RegExp) =>
+    removals
+      .filter((one) => pattern.test(one.what))
+      .reduce((n, one) => n + one.count, 0);
+  const said = join(
+    kit.out,
+    `detached${engine === "chromium" ? "" : `-${engine}`}.txt`
+  );
   await writeFile(
-    join(kit.out, "detached.txt"),
+    said,
     `${[
-      `# After ${SWITCHES} switches`,
-      ...holders(before, after),
-      "# Once every pane is shown again, the busy one left in front",
-      ...holders(before, shownAgain),
-      `# Taken out of a pane put away over the switches: ${removals.reduce((n, one) => n + one.count, 0)}, by what each was and where it sat`,
+      ...(before && after && shownAgain
+        ? [
+            `# After ${SWITCHES} switches`,
+            ...holders(before, after),
+            "# Once every pane is shown again, the busy one left in front",
+            ...holders(before, shownAgain),
+          ]
+        : [
+            `# ${engine}: no heap to read (the DevTools protocol is Chromium's)`,
+          ]),
+      `# Taken out of a pane put away over the switches: ${taken(ANY_NODE)}, by what each was and where it sat`,
       ...removals.slice(0, 20).map((one) => `  ${one.count}× ${one.what}`),
       `# The transcripts' lists (tabs in order: ${tabs.join(", ")}; the busy one second)`,
       ...listings.map((one) => `  ${JSON.stringify(one)}`),
     ].join("\n")}\n`
   );
+  // What Chromium holds until the pane is shown again: every row a
+  // transcript's list takes out of a pane put away (virtua's item, the
+  // list's own child), its text with it.
+  const rows = taken(LIST_ROW);
+  kit.check(
+    `detached (${engine}): ${SWITCHES} switches round ${tabs.length} tabs take no settled transcript row out of a pane put away`,
+    rows === 0,
+    `${rows} settled rows; ${taken(IN_FLIGHT_ROW)} rows in flight that landed meanwhile; ${taken(ANY_NODE)} nodes in all, by what and where in ${said}`
+  );
+  if (!(cdp && before && after && shownAgain)) {
+    await page.close();
+    return;
+  }
   kit.note(
     `detached once every pane is shown again: ${JSON.stringify(Object.fromEntries(DETACHED_KINDS.map((kind) => [kind, shownAgain.detached[kind] ?? 0])))}; lists ${JSON.stringify(listings)}`
   );
@@ -2358,11 +2478,14 @@ async function detachedLeg(
   kit.note(
     `detached: before ${JSON.stringify(before.detached)}, after ${SWITCHES} switches ${JSON.stringify(after.detached)} (held only for the driver: ${before.heldForDriver} → ${after.heldForDriver}); what holds each is in ${join(kit.out, "detached.txt")}`
   );
+  // The invariant: a pane put away holds nothing. Raw growth is said, not
+  // held to: script keeps nodes of its own for as long as it lives.
   for (const kind of DETACHED_KINDS) {
+    const held = heldAway(before, after, kind);
     kit.check(
-      `detached: ${SWITCHES} switches round ${tabs.length} tabs leave no more detached ${kind} after a collection`,
-      (now[kind] ?? 0) <= (was[kind] ?? 0),
-      `${was[kind]} → ${now[kind]}`
+      `detached: ${SWITCHES} switches round ${tabs.length} tabs leave no detached ${kind} that a pane put away holds, after a collection`,
+      held.length === 0,
+      `${held.length} held through a pane put away (raw ${was[kind]} → ${now[kind]})${held.length > 0 ? `; the first held so: ${held[0]?.path.slice(-8).join(" ")}` : ""}`
     );
   }
   await cdp.detach();
@@ -2422,10 +2545,9 @@ const run = async (kit: Kit) => {
   await until(
     `${SEED} calls in the busy session`,
     () => scene.counts,
-    (c) => (c.busy ?? 0) > SEED + 5,
+    (c) => (c.busy ?? 0) > SEED,
     30 * 60_000
   );
-  scene.hold();
   // TAB_RETURN_LEGS=detached: the detached-node leg alone; with
   // TAB_RETURN_DEV=1 on the dev server, so each holder's closure is said at
   // its source file and line.
@@ -2530,6 +2652,11 @@ const run = async (kit: Kit) => {
     busy,
     "chromium"
   );
+  // The busy tab away (the desk leaves the quiet one in front), its tail
+  // streamed full: every row a busy return mounts is a live turn streamed
+  // while it was away, whatever a contended leg's retry added since.
+  await scene.release(PRIMED_TURNS);
+  await isolated.page.waitForTimeout(LANDED_MS);
 
   const backs: Back[] = [];
   const loopReads: LoopRead[] = [];

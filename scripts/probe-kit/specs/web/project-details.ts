@@ -4,7 +4,7 @@
  * title"), on a scratch fleet in the built dashboard, read from the page's
  * engine and the hub's own record:
  *
- * 1. At 1440 and 390, light and dark: the head's place line and ⋯ › Project
+ * 1. At 1440 and 390, light and dark: the head's place and ⋯ › Project
  *    details… both unfold the tray under the head, inside the page's width,
  *    indented by the head's own leading padding (--space-7 at the desk,
  *    --space-5 on a phone), its tile the scheme's raised surface, the labels
@@ -24,11 +24,11 @@
  *    back at its value: a place whose folder is not absolute (the typed
  *    folder kept); and, for a project the hub no longer records, a landing
  *    and a Review change (404 "This project is no longer recorded").
- * 5. At 1440, a project's name in its head shows whole when it is its
- *    column's widest line (a project on its hub folder alone, whose place
- *    line is short: its text as wide as its box, the press tint's bleed
- *    costing it nothing), and a name too long for the column ends in an
- *    ellipsis inside it, its box reaching the column's edge and its bleed.
+ * 5. At 1440, a project's name in its head's one row shows whole when it
+ *    fits (a project on its hub folder alone: its text as wide as its box,
+ *    the press tint's bleed costing it nothing), and a name too long for the
+ *    row ends in an ellipsis inside its title, its box reaching the title's
+ *    edge.
  *    A task's title (its pane, from the desk legs) wraps in its heading's
  *    whole width.
  * 6. At 1440, a session's rename field in the rail's row is its words'
@@ -189,7 +189,7 @@ const markScroller = (page: Page) =>
     return null;
   });
 
-/** Opens `url` on `page` and the tray from the place line. */
+/** Opens `url` on `page` and the tray from the head's place. */
 const openTray = async (page: Page, url: string) => {
   await open(page, url, LINE);
   await page.locator(LINE).click();
@@ -308,7 +308,7 @@ const leg = async (
   const inset = (at.tile?.left ?? 0) - (at.head?.left ?? 0);
   const indent = desk ? at.tokens.space7 : at.tokens.space5;
   kit.check(
-    `${tag}: the place line unfolds the tray under the head, inside the page`,
+    `${tag}: the head's place unfolds the tray under the head, inside the page`,
     at.tray !== null &&
       at.head !== null &&
       at.tray.top >= at.head.bottom - 1 &&
@@ -329,7 +329,7 @@ const leg = async (
     `${at.tileBg} vs ${at.tokens.raised}; stacked ${JSON.stringify(at.stacked)}`
   );
   kit.check(
-    `${tag}: the Place row says the whole folder the head's line cuts short`,
+    `${tag}: the Place row says the whole folder the head never prints`,
     at.placeWords.endsWith("/src") && at.placeCut === false,
     `“${at.placeWords}”, cut ${at.placeCut}`
   );
@@ -613,12 +613,11 @@ const refusals = async (kit: Kit, { base, fleet, gone }: Setup) => {
 const LONG_NAME =
   "tidewater_harbour_authority_gauges_and_every_buoy_along_the_estuary_monorepo";
 
-/** 5: the name in its head, whole when it fits, ellipsized inside its column when not. */
+/** 5: the name in its head, whole when it fits, ellipsized inside its title when not. */
 const names = async (kit: Kit, { base, fleet, named }: Setup) => {
   const page = await kit.page("desk");
   const legs = [
-    // No checkout: its place line is "Its folder on the hub", narrower than
-    // the name, so the name is its column's widest line.
+    // No checkout: its place is the hub's folder.
     { long: false, body: { name: "tidewaterharbour" } },
     {
       long: true,
@@ -629,15 +628,14 @@ const names = async (kit: Kit, { base, fleet, named }: Setup) => {
     const made = await fleet.api<{ id: string }>("/api/projects", body);
     await open(page, `${base}/project/${made.id}`, LINE);
     await settle(page, 300);
-    const at = await page.evaluate((selector) => {
+    const at = await page.evaluate(() => {
       const button = document.querySelector<HTMLElement>(
         '[data-slot="project-head"] [data-slot="title"] [data-slot="name"]'
       );
-      const column = document.querySelector(
-        '[data-slot="project-head"] [data-slot="txt"]'
+      const title = document.querySelector(
+        '[data-slot="project-head"] [data-slot="title"]'
       );
-      const line = document.querySelector<HTMLElement>(selector);
-      if (!(button && column && line)) {
+      if (!(button && title)) {
         return null;
       }
       const style = getComputedStyle(button);
@@ -652,27 +650,22 @@ const names = async (kit: Kit, { base, fleet, named }: Setup) => {
         cut: button.scrollWidth > button.clientWidth,
         overflow: style.textOverflow,
         right: button.getBoundingClientRect().right,
-        bleed: Number.parseFloat(style.paddingRight),
-        column: column.getBoundingClientRect().right,
-        line: line.getBoundingClientRect().width,
+        title: title.getBoundingClientRect().right,
       };
-    }, LINE);
+    });
     const detail = JSON.stringify(at);
     if (long) {
       kit.check(
-        "1440: a very long name ends in an ellipsis inside its column, its box reaching the column's edge and its bleed",
+        "1440: a very long name ends in an ellipsis inside its title, its box reaching the title's edge",
         at?.cut === true &&
           at.overflow === "ellipsis" &&
-          Math.abs(at.right - (at.column + at.bleed)) <= 0.5,
+          Math.abs(at.right - at.title) <= 0.5,
         detail
       );
     } else {
       kit.check(
-        "1440: a short name, its column's widest line, shows whole: its text as wide as its box",
-        at !== null &&
-          at.text > at.line &&
-          !at.cut &&
-          Math.abs(at.text - at.box) <= 0.5,
+        "1440: a short name shows whole: its text as wide as its box",
+        at !== null && !at.cut && Math.abs(at.text - at.box) <= 0.5,
         detail
       );
     }

@@ -26,8 +26,12 @@
  */
 import { readFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
+import { machineGauge } from "../../../packages/core/src/machine-room";
 import type { Kit, Spec } from "../kit";
-import { machineQuiet, QUIET_LIMIT, quietLeg } from "../quiet";
+import { machineQuiet, quietLeg } from "../quiet";
+
+/** The CPU reading at which the gate calls a leg contended. */
+const QUIET_LIMIT = machineGauge().limit.cpu;
 
 /** One leg through the kit's timing gate, one try, a short wait. */
 const gate = (name: string, leg: () => Promise<void>): Promise<string> =>

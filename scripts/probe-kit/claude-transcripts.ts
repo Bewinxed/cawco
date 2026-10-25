@@ -72,8 +72,14 @@ class TranscriptWriter {
   #clock = Date.UTC(2026, 9, 1);
   /** The chain's last record: the next one's parent. */
   parent: string | null = null;
+  /** That record as written. */
+  last: Record<string, unknown> | null = null;
+  /** The compactions written so far. */
+  compactions = 0;
   turn = 0;
   readonly running: Task[] = [];
+  /** Sends absorbed mid-turn, one of which the next session start may hand again. */
+  readonly absorbed: { source: string; prompt: string }[] = [];
 
   constructor(path: string, shape: TranscriptShape) {
     this.#shape = shape;
@@ -123,15 +129,18 @@ class TranscriptWriter {
 
   /** A chained record: hung from the chain's last, and the chain's last from now on. */
   chained(record: Record<string, unknown>, keep = true): string {
-    const uuid = this.id("uuid");
-    this.line({
+    const uuid =
+      typeof record.uuid === "string" ? record.uuid : this.id("uuid");
+    const written = {
       ...this.envelope(this.parent),
       ...record,
       uuid,
       timestamp: this.at(),
-    });
+    };
+    this.line(written);
     if (keep) {
       this.parent = uuid;
+      this.last = written;
     }
     return uuid;
   }
@@ -334,16 +343,18 @@ const midTurn = (writer: TranscriptWriter, ending: Task[]): void => {
   }
   if (writer.chance(0.04)) {
     const source = writer.id("uuid");
+    const prompt = `mid-turn ${writer.words(8)}`;
     writer.queue("enqueue", { content: writer.words(8) });
     writer.chained({
       type: "attachment",
       attachment: {
         type: "queued_command",
-        prompt: `mid-turn ${writer.words(8)}`,
+        prompt,
         source_uuid: source,
         timestamp: writer.at(),
       },
     });
+    writer.absorbed.push({ source, prompt });
     writer.queue("remove", { reason: "absorbed_mid_turn" });
   }
 };
@@ -396,9 +407,22 @@ const step = (
   }
 };
 
-/** A `/compact`: the boundary starts a chain of its own, its summary hangs from it. */
+/**
+ * A `/compact`: the boundary starts a chain of its own, its summary hangs
+ * from it, its logical parent the record before it, or one never written
+ * (below). Now and then the CLI writes the block again later
+ * (anthropics/claude-code#92089): the boundary, the summary and the record
+ * it kept, that one now hung from the summary, all under their old uuids.
+ * The kept record is the boundary's logical parent, so its later copy leads
+ * back to the boundary.
+ */
 const compaction = (writer: TranscriptWriter): void => {
-  const before = writer.parent;
+  const kept = writer.last;
+  // Every third one's logical parent is a record the CLI never wrote
+  // (anthropics/claude-code#46603, #49996: 9 of a real session's 50).
+  writer.compactions += 1;
+  const phantom = writer.compactions % 3 === 2;
+  const before = phantom ? writer.id("uuid") : writer.parent;
   writer.parent = null;
   writer.chained({
     type: "system",
@@ -408,6 +432,7 @@ const compaction = (writer: TranscriptWriter): void => {
     compactMetadata: { trigger: "auto", preTokens: 160_000 + writer.turn },
     level: "info",
   });
+  const boundary = writer.last;
   writer.chained({
     type: "user",
     isCompactSummary: true,
@@ -417,6 +442,15 @@ const compaction = (writer: TranscriptWriter): void => {
       content: `This session is being continued from a previous conversation that ran out of context. ${writer.words(200)}`,
     },
   });
+  const summary = writer.last;
+  if (!phantom && kept && boundary && summary && writer.chance(0.3)) {
+    writer.line(boundary);
+    writer.line(summary);
+    const again = { ...kept, parentUuid: summary.uuid };
+    writer.line(again);
+    writer.parent = kept.uuid as string;
+    writer.last = again;
+  }
 };
 
 /** One turn: what was queued, the prompt (or a task's notification), its steps and its end. */
@@ -436,13 +470,20 @@ const turnOf = (writer: TranscriptWriter): void => {
     writer.running.splice(writer.running.indexOf(task), 1);
   }
   const notice = ending.shift();
+  // Now and then a send the CLI absorbed mid-turn is handed again after a
+  // restart: a user record under the send's own uuid, the same words (as a
+  // real session's hand-off was, an hour after its absorbed line).
+  const again =
+    !notice && writer.chance(0.3) ? writer.absorbed.shift() : undefined;
   writer.chained({
     type: "user",
+    ...(again ? { uuid: again.source } : {}),
     message: {
       role: "user",
       content: notice
         ? noticeOf(writer, notice)
-        : `${writer.turn}: ${writer.words(writer.between(20, 80))}`,
+        : (again?.prompt ??
+          `${writer.turn}: ${writer.words(writer.between(20, 80))}`),
     },
   });
   const steps = writer.between(1, 6);

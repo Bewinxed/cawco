@@ -16,6 +16,7 @@
  *     index (which page depends on how many pages that window holds): it
  *     answers within {@link SCAN_MS}, and every other within
  *     {@link PAGE_MS}.
+ *     Every picture a page names is served.
  * (c) Meanwhile the hub's loop answers `/health` within {@link HEALTH_MS},
  *     and the agent says no stall of its loop (loop-watch.ts).
  *
@@ -38,7 +39,7 @@ import {
   type WindowAsk,
 } from "../../../packages/core/src";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
-import { until } from "../../scratch-fleet";
+import { delay, until } from "../../scratch-fleet";
 import { writeClaudeTranscript } from "../claude-transcripts";
 import type { Kit, KitFleet, Spec } from "../kit";
 
@@ -63,6 +64,8 @@ const PID = /^\d+$/;
 const VM_RSS = /VmRSS:\s+(\d+)/;
 /** The agent's first memory line, said once its first usage scan and search sync end (daemon.ts `logMemory`). */
 const FIRST_SCANS_ENDED = "memory rss=";
+/** A stored picture's address on a page (media.ts). */
+const MEDIA_URL = /\/api\/media\/[a-f0-9]{64}\.(?:png|jpg|gif|webp)/g;
 /** The agent's line for a stall (loop-watch.ts). */
 const STALL = "[loop] the agent's loop was held";
 
@@ -177,8 +180,25 @@ const openCodeWindows = async (kit: Kit, fleet: KitFleet): Promise<void> => {
       120_000
     );
   }
+  // Read once the last turn is over and its server has finished writing it:
+  // an assistant message is stored before its last parts and tokens are, so
+  // a read in between differs from the next one.
+  await until(
+    "the last OpenCode turn over",
+    () => fleet.instance(instanceId),
+    (row) => row?.turn_open_at === null,
+    120_000
+  );
   const key = keyOf() as string;
-  const all = await whole();
+  let all = await whole();
+  for (let settled = 0; settled < 10; settled += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: each read is compared with the one before it
+    const again = await delay(500).then(whole);
+    if (JSON.stringify(again) === JSON.stringify(all)) {
+      break;
+    }
+    all = again;
+  }
   const window = (asked: WindowAsk) =>
     ask(CONTROL_READ_TRANSCRIPT_WINDOW, [
       key,
@@ -208,13 +228,25 @@ const openCodeWindows = async (kit: Kit, fleet: KitFleet): Promise<void> => {
   kit.check(
     `d: an OpenCode session of ${OC_TURNS} turns (${all.length} entries) read in ${back.length} windows newest back, and ${on.length} oldest on, joins to the whole conversation`,
     back.length > 1 && on.length > 1 && same(back.toReversed()) && same(on),
-    `${back
-      .toReversed()
-      .flatMap((one) => one.entries.map((entry) => entry.uuid))
-      .join(
-        ","
-      )} / ${on.flatMap((one) => one.entries.map((entry) => entry.uuid)).join(",")} / ${all.map((entry) => entry.uuid).join(",")}`
+    differing(back.toReversed(), all) ?? differing(on, all)
   );
+};
+
+/** The first entry `windows` hold otherwise than `all`, both ways round, for a failure's detail. */
+const differing = (
+  windows: TranscriptWindow[],
+  all: SessionMessage[]
+): string | undefined => {
+  const joined = windows.flatMap((one) => one.entries);
+  if (joined.length !== all.length) {
+    return `${joined.length} entries in the windows, ${all.length} whole`;
+  }
+  const at = joined.findIndex(
+    (entry, i) => JSON.stringify(entry) !== JSON.stringify(all[i])
+  );
+  return at < 0
+    ? undefined
+    : `entry ${at}: windows ${JSON.stringify(joined[at])} / whole ${JSON.stringify(all[at])}`;
 };
 
 export default {
@@ -318,6 +350,9 @@ export default {
     const times: number[] = [];
     let pages = 0;
     let health = first.healthMs;
+    const pictures = new Set(
+      JSON.stringify(first.value).match(MEDIA_URL) ?? []
+    );
     for (let at = 0; at < PAGES && before !== null; at += 1) {
       const cursor: string = before;
       // biome-ignore lint/performance/noAwaitInLoops: each page names the next
@@ -329,6 +364,9 @@ export default {
         twice += seen.has(block.id) ? 1 : 0;
         seen.add(block.id);
       }
+      for (const url of JSON.stringify(older.value).match(MEDIA_URL) ?? []) {
+        pictures.add(url);
+      }
       pages += 1;
       before = older.value.cursor;
     }
@@ -338,6 +376,19 @@ export default {
       `b: ${pages} older pages walk back with no block twice; the one that built the line index answered in ${Math.round(scan)} ms (≤ ${SCAN_MS}), every other in ${Math.round(slowest)} ms or less (≤ ${PAGE_MS})`,
       pages > 0 && twice === 0 && scan <= SCAN_MS && slowest <= PAGE_MS,
       `${twice} block(s) twice`
+    );
+    // The pictures the pages named, each asked as the page shows it, the
+    // moment it is named: one whose file is still being written is served
+    // from what the hub holds of it (media.ts `writing`).
+    const served = await Promise.all(
+      [...pictures].map(
+        async (url) => (await fetch(`${fleet.base}${url}`)).status
+      )
+    );
+    check(
+      `b: the ${pictures.size} picture(s) the pages name are each served`,
+      served.every((code) => code === 200),
+      served.join(", ")
     );
     const stalls = (await agentLog.since())
       .split("\n")

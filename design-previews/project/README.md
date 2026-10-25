@@ -9,7 +9,18 @@ sideways) and the scheme. Under 1100px it shows one frame at a time.
 
 Serve the folder as it is (`bunx serve design-previews/project`). Its proof
 is `scripts/probe-kit/specs/project-preview.ts`
-(`bun scripts/probe-kit/run.ts project-preview`).
+(`bun scripts/probe-kit/run.ts project-preview`), which reads it at 390, 680,
+1037 and 1440 and runs the house rules at 390, 1037 and 1440.
+
+The head and the pane's bar follow DESIGN.md's Title Bars Follow Liquid Glass
+Rule as the live head does (`ProjectHead.svelte`): one row, the name, the
+place as its machine's OS mark, Caw's seat and one glass capsule (Ask Caw,
+Spin off, More); the pane's bar is bare symbols (Back on a phone, the
+session's symbol and Close in its capsule) over the task's title, and its
+tabs are Task, Changes and History. A capsule's glass stands only round two
+symbols or more: More alone under 640, and the session's symbol alone on a
+phone's pane, are bare glyphs. The session opens from the pane's bar alone.
+Caw's first thread is titled "Caw is new to {project}".
 
 ## Caw
 

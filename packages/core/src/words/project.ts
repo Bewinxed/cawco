@@ -7,6 +7,12 @@
 export const projectWords = {
   /** The head's New session from the project's checkout. */
   spinOff: "Spin off",
+  /** The head's Ask Caw: his panel on a new thread. */
+  askCaw: "Ask Caw",
+  /** The head's place: its name, which opens the project's details. */
+  details: "Project details",
+  /** The head's place's tooltip while the project's one place is its folder on the hub. */
+  hubFolder: "Its folder on the hub",
   /** The head's ⋯. */
   pickStages: "Pick stages…",
   projectDetails: "Project details…",

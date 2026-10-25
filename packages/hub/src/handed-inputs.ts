@@ -31,7 +31,7 @@ import {
 } from "./artifacts/service";
 import type { WorkItemRow } from "./db";
 import { byHandle } from "./handles";
-import { mediaFilePath, storedFilePath } from "./media";
+import { mediaBytes, mediaFilePath, storedFilePath } from "./media";
 import { FolderRefusal, readFolderBytes } from "./project-folder";
 
 /**
@@ -288,10 +288,14 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
     if (inline) {
       return Buffer.from(inline);
     }
-    const path = mediaFilePath(src.replace(MEDIA_PREFIX, ""));
-    return path
-      ? (readOrNull(path) ?? "its picture is gone from the hub's media store")
-      : `its picture is at ${src.slice(0, 80)}, which the hub does not hold`;
+    const name = src.replace(MEDIA_PREFIX, "");
+    if (!mediaFilePath(name)) {
+      return `its picture is at ${src.slice(0, 80)}, which the hub does not hold`;
+    }
+    const bytes = mediaBytes(name);
+    return bytes
+      ? Buffer.from(bytes)
+      : "its picture is gone from the hub's media store";
   };
 
   /** The session whose attachments `entry` reads: the caller's own, or `session` of its tree, whole or by handle (handles.ts). */

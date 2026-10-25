@@ -661,16 +661,18 @@ const firstRestart = async (
       JSON.stringify(had.get(one.workspaceId)) !==
       JSON.stringify(after.get(one.workspaceId))
   );
-  kit.check(
-    `1: an agent restart starts no idle workspace's boundary and hands none over, ${RE_FORMED} of them of an older form: each keeps its one boundary process`,
-    moved.length === 0 &&
-      idle.every((one) => had.get(one.workspaceId)?.length === 1),
-    moved
+  const notOne = idle.filter((one) => had.get(one.workspaceId)?.length !== 1);
+  const listed = (list: readonly Delegated[]) =>
+    list
       .map(
         (one) =>
-          `${one.tag}: ${had.get(one.workspaceId)?.join(",")} → ${after.get(one.workspaceId)?.join(",")}`
+          `${one.tag}: ${had.get(one.workspaceId)?.join(",") || "none"} → ${after.get(one.workspaceId)?.join(",") || "none"}`
       )
-      .join("; ") || "none moved"
+      .join("; ") || "none";
+  kit.check(
+    `1: an agent restart starts no idle workspace's boundary and hands none over, ${RE_FORMED} of them of an older form: each keeps its one boundary process`,
+    moved.length === 0 && notOne.length === 0,
+    `moved: ${listed(moved)}; not one boundary before the restart: ${listed(notOne)}`
   );
   kit.check(
     "1: its start-up pass leaves the idle ones as they are, as the agent records",
@@ -688,20 +690,34 @@ const quietCloses = async (
   p: Delegated
 ): Promise<void> => {
   const bound = QUIET_CLOSE_MS + CLOSE_SLACK_MS;
-  const open = await until(
-    "every idle workspace's boundary closed",
-    () => stillOpen(fleet, idle),
-    (left) => left.length === 0,
+  // One close takes its boundary, then its doors and judges, then records
+  // itself (agent boundary.ts `closeNow`), and the sweep closes the idle ones
+  // one after another: the wait is for all three, read together, so a look
+  // between one close's boundary and its record is no answer yet.
+  const idleNow = async () => {
+    const held = await fleet.heldProcs();
+    const quiet = await Promise.all(
+      idle.map((one) => closedQuietly(home, one.workspaceId))
+    );
+    return {
+      open: idle.filter((one) =>
+        held.some((proc) => isBoundaryOf(proc.procId, one.workspaceId))
+      ),
+      judged: idle.filter((one) =>
+        held.some((proc) => isJudgeOf(proc.procId, one.workspaceId))
+      ),
+      unsaid: idle.filter((_, at) => !quiet[at]),
+    };
+  };
+  const { open, judged, unsaid } = await until(
+    "every idle workspace's boundary and judge closed, each close recorded",
+    idleNow,
+    (now) =>
+      now.open.length === 0 &&
+      now.judged.length === 0 &&
+      now.unsaid.length === 0,
     bound
-  ).catch(() => stillOpen(fleet, idle));
-  const held = await fleet.heldProcs();
-  const quiet = await Promise.all(
-    idle.map((one) => closedQuietly(home, one.workspaceId))
-  );
-  const unsaid = idle.filter((_, at) => !quiet[at]);
-  const judged = idle.filter((one) =>
-    held.some((proc) => isJudgeOf(proc.procId, one.workspaceId))
-  );
+  ).catch(idleNow);
   const tags = (list: readonly Delegated[]) =>
     list.map((one) => one.tag).join(",") || "none";
   kit.check(
@@ -847,25 +863,32 @@ const waiterCloses = async (
   w: Delegated,
   endedAt: number
 ): Promise<void> => {
-  const open = await until(
-    "W's boundary closed",
-    () => boundariesOf(fleet, w.workspaceId),
-    (left) => left.length === 0,
-    Math.max(endedAt + W_CLOSE_MS - Date.now(), 0)
-  ).catch(() => boundariesOf(fleet, w.workspaceId));
   // Closed quietly, or with its workspace as the hub settles it once its
   // item is over (hub work-items.ts `settle`): held, its boundary closed for
-  // good, or retired, its state dir gone with it.
+  // good, or retired, its state dir gone with it. A close records itself
+  // after its boundary is gone, so the wait is for both.
   const state = join(home, ".cawco", "workspaces", w.workspaceId);
-  const decisions = await decisionsOf(home, w.workspaceId);
-  const said =
-    !existsSync(state) ||
-    decisions.some(
-      (one) =>
-        (one.decision === "quiet-closed" ||
-          one.decision === "closed-for-good") &&
-        one.at >= endedAt
-    );
+  const closed = async () => {
+    const decisions = await decisionsOf(home, w.workspaceId);
+    return {
+      open: await boundariesOf(fleet, w.workspaceId),
+      decisions,
+      said:
+        !existsSync(state) ||
+        decisions.some(
+          (one) =>
+            (one.decision === "quiet-closed" ||
+              one.decision === "closed-for-good") &&
+            one.at >= endedAt
+        ),
+    };
+  };
+  const { open, decisions, said } = await until(
+    "W's boundary closed, its close recorded",
+    closed,
+    (now) => now.open.length === 0 && now.said,
+    Math.max(endedAt + W_CLOSE_MS - Date.now(), 0)
+  ).catch(closed);
   kit.check(
     `8: within ${W_CLOSE_MS / 60_000} min of W's item ending, its boundary closes (quietly, or as its workspace is settled), as the agent records or its state dir gone`,
     open.length === 0 && said,

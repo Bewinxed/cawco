@@ -392,6 +392,13 @@ export interface TranscriptPage {
   cursor: string | null;
   /** Newest page only: what the session has said about itself. */
   facts?: TranscriptFacts;
+  /**
+   * Newest page only: the hub run that numbered `seq`, one value per hub
+   * start (frames.ts `InstancesFrame.hubRun`). The hub numbers each stream from 1
+   * again when it restarts, so a `seq` resumes a stream only on a socket
+   * whose board names the same run.
+   */
+  hubRun?: string;
   /** Newest page only: the sends waiting to be read. */
   queued?: TranscriptBlock[];
   /**

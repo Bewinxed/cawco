@@ -20,15 +20,55 @@
  *    holds neither the dead id nor the `run:` tab.
  * b. A tab switch to Q and back logs nothing and fails nothing.
  * c. Ten reloads while B's turn streams: each logs nothing, fails nothing,
- *    and reads B's newest page no more than twice, with no separate tooling
- *    read (the tooling rides the page). Twice is the design's: the pane reads
- *    the page before the socket is up, and the page's first connection reads
- *    it again rather than resume from a seq read off another connection
- *    (client.svelte.ts `rereadFollowed`).
+ *    and reads B's newest page exactly once, with no separate tooling read
+ *    (the tooling rides the page). The pane reads the page before the socket
+ *    is up, and the socket's first connection resumes B's stream from that
+ *    page's seq, the board naming the page's hub run (client.svelte.ts
+ *    `followHeld`, `TranscriptPage.hubRun`).
+ * d. A reload whose socket is held until the hub has restarted after the
+ *    page was read: the page's run is not the socket's, so B's newest page is
+ *    read once more after the socket opens (`because reconnect`), and only
+ *    once.
+ * f. The page's socket drops and comes back to the same hub run: no
+ *    transcript page is read; B's stream resumes from its place (the hub
+ *    answers with its backlog, no reset; client.svelte.ts `followHeld`).
+ * e. A tab on a conversation stored on the machine, which the hub holds no
+ *    row for, opened by its address once the machine is away: the hub's
+ *    locate finds it in the machine's last catalog and answers its
+ *    transcript 503 (the machine away), never 404. The page asks for neither
+ *    its transcript nor Files' attachments, through the machine's
+ *    reconnecting window and past it: the server's read of the load said the
+ *    machine is away, and the board lists it away (client.svelte.ts
+ *    `storedReadWaits`). No request fails and nothing is logged; the pane
+ *    shows the machine away. Files opened then: its attachments stand as the
+ *    fault row, its reason and, under Show details, the machine's words
+ *    (core `machineFaultWords`), with nothing clipped (journeys/scan.ts over
+ *    the page); Try again asks nothing. The machine back, the page reads
+ *    each once, the pane says so no more, and Files, still open, lists the
+ *    conversation's picture where the fault row stood.
  */
-import type { Page } from "playwright-core";
-import { until } from "../../scratch-fleet";
-import { COMPOSER, type Kit, kitsOwnMessage, open, type Spec } from "../kit";
+import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
+import type { Page, Response, WebSocketRoute } from "playwright-core";
+import type { AgentRow } from "../../../packages/core/src";
+import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
+import { RECONNECTING_MS } from "../../../packages/core/src/handover";
+import {
+  machineCalled,
+  machineFaultWords,
+} from "../../../packages/core/src/machine-names";
+import { filesWords } from "../../../packages/core/src/words/files";
+import { MACHINE, until } from "../../scratch-fleet";
+import { writeClaudeTranscript } from "../claude-transcripts";
+import { scan } from "../journeys/scan";
+import {
+  COMPOSER,
+  type Kit,
+  kitsOwnMessage,
+  open,
+  type Spec,
+  settle,
+} from "../kit";
 
 /** B's turn: long enough to stream through every reload. */
 const WORDS = Array.from({ length: 4000 }, (_, at) => `word${at}`);
@@ -39,19 +79,41 @@ const DEAD = "6654eba8";
 const RUN_TAB = "run:0d1076a2-7be7-422a-acc6-4b16d97e7415";
 /** What the page does after it is up: its reads, its follows, its cookie's write. */
 const SETTLE_MS = 3000;
+/** A conversation stored on the machine that the hub never started (leg e). */
+const STORED = "00000000-0000-4000-8000-00000000c0de";
+/** The page's own line for each newest page it read, and why (client.svelte.ts `readNewestPage`). */
+const READ_LINE = /^\[cawco\] read (\w+) because (\w+)/;
+/** The pane's title for a transcript whose machine is away (SessionPane.svelte `faultTitle`). */
+const AWAY_TITLE = /This machine is (offline|reconnecting)/;
+/** A 1×1 PNG: the picture e's stored conversation carries. */
+const PIXEL =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+/** Files' attachments region, and its fault row there. */
+const ATTACHMENTS = '[data-files-region="attachments"]';
+const ATTACHMENTS_FAULT = `${ATTACHMENTS} [data-files-failed]`;
+/** The hub's answer to a stream's resume (hub stream.ts `subscribe`). */
+const STREAM_ANSWER = /"type":"stream\.(backlog|reset)"/;
+/** Any session's newest transcript page. */
+const TRANSCRIPT_PATH = /^\/api\/instances\/[^/]+\/transcript$/;
 
 /** What a page said and failed, from the moment it is watched. */
 interface Heard {
   /** Every request's path and query, in order. */
   asked: string[];
   failed: string[];
+  /** Each newest page the page read, as `<id8> <cause>`. */
+  read: string[];
   said: string[];
 }
 
 const watch = (page: Page): Heard => {
-  const heard: Heard = { said: [], failed: [], asked: [] };
+  const heard: Heard = { said: [], failed: [], asked: [], read: [] };
   page.on("console", (message) => {
     const type = message.type();
+    const read = READ_LINE.exec(message.text());
+    if (read) {
+      heard.read.push(`${read[1]} ${read[2]}`);
+    }
     if (
       (type === "error" || type === "warning") &&
       !kitsOwnMessage(message.text())
@@ -79,11 +141,50 @@ const watch = (page: Page): Heard => {
   return heard;
 };
 
+/**
+ * The person's last prompt in a stored Claude transcript carries a picture,
+ * as the CLI writes one (a base64 `image` block), so Files lists an
+ * attachment for it: chained after the file's last record.
+ */
+const withPicture = async (file: string, cwd: string): Promise<void> => {
+  const lines = (await readFile(file, "utf8")).trimEnd().split("\n");
+  const parentUuid =
+    lines
+      .map((line) => JSON.parse(line) as { uuid?: string })
+      .findLast((record) => record.uuid)?.uuid ?? null;
+  await appendFile(
+    file,
+    `${JSON.stringify({
+      type: "user",
+      uuid: "0000c0de-0000-4000-8000-00000000f11e",
+      parentUuid,
+      isSidechain: false,
+      userType: "external",
+      cwd,
+      sessionId: STORED,
+      version: "2.1.280",
+      gitBranch: "main",
+      timestamp: new Date(Date.UTC(2026, 9, 2)).toISOString(),
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "image",
+            source: { type: "base64", media_type: "image/png", data: PIXEL },
+          },
+          { type: "text", text: "Here is the picture." },
+        ],
+      },
+    })}\n`
+  );
+};
+
 /** Empties what was heard, answering what it held. */
 const take = (heard: Heard) => ({
   said: heard.said.splice(0),
   failed: heard.failed.splice(0),
   asked: heard.asked.splice(0),
+  read: heard.read.splice(0),
 });
 
 /** The tabs the workspace's tree holds, as localStorage keeps it. */
@@ -121,6 +222,23 @@ const run = async (kit: Kit): Promise<void> => {
   fleet.launch("hub");
   await fleet.hubUp();
   fleet.fileAccount();
+  // e's conversation, on the machine's disk before its agent registers, so
+  // its register's catalog names it.
+  const project = join(
+    fleet.home,
+    CLAUDE_DIR_NAME,
+    "projects",
+    "-probe-console-quiet"
+  );
+  await mkdir(project, { recursive: true });
+  const storedFile = join(project, `${STORED}.jsonl`);
+  writeClaudeTranscript(storedFile, {
+    bytes: 64 * 1024,
+    seed: 7,
+    sessionId: STORED,
+    cwd: fleet.workdir,
+  });
+  await withPicture(storedFile, fleet.workdir);
   fleet.launch("agent");
   await fleet.agentUp();
   await fleet.accountSignedIn();
@@ -225,22 +343,297 @@ const run = async (kit: Kit): Promise<void> => {
     const reads = load.asked.filter((path) => path === newest).length;
     const tooling = load.asked.filter((path) => path.endsWith("/tooling"));
     kit.check(
-      `c. reload ${at} while the turn streams: nothing logged, nothing failed, the newest page read at most twice, no tooling read`,
+      `c. reload ${at} while the turn streams: nothing logged, nothing failed, the newest page read exactly once, no tooling read`,
       streaming &&
         load.said.length === 0 &&
         load.failed.length === 0 &&
-        reads >= 1 &&
-        reads <= 2 &&
+        reads === 1 &&
         tooling.length === 0,
       JSON.stringify({
         streaming,
         said: load.said,
         failed: load.failed,
         reads,
+        why: load.read,
         tooling,
       })
     );
   }
+
+  // d. The hub restarts between the page's read and its socket.
+  const { promise: held, resolve: release } = Promise.withResolvers<void>();
+  /** The page's socket as it stands, how many it has opened, and what the hub said on them that f reads. */
+  const sockets = {
+    live: null as WebSocketRoute | null,
+    opened: 0,
+    resumed: [] as string[],
+  };
+  await page.routeWebSocket(
+    (url) => url.pathname === "/ws/dashboard",
+    async (ws) => {
+      await held;
+      const server = ws.connectToServer();
+      sockets.live = ws;
+      sockets.opened += 1;
+      ws.onMessage((message) => server.send(message));
+      server.onMessage((message) => {
+        if (typeof message === "string") {
+          const kind = STREAM_ANSWER.exec(message)?.[1];
+          if (kind && message.includes(busy)) {
+            sockets.resumed.push(kind);
+          }
+        }
+        ws.send(message);
+      });
+    }
+  );
+  const isNewest = (response: Response) =>
+    new URL(response.url()).pathname === newest;
+  const pageRead = page.waitForResponse(isNewest, { timeout: 60_000 });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  const before = await pageRead;
+  await before.finished();
+  const readBefore = take(heard);
+  await fleet.stop("hub");
+  fleet.launch("hub");
+  await fleet.hubUp();
+  await fleet.agentUp();
+  const reread = page.waitForResponse(isNewest, { timeout: 60_000 });
+  release();
+  const after = await reread.catch(() => null);
+  await page.waitForTimeout(SETTLE_MS);
+  const restarted = take(heard);
+  const readsBefore = readBefore.asked.filter((path) => path === newest);
+  const readsAfter = restarted.asked.filter((path) => path === newest);
+  kit.check(
+    "d. the hub restarted between the page's read and its socket: the newest page is read once before the socket opens and once after, because the run moved",
+    before.status() === 200 &&
+      after?.status() === 200 &&
+      readsBefore.length === 1 &&
+      readsAfter.length === 1 &&
+      restarted.read.includes(`${busy.slice(0, 8)} reconnect`),
+    JSON.stringify({
+      before: before.status(),
+      after: after?.status() ?? null,
+      readsBefore: readsBefore.length,
+      readsAfter: readsAfter.length,
+      why: [...readBefore.read, ...restarted.read],
+    })
+  );
+
+  // f. The socket drops and comes back to the same hub run.
+  const openedBefore = sockets.opened;
+  sockets.resumed.length = 0;
+  take(heard);
+  await sockets.live?.close({ code: 4000, reason: "console-quiet: a drop" });
+  const reopened = await until(
+    "the page's socket back",
+    () => Promise.resolve(sockets.opened),
+    (opened) => opened > openedBefore,
+    30_000
+  ).catch(() => sockets.opened);
+  await until(
+    "the busy session's stream answered on the new socket",
+    () => Promise.resolve(sockets.resumed.length),
+    (answers) => answers > 0,
+    15_000
+  ).catch(() => 0);
+  await page.waitForTimeout(SETTLE_MS);
+  const dropped = take(heard);
+  const pageReads = dropped.asked.filter((path) => TRANSCRIPT_PATH.test(path));
+  kit.check(
+    "f. a socket drop that comes back to the same hub run reads no transcript page: the busy session's stream resumes from its place (the hub's backlog, no reset), and nothing is logged or fails",
+    reopened > openedBefore &&
+      pageReads.length === 0 &&
+      dropped.read.length === 0 &&
+      sockets.resumed.includes("backlog") &&
+      !sockets.resumed.includes("reset") &&
+      dropped.said.length === 0 &&
+      dropped.failed.length === 0,
+    JSON.stringify({
+      opened: reopened - openedBefore,
+      pageReads,
+      why: dropped.read,
+      resumed: sockets.resumed,
+      said: dropped.said,
+      failed: dropped.failed,
+    })
+  );
+
+  // e. A stored conversation whose machine is away.
+  const rows = fleet.query<{ id: string }>(
+    "SELECT id FROM instances WHERE id = ? OR session_id = ?",
+    STORED,
+    STORED
+  );
+  kit.check(
+    "e. the stored conversation has no row on the hub: only the machine's catalog names it",
+    rows.length === 0,
+    JSON.stringify(rows)
+  );
+  await fleet.stop("agent");
+  await until(
+    "the machine away",
+    async () =>
+      (await fleet.api<AgentRow[]>("/api/agents")).find(
+        (row) => row.machineId === MACHINE
+      )?.status,
+    (status) => status !== "online",
+    30_000
+  );
+  take(heard);
+  const stored = `/api/instances/${STORED}/transcript`;
+  const attachments = `/api/instances/${STORED}/attachments`;
+  // The hub's own answer for it, asked beside the page (not in its log).
+  const hubSays = await page.request.get(`${base}${stored}`);
+  await page.goto(
+    `${base}/session/${STORED}?${new URLSearchParams({
+      machine: MACHINE,
+      harness: "claude",
+      cwd: fleet.workdir,
+    })}`,
+    { waitUntil: "domcontentloaded" }
+  );
+  const awayShown = await page
+    .getByRole("alert")
+    .filter({ hasText: AWAY_TITLE })
+    .first()
+    .waitFor({ timeout: 30_000 })
+    .then(() => true)
+    .catch(() => false);
+  // Past the machine's reconnecting window: its deadline asks nothing either
+  // (client.svelte.ts `readAtDeadline`, the board still listing it away).
+  await page.waitForTimeout(RECONNECTING_MS + SETTLE_MS);
+  const awayLoad = take(heard);
+  const storedReads = awayLoad.asked.filter((path) => path === stored).length;
+  const attachmentReads = awayLoad.asked.filter(
+    (path) => path === attachments
+  ).length;
+  kit.check(
+    "e. the stored conversation's machine away: the hub answers its transcript 503, the page asks for neither its transcript nor its attachments through the machine's reconnecting window and past it, no request fails, nothing is logged, and the pane shows the machine away",
+    hubSays.status() === 503 &&
+      storedReads === 0 &&
+      attachmentReads === 0 &&
+      awayLoad.failed.length === 0 &&
+      awayLoad.said.length === 0 &&
+      awayShown,
+    JSON.stringify({
+      hub: hubSays.status(),
+      storedReads,
+      attachmentReads,
+      why: awayLoad.read,
+      failed: awayLoad.failed,
+      said: awayLoad.said,
+      awayShown,
+    })
+  );
+
+  // Files, opened while the machine is away: what a person sees there.
+  await page.locator("[data-files-control]").click();
+  await page.locator("[data-glass-card-frame='files-pop']").waitFor();
+  const faultShown = await page
+    .locator(ATTACHMENTS_FAULT)
+    .waitFor({ timeout: 15_000 })
+    .then(() => true)
+    .catch(() => false);
+  await page.locator(`${ATTACHMENTS_FAULT} [data-details]`).click();
+  await settle(page, 400);
+  const machineWords = machineFaultWords(
+    machineCalled(MACHINE, await fleet.api<AgentRow[]>("/api/agents")),
+    "offline"
+  );
+  const faultSaid = (
+    (await page.locator(ATTACHMENTS_FAULT).textContent()) ?? ""
+  ).replaceAll(/\s+/g, " ");
+  const clipped = await page.evaluate(scan);
+  kit.check(
+    "e. Files opened while the machine is away: its attachments stand as the fault row, the reason and, under Show details, the machine's words, and the overflow sweep finds nothing clipped",
+    faultShown &&
+      faultSaid.includes(filesWords.cantReadAttachments) &&
+      faultSaid.includes(machineWords) &&
+      clipped.length === 0,
+    JSON.stringify({ faultShown, faultSaid, machineWords, clipped })
+  );
+  take(heard);
+  await page.locator(`${ATTACHMENTS_FAULT} [data-again]`).click();
+  await page.waitForTimeout(SETTLE_MS);
+  const tried = take(heard);
+  const triedAttachments = tried.asked.filter(
+    (path) => path === attachments
+  ).length;
+  const stillFault = await page.locator(ATTACHMENTS_FAULT).count();
+  kit.check(
+    "e. Try again while the machine is away asks nothing of the hub: no attachments request, nothing fails or is logged, and the fault row stands",
+    triedAttachments === 0 &&
+      tried.failed.length === 0 &&
+      tried.said.length === 0 &&
+      stillFault === 1,
+    JSON.stringify({
+      triedAttachments,
+      failed: tried.failed,
+      said: tried.said,
+      stillFault,
+    })
+  );
+
+  // The machine back: its conversation is read, once.
+  const answered = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === stored,
+    { timeout: 90_000 }
+  );
+  fleet.launch("agent");
+  await fleet.agentUp();
+  const backRead = await answered.catch(() => null);
+  const awayGone = await page
+    .getByRole("alert")
+    .filter({ hasText: AWAY_TITLE })
+    .first()
+    .waitFor({ state: "detached", timeout: 30_000 })
+    .then(() => true)
+    .catch(() => false);
+  const listed = await page
+    .locator(`${ATTACHMENTS} [data-files-row]`)
+    .first()
+    .waitFor({ timeout: 30_000 })
+    .then(() => true)
+    .catch(() => false);
+  await page.waitForTimeout(SETTLE_MS);
+  const backLoad = take(heard);
+  const backReads = backLoad.asked.filter((path) => path === stored).length;
+  const backAttachments = backLoad.asked.filter(
+    (path) => path === attachments
+  ).length;
+  const files = await page.evaluate(
+    ({ region, fault }) => ({
+      open: !!document.querySelector("[data-glass-card-frame='files-pop']"),
+      fault: document.querySelectorAll(fault).length,
+      rows: [...document.querySelectorAll(`${region} [data-files-row]`)].map(
+        (row) => row.textContent?.replaceAll(/\s+/g, " ").trim() ?? ""
+      ),
+    }),
+    { region: ATTACHMENTS, fault: ATTACHMENTS_FAULT }
+  );
+  kit.check(
+    "e. the machine back: the stored conversation and its attachments are read once each, the transcript answers 200, nothing fails, and the pane no longer says the machine is away",
+    backRead?.status() === 200 &&
+      backReads === 1 &&
+      backAttachments === 1 &&
+      backLoad.failed.length === 0 &&
+      awayGone,
+    JSON.stringify({
+      status: backRead?.status() ?? null,
+      backReads,
+      backAttachments,
+      why: backLoad.read,
+      awayGone,
+      failed: backLoad.failed,
+    })
+  );
+  kit.check(
+    "e. the machine back: Files, still open, has no fault row in its attachments and lists the conversation's picture",
+    listed && files.open && files.fault === 0 && files.rows.length > 0,
+    JSON.stringify({ listed, ...files })
+  );
 };
 
 export default { name: "console-quiet", run } satisfies Spec;

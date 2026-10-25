@@ -384,6 +384,26 @@ function findActiveChain(
   return { chain, chainSet };
 }
 
+/**
+ * Each record by uuid as the file first wrote it. Claude Code writes an
+ * earlier compaction's block again when a later `/compact` runs in the same
+ * process (anthropics/claude-code#92089): the boundary, its summary and the
+ * records it kept, under their old uuids, the kept ones now hung from the
+ * summary. A later copy is not where a record was said, and its links lead
+ * the boundary's logical parent back to the boundary itself (1,274 records
+ * written twice in a real 413 MB session, whose walk stopped there 9,666
+ * entries back of 47,076).
+ */
+function firstWrites(records: readonly ChainNode[]): Map<string, ChainNode> {
+  const m = new Map<string, ChainNode>();
+  for (const r of records) {
+    if (typeof r.uuid === "string" && !m.has(r.uuid)) {
+      m.set(r.uuid, r);
+    }
+  }
+  return m;
+}
+
 /** Whether `r` is the line Claude Code starts a compacted conversation on. */
 const isCompactBoundary = (r: { type: string; subtype?: unknown }): boolean =>
   r.type === "system" && r.subtype === "compact_boundary";
@@ -401,11 +421,14 @@ const isCompactBoundary = (r: { type: string; subtype?: unknown }): boolean =>
  * The walk follows one record's parent at a time, so a branch the
  * conversation left (a retry, an edit, a rewind) is never on it. A
  * preserved record stands once, where it was said, and not again after the
- * summary.
+ * summary: `original` holds each record as the file first wrote it
+ * ({@link firstWrites}). A boundary whose logical parent the file never
+ * wrote goes on from the row above it.
  */
 function withSetAside(
   chain: ChainNode[],
-  original: Map<string, ChainNode>
+  original: Map<string, ChainNode>,
+  records: readonly ChainNode[]
 ): ChainNode[] {
   const [head] = chain;
   const before: ChainNode[] = [];
@@ -415,9 +438,32 @@ function withSetAside(
       return original.get(r.parentUuid);
     }
     const logical = r.logicalParentUuid;
-    return isCompactBoundary(r) && typeof logical === "string"
-      ? original.get(logical)
-      : undefined;
+    if (!(isCompactBoundary(r) && typeof logical === "string")) {
+      return;
+    }
+    return original.get(logical) ?? rowAbove(r);
+  };
+  // Claude Code names a logical parent it never wrote now and then
+  // (anthropics/claude-code#46603, #49996): the boundary then goes on from
+  // the nearest row above it in the file, the first persisted record before
+  // it (#55818 reads it so; so it is in all six such boundaries of a real
+  // 413 MB session).
+  let firstAt: Map<string, number> | undefined;
+  const rowAbove = (boundary: ChainNode): ChainNode | undefined => {
+    if (!firstAt) {
+      firstAt = new Map();
+      for (const [i, r] of records.entries()) {
+        if (!firstAt.has(r.uuid)) {
+          firstAt.set(r.uuid, i);
+        }
+      }
+    }
+    for (let i = (firstAt.get(boundary.uuid) ?? 0) - 1; i >= 0; i -= 1) {
+      const above = records[i];
+      if (typeof above?.uuid === "string" && above.uuid) {
+        return original.get(above.uuid);
+      }
+    }
   };
   for (
     let node = head && isCompactBoundary(head) ? onFrom(head) : undefined;
@@ -613,7 +659,7 @@ function* walkSteps(
   said: boolean
 ): Generator<void, ChainNode[]> {
   const byUuid = buildUuidMap(records);
-  const original = said ? new Map(byUuid) : byUuid;
+  const original = said ? firstWrites(records) : byUuid;
   yield;
   const skippedAnchors = relinkCompactBoundaries(byUuid);
   yield;
@@ -623,7 +669,9 @@ function* walkSteps(
   }
   yield;
   const { chainSet } = found;
-  let active = said ? withSetAside(found.chain, original) : found.chain;
+  let active = said
+    ? withSetAside(found.chain, original, records)
+    : found.chain;
   for (const r of active) {
     chainSet.add(r.uuid);
   }
@@ -1056,7 +1104,13 @@ function joinedCounts(raw: readonly ChainNode[]): Map<string, number> {
 // Line index
 // ---------------------------------------------------------------------------
 
-/** The tool calls a message makes, answers, or the task its notification ends: {@link ChainNode.ids}. */
+/**
+ * The tool calls a message makes, answers, or the task its notification
+ * ends, and the row a reader's message draws ({@link ChainNode.ids}): a send
+ * the CLI absorbed mid-turn names its row by the send (`sourceUuid`), and the
+ * same send handed again after a restart is a user record of that uuid, the
+ * one row both draw (core `TranscriptBuilder`: the first wins).
+ */
 function namedIds(msg: SDKSessionMessage): string[] {
   const ids: string[] = [];
   const frame = msg.message as {
@@ -1171,12 +1225,16 @@ function messageFacts(r: RawRecord): Partial<ChainNode> {
   }
   const frame = msg.message as { subtype?: unknown } | null;
   const ids = namedIds(msg);
+  const opens = opensTurn(msg);
+  if (opens) {
+    ids.push(msg.sourceUuid ?? msg.uuid);
+  }
   return {
     shows:
       msg.type === "system" && frame?.subtype === "hook_response"
         ? "hook"
         : msg.type,
-    ...(opensTurn(msg) ? { opens: true as const } : {}),
+    ...(opens ? { opens: true as const } : {}),
     ...(msg.sourceUuid ? { sourceUuid: msg.sourceUuid } : {}),
     ...(ids.length > 0 ? { ids } : {}),
   };
@@ -1501,9 +1559,17 @@ function localCut(
   return found;
 }
 
-/** Whether `node` opens `id` rather than answering it: a tool call it makes, a task it ends. */
+/**
+ * Whether `node` opens `id` rather than answering it: a tool call it makes, a
+ * task it ends, the row its message draws. A row's first mention may stand
+ * before what a suffix read holds (a send absorbed long before it was handed
+ * again); the older window that holds it moves the row there (core
+ * `TranscriptBuilder.prepend`).
+ */
 const opensId = (node: ChainNode, id: string): boolean =>
-  node.shows === "assistant" || id.startsWith("task:");
+  node.shows === "assistant" ||
+  id.startsWith("task:") ||
+  id === (node.sourceUuid ?? node.uuid);
 
 /**
  * Read the newest records from a session transcript, starting from EOF.

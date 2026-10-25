@@ -304,6 +304,13 @@ export class TranscriptBuilder {
   /** What is served: the rows with every send in its place. */
   private placed: TranscriptBlock[] = [];
   private queued: TranscriptBlock[] = [];
+  /**
+   * Blocks an older window moved to where it first names them
+   * ({@link prepend}), each to the block that followed it where it was: a
+   * page asked before a moved block is a page before that one, so a reader
+   * whose cursor was the moved block misses none of what lay between.
+   */
+  private readonly movedFrom = new Map<string, string | null>();
   /** The uuids a history read carried: a frame replayed behind it is not news. */
   private readonly seeded = new Set<string>();
   /** How many reads this transcript has merged: the first is the transcript, and says nothing. */
@@ -482,8 +489,21 @@ export class TranscriptBuilder {
     records: Record<string, SendRecord>,
     complete: boolean
   ): { events: TranscriptEvent[]; placed: LinePlaced[] } {
-    const { rows: built, branches } = this.build(entries);
-    const older = built.filter((row) => !this.rowIds.has(row.id));
+    const { rows: older, branches } = this.build(entries);
+    // A row the older entries name too belongs where they first name it, as
+    // a whole read puts it (`build`'s `put`: the first wins): a send the CLI
+    // absorbed mid-turn and was handed again after a restart, its absorbed
+    // line older than the window that holds its later record. The held row
+    // moves (a `block.remove` here, its place in the older page).
+    const again = new Set(
+      older.filter((row) => this.rowIds.has(row.id)).map((row) => row.id)
+    );
+    for (const id of again) {
+      const at = this.placed.findIndex((block) => block.id === id);
+      if (at >= 0) {
+        this.movedFrom.set(id, this.placed[at + 1]?.id ?? null);
+      }
+    }
     const { placed, pending } = placeLines(
       this.instanceId,
       older,
@@ -519,7 +539,12 @@ export class TranscriptBuilder {
     if (entries.length > 0 && !this.facts.initialized) {
       this.facts = { ...this.facts, initialized: true };
     }
-    this.rows = [...older, ...this.rows];
+    this.rows = [
+      ...older,
+      ...(again.size > 0
+        ? this.rows.filter((row) => !again.has(row.id))
+        : this.rows),
+    ];
     for (const row of older) {
       this.rowIds.add(row.id);
     }
@@ -946,15 +971,19 @@ export class TranscriptBuilder {
       });
       this.clearTurnPhase();
     } else if (
-      mapping.delta ||
-      mapping.currentTool ||
-      // A turn that opens on a long reasoning block sends neither text nor a
-      // tool call for minutes; the block itself is the evidence.
-      mapping.blockStart ||
-      mapping.thinkingDelta ||
-      mapping.blocks.some(
-        (block) => block.type === "assistant" || block.type === "thinking"
-      )
+      // The main loop's frames only, as the daemon reads a turn (agent
+      // claude.ts `runsTurn`): a subagent writing on after its session's
+      // turn ended is its branch's news, not a turn.
+      !mapping.agentId &&
+      (mapping.delta ||
+        mapping.currentTool ||
+        // A turn that opens on a long reasoning block sends neither text nor a
+        // tool call for minutes; the block itself is the evidence.
+        mapping.blockStart ||
+        mapping.thinkingDelta ||
+        mapping.blocks.some(
+          (block) => block.type === "assistant" || block.type === "thinking"
+        ))
     ) {
       // Frames are the evidence it is working, whoever sent the turn.
       this.setTail({ busy: true });
@@ -1097,7 +1126,12 @@ export class TranscriptBuilder {
     if (end < 0) {
       return undefined;
     }
-    const start = this.pageStart(end, Math.max(1, limit));
+    let start = this.pageStart(end, Math.max(1, limit));
+    // A moved block never heads a page: its id as a cursor means where it
+    // was ({@link movedFrom}), so the page takes it and what is before it.
+    while (start > 0 && this.movedFrom.has(this.placed[start]?.id ?? "")) {
+      start -= 1;
+    }
     const blocks = this.placed.slice(start, end);
     const branches: TranscriptPageBranch[] = [];
     const listed = new Set<string>();
@@ -1153,7 +1187,13 @@ export class TranscriptBuilder {
 
   /* --------------------------------------------------------- internals — */
 
-  private indexOf(id: string): number {
+  private indexOf(id: string, hops = 0): number {
+    const followed = this.movedFrom.get(id);
+    if (followed !== undefined && hops < this.movedFrom.size) {
+      return followed === null
+        ? this.placed.length
+        : this.indexOf(followed, hops + 1);
+    }
     for (let i = this.placed.length - 1; i >= 0; i -= 1) {
       if (this.placed[i].id === id) {
         return i;

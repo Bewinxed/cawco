@@ -897,6 +897,13 @@ export interface AgentRow {
    * "stopped 1 running check". Null when it stopped nothing, or is not paused.
    */
   pauseStopped: string | null;
+  /**
+   * Until when (epoch ms, the hub's clock, as `lostAt`) the hub reads this
+   * machine as on its way back after its agent's link went: a read off it
+   * answers so then (`Retry-After`), and offline after. Null while it is
+   * connected or once it is offline. Live, as `status` is: never stored.
+   */
+  reconnectingUntil?: number | null;
   status: string;
   /**
    * Last-known tool status by tool id (NEW.md §10).
@@ -1948,6 +1955,7 @@ export * from "./words/contact";
 export * from "./words/containers";
 export * from "./words/decisions";
 export * from "./words/delegate-types";
+export * from "./words/design-graph";
 export * from "./words/files";
 export * from "./words/find-secrets";
 export * from "./words/gate";

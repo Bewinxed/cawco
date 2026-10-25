@@ -567,6 +567,20 @@ const forReading = async (projectId: string): Promise<string> => {
   return root;
 };
 
+/**
+ * Makes project `projectId`'s folder now if it is not there yet, before a
+ * workspace of the project is cut (work-items.ts `openWorkspace`, `recut`).
+ * A workspace's boundary on the hub's machine reads the folder only once it
+ * exists (core workspace-policy.ts `projectFolderOf`). If the folder appears
+ * later, at its first read or write, the form of every boundary of the
+ * project changes, and each one is handed over to a second boundary at its
+ * next command. r361, 2026-10-25: twenty delegates cut at 15:14:38, the
+ * folder started at 15:14:43, and each boundary was handed over by 15:14:47.
+ */
+export const makeProjectFolder = async (projectId: string): Promise<void> => {
+  await forReading(projectId);
+};
+
 // --- where a path leads -----------------------------------------------------
 
 const within = (parent: string, child: string): boolean =>

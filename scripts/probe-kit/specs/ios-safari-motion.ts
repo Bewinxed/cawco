@@ -23,16 +23,25 @@
  *    each frame: blurred part way at first (between 0 and the token's
  *    4px), clear at the end.
  *  - `queued-edit`: a send queued behind a running turn, lifted into the
- *    field as a person does it on a phone (a tap on the queued message, then
- *    its Edit): the page answers within a second, the edit row draws, and
- *    after the keyboard's room reaches the page its label and Keep it come
- *    up out of the `--part-blur` blur on frames the page draws (opacity and
- *    blur read part way), clear at the end. iOS 27.2 Safari draws no frame
- *    from the focus the lift puts in the field until the keyboard's room
- *    arrives (focus at 810ms, the viewport down to 384px at 1190ms, the next
- *    frame at 1210ms after one at 840ms), so the row's entrance starts there
- *    (Composer `enterWithKeyboard`). The longest gap between frames, the
+ *    field as a person does it on a phone (a tap on Edit in place, in the
+ *    recovery row standing under the queued words): the page answers within
+ *    a second, the edit row draws, and once the frames iOS Safari holds as its keyboard rises come again, its
+ *    label and Keep it come up out of the `--part-blur` blur on frames the
+ *    page draws (opacity and blur read part way), clear at the end. Safari
+ *    draws no frame from the focus the lift puts in the field until the
+ *    keyboard has risen (27.2: focus at 810ms, the viewport down to 384px at
+ *    1190ms, the next frame at 1210ms after one at 840ms; 27.0: focus at
+ *    738ms, a frame at 792, the next at 1169, the viewport down at 1269), so
+ *    the row's shape and parts run on a clock of drawn frames (GrownShape
+ *    `morphTo`, Composer `growRow`). The longest gap between frames, the
  *    focus and the keyboard's room are noted.
+ *  - `send-stop`: the composer's send glyph turning to stop as a turn
+ *    starts, and back as it ends (Composer's `{#key}` swap): the going glyph
+ *    shrinks and fades into a 4px blur (`glyphOut`, a script's animation),
+ *    the coming one comes up out of it (`animate-icon-swap`'s keyframes).
+ *    Each glyph is read by its own identity every 16ms: both blurred part
+ *    way, the going one gone and the coming one clear at the end, and the
+ *    page answering a script within a second throughout.
  *  - `entrances`: the kit's popover and dropdown menu (the overlays bench,
  *    each opened by a tap) and the composer's / menu (a `/` typed into a
  *    session's field) come in by their `@starting-style` transitions: CSS
@@ -91,6 +100,7 @@ const LEGS = [
   "starting-style",
   "long-ask",
   "queued-edit",
+  "send-stop",
   "entrances",
   "caw-dock",
   "desk-entrances",
@@ -169,32 +179,77 @@ const touch = (udid: string, x: number, y: number) =>
  * Where the page's viewport stands on the screen, in points: a tap at a known
  * point is heard by the page at its client coordinates. Safari's web content
  * is not in the accessibility tree `axe` reads, so taps on the page go by
- * point, the element's box plus this.
+ * point, the element's box plus this. The tap does nothing on the page: its
+ * events are taken at the document, first, and go no further, and its
+ * touchend's default (the click and the focus it brings) is refused. A tap
+ * that reached the page pressed what stood at (200, 420): on an iPad the
+ * config rail's row, which took the page away from the field the leg was to
+ * type into; on the overlays bench the page's own button, after which iOS
+ * 27.0 Safari sent the next tap, on the popover's opener, no click (its
+ * mouseover the last event it sent). Taken at the window instead, a page
+ * with no touch listener of its own (the starting-style fiddle) heard none
+ * of the tap in iOS 27.0 Safari, three runs of three.
  */
 async function viewportOnScreen(
   udid: string,
   page: SafariPage
 ): Promise<{ x: number; y: number }> {
   await page.run(() => {
-    const w = window as unknown as { __touched?: { x: number; y: number } };
+    const w = window as unknown as {
+      __touched?: { x: number; y: number };
+      __calibrating?: () => void;
+      __calibration?: string[];
+    };
     w.__touched = undefined;
-    document.addEventListener(
+    w.__calibration = [];
+    const swallow = (event: Event) => {
+      w.__calibration?.push(event.type);
+      if (event.type === "pointerdown" && !w.__touched) {
+        const { clientX, clientY } = event as PointerEvent;
+        w.__touched = { x: clientX, y: clientY };
+      }
+      event.stopImmediatePropagation();
+      if (event.cancelable && event.type !== "pointerdown") {
+        event.preventDefault();
+      }
+    };
+    const types = [
       "pointerdown",
-      (event) => {
-        w.__touched = { x: event.clientX, y: event.clientY };
-      },
-      { capture: true, once: true }
-    );
+      "pointerup",
+      "touchstart",
+      "touchend",
+      "mousedown",
+      "mouseup",
+      "click",
+    ];
+    for (const type of types) {
+      document.addEventListener(type, swallow, {
+        capture: true,
+        passive: false,
+      });
+    }
+    w.__calibrating = () => {
+      for (const type of types) {
+        document.removeEventListener(type, swallow, { capture: true });
+      }
+    };
   });
   const at = { x: 200, y: 420 };
   await touch(udid, at.x, at.y);
   await Bun.sleep(300);
-  const heard = await page.run(
-    () =>
-      (window as unknown as { __touched?: { x: number; y: number } }).__touched
-  );
+  const { heard, seen } = await page.run(() => {
+    const w = window as unknown as {
+      __touched?: { x: number; y: number };
+      __calibrating?: () => void;
+      __calibration?: string[];
+    };
+    w.__calibrating?.();
+    return { heard: w.__touched, seen: w.__calibration ?? [] };
+  });
   if (!heard) {
-    throw new Error("the page heard no tap at (200, 420)");
+    throw new Error(
+      `the page heard no tap at (200, 420) (its events: ${seen.join(", ") || "none"})`
+    );
   }
   return { x: at.x - heard.x, y: at.y - heard.y };
 }
@@ -822,6 +877,8 @@ interface Lift {
   before: number | null;
   focus: number | null;
   held: number | null;
+  /** When the frame that ended the longest wait came, on the page's clock. */
+  heldAt: number | null;
   keyboard: number | null;
   /** When the keyboard's room reached the page, on the page's clock. */
   keyboardAt: number | null;
@@ -840,6 +897,7 @@ function hearLift(): void {
     before: null,
     focus: null,
     held: null,
+    heldAt: null,
     keyboard: null,
     keyboardAt: null,
     room: null,
@@ -853,6 +911,7 @@ function hearLift(): void {
       longest = now - last;
       lift.before = Math.round(last - t0);
       lift.held = Math.round(now - t0);
+      lift.heldAt = Math.round(now);
     }
     last = now;
     if (now - t0 < 6000) {
@@ -894,35 +953,37 @@ async function queuedEdit(on: On, stood: Stood): Promise<void> {
       getComputedStyle(document.documentElement).getPropertyValue("--part-blur")
     )
   );
-  // A person's way on a phone: a tap on the queued message shows its row's
-  // actions, and its Edit lifts it into the field.
+  // A person's way on a phone: the queued message's recovery row stands at
+  // rest under its words (MessageRow `queueRow`), and its Edit in place lifts
+  // them into the field.
   const offset = await viewportOnScreen(on.udid, page);
   const queued = await page.run(
-    (words: string) => {
+    (words: string, edit: string) => {
       const bubble = [...document.querySelectorAll("[data-message]")].find(
         (at) => at.textContent?.includes(words)
       );
-      if (!bubble) {
-        return null;
+      const button = [
+        ...(bubble?.querySelectorAll('[data-slot="recovery"] button') ?? []),
+      ].find((at) => at.textContent?.trim() === edit);
+      if (!(bubble && button)) {
+        return bubble ? "no Edit in place in its recovery row" : null;
       }
       bubble.setAttribute("data-probe-queued", "");
+      button.setAttribute("data-probe-edit", "");
       bubble.scrollIntoView({ block: "center" });
-      return true;
+      return "drawn";
     },
-    [QUEUED]
+    [QUEUED, transcriptWords.editInPlace]
   );
-  if (!queued) {
-    on.kit.check(`${on.tag} queued-edit: the queued message is drawn`, false);
+  if (queued !== "drawn") {
+    on.kit.check(
+      `${on.tag} queued-edit: the queued message is drawn with its Edit in place`,
+      false,
+      queued ?? "no queued message"
+    );
     return;
   }
   await Bun.sleep(400);
-  await tapOn(
-    on,
-    page,
-    offset,
-    "[data-probe-queued] [data-slot=bubble], [data-probe-queued]"
-  );
-  await Bun.sleep(600);
   await page.run(hearLift);
   const run = await answering(page, async () => {
     const watched = page.run(
@@ -930,12 +991,7 @@ async function queuedEdit(on: On, stood: Stood): Promise<void> {
       [EDIT_PARTS, 10_000, 1200, null, true],
       30_000
     );
-    await tapOn(
-      on,
-      page,
-      offset,
-      `[data-probe-queued] button[aria-label="${transcriptWords.editMessage}"]`
-    );
+    await tapOn(on, page, offset, "[data-probe-queued] [data-probe-edit]");
     return watched;
   });
   const parts = run.result;
@@ -969,12 +1025,14 @@ async function queuedEdit(on: On, stood: Stood): Promise<void> {
     row.drawn && row.words.length > 0,
     JSON.stringify(row)
   );
-  // After the keyboard's room reached the page: reads on frames the page
-  // drew (its frame count moved since the read before), a part read part
-  // way in both its opacity and its blur.
-  const { keyboardAt } = heard;
+  // Once the frames the page held as the keyboard rose come again (the
+  // frame that ended the longest wait): reads on frames the page drew (its
+  // frame count moved since the read before), a part read part way in both
+  // its opacity and its blur. iOS 27.2 drew that frame just after the
+  // keyboard's room reached the page, 27.0 some 100ms before it.
+  const { heldAt } = heard;
   const after =
-    keyboardAt === null ? [] : parts.frames.filter((f) => f.at >= keyboardAt);
+    heldAt === null ? [] : parts.frames.filter((f) => f.at >= heldAt);
   const partWay = after.filter(
     (f, i) =>
       i > 0 &&
@@ -989,14 +1047,14 @@ async function queuedEdit(on: On, stood: Stood): Promise<void> {
   );
   const last = parts.frames.at(-1);
   on.kit.check(
-    `${on.tag} queued-edit: after the keyboard's room reaches the page, its label and Keep it come up out of the ${blur}px blur on drawn frames (opacity and blur read part way) and stand clear`,
-    keyboardAt !== null &&
+    `${on.tag} queued-edit: once the frames held as the keyboard rises come again, its label and Keep it come up out of the ${blur}px blur on drawn frames (opacity and blur read part way) and stand clear`,
+    heldAt !== null &&
       partWay.length > 0 &&
       (last?.looks ?? []).length > 0 &&
       (last?.looks ?? []).every(
         (l) => l.opacity > 0.999 && blurOf(l.filter) === 0
       ),
-    `keyboard at ${keyboardAt === null ? "never" : `${keyboardAt - (parts.frames[0]?.at ?? keyboardAt) + (parts.frames[0]?.t ?? 0)}ms`}; part way on ${partWay.length} drawn reads after it: ${partWay
+    `frames again at ${heldAt === null ? "never" : `${heldAt - (parts.frames[0]?.at ?? heldAt) + (parts.frames[0]?.t ?? 0)}ms`}; part way on ${partWay.length} drawn reads after it: ${partWay
       .slice(0, 4)
       .map(
         (f) =>
@@ -1011,6 +1069,206 @@ async function queuedEdit(on: On, stood: Stood): Promise<void> {
   );
 }
 
+// ---- send-stop: the composer's send/stop glyph swap -------------------------
+
+/** The composer's glyph carriers: the one standing, and while they swap, the one going and the one coming. */
+const SWAP = '[data-slot="stop"] [data-slot="swap"]';
+
+/** A swap's two glyphs on one read: each one's look, null once it is gone. */
+interface SwapRead {
+  incoming: Look | null;
+  outgoing: Look | null;
+  t: number;
+}
+/** What a swap watch read: each glyph's runs as it was first read, and its look every 16ms. */
+interface SwapWatched {
+  first: { incoming: string[]; outgoing: string[] };
+  found: number | null;
+  frameGap: number;
+  frames: SwapRead[];
+}
+
+/**
+ * In the page: waits up to `waitMs` for a glyph carrier that was not there
+ * when the watch began (the `{#key}` flip's new one), then reads it and the
+ * one it replaced, each by its own identity, every 16ms for `forMs`. A
+ * carrier that has left the document reads null.
+ */
+function watchSwap(selector: string, waitMs: number, forMs: number) {
+  return new Promise<SwapWatched>((resolve) => {
+    const before = new Set(document.querySelectorAll(selector));
+    const began = performance.now();
+    const out: SwapWatched = {
+      first: { incoming: [], outgoing: [] },
+      found: null,
+      frameGap: 0,
+      frames: [],
+    };
+    let start: number | null = null;
+    let incoming: Element | null = null;
+    let outgoing: Element | null = null;
+    let lastFrame: number | null = null;
+    let reading = true;
+    const tick = (at: number) => {
+      if (start !== null && lastFrame !== null) {
+        out.frameGap = Math.max(out.frameGap, Math.round(at - lastFrame));
+      }
+      lastFrame = at;
+      if (reading) {
+        requestAnimationFrame(tick);
+      }
+    };
+    const runs = (el: Element) =>
+      el.getAnimations().map((run) => {
+        const named = run as Animation & {
+          animationName?: string;
+          transitionProperty?: string;
+        };
+        const timing = run.effect?.getComputedTiming();
+        return `${run.constructor.name} ${named.transitionProperty ?? named.animationName ?? ""} ${Math.round(Number(timing?.duration ?? 0))}`;
+      });
+    const look = (el: Element | null): Look | null => {
+      if (!el?.isConnected) {
+        return null;
+      }
+      const style = getComputedStyle(el);
+      return {
+        opacity: Number(style.opacity),
+        filter: style.filter,
+        translate: style.translate,
+        scale: style.scale,
+        transform: style.transform,
+      };
+    };
+    /** The flip's new carrier, once there is one: the two glyphs taken as the swap's. */
+    const begin = (now: number) => {
+      const fresh = [...document.querySelectorAll(selector)].find(
+        (el) => !before.has(el)
+      );
+      if (!fresh) {
+        return;
+      }
+      start = now;
+      out.found = Math.round(now - began);
+      incoming = fresh;
+      outgoing = [...before].find((el) => el.isConnected) ?? null;
+      out.first = {
+        incoming: runs(fresh),
+        outgoing: outgoing ? runs(outgoing) : [],
+      };
+    };
+    const frame = () => {
+      const now = performance.now();
+      if (start === null) {
+        begin(now);
+      }
+      if (start !== null) {
+        out.frames.push({
+          t: Math.round(now - start),
+          incoming: look(incoming),
+          outgoing: look(outgoing),
+        });
+      }
+      const done = start === null ? now - began > waitMs : now - start > forMs;
+      if (done) {
+        reading = false;
+        resolve(out);
+      } else {
+        setTimeout(frame, 16);
+      }
+    };
+    requestAnimationFrame(tick);
+    frame();
+  });
+}
+
+/** A glyph's opacity and blur, or `gone`. */
+const glyphWords = (l: Look | null) =>
+  l ? `${l.opacity.toFixed(2)}/${blurOf(l.filter).toFixed(2)}px` : "gone";
+
+/** The swap in words: the going glyph's and the coming one's opacity and blur at a few points. */
+const swapWords = (w: SwapWatched, points: number[]) =>
+  points
+    .map((ms) => {
+      const f = w.frames.find((one) => one.t >= ms) ?? w.frames.at(-1);
+      return f
+        ? `${f.t}ms out ${glyphWords(f.outgoing)} in ${glyphWords(f.incoming)}`
+        : `${ms}ms -`;
+    })
+    .join("; ");
+
+/**
+ * Whether the swap ran both ways out of and into the blur: the coming glyph
+ * read blurred part way (strictly between 0 and `most`) and stands clear and
+ * opaque at the end; the going one read blurred part way as it faded and is
+ * gone at the end.
+ */
+const swapRan = (w: SwapWatched, most: number) => {
+  const partWay = (l: Look | null) => {
+    const r = l ? blurOf(l.filter) : 0;
+    return r > 0.05 && r < most - 0.05;
+  };
+  const last = w.frames.at(-1);
+  return (
+    w.frames.some((f) => partWay(f.incoming)) &&
+    w.frames.some(
+      (f) =>
+        partWay(f.outgoing) &&
+        (f.outgoing?.opacity ?? 1) > 0.02 &&
+        (f.outgoing?.opacity ?? 1) < 0.98
+    ) &&
+    last?.incoming !== null &&
+    blurOf(last?.incoming?.filter ?? "blur(1px)") === 0 &&
+    (last?.incoming?.opacity ?? 0) > 0.99 &&
+    last?.outgoing === null
+  );
+};
+
+async function sendStop(on: On, stood: Stood): Promise<void> {
+  const { fleet, base } = stood;
+  const id = await fleet.spawn("claude", "Probe send stop", fleet.workdir);
+  const page = await sessionPage(on, base, id);
+  const blur = await page.run(() =>
+    Number.parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue("--space-1")
+    )
+  );
+  // Send → stop as the turn starts; stop → send as it ends (SLOW's turn
+  // runs some 24s).
+  const toStop = await answering(page, async () => {
+    const watched = page.run(watchSwap, [SWAP, 60_000, 700], 90_000);
+    await fleet.send(id, `${SLOW} the long turn`);
+    return watched;
+  });
+  const toSend = await answering(page, () =>
+    page.run(watchSwap, [SWAP, 90_000, 700], 120_000)
+  );
+  await keep(on, "send-stop", {
+    blur,
+    toStop: { ...toStop, result: undefined, swap: toStop.result },
+    toSend: { ...toSend, result: undefined, swap: toSend.result },
+  });
+  for (const [what, run] of [
+    ["send → stop as the turn starts", toStop],
+    ["stop → send as the turn ends", toSend],
+  ] as const) {
+    const w = run.result;
+    console.log(
+      `  ${on.tag} send-stop, ${what}: found ${w.found}ms in, runs out ${JSON.stringify(w.first.outgoing)} in ${JSON.stringify(w.first.incoming)}, longest gap between frames ${w.frameGap}ms\n    ${swapWords(w, POINTS)}`
+    );
+    on.kit.check(
+      `${on.tag} send-stop, ${what}: the page answers a script within a second`,
+      run.longest < 1000,
+      `longest round trip ${Math.round(run.longest)}ms over ${run.asked} asks`
+    );
+    on.kit.check(
+      `${on.tag} send-stop, ${what}: the going glyph fades into the ${blur}px blur and the coming one comes up out of it (each read part way), the new one clear at the end`,
+      swapRan(w, blur),
+      `runs out ${JSON.stringify(w.first.outgoing)} in ${JSON.stringify(w.first.incoming)}; ${swapWords(w, POINTS)}`
+    );
+  }
+}
+
 // ---- entrances: popover, menu, / menu ---------------------------------------
 
 async function entrance(
@@ -1023,18 +1281,43 @@ async function entrance(
   await page.run(() => {
     const heard: string[] = [];
     (window as unknown as { __heard: string[] }).__heard = heard;
-    for (const type of ["pointerdown", "pointerup", "click", "touchend"]) {
+    const began = performance.now();
+    for (const type of [
+      "pointerdown",
+      "pointerup",
+      "touchstart",
+      "touchend",
+      "mouseover",
+      "mousedown",
+      "mouseup",
+      "click",
+    ]) {
       document.addEventListener(
         type,
         (event) => {
           const at = event.target instanceof Element ? event.target : null;
           heard.push(
-            `${type} ${(event as PointerEvent).pointerType ?? ""} on ${at?.tagName.toLowerCase()}[${at?.getAttribute("data-open") ?? at?.getAttribute("data-slot") ?? ""}]`
+            `${Math.round(performance.now() - began)}ms ${type} ${(event as PointerEvent).pointerType ?? ""} on ${at?.tagName.toLowerCase()}[${at?.getAttribute("data-open") ?? at?.getAttribute("data-slot") ?? ""}]`
           );
         },
         true
       );
     }
+    // What the page changed under the tap, in order with its events: iOS
+    // Safari sends a tap's click only when its hover changed nothing it
+    // takes for new content.
+    new MutationObserver((records) => {
+      for (const record of records.slice(0, 20)) {
+        const at = record.target instanceof Element ? record.target : null;
+        heard.push(
+          `${Math.round(performance.now() - began)}ms ${record.type} ${record.attributeName ?? `+${record.addedNodes.length} -${record.removedNodes.length}`} on ${at?.tagName.toLowerCase() ?? record.target.nodeName}[${at?.getAttribute("data-slot") ?? at?.id ?? ""}]`
+        );
+      }
+    }).observe(document, {
+      attributes: true,
+      childList: true,
+      subtree: true,
+    });
   });
   const watched = page.run(watch, [surface, 8000, 700], 20_000);
   await act();
@@ -1413,6 +1696,9 @@ async function onSimulator(
     }
     if (run.has("queued-edit")) {
       await queuedEdit(on, await stood());
+    }
+    if (run.has("send-stop")) {
+      await sendStop(on, await stood());
     }
     if (run.has("entrances")) {
       await entrances(on, await stood());
