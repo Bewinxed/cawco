@@ -274,9 +274,16 @@ const serving = async (
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     try {
+      // The session's preview, on its own origin (hub server.ts `frameAddress`).
       // biome-ignore lint/performance/noAwaitInLoops: polls until it answers or the bound passes
+      const listed = await fetch(
+        `${fleet.base}/api/instances/${instanceId}/artifacts`
+      );
+      const preview = (
+        (await listed.json()) as { id: string; kind: string }[]
+      ).find((one) => one.kind === "preview");
       const address = await fetch(
-        `${fleet.base}/api/instances/${instanceId}/preview-address`,
+        `${fleet.base}/api/artifacts/${preview?.id}/preview-address`,
         { method: "POST" }
       );
       const { port } = (await address.json()) as { port?: number };

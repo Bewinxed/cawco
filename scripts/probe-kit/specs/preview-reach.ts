@@ -592,15 +592,17 @@ const BACKOFF_GROWTH = 1.5;
  * probes, the probes back off, and the agent back, the page is shown.
  */
 const serverGone = async (leg: {
+  /** The port preview the pane shows, served on its own origin. */
+  artifact: string;
   base: string;
   engine: Engine;
   fleet: Awaited<ReturnType<Kit["fleet"]>>;
   kit: Kit;
   ported: string;
 }) => {
-  const { base, engine, fleet, kit, ported } = leg;
+  const { artifact, base, engine, fleet, kit, ported } = leg;
   const { port } = await fleet.api<{ port: number }>(
-    `/api/instances/${ported}/preview-address`,
+    `/api/artifacts/${artifact}/preview-address`,
     {}
   );
   const host = `${new URL(base).hostname}:${port}`;
@@ -757,16 +759,19 @@ const run = async (kit: Kit) => {
       }),
   });
   const ported = await fleet.spawn("claude", "Agent away", fleet.repo);
-  await fleet.api(`/api/instances/${ported}/artifacts`, {
-    kind: "preview",
-    does: "try",
-    ask: "Try this page and say whether it works",
-    name: "agent-away",
-    port: app.port,
-  });
+  const away = await fleet.api<{ id: string }>(
+    `/api/instances/${ported}/artifacts`,
+    {
+      kind: "preview",
+      does: "try",
+      ask: "Try this page and say whether it works",
+      name: "agent-away",
+      port: app.port,
+    }
+  );
   for (const engine of GONE_ENGINES) {
     // biome-ignore lint/performance/noAwaitInLoops: one engine at a time, the agent stopped and back for each
-    await serverGone({ base, engine, fleet, kit, ported });
+    await serverGone({ artifact: away.id, base, engine, fleet, kit, ported });
   }
 
   // 3. The agent frozen: still the machine the hub knows, its listener

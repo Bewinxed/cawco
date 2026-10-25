@@ -4166,11 +4166,14 @@ export const shownPreviews = sqliteTable("shown_previews", {
 /**
  * Each preview origin's port (preview.ts), and the port its host name says
  * under a `{port}` host pattern: kept across restarts so what it serves
- * keeps its storage. An origin is a session's (its panel's previews and
- * canvases, taken when it first shows one, given back when it ends) or a
- * project's (its pages, Projects spec §5.8: one origin for the project's
- * life, whichever session wrote a page or whether it still stands); exactly
- * one owns each row, and goes with it.
+ * keeps its storage. An origin is a session's (its pages and canvases by
+ * id, taken when it first shows one, given back when it ends), a project's
+ * (its pages, Projects spec §5.8: one origin for the project's life,
+ * whichever session wrote a page or whether it still stands) or a machine
+ * artifact's (a dev server's or a folder's preview, a sheet: its own origin
+ * for the artifact's life, which its panel, its own tab and every decision
+ * card load, so no two artifacts ever share a port's storage or cache);
+ * exactly one owns each row, and goes with it.
  */
 export const previewPorts = sqliteTable(
   "preview_ports",
@@ -4182,11 +4185,14 @@ export const previewPorts = sqliteTable(
     projectId: text("project_id")
       .unique()
       .references(() => projects.id, { onDelete: "cascade" }),
+    artifactId: text("artifact_id")
+      .unique()
+      .references(() => artifacts.id, { onDelete: "cascade" }),
   },
   (table) => [
     check(
       "preview_ports_one_owner",
-      sql`(${table.instanceId} is null) <> (${table.projectId} is null)`
+      sql`(${table.instanceId} is not null) + (${table.projectId} is not null) + (${table.artifactId} is not null) = 1`
     ),
   ]
 );

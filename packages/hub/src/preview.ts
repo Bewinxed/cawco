@@ -67,25 +67,30 @@ import {
 } from "./config";
 import type { ArtifactRow } from "./db/artifacts";
 import type { PreviewPassesDb } from "./db/preview-passes";
-import type { PreviewsDb } from "./db/previews";
+import {
+  artifactOfOrigin,
+  artifactOrigin,
+  type PreviewsDb,
+} from "./db/previews";
 import { DECISION_ASSETS } from "./decision-program";
 import { enter, lockedResponse, type PassLock, passOf } from "./preview-access";
 import { FolderRefusal, folderPath } from "./project-folder";
 import { asReached, type TailnetHttpsService } from "./tailnet-https";
 
 /**
- * A session's preview: the artifact its panel shows, and the machine and
- * address that serve it. Every preview is an origin of its own, never the
- * dashboard's: the session's listener on a port of the hub's range, and in
- * host mode the session's own host name on the first port too. So a
- * previewed app keeps its own storage and cookies, routes by its own paths
- * at the root, and two sessions' previews open at once never cross.
+ * What an origin serves: a session's panel's artifact (the operator's
+ * intent, kept in the database, `shown_previews`, so it outlives the hub
+ * too; only a close, or the session ending, ends it), or a machine
+ * artifact's own ({@link embedTargets}), with the machine and address that
+ * serve it. Every preview is an origin of its own, never the dashboard's: a
+ * port of the hub's range, and in host mode a host name on the first port
+ * too. So a previewed app keeps its own storage and cookies, routes by its
+ * own paths at the root, and two previews open at once never cross.
  *
- * A target is the operator's intent, kept in the database (`shown_previews`)
- * so it outlives the hub too, and it outlives the machine's listener: while
- * none serves it (its machine away or restarted, or its start failed)
- * `upstream` is absent, and the machine's register or the preview's next
- * request starts it again. Only a close, or the session ending, ends it.
+ * A machine artifact's target outlives its machine's listener: while none
+ * serves it (its machine away or restarted, or its start failed) `upstream`
+ * is absent, and the machine's register or the preview's next request
+ * starts it again.
  */
 export interface PreviewTarget {
   /** The artifact the panel shows (Projects spec §5.10). */
@@ -99,7 +104,11 @@ export interface PreviewTarget {
 
 /**
  * What each session's panel shows, by instance id: every key is a session's,
- * so the board, the panel's frames and the session's own port read it as one.
+ * so the board and the panel's frames read it as one. A page the hub
+ * serves stands at the session's origin's root too (the apps load it
+ * there); a machine's preview is served on its artifact's own origin alone
+ * ({@link embedTargets}), never the session's, so whatever the panel shows
+ * next, a frame of it keeps its own content.
  */
 export const previewTargets = new Map<string, PreviewTarget>();
 
@@ -114,20 +123,19 @@ export const shownArtifact = (
 });
 
 /**
- * A decision page's Preview of a session's dev-server preview or sheet: its
- * target in {@link embedTargets} and its listener on an origin of its own
- * are keyed by the embedded artifact ({@link embedKey}), apart from every
- * session's. A dev server and a stage serve from their root, so the page
- * cannot show one under a path of its own origin; the machine keys its
- * listener by the same key. No session owns the key: it has no row, no
- * session port and no panel, so it is never in {@link previewTargets}.
+ * A machine artifact's own origin (a dev server's or a folder's preview, a
+ * sheet), which its session's panel, its own tab and every decision page's
+ * Preview of it load: its target here and its listener on a port of its own
+ * are keyed by the artifact ({@link embedKey}), apart from every session's,
+ * and its port is kept for the artifact's life (db previews.ts
+ * `artifactOrigin`). A dev server and a stage serve from their root, so no
+ * other origin can show one under a path of its own; the machine keys its
+ * listener by the same key. It is never in {@link previewTargets}.
  */
 export const embedTargets = new Map<string, PreviewTarget>();
 
-const EMBED_PREFIX = "embed-";
-export const embedKey = (artifactId: string): string =>
-  `${EMBED_PREFIX}${artifactId}`;
-const isEmbed = (key: string): boolean => key.startsWith(EMBED_PREFIX);
+export const embedKey = artifactOrigin;
+const isEmbed = (key: string): boolean => artifactOfOrigin(key) !== null;
 
 /**
  * The map that holds `key`'s target: an embed's, or a session's. Only what
@@ -574,10 +582,9 @@ async function pingSession(
   deps: PreviewListenerDeps
 ): Promise<Response> {
   const target = targetsOf(instanceId).get(instanceId);
-  if (
-    !target ||
-    ("page" in target.source && target.artifact.kind !== "component")
-  ) {
+  // A session's or a project's origin serves only what the hub holds: a
+  // machine's preview answers on its artifact's own origin.
+  if (!(target && isEmbed(instanceId)) || "page" in target.source) {
     return ping();
   }
   const reached = await deps.reach(instanceId);
@@ -850,6 +857,16 @@ async function serveSession(
       deps,
       url
     );
+  }
+  // A machine's preview is served on its artifact's own origin alone
+  // (embedKey): the session's panel names that origin, never this one.
+  if (!isEmbed(instanceId)) {
+    previewFailed(
+      HOP,
+      instanceId,
+      "its machine's preview is on its own origin"
+    );
+    return downResponse("closed", 404);
   }
   // No listener serves it now (its machine restarted, or the last start
   // failed): started here, or the hop that failed says why.
@@ -1457,11 +1474,12 @@ export function createPreviewListeners(
 
   /** Origin `key`'s listener stops and its port is free again. */
   const release = (key: string): void => {
-    const listener = sessions.get(key);
+    const listener = sessions.get(key) ?? embeds.get(key)?.listener;
     if (listener) {
       detach(listener.stop(), "preview listener stop");
     }
     sessions.delete(key);
+    embeds.delete(key);
     db.dropPort(key);
   };
 
@@ -1536,41 +1554,39 @@ export function createPreviewListeners(
       { cause: thrown }
     );
 
-  /** An embed's listener on the lowest free preview port no session or other embed holds; refused when every port is taken. */
+  /**
+   * A machine artifact's listener on the port it keeps ({@link portFor}),
+   * so its origin is the same one across the hub's restarts and no other
+   * artifact's ever: the port it keeps while that still opens, else the
+   * lowest of the range no other origin holds, kept from then on.
+   */
   const openEmbed = (
     key: string,
     owner: string
   ): { ancestors: Set<string>; listener: Listener; owner: string } => {
-    const taken = new Set([
-      ...db.ports().map((row) => row.port),
-      ...[...embeds.values()].map((embed) => embed.listener.port),
-    ]);
-    for (
-      let port = PREVIEW_PORTS.first;
-      port <= PREVIEW_PORTS.last;
-      port += 1
-    ) {
-      if (taken.has(port) || barred(port) || !unheld(port)) {
-        continue;
+    portFor(key, (port) => {
+      if (!unheld(port)) {
+        return false;
       }
       try {
-        const opened = {
+        embeds.set(key, {
           owner,
           ancestors: new Set<string>(),
           listener: listen(port, () => key),
-        };
-        embeds.set(key, opened);
-        return opened;
+        });
+        return true;
       } catch (thrown) {
-        if ((thrown as { code?: unknown }).code !== "EADDRINUSE") {
-          throw portRefused(port, thrown);
+        if ((thrown as { code?: unknown }).code === "EADDRINUSE") {
+          return false;
         }
+        throw portRefused(port, thrown);
       }
+    });
+    const opened = embeds.get(key);
+    if (!opened) {
+      throw everyPortTaken();
     }
-    throw new PreviewRefusal(
-      503,
-      `Every preview port (${PREVIEW_PORTS_TEXT}) is taken: end a session that has a preview or a canvas, then show this page again.`
-    );
+    return opened;
   };
 
   /**
@@ -1602,10 +1618,14 @@ export function createPreviewListeners(
     return null;
   };
 
-  /** Each session that keeps a port and has no listener yet gets one on it (`bind`). */
+  /**
+   * Each session or project that keeps a port and has no listener yet gets
+   * one on it (`bind`). A machine artifact's opens as a frame names it
+   * ({@link openEmbed}): only its page knows who may frame it.
+   */
   const bindKept = (): void => {
     for (const { key } of db.ports()) {
-      if (!sessions.has(key)) {
+      if (!(sessions.has(key) || isEmbed(key))) {
         try {
           bind(key);
         } catch (thrown) {
@@ -1707,7 +1727,7 @@ export function createPreviewListeners(
       return { port, ...onTailnet };
     },
 
-    /** Session `owner`'s embeds stop with it: their keys, so their machines' listeners stop too. */
+    /** Session `owner`'s artifacts' origins stop with it, each keeping its port: their keys, so their machines' listeners stop too. */
     releaseEmbeds(owner: string): string[] {
       const gone = [...embeds].filter(([, embed]) => embed.owner === owner);
       for (const [key, embed] of gone) {

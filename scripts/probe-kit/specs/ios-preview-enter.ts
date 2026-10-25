@@ -386,8 +386,9 @@ async function run(kit: Kit): Promise<void> {
       `${fleet.base}/api/instances/${session}/artifacts/${artifact}/show`,
       { method: "POST" }
     );
+    // The preview's own origin (hub server.ts `frameAddress`).
     const address = (await (
-      await fetch(`${fleet.base}/api/instances/${session}/preview-address`, {
+      await fetch(`${fleet.base}/api/artifacts/${artifact}/preview-address`, {
         method: "POST",
       })
     ).json()) as { origin?: string; port?: number };

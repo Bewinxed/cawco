@@ -1,7 +1,7 @@
 /**
  * The sockets artifacts' own tabs follow their sessions on
- * (`ARTIFACT_SESSION_PATH`): one session each, its panel, its row's name and
- * place, whether it is working, and the fleet's machines. The owner: "an
+ * (`ARTIFACT_SESSION_PATH`): one session each, the tab's own artifact as
+ * the session's panel would show it, its row's name and place, whether it is working, and the fleet's machines. The owner: "an
  * artifact shouldn't load anything that is not needed for the
  * preview/artifact, no unnecessary connections etc", so such a tab opens this
  * and its doc's sync socket, never the dashboard's socket and the board it
@@ -45,7 +45,8 @@ interface Follower {
 }
 
 export const createArtifactSessions = (
-  frameOf: (instanceId: string) => ArtifactSessionFrame,
+  /** The frame of `artifactId`'s own tab, on session `instanceId`. */
+  frameOf: (instanceId: string, artifactId: string) => ArtifactSessionFrame,
   /** Whether `artifactId` is still `instanceId`'s. */
   holds: (instanceId: string, artifactId: string) => boolean
 ): ArtifactSessionsShape => {
@@ -69,11 +70,12 @@ export const createArtifactSessions = (
         follower.socket.close(ARTIFACT_SESSION_REFUSED.gone, ARTIFACT_GONE);
         continue;
       }
-      let read = frames.get(follower.instanceId);
+      const key = `${follower.instanceId}/${follower.artifactId}`;
+      let read = frames.get(key);
       if (!read) {
-        const frame = frameOf(follower.instanceId);
+        const frame = frameOf(follower.instanceId, follower.artifactId);
         read = { frame, text: JSON.stringify(frame) };
-        frames.set(follower.instanceId, read);
+        frames.set(key, read);
       }
       if (read.text !== follower.last) {
         follower.last = read.text;

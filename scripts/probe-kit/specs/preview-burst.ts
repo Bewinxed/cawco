@@ -787,6 +787,7 @@ const asks = new Map<string, { input: object; name: string }>();
 const issued = new Set<string>();
 const answered = new Map<string, string>();
 const COMMAND = /PROBE-CALL:(\w+)/g;
+const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
 
 /** Leg 5's mock model: the call a `PROBE-CALL:<n>` names, then "done"; every other turn a word. */
 const respond = (request: Seen): Reply => {
@@ -880,8 +881,10 @@ async function realJoin(kit: Kit): Promise<void> {
     Boolean,
     300_000
   ).catch(() => "no answer")) as string;
+  // The sheet's own origin (hub server.ts `frameAddress`).
+  const id = ANSWERED_ID.exec(created)?.[1] ?? "";
   const { port } = (await (
-    await fetch(`${fleet.base}/api/instances/${session}/preview-address`, {
+    await fetch(`${fleet.base}/api/artifacts/${id}/preview-address`, {
       method: "POST",
     })
   ).json()) as { port?: number };

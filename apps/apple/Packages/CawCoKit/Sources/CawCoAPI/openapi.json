@@ -19440,36 +19440,6 @@
                 }
               }
             }
-          },
-          "500": {
-            "description": "deleteApiInstancesByIdPreview 500",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "deleteApiInstancesByIdPreview 503",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "504": {
-            "description": "deleteApiInstancesByIdPreview 504",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
           }
         }
       }
@@ -32188,6 +32158,9 @@
             "$ref": "#/components/schemas/HubAuthFrame"
           },
           {
+            "$ref": "#/components/schemas/PreviewFrame"
+          },
+          {
             "$ref": "#/components/schemas/StageFrame"
           },
           {
@@ -32210,9 +32183,6 @@
           },
           {
             "$ref": "#/components/schemas/FleetConvergeFrame"
-          },
-          {
-            "$ref": "#/components/schemas/PreviewFrame"
           },
           {
             "$ref": "#/components/schemas/MessageFrame"
@@ -32360,6 +32330,7 @@
           "propertyName": "kind",
           "mapping": {
             "hub_auth": "#/components/schemas/HubAuthFrame",
+            "preview": "#/components/schemas/PreviewFrame",
             "stage": "#/components/schemas/StageFrame",
             "browsers": "#/components/schemas/BrowserFrame",
             "browser_handback": "#/components/schemas/BrowserHandedBackFrame",
@@ -32368,7 +32339,6 @@
             "fleet_mcp": "#/components/schemas/FleetMcpFrame",
             "fleet_report": "#/components/schemas/FleetReportFrame",
             "fleet_converge": "#/components/schemas/FleetConvergeFrame",
-            "preview": "#/components/schemas/PreviewFrame",
             "frame": "#/components/schemas/MessageFrame",
             "send": "#/components/schemas/SendFrame",
             "rejected": "#/components/schemas/RejectedFrame",
@@ -39002,24 +38972,6 @@
           "text": {
             "type": "string"
           },
-          "page": {
-            "type": "object",
-            "properties": {
-              "x": {
-                "type": "number"
-              },
-              "y": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "x",
-              "y"
-            ]
-          },
-          "url": {
-            "type": "string"
-          },
           "source": {
             "type": "object",
             "properties": {
@@ -39067,6 +39019,24 @@
               "line",
               "of"
             ]
+          },
+          "page": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ]
+          },
+          "url": {
+            "type": "string"
           },
           "selector": {
             "type": "string"

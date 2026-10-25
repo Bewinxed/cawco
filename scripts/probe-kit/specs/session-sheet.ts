@@ -1919,9 +1919,9 @@ const run = async (kit: Kit) => {
         entry.includes(MISSING_TAIL),
       short(missing)
     );
-    // 5c. The canvas open through the session's preview, its section failed; the file written, it draws there by itself.
+    // 5c. The canvas open on its own origin (hub server.ts `frameAddress`), its section failed; the file written, it draws there by itself.
     const { port } = (await (
-      await fetch(`${fleet.base}/api/instances/${session}/preview-address`, {
+      await fetch(`${fleet.base}/api/artifacts/${laterId}/preview-address`, {
         method: "POST",
       })
     ).json()) as { port?: number };
@@ -2035,9 +2035,9 @@ const run = async (kit: Kit) => {
       short(read)
     );
 
-    // 5. The sheet through the session's preview, and the session's edit reaching it.
+    // 5. The sheet on its own origin (hub server.ts `frameAddress`), and the session's edit reaching it.
     const { port } = (await (
-      await fetch(`${fleet.base}/api/instances/${session}/preview-address`, {
+      await fetch(`${fleet.base}/api/artifacts/${sheet}/preview-address`, {
         method: "POST",
       })
     ).json()) as { port?: number };

@@ -412,12 +412,14 @@
     writeJson(keepKey, { revision: preview.revision, at: place });
   }
   /**
-   * Where a show starts: a project's page at its own place on its project's
-   * origin (core `projectPagePlace`, the frame naming the project), else the
-   * page the agent named (`path`), else the root.
+   * Where a show starts: a page at its own place on the origin that serves
+   * it (core `projectPagePlace`: its project's, else its session's), which
+   * holds that page whatever the session's panel shows, so an artifact's
+   * own tab never loads another; else, on a machine artifact's own origin,
+   * the page the agent named (`path`), else the root.
    */
   const startAt = $derived.by(() => {
-    if (preview?.project) {
+    if (preview?.project || preview?.artifact.kind === "page") {
       return projectPagePlace(preview.artifact.id);
     }
     return (source && "path" in source ? source.path : undefined) ?? "/";
