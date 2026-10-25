@@ -5,8 +5,9 @@
   well's width where it says none) and as tall as its content up to the
   media cap; a taller one scrolls inside its frame, the house edge fade
   over its head and foot while more is past them, so nothing is cut off
-  without a way to see it. A dev server's preview or a sheet stands on an
-  origin of its own the hub opened for it (hub server.ts `embedAt`), named
+  without a way to see it. A dev server's or a folder's preview or a sheet
+  stands on an origin of its own the hub opened for it (hub server.ts
+  `embedAt`), open in the panel or not, named
   in the page's media, at the shape of a screen as wide as its `width`
   says. A component canvas draws the stories its `stories` names (every one
   when it names none) as the component alone, each at its own size, and

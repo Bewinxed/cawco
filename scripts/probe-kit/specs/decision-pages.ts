@@ -144,9 +144,19 @@
  *     said at boot, 11 of these twelve began before the one before them
  *     drew, and caw-panel's 33 had ten say "didn't load").
  *
+ * (s) A Preview of a folder's preview its own session made draws the
+ *     folder live in its card, in a fresh Chromium and a fresh WebKit, the
+ *     preview no longer open in the panel: the card's frame holds the
+ *     folder's own page (its `#folder-mark` read inside it), never "can't
+ *     be opened here now", and no console error.
+ *
  *   DECISION_PAGES=embeds bun scripts/probe-kit/run.ts decision-pages
  *
  *     runs (r) alone, with no fleet.
+ *
+ *   DECISION_PAGES=folder bun scripts/probe-kit/run.ts decision-pages
+ *
+ *     runs (s) alone.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one step at a time, as a person takes them
 import { createHash } from "node:crypto";
@@ -175,6 +185,7 @@ import {
 import {
   type Kit,
   type KitFleet,
+  kitsOwnMessage,
   open,
   pressAt,
   pressIn,
@@ -5282,6 +5293,183 @@ async function waitAndViewChecks(
   );
 }
 
+/** (s)'s folder: one page, its known element the leg reads inside the card's frame. */
+const FOLDER_MARK = "The folder's own page";
+const FOLDER_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Folder</title></head>
+<body><h1 id="folder-mark">${FOLDER_MARK}</h1></body></html>`;
+
+/** (s)'s page: one card whose recommended option shows the folder's preview. */
+const folderProgram = (
+  folder: string
+) => `root = Decisions("Pick the look", [look])
+look = Decision("look", "Which look ships?", [plain, bold], "The folder shows the plain one.")
+plain = Option("plain", "Plain", "Quiet type on paper.", true, [shown], "Reads flat beside the dashboard.")
+bold = Option("bold", "Bold", "Loud type on colour.", false, [], "Tires the eye over a day.")
+shown = Preview("${folder}", "The folder as it stands")`;
+
+/** The words of `#folder-mark` inside the loaded frame `selector` names on `page`; "" until it is there. */
+const folderMarkIn = async (page: Frame, selector: string): Promise<string> => {
+  try {
+    const handle = await page
+      .locator(selector)
+      .elementHandle({ timeout: 1000 });
+    const inner = await handle?.contentFrame();
+    return (
+      (await inner?.locator("#folder-mark").textContent({ timeout: 1000 })) ??
+      ""
+    );
+  } catch {
+    return "";
+  }
+};
+
+/**
+ * (s) A Preview of a folder's preview (`artifact_create({kind: "preview",
+ * dir})`) made by the page's own session draws that folder live in its
+ * card, the preview no longer open in the panel (the page took its place),
+ * in a fresh Chromium and a fresh WebKit: the card's frame loads the
+ * folder's own page, its `#folder-mark` read inside it, no "can't be opened
+ * here now", and no console error. On 2026-10-25 the owner's page
+ * `waiting-on-you` said "The preview this card shows can't be opened here
+ * now." over both its folder previews: the hub gave an embed only to a
+ * preview of a port (server.ts `embedAt`).
+ */
+async function folderLeg(
+  on: Pick<On, "base" | "desk" | "fleet" | "kit" | "writer">
+): Promise<void> {
+  const { base, desk, fleet, kit, writer } = on;
+  const make = <T>(body: object) =>
+    fleet.api<T>(`/api/instances/${writer}/artifacts`, body);
+  const dir = join(fleet.sandbox, "folder-look");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "index.html"), FOLDER_HTML);
+  const folder = await make<{ id: string }>({
+    kind: "preview",
+    does: "try",
+    ask: "Try the plain look",
+    name: "folder-look",
+    dir,
+    machine: MACHINE,
+  });
+  const program = folderProgram(folder.id);
+  let refusal = "";
+  try {
+    checkProgram(program);
+  } catch (error) {
+    refusal = (error as Error).message;
+  }
+  kit.check(
+    "(s) the hub's check keeps the page of a folder's Preview",
+    refusal === "",
+    refusal
+  );
+  await make<{ id: string }>({
+    kind: "page",
+    does: "pick",
+    ask: "Pick the look",
+    name: "folder-look-pick",
+    program,
+  });
+  // The page takes the panel's front: the folder's preview is open there no more.
+  const front = await until(
+    "(s) the page at the panel's front",
+    async () => countIn(await frameAt(desk, FRAME), "#decision-look"),
+    (count) => count === 1,
+    60_000
+  ).catch(() => 0);
+  kit.check(
+    "(s) the page stands at the panel's front, the folder's preview no longer open there",
+    front === 1,
+    `cards: ${front}`
+  );
+  for (const engine of ["chromium", "webkit"] as const) {
+    const leg = `(s) ${engine}, a fresh browser`;
+    const shown = await kit.page("desk", { engine, theme: "light" });
+    const errors: string[] = [];
+    shown.on("pageerror", (error) => errors.push(String(error)));
+    shown.on("console", (message) => {
+      if (message.type() === "error" && !kitsOwnMessage(message.text())) {
+        errors.push(message.text());
+      }
+    });
+    await open(shown, `${base}/session/${writer}`, '[data-slot="pane"]');
+    const page = await until(
+      `${leg}: the page in the panel`,
+      async () => {
+        const frame = await frameAt(shown, FRAME);
+        return (await countIn(frame, "#decision-look")) === 1 ? frame : null;
+      },
+      Boolean,
+      60_000
+    ).catch(() => null);
+    if (!page) {
+      kit.check(`${leg}: the page draws in the panel`, false, "no card");
+      await shown.close();
+      continue;
+    }
+    const embed = `#decision-look iframe[data-cawco-artifact="${folder.id}"]`;
+    const mark = await until(
+      `${leg}: the folder's page in the card`,
+      () => folderMarkIn(page, `${embed}[data-drawn]`),
+      (words) => words === FOLDER_MARK,
+      30_000
+    ).catch(() => "");
+    // Read once its reveal (an opacity transition, `--dur-fade`) has ended.
+    const card = await page.evaluate(async (selector) => {
+      const frame = document.querySelector<HTMLIFrameElement>(selector);
+      await Promise.all(
+        (frame?.getAnimations() ?? []).map((reveal) =>
+          reveal.finished.catch(() => undefined)
+        )
+      );
+      const box = frame?.getBoundingClientRect();
+      return {
+        src: frame?.src ?? "",
+        box: box
+          ? { w: Math.round(box.width), h: Math.round(box.height) }
+          : null,
+        opacity: frame ? getComputedStyle(frame).opacity : "",
+        gone: [
+          ...document.querySelectorAll(
+            "#decision-look [data-slot=media-gone], #decision-look [data-slot=embed-fault]"
+          ),
+        ].map((one) => one.textContent?.trim() ?? ""),
+      };
+    }, embed);
+    kit.check(
+      `${leg}: the card's Preview draws the folder live, its #folder-mark read inside its frame (“${mark}”), on an origin of its own, at a box with a size`,
+      mark === FOLDER_MARK &&
+        card.gone.length === 0 &&
+        !!card.box &&
+        card.box.w > 0 &&
+        card.box.h > 0 &&
+        card.opacity === "1" &&
+        new URL(card.src || "http://x").origin !== new URL(page.url()).origin,
+      JSON.stringify({
+        card,
+        frame: page.url(),
+        hub:
+          mark === FOLDER_MARK
+            ? ""
+            : (await fleet.logs("hub"))
+                .split("\n")
+                .filter(
+                  (line) =>
+                    line.includes("embed-") || line.includes("[preview]")
+                )
+                .slice(-6)
+                .join(" | "),
+      })
+    );
+    kit.check(
+      `${leg}: no "can't be opened here now" and no console error`,
+      card.gone.length === 0 && errors.length === 0,
+      JSON.stringify({ gone: card.gone, errors: errors.slice(0, 6) })
+    );
+    await shown.close();
+  }
+}
+
 /** (r): a dozen Previews of one heavy canvas on one page, each drawn whole, in Chromium and WebKit. */
 async function dozenLeg(kit: Kit): Promise<void> {
   let refusal = "";
@@ -5329,6 +5517,11 @@ const run = async (kit: Kit) => {
   // `DECISION_PAGES=embeds`: (r) alone, which stands no fleet.
   if (process.env.DECISION_PAGES === "embeds") {
     await dozenLeg(kit);
+    return;
+  }
+  // `DECISION_PAGES=folder`: (s) alone, on its own fleet.
+  if (process.env.DECISION_PAGES === "folder") {
+    await folderLeg({ ...(await standUp(kit)), kit });
     return;
   }
   const on = await publish(kit, await standUp(kit));
@@ -5395,6 +5588,7 @@ const run = async (kit: Kit) => {
   await burstLeg(on);
   await treeMediaLeg(on);
   await panelOfTreeLeg(on);
+  await folderLeg(on);
   await dozenLeg(kit);
   kit.check(
     "the pages said no error",

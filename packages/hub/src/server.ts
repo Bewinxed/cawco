@@ -14183,10 +14183,13 @@ export const createServer = (
   };
 
   /**
-   * A decision page's Preview of a dev-server preview or a sheet of its
-   * session's: its target kept under its own key ({@link embedKey}), its
-   * origin's listener started, and its address as the page reached it, the
-   * source's start path on it. On the session's own port: the same name, the
+   * A decision page's Preview of a dev-server preview, a folder's preview or
+   * a sheet of its session's: whatever machine serves it (a port or a
+   * folder), whether or not a panel shows it, its target kept under its own
+   * key ({@link embedKey}), its origin's listener started, and its address
+   * as the page reached it, the source's start path on it. A preview no
+   * machine serves (a browser's, `{ page }`) has no embed. On the session's
+   * own port: the same name, the
    * embed's port. On a host-mode name: the embed's name, which the browser's
    * pass covers as it covers the page's (preview-access.ts), so no ticket
    * is ever served in a page. Nothing when the hub no longer holds it or
@@ -14200,7 +14203,7 @@ export const createServer = (
     const row = db.artifacts.get(artifactId);
     // The origin that serves the page: its embeds are framed by it.
     const owner = originKeyOf(pageId);
-    if (!(row?.machineId && owner && "port" in row.source)) {
+    if (!(row?.machineId && owner) || "page" in row.source) {
       return {};
     }
     const key = keepEmbedTarget(row, row.machineId);
