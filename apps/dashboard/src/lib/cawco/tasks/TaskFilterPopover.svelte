@@ -118,6 +118,7 @@
           {/if}
           {#if active > 0}
             <span
+              data-box
               data-num
               data-slot="count"
               class="num inline-grid h-space-5 min-w-space-5 place-items-center rounded-xs bg-brand-wash px-space-1 type-meta text-brand-ink"

@@ -33,6 +33,12 @@
  * `auto` or Tailwind's `truncate`, because Gecko does not trim a scroll
  * container and the run would take the recipe's padding on top of its line.
  *
+ * A run the recipe trims (a mark line's words, a `.mark-text`, what a words
+ * component draws at its top) is a block container, never flex, grid or
+ * table by a utility in any variant or by its component's styles: the trim
+ * reaches none of those (CSS Inline 3), so the run keeps its whole line and
+ * takes the recipe's padding on top of it.
+ *
  * A mark component (`…Mark`, `…Face`, `…Dot`) says `data-box` on its own
  * root, or draws an svg. A kit box (BOXES: the badge) holds its words in an
  * element whether or not a mark stands beside them.
@@ -99,6 +105,22 @@ const SCROLLS =
   /(?:^|[;{\s])overflow(?:-x|-y|-inline|-block)?\s*:\s*(?:hidden|auto|scroll)\b/;
 /** Tailwind utilities that make one. */
 const SCROLL_TOKEN = /^(?:truncate|overflow(?:-[xy])?-(?:hidden|auto|scroll))$/;
+/**
+ * A declaration that makes an element a flex, grid or table container,
+ * which text-box-trim does not reach (CSS Inline 3: "this property does
+ * not apply to, or propagate through, flex, grid, or table formatting
+ * contexts").
+ */
+const LAYS_OUT =
+  /(?:^|[;{\s])display\s*:\s*(?:(?:block|inline)\s+)?(?:inline-)?(?:flex|grid|table)\b/;
+/** Tailwind utilities that make one, in any variant (`has-data-reason:inline-flex` splits to `inline-flex`). */
+const LAYS_OUT_TOKEN = /^(?:inline-)?(?:flex|grid|table)$/;
+/**
+ * The files of the components that draw words into a mark line
+ * (WORDS_COMPONENT): each element at their top is a run the recipe trims.
+ */
+const WORDS_FILE =
+  /(?:^|\/)(?:pending-content|morph-text|JumpMatch|dropdown-menu-shortcut|context-menu-shortcut)\.svelte$/;
 const STYLE = /<style\b[^>]*>([\s\S]*?)<\/style>/;
 const RULE = /([^{}]*)\{([^{}]*)\}/g;
 /**
@@ -311,6 +333,22 @@ function scrolls(node: Node, source: string, css: string): boolean {
   );
 }
 
+/** Whether an element is a flex, grid or table container by a utility or its component's styles. */
+function laysOut(node: Node, source: string, css: string): boolean {
+  const names = classes(node, source);
+  return (
+    names.some((c) => LAYS_OUT_TOKEN.test(c)) ||
+    names.some((c) => rulesFor(css, c).some((body) => LAYS_OUT.test(body)))
+  );
+}
+
+/** Whether the recipe leaves an element alone: an svg, an img, a kit cell, a box that says so. */
+const leftAlone = (node: Node, source: string): boolean =>
+  node.name === "svg" ||
+  node.name === "img" ||
+  hasAttribute(node, "data-box") ||
+  classes(node, source).some((c) => LEFT_ALONE_CLASS.test(c));
+
 /** Whether the comment directly above `siblings[index]` says why it is no mark line. */
 function allowedAt(siblings: Node[], index: number): boolean {
   for (let i = index - 1; i >= 0; i -= 1) {
@@ -441,6 +479,33 @@ function checkScroll(r: Reading, node: Node, kids: Node[]): void {
   }
 }
 
+/**
+ * A run the recipe trims is a block container: text-box-trim does not
+ * reach a flex, grid or table container, which keeps its whole line and
+ * takes the recipe's padding on top of it (a Text states swap grid given
+ * the recipe stood 33px around its 20px line).
+ */
+function checkLaysOut(r: Reading, runs: Node[]): void {
+  for (const run of runs.filter((k) => laysOut(k, r.source, r.css))) {
+    hit(
+      r,
+      run,
+      "a run the mark line trims lays out as flex, grid or table, which text-box-trim does not reach: it keeps its whole line and the recipe's padding on top. Set its words in a block (the layout inside it), or say data-box where it is a box or a row of its own"
+    );
+  }
+}
+
+/** The runs on `node` the recipe trims: its words on a mark line, and itself as `.mark-text`. */
+function runsOf(r: Reading, node: Node, kids: Node[]): Node[] {
+  const runs = isLine(r, node)
+    ? kids.filter((k) => isElement(k) && !leftAlone(k, r.source))
+    : [];
+  if (isElement(node) && classes(node, r.source).includes("mark-text")) {
+    runs.push(node);
+  }
+  return runs;
+}
+
 function inspect(
   r: Reading,
   node: Node,
@@ -470,6 +535,7 @@ function inspect(
     checkBoxes(r, kids);
   }
   checkScroll(r, node, kids);
+  checkLaysOut(r, runsOf(r, node, kids));
 }
 
 /** A node's child nodes, each with the sibling list it sits in. */
@@ -525,6 +591,13 @@ export function check(file: string, source: string): Hit[] {
   top.forEach((node, i) => {
     visit(r, node, top, i);
   });
+  // A component that draws words into a mark line: what it draws at its top is trimmed there.
+  if (WORDS_FILE.test(file)) {
+    checkLaysOut(
+      r,
+      children(top).filter((k) => isElement(k) && !leftAlone(k, source))
+    );
+  }
   return r.hits;
 }
 
