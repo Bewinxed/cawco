@@ -1,10 +1,10 @@
 // The design graph, round 29: the component on the page, its state machines as one graph in the panel, and
 // the kept move's choreography in the dock, editable; on every screen (responsive-design.md). Round 29 builds
-// the designer's sections A to F (the handle, the clip rows, the popover, Hide, the regions, the edges).
+// the designer's sections A to F (the handle, the clip rows, the clip's controls, Hide, the regions, the edges).
 
 // ---- Glyphs ----
 const icon = (name, cls) => SOLAR[name].replace("<svg ", '<svg aria-hidden="true" focusable="false"' + (cls ? ' class="' + cls + '"' : "") + " ");
-const ICON = { zoomIn: "minimalistic-magnifer-zoom-in-bold-duotone", zoomOut: "minimalistic-magnifer-zoom-out-bold-duotone", play: "play-bold-duotone", pause: "pause-bold-duotone", loop: "repeat-bold-duotone", chevron: "alt-arrow-down-linear", chevronRight: "alt-arrow-right-linear", chevronLeft: "alt-arrow-left-linear", chevronUp: "alt-arrow-up-linear", graph: "structure-bold-duotone", outline: "list-bold-duotone", fail: "danger-circle-bold-duotone" };
+const ICON = { zoomIn: "minimalistic-magnifer-zoom-in-bold-duotone", zoomOut: "minimalistic-magnifer-zoom-out-bold-duotone", play: "play-bold-duotone", pause: "pause-bold-duotone", loop: "repeat-bold-duotone", chevron: "alt-arrow-down-linear", chevronRight: "alt-arrow-right-linear", chevronLeft: "alt-arrow-left-linear", chevronUp: "alt-arrow-up-linear", graph: "structure-bold-duotone", outline: "list-bold-duotone", fail: "danger-circle-bold-duotone", close: "close-bare" };
 // A clip's kind of property and its glyph (section B): what moves, read before its words are.
 const PROP_GLYPH = { opacity: "sun-fog-bold-duotone", position: "move-bold-duotone", size: "maximize-bold-duotone", colour: "palette-bold-duotone", text: "text-field-bold-duotone", unfold: "sort-vertical-bold-duotone" };
 const PROP_WORD = { opacity: "Opacity", position: "Position", size: "Size", colour: "Colour", text: "Text swap", unfold: "Unfold" };
@@ -12,20 +12,22 @@ for (const el of document.querySelectorAll("[data-icon]")) el.insertAdjacentHTML
 
 // ---- The mockup's data: components, each with its state machines, each machine with its states and moves ----
 // Every state carries the agent's note: what the state is for and what to check in it (clarity §6).
-const longPrompt = "Read every issue opened since the last run in github.com/petralab/cockpit/issues?q=is%3Aopen+label%3Atriage, label each one by area, link duplicates, and say which need me before standup.";
+// The owner's own routine, as the hub holds it ("Daily reply shortlist for X", 30 6 * * *, America/New_York):
+// its prompt as its runs are handed it, up to the last sentence the hub's record carries whole.
+const longPrompt = "Build today's reply shortlist for @CawCoDev. You publish nothing: no posting, replying, liking, following or DMing. Use the x-use MCP, account `cawcodev`, read-only tools only (search_tweets, get_tweet, search_profile).";
 const components = [
   {
     id: "form", name: "Create routine form",
-    base: { name: "Triage new issues", prompt: "Read the issues opened since the last run, label each one, and say which need me.", when: "Every day", at: "09:00", zone: "Asia/Riyadh", read: "Next run today 09:00", type: "The hub's pick for each run", primary: "Create routine" },
+    base: { name: "Daily reply shortlist for X", prompt: "Build today's reply shortlist for @CawCoDev. You publish nothing: no posting, replying, liking, following or DMing.", when: "Every day", at: "06:30", zone: "America/New_York", read: "Next run tomorrow 06:30", type: "The hub's pick for each run", primary: "Create routine" },
     defaults: { when: "day", read: "readback", types: "loaded", save: "filled" },
     machineEdges: [["when", "read"], ["read", "save"], ["types", "save"]],
     machines: [
       { id: "when", name: "When it runs", states: [
           { id: "hour", name: "Every hour", note: "At swaps to the read-back; nothing else moves.", set: { when: "Every hour", at: null, read: "Next run 10:00" } },
-          { id: "day", name: "Every day", note: "The form opens here; At holds 09:00.", set: { when: "Every day" } },
-          { id: "week", name: "Every week", note: "The read-back names the day; At keeps its time.", set: { when: "Every week", read: "Next run Monday 09:00" } },
+          { id: "day", name: "Every day", note: "The form opens here; At holds 06:30.", set: { when: "Every day" } },
+          { id: "week", name: "Every week", note: "The read-back names the day; At keeps its time.", set: { when: "Every week", read: "Next run Monday 06:30" } },
           { id: "custom", name: "Custom", note: "Schedule takes At's place; the read-back is the hub's own parse.", vars: [
-            { name: "Readable", set: { when: "Custom", at: null, custom: "0 8,13 * * 1-5", read: "At 08:00 and 13:00, Monday through Friday · next run today 13:00" } },
+            { name: "Readable", set: { when: "Custom", at: null, custom: "0 9 * * 1", read: "At 09:00 on Mondays · next run Monday 09:00" } },
             { name: "Unreadable", set: { when: "Custom", at: null, custom: "0 9 * *", read: null, failSchedule: "This schedule can't be read. Write five values separated by spaces: minute, hour, day of the month, month, day of the week." } } ] } ],
         edges: [["hour", "day"], ["day", "week"], ["day", "custom"]], path: ["hour", "day", "week", "custom"] },
       { id: "read", name: "Reading the schedule back", states: [
@@ -42,8 +44,7 @@ const components = [
           { id: "empty", name: "Empty", note: "Just opened: Name and the instruction are blank.", set: { name: "", prompt: "" } },
           { id: "filled", name: "Filled", note: "Ready to create; the variants check that long words wrap and never clip.", vars: [
             { name: "Short instruction", set: {} },
-            { name: "Long instruction with a link", set: { prompt: longPrompt } },
-            { name: "Long name", set: { name: "Triage new issues for the cockpit repo and post the summary in the team thread before standup" } } ] },
+            { name: "Its whole instruction", set: { prompt: longPrompt } } ] },
           { id: "saving", name: "Saving", note: "Create reads Creating… while the hub works; nothing else changes.", set: { primary: "Creating…" } },
           { id: "failed", name: "Save failed", fail: true, note: "The reason sits above the actions; the form keeps every value.", vars: [
             { name: "The hub didn't answer", set: { failActions: "The routine wasn't created. The hub didn't answer." } },
@@ -57,7 +58,9 @@ const components = [
         { key: "label", kind: "text", of: "Button label", does: "swaps to “Creating…”", at: { ref: null, v: 0 }, dur: "--dur-fade", ease: "--ease-crossfade" } ],
       "save:saving>failed": [
         { key: "label", kind: "text", of: "Button label", does: "swaps to “Create routine”", at: { ref: null, v: 0 }, dur: "--dur-fade", ease: "--ease-crossfade" },
-        { key: "reveal", kind: "unfold", of: "Reason line", does: "unfolds", at: { ref: null, v: "--dur-stagger" }, dur: "--dur-pop", ease: "--ease-out", prop: "y", from: 16, to: 0, unit: "px" },
+        // The agent's own call, off the token scale: a 340ms spring with 0.15 bounce, so the reason line lands
+        // with a little give. The row and the controls mark it "ad hoc".
+        { key: "reveal", kind: "unfold", of: "Reason line", does: "unfolds", at: { ref: null, v: "--dur-stagger" }, dur: 340, ease: { spring: { bounce: 0.15 } }, prop: "y", from: 16, to: 0, unit: "px" },
         { key: "fade", kind: "opacity", of: "Reason words", does: "fade in", at: { ref: "with", of: "reveal", v: 0 }, dur: "--dur-pop", ease: "--ease-out" } ],
       "save:failed>saving": [
         { key: "fold", kind: "unfold", of: "Reason line", does: "folds away", at: { ref: null, v: 0 }, dur: "--dur-exit", ease: "--ease-out" },
@@ -72,7 +75,7 @@ const components = [
   },
   {
     id: "row", name: "Routine row",
-    base: { name: "Morning board check", schedule: "Weekdays at 09:00", status: "Next run tomorrow 09:00", kind: "", actions: ["Run now"], dim: false },
+    base: { name: "Daily reply shortlist for X", schedule: "Every day at 06:30", status: "Next run tomorrow 06:30", kind: "", actions: ["Run now"], dim: false },
     defaults: { pause: "active", runs: "waiting" },
     machineEdges: [["pause", "runs"]],
     machines: [
@@ -84,8 +87,8 @@ const components = [
           { id: "waiting", name: "Waiting", note: "Between runs: the status names the next one.", set: {} },
           { id: "running", name: "Running", note: "A live dot leads the status; Open takes the action's place.", set: { status: "Running for 2 min", kind: "live", actions: ["Open"] } },
           { id: "ran", name: "Ran", note: "The status says when it last ran and when it runs next.", vars: [
-            { name: "A minute ago", set: { status: "Ran 1 min ago · next run tomorrow 09:00" } },
-            { name: "Yesterday", set: { status: "Ran yesterday 09:00 · next run tomorrow 09:00" } } ] },
+            { name: "A minute ago", set: { status: "Ran 1 min ago · next run tomorrow 06:30" } },
+            { name: "Yesterday", set: { status: "Ran yesterday 06:30 · next run tomorrow 06:30" } } ] },
           { id: "failed", name: "Didn't run", fail: true, note: "The status says why in red; the action fixes that cause.", vars: [
             { name: "No machine online", set: { status: "Didn't run: no machine was online", kind: "fail", actions: ["Run now"] } },
             { name: "Budget spent", set: { status: "Didn't run: the project's budget is spent", kind: "fail", actions: ["Raise budget"] } } ] } ],
@@ -135,15 +138,18 @@ function bezier([x1, y1, x2, y2]) {
   };
 }
 // Motion's duration-based spring (type "spring", visualDuration, bounce: motion-dom spring.ts getSpringOptions),
-// integrated at 1ms. It rests by the house test (motion/spring.ts: |x| < 0.5 and |v| < 20, in px, over the
-// clip's travel, or 100 when it has no px travel), from the last moment it was still outside it.
+// integrated at 1ms, with a starting velocity (in the travel's own units per second, toward the target). Any
+// bounce up to 1 (undamped) is taken; under 0 the spring is overdamped. Its mass changes nothing here: the
+// response and the bounce already fix the ratios k/m and c/m that move it. It rests by the house test
+// (motion/spring.ts: |x| < 0.5 and |v| < 20, in px, over the clip's travel, or 100 when it has no px travel),
+// from the last moment it was still outside it.
 const springCache = new Map();
-function springOf(visualMs, bounce, travel) {
-  const id = visualMs + "|" + bounce + "|" + travel;
+function springOf(visualMs, bounce, travel, velocity = 0) {
+  const id = visualMs + "|" + bounce + "|" + travel + "|" + velocity;
   if (springCache.has(id)) return springCache.get(id);
   const vd = Math.max(visualMs, 1) / 1000, root = (2 * Math.PI) / (vd * 1.2), k = root * root;
-  const c = 2 * Math.min(1, Math.max(0.05, 1 - bounce)) * Math.sqrt(k), dt = 1 / 1000;
-  let x = -1, v = 0, t = 0, moving = 0;
+  const c = 2 * Math.max(0, 1 - bounce) * Math.sqrt(k), dt = 1 / 1000;
+  let x = -1, v = velocity, t = 0, moving = 0;
   const xs = [0];
   for (let i = 1; i <= 3000; i++) {
     v += (-k * x - c * v) * dt; x += v * dt; t += dt; xs.push(1 + x);
@@ -180,7 +186,7 @@ function resolve(clips) {
     const start = Math.max(0, base + (c.at.ref === "with" ? 0 : msOf(c.at.v)));
     const dur = msOf(c.dur);
     let fn, tail = start + dur;
-    if (isSpring(c.ease)) { const s = springOf(dur, c.ease.spring.bounce, travelOf(c)); fn = (t) => s.at(t); tail = start + Math.max(dur, s.settle); }
+    if (isSpring(c.ease)) { const s = springOf(dur, c.ease.spring.bounce, travelOf(c), c.ease.spring.velocity || 0); fn = (t) => s.at(t); tail = start + Math.max(dur, s.settle); }
     else { const f = bezier(Array.isArray(c.ease) ? c.ease : bezierOf(c.ease)); fn = (t) => f(t / dur); }
     return (out[key] = { start, dur, end: start + dur, tail, fn });
   };
@@ -323,6 +329,7 @@ function drawStage(cid = tab) {
   const f = fieldsOf(c, cur, top);
   applyStage(cid, c.id === "form" ? formHtml(f, fromF, p, val, tm) : rowHtml(f, fromF, p, tm), tm);
   if (pk) drawWashes(cid); else clearWashes(cid);
+  scrollFade($("page"));
 }
 function softSwap(el, next) {
   const prev = el.dataset.text ?? el.textContent;
@@ -367,7 +374,7 @@ function crossfade(oldText, newText, k) {
   if (!oldText || oldText === newText || k >= 1) return soft(newText);
   return '<span style="display:inline-grid"><span style="grid-area:1/1;opacity:' + (1 - k) + '">' + esc(oldText) + '</span><span style="grid-area:1/1;opacity:' + k + '">' + esc(newText) + "</span></span>";
 }
-const doneCard = '<div class="frame"><div class="done" data-key="done" data-val="done"><b>Triage new issues</b> is created and its test run has started.</div></div>';
+const doneCard = '<div class="frame"><div class="done" data-key="done" data-val="done"><b>Daily reply shortlist for X</b> is created and its test run has started.</div></div>';
 function formHtml(f, from, p, val, tm) {
   const outK = p("formOut"), inK = p("doneIn");
   if (f.created && (!from || (outK >= 1 && inK >= 1))) return doneCard;
@@ -401,7 +408,8 @@ function formHtml(f, from, p, val, tm) {
     '<div class="actions"><span class="note" data-key="note" data-val="test">Creating it runs it once now, as a test.</span><span class="btn">Cancel</span><span class="btn primary" data-key="primary" data-val="' + esc(f.primary) + '">' + label + "</span></div></div>";
 }
 function rowHtml(f, from, p, tm) {
-  const others = '<div class="rrow"><b>Weekly milestone check</b><span class="rmeta">Mondays at 10:00</span><span class="rstatus muted">Next run Monday 10:00</span><span class="ractions"><span class="btn">Run now</span></span></div>';
+  // The owner's other routine in this list, as the hub holds it: weekly, Mondays 09:00 New York, turned off.
+  const others = '<div class="rrow" style="opacity:0.45"><b>Weekly X milestone check</b><span class="rmeta">Mondays at 09:00</span><span class="rstatus muted">Paused</span><span class="ractions"><span class="btn">Resume</span></span></div>';
   const dotK = from && from.kind !== "live" && f.kind === "live" ? p("dot") : from && from.kind === "live" && f.kind !== "live" ? 1 - p("dotOut") : f.kind === "live" ? 1 : 0;
   const status = tm === null || !from ? soft(f.status) : crossfade(from.status, f.status, p("fade"));
   const dim = from && from.dim !== f.dim ? (f.dim ? 1 - 0.55 * p("dim") : 0.45 + 0.55 * p("dim")) : f.dim ? 0.45 : 1;
@@ -686,7 +694,7 @@ function drawGraph(cid = tab) {
   const regions = {};
   for (const m of c.machines) {
     const r = document.createElement("section"); r.className = "region"; r.setAttribute("aria-label", m.name); r.dataset.machine = m.id;
-    // Its name inside it: a press fits the slab in the view (Framer's "Fit the canvas to your selection").
+    // Its name inside it: a press fits the slab, and only the slab, in the view.
     const head = document.createElement("button"); head.type = "button"; head.className = "region-head"; head.dataset.tip = "Fit " + m.name;
     head.innerHTML = "<b>" + esc(m.name) + "</b><span>" + stateCount(m) + "</span>";
     head.onclick = (e) => { e.stopPropagation(); fitRegion(cid, m.id, "fit"); };
@@ -1011,10 +1019,6 @@ function mark() {
   }
   document.querySelectorAll(".edge-dash").forEach((d) => d.remove());
   updateDash();
-  // The drawer's and the sheet's head name the kept state.
-  const v = views[tab];
-  $("sheetState").textContent = stateOf(machineOf(comp(), v.last), v.cur[v.last].state).name;
-  labelHead();
 }
 // Playback (section F): one 24px dash travels the chosen edge from source to target on the dock's clock,
 // one clock with the playhead; shown while playing or scrubbing, and gone when playback ends.
@@ -1037,7 +1041,7 @@ function keep(cid, machine, state, vary, via) {
   const was = tab, v = views[cid]; tab = cid;
   v.cur[machine] = { state, vary }; v.last = machine; peek = null; time = null;
   v.via = via ? { machine, from: via, to: state } : null;
-  closePop();
+  closeCtl();
   if (was !== cid && screen.multi) drawStage(was);
   setCurrent();
   drawStage(cid); keptSnaps[cid] = snapStage(cid); mark(); buildDock(); showKept(cid);
@@ -1071,7 +1075,7 @@ function rescale(km) {
 function curvePoints(ease, n = 24) {
   const pts = [];
   if (isSpring(ease)) {
-    const s = springOf(1000, ease.spring.bounce, 100), end = Math.max(1000, s.settle);
+    const s = springOf(1000, ease.spring.bounce, 100, ease.spring.velocity || 0), end = Math.max(1000, s.settle);
     for (let i = 0; i <= n; i++) { const t = (i / n) * end; pts.push([t / end, s.at(t)]); }
   } else {
     const f = bezier(Array.isArray(ease) ? ease : bezierOf(ease));
@@ -1091,7 +1095,7 @@ const durShort = (t) => t.replace(/^--dur-/, "");
 const SEG_CURVES = ["--ease-out", "--ease-in-out", "--ease-drawer", "--ease-crossfade"];
 const CURVE_WORD = { "--ease-out": "ease-out", "--ease-in-out": "ease-in-out", "--ease-drawer": "drawer", "--ease-crossfade": "crossfade" };
 function curveWord(c) {
-  if (isSpring(c.ease)) return "spring " + Math.round(msOf(c.dur)) / 1000 + "s · " + c.ease.spring.bounce + " bounce";
+  if (isSpring(c.ease)) return "spring " + Math.round(msOf(c.dur)) / 1000 + "s · " + Math.round(c.ease.spring.bounce * 1000) / 1000 + " bounce";
   if (Array.isArray(c.ease)) return "custom";
   return CURVE_WORD[c.ease] || c.ease.replace(/^--ease-/, "");
 }
@@ -1104,12 +1108,18 @@ const tokLast = new Map();
 // A value the person changed takes the selection pair.
 function factsHtml(e, c) {
   const o = e.orig.find((x) => x.key === c.key), ch = (a, b) => (same(a, b) ? "" : " changed");
-  const d = Math.round(msOf(c.dur)), isTok = typeof c.dur === "string";
-  // Off a detent the badge keeps the name it last showed (it is folding away), never an empty chip.
+  const d = Math.round(msOf(c.dur)), isTok = typeof c.dur === "string", adhoc = adhocDur(c, o);
+  // Off a detent the badge keeps the name it last showed (it is folding away), never an empty chip. The agent's
+  // own length off the token scale says so in the badge's place: "ad hoc".
   const name = isTok ? durShort(c.dur) : typeof o.dur === "string" ? durShort(o.dur) : "";
-  let html = '<button type="button" class="fact fact-dur' + ch(c.dur, o.dur) + '" data-open="dur" aria-label="Length ' + d + " ms" + (isTok ? ", the " + esc(name) + " token" : "") + '">' + fig(d, "ms") + '<span class="tok"' + (isTok ? " data-on" : "") + ' aria-hidden="true"><span class="tok-clip"><code class="badge">' + esc(name) + "</code></span></span></button>";
-  html += '<button type="button" class="fact fact-curve' + ch(c.ease, o.ease) + '" data-open="curve" aria-label="Curve ' + esc(curveWord(c)) + '">' + glyph(c.ease, "curve-glyph") + '<span class="word">' + esc(curveWord(c)) + "</span></button>";
+  let html = '<button type="button" class="fact fact-dur' + ch(c.dur, o.dur) + '" data-open="dur" aria-label="Length ' + d + " ms" + (isTok ? ", the " + esc(name) + " token" : adhoc ? ", ad hoc" : "") + '">' + fig(d, "ms") + '<span class="tok"' + (isTok ? " data-on" : "") + ' aria-hidden="true"><span class="tok-clip"><code class="badge">' + esc(name) + "</code></span></span></button>";
+  const adhocS = adhocSpring(c, o);
+  html += '<button type="button" class="fact fact-curve' + ch(c.ease, o.ease) + '" data-open="curve" aria-label="Curve ' + esc(curveWord(c)) + (adhocS ? ", ad hoc" : "") + '">' + glyph(c.ease, "curve-glyph") + '<span class="word">' + esc(curveWord(c)) + "</span></button>";
   if (c.from != null) html += '<button type="button" class="fact fact-delta' + ch([c.from, c.to], [o.from, o.to]) + '" data-open="delta" aria-label="' + esc((c.prop || "") + " from " + c.from + " to " + c.to + " " + (c.unit || "")) + '">' + fig(c.from) + '<span class="arrow">→</span>' + fig(c.to, c.unit || "") + "</button>";
+  // The agent's own values off the token scale are marked once, at the line's end, and the mark never drops
+  // (a narrow line gives up the token badges and the curve's word first); its tip says which.
+  const which = [adhoc ? d + " ms" : "", adhocS ? "a spring of " + springP(c).bounce + " bounce" : ""].filter(Boolean);
+  if (which.length) html += '<span class="badge adhoc" data-tip="The agent\'s own: ' + esc(which.join(" and ")) + ', off the token scale">ad hoc</span>';
   return html;
 }
 const anchorWords = (e, c) => (c.at.ref ? c.at.ref + " " + e.cur.concat(e.orig).find((x) => x.key === c.at.of).of : "");
@@ -1135,15 +1145,32 @@ function buildDock(opts = {}) {
   // Its head bar: the move, play and loop, the time; Compare, the count and Reset at its end.
   // The transport and the time hold the bar's trailing end, so play stays where the hand left it whatever
   // the move is called; the edits stand before them when there are any.
-  let html = '<header class="dock-head"><h2 class="dock-title">' + esc(title) + "</h2>";
-  html += '<div class="edits">';
-  if (edited) html += '<div class="t-tabs" id="compare" role="tablist" aria-label="Compare"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" data-view="original"><span class="t-label">Original</span></button><button class="t-tab" role="tab" data-view="edited"><span class="t-label">Edited</span></button></div><span class="badge edits-count"><span class="num">' + n + "</span>" + (n === 1 ? " edit" : " edits") + '</span><button class="ghost-btn" id="resetAll">Reset</button>';
-  html += '</div><div class="transport"><button class="tbtn" id="play" aria-label="Play">' + icon(ICON.play, "i-play") + icon(ICON.pause, "i-pause") + '</button><button class="tbtn" id="loop" aria-label="Loop" aria-pressed="' + looping + '">' + icon(ICON.loop) + '</button></div><span class="readout" id="readout"></span></header>';
-  html += '<div class="tl" id="tl"><div class="end-area" id="endArea"></div>';
-  html += '<div class="tl-row ruler-row"><div class="ruler" id="ruler"></div></div>';
-  html += '<div class="rows" id="rows"><div class="row-ghost" id="rowGhost" aria-hidden="true"></div>' + km.clips.map((c) => clipRow(km.e, c)).join("") + "</div>";
-  html += '<div id="ties"></div><div class="playhead" id="playhead"></div></div>';
-  $("dockBody").innerHTML = html;
+  let head = '<header class="dock-head"><h2 class="dock-title">' + esc(title) + "</h2>";
+  head += '<div class="edits">';
+  if (edited) head += '<div class="t-tabs" id="compare" role="tablist" aria-label="Compare"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" data-view="original"><span class="t-label">Original</span></button><button class="t-tab" role="tab" data-view="edited"><span class="t-label">Edited</span></button></div><span class="badge edits-count"><span class="num">' + n + "</span>" + (n === 1 ? " edit" : " edits") + '</span><button class="ghost-btn" id="resetAll">Reset</button>';
+  head += '</div><div class="transport"><button class="tbtn" id="play" aria-label="Play">' + icon(ICON.play, "i-play") + icon(ICON.pause, "i-pause") + '</button><button class="tbtn" id="loop" aria-label="Loop" aria-pressed="' + looping + '">' + icon(ICON.loop) + '</button></div><span class="readout" id="readout"></span></header>';
+  // The same move drawn again (an edit, a held slider) patches its head and each row in place: the timeline
+  // keeps its scroll, and the clip's controls standing in a row stay where they are, a held control keeping
+  // its pointer. Any other move draws the dock whole.
+  const rowsNow = $("rows"), patch = sameMove && rowsNow && km.clips.every((c) => rowsNow.querySelector('.clip[data-key="' + c.key + '"]')) && rowsNow.querySelectorAll(".clip").length === km.clips.length;
+  if (patch) {
+    dock.querySelector(".dock-head").outerHTML = head;
+    const t = document.createElement("div");
+    for (const c of km.clips) {
+      const old = rowsNow.querySelector('.clip[data-key="' + c.key + '"]');
+      t.innerHTML = clipRow(km.e, c);
+      const n = t.firstElementChild;
+      old.setAttribute("data-prop", n.dataset.prop);
+      old.querySelector(".clip-name").replaceWith(n.querySelector(".clip-name"));
+      old.querySelector(".lane").replaceWith(n.querySelector(".lane"));
+    }
+  } else {
+    let html = head + '<div class="tl" id="tl"><div class="end-area" id="endArea"></div>';
+    html += '<div class="tl-row ruler-row"><div class="ruler" id="ruler"></div></div>';
+    html += '<div class="rows" id="rows"><div class="row-ghost" id="rowGhost" aria-hidden="true"></div>' + km.clips.map((c) => clipRow(km.e, c)).join("") + "</div>";
+    html += '<div id="ties"></div><div class="playhead" id="playhead"></div></div>';
+    $("dockBody").innerHTML = html;
+  }
   tl = { km };
   // A badge whose detent changed comes or goes from where it stood; one still on its way when the rows are
   // drawn again (a slider held, then let go) carries on at the time it had reached, by a negative delay.
@@ -1165,7 +1192,7 @@ function buildDock(opts = {}) {
   wireDock(km);
   layoutDock();
   sizeDockRoom();
-  if (pop) placePop();
+  mountCtl();
 }
 // The hover ghost glides under the row the pointer is on (--dur-ghost on ease-in-out); its first showing fades
 // in where it stands.
@@ -1190,6 +1217,16 @@ function fitFacts() {
     if (need() > room + 0.5) f.dataset.drop = "tok word";
   }
 }
+// A scroller with more past its top or its foot fades that end by the house edge fade (as the graph's view does):
+// the timeline, under its sticky ruler, and the page under review.
+function scrollFade(el) {
+  if (!el) return;
+  const more = el.scrollHeight - el.clientHeight - el.scrollTop, f = [el.scrollTop > 1 ? "top" : "", more > 1 ? "foot" : ""].filter(Boolean).join(" ");
+  if (f) el.dataset.fade = f; else delete el.dataset.fade;
+}
+$("page").addEventListener("scroll", () => scrollFade($("page")), { passive: true });
+// The page's room changes on the drawer's own clock: its fade is read again once that has run.
+$("page").addEventListener("transitionend", (e) => { if (e.target === $("page")) scrollFade($("page")); });
 // A strip that scrolls fades the edge with more to scroll.
 function edgeFade(t) { const more = t.scrollWidth - t.clientWidth; if (more <= 1) { delete t.dataset.fade; return; } const s = t.scrollLeft > 1, e = t.scrollLeft < more - 1; t.dataset.fade = s && e ? "both" : s ? "start" : "end"; }
 $("tabs").addEventListener("scroll", () => edgeFade($("tabs")), { passive: true });
@@ -1215,7 +1252,7 @@ function setView(view) {
   if (!km || km.e.view === view) return;
   const was = km.e.view;
   km.e.view = view;
-  closePop();
+  closeCtl();
   km.e.sel.clear();
   buildDock({ pillFrom: was });
   play();
@@ -1279,6 +1316,9 @@ function layoutDock(work) {
   drawTies(clips, r, g);
   fitFacts();
   updateTime();
+  // The top fade starts under the sticky ruler, so the ruler itself never fades.
+  $("tl").style.setProperty("--tl-head", rrow.offsetHeight + "px");
+  scrollFade($("tl"));
 }
 // An anchored start draws its tie: a hairline from the anchor's edge to this bar's start, a foot at each end.
 // Stacked, the tie stays in its own lane: a hairline across the lane at the anchor, its foot along the lane's
@@ -1324,6 +1364,7 @@ function sizeDockRoom() {
   if (layoutIs("drawer")) room = drawerH + px("--c-grabber-h") / 2 + 0.5;
   else if (layoutIs("desk") && $("dock").dataset.open === "true") room = $("dock").offsetHeight + 2 * px("--space-5");
   rootEl.style.setProperty("--dock-room", room + "px");
+  scrollFade($("page"));
 }
 // Playback: the page plays the move from 0, once, or on a loop. A committed edit replays it once.
 function play() {
@@ -1349,13 +1390,13 @@ function afterEdit(km, { replay, rescaleNow = true, inPlace = false } = {}) {
   const lanes = [...$("dock").querySelectorAll(".lane")];
   const grew = rescaleNow && rescale(keptMove());
   if (editCount(km.e) === 0) km.e.view = "edited";
-  const hadPop = pop && pop.key;
+  const hadCtl = ctl && ctl.key;
   const sel = [...km.e.sel];
   rebuildKeepingFocus();
   keptMove().e.sel = new Set(sel);
   if (grew && !reduced()) { for (const l of $("dock").querySelectorAll(".lane")) { l.classList.add("rescaling"); setTimeout(() => l.classList.remove("rescaling"), ms("--dur-reveal") + 40); } }
   layoutDock();
-  if (hadPop && pop) { if (inPlace) refreshPop(keptMove().e.cur); else refreshPop(); }
+  if (hadCtl && ctl) { if (inPlace) refreshCtl(keptMove().e.cur); else refreshCtl(); }
   if (replay) play(); else { drawStage(); }
   void lanes;
 }
@@ -1373,22 +1414,22 @@ function snapTargets(km, clips, skip) {
 }
 function wireDock(km) {
   const rows = $("rows"), tlEl = $("tl");
+  tlEl.onscroll = () => scrollFade(tlEl);
   // Scrub: the knob, or anywhere on the ruler row's ruler.
   const scrubAt = (e) => { const g = laneGeo(), tlb = tlEl.getBoundingClientRect(); stopPlayKeepTime(); time = clamp(((e.clientX - tlb.left - g.x0) / g.w) * g.end, 0, playLengthOf(tl.km.r)); drawStage(); updateTime(); };
   const startScrub = (e) => { e.preventDefault(); scrubbing = true; rootEl.dataset.scrubbing = ""; e.currentTarget.setPointerCapture(e.pointerId); scrubAt(e); e.currentTarget.onpointermove = scrubAt; e.currentTarget.onpointerup = e.currentTarget.onpointercancel = (ev) => { ev.currentTarget.onpointermove = null; scrubbing = false; delete rootEl.dataset.scrubbing; updateDash(); }; };
   $("ruler").onpointerdown = startScrub;
   for (const name of rows.querySelectorAll(".clip-name")) name.onclick = (e) => { if (e.target.closest(".fact")) return; const bar = name.parentNode.querySelector(".bar"); barClick(bar.dataset.key, e, "pointer", { name: true }); };
-  // A fact opens its clip's popover grown out of itself (section C); a press on the fact whose popover is open
-  // folds it back in.
+  // A fact opens its clip's controls (section C); a press on the fact whose controls are open closes them.
   for (const f of rows.querySelectorAll(".fact")) f.onclick = (e) => {
     e.stopPropagation();
     const key = f.closest(".clip").dataset.key, open = f.dataset.open;
-    if (pop && pop.key === key && pop.anchor && pop.anchor.open === open && pop.el.dataset.state === "open") { closePop(); return; }
+    if (ctl && ctl.key === key && ctl.anchor && ctl.anchor.open === open) { closeCtl(); return; }
     barClick(key, e, e.detail === 0 ? "key" : "pointer", { open });
   };
   // The hover ghost follows the pointer down the rows.
-  for (const row of rows.querySelectorAll(".clip")) row.addEventListener("pointerenter", (e) => { if (e.pointerType !== "touch") ghostTo(row); });
-  rows.addEventListener("pointerleave", () => ghostTo(null));
+  for (const row of rows.querySelectorAll(".clip")) row.onpointerenter = (e) => { if (e.pointerType !== "touch") ghostTo(row); };
+  rows.onpointerleave = () => ghostTo(null);
   for (const bar of rows.querySelectorAll(".bar")) {
     bar.onpointermove = (e) => { if (bar.dataset.dragging || km.e.view === "original") return; const b = bar.getBoundingClientRect(), z = px("--bar-handle-zone"); const zone = e.clientX - b.left < z ? "start" : b.right - e.clientX < z ? "end" : ""; if (zone) bar.dataset.zone = zone; else delete bar.dataset.zone; };
     bar.onpointerleave = () => { delete bar.dataset.zone; };
@@ -1400,7 +1441,7 @@ function wireDock(km) {
   // clears the selection.
   for (const lane of rows.querySelectorAll(".lane")) lane.onpointerdown = (e) => {
     if (e.target.closest(".bar") || tl.km.e.view === "original") return;
-    if (e.pointerType !== "mouse") { const bar = lane.querySelector('.bar[aria-pressed="true"]'), z = bar && touchZone(bar, e.clientX); if (z) barDown(bar, e, z); else { tl.km.e.sel = new Set(); closePop(); layoutDock(); } return; }
+    if (e.pointerType !== "mouse") { const bar = lane.querySelector('.bar[aria-pressed="true"]'), z = bar && touchZone(bar, e.clientX); if (z) barDown(bar, e, z); else { tl.km.e.sel = new Set(); closeCtl(); layoutDock(); } return; }
     marquee(e);
   };
 }
@@ -1419,11 +1460,11 @@ function barClick(key, e, origin, anchor) {
   if (km.e.view === "original") return;
   if (e.shiftKey || e.metaKey || e.ctrlKey) {
     if (e.metaKey || e.ctrlKey) { if (km.e.sel.has(key)) km.e.sel.delete(key); else km.e.sel.add(key); } else km.e.sel.add(key);
-    closePop(); layoutDock(); return;
+    closeCtl(); layoutDock(); return;
   }
   km.e.sel = new Set([key]);
   layoutDock();
-  openPop(key, origin, anchor);
+  openCtl(key, origin, anchor);
 }
 function barDown(bar, e, touchEdge) {
   const km = keptMove();
@@ -1441,8 +1482,7 @@ function barDown(bar, e, touchEdge) {
     if (!moved && Math.abs(dx) < 4) return;
     if (!moved) {
       moved = true; bar.dataset.dragging = ""; rootEl.dataset.dragging = zone === "body" ? "body" : "edge";
-      if (!km.e.sel.has(key)) { km.e.sel = new Set([key]); if (pop && pop.key !== key) closePop(); }
-      if (pop) pop.held = true;
+      if (!km.e.sel.has(key)) { km.e.sel = new Set([key]); if (ctl && ctl.key !== key) closeCtl(); }
       $("tl").append(ticks, snapLine, pill); stopPlayKeepTime(); time = null;
     }
     const free = ev.altKey, dt = (dx / g.w) * g.end, c0 = base.find((x) => x.key === key), s0 = r0[key];
@@ -1514,7 +1554,7 @@ function barDown(bar, e, touchEdge) {
     pill.style.top = bar.getBoundingClientRect().top - tlTop() - px("--c-badge-h") - px("--space-1") + "px";
     layoutDock(work);
     if (zone === "body" && s0.start + dt < 0) bar.style.left = (g.w * -Math.sqrt(-(s0.start + dt) * 4)) / g.end + "px";
-    if (pop) refreshPop(work);
+    if (ctl) refreshCtl(work);
   };
   bar.onpointerup = bar.onpointercancel = (ev) => {
     bar.onpointermove = (pe) => { if (!bar.dataset.dragging) { const b = bar.getBoundingClientRect(), z = px("--bar-handle-zone"); const zn = pe.clientX - b.left < z ? "start" : b.right - pe.clientX < z ? "end" : ""; if (zn) bar.dataset.zone = zn; else delete bar.dataset.zone; } };
@@ -1522,12 +1562,10 @@ function barDown(bar, e, touchEdge) {
     pill.remove(); snapLine.remove(); ticks.remove();
     delete bar.dataset.dragging; delete rootEl.dataset.dragging;
     if (!moved) { if (ev.type === "pointerup") barClick(key, ev, "pointer"); return; }
-    const r0 = pop ? pop.el.getBoundingClientRect() : null;
     const shown = parseFloat(bar.style.left);
     if (shown < 0 && !reduced()) bar.animate([{ left: shown + "px" }, { left: "0px" }], { duration: ms("--dur-control"), easing: tok("--ease-out") });
     if (commit(km.e, work)) afterEdit(km, { replay: true });
     else layoutDock();
-    if (pop) { pop.held = false; movePop(r0); }
   };
 }
 function marquee(e) {
@@ -1538,21 +1576,21 @@ function marquee(e) {
   let moved = false;
   lane.onpointermove = (ev) => {
     if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 4) return;
-    if (!moved) { moved = true; tlEl.append(box); closePop(); }
+    if (!moved) { moved = true; tlEl.append(box); closeCtl(); }
     const l = Math.min(x0, ev.clientX), r = Math.max(x0, ev.clientX), t = Math.min(y0, ev.clientY), b = Math.max(y0, ev.clientY);
     Object.assign(box.style, { left: l - tlb.left + "px", top: t - tlTop() + "px", width: r - l + "px", height: b - t + "px" });
     const sel = new Set(startSel);
     for (const bar of $("rows").querySelectorAll(".bar")) { const bb = bar.getBoundingClientRect(); if (bb.left < r && bb.right > l && bb.top < b && bb.bottom > t) sel.add(bar.dataset.key); }
     km.e.sel = sel; layoutDock();
   };
-  lane.onpointerup = lane.onpointercancel = () => { lane.onpointermove = null; box.remove(); if (!moved) { km.e.sel = new Set(); closePop(); layoutDock(); } };
+  lane.onpointerup = lane.onpointercancel = () => { lane.onpointermove = null; box.remove(); if (!moved) { km.e.sel = new Set(); closeCtl(); layoutDock(); } };
 }
 // Keys on a focused bar: arrows nudge the start (to the next snap target; ⇧ 50ms; ⌥ 1ms), [ and ] step the
-// length on the ladder, Enter opens the popover with focus in Starts. Nudges land at once and don't replay.
+// length on the ladder, Enter opens the clip's controls with the focus in them. Nudges land at once and don't replay.
 function barKey(bar, e) {
   const km = keptMove(), key = bar.dataset.key;
   if (km.e.view === "original") return;
-  if (e.key === "Enter") { e.preventDefault(); km.e.sel = new Set([key]); layoutDock(); openPop(key, "key"); return; }
+  if (e.key === "Enter") { e.preventDefault(); km.e.sel = new Set([key]); layoutDock(); openCtl(key, "key"); return; }
   const next = clone(km.e.cur), c = next.find((x) => x.key === key), r = resolve(next)[key];
   const setStart = (s) => { s = Math.max(0, s); if (c.at.ref === "with") c.at = { ref: null, v: 0 }; const b = c.at.ref ? (c.at.ref === "after" ? resolve(next)[c.at.of].end : resolve(next)[c.at.of].start) : 0; c.at.v = asValue(Math.round(s - b), typeof c.at.v === "string" ? c.at.v : null); };
   if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
@@ -1576,116 +1614,72 @@ function barKey(bar, e) {
   if (commit(km.e, next)) afterEdit(km, { replay: false });
 }
 
-// ---- The clip popover (round 29, section C): it grows out of what was pressed ----
-// One thing per tray: the clip's controls and nothing else. Its head is the row's first line; then the length
-// (a slider with a detent at every --dur-* token, and a figure that takes any number), the curve (the house
-// curves as glyphs, Spring, Custom, the chosen one drawn large with its handles), and the delta. A change
-// applies at once and the stage replays; there is no foot and no Save.
-let pop = null, closing = null;
-const popInset = () => (compact() ? px("--c-screen-margin") : px("--space-5"));
-const phoneWide = () => screen.screen === "phone-portrait" || screen.screen === "phone-landscape";
+// ---- A clip's controls (round 29, section C): in its row, or in the dock's inspector ----
+// The owner's note on the popover ("popover? lol..") left two answers on the decision card, and both are drawn
+// here (html[data-ctl], the review bar's switch): "row" opens the controls inside the clip's own row, under its
+// facts, the row's chosen wash round both; "inspector" opens them in an inspector beside the timeline, and on a
+// dock too narrow for both, in the timeline's place with Back to return to it.
+// One thing at a time: the clip's controls and nothing else. The inspector's head is the row's first line (in
+// the row the row itself is the head); then the length (a slider with a detent at every --dur-* token, and a
+// figure that takes any number), the curve (the house curves as glyphs, Spring, Custom, the chosen one drawn
+// large with its handles), a spring's every parameter as a figure, and the delta. A change applies at once and
+// the stage replays; there is no foot and no Save.
+let ctl = null;
+const ctlMode = () => (rootEl.dataset.ctl === "inspector" ? "inspector" : "row");
+const floatInset = () => (compact() ? px("--c-screen-margin") : px("--space-5"));
 function clipNow(key, work) { const km = keptMove(); return (work || km.e.cur).find((x) => x.key === key); }
 // The pressed thing, found again by what it is (a fact by its field, the name, or the bar), so a redrawn row
-// gives the popover its source back.
-function anchorEl(p = pop) {
+// gives the focus back to it.
+function anchorEl(p = ctl) {
   const row = p && $("rows") && $("rows").querySelector('.clip[data-key="' + p.key + '"]');
   if (!row) return null;
   const a = p.anchor;
   return (a && a.open && row.querySelector('.fact[data-open="' + a.open + '"]')) || (a && a.name && row.querySelector(".l1")) || row.querySelector(".bar");
 }
-// Read at rest: a fact still pressed (scaled by --press-scale) would put the box a pixel or two off.
-function restRect(el) { const was = el.style.scale; el.style.scale = "1"; const b = el.getBoundingClientRect(); el.style.scale = was; return b; }
-function popBounds() { const inset = popInset(); return { l: inset, t: inset, r: innerWidth - inset, b: innerHeight - inset }; }
-// Where it stands: above the row, start-aligned on the pressed thing, --space-1 off it; below only when the
-// room above is shorter than it and shorter than the room below; inside the viewport's inset either way.
-function popPlace(p = pop) {
-  const a = anchorEl(p);
-  if (!a) return null;
-  const b = restRect(a), el = p.el, B = popBounds(), gap = px("--space-1"), w = el.offsetWidth, h = el.offsetHeight;
-  const left = clamp(b.left, B.l, B.r - w), roomAbove = b.top - gap - B.t, roomBelow = B.b - (b.bottom + gap);
-  const above = roomAbove >= h || roomAbove >= roomBelow;
-  const top = clamp(above ? b.top - gap - h : b.bottom + gap, B.t, Math.max(B.t, B.b - h));
-  return { left, top, w, h, above, src: b, radius: parseFloat(getComputedStyle(a).borderTopLeftRadius) || px("--radius-xs") };
+// Its home: the clip's own row (its last child, across both columns), or the inspector. A redraw of the rows
+// patches each row in place and leaves the controls standing, so a held slider keeps its pointer.
+function mountCtl() {
+  const dock = $("dock");
+  dock.toggleAttribute("data-insp", !!ctl && ctlMode() === "inspector");
+  if (!ctl) return;
+  if (ctlMode() === "row") {
+    const row = $("rows") && $("rows").querySelector('.clip[data-key="' + ctl.key + '"]');
+    if (row && ctl.el.parentNode !== row) row.append(ctl.el);
+  } else if (ctl.el.parentNode !== $("insp")) $("insp").append(ctl.el);
 }
-function placePop(p = pop) {
-  if (!p) return;
-  const q = popPlace(p);
-  if (!q) return;
-  const s = p.el.style;
-  s.left = q.left + "px";
-  // Above, it hangs from its foot, so a taller body grows up and away from the row.
-  if (q.above) { s.top = "auto"; s.bottom = innerHeight - (q.top + q.h) + "px"; } else { s.bottom = "auto"; s.top = q.top + "px"; }
-  p.above = q.above;
-  // Closed, its box is the source's rect and radius in the popover's own frame.
-  s.setProperty("--from-t", q.src.top - q.top + "px"); s.setProperty("--from-l", q.src.left - q.left + "px");
-  s.setProperty("--from-r", q.left + q.w - q.src.right + "px"); s.setProperty("--from-b", q.top + q.h - q.src.bottom + "px");
-  s.setProperty("--from-radius", q.radius + "px");
-}
-const movePop = () => placePop();
-// The source is hidden while the box flies out of it or folds back into it: one box on screen.
-// It shows again once the box has grown (its transitionend, on the clock the box runs on).
-function fly(p) {
-  for (const x of document.querySelectorAll("[data-flying]")) delete x.dataset.flying;
-  const a = anchorEl(p);
-  if (!a || reduced()) return;
-  a.dataset.flying = "";
-  const box = p.el.querySelector(".pop-box");
-  if (p.flyEnd) box.removeEventListener("transitionend", p.flyEnd);
-  p.flyEnd = (e) => { if (e.target !== box || e.propertyName !== "top" || p.el.dataset.state !== "open") return; box.removeEventListener("transitionend", p.flyEnd); for (const x of document.querySelectorAll("[data-flying]")) delete x.dataset.flying; };
-  box.addEventListener("transitionend", p.flyEnd);
-}
-function openPop(key, origin, anchor) {
+function openCtl(key, origin, anchor) {
   const km = keptMove();
   if (!km || km.e.view === "original") return;
-  // The same clip, open: the popover re-anchors on what was pressed now.
-  if (pop && pop.key === key) { pop.anchor = anchor || null; placePop(); if (origin === "key") focusFirst(); return; }
-  // A fold caught by a press on its own source turns back from where the box is drawn.
-  if (closing && closing.key === key && same(closing.anchor, anchor || null)) {
-    pop = closing; closing = null;
-    pop.el.dataset.state = "open"; fly(pop);
-    return;
-  }
-  if (pop) { const p = pop; pop = null; p.el.remove(); }
-  const el = document.createElement("div");
-  el.className = "pop"; el.dataset.state = "closed"; el.setAttribute("role", "dialog"); el.dataset.key = key;
-  el.innerHTML = '<div class="pop-box"></div><div class="pop-body"></div>';
-  // On a phone the kit's own rule: the viewport less 24px.
-  if (phoneWide()) el.style.inlineSize = innerWidth - 2 * px("--c-screen-margin") + "px";
-  pop = { key, el, origin, held: false, committed: {}, anchor: anchor || null };
-  document.body.append(el);
-  // Measured and placed with its box held still, so the box stands on the source's rect before it grows.
-  const box = el.querySelector(".pop-box"); box.style.transition = "none";
-  renderPop();
-  placePop();
-  void box.offsetWidth; box.style.transition = "";
-  const c = clipNow(key); el.setAttribute("aria-label", c.of + " " + c.does);
-  fly(pop);
-  el.dataset.state = "open";
+  // The same clip, open: it stays, and a key's press puts the focus in it.
+  if (ctl && ctl.key === key && ctl.mode === ctlMode()) { ctl.anchor = anchor || null; if (origin === "key") focusFirst(); return; }
+  closeCtl();
+  const mode = ctlMode(), el = document.createElement(mode === "row" ? "div" : "section"), c = clipNow(key);
+  el.className = "ctl ctl-" + mode; el.dataset.key = key;
+  el.setAttribute("role", "region"); el.setAttribute("aria-label", "Controls, " + c.of + " " + c.does);
+  el.innerHTML = '<div class="ctl-body"></div>';
+  ctl = { key, el, mode, origin, committed: {}, anchor: anchor || null };
+  mountCtl();
+  renderCtl();
+  // The rows under an opened row move down: their ties follow, and the timeline shows the controls whole.
+  ctl.ro = new ResizeObserver(() => requestAnimationFrame(() => { if (tl) layoutDock(); scrollFade($("insp")); }));
+  ctl.ro.observe(el);
+  // Scrolled into the timeline's view as far as it fits, its head never under the sticky ruler.
+  if (mode === "row") { const t = $("tl"), b = el.getBoundingClientRect(), tb = t.getBoundingClientRect(), head = t.querySelector(".ruler-row").offsetHeight + px("--space-2"); if (b.bottom > tb.bottom) t.scrollTop += Math.min(b.bottom - tb.bottom + px("--space-2"), b.top - tb.top - head); }
   if (origin === "key") focusFirst();
   playLive();
 }
-function focusFirst() { const i = pop.el.querySelector(".dslider") || pop.el.querySelector("input, button"); if (i) i.focus({ preventScroll: true }); }
-// Closed by Esc, a press outside or a press on its source: the box folds back into the source as it stands now.
-function closePop(instant) {
+function focusFirst() { const i = ctl.el.querySelector(".dslider") || ctl.el.querySelector("input, button"); if (i) i.focus({ preventScroll: true }); }
+// Closed by Esc, its Close (Back on a narrow dock), a press outside the dock, a press on its own fact again, or
+// another clip's: it goes at once and the timeline is whole again.
+$("insp").onscroll = () => scrollFade($("insp"));
+function closeCtl() {
   closeMenu();
-  if (closing && instant) { closing.el.remove(); closing = null; }
-  if (!pop) return;
-  const p = pop; pop = null;
-  if (instant) { p.el.remove(); for (const x of document.querySelectorAll("[data-flying]")) delete x.dataset.flying; return; }
-  if (closing) closing.el.remove();
-  closing = p;
-  placePop(p);
-  p.el.dataset.state = "closed";
-  // The source stays hidden until the box has folded into it; then the box goes. Both on the fold's own clock
-  // (its transitionend), so a paused or slowed clock holds them.
-  const a = anchorEl(p);
-  for (const x of document.querySelectorAll("[data-flying]")) delete x.dataset.flying;
-  if (a && !reduced()) a.dataset.flying = "";
-  const done = () => { if (closing !== p) return; closing = null; p.el.remove(); for (const x of document.querySelectorAll("[data-flying]")) delete x.dataset.flying; };
-  const box = p.el.querySelector(".pop-box");
-  p.el.addEventListener("transitionend", (e) => { if ((e.target === box && e.propertyName === "top") || (e.target === p.el && e.propertyName === "opacity")) done(); });
-  requestAnimationFrame(() => { if (!p.el.getAnimations({ subtree: true }).length) done(); });
-  p.timer = 0;
+  if (!ctl) return;
+  const p = ctl; ctl = null;
+  if (p.ro) p.ro.disconnect();
+  p.el.remove();
+  mountCtl();
+  if (tl) layoutDock();
 }
 const fieldVal = (v) => String(Math.round(msOf(v) * 100) / 100);
 // The field is a label round its input, so a press anywhere on its box is the input's.
@@ -1703,7 +1697,7 @@ function sliderHtml(c, mode) {
 // The detents' names where they have room, each its own width and --space-1 clear of every name shown; the
 // rest keep their tick alone.
 function labelTicks() {
-  const s = pop && pop.el.querySelector(".dslider");
+  const s = ctl && ctl.el.querySelector(".dslider");
   if (!s) return;
   const names = [...s.querySelectorAll(".dname")], gap = px("--space-1"), W = s.clientWidth;
   const box = (n) => { const x = (parseFloat(n.style.left) / 100) * W, w = n.offsetWidth; return [x - w / 2, x + w / 2]; };
@@ -1715,7 +1709,7 @@ function labelTicks() {
   const order = names.slice().sort((a, b) => rank(a) - rank(b));
   for (const n of order) { const b = box(n); if (fits(b)) { taken.push(b); n.style.visibility = ""; } else n.style.visibility = "hidden"; }
 }
-// The chosen curve drawn large (DialKit's easing editor): its plot 0 to 1 across and up, room above and below
+// The chosen curve drawn large, an easing editor: its plot 0 to 1 across and up, room above and below
 // for a curve that overshoots; a bezier's two handles to drag; a live dot that plays the clip's length on it.
 const ED = { x0: 10, x1: 110, y0: 58, y1: 14 };
 const edX = (x) => ED.x0 + x * (ED.x1 - ED.x0), edY = (y) => ED.y0 + y * (ED.y1 - ED.y0);
@@ -1731,10 +1725,10 @@ function editorHtml(c) {
 // After every change the dot plays the clip on the curve: across in time, up with the value (WAAPI, linear in
 // time because the curve's x is time). With less motion it stands at the end.
 function playLive() {
-  const dot = pop && pop.el.querySelector(".ceditor .live");
+  const dot = ctl && ctl.el.querySelector(".ceditor .live");
   if (!dot) return;
   for (const a of dot.getAnimations()) a.cancel();
-  const c = clipNow(pop.key), dur = isSpring(c.ease) ? Math.max(msOf(c.dur), springOf(msOf(c.dur), c.ease.spring.bounce, travelOf(c)).settle) : msOf(c.dur);
+  const c = clipNow(ctl.key), dur = isSpring(c.ease) ? Math.max(msOf(c.dur), springOf(msOf(c.dur), c.ease.spring.bounce, travelOf(c), springP(c).velocity).settle) : msOf(c.dur);
   const pts = curvePoints(c.ease, 24), end = pts[pts.length - 1];
   const at = ([x, y]) => "translate(" + (edX(x) - edX(0)).toFixed(2) + "px, " + (edY(y) - edY(0)).toFixed(2) + "px)";
   if (reduced()) { dot.style.transform = at(end); return; }
@@ -1744,7 +1738,7 @@ function playLive() {
 // A held slider or handle redraws in place (its element keeps the pointer): the thumb, the fill, the detent
 // it stands on and its name; the curve, its arms and its knobs.
 function syncSlider(c) {
-  const s = pop.el.querySelector(".dslider");
+  const s = ctl.el.querySelector(".dslider");
   if (!s) return;
   const d = msOf(c.dur), max = +s.dataset.max, at = (v) => (Math.min(v, max) / max) * 100 + "%", on = typeof c.dur === "string" ? ms(c.dur) : null;
   s.querySelector(".dthumb").style.left = at(d); s.querySelector(".dslider-fill").style.inlineSize = at(d);
@@ -1754,7 +1748,7 @@ function syncSlider(c) {
   labelTicks();
 }
 function syncEditor(c) {
-  const ed = pop.el.querySelector(".ceditor svg");
+  const ed = ctl.el.querySelector(".ceditor svg");
   if (!ed) return;
   ed.querySelector(".curve").setAttribute("d", curvePoints(c.ease, 48).map(([x, y], i) => (i ? "L" : "M") + edX(x).toFixed(2) + " " + edY(y).toFixed(2)).join(" "));
   if (isSpring(c.ease)) return;
@@ -1765,81 +1759,132 @@ function syncEditor(c) {
   const hits = ed.querySelectorAll(".knob-hit");
   hits[0].setAttribute("cx", edX(x1)); hits[0].setAttribute("cy", edY(y1)); hits[1].setAttribute("cx", edX(x2)); hits[1].setAttribute("cy", edY(y2));
 }
-function renderPop(work) {
-  const el = pop.el, body = el.querySelector(".pop-body"), c = clipNow(pop.key, work), km = keptMove(), e = km.e;
+// ---- A spring's parameters ----
+// A spring is stored as the agent or the person wrote it: its response (the clip's length, Motion's
+// visualDuration), its bounce, its mass and its starting velocity. Its stiffness and damping are those four's
+// physics (ω = 2π / (1.2 × response), k = m ω², c = 2 (1 − bounce) √(k m)), and an edit to either is solved back
+// into the four, holding the others as a physical spring does: a new stiffness keeps the mass and the damping, a
+// new damping keeps the mass and the stiffness, a new mass keeps the stiffness and the damping.
+const springP = (c) => ({ bounce: c.ease.spring.bounce, mass: c.ease.spring.mass ?? 1, velocity: c.ease.spring.velocity ?? 0 });
+function springPhysics(c) {
+  const { bounce, mass } = springP(c), w = (2 * Math.PI) / (1.2 * Math.max(msOf(c.dur), 1) / 1000), k = mass * w * w;
+  return { stiffness: k, damping: 2 * (1 - bounce) * Math.sqrt(k * mass) };
+}
+// From mass, stiffness and damping back to the response (ms) and the bounce, unrounded, so the figure typed is
+// the figure read back.
+function springFrom(m, k, d) { const w = Math.sqrt(k / m); return { dur: (2 * Math.PI) / (1.2 * w) * 1000, bounce: 1 - d / (2 * Math.sqrt(k * m)) }; }
+// The house spring (DESIGN.md: 0.4s, no bounce), and whether a clip's spring is it.
+const isHouseSpring = (c) => { const s = springP(c); return ms("--dur-settle") === msOf(c.dur) && s.bounce === 0 && s.mass === 1 && s.velocity === 0; };
+// An agent's own value off the token scale is marked "ad hoc": a length that is no --dur-* token, or a spring that
+// is not the house spring, each as the agent wrote it (a person's own edit takes the selection pair instead).
+const adhocDur = (c, o) => typeof c.dur !== "string" && same(c.dur, o.dur);
+const adhocSpring = (c, o) => isSpring(c.ease) && same(c.ease, o.ease) && same(c.dur, o.dur) && !isHouseSpring(c);
+const adhocBadge = '<span class="badge adhoc">ad hoc</span>';
+const num = (v, places) => String(Math.round(v * 10 ** places) / 10 ** places);
+function springFields(c) {
+  const s = springP(c), p = springPhysics(c);
+  return { bounce: num(s.bounce, 3), mass: num(s.mass, 3), stiffness: num(p.stiffness, 1), damping: num(p.damping, 2), velocity: num(s.velocity, 2) };
+}
+function renderCtl(work) {
+  const el = ctl.el, body = el.querySelector(".ctl-body"), c = clipNow(ctl.key, work), km = keptMove(), e = km.e;
   const o = e.orig.find((x) => x.key === c.key), isEdited = !same(c, o);
   const mode = isSpring(c.ease) ? "spring" : SEG_CURVES.includes(c.ease) ? c.ease : "custom";
-  const d = msOf(c.dur);
-  // Its title is the row's first line, led by the row's own glyph (Family's trays: "a title … alongside an icon").
-  let html = '<div class="pop-head" data-prop="' + (c.kind || "text") + '"><span class="lead" role="img" aria-label="' + PROP_WORD[c.kind || "text"] + '">' + icon(PROP_GLYPH[c.kind || "text"]) + "</span><p>" + esc(c.of) + " <span>" + esc(c.does) + "</span></p>" + (isEdited ? '<button class="ghost-btn" id="popReset" type="button">Reset</button>' : "") + "</div>";
+  const d = msOf(c.dur), narrow = stacked();
+  // The head: in the inspector the row's first line, led by the row's own glyph, so the controls say whose they
+  // are; in the row, the row is the head and only its actions stand, trailing. Reset where the clip is edited,
+  // then Close (Back where the inspector stands in the timeline's place), bare symbols in one glass group.
+  const close = narrow && ctl.mode === "inspector" ? '<button class="icon-btn" id="ctlClose" type="button" aria-label="Back to the timeline" data-tip="Back to the timeline">' + icon(ICON.chevronLeft) + "</button>" : '<button class="icon-btn" id="ctlClose" type="button" aria-label="Close the clip\'s controls" data-tip="Close (Esc)">' + icon(ICON.close) + "</button>";
+  let html = '<div class="ctl-head" data-prop="' + (c.kind || "text") + '">';
+  if (narrow && ctl.mode === "inspector") html += '<div class="glass">' + close + "</div>";
+  if (ctl.mode === "inspector") html += '<span class="lead" role="img" aria-label="' + PROP_WORD[c.kind || "text"] + '">' + icon(PROP_GLYPH[c.kind || "text"]) + "</span><p>" + esc(c.of) + " <span>" + esc(c.does) + "</span></p>";
+  html += (isEdited ? '<button class="ghost-btn" id="ctlReset" type="button">Reset</button>' : "") + (narrow && ctl.mode === "inspector" ? "" : '<div class="glass">' + close + "</div>") + "</div>";
   // Length: the slider and its figure. A spring's length is its perceptual duration: its response.
-  html += '<div class="pop-sec"><div class="pop-label"><span>' + (mode === "spring" ? "Response" : "Duration") + '</span></div><div class="pop-line">' + sliderHtml(c, mode) + fieldHtml("dur", fieldVal(d), "ms", (mode === "spring" ? "Response" : "Duration") + ", ms") + "</div></div>";
-  // Curve: the four house curves as glyphs, then Spring and Custom; the chosen one drawn large beside its words.
+  html += '<div class="ctl-sec ctl-len"><div class="ctl-label"><span>' + (mode === "spring" ? "Response" : "Duration") + "</span>" + (adhocDur(c, o) ? adhocBadge : "") + '</div><div class="ctl-line">' + sliderHtml(c, mode) + fieldHtml("dur", fieldVal(d), "ms", (mode === "spring" ? "Response" : "Duration") + ", ms") + "</div></div>";
   // The curve: past four short segments the list, as the inspector's variant control does (designer's 2C):
   // the house curves as their glyphs with their words, then Spring and Custom, one radio group in two columns.
   const CHOICES = SEG_CURVES.map((t) => [t, glyph(t), CURVE_WORD[t]]).concat([["spring", glyph({ spring: { bounce: 0.3 } }), "Spring"], ["custom", '<svg viewBox="0 0 16 10" aria-hidden="true"><path d="M1 9 C 6 9, 4 1, 15 1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="0"/><circle cx="6" cy="9" r="1.5" fill="currentColor"/><circle cx="4" cy="1" r="1.5" fill="currentColor"/></svg>', "Custom"]]);
-  html += '<div class="pop-sec"><div class="pop-label"><span id="curveLabel">Curve</span></div><div class="curve-list" id="curveList" role="radiogroup" aria-labelledby="curveLabel">';
+  html += '<div class="ctl-sec ctl-curve"><div class="ctl-label"><span id="curveLabel">Curve</span></div><div class="curve-list" id="curveList" role="radiogroup" aria-labelledby="curveLabel">';
   for (const [t, g, w] of CHOICES) html += '<button class="curve-opt" type="button" role="radio" data-curve="' + t + '" aria-checked="' + (mode === t) + '" tabindex="' + (mode === t ? 0 : -1) + '">' + g + "<span>" + esc(w) + "</span></button>";
   html += "</div>";
   let side;
-  if (mode === "spring") side = '<span class="word">Spring</span><label class="pop-label" for="bounceIn"><span>Bounce</span>' + fig(c.ease.spring.bounce) + '</label><input id="bounceIn" type="range" data-f="bounce" min="0" max="0.6" step="0.05" value="' + c.ease.spring.bounce + '" aria-label="Bounce">';
+  if (mode === "spring") side = '<span class="word">Spring</span>' + (adhocSpring(c, o) ? adhocBadge : isHouseSpring(c) ? '<code class="badge">settle</code>' : "");
   else if (mode === "custom" && Array.isArray(c.ease)) side = '<span class="word">Custom</span><label class="fld wide"><input data-f="bez" aria-label="Custom bezier" value="' + c.ease.map((n) => +(+n).toFixed(3)).join(", ") + '"></label>';
   // A house curve the agent wrote that the control has no glyph for is shown as it is, its token and numbers.
   else if (mode === "custom") side = '<span class="word">' + esc(curveWord(c)) + "</span><code>" + esc(c.ease) + "</code><code>" + bezierOf(c.ease).join(", ") + "</code>";
   else side = '<span class="word">' + esc(CURVE_WORD[c.ease]) + "</span><span>Drag a handle to make it your own</span>";
-  html += '<div class="pop-line">' + editorHtml(c) + '<div class="curve-side">' + side + "</div></div></div>";
+  html += '<div class="ctl-line">' + editorHtml(c) + '<div class="curve-side">' + side + "</div></div></div>";
+  // A spring's parameters, each a figure that takes any value: the bounce as a slider and its figure, then the
+  // mass, the stiffness, the damping and the starting velocity.
+  if (mode === "spring") {
+    const f = springFields(c);
+    html += '<div class="ctl-sec ctl-spring"><div class="ctl-label"><span>Bounce</span></div><div class="ctl-line"><input type="range" data-f="bounce" min="0" max="1" step="0.01" value="' + Math.min(1, Math.max(0, +f.bounce)) + '" aria-label="Bounce">' + fieldHtml("bounce", f.bounce, "", "Bounce") + '</div><div class="spring-grid">';
+    for (const [k, w, u] of [["mass", "Mass", ""], ["stiffness", "Stiffness", ""], ["damping", "Damping", ""], ["velocity", "Velocity", "/s"]]) html += '<div class="spring-p"><span class="ctl-label">' + w + "</span>" + fieldHtml(k, f[k], u, w) + "</div>";
+    html += "</div></div>";
+  }
   // Delta: from and to, where the property has them.
-  if (c.from != null) html += '<div class="pop-sec"><div class="pop-label"><span><code>' + esc(c.prop) + "</code> from, to</span></div><div class=\"pop-line\">" + fieldHtml("from", String(c.from), "", c.prop + " from") + '<span class="arrow">→</span>' + fieldHtml("to", String(c.to), c.unit || "", c.prop + " to") + "</div></div>";
+  if (c.from != null) html += '<div class="ctl-sec ctl-delta"><div class="ctl-label"><span><code>' + esc(c.prop) + "</code> from, to</span></div><div class=\"ctl-line\">" + fieldHtml("from", String(c.from), "", c.prop + " from") + '<span class="arrow">→</span>' + fieldHtml("to", String(c.to), c.unit || "", c.prop + " to") + "</div></div>";
   const focused = document.activeElement && el.contains(document.activeElement) ? document.activeElement : null;
-  const focusKey = focused ? focused.dataset.f || focused.dataset.curve || focused.dataset.h || (focused.classList.contains("dslider") ? "slider" : null) : null;
+  const focusKey = focused ? (focused.type === "range" ? "range-" + focused.dataset.f : focused.dataset.f || focused.dataset.curve || focused.dataset.h || (focused.classList.contains("dslider") ? "slider" : focused.id ? "#" + focused.id : null)) : null;
   const caret = focused && focused.selectionStart;
-  const h0 = body.childElementCount ? body.offsetHeight : 0;
   body.innerHTML = html;
-  pop.committed = { dur: fieldVal(d), from: String(c.from), to: String(c.to), bez: Array.isArray(c.ease) ? c.ease.map((n) => +(+n).toFixed(3)).join(", ") : "" };
-  wirePop();
+  ctl.committed = { dur: fieldVal(d), from: String(c.from), to: String(c.to), bez: Array.isArray(c.ease) ? c.ease.map((n) => +(+n).toFixed(3)).join(", ") : "", ...(mode === "spring" ? springFields(c) : {}) };
+  wireCtl();
   labelTicks();
-  if (focusKey) { const f = el.querySelector('[data-f="' + focusKey + '"], [data-curve="' + focusKey + '"], [data-h="' + focusKey + '"]') || (focusKey === "slider" ? el.querySelector(".dslider") : null); if (f) { f.focus({ preventScroll: true }); if (caret != null && f.setSelectionRange) try { f.setSelectionRange(caret, caret); } catch {} } }
-  // The kit's morph: a height change tweens the box over --dur-morph on the drawer curve, on its far side from
-  // the row.
-  const h1 = body.offsetHeight;
-  if (h0 && h0 !== h1 && !reduced() && el.dataset.state === "open") el.querySelector(".pop-box").animate([{ [pop.above ? "top" : "bottom"]: h1 - h0 + "px" }, { [pop.above ? "top" : "bottom"]: "0px" }], { duration: ms("--dur-morph"), easing: tok("--ease-drawer") });
+  if (focusKey) {
+    const f = focusKey.startsWith("range-") ? el.querySelector('input[type="range"][data-f="' + focusKey.slice(6) + '"]') : focusKey.startsWith("#") ? el.querySelector(focusKey) : el.querySelector('input[data-f="' + focusKey + '"]:not([type="range"]), [data-curve="' + focusKey + '"], [data-h="' + focusKey + '"]') || (focusKey === "slider" ? el.querySelector(".dslider") : null);
+    if (f) { f.focus({ preventScroll: true }); if (caret != null && f.setSelectionRange) try { f.setSelectionRange(caret, caret); } catch {} }
+  }
 }
-// While the bar is dragged the fields tick with it in place; otherwise the popover is drawn anew.
-function refreshPop(work) {
-  if (!pop) return;
+// While a bar is dragged the fields tick with it in place; otherwise the controls are drawn anew.
+function refreshCtl(work) {
+  if (!ctl) return;
   if (work) {
-    const c = clipNow(pop.key, work), set = (f, v) => { const i = pop.el.querySelector('input[data-f="' + f + '"]'); if (i && document.activeElement !== i) i.value = v; };
+    const c = clipNow(ctl.key, work), set = (f, v) => { const i = ctl.el.querySelector('input[data-f="' + f + '"]:not([type="range"])'); if (i && document.activeElement !== i) i.value = v; };
     set("dur", fieldVal(c.dur)); if (c.from != null) { set("from", String(c.from)); set("to", String(c.to)); }
     if (Array.isArray(c.ease)) set("bez", c.ease.map((n) => +(+n).toFixed(3)).join(", "));
+    if (isSpring(c.ease)) for (const [k, v] of Object.entries(springFields(c))) set(k, v);
     syncSlider(c); syncEditor(c);
     return;
   }
-  renderPop();
-  if (!pop.held) placePop();
+  renderCtl();
   playLive();
 }
-function popCommit(next, { replay }) {
+function ctlCommit(next, { replay }) {
   const km = keptMove();
   if (commit(km.e, next)) { afterEdit(km, { replay }); return true; }
-  if (pop) renderPop();
+  if (ctl) renderCtl();
   return false;
 }
-function withClip(fn, key = pop.key) { const km = keptMove(), next = clone(km.e.cur), c = next.find((x) => x.key === key); fn(c, next); return next; }
-function applyField(f, raw, km, key = pop.key) {
+function withClip(fn, key = ctl.key) { const km = keptMove(), next = clone(km.e.cur), c = next.find((x) => x.key === key); fn(c, next); return next; }
+// A field's value applied to its clip: any finite number (a length off the token scale stays the number it is).
+function applyField(f, raw, km, key = ctl.key) {
   const text = String(raw).trim();
   if (f === "bez") { const n = text.split(/[\s,]+/).map(Number); if (n.length !== 4 || n.some((x) => !Number.isFinite(x))) return null; return withClip((c) => { c.ease = n; }, key); }
   const v = Number(text);
   if (!Number.isFinite(v)) return null;
+  const c0 = clipNow(key);
+  if ((f === "mass" || f === "stiffness") && v <= 0) return null;
+  if (f === "damping" && v < 0) return null;
   return withClip((c) => {
     const o = km.e.orig.find((x) => x.key === c.key);
     if (f === "dur") c.dur = asValue(Math.max(10, Math.round(v)), typeof o.dur === "string" ? o.dur : null);
-    if (f === "bounce") c.ease = { spring: { bounce: clamp(Math.round(v * 100) / 100, 0, 0.6) } };
+    // The bounce takes any value up to 1 (undamped); under 0 the spring is overdamped and creeps in.
+    if (f === "bounce") c.ease = { spring: { ...c0.ease.spring, bounce: Math.min(1, Math.round(v * 1000) / 1000) } };
+    if (f === "velocity") c.ease = { spring: { ...c0.ease.spring, velocity: Math.round(v * 100) / 100 } };
+    if (f === "mass" || f === "stiffness" || f === "damping") {
+      const s = springP(c0), p = springPhysics(c0), m = f === "mass" ? v : s.mass, k = f === "stiffness" ? v : p.stiffness, dmp = f === "damping" ? v : p.damping, r = springFrom(m, k, dmp);
+      c.dur = asValue(Math.max(10, r.dur), typeof o.dur === "string" ? o.dur : null);
+      c.ease = { spring: { ...c0.ease.spring, bounce: Math.min(1, r.bounce), mass: m } };
+    }
     if (f === "from") c.from = v;
     if (f === "to") c.to = v;
   }, key);
 }
+// Up and Down step a figure: a length along the ladder (⇧ or ⌥ by 10ms), a spring's parameter by its own step
+// (⇧ ten of them), from and to by 1.
+const SPRING_STEP = { bounce: 0.01, mass: 0.1, stiffness: 10, damping: 1, velocity: 0.5 };
 function stepField(f, dir, e, km) {
-  const c = clipNow(pop.key);
+  const c = clipNow(ctl.key);
   if (f === "dur") {
     const cur = msOf(c.dur);
     let n;
@@ -1847,24 +1892,25 @@ function stepField(f, dir, e, km) {
     else { n = ladderMs().filter((l) => (dir > 0 ? l > cur : l < cur)).sort((a, b) => dir * (a - b))[0]; if (n === undefined) return null; }
     return applyField(f, n, km);
   }
+  if (SPRING_STEP[f] && isSpring(c.ease)) return applyField(f, +springFields(c)[f] + dir * SPRING_STEP[f] * (e.shiftKey ? 10 : 1), km);
   if (f === "from" || f === "to") return applyField(f, c[f] + dir, km);
   return null;
 }
 // A live change (a slider or a handle held): the clip takes it at once, the stage replays on release.
 function liveEdit(km, next) { km.e.cur = next; afterEdit(km, { replay: false, rescaleNow: false, inPlace: true }); }
 function settleEdit(before) { const kmm = keptMove(); if (!same(before, kmm.e.cur)) { kmm.e.past.push(before); kmm.e.future = []; rescale(kmm); afterEdit(kmm, { replay: true }); } }
-function wirePop() {
-  const el = pop.el, km = keptMove();
+function wireCtl() {
+  const el = ctl.el, km = keptMove();
   for (const i of el.querySelectorAll("input[data-f]:not([type=range])")) {
     const f = i.dataset.f;
     i.onkeydown = (e) => {
-      if (e.key === "ArrowUp" || e.key === "ArrowDown") { e.preventDefault(); const next = stepField(f, e.key === "ArrowUp" ? 1 : -1, e, km); if (next) popCommit(next, { replay: false }); }
-      else if (e.key === "Enter") { e.preventDefault(); const next = applyField(f, i.value, km); if (next) popCommit(next, { replay: true }); else i.value = pop.committed[f]; }
-      else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); if (i.value !== pop.committed[f]) i.value = pop.committed[f]; else closeAndFocusSource(); }
+      if (e.key === "ArrowUp" || e.key === "ArrowDown") { e.preventDefault(); const next = stepField(f, e.key === "ArrowUp" ? 1 : -1, e, km); if (next) ctlCommit(next, { replay: false }); }
+      else if (e.key === "Enter") { e.preventDefault(); const next = applyField(f, i.value, km); if (next) ctlCommit(next, { replay: true }); else i.value = ctl.committed[f]; }
+      else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); if (i.value !== ctl.committed[f]) i.value = ctl.committed[f]; else closeAndFocusSource(); }
     };
-    i.onblur = () => { if (!pop || i.value === pop.committed[f]) return; const key = pop.key, val = i.value; setTimeout(() => { const next = applyField(f, val, keptMove(), key); if (next) { const kmm = keptMove(); if (commit(kmm.e, next)) afterEdit(kmm, { replay: true }); } }); };
+    i.onblur = () => { if (!ctl || i.value === ctl.committed[f]) return; const key = ctl.key, val = i.value; setTimeout(() => { const next = applyField(f, val, keptMove(), key); if (next) { const kmm = keptMove(); if (commit(kmm.e, next)) afterEdit(kmm, { replay: true }); } }); };
   }
-  const bounce = el.querySelector('input[data-f="bounce"]');
+  const bounce = el.querySelector('input[type="range"][data-f="bounce"]');
   if (bounce) {
     let before = null;
     bounce.onpointerdown = () => { before = clone(keptMove().e.cur); };
@@ -1875,16 +1921,17 @@ function wirePop() {
   const opts = [...el.querySelectorAll("#curveList .curve-opt")];
   for (const b of opts) b.onkeydown = (e) => { const d = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key]; if (!d) return; e.preventDefault(); const n = opts[(opts.indexOf(b) + d + opts.length) % opts.length]; n.focus(); n.click(); };
   for (const b of opts) b.onclick = () => {
-    const kind = b.dataset.curve, c = clipNow(pop.key);
+    const kind = b.dataset.curve, c = clipNow(ctl.key);
     const next = withClip((x) => {
       if (kind === "spring") x.ease = isSpring(c.ease) ? c.ease : { spring: { bounce: 0 } };
       else if (kind === "custom") x.ease = Array.isArray(c.ease) ? c.ease : isSpring(c.ease) ? bezierOf("--ease-out") : bezierOf(c.ease);
       else x.ease = kind;
     });
-    popCommit(next, { replay: true });
+    ctlCommit(next, { replay: true });
   };
-  const rs = el.querySelector("#popReset");
-  if (rs) rs.onclick = () => { const next = clone(km.e.cur), i = next.findIndex((x) => x.key === pop.key); next[i] = clone(km.e.orig.find((x) => x.key === pop.key)); popCommit(next, { replay: true }); };
+  const rs = el.querySelector("#ctlReset");
+  if (rs) rs.onclick = () => { const next = clone(km.e.cur), i = next.findIndex((x) => x.key === ctl.key); next[i] = clone(km.e.orig.find((x) => x.key === ctl.key)); ctlCommit(next, { replay: true }); };
+  el.querySelector("#ctlClose").onclick = () => closeAndFocusSource();
   wireSlider(el.querySelector(".dslider"));
   for (const k of el.querySelectorAll(".ceditor .knob")) wireKnob(k);
   // A finger's 44px circle round each handle hands its press to the handle.
@@ -1918,7 +1965,7 @@ function wireSlider(s) {
     s.onpointerup = s.onpointercancel = () => { s.onpointermove = s.onpointerup = s.onpointercancel = null; delete rootEl.dataset.sliding; settleEdit(before); };
   };
   s.onkeydown = (e) => {
-    const c = clipNow(pop.key), cur = msOf(c.dur), km = keptMove();
+    const c = clipNow(ctl.key), cur = msOf(c.dur), km = keptMove();
     let n = null;
     if (e.key === "ArrowRight" || e.key === "ArrowUp") n = e.shiftKey ? cur + 10 : (ds.find((d) => d.v > cur) || {}).v;
     else if (e.key === "ArrowLeft" || e.key === "ArrowDown") n = e.shiftKey ? cur - 10 : ([...ds].reverse().find((d) => d.v < cur) || {}).v;
@@ -1934,7 +1981,7 @@ function wireSlider(s) {
 // by 0.05 (⇧ 0.01).
 function wireKnob(k) {
   const h = +k.dataset.h, svg = k.ownerSVGElement;
-  const ease = () => { const c = clipNow(pop.key); return (Array.isArray(c.ease) ? c.ease : bezierOf(c.ease)).slice(); };
+  const ease = () => { const c = clipNow(ctl.key); return (Array.isArray(c.ease) ? c.ease : bezierOf(c.ease)).slice(); };
   const set = (x, y) => { const b = ease(); if (h === 1) { b[0] = x; b[1] = y; } else { b[2] = x; b[3] = y; } return withClip((c) => { c.ease = b.map((n) => Math.round(n * 1000) / 1000); }); };
   k.onpointerdown = (e) => {
     e.preventDefault(); e.stopPropagation(); k.setPointerCapture(e.pointerId); rootEl.dataset.sliding = "";
@@ -1954,8 +2001,8 @@ function wireKnob(k) {
     popCommit(set(clamp(x, 0, 1), clamp(y, -0.5, 1.5)), { replay: true });
   };
 }
-// Esc folds it back into its source and gives the source the focus.
-function closeAndFocusSource() { const p = pop; const a = p && anchorEl(p); closePop(); if (a) a.focus({ preventScroll: true }); }
+// Esc closes the clip's controls and gives the pressed thing the focus.
+function closeAndFocusSource() { const p = ctl; const a = p && anchorEl(p); closeCtl(); if (a) a.focus({ preventScroll: true }); }
 
 // ---- The kit's DropdownMenu (the Outline) ----
 let menu = null;
@@ -1966,7 +2013,7 @@ function openMenu(kind, trigger, head, items) {
   el.className = "menu"; el.setAttribute("role", "menu"); el.setAttribute("aria-label", kind === "outline" ? "Outline" : kind);
   el.innerHTML = (head || "") + items.map((it, i) => '<div class="mi" role="menuitemradio" tabindex="-1" data-i="' + i + '" aria-checked="' + !!it.on + '">' + it.html + "</div>").join("");
   document.body.append(el);
-  const tb = trigger.getBoundingClientRect(), inset = popInset(), gap = px("--space-1");
+  const tb = trigger.getBoundingClientRect(), inset = floatInset(), gap = px("--space-1");
   const left = clamp(tb.right - el.offsetWidth, inset, innerWidth - inset - el.offsetWidth);
   const below = tb.bottom + gap + el.offsetHeight <= innerHeight - inset;
   el.style.left = left + "px"; el.style.top = (below ? tb.bottom + gap : Math.max(inset, tb.top - gap - el.offsetHeight)) + "px";
@@ -1990,14 +2037,14 @@ function closeMenu() { if (menu) { menu.trigger.setAttribute("aria-expanded", "f
 // An outside press commits the field being edited, closes, and still acts.
 addEventListener("pointerdown", (e) => {
   if (menu && !menu.el.contains(e.target) && !menu.trigger.contains(e.target)) closeMenu();
-  if (pop && !pop.el.contains(e.target) && !(menu && menu.el.contains(e.target))) {
-    const a = document.activeElement; if (a && pop.el.contains(a)) a.blur();
-    const row = e.target.closest && e.target.closest(".clip");
-    if (row && row.dataset.key === pop.key && !e.shiftKey && !e.metaKey && !e.ctrlKey) return;
-    closePop();
+  // The clip's controls stay while the timeline is worked; a press outside the dock closes them.
+  // (The review bar's switches are the reviewer's, not the tool's: moving them keeps the controls open.)
+  if (ctl && !ctl.el.contains(e.target) && !$("dock").contains(e.target) && !(e.target.closest && e.target.closest(".review-bar")) && !(menu && menu.el.contains(e.target))) {
+    const a = document.activeElement; if (a && ctl.el.contains(a)) a.blur();
+    closeCtl();
   }
 }, true);
-addEventListener("scroll", (e) => { if (pop && !pop.held) placePop(); if (menu && !(e.target instanceof Node && menu.el.contains(e.target))) closeMenu(); }, true);
+addEventListener("scroll", (e) => { if (menu && !(e.target instanceof Node && menu.el.contains(e.target))) closeMenu(); }, true);
 
 // ---- The tooltip (DESIGN.md Tooltip): ink, never coral; after the kit's 400ms rest ----
 let tipTimer = null, tipFor = null;
@@ -2048,8 +2095,10 @@ function labelTab(b, name) { b.replaceChildren(); const l = document.createEleme
 const zoomGroup = (label, id) => '<div class="zoom" role="group" aria-label="Zoom, ' + esc(label) + '"><button class="icon-btn" type="button" data-z="out" aria-label="Zoom out" data-tip="Zoom out (⌘ scroll)">' + icon(ICON.zoomOut) + '</button><button class="zoom-fit" type="button" data-z="fit"' + (id ? ' id="' + id + '"' : "") + ' aria-label="Fit all" data-tip="Fit all (⇧1)">100%</button><button class="icon-btn" type="button" data-z="in" aria-label="Zoom in" data-tip="Zoom in (⌘ scroll)">' + icon(ICON.zoomIn) + "</button></div>";
 const outlineBtn = (id) => '<button class="icon-btn hide-btn outline-btn" type="button" data-z="outline"' + (id ? ' id="' + id + '"' : "") + ' aria-label="Outline" aria-haspopup="menu" aria-expanded="false" data-tip="Outline">' + icon(ICON.outline) + "</button>";
 const zoomAct = (cid, z) => (z.dataset.z === "fit" ? fitZoom(cid) : z.dataset.z === "outline" ? openOutline(cid, z) : setZoom(cid, G[cid].zoom * (z.dataset.z === "in" ? 1.2 : 1 / 1.2)));
-// The toolbar's end: the zoom group, the Outline, and Hide last ("Hide graph", a chevron to the trailing edge).
-$("barEnd").innerHTML = zoomGroup("the graph", "zoomLevel") + outlineBtn("outlineBtn") + '<button class="icon-btn hide-btn" id="hide" type="button" aria-label="Hide graph" aria-expanded="true" data-tip="Hide graph (H)">' + icon(ICON.chevronRight) + "</button>";
+// The toolbar's end, two glass groups: what acts on the view (the zoom and the Outline), then Hide on its own
+// ("Hide graph", a chevron to the trailing edge).
+const viewGroup = (label, id, outlineId) => '<div class="glass view-group" role="group" aria-label="' + esc(label) + '">' + zoomGroup(label, id) + outlineBtn(outlineId) + "</div>";
+$("barEnd").innerHTML = viewGroup("the graph", "zoomLevel", "outlineBtn") + '<div class="glass hide-group"><button class="icon-btn hide-btn" id="hide" type="button" aria-label="Hide graph" aria-expanded="true" data-tip="Hide graph (H)">' + icon(ICON.chevronRight) + "</button></div>";
 for (const z of $("barEnd").querySelectorAll("[data-z]")) z.onclick = () => zoomAct(tab, z);
 for (const c of review) {
   const page = document.createElement("section");
@@ -2059,12 +2108,12 @@ for (const c of review) {
   // Its name in the label role over its graph, and its own zoom and Fit: shown when every graph is on screen.
   const sec = document.createElement("section");
   sec.className = "gsec"; sec.dataset.comp = c.id; sec.setAttribute("aria-label", c.name);
-  sec.innerHTML = '<header class="gsec-head"><h3 class="gsec-name">' + esc(c.name) + "</h3>" + zoomGroup(c.name) + outlineBtn() + '</header><div class="gview"><div class="graph" role="region" aria-label="' + esc(c.name) + ', its state machines"></div><div class="doors"></div></div><div class="dials"></div>';
+  sec.innerHTML = '<header class="gsec-head"><h3 class="gsec-name">' + esc(c.name) + "</h3>" + viewGroup(c.name) + '</header><div class="gview"><div class="graph" role="region" aria-label="' + esc(c.name) + ', its state machines"></div><div class="doors"></div></div><div class="dials"></div>';
   for (const z of sec.querySelectorAll("[data-z]")) z.onclick = () => zoomAct(c.id, z);
   $("graphs").append(sec);
   const b = document.createElement("button");
   b.className = "t-tab"; b.setAttribute("role", "tab"); b.dataset.tab = c.id; labelTab(b, c.name);
-  b.onclick = () => { if (tab === c.id) return; stopPlay(); tab = c.id; peek = null; time = null; closePop(true); render(true); };
+  b.onclick = () => { if (tab === c.id) return; stopPlay(); tab = c.id; peek = null; time = null; closeCtl(); render(true); };
   $("tabs").append(b);
 }
 // Two graphs stacked share the panel's height: the first takes --split-h (half, until its foot edge is
@@ -2106,7 +2155,7 @@ function setFace(f) {
   for (const b of $("faces").querySelectorAll(".t-tab")) b.setAttribute("aria-selected", String(b.dataset.face === f));
   slidePill($("faces"), was !== f && !reduced());
   if (was === f) return;
-  closePop(true);
+  closeCtl();
   // The face that comes back draws at its size.
   if (f === "graph") { drawGraph(); mark(); showKept(); } else buildDock();
 }
@@ -2114,14 +2163,16 @@ for (const b of $("faces").querySelectorAll(".t-tab")) b.onclick = () => setFace
 // The stops: the head alone, peek (--c-graph-drawer-stop) and full (--c-sheet-max-h).
 const STOPS = ["head", "peek", "full"];
 const stopPx = (s) => (s === "head" ? $("sheetHead").offsetHeight + 1 : Math.round(lenOf(s === "full" ? "--c-sheet-max-h" : "--c-graph-drawer-stop")));
-function labelHead() { $("sheetTitle").setAttribute("aria-label", "Design graph, " + $("sheetState").textContent + (layoutIs("drawer") ? ". Drawer at " + stop + "; tap for " + (stop === "peek" ? "full" : "peek") : "")); }
+// The grabber is the drawer's own control for a key and a screen reader; a press anywhere on the head does
+// the same.
+function labelHead() { $("grabber").setAttribute("aria-label", "Drawer at " + stop + "; press for " + (stop === "peek" ? "full" : "peek")); }
 function setDrawerH(h) { drawerH = Math.round(h); rootEl.style.setProperty("--drawer-h", drawerH + "px"); sizeDockRoom(); }
 // The sheet's own Hide (round 29 review): in the drawer a chevron down folds it to its head bar and, folded, the
 // same control points up and is Show; in the side sheet it points to the trailing edge the sheet folds to.
 function labelSheetHide() {
   const b = $("sheetHide"), drawer = layoutIs("drawer"), folded = drawer && stop === "head";
-  // One chevron that turns over as the drawer folds and opens (Family's chevron that transforms rather than
-  // swaps), on the drawer's own clock.
+  // One chevron that turns over as the drawer folds and opens, one glyph turning rather than two swapping, on
+  // the drawer's own clock.
   const glyph = drawer ? ICON.chevron : ICON.chevronRight;
   if (b.dataset.glyph !== glyph) { b.innerHTML = icon(glyph); b.dataset.glyph = glyph; }
   b.toggleAttribute("data-folded", folded);
@@ -2138,15 +2189,13 @@ function setStop(s) {
 }
 const nextStop = (dir) => STOPS[clamp(STOPS.indexOf(stop) + dir, 0, STOPS.length - 1)];
 // A tap on the head toggles peek and full; from the head stop it goes to peek (the r22 ruling). The head
-// stop is a drag down or Hide. Up and Down step it by keys. In the side sheet a tap on the title brings the
-// graph back to the kept state.
+// stop is a drag down or Hide. Up and Down on the grabber step it by keys.
 $("sheetHead").addEventListener("click", (e) => {
   if (e.target.closest(".faces, #sheetHide")) return;
   if ($("sheetHead")._dragged) { $("sheetHead")._dragged = false; return; }
   if (layoutIs("drawer")) setStop(stop === "peek" ? "full" : "peek");
-  else if (e.target.closest("#sheetTitle")) { setFace("graph"); showKept(); }
 });
-$("sheetTitle").onkeydown = (e) => { if (!layoutIs("drawer") || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return; e.preventDefault(); setStop(nextStop(e.key === "ArrowUp" ? 1 : -1)); };
+$("grabber").onkeydown = (e) => { if (!layoutIs("drawer") || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return; e.preventDefault(); setStop(nextStop(e.key === "ArrowUp" ? 1 : -1)); };
 // Dragging the head moves the drawer with the finger; it settles on the nearest stop.
 $("sheetHead").addEventListener("pointerdown", (e) => {
   const head = $("sheetHead");
@@ -2179,7 +2228,7 @@ const splitFloor = () => { const gs = splitGraphs(); return gs.length && gs[0].q
 const splitCeil = () => { const gs = splitGraphs(); return gs.length < 2 ? splitFloor() : Math.max(splitFloor(), gs[0].offsetHeight + gs[gs.length - 1].offsetHeight - (gs[gs.length - 1].querySelector(".node") ? floorOf(gs[gs.length - 1]) : 120)); };
 function setSplit(h) { splitDragged = true; rootEl.style.setProperty("--split-h", clamp(Math.round(h), splitFloor(), splitCeil()) + "px"); placeSplit(); syncSashes(); }
 const stackedGraphs = () => !!screen.multi && screen.multi.graphs === "stack";
-// The dock's floor is its head bar alone (Figma Motion's collapsed timeline); its ceiling leaves the page
+// The dock's floor is its head bar alone (a timeline folded to its transport); its ceiling leaves the page
 // --c-page-h-floor, so the page's head and first field stay readable.
 function dockFloor() {
   const d = $("dock"), head = d.querySelector(".dock-head");
@@ -2202,7 +2251,7 @@ function syncSashes() {
   set($("sashDC"), $("dock").offsetHeight, dockFloor(), dockCeil(), $("dock").offsetHeight + " px tall");
   if (stackedGraphs()) set($("sashS"), splitGraphs()[0].offsetHeight, splitFloor(), splitCeil());
 }
-function relayoutAfterResize() { for (const c of shownComps()) drawGraph(c.id); mark(); for (const c of shownComps()) showKept(c.id); placeSplit(); if (tl) layoutDock(); sizeDockRoom(); if (pop) placePop(); }
+function relayoutAfterResize() { for (const c of shownComps()) drawGraph(c.id); mark(); for (const c of shownComps()) showKept(c.id); placeSplit(); if (tl) layoutDock(); sizeDockRoom(); }
 
 // ---- The arc (section A): one object at three lengths ----
 // Drawn in its corner's own frame: the panel's bottom-leading corner at 0,0, x in along the foot, y up the
@@ -2455,7 +2504,7 @@ function setOpen(open, how = {}) {
   if (layoutIs("drawer")) { setStop(open ? "peek" : "head"); return; }
   if (layoutIs("desk")) {
     if (panelOpen()) tabPlace();
-    if (!open) closePop(true);
+    if (!open) closeCtl();
     if (how.key) {
       // A keyboard toggle is instant.
       panel.dataset.instant = ""; applyOpen(open); void panel.offsetWidth;
@@ -2470,7 +2519,7 @@ function setOpen(open, how = {}) {
   }
   applyOpen(open);
   $("show").hidden = open;
-  if (!open) closePop(true);
+  if (!open) closeCtl();
   if (open) { if (face === "graph") { drawGraph(); mark(); showKept(); } else buildDock(); }
 }
 const toolsOpen = () => (layoutIs("drawer") ? stop !== "head" : panelOpen());
@@ -2492,12 +2541,12 @@ addEventListener("keydown", (e) => {
     return;
   }
   if (e.metaKey || e.ctrlKey || typing(document.activeElement)) return;
-  if (e.key === "Escape" && pop && !menu) { e.preventDefault(); closeAndFocusSource(); return; }
+  if (e.key === "Escape" && ctl && !menu) { e.preventDefault(); closeAndFocusSource(); return; }
   if ((e.key === "h" || e.key === "H") && !e.altKey) { const was = toolsOpen(); setOpen(!was, { key: true }); if (layoutIs("desk")) (was ? $("shell") : $("hide")).focus({ preventScroll: true }); return; }
-  // ⇧1, as Figma's: fit every slab in the view.
+  // ⇧1: fit every slab in the view.
   if (e.shiftKey && e.code === "Digit1") { e.preventDefault(); if (toolsOpen()) fitZoom(tab); return; }
   if (!km || !tl) return;
-  if (e.key === " " && !(document.activeElement && (document.activeElement.tagName === "BUTTON" || (document.activeElement.closest && document.activeElement.closest(".panel, .pop, .menu, .show, .sash"))))) { e.preventDefault(); playing ? stopPlay() : play(); }
+  if (e.key === " " && !(document.activeElement && (document.activeElement.tagName === "BUTTON" || (document.activeElement.closest && document.activeElement.closest(".panel, .ctl, .menu, .show, .sash"))))) { e.preventDefault(); playing ? stopPlay() : play(); }
   else if (e.key === "Home" && !e.target.closest(".sash, .dslider")) { stopPlayKeepTime(); time = 0; drawStage(); updateTime(); }
   else if (e.key === "End" && !e.target.closest(".sash, .dslider")) { stopPlayKeepTime(); time = null; drawStage(); updateTime(); }
   else if (e.key === "," || e.key === ".") { stopPlayKeepTime(); const len = playLengthOf(km.r); time = clamp((time ?? lengthOf(km.r)) + (e.key === "." ? 10 : -10), 0, len); drawStage(); updateTime(); }
@@ -2507,7 +2556,7 @@ new ResizeObserver(() => sizeDockRoom()).observe($("dock"));
 // A new size can be a new class: its layout is set first, then everything draws at it. A dragged dock height
 // stays inside the new room; the drawer's stop is re-measured on the new height.
 function onResize() {
-  if (applyScreen()) { closePop(true); stopPlay(); if (layoutIs("desk")) $("tools").dataset.face = face = "graph"; }
+  if (applyScreen()) { closeCtl(); stopPlay(); if (layoutIs("desk")) $("tools").dataset.face = face = "graph"; }
   if (layoutIs("drawer")) setStop(stop);
   if (layoutIs("desk") && rootEl.style.getPropertyValue("--dock-h")) setDockH(parseFloat(rootEl.style.getPropertyValue("--dock-h")));
   if (layoutIs("drawer") && !panelOpen()) applyOpen(true);
@@ -2524,14 +2573,22 @@ if (layoutIs("drawer")) setStop("peek");
 labelSheetHide();
 setFace("graph");
 
-// ---- The round's open choice (the owner's): clip kinds in their own hue, or in ink only ----
+// ---- The round's open choices (the owner's): clip kinds in their own hue or in ink only, and a clip's
+// controls in its row or in an inspector ----
 rootEl.dataset.kinds = "hue";
-for (const b of $("kinds").querySelectorAll(".t-tab")) b.onclick = () => {
-  rootEl.dataset.kinds = b.dataset.kinds;
-  for (const x of $("kinds").querySelectorAll(".t-tab")) x.setAttribute("aria-selected", String(x === b));
-  slidePill($("kinds"), !reduced());
-};
-requestAnimationFrame(() => slidePill($("kinds"), false));
+rootEl.dataset.ctl = "row";
+function reviewSwitch(id, attr, then) {
+  for (const b of $(id).querySelectorAll(".t-tab")) b.onclick = () => {
+    rootEl.dataset[attr] = b.dataset[attr];
+    for (const x of $(id).querySelectorAll(".t-tab")) x.setAttribute("aria-selected", String(x === b));
+    slidePill($(id), !reduced());
+    if (then) then();
+  };
+  requestAnimationFrame(() => slidePill($(id), false));
+}
+reviewSwitch("kinds", "kinds");
+// A clip's controls open stay open across the switch, in their new home.
+reviewSwitch("ctlChoice", "ctl", () => { if (!ctl) return; const { key, anchor } = ctl; closeCtl(); openCtl(key, "pointer", anchor); });
 
 render();
 document.fonts.ready.then(() => { if (layoutIs("drawer")) setStop(stop); render(); });

@@ -73,7 +73,7 @@
   --c-edge-head-leg: 7px;
   --c-edge-dash-len: 24px;
   --c-edge-dash-w: calc(2 * var(--c-graph-edge));
-  /* The popover's curve editor (section C, DialKit's easing editor) and its slider's snap. */
+  /* The clip controls' curve editor (section C) and its slider's snap. */
   --c-curve-editor-w: 120px;
   --c-curve-editor-h: 72px;
   --c-detent-snap: 6px;
@@ -145,7 +145,16 @@ button { font: inherit; color: inherit; }
 .line.muted { color: var(--ink-muted); }
 .line.fail { color: var(--status-fail-ink); }
 .field .line { margin: var(--space-1) 0 0; }
-.actions { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--space-2); }
+/* The page under review scrolls under the house edge fade where more is past its top or its foot. */
+.page[data-fade~="top"] { --page-fade-t: var(--c-edge-fade-len-phone); }
+.page[data-fade~="foot"]:not(:has(.stage .actions)) { --page-fade-b: var(--c-edge-fade-len-phone); }
+.page[data-fade] { mask-image: linear-gradient(transparent, #000 var(--page-fade-t, 0px), #000 calc(100% - var(--page-fade-b, 0px)), transparent); }
+/* The form's actions hold at the page's foot while the form runs on past it, so they never sit under the
+   drawer or the dock: their own band of the frame's surface, the edge fade over the form above them while
+   more is under them. At rest their padding is taken back by their margins, so nothing moves. */
+.actions { position: sticky; z-index: 1; inset-block-end: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--space-2); margin: calc(-1 * var(--space-3)) calc(-1 * var(--space-6)); padding: var(--space-3) var(--space-6); background: var(--surface-raised); }
+.actions::before { content: ""; position: absolute; inset-inline: 0; inset-block-end: 100%; block-size: var(--c-edge-fade-len-phone); background: linear-gradient(transparent, var(--surface-raised)); opacity: 0; pointer-events: none; }
+.page[data-fade~="foot"] .actions::before { opacity: 1; }
 .actions .note { font: var(--type-meta); color: var(--ink-muted); text-wrap: pretty; }
 @container page (width < 440px) { .actions .note { grid-column: 1 / -1; } .actions .btn { grid-row: 2; grid-column: 2; } .actions .btn.primary { grid-column: 3; } }
 .btn { display: inline-flex; align-items: center; min-block-size: var(--c-btn-h-sm); padding: 0 var(--space-4); border: 1px solid var(--border-control); border-radius: var(--mock-radius, 8px); background: var(--surface-raised); color: var(--ink-strong); font: var(--type-button); white-space: nowrap; }
@@ -177,7 +186,22 @@ button { font: inherit; color: inherit; }
    fold that one box into the tab. Its content keeps the 1px edge plus --space-2 in. */
 .panel { z-index: calc(var(--layer-dock) + 1); inset-block-start: max(var(--space-5), env(safe-area-inset-top, 0px)); inset-inline-end: calc(var(--gutter-end) + var(--space-5)); inline-size: var(--panel-w); max-block-size: calc(100dvh - 2 * var(--space-5)); display: flex; flex-direction: column; border: 0; border-radius: var(--radius-panel); padding: calc(var(--space-2) + 1px); background: none; box-shadow: none; }
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-block-end: var(--space-2); }
-.bar-end { display: flex; align-items: center; gap: var(--space-1); margin-inline-start: auto; flex: none; }
+.bar-end { display: flex; align-items: center; gap: var(--space-2); margin-inline-start: auto; flex: none; }
+/* A bar's group (DESIGN.md, The Title Bars Follow Liquid Glass Rule; the top bar's glass group its recipe): one
+   capsule of the panel's glass floating over what is under it, its items bare symbols --c-bar-group-pad in and
+   concentric with it. Its glass is its own layer under its items, so a segmented thumb inside stays over it. Under
+   Increase Contrast or Reduce Transparency it is the solid surface with the 3:1 edge. */
+.glass { position: relative; isolation: isolate; display: inline-flex; align-items: center; gap: var(--c-bar-group-pad); min-inline-size: 0; padding: var(--c-bar-group-pad); border-radius: var(--radius-pill); }
+.glass::before { content: ""; position: absolute; z-index: -1; inset: 0; border-radius: inherit; border: 1px solid var(--border-hairline); background: var(--material-panel); box-shadow: var(--shadow-tile); backdrop-filter: blur(calc(var(--material-blur) * 1.4)) saturate(var(--material-saturate)); pointer-events: none; }
+@media (prefers-contrast: more) { .glass::before { border-color: var(--border-contrast); background: var(--surface-raised); backdrop-filter: none; } }
+@media (prefers-reduced-transparency: reduce) { .glass::before { border-color: var(--border-contrast); background: var(--surface-raised); backdrop-filter: none; } }
+.glass :is(.icon-btn, .hide-btn) { inline-size: var(--c-bar-item); block-size: var(--c-bar-item); border-radius: var(--radius-pill); }
+.glass .zoom-fit { block-size: var(--c-bar-item); border-radius: var(--radius-pill); }
+/* A segmented switch as a group: the glass is its groove, the thumb lifted on it, each segment concentric. */
+.glass > .t-tabs { padding: 0; background: none; border-radius: var(--radius-pill); }
+.glass > .t-tabs .t-tab { block-size: var(--c-bar-item); border-radius: var(--radius-pill); }
+.glass > .t-tabs .t-tabs-pill { inset-block-start: 0; block-size: var(--c-bar-item); border-radius: var(--radius-pill); }
+.tabs-group { flex: 0 1 auto; }
 /* The well: the graph's view between two bands of its own, one at its top and one at its foot, where the
    doorways stand (section E). A door in its band covers nothing of the graph; the view scrolls between them,
    its ends faded by the house edge fade so what scrolls on reads as going on. */
@@ -313,7 +337,7 @@ html:not([data-multi]) .gsec:not([data-current]) { display: none; }
 html:not([data-multi]) .gsec-head { display: none; }
 .gsec-head { display: flex; align-items: center; gap: var(--space-2); margin-block-end: var(--space-2); }
 .gsec-name { flex: 1 1 auto; min-inline-size: 0; margin: 0; padding-inline-start: var(--space-1); font: var(--type-label); color: var(--ink-strong); overflow-wrap: anywhere; text-wrap: balance; }
-html[data-multi] .toolbar :is(#tabs, .bar-end > .zoom, .bar-end > .outline-btn) { display: none; }
+html[data-multi] .toolbar :is(.tabs-group, .bar-end > .view-group) { display: none; }
 html[data-multi] .graphs { gap: var(--space-4); }
 html[data-graphs="stack"] .panel { block-size: calc(100dvh - 2 * var(--space-5)); }
 html[data-graphs="stack"] .graphs { flex: 1 1 auto; }
@@ -444,7 +468,7 @@ html[data-layout="desk"] .panel[data-open="false"] .panel-shell:active .tab-glyp
 .dock { container: dock / inline-size; inset-inline-start: calc(var(--gutter-start) + var(--space-5)); inset-inline-end: calc(var(--gutter-end) + var(--panel-w) + 2 * var(--space-5)); inset-block-end: var(--space-5); block-size: var(--dock-h, auto); max-block-size: calc(100dvh - 2 * var(--space-5)); display: flex; flex-direction: column; border-radius: var(--radius-panel); padding: 0 var(--space-4); }
 .dock-body { display: contents; }
 /* Its head bar (44px): the move, play, loop and the time; the edits at its end. Dragged to its floor, the dock
-   is this bar alone (Figma Motion's collapsed timeline). */
+   is this bar alone: a timeline folded to its transport. */
 .dock-head { flex: none; display: flex; align-items: center; gap: var(--space-2); min-block-size: var(--c-row-h); }
 .dock-title { flex: 1 1 auto; min-inline-size: 0; margin: 0; font: var(--type-label); color: var(--ink-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .transport { display: flex; align-items: center; gap: var(--space-1); flex: none; }
@@ -453,7 +477,12 @@ html[data-layout="desk"] .panel[data-open="false"] .panel-shell:active .tab-glyp
 .ghost-btn { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; block-size: var(--c-btn-h-sm); padding: 0 var(--space-3); border-radius: var(--radius-md); font: var(--type-label); color: var(--ink-strong); cursor: pointer; transition: var(--transition-control); }
 @media (hover: hover) { .ghost-btn:hover { background: var(--surface-hover); } }
 .ghost-btn:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
-.tl { position: relative; flex: 1 1 auto; overflow: hidden auto; overscroll-behavior: contain; min-block-size: 0; margin-inline: calc(-1 * var(--space-2)); padding: 0 var(--space-2) var(--space-3); }
+.tl { position: relative; min-inline-size: 0; overflow: hidden auto; overscroll-behavior: contain; min-block-size: 0; margin-inline: calc(-1 * var(--space-2)); padding: 0 var(--space-2) var(--space-3); }
+/* The house edge fade where more rows are past the timeline's top (under its sticky ruler) or its foot. */
+.tl { --fade-t: 0px; --fade-b: 0px; }
+.tl[data-fade~="top"] { --fade-t: var(--c-edge-fade-len-phone); }
+.tl[data-fade~="foot"] { --fade-b: var(--c-edge-fade-len-phone); }
+.tl[data-fade] { mask-image: linear-gradient(#000 var(--tl-head, 0px), transparent var(--tl-head, 0px), #000 calc(var(--tl-head, 0px) + var(--fade-t)), #000 calc(100% - var(--fade-b)), transparent); }
 .tl-row { display: grid; grid-template-columns: var(--dock-name-w) minmax(0, 1fr); }
 .ruler-row { position: sticky; inset-block-start: 0; z-index: 3; align-items: center; min-block-size: var(--c-pill-h); background: var(--surface-raised); padding-block-end: var(--space-1); }
 .ruler-row .ruler { grid-column: 2; }
@@ -480,7 +509,7 @@ html[data-layout="desk"] .panel[data-open="false"] .panel-shell:active .tab-glyp
    The house row grid: the kind's 16px glyph centred in the 28px lead column, the words --space-3 after it. Line
    1: the element in the label role, then the change. Line 2, the facts, each in its own dress: the length a
    Measured figure (the token's short name in the kit badge after it only when it is a token), the curve drawn
-   small with its word, the delta as figures. Each fact is a press that opens the clip's popover from itself.
+   small with its word, the delta as figures. Each fact is a press that opens the clip's controls.
    html[data-kinds]: "hue" puts the glyph, the figure and the bar in the kind's hue (prop-*); "ink" names the
    kind by its glyph alone, the bars on surface-fill. */
 .rows { position: relative; }
@@ -511,8 +540,6 @@ html[data-kinds="hue"] .lead { color: var(--kind); }
 @media (hover: hover) { .fact:hover { background: var(--surface-hover); } }
 .fact:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
 .fact:active { scale: var(--press-scale); }
-/* While the popover flies out of a fact or folds back into it, the fact is hidden: one box on screen. */
-[data-flying] { visibility: hidden; }
 .fact .curve-glyph { inline-size: 16px; block-size: 10px; flex: none; overflow: visible; color: var(--ink-row); }
 .fact .arrow { color: var(--ink-muted); }
 /* A Measured figure (DESIGN.md Typography): JetBrains Mono at its line's size, tabular, set to the cap height;
@@ -583,37 +610,52 @@ html[data-kinds="ink"] .tail { --tail-fill: var(--surface-fill-strong); --tail-e
 .drag-pill { position: absolute; z-index: 4; pointer-events: none; translate: -50% 0; }
 .drag-pill .badge { background: var(--surface-raised); box-shadow: var(--shadow-tile); }
 
-/* ---- The clip popover (round 29, section C): it grows out of what was pressed ----
-   The kit popover (12px radius, 1px control edge, overlay shadow, the 6px pad), --c-sheet-inspector-w wide,
-   above the row and start-aligned on the pressed fact, --space-1 off it. Its box starts as that fact's rect
-   and radius (--from-*, app.js) and tweens to its own over --dur-pop on --ease-drawer; its contents fade in
-   over --dur-morph from 80ms. Closed (Esc, a press outside, a press on the source) the box folds back into
-   the source over --dur-exit. Transitions on data-state, so a fold caught by a press turns back. With less
-   motion it fades in place. */
-.pop { position: fixed; z-index: var(--layer-float); inline-size: var(--c-sheet-inspector-w); pointer-events: none; font: var(--type-label); color: var(--ink-strong); }
-.pop[data-state="open"] { pointer-events: auto; }
-.pop-box { position: absolute; inset: var(--from-t, 0) var(--from-r, 0) var(--from-b, 0) var(--from-l, 0); border: 1px solid var(--border-control); border-radius: var(--from-radius, var(--radius-xs)); background: var(--surface-raised); box-shadow: var(--shadow-tile); transition: inset var(--dur-exit) var(--ease-drawer), border-radius var(--dur-exit) var(--ease-drawer), box-shadow var(--dur-exit) var(--ease-drawer); }
-.pop[data-state="open"] .pop-box { inset: 0; border-radius: var(--radius-lg); box-shadow: var(--shadow-overlay); transition: inset var(--dur-pop) var(--ease-drawer), border-radius var(--dur-pop) var(--ease-drawer), box-shadow var(--dur-pop) var(--ease-drawer); }
-.pop-body { position: relative; display: flex; flex-direction: column; gap: var(--space-2); padding: calc(var(--c-floating-pad) + var(--space-1)) calc(var(--c-floating-pad) + var(--space-2)) calc(var(--c-floating-pad) + var(--space-2)); opacity: 0; transition: opacity var(--dur-ghost) var(--ease-out); }
-.pop[data-state="open"] .pop-body { opacity: 1; transition: opacity var(--dur-morph) var(--ease-out) var(--dur-ghost); }
-@media (prefers-reduced-motion: reduce) {
-  .pop { opacity: 0; transition: opacity var(--dur-exit) var(--ease-out); }
-  .pop[data-state="open"] { opacity: 1; transition: opacity var(--dur-pop) var(--ease-out); }
-  .pop .pop-box, .pop[data-state="open"] .pop-box { inset: 0; border-radius: var(--radius-lg); box-shadow: var(--shadow-overlay); transition: none; }
-  .pop .pop-body, .pop[data-state="open"] .pop-body { opacity: 1; transition: none; }
+/* ---- A clip's controls (round 29, section C): in its row, or in an inspector ----
+   The two answers to the owner's note on the popover, switched by html[data-ctl] on the review bar. In the
+   row: the row's last part, across both its columns under its facts and lane, inside the row's chosen wash;
+   on a wide dock its sections stand side by side. In an inspector: a --c-sheet-inspector-w column beside the
+   timeline, a hairline between, its head the row's first line; on a dock too narrow for both it takes the
+   timeline's place, Back leading its head. Neither floats over anything, so neither is a dialog. */
+.ctl { font: var(--type-label); color: var(--ink-strong); }
+.ctl-body { display: flex; flex-direction: column; gap: var(--space-3); }
+.clip > .ctl-row { grid-column: 1 / -1; min-inline-size: 0; margin-block-start: var(--space-2); padding-block-end: var(--space-1); cursor: auto; }
+.ctl-row .ctl-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: var(--space-3) var(--space-5); align-items: start; }
+.ctl-row .ctl-head { grid-column: 1 / -1; justify-content: flex-end; min-block-size: 0; margin-block-end: calc(-1 * var(--space-2)); }
+.dock-grid { flex: 1 1 auto; min-block-size: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); column-gap: var(--space-4); }
+.dock[data-insp] .dock-grid { grid-template-columns: minmax(0, 1fr) var(--c-sheet-inspector-w); }
+.dock-head { grid-column: 1 / -1; }
+.tl { grid-column: 1; grid-row: 2; }
+.insp { grid-column: 2; grid-row: 2; min-block-size: 0; overflow: hidden auto; overscroll-behavior: contain; padding: var(--space-1) 0 var(--space-3) var(--space-4); border-inline-start: 1px solid var(--border-hairline); }
+.insp:empty { display: none; }
+.insp[data-fade~="top"] { --insp-fade-t: var(--c-edge-fade-len-phone); }
+.insp[data-fade~="foot"] { --insp-fade-b: var(--c-edge-fade-len-phone); }
+.insp[data-fade] { mask-image: linear-gradient(transparent, #000 var(--insp-fade-t, 0px), #000 calc(100% - var(--insp-fade-b, 0px)), transparent); }
+@container dock (width < 440px) {
+  .dock[data-insp] .dock-grid { grid-template-columns: minmax(0, 1fr); }
+  .dock[data-insp] .tl { display: none; }
+  .dock[data-insp] .insp { grid-column: 1; padding-inline-start: 0; border-inline-start: 0; }
 }
-.pop-head { --kind: var(--prop-text); display: flex; align-items: center; gap: var(--space-2); min-block-size: var(--c-btn-h-sm); }
-.pop-head[data-prop="opacity"] { --kind: var(--prop-opacity); }
-.pop-head[data-prop="position"] { --kind: var(--prop-position); }
-.pop-head[data-prop="size"] { --kind: var(--prop-size); }
-.pop-head[data-prop="colour"] { --kind: var(--prop-colour); }
-.pop-head[data-prop="unfold"] { --kind: var(--prop-unfold); }
-.pop-head .lead { flex: none; inline-size: var(--icon-md); block-size: auto; }
-.pop-head p { flex: 1 1 auto; min-inline-size: 0; margin: 0; font: var(--type-label); color: var(--ink-row); text-wrap: pretty; }
-.pop-head p span { font-weight: var(--weight-body); color: var(--ink-strong); }
-.pop-sec { display: flex; flex-direction: column; gap: var(--space-2); }
-.pop-label { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); font: var(--type-meta); color: var(--ink-muted); }
-.pop-line { display: flex; align-items: center; gap: var(--space-3); min-inline-size: 0; }
+.ctl-head { --kind: var(--prop-text); display: flex; align-items: center; gap: var(--space-2); min-block-size: var(--c-btn-h); }
+.ctl-head[data-prop="opacity"] { --kind: var(--prop-opacity); }
+.ctl-head[data-prop="position"] { --kind: var(--prop-position); }
+.ctl-head[data-prop="size"] { --kind: var(--prop-size); }
+.ctl-head[data-prop="colour"] { --kind: var(--prop-colour); }
+.ctl-head[data-prop="unfold"] { --kind: var(--prop-unfold); }
+.ctl-head .lead { flex: none; inline-size: var(--icon-md); block-size: auto; }
+.ctl-head p { flex: 1 1 auto; min-inline-size: 0; margin: 0; font: var(--type-label); color: var(--ink-row); text-wrap: pretty; }
+.ctl-head p span { font-weight: var(--weight-body); color: var(--ink-strong); }
+.ctl-sec { display: flex; flex-direction: column; gap: var(--space-2); min-inline-size: 0; }
+.ctl-label { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); font: var(--type-meta); color: var(--ink-muted); }
+.ctl-line { display: flex; align-items: center; gap: var(--space-3); min-inline-size: 0; }
+/* A spring's parameters: the bounce as a slider and its figure, then mass, stiffness, damping and velocity, two
+   to a line, each its label over its figure. */
+.ctl-spring input[type="range"] { flex: 1 1 auto; min-inline-size: 0; margin: 0; accent-color: var(--ink-solid); }
+.spring-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2) var(--space-3); }
+.spring-p { display: flex; flex-direction: column; gap: var(--space-1); min-inline-size: 0; }
+.spring-p .fld { inline-size: auto; }
+/* An agent's own value off the token scale: the kit badge in words. */
+.badge.adhoc { font: var(--type-meta); line-height: 1; color: var(--ink-muted); }
+.facts .badge.adhoc { margin-inline-start: var(--space-1); }
 /* The duration slider: a detent at every --dur-* token, its short name in meta under the tick where it has
    room; the thumb snaps within --c-detent-snap of a tick while dragged (⌥ frees it). */
 .dslider { position: relative; flex: 1 1 auto; min-inline-size: 0; block-size: calc(var(--c-badge-h) + var(--text-meta) + var(--space-2)); cursor: pointer; touch-action: none; outline: none; }
@@ -645,7 +687,7 @@ html:is([data-input="touch"], [data-input="touch-hover"]) .fld input { font-size
 .curve-opt[aria-checked="true"] { background: var(--surface-fill); color: var(--ink-strong); }
 @media (hover: hover) { .curve-opt:not([aria-checked="true"]):hover { background: var(--surface-hover); color: var(--ink-strong); } }
 .curve-opt:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
-/* The chosen curve drawn large (DialKit's easing editor): the curve, its two handles to drag, and a live dot
+/* The chosen curve drawn large, an easing editor: the curve, its two handles to drag, and a live dot
    that plays the clip's length on the curve after every change. */
 .ceditor { position: relative; flex: none; inline-size: var(--c-curve-editor-w); block-size: var(--c-curve-editor-h); border-radius: var(--radius-sm); background: var(--surface-recess); touch-action: none; }
 .ceditor svg { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; overflow: visible; }
@@ -759,15 +801,15 @@ html:is([data-input="touch"], [data-input="touch-hover"]) .fld input { font-size
 /* Touch and phones: every target is at least the touch floor (44px). Where a part can grow to it in place it
    does (a variant chip, a slab's name, a fact, a field, the slider); a glyph or a word in a tight row keeps its
    size and grows a transparent layer to the floor instead; a bar's layer stands across its lane. */
-html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.icon-btn, .tbtn, .t-tab, .ghost-btn, .zoom-fit, .sheet-title) { position: relative; }
-html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.icon-btn, .tbtn, .t-tab, .ghost-btn, .zoom-fit, .door, .sheet-title, .panel-shell, .show) { touch-action: manipulation; }
-html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.icon-btn, .tbtn, .t-tab, .ghost-btn, .zoom-fit, .door, .sheet-title, .panel-shell, .show)::before { content: ""; position: absolute; inset-block: min(0px, (100% - var(--c-touch-floor)) / 2); inset-inline: min(0px, (100% - var(--c-touch-floor)) / 2); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.icon-btn, .tbtn, .t-tab, .ghost-btn, .zoom-fit) { position: relative; }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.icon-btn, .tbtn, .t-tab, .ghost-btn, .zoom-fit, .door, .panel-shell, .show) { touch-action: manipulation; }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.icon-btn, .tbtn, .t-tab, .ghost-btn, .zoom-fit, .door, .panel-shell, .show)::before { content: ""; position: absolute; inset-block: min(0px, (100% - var(--c-touch-floor)) / 2); inset-inline: min(0px, (100% - var(--c-touch-floor)) / 2); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .zoom { gap: calc(var(--c-touch-floor) - var(--c-btn-h-xs)); }
 /* Touch layers take presses only where nothing clips them and no neighbour's stands over them: a segmented
    groove lets its segments' layers past its edge (it scrolls only on a desk), and the toolbar's end stands its
    controls far enough apart that their 44px layers meet without crossing. */
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .t-tabs { overflow: visible; }
-html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .bar-end { gap: calc(var(--c-touch-floor) - var(--c-btn-h-sm)); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .bar-end { gap: calc(var(--c-touch-floor) - var(--c-bar-item)); }
 /* The toolbar's layers reach up to 7px under it (a 24px zoom figure in its 30px row) and a door's 10px over
    its band: --space-5 between keeps them apart. */
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .toolbar { margin-block-end: var(--space-5); }
@@ -778,16 +820,17 @@ html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-po
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .door[data-band="bottom"]::before { inset-block-end: -10px; }
 /* The head's last control keeps its layer on the screen: the head stands its end that much in. */
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) #sheetHead { padding-inline-end: calc((var(--c-touch-floor) - var(--c-btn-h-sm)) / 2 + 1px); }
-/* Hide keeps its 30px; the title gives way first. */
-#sheetHide { flex: none; }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .glass { gap: calc(var(--c-touch-floor) - var(--c-bar-item)); }
 /* Stacked rows: a bar's 44px layer reaches 10px over and under its lane, so the lane stands 10px under its
    facts and the row keeps 10px under it, and no row's layer reaches into a neighbour's. */
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .clip { padding-block: calc((var(--c-touch-floor) - var(--c-pill-h)) / 2); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .transport { gap: calc(var(--c-touch-floor) - var(--c-btn-h-sm)); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.var, .region-head, .fact, .fld, .curve-opt) { min-block-size: var(--c-touch-floor); }
+/* A fact cut to its glyph (a narrow facts line gives up its words) still takes a finger: the floor wide, its glyph centred. */
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .fact { min-inline-size: var(--c-touch-floor); justify-content: center; }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .var { display: flex; align-items: center; }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .fld { block-size: var(--c-touch-floor); }
-html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.dslider, .pop input[type="range"], .dial input[type="range"]) { min-block-size: var(--c-touch-floor); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.dslider, .ctl input[type="range"], .dial input[type="range"]) { min-block-size: var(--c-touch-floor); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .bar { touch-action: none; }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .bar-hit { display: block; }
 /* The mock page's own fields keep the touch floor too (the fourth review: they took a press over 42px). */
@@ -804,16 +847,18 @@ html:is([data-screen="phone-portrait"], [data-screen="phone-landscape"]) .zoom :
 /* ---- Compact: the drawer (phone and tablet portrait) and the side sheet (short panes). One surface, two
    faces under the segmented control; no grips. ---- */
 html:not([data-layout="desk"]) .tools { position: fixed; z-index: var(--layer-dock); display: flex; flex-direction: column; color: var(--ink-strong); background: var(--surface-raised); border: 1px solid var(--border-control); font: var(--type-label); font-weight: var(--weight-body); }
-.edge-pill-top { position: absolute; z-index: 5; pointer-events: none; border-radius: var(--radius-pill); background: var(--border-row-outline); block-size: var(--c-grabber-h); inline-size: var(--c-edge-grip-len); inset-block-start: calc(-1 * (var(--c-grabber-h) + 1px) / 2); inset-inline-start: calc(50% - var(--c-edge-grip-len) / 2); }
-html:not([data-layout="desk"]) .sheet-head { position: relative; display: flex; align-items: center; gap: var(--space-2); flex: none; block-size: var(--c-sheet-inspector-head-h); padding-inline: var(--space-1) var(--space-2); }
-.sheet-title { all: unset; box-sizing: border-box; display: block; flex: 1 1 auto; min-inline-size: 0; block-size: var(--c-btn-h); padding-inline: var(--space-2); border-radius: var(--radius-sm); font: var(--type-label); line-height: var(--c-btn-h); color: var(--ink-muted); cursor: pointer; }
-/* Its words cut at their end inside it; the title itself clips nothing, so its 44px touch layer takes presses. */
-.sheet-title-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sheet-title b { font-weight: var(--weight-strong); color: var(--ink-strong); }
-.sheet-title:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-inset); }
+.edge-pill-top { position: absolute; z-index: 5; pointer-events: none; padding: 0; border-radius: var(--radius-pill); background: var(--border-row-outline); block-size: var(--c-grabber-h); inline-size: var(--c-edge-grip-len); inset-block-start: calc(-1 * (var(--c-grabber-h) + 1px) / 2); inset-inline-start: calc(50% - var(--c-edge-grip-len) / 2); }
+/* The head: no title and no ground. Its title area stays empty; the faces' switch stands in the centre and Hide
+   trailing, each a glass group; the head itself is the drawer's press and drag. */
+html:not([data-layout="desk"]) .sheet-head { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: var(--space-2); flex: none; block-size: var(--c-sheet-inspector-head-h); padding-inline: var(--space-2); }
+.faces-group { grid-column: 2; }
+.sheet-end { grid-column: 3; justify-self: end; }
 .faces { flex: none; overflow: visible; }
+/* The grabber is a control for a key and a screen reader; it draws the pill and no box of its own. */
+.grabber { appearance: none; border: 0; margin: 0; }
+.grabber:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: 2px; }
 html:not([data-layout="desk"]) .tools > .tool { position: relative; inset: auto; z-index: auto; inline-size: auto; block-size: auto; max-block-size: none; flex: 1 1 auto; min-block-size: 0; overflow: hidden; border: 0; border-radius: 0; box-shadow: none; transform: none; opacity: 1; filter: none; pointer-events: auto; transition: none; will-change: auto; }
-html:not([data-layout="desk"]) :is(.sash, .lit, .arc, .panel-shell, #hide) { display: none !important; }
+html:not([data-layout="desk"]) :is(.sash, .lit, .arc, .panel-shell, #hide, .hide-group) { display: none !important; }
 html:not([data-layout="desk"]) .tools[data-face="graph"] > .dock,
 html:not([data-layout="desk"]) .tools[data-face="move"] > .panel { display: none; }
 /* The face clips its content; the toolbar stands a step in from its top so its 44px touch layers fall inside. */
