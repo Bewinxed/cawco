@@ -36,7 +36,14 @@
  *     the hub's log naming it. Once the shell alone is killed, its `sleep`
  *     is an orphan, as a session's detached server is once its starter is
  *     gone: the next sweep ends it, names it in the agent's log, and
- *     retires O.
+ *     retires O. On Linux O's path is the person's folder seen through O's
+ *     view (agent layer.ts): the person's shell there runs outside the view,
+ *     so O retires without waiting for it and it runs on; a sleep left
+ *     orphaned in the view ends with O's retirement, named in the agent's
+ *     log.
+ *
+ * Every read of a delegate's copy goes through ../copy.ts: on Linux its
+ * path is the person's folder, and the delegate's work is in its view.
  * (c) P's carry holds an uncommitted diff beside its commits: a handoff
  *     cuts it again with the diff on top and says so; a diff that no
  *     longer applies is said, naming its file, and stays in the carry.
@@ -61,14 +68,11 @@ import { join } from "node:path";
 import { SessiondClient } from "../../../packages/agent/src/sessiond-client";
 import { movedLine, restoredWords } from "../../../packages/core/src/injected";
 import { commandLines } from "../../../packages/core/src/process-identity";
-import {
-  SAFE_GIT_ENV,
-  SAFE_GIT_FLAGS,
-} from "../../../packages/core/src/safe-git";
 import { workWords } from "../../../packages/core/src/words/work";
 import { welcomed } from "../../lib/keeper-dial";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { copyArgv, copyGone, gitInCopy, inCopy, isView } from "../copy";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 const TAG = /PROBE-HOLDS-([NLXSRDUOPT])\b/;
@@ -89,6 +93,8 @@ const INSIDE_SLEEP = "7243";
 const HOST_SLEEP = "7244";
 /** The sleep of (o)'s shell of the person's. */
 const OWNER_SLEEP = "7245";
+/** The sleep (o) leaves orphaned in O's view on Linux. */
+const VIEW_SLEEP = "7246";
 /** P's two handoffs, and what it prints after the first. */
 const P_AGAIN = "PROBE-HOLDS-P-AGAIN";
 const P_THIRD = "PROBE-HOLDS-P-THIRD";
@@ -334,15 +340,6 @@ interface Scene {
   workspaceOf: (id: string) => Workspace;
 }
 
-/** git on the host in `dir`, as safe-git.ts says; its stdout, trimmed. */
-const gitIn = (dir: string, ...args: string[]): Promise<string> =>
-  Bun.$`git ${SAFE_GIT_FLAGS} -C ${dir} ${args}`
-    .env({ ...process.env, ...SAFE_GIT_ENV })
-    .quiet()
-    .nothrow()
-    .text()
-    .then((out) => out.trim());
-
 /** The hub's lines naming a workspace, for a check's detail. */
 const linesOf = async (fleet: KitFleet, id: string): Promise<string> => {
   const logs = `${await fleet.logs("hub")}\n${await fleet.logs("agent")}`;
@@ -387,7 +384,7 @@ const noneLeg = async (kit: Kit, scene: Scene): Promise<void> => {
     "(n) N lands none and commits: done, its workspace retires, not held, its commit in a carry in ~/.cawco/carries",
     item?.state === "done" &&
       retired.state === "archived" &&
-      !existsSync(ws.path) &&
+      copyGone(scene.fleet, ws) &&
       carry.startsWith(
         join(scene.fleet.home, ".cawco", "carries", `${ws.id}-`)
       ) &&
@@ -434,7 +431,7 @@ const landedLeg = async (kit: Kit, scene: Scene): Promise<void> => {
   const wl = scene.workspaceOf(l.workspaceId);
   const own = await until(
     "L's commit in its clone",
-    () => gitIn(wl.path, "log", "-1", "--format=%H%x09%s"),
+    () => gitInCopy(scene.fleet, wl, ["log", "-1", "--format=%H%x09%s"]),
     (line) => line.endsWith("Same change by L"),
     ITEM_MS
   ).catch(() => "");
@@ -461,7 +458,7 @@ const landedLeg = async (kit: Kit, scene: Scene): Promise<void> => {
     "(l) L finishes blocked (its item failed), its commit on no remote by hash; its workspace retires, not held, its head at main's tip",
     lItem?.state === "failed" &&
       retired.state === "archived" &&
-      !existsSync(wl.path) &&
+      copyGone(scene.fleet, wl) &&
       main !== "" &&
       head?.commit === main,
     `${lItem?.state}; ${retired.state}; head ${retired.head}; main ${main}; ${await linesOf(scene.fleet, wl.id)}`
@@ -475,7 +472,7 @@ const stoppedLeg = async (kit: Kit, scene: Scene): Promise<void> => {
   const ws = scene.workspaceOf(s.workspaceId);
   await until(
     "S's commit in its clone",
-    () => gitIn(ws.path, "log", "-1", "--format=%s"),
+    () => gitInCopy(scene.fleet, ws, ["log", "-1", "--format=%s"]),
     (subject) => subject === "Holds commit S",
     ITEM_MS
   ).catch(() => "");
@@ -513,7 +510,7 @@ const readOnlyLeg = async (kit: Kit, scene: Scene): Promise<void> => {
       retired.state === "archived" &&
       scratch !== "" &&
       !existsSync(scratch) &&
-      !existsSync(wr.path),
+      copyGone(scene.fleet, wr),
     `${item?.state}; ${retired.state}; scratch ${scratch} ${existsSync(scratch) ? "stands" : "gone"}; ${await linesOf(scene.fleet, wr.id)}`
   );
 };
@@ -529,17 +526,24 @@ const processesLeg = async (kit: Kit, scene: Scene): Promise<void> => {
     (pids) => pids.length > 0,
     ITEM_MS
   ).catch(() => [] as number[]);
-  // A process of CawCo's on the host, as a session's CLI the hub wrote off
-  // is: the keeper's, in D's clone, outside its boundary.
+  // A process of CawCo's outside its boundary, as a session's CLI the hub
+  // wrote off is: the keeper's, in D's copy as a session's spawn enters it
+  // (its clone on the Mac; its view on Linux, agent layer.ts `enterSpawn`).
   const keeper = welcomed(
     scene.fleet.sessiondSocket,
     await SessiondClient.connect(scene.fleet.sessiondSocket)
   );
   try {
+    const spawn = copyArgv(scene.fleet, wd, [
+      "/bin/sh",
+      "-c",
+      `exec sleep ${HOST_SLEEP}`,
+    ]);
+    const [command = "/bin/sh", ...args] = spawn.argv;
     await keeper.spawnProc(crypto.randomUUID(), {
-      command: "/bin/sh",
-      args: ["-c", `exec sleep ${HOST_SLEEP}`],
-      cwd: wd.path,
+      command,
+      args,
+      cwd: spawn.cwd,
     });
   } finally {
     keeper.close();
@@ -587,6 +591,10 @@ const ownerLeg = async (kit: Kit, scene: Scene): Promise<void> => {
   const { check } = kit;
   const o = await scene.delegate("O", scene.src, { lands: "none" });
   const wo = scene.workspaceOf(o.workspaceId);
+  if (isView(scene.fleet, wo)) {
+    await viewOwnerLeg(kit, scene, o, wo);
+    return;
+  }
   await until(
     "O's clone",
     () => existsSync(wo.path),
@@ -646,6 +654,73 @@ const ownerLeg = async (kit: Kit, scene: Scene): Promise<void> => {
       named !== undefined,
     `${retired.state}; orphan ${orphan.join(", ") || "none"}; ${named ?? "no line naming it"}; ${await linesOf(scene.fleet, wo.id)}`
   );
+};
+
+/**
+ * (o) on Linux, where O's path is the person's folder seen through O's view
+ * (agent layer.ts): a shell of the person's in that folder runs outside the
+ * view, so it is none of O's. O retires without waiting for it, and it runs
+ * on. A process left running in O's view once its starter is gone (a
+ * session's detached server) is O's: the retirement ends it with the view,
+ * naming it in the agent's log.
+ */
+const viewOwnerLeg = async (
+  kit: Kit,
+  scene: Scene,
+  o: Started,
+  wo: Workspace
+): Promise<void> => {
+  const { check } = kit;
+  await until(
+    "O's view running",
+    async () => (await inCopy(scene.fleet, wo, ["true"])).exitCode,
+    (code) => code === 0,
+    ITEM_MS
+  ).catch(() => -1);
+  const shell = Bun.spawn(["sh", "-c", `sleep ${OWNER_SLEEP}; :`], {
+    cwd: wo.path,
+    stdio: ["ignore", "ignore", "ignore"],
+  });
+  // Its starter, the shell entered into the view, ends at once: the sleep is
+  // an orphan in the view.
+  await inCopy(scene.fleet, wo, [
+    "/bin/sh",
+    "-c",
+    `nohup sleep ${VIEW_SLEEP} > /dev/null 2>&1 &`,
+  ]);
+  const orphan = await until(
+    "the orphaned sleep in O's view",
+    () => sleeps(VIEW_SLEEP),
+    (pids) => pids.length > 0,
+    30_000
+  ).catch(() => [] as number[]);
+  await writeFile(join(wo.tmp ?? "", goFile("O")), "go\n");
+  const item = await scene.ended(o);
+  const retired = await scene.stateBecomes(wo.id, "archived");
+  check(
+    "(o) a shell of the person's in the folder O's view is of runs outside the view: O retires without waiting for it, and it runs on",
+    item?.state === "done" &&
+      retired.state === "archived" &&
+      copyGone(scene.fleet, wo) &&
+      shell.exitCode === null,
+    `${item?.state}; ${retired.state}; shell ${shell.exitCode === null ? "runs" : `ended ${shell.exitCode}`}; ${await linesOf(scene.fleet, wo.id)}`
+  );
+  const named = (await scene.fleet.logs("agent"))
+    .split("\n")
+    .find(
+      (line) =>
+        line.includes(`[workspace] ${wo.id}: ended`) &&
+        line.includes(`sleep ${VIEW_SLEEP}`)
+    );
+  check(
+    "(o) a process left running in O's view, its starter gone, ends with its retirement, named in the agent's log",
+    orphan.length > 0 &&
+      (await sleeps(VIEW_SLEEP)).length === 0 &&
+      named !== undefined,
+    `orphan ${orphan.join(", ") || "none"}; ${named ?? "no line naming it"}; ${await linesOf(scene.fleet, wo.id)}`
+  );
+  shell.kill("SIGKILL");
+  await shell.exited;
 };
 
 /** The moved line's own opening, as the product writes it (core injected.ts `movedLine`). */
@@ -822,8 +897,8 @@ const treeLeg = async (kit: Kit, scene: Scene, tree: string): Promise<void> => {
   const { check } = kit;
   const t = await scene.delegate("T", tree);
   const wt = scene.workspaceOf(t.workspaceId);
-  const status = await gitIn(wt.path, "status", "--porcelain");
-  const tracked = (await gitIn(wt.path, "ls-files"))
+  const status = await gitInCopy(scene.fleet, wt, ["status", "--porcelain"]);
+  const tracked = (await gitInCopy(scene.fleet, wt, ["ls-files"]))
     .split("\n")
     .filter(Boolean).length;
   check(
@@ -843,9 +918,9 @@ const treeLeg = async (kit: Kit, scene: Scene, tree: string): Promise<void> => {
     (row) => row.state !== "active",
     SETTLE_MS
   ).catch(() => scene.workspaceOf(wt.id));
-  const after = existsSync(wt.path)
-    ? await gitIn(wt.path, "status", "--porcelain")
-    : "";
+  const after = copyGone(scene.fleet, wt)
+    ? ""
+    : await gitInCopy(scene.fleet, wt, ["status", "--porcelain"]);
   check(
     "(t) T finishes blocked and its workspace retires, not held",
     item?.state === "failed" && settled.state === "archived",

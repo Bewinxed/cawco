@@ -27,7 +27,8 @@
  *   with EROFS naming the target or a dir on its way to it, at or under
  *   `~/.cache` (before the fix it succeeded into the sandbox's memory);
  * - a write to `$TMPDIR` and one to the clone succeed, and both files are on
- *   the host's disk after the boundary's process is gone;
+ *   the host's disk after the boundary's process is gone (the clone's where
+ *   its copy keeps it: on Linux its view's upper, ../copy.ts);
  * - `bun install --frozen-lockfile` in the clone finishes;
  * - `git commit` in the clone finishes, and the commit is in the clone's log
  *   on the host;
@@ -67,6 +68,7 @@ import { isBoundaryOf } from "../../../packages/agent/src/proc-id";
 import { RELAY_URL } from "../../../packages/agent/src/proxy-relay";
 import { isAlive, signal } from "../../../packages/core/src/signal";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { copyPath, gitInCopy } from "../copy";
 import type { Kit, Spec } from "../kit";
 
 const ROOT = resolve(import.meta.dir, "..", "..", "..");
@@ -305,6 +307,52 @@ const checkBackgroundRead = (
   );
 };
 
+/** A workspace as these checks read it: its id and path. */
+interface Workspace {
+  id: string;
+  path: string;
+}
+
+/**
+ * The clone write is on the host's disk after the boundary closed, where its
+ * copy keeps it: its folder, or on Linux its view's upper (../copy.ts).
+ */
+const checkCloneWrite = async (
+  kit: Kit,
+  fleet: Fleet,
+  workspace: Workspace,
+  said: string
+): Promise<void> => {
+  const clonePath = copyPath(fleet, workspace, CLONE_FILE);
+  const cloneText = clonePath
+    ? await readFile(clonePath, "utf8").catch(() => undefined)
+    : undefined;
+  kit.check(
+    "a write to the clone succeeds and is on the host's disk after the boundary closed",
+    after(said, "CLONE-WRITE:") === "0" && cloneText === "kept\n",
+    `exit ${after(said, "CLONE-WRITE:")}; ${clonePath ?? join(workspace.path, CLONE_FILE)} on the host: ${JSON.stringify(cloneText)}`
+  );
+};
+
+/** The commit made inside the boundary is in the clone, read in its copy (../copy.ts). */
+const checkCommit = async (
+  kit: Kit,
+  fleet: Fleet,
+  workspace: Workspace,
+  said: string
+): Promise<void> => {
+  const subject = await gitInCopy(fleet, workspace, [
+    "log",
+    "-1",
+    "--format=%s",
+  ]);
+  kit.check(
+    "git commit in the clone finishes inside the boundary, and the commit is in the clone on the host",
+    after(said, "COMMITTED:") === "0" && subject === COMMIT_SUBJECT,
+    `exit ${after(said, "COMMITTED:")}; the clone's last commit on the host: ${JSON.stringify(subject)}`
+  );
+};
+
 const run = async (kit: Kit) => {
   const nested =
     await Bun.$`bwrap --unshare-user --unshare-net --die-with-parent --ro-bind / / --dev /dev --proc /proc true`
@@ -366,11 +414,14 @@ const run = async (kit: Kit) => {
     ).catch(() => undefined)) ?? "";
   const output = outputOf(said);
   kit.note(output.slice(0, 1200));
-  const clone =
-    fleet.query<{ path: string }>(
-      "SELECT path FROM workspaces WHERE id = ?",
-      started.workspaceId
-    )[0]?.path ?? "";
+  const workspace: Workspace = {
+    id: started.workspaceId,
+    path:
+      fleet.query<{ path: string }>(
+        "SELECT path FROM workspaces WHERE id = ?",
+        started.workspaceId
+      )[0]?.path ?? "",
+  };
 
   // The boundary closed: every process of its, as sessiond holds them, ended.
   const boundaries = (await fleet.heldProcs()).filter((proc) =>
@@ -425,14 +476,7 @@ const run = async (kit: Kit) => {
     after(said, "SCRATCH-WRITE:") === "0" && scratchText === "kept\n",
     `exit ${after(said, "SCRATCH-WRITE:")}; ${join(scratch, SCRATCH_FILE)} on the host: ${JSON.stringify(scratchText)}`
   );
-  const cloneText = await readFile(join(clone, CLONE_FILE), "utf8").catch(
-    () => undefined
-  );
-  kit.check(
-    "a write to the clone succeeds and is on the host's disk after the boundary closed",
-    after(said, "CLONE-WRITE:") === "0" && cloneText === "kept\n",
-    `exit ${after(said, "CLONE-WRITE:")}; ${join(clone, CLONE_FILE)} on the host: ${JSON.stringify(cloneText)}`
-  );
+  await checkCloneWrite(kit, fleet, workspace, said);
   const installed = after(said, "INSTALLED:");
   kit.check(
     "bun install --frozen-lockfile in the clone finishes inside the boundary",
@@ -442,16 +486,7 @@ const run = async (kit: Kit) => {
       .trim()
       .slice(0, 400) || "unread"
   );
-  const subject = (
-    await Bun.$`git -C ${clone} log -1 --format=%s`.quiet().nothrow()
-  ).stdout
-    .toString()
-    .trim();
-  kit.check(
-    "git commit in the clone finishes inside the boundary, and the commit is in the clone on the host",
-    after(said, "COMMITTED:") === "0" && subject === COMMIT_SUBJECT,
-    `exit ${after(said, "COMMITTED:")}; the clone's last commit on the host: ${JSON.stringify(subject)}`
-  );
+  await checkCommit(kit, fleet, workspace, said);
   checkRelay(kit, said);
   checkBackgroundRead(kit, said, home, started.workspaceId);
   const runtime = after(said, "BUNX-RUNTIME:");

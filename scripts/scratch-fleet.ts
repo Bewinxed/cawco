@@ -1364,6 +1364,21 @@ class FleetDirs {
 const KEPT_FILE = ".kept.json";
 
 /**
+ * {@link removeTree} where nothing can wait (an exit, a signal): a folder of
+ * the tree its owner may not write (a delegate's Go module cache in its
+ * TMPDIR, under a service HOME) is given back to its owner first, so the
+ * fleet's folders go whole, read-only ones included.
+ */
+const removeTreeSync = (dir: string): void => {
+  try {
+    rmSync(dir, { recursive: true, force: true });
+  } catch {
+    Bun.spawnSync(["chmod", "-R", "u+rwx", dir], { stderr: "ignore" });
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+/**
  * Removes the sandboxes earlier fleets named `name` kept for reading under
  * `scratch`, and every folder each says it kept ({@link KEPT_FILE}): a
  * failed run's evidence stays until the same spec runs again. Each goes as

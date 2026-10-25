@@ -221,6 +221,7 @@ import { type HeldProc, KeeperPool } from "./keepers";
 import {
   ensureView,
   folderSync,
+  inView,
   layerOf,
   overlaySync,
   ownModules,
@@ -6534,7 +6535,8 @@ const liveFacts = async (
 /**
  * Whether a session's process a keeper holds may run a command in workspace
  * `id`, whose folder is `path`: a Claude Code or pi process started in its
- * clone (every session there runs in its boundary), or, for a place (a
+ * copy (every session there runs in its boundary), one in its view's mount
+ * namespace for a Linux view (layer.ts `inView`), or, for a place (a
  * person's own folder, where the person's own sessions run on the
  * host), one launched with the place's hook. A sleeping session has no
  * process. Read off the keepers, so it holds for a CLI this agent has not
@@ -6562,6 +6564,11 @@ const attachedProcs = (
     }
     if (isPlace(id)) {
       return commands.byPid.get(proc.pid)?.includes(hook) ?? false;
+    }
+    // A Linux view's path is the person's folder, where their own sessions
+    // and every other view's run too: its sessions are those in its view.
+    if (overlaySync(id)) {
+      return inView(id, proc.pid);
     }
     return (
       proc.cwd !== undefined &&

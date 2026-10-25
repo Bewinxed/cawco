@@ -1,9 +1,11 @@
 /**
  * A project's place made a git repository when a plain folder is first
  * needed as one (agent place-repo.ts does the work on the place's machine):
- * as a project is made from or joined to a folder. A workspace needs none:
- * it is a private copy of any folder (agent layer.ts). The person is never
- * asked: CawCo makes one local commit of what is
+ * as a publish to a new GitHub repository reads it (repo-publish.ts). A
+ * project made from a folder, or a folder added as its place, stays a
+ * folder: a workspace is a private copy of any folder (agent layer.ts), and
+ * a move makes one a repository with the person's yes (moves.ts `askFor`).
+ * CawCo makes one local commit of what is
  * safe to keep in history, pushes nothing, adds no remote, and notes in the
  * project's newest conversation what the commit took and what it left out.
  *
@@ -18,8 +20,6 @@
  *   be made one (not a folder there, past 500 MB to commit, a `.git` git
  *   cannot read, git failing), or the machine is not connected. A place has
  *   one step in flight: a second `ensure` while it runs joins it.
- * - `hold(machineId, path)` registers the place's step before what must
- *   run first; its `ensure` starts it, its `release` ends it unstarted.
  * - `settled(machineId, path)` resolves once that place's step in flight,
  *   if any, has finished, whichever way: a move's plan inspects after it.
  */
@@ -153,15 +153,12 @@ export const createPlaceRepos = ({ call, db, notice }: PlaceRepoDeps) => {
     return answer;
   };
 
-  /**
-   * Each place's one repo step in flight, by machine and path. A held step
-   * ({@link hold}) that ended without starting answers `undefined`.
-   */
-  const inFlight = new Map<string, Promise<PlaceRepo | undefined>>();
+  /** Each place's one repo step in flight, by machine and path. */
+  const inFlight = new Map<string, Promise<PlaceRepo>>();
   const keyOf = (machineId: string, path: string): string =>
     `${machineId}\0${path}`;
 
-  const track = (key: string, step: Promise<PlaceRepo | undefined>): void => {
+  const track = (key: string, step: Promise<PlaceRepo>): void => {
     inFlight.set(key, step);
     const forget = () => {
       if (inFlight.get(key) === step) {
@@ -176,41 +173,11 @@ export const createPlaceRepos = ({ call, db, notice }: PlaceRepoDeps) => {
     const key = keyOf(place.machineId, place.path);
     const running = inFlight.get(key);
     if (running !== undefined) {
-      // A held step that never started leaves this one to start its own.
-      return running.then((answer) => answer ?? ensure(place));
+      return running;
     }
     const mine = make(place);
     track(key, mine);
     return mine;
-  };
-
-  /**
-   * The place's step held from now, while what must come before it runs
-   * (server.ts `addProjectPlace` reads the folder's remote first, and may
-   * merge its project): `settled` waits on it and an `ensure` elsewhere
-   * joins it. The hold's `ensure` starts the step, after one already in
-   * flight; `release` ends a hold whose step never started, at once, as
-   * `settled` resolves at once for a place that needs no step. A release
-   * after `ensure` does nothing.
-   */
-  const hold = (machineId: string, path: string) => {
-    const key = keyOf(machineId, path);
-    const before = inFlight.get(key);
-    const held = Promise.withResolvers<PlaceRepo | undefined>();
-    track(key, held.promise);
-    return {
-      ensure: (place: PlaceRef): Promise<PlaceRepo> => {
-        const step =
-          before === undefined
-            ? make(place)
-            : before.then((answer) => answer ?? make(place));
-        held.resolve(step);
-        return step;
-      },
-      release: (): void => {
-        held.resolve(before);
-      },
-    };
   };
 
   /**
@@ -225,7 +192,6 @@ export const createPlaceRepos = ({ call, db, notice }: PlaceRepoDeps) => {
 
   return {
     ensure,
-    hold,
     settled,
   };
 };

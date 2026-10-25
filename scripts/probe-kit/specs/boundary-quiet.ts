@@ -95,6 +95,7 @@ import {
   type RecordedState,
   startedSince,
 } from "../agent-records";
+import { copyGone, inCopyExists } from "../copy";
 import type { Kit, Spec } from "../kit";
 import { passedFetch } from "../preview-pass";
 
@@ -839,7 +840,8 @@ const quietCloses = async (
   const missing = rows.filter(
     (row) =>
       !(
-        existsSync(join(row.path, ".git")) &&
+        !copyGone(fleet, row) &&
+        inCopyExists(fleet, row, ".git") &&
         existsSync(join(home, ".cawco", "workspaces", row.id)) &&
         row.tmp &&
         existsSync(row.tmp)
