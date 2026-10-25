@@ -45,6 +45,12 @@ interface Step {
 }
 const steps = new Map<Leg, Step>();
 
+/** What a recorded request says of the call: the words around the memory's hash, else the body's last words. */
+const saidOf = (body: string): string => {
+  const at = body.lastIndexOf(KEPT_HASH);
+  return at < 0 ? body.slice(-400) : body.slice(Math.max(0, at - 200), at + 80);
+};
+
 const words = (said: string): Reply => ({ everyMs: 5, words: [said] });
 const calling = (name: string, input: object): Reply => ({
   everyMs: 5,
@@ -143,7 +149,7 @@ const spec: Spec = {
         `${harness}: nothing came back before the person answered, ${HOLD_MS / 60_000} minutes in`,
         early === undefined,
         early
-          ? `${Math.round((early.at - parked) / 1000)} s after it parked: ${early.body.slice(-400)}`
+          ? `${Math.round((early.at - parked) / 1000)} s after it parked: ${saidOf(early.body)}`
           : ""
       );
       await fleet.post({
@@ -170,7 +176,7 @@ const spec: Spec = {
           !result.failed &&
           result.body.includes(KEPT_HASH) &&
           after * 1000 >= HOLD_MS,
-        `${after} s after it parked; failed ${result?.failed}; came back ${result?.body.slice(-400)}`
+        `${after} s after it parked; failed ${result?.failed}; came back ${result ? saidOf(result.body) : "nothing"}`
       );
     };
     await Promise.all(HARNESSES.map(leg));
