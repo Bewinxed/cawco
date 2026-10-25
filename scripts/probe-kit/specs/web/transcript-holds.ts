@@ -22,13 +22,22 @@
  * mid-history (every page read first), one at the tail. After each of a
  * socket drop, the agent registering again, the hub restarting with the
  * agent up, the hub restarting with the agent down first, a new turn, a
- * reload, and (once) a `/clear` that changes the session's key:
+ * reload, and (once on each engine) a `/clear` that changes the session's
+ * key:
  *  - each page's list holds every row it held (the store, by id);
  *  - the hub's paged walk holds every turn its walk held, and every turn
  *    said, from the first, across the compactions and the continuation;
  *  - no account line stands before the conversation's first turn;
  *  - the page scrolled up has the same row at its top, as far into it
  *    within 2 px; the page at the tail stays at the tail.
+ * The /clear draws the same rows live (the page at the tail, the hub's walk)
+ * as the hub's read again after a restart, none of them "Unrecognised". The
+ * new turn ends with every look refused at the network, as while the hub is
+ * down: no console error says so, and the look reaches the hub once the
+ * pages are connected again; on Chromium, at 4x CPU throttle and traced, no
+ * frame of its reply forces a layout from a row handing its place on
+ * (Transcript.svelte `handOn`), and the reads the long frames forced
+ * elsewhere at Transcript.svelte are noted. No console error on any page.
  * Once at the end, the idle sweep: the session put to sleep and no page
  * open past the hub's idle time, then opened again: the walk holds every
  * turn, and a page opens at the place it was left.
@@ -41,9 +50,10 @@
 // biome-ignore-all lint/performance/noAwaitInLoops: one turn, one event at a time, as a person takes them
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Page } from "playwright-core";
+import type { Page, Route } from "playwright-core";
 import { CLAUDE_JSON_NAME } from "../../../../packages/core/src/claude-dirs";
 import { ACCOUNT, until } from "../../../scratch-fleet";
+import { traceMain } from "../../frames";
 import {
   type Engine,
   type Kit,
@@ -259,8 +269,8 @@ async function continueAt(
 }
 
 interface Walk {
-  /** Every block's id and type, oldest first. */
-  blocks: { id: string; type: string; text: string }[];
+  /** Every block's id, type, words and note kind, oldest first. */
+  blocks: Drawn[];
   /** The person's turns the walk holds, oldest first. */
   said: string[];
 }
@@ -271,7 +281,12 @@ async function walk(fleet: KitFleet, source: string): Promise<Walk> {
   let before: string | null = null;
   for (let pages = 0; pages < 200; pages += 1) {
     const page: {
-      blocks: { id: string; type?: string; content?: unknown }[];
+      blocks: {
+        id: string;
+        type?: string;
+        content?: unknown;
+        metadata?: { noteKind?: string };
+      }[];
       cursor: string | null;
     } = await fleet.api(
       `/api/instances/${source}/transcript?limit=200${before ? `&before=${encodeURIComponent(before)}` : ""}`
@@ -280,6 +295,7 @@ async function walk(fleet: KitFleet, source: string): Promise<Walk> {
       ...page.blocks.map((block) => ({
         id: block.id,
         type: block.type ?? "",
+        kind: block.metadata?.noteKind ?? "",
         text: typeof block.content === "string" ? block.content.trim() : "",
       }))
     );
@@ -390,17 +406,204 @@ const heldRows = (
     );
   }, id);
 
+/** A row as a list holds it: its id, type, note kind and words. */
+interface Drawn {
+  id: string;
+  kind: string;
+  text: string;
+  type: string;
+}
+
+/** The blocks the page's store holds for the session, as {@link Drawn}. */
+const drawnRows = (page: Page, id: string): Promise<Drawn[]> =>
+  page.evaluate(
+    (viewId) =>
+      (
+        globalThis as unknown as {
+          __cawcoDebug?: {
+            state?: {
+              sessions?: Record<
+                string,
+                {
+                  blocks?: {
+                    id: string;
+                    type: string;
+                    content: unknown;
+                    metadata?: { noteKind?: string };
+                  }[];
+                }
+              >;
+            };
+          };
+        }
+      ).__cawcoDebug?.state?.sessions?.[viewId]?.blocks?.map((one) => ({
+        id: one.id,
+        type: one.type,
+        kind: one.metadata?.noteKind ?? "",
+        text: typeof one.content === "string" ? one.content.trim() : "",
+      })) ?? [],
+    id
+  );
+
+/** What a /clear drew: the rows after the leg's fresh turn, each as `type id (note kind)`. */
+const clearedOf = (rows: Drawn[], fresh: string): string[] =>
+  rows
+    .slice(rows.findLastIndex((one) => one.text === fresh) + 1)
+    .map((one) => `${one.type} ${one.id}${one.kind ? ` (${one.kind})` : ""}`);
+
 /** The ids of the blocks the page's store holds for the session. */
 const heldIds = async (page: Page, id: string): Promise<string[] | null> =>
   (await heldRows(page, id))?.map((one) => one.id) ?? null;
 
 /**
  * The browser's own line for a request the restarting hub answered 502 or
- * refused, and the dashboard's own word that a request got no answer while
- * it was down: not the page's.
+ * refused: not the page's. What the page's own code logs while the hub is
+ * down is the page's, and counts.
  */
 const HUB_DOWN =
-  /status of 50[23]|Failed to load resource|WebSocket connection|ERR_CONNECTION_REFUSED|Could not connect|couldn't reach the hub: the request got no answer/;
+  /status of 50[23]|Failed to load resource|WebSocket connection|ERR_CONNECTION_REFUSED|Could not connect/;
+
+/** The module that marks a look seen (home-state.svelte.ts `markOpened`): an error it logs is that. */
+const MARKS_SEEN = /home-state\.svelte\.ts/;
+
+/** The dashboard's call that marks a look seen (home-state.svelte.ts `postSeen`). */
+const SEEN_ROUTE = "**/api/seen";
+
+/** Whether the hub holds the session seen through its last turn's end. */
+const seenOf = (
+  fleet: KitFleet,
+  id: string
+): { seen: boolean; seenAt: number | null; turnEndedAt: number | null } => {
+  const [row] = fleet.query<{
+    seen_at: number | null;
+    turn_ended_at: number | null;
+  }>("SELECT seen_at, turn_ended_at FROM instances WHERE id = ?", id);
+  const seenAt = row?.seen_at ?? null;
+  const turnEndedAt = row?.turn_ended_at ?? null;
+  return {
+    seen: seenAt !== null && turnEndedAt !== null && seenAt >= turnEndedAt,
+    seenAt,
+    turnEndedAt,
+  };
+};
+
+/** A pass script forced: its stack's frames, each `fn@file:line:column` (frames.ts `traceMain`). */
+const forcedPass = (pass: { at: string }): boolean => pass.at.includes("@");
+
+/** A frame longer than this is long (headless Chromium's 16.67ms grid, two frames: decision-pages (o)). */
+const LONG_FRAME_MS = 33.4;
+
+/** A forced pass whose reading call is Transcript.svelte's own. */
+const atTranscript = (pass: { at: string }): boolean =>
+  (pass.at.split(" ← ")[0] ?? "").includes("Transcript.svelte");
+
+/** A forced pass read by a row handing its place on (Transcript.svelte `handOn`, be88156f's read). */
+const atHandOn = (pass: { at: string }): boolean =>
+  (pass.at.split(" ← ")[0] ?? "").startsWith("handOn@");
+
+/**
+ * A turn's reply on `page` at 4x CPU throttle, traced (Chromium): its long
+ * frames (the page's own frame clock, `requestAnimationFrame`, past
+ * {@link LONG_FRAME_MS}), each with the style and layout passes script forced
+ * in the tasks that started in it; the passes forced at Transcript.svelte in
+ * those frames (`inLong`), and those a row handing its place on forced in
+ * any frame of the reply (`handOn`).
+ */
+async function forcedInTurn(page: Page, act: () => Promise<void>) {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
+  let pageAt = 0;
+  let frames: number[] = [];
+  try {
+    const main = await traceMain(
+      page,
+      async () => {
+        pageAt = await page.evaluate(() => {
+          const clock: { on: boolean; ticks: number[] } = {
+            on: true,
+            ticks: [],
+          };
+          (
+            globalThis as unknown as { __turnClock?: typeof clock }
+          ).__turnClock = clock;
+          const tick = (now: number) => {
+            if (clock.on) {
+              clock.ticks.push(now);
+              requestAnimationFrame(tick);
+            }
+          };
+          requestAnimationFrame(tick);
+          performance.mark("transcript-turn");
+          return performance.now();
+        });
+        await act();
+        frames = await page.evaluate(() => {
+          const clock = (
+            globalThis as unknown as {
+              __turnClock?: { on: boolean; ticks: number[] };
+            }
+          ).__turnClock;
+          if (clock) {
+            clock.on = false;
+          }
+          return clock?.ticks ?? [];
+        });
+      },
+      { passes: true }
+    );
+    const markAt =
+      main.marks.find((one) => one.name === "transcript-turn")?.at ?? 0;
+    const traceAt = (ms: number) => markAt + (ms - pageAt) * 1000;
+    const said = (
+      task: (typeof main.tasks)[number],
+      pass: (typeof main.tasks)[number]["passes"][number]
+    ) =>
+      `${pass.name} ${pass.ms.toFixed(1)}ms at ${pass.at} (in a ${Math.round(task.wall)}ms task, ${task.ran})`;
+    const long: string[] = [];
+    const inLong: string[] = [];
+    for (let at = 1; at < frames.length; at += 1) {
+      const span = frames[at] - frames[at - 1];
+      if (span <= LONG_FRAME_MS) {
+        continue;
+      }
+      const from = traceAt(frames[at - 1]);
+      const to = traceAt(frames[at]);
+      const tasks = main.tasks.filter(
+        (task) => task.at >= from && task.at < to
+      );
+      const forced = tasks.flatMap((task) =>
+        task.passes.filter(forcedPass).map((pass) => ({ task, pass }))
+      );
+      inLong.push(
+        ...forced
+          .filter(({ pass }) => atTranscript(pass) && !atHandOn(pass))
+          .map(({ task, pass }) => said(task, pass))
+      );
+      long.push(
+        `${Math.round(span)}ms: ${
+          forced
+            .map(({ pass }) => `${pass.name} at ${pass.at.split(" ← ")[0]}`)
+            .join("; ") || "no forced pass"
+        }`
+      );
+    }
+    // The row handoff's reads in any frame of the reply, long or not.
+    const handOn = main.tasks.flatMap((task) =>
+      task.passes
+        .filter((pass) => forcedPass(pass) && atHandOn(pass))
+        .map((pass) => said(task, pass))
+    );
+    return {
+      frames: frames.length,
+      handOn,
+      inLong,
+      long,
+    };
+  } finally {
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+    await cdp.detach();
+  }
+}
 
 interface Watched {
   errors: string[];
@@ -422,7 +625,7 @@ async function sessionPage(
       !kitsOwnMessage(text) &&
       !HUB_DOWN.test(text)
     ) {
-      watched.errors.push(text);
+      watched.errors.push(`${text} (${message.location().url})`);
     }
   });
   page.on("pageerror", (error) => watched.errors.push(String(error)));
@@ -716,10 +919,76 @@ async function legOf(
   );
   const fresh = `fresh turn for ${leg.label}`;
   await through(kit, fleet, id, pages, leg, "a new turn", async () => {
-    await say(fleet, source.id, fresh);
-    await tail.page.getByText(fresh, { exact: true }).first().waitFor({
-      timeout: 60_000,
-    });
+    // The turn ends with the conversation in front of both pages, and no
+    // look reaches the hub, as none does while it restarts: each page's
+    // look is refused at the network.
+    let refused = 0;
+    const refuse = async (route: Route) => {
+      refused += 1;
+      await route.abort("connectionrefused");
+    };
+    const seenErrors = () =>
+      [...up.errors, ...tail.errors].filter((one) => MARKS_SEEN.test(one))
+        .length;
+    const errorsBefore = seenErrors();
+    for (const one of [up, tail]) {
+      await one.page.route(SEEN_ROUTE, refuse);
+    }
+    const turn = async () => {
+      await say(fleet, source.id, fresh);
+      await tail.page.getByText(fresh, { exact: true }).first().waitFor({
+        timeout: 60_000,
+      });
+      // Its last rows land and their motion runs out.
+      await tail.page.waitForTimeout(2000);
+    };
+    if (leg.engine === "chromium") {
+      // The reply as the page at the tail draws it: its rows change hands
+      // (the live row settles, a tool's glance lands in its run), and no
+      // layout is read after a write from the transcript's own code.
+      const read = await forcedInTurn(tail.page, turn);
+      kit.check(
+        `${leg.label}, a new turn at the tail, 4x CPU throttle: the long-frame check names no forced read at Transcript.svelte's row handoff (handOn), in any frame of the reply (${read.frames} frames, ${read.long.length} past ${LONG_FRAME_MS}ms: ${read.long.join(" | ") || "none"})`,
+        read.frames > 0 && read.handOn.length === 0,
+        read.handOn.slice(0, 8).join("\n    ")
+      );
+      if (read.inLong.length > 0) {
+        kit.note(
+          `${leg.label}, a new turn at the tail: reads forced at Transcript.svelte in its long frames, outside the row handoff: ${read.inLong.slice(0, 12).join(" | ")}`
+        );
+      }
+    } else {
+      await turn();
+    }
+    const unseen = seenOf(fleet, source.id);
+    for (const one of [up, tail]) {
+      await one.page.unroute(SEEN_ROUTE, refuse);
+    }
+    // The hub comes back for the pages: each one's socket dropped and made
+    // again, as a hub's restart does.
+    const reads = {
+      tail: await readsOf(tail.page, source.id),
+      up: await readsOf(up.page, source.id),
+    };
+    for (const one of [up, tail]) {
+      await one.page.evaluate(() =>
+        (
+          globalThis as unknown as { __cawcoSocket?: WebSocket }
+        ).__cawcoSocket?.close()
+      );
+    }
+    await reconnected(pages, source.id, reads);
+    const seen = await until(
+      "the look the hub did not take, taken",
+      async () => seenOf(fleet, source.id),
+      (one) => one.seen,
+      30_000
+    ).catch(() => seenOf(fleet, source.id));
+    kit.check(
+      `${leg.label}, a turn ending while the hub takes no look: no console error from marking seen, and the look reaches the hub once it is back (${refused} looks refused)`,
+      refused > 0 && !unseen.seen && seenErrors() === errorsBefore && seen.seen,
+      JSON.stringify({ errors: seenErrors() - errorsBefore, unseen, seen })
+    );
   });
   if (first) {
     await through(
@@ -734,8 +1003,9 @@ async function legOf(
           "SELECT session_id FROM instances WHERE id = ?",
           source.id
         );
+        const after = `after clear for ${leg.label}`;
         await say(fleet, source.id, "/clear");
-        await say(fleet, source.id, `after clear for ${leg.label}`);
+        await say(fleet, source.id, after);
         const [now] = fleet.query<{ session_id: string | null }>(
           "SELECT session_id FROM instances WHERE id = ?",
           source.id
@@ -745,10 +1015,33 @@ async function legOf(
           !!was?.session_id && now?.session_id !== was.session_id,
           JSON.stringify({ was, now })
         );
+        await tail.page.getByText(after, { exact: true }).first().waitFor({
+          timeout: 60_000,
+        });
+        await tail.page.waitForTimeout(2000);
+        // What the /clear drew live, on the page at the tail and on the
+        // hub's walk, then what the hub reads again once it restarts.
+        const live = clearedOf(await drawnRows(tail.page, source.id), fresh);
+        const liveWalk = clearedOf(
+          (await walk(fleet, source.id)).blocks,
+          fresh
+        );
         await fleet.stop("hub");
         fleet.launch("hub");
         await fleet.hubUp();
         await reconnected(pages, source.id, marks);
+        const reread = clearedOf((await walk(fleet, source.id)).blocks, fresh);
+        const unrecognised = [...live, ...liveWalk, ...reread].filter((one) =>
+          one.includes("Unrecognised")
+        );
+        kit.check(
+          `${leg.label}: /clear live and re-read draw the same rows (${reread.length}), none of them "Unrecognised"`,
+          reread.length > 0 &&
+            JSON.stringify(live) === JSON.stringify(reread) &&
+            JSON.stringify(liveWalk) === JSON.stringify(reread) &&
+            unrecognised.length === 0,
+          JSON.stringify({ live, liveWalk, reread })
+        );
       }
     );
   }
@@ -911,11 +1204,20 @@ const spec: Spec = {
     const only = process.env.PROBE_LEGS?.split(",");
     const legs = LEGS.filter((one) => !only || only.includes(one.label));
     for (const [index, leg] of legs.entries()) {
-      errors.push(...(await legOf(kit, fleet, base, source, leg, index === 0)));
+      // Each engine's first leg runs the /clear too.
+      const engineFirst =
+        legs.findIndex((one) => one.engine === leg.engine) === index;
+      errors.push(...(await legOf(kit, fleet, base, source, leg, engineFirst)));
     }
     if (process.env.PROBE_IDLE !== "0") {
       errors.push(...(await idleLeg(kit, fleet, base, source.id)));
     }
+    const seenErrors = errors.filter((one) => MARKS_SEEN.test(one));
+    kit.check(
+      `no console error from marking seen, through every leg's socket drops, hub restarts, turns, /clear and reloads: ${seenErrors.length}`,
+      seenErrors.length === 0,
+      seenErrors.slice(0, 4).join(" | ")
+    );
     kit.check(
       `no console error on any page: ${errors.length}`,
       errors.length === 0,

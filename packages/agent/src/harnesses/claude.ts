@@ -90,6 +90,7 @@ import {
   CONTROL_SET_MODEL,
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_WITHDRAW_SEND,
+  CONVERSATION_RESET,
   configurePage,
   conversationGone,
   EFFORT_READ,
@@ -477,6 +478,17 @@ export const toNeutral = (
     sdk.type === "system"
   ) {
     return { ...sdk, raw: sdk } as unknown as NeutralMessage;
+  }
+  // The CLI discarding the conversation for a new one (`/clear`): typed, so
+  // a transcript knows it for what it is (core `CONVERSATION_RESET`).
+  if (sdk.type === "conversation_reset") {
+    return {
+      type: "system",
+      subtype: CONVERSATION_RESET,
+      uuid: sdk.uuid,
+      session_id: sdk.session_id,
+      raw: sdk,
+    } as unknown as NeutralMessage;
   }
   // `auth_status` is MCP server auth plumbing — surface it as a quiet system
   // message so the QUIET set silences it instead of the dashboard showing a

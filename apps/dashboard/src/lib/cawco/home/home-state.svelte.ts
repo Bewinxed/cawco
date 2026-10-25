@@ -42,7 +42,14 @@ import {
   topsIn,
 } from "@cawco/core";
 import { UPSTREAM_WORDS } from "@cawco/core/upstream-guard";
-import { hubRefusal } from "#lib/cawco/hub-read.js";
+import { untrack } from "svelte";
+import {
+  HUB_UNREACHABLE,
+  HubUnreachable,
+  hubRefusal,
+  unreachable,
+  unreachedAnswer,
+} from "#lib/cawco/hub-read.js";
 import {
   type BlockedRequest,
   type BoardRow,
@@ -100,6 +107,8 @@ interface SeenMark {
   mark: number;
   /** The end it marked seen, on the hub's clock (`endedAt`). */
   through: number;
+  /** A look the hub did not take: sent again once it is connected again (`sendUnsent`). */
+  unsent?: boolean;
 }
 
 /**
@@ -163,6 +172,9 @@ async function postSeen(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ids, kind }),
   });
+  if (unreachedAnswer(response)) {
+    throw new HubUnreachable(HUB_UNREACHABLE);
+  }
   if (!response.ok) {
     let { message } = await hubRefusal(response);
     for (const id of ids) {
@@ -178,14 +190,26 @@ async function postSeen(
  * Records that the reader has a conversation in front of them, ended: seen
  * through the end it shows now, on the hub's clock, in the moment it is
  * looked at (a turn that ends while the mark is on its way is news again).
- * Nobody asked for it, so a refusal only takes the mark back.
  */
 export function markOpened(id: string): void {
   seenMarks += 1;
-  const mark = seenMarks;
   const row = cawco.instanceIndex.byId.get(id);
-  seenHere[id] = { mark, through: (row && endedAt(row)) ?? 0 };
+  seenHere[id] = { mark: seenMarks, through: (row && endedAt(row)) ?? 0 };
   delete clearedHere[id];
+  sendLook(id, seenMarks);
+}
+
+/**
+ * Tells the hub of the look `mark` on `id`. The reader did look, so a look
+ * the hub did not take stays marked here and goes again once the hub is
+ * connected again (`sendUnsent`). Taken back, the row was news again, the
+ * tab in front marked it again at once, and each mark the hub did not
+ * answer logged an error, as fast as the dashboard could refuse it, for as
+ * long as the hub was down (a hub restarting: transcript-holds). No answer
+ * is the hub away, and says nothing; the hub refuses no look, so a refusal
+ * is a fault, said once.
+ */
+function sendLook(id: string, mark: number): void {
   const ours = () => seenHere[id]?.mark === mark;
   postSeen([id], "look").then(
     (at) => {
@@ -195,12 +219,25 @@ export function markOpened(id: string): void {
       settleSeen();
     },
     (error: unknown) => {
-      if (ours()) {
-        delete seenHere[id];
+      if (!ours()) {
+        return;
       }
-      console.error("[cawco] marking seen failed:", error);
+      (seenHere[id] as SeenMark).unsent = true;
+      if (!unreachable(error)) {
+        console.error("[cawco] marking seen failed:", error);
+      }
     }
   );
+}
+
+/** Every look the hub did not answer, sent again: called as the hub is connected again. */
+function sendUnsent(): void {
+  for (const [id, mark] of Object.entries(seenHere)) {
+    if (mark.unsent) {
+      mark.unsent = false;
+      sendLook(id, mark.mark);
+    }
+  }
 }
 
 /**
@@ -1158,6 +1195,13 @@ class Home {
       // The hub's echo of a mark (a row's `seenAt` reaching it) drops it.
       $effect(() => {
         settleSeen();
+      });
+      // The looks the hub did not take go again as it is connected again:
+      // once a connection, never on a mark's own change.
+      $effect(() => {
+        if (cawco.hub === "connected") {
+          untrack(sendUnsent);
+        }
       });
     });
   }

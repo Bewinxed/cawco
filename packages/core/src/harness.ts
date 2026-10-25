@@ -1192,6 +1192,19 @@ export const MESSAGES_STORED = "stored";
 export const MESSAGES_HELD = "held";
 
 /**
+ * The `system` subtype saying the harness discarded the conversation and goes
+ * on in a new one (`session_id` the one it left): Claude Code's
+ * `conversation_reset` (SDK `SDKConversationResetMessage`), sent for `/clear`
+ * and its aliases, a plan-mode exit that clears the context, a fresh session
+ * for an approved plan, and an onboarding re-run. The harness stores no
+ * record of it: a session read again draws what its two conversations hold,
+ * the send that asked for it and the next conversation's first turn under it
+ * (hub `priorEntries`), and nothing for the reset itself. So a transcript
+ * draws no row for it live either (core transcript-rules.ts).
+ */
+export const CONVERSATION_RESET = "conversation_reset";
+
+/**
  * The `system` subtype carrying the reply being written, whole so far: every
  * partial since its message began (`partials`, consecutive deltas joined).
  * An agent sends it as it registers with the hub, for each session part way

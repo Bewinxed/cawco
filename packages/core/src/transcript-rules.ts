@@ -30,6 +30,7 @@ import {
   CAWCO_NOTICE,
   CLI_OUTDATED,
   CONTINUATION_ORIGIN,
+  CONVERSATION_RESET,
   CUSTODY_HELD,
   FLEET_WATCH,
   FRESH_START,
@@ -873,6 +874,10 @@ export function mapFrame(
           break;
         case "commands_changed":
           mapping.commands = sdk.commands;
+          break;
+        // The conversation discarded and a new one begun (`/clear`): no row,
+        // as a re-read of the session has none (core `CONVERSATION_RESET`).
+        case CONVERSATION_RESET:
           break;
         case "status":
           mapping.status = sdk.status as NeutralStatus | undefined;

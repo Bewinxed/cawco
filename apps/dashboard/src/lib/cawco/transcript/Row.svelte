@@ -43,6 +43,7 @@
    * in one frame at the end.
    */
   import { type Snippet, untrack } from "svelte";
+  import type { Attachment } from "svelte/attachments";
   import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import {
     type Handoff,
@@ -60,6 +61,7 @@
     handoff,
     onleft,
     marked,
+    measured,
     children,
   }: {
     /**
@@ -85,6 +87,8 @@
      * while it is held, `off` as it fades once the reader has moved on.
      */
     marked?: "on" | "off";
+    /** Hears the row's box as each frame lays it out (Transcript's `measureRow`): a row of the list. */
+    measured?: Attachment<HTMLElement>;
     children: Snippet<[Ticket | null]>;
   } = $props();
 
@@ -472,6 +476,7 @@
   data-marked={marked}
   data-row={rowKey}
   bind:this={node}
+  {@attach measured}
   style:--mark-in={marked
     ? "kit-fade-in var(--dur-panel) var(--ease-out)"
     : undefined}

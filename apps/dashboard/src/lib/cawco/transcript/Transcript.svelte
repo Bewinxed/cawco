@@ -40,6 +40,7 @@
    * beside the log, never through the virtualized container itself.
    */
   import { flushSync, onDestroy, setContext, tick, untrack } from "svelte";
+  import type { Attachment } from "svelte/attachments";
   import { Virtualizer, type VirtualizerHandle } from "virtua/svelte";
   import { describeTool } from "#lib/components/features/tool-cards/descriptors.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -59,7 +60,11 @@
   } from "../client.svelte";
   import EmptyAsk from "../EmptyAsk.svelte";
   import { askFirst, EMPTY_LINES, firstAskLabel } from "../empty-asks";
-  import { frameSize } from "../frame-observer";
+  import {
+    type FrameObserver,
+    frameObserver,
+    frameSize,
+  } from "../frame-observer";
   import { crossIn, dur, ease, motionOk, rise } from "../motion/curves.svelte";
   import { BLEED } from "../motion/rows.svelte";
   import { carry, waiting } from "../motion/share.svelte";
@@ -1209,13 +1214,19 @@
     const folding = new Set(leaving.map(({ row }) => row.key));
     const handed = new Map<string, Handoff>();
     // Only a row on screen folds or hands its place on: one outside virtua's
-    // range has nothing to fold, and nobody to see it go.
+    // range, or one no frame has laid out yet (`drawnHeights`), has nothing
+    // to fold, and nobody to see it go.
     for (const [key, stood] of standing) {
       if (present.has(key) || folding.has(key)) {
         continue;
       }
       const node = drawnRow(key);
-      if (!node || handOn(node, takerOf(key, stood, next, ended), handed)) {
+      const height = node ? drawnHeights.get(node) : undefined;
+      if (
+        !node ||
+        height === undefined ||
+        handOn(node, height, takerOf(key, stood, next, ended), handed)
+      ) {
         continue;
       }
       if (hasLeft(key, stood.row, ended)) {
@@ -1262,28 +1273,30 @@
   }
 
   /**
-   * The row drawn as `node` hands its place to `taker`: the height the taker
-   * starts from — the place's, or the place's on top of its own when it
-   * absorbs it. A row that becomes another is drawn at the place's height
-   * whether or not it moves; a run taking a call in is drawn at its own new
-   * height at once when nothing moves, and is handed nothing. False when
-   * nothing takes the place.
+   * The row drawn as `node`, `height` tall as the last frame laid it out,
+   * hands its place to `taker`: the height the taker starts from — the
+   * place's, or the place's on top of its own when it absorbs it. A row
+   * that becomes another is drawn at the place's height whether or not it
+   * moves; a run taking a call in is drawn at its own new height at once
+   * when nothing moves, or when no frame has laid it out yet, and is handed
+   * nothing. False when nothing takes the place.
    */
   function handOn(
     node: HTMLElement,
+    height: number,
     taker: Taker | null,
     handed: Map<string, Handoff>
   ): boolean {
     if (!taker) {
       return false;
     }
-    const { height } = node.getBoundingClientRect();
     const ghost = taker.replaces ? ghostOf(node) : null;
     if (!taker.absorbs) {
       handed.set(taker.key, { from: height, ghost, taken: false });
       return true;
     }
-    const own = drawnRow(taker.key)?.getBoundingClientRect().height;
+    const holder = drawnRow(taker.key);
+    const own = holder ? drawnHeights.get(holder) : undefined;
     if (
       own !== undefined &&
       untrack(() => landed && watched && motionOk.current)
@@ -1322,6 +1335,41 @@
   /** The row `key` as it is drawn now, before the update lands. */
   const drawnRow = (key: string): HTMLElement | null | undefined =>
     listing?.querySelector<HTMLElement>(`[data-row="${CSS.escape(key)}"]`);
+
+  /**
+   * Each row of the list's height as the last frame laid it out: its border
+   * box, from the reports of one size observer on every row, read inside the
+   * delivery on the layout that frame has just done (frame-observer's
+   * shared delivery, as LiveRow's `drawnHeight`). What a row handing its
+   * place on hands on (`handOn`), read off the record in the update that
+   * changes the rows. Read off the rows there instead, their boxes laid the
+   * page out again after that update's own writes (a reply's frame, forced
+   * after a Svelte style write: be88156f). A row with none has never been
+   * laid out, and has nothing on screen to hand on.
+   */
+  const drawnHeights = new WeakMap<Element, number>();
+  /** The rows' size observer, made by the first row the list mounts (none on the server). */
+  let rowSizes: FrameObserver | null = null;
+  /** A row of the list, heard as each frame lays it out (`drawnHeights`). */
+  const measureRow: Attachment<HTMLElement> = (node) => {
+    rowSizes ??= frameObserver(() => undefined, {
+      read: (entries) => {
+        for (const entry of entries) {
+          const height = entry.borderBoxSize[0]?.blockSize;
+          if (height !== undefined) {
+            drawnHeights.set(entry.target, height);
+          }
+        }
+      },
+    });
+    const sizes = rowSizes;
+    sizes.observe(node, { box: "border-box" });
+    return () => {
+      sizes.unobserve(node);
+      drawnHeights.delete(node);
+    };
+  };
+  onDestroy(() => rowSizes?.disconnect());
 
   /**
    * A TAIL ROW HANDS ITS PLACE TO THE ROW THAT TAKES IT.
@@ -4236,6 +4284,7 @@
           id={row.kind === "tools" ? undefined : row.key}
           leaving={presentation.leaving.has(row.key)}
           marked={marked?.key === row.key ? marked.state : undefined}
+          measured={measureRow}
           motion={motionOf(row)}
           onleft={leaver(row.key)}
           rowKey={row.key}
