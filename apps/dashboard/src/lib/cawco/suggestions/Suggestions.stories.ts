@@ -81,38 +81,6 @@ export const RowsPanel = {
   args: { look: "rows", placement: "panel", set: "decisions" },
 };
 
-/** Tiles: Linear's example tiles, the glyph over the words. Three, in Caw's first thread. */
-export const Tiles = { args: { look: "tiles" } };
-
-/** Tiles: one. */
-export const TilesOne = { args: { look: "tiles", set: "one" } };
-
-/** Tiles: seven, more than the hub writes today. */
-export const TilesMany = { args: { look: "tiles", set: "many" } };
-
-/** Tiles: the longest the hub writes, one an unbroken name, wrapping inside. */
-export const TilesLong = { args: { look: "tiles", set: "long" } };
-
-/** Tiles: while they are read, three skeletons at the look's own size. */
-export const TilesLoading = { args: { look: "tiles", loading: 3 } };
-
-/** Tiles: the first reached by the keyboard, the house ring on it. */
-export const TilesFocus = { args: { look: "tiles", state: "focus" } };
-
-/** Tiles: the first held down: a wide item tints, a chip scales. */
-export const TilesPressed = { args: { look: "tiles", state: "pressed" } };
-
-/** Tiles: at a phone's width. */
-export const TilesPhone = {
-  args: { look: "tiles", set: "long" },
-  parameters: { viewport: 390 },
-};
-
-/** Tiles: the empty Decisions tab's one action, an empty panel's placement. */
-export const TilesPanel = {
-  args: { look: "tiles", placement: "panel", set: "decisions" },
-};
-
 /** Chips: the kit's option chips, as Langdock, AirOps and Relevance AI set them under the field. Three, in Caw's first thread. */
 export const Chips = { args: { look: "chips" } };
 

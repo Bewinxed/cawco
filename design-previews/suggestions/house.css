@@ -67,7 +67,6 @@ button, input:where([type="button"], [type="reset"], [type="submit"]), ::file-se
 .size-full { width: 100%; height: 100%; }
 .size-icon-md { width: var(--icon-md); height: var(--icon-md); }
 .h-14 { height: calc(var(--spacing) * 14); }
-.h-24 { height: calc(var(--spacing) * 24); }
 .h-c-btn-h-sm { height: var(--c-btn-h-sm); }
 .h-lh { height: 1lh; }
 .min-h-c-btn-h-sm { min-height: var(--c-btn-h-sm); }
@@ -91,8 +90,6 @@ button, input:where([type="button"], [type="reset"], [type="submit"]), ::file-se
 }
 .list-none { list-style-type: none; }
 .auto-rows-\(--cards-rows\) { grid-auto-rows: var(--cards-rows); }
-.auto-rows-fr { grid-auto-rows: minmax(0px, 1fr); }
-.grid-cols-\(--tiles-cols\) { grid-template-columns: var(--tiles-cols); }
 .grid-cols-1 { grid-template-columns: repeat(1, minmax(0px, 1fr)); }
 .grid-cols-\[auto_minmax\(0\,auto\)\] { grid-template-columns: auto minmax(0px, auto); }
 .grid-cols-lead-fluid { grid-template-columns: var(--c-row-lead) minmax(0, 1fr); }
@@ -105,7 +102,6 @@ button, input:where([type="button"], [type="reset"], [type="submit"]), ::file-se
 .items-start { align-items: flex-start; }
 .gap-space-1 { gap: var(--space-1); }
 .gap-space-2 { gap: var(--space-2); }
-.gap-space-3 { gap: var(--space-3); }
 .gap-x-space-1 { column-gap: var(--space-1); }
 :where(.divide-y > :not(:last-child)) { --tw-divide-y-reverse: 0; border-bottom-style: var(--tw-border-style); border-top-style: var(--tw-border-style); border-top-width: calc(1px * var(--tw-divide-y-reverse)); border-bottom-width: calc(1px * calc(1 - var(--tw-divide-y-reverse))); }
 :where(.divide-border-hairline > :not(:last-child)) { border-color: var(--border-hairline); }
@@ -115,16 +111,13 @@ button, input:where([type="button"], [type="reset"], [type="submit"]), ::file-se
 .rounded-sm { border-radius: var(--radius-sm); }
 .rounded-xs { border-radius: var(--radius-xs); }
 .border { border-style: var(--tw-border-style); border-width: 1px; }
-.border-solid { --tw-border-style: solid; border-style: solid; }
 .border-border-control { border-color: var(--border-control); }
-.border-border-row-outline { border-color: var(--border-row-outline); }
 .press-tint:is(:active, [data-pressed], #\#):not(:disabled, [aria-disabled="true"]) { background-color: var(--surface-pressed); }
 .press-tint:where(:root:not(.dark), :root:not(.dark) *):is(:active, [data-pressed]):not(:disabled, [aria-disabled="true"]) { --ink-muted: var(--ink-strong); --text-muted: var(--ink-strong); --ink-subtle: var(--ink-strong); --selected-ink: var(--ink-strong); }
 .bg-surface-fill { background-color: var(--surface-fill); }
 .bg-surface-raised { background-color: var(--surface-raised); }
 .p-0 { padding: 0px; }
 .p-space-3 { padding: var(--space-3); }
-.p-space-4 { padding: var(--space-4); }
 .px-space-3 { padding-inline: var(--space-3); }
 :where(:where(.mark-line) > :where(:not(svg, img, .rail-cell, .icon-swap, .mark-cell, [data-box], :has(> :is(svg, img, .rail-cell, .icon-swap, .mark-cell, [data-box])):not(:has(> :not(svg, img, .rail-cell, .icon-swap, .mark-cell, [data-box])))))) { text-box: ex alphabetic; padding-block: calc(-0.5ex + 0.5lh); }
 :where(.mark-text) { text-box: ex alphabetic; padding-block: calc(-0.5ex + 0.5lh); }
@@ -180,6 +173,9 @@ button, input:where([type="button"], [type="reset"], [type="submit"]), ::file-se
 :where(.group\/starters)[data-rows] .group-data-rows\/starters\:flex-col { flex-direction: column; }
 :where(.group\/starters)[data-rows] .group-data-rows\/starters\:items-start { align-items: flex-start; }
 :where(.group\/starters)[data-rows] .group-data-rows\/starters\:rounded-md { border-radius: var(--radius-md); }
+:where(.group\/starters)[data-rows] .group-data-rows\/starters\:border { border-style: var(--tw-border-style); border-width: 1px; }
+:where(.group\/starters)[data-rows] .group-data-rows\/starters\:border-solid { --tw-border-style: solid; border-style: solid; }
+:where(.group\/starters)[data-rows] .group-data-rows\/starters\:border-border-row-outline { border-color: var(--border-row-outline); }
 :where(.group\/starters)[data-rows] .group-data-rows\/starters\:px-space-3 { padding-inline: var(--space-3); }
 :where(.group\/starters)[data-rows] .group-data-rows\/starters\:py-space-2 { padding-block: var(--space-2); }
 :where(.group\/starters)[data-rows] .group-data-rows\/starters\:shadow-none { --tw-shadow: 0 0 #0000; box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow); }

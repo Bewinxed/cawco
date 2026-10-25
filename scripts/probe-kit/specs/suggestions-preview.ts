@@ -2,7 +2,7 @@
  * The suggestions preview (design-previews/suggestions/), served as a
  * folder and read from the engine on Chromium and WebKit, at 1440 (a desk's
  * mouse), 680 (a narrow desk window) and 390 (a phone's finger), by day and
- * at night. Every look (list, rows, tiles, chips) is Suggestions.svelte's
+ * at night. Every look (list, rows, chips) is Suggestions.svelte's
  * own markup (capture/capture.ts), set in Caw's first thread and the empty
  * Decisions tab beside today's StarterCards:
  *
@@ -16,7 +16,7 @@
  * 3. Focus is visible: Tab onto each look's first item from the control
  *    before it, and it matches `:focus-visible` and draws the house ring
  *    (a 2px solid outline in `--focus-ring`).
- * 4. Pressed: held down under the mouse, a wide item (list, rows, tiles)
+ * 4. Pressed: held down under the mouse, a wide item (list, rows)
  *    takes `--surface-pressed` and a chip scales to `--press-scale`; let go
  *    over it, its words are in the composer, the caret after them.
  * 5. Long text wraps without overflow: in every look's longest set, each
@@ -37,7 +37,7 @@ import type { Engine, Kit, Spec, View } from "../kit";
 import { ROOT } from "../kit";
 
 const DIR = join(ROOT, "design-previews", "suggestions");
-const LOOKS = ["list", "rows", "tiles", "chips"] as const;
+const LOOKS = ["list", "rows", "chips"] as const;
 const WIDTHS: { width: number; view: View }[] = [
   { width: 1440, view: "desk" },
   { width: 680, view: "narrowDesk" },
@@ -425,8 +425,8 @@ async function longLeg(kit: Kit, page: Page, at: string): Promise<void> {
 /**
  * Leg 6: what a person reads. Each sentence and reason holds 4.5:1 on its
  * item's fill (or the fill under a bare item), its glyph stands on its
- * first line's middle within a pixel (The Mark Line Rule; a tile's glyph
- * stands above its words), and how tall each look stands in Caw's thread
+ * first line's middle within a pixel (The Mark Line Rule), and how tall
+ * each look stands in Caw's thread
  * is noted, so the looks can be weighed by the room they take.
  */
 async function inkLeg(kit: Kit, page: Page, at: string): Promise<void> {
@@ -495,9 +495,6 @@ async function inkLeg(kit: Kit, page: Page, at: string): Promise<void> {
               `${look} "${run.textContent?.slice(0, 18)}" ${r.toFixed(2)}`
             );
           }
-        }
-        if (look === "tiles") {
-          continue;
         }
         for (const glyph of document.querySelectorAll<SVGElement>(
           `.variant[data-look="${look}"] [data-suggestion-glyph]`
