@@ -608,6 +608,107 @@ async function away(page: Page, id: string): Promise<void> {
 }
 
 /**
+ * In the dashboard's own document, from `__hiddenRemovals.start()`: every
+ * node taken out of a pane put away (`[data-pane-hidden]`), counted by
+ * what it was and where it sat (the detached leg's `detached.txt`).
+ */
+function watchHiddenRemovals(): void {
+  if (window.top !== window) {
+    return;
+  }
+  /** Nodes taken out of a pane put away, by what each was and where it sat. */
+  const by = new Map<string, number>();
+  let on = false;
+  const w = window as unknown as {
+    __hiddenRemovals: {
+      read: () => { count: number; what: string }[];
+      start: () => void;
+    };
+  };
+  w.__hiddenRemovals = {
+    start: () => {
+      by.clear();
+      on = true;
+    },
+    read: () =>
+      [...by]
+        .map(([what, count]) => ({ what, count }))
+        .sort((a, b) => b.count - a.count),
+  };
+  /** A node's mark: its tag and `data-slot`, or `#text` and its first words. */
+  const markOf = (node: Node | null): string => {
+    if (!(node instanceof Element)) {
+      return node
+        ? `${node.nodeName} ${(node.textContent ?? "").slice(0, 24)}`
+        : "";
+    }
+    const slot = node.getAttribute("data-slot");
+    return `${node.localName}${slot ? `[${slot}]` : ""}`;
+  };
+  const note = (parent: Node | null, child: Node | null) => {
+    if (!(
+      on &&
+      parent instanceof Element &&
+      parent.closest("[data-pane-hidden]")
+    )) {
+      return;
+    }
+    // Where it was: its parent's slots out to the row, and the list's mark.
+    const chain: string[] = [];
+    for (
+      let at: Element | null = parent;
+      at && chain.length < 6 && !at.matches('[data-slot="listing"]');
+      at = at.parentElement
+    ) {
+      if (at.hasAttribute("data-slot") || at.hasAttribute("data-item")) {
+        chain.push(markOf(at));
+      }
+    }
+    const list = parent
+      .closest('[data-slot="listing"]')
+      ?.getAttribute("data-probe");
+    const key = `${markOf(child)} in ${chain.join(" < ")} (${list ?? "no list"})`;
+    by.set(key, (by.get(key) ?? 0) + 1);
+  };
+  const { remove } = Element.prototype;
+  Element.prototype.remove = function (this: Element) {
+    note(this.parentNode, this);
+    remove.call(this);
+  };
+  const { remove: removeText } = CharacterData.prototype;
+  CharacterData.prototype.remove = function (this: CharacterData) {
+    note(this.parentNode, this);
+    removeText.call(this);
+  };
+  const { removeChild } = Node.prototype;
+  Node.prototype.removeChild = function <T extends Node>(this: Node, child: T) {
+    note(this, child);
+    return removeChild.call(this, child) as T;
+  };
+  const { replaceWith } = Element.prototype;
+  Element.prototype.replaceWith = function (
+    this: Element,
+    ...nodes: (Node | string)[]
+  ) {
+    note(this.parentNode, this);
+    replaceWith.apply(this, nodes);
+  };
+  const content = Object.getOwnPropertyDescriptor(
+    Node.prototype,
+    "textContent"
+  );
+  Object.defineProperty(Node.prototype, "textContent", {
+    ...content,
+    set(this: Node, value: string) {
+      if (this.firstChild) {
+        note(this, this.firstChild);
+      }
+      content?.set?.call(this, value);
+    },
+  });
+}
+
+/**
  * In the dashboard's own document: when the pane reaches into a preview's
  * frame to post to it (its `contentWindow`, epoch ms), so a return says how
  * long the pane took to send its release, apart from how long it took to
@@ -2046,7 +2147,7 @@ async function detachedLeg(
       .filter({ visible: true })
       .first()
       .click();
-  const page = await kit.page("desk");
+  const page = await kit.page("desk", { init: [watchHiddenRemovals] });
   await page.addInitScript(
     ([held, active]) => {
       localStorage.setItem(
@@ -2083,6 +2184,11 @@ async function detachedLeg(
   });
   const cdp = await page.context().newCDPSession(page);
   const before = await heapOf(cdp);
+  await page.evaluate(() =>
+    (
+      window as unknown as { __hiddenRemovals: { start: () => void } }
+    ).__hiddenRemovals.start()
+  );
   // The busy session streams through the switches, as the owner's fleet does.
   const streaming = stream();
   for (let i = 0; i < SWITCHES; i += 1) {
@@ -2093,6 +2199,13 @@ async function detachedLeg(
   await streaming;
   await page.waitForTimeout(SWITCH_REST_MS);
   const after = await heapOf(cdp);
+  const removals = await page.evaluate(() =>
+    (
+      window as unknown as {
+        __hiddenRemovals: { read: () => { count: number; what: string }[] };
+      }
+    ).__hiddenRemovals.read()
+  );
   // Every pane shown once more, each laid out again, the busy one last and
   // left in front; then read a third time.
   for (const id of [...tabs.slice(2), tabs[0], tabs[1]] as string[]) {
@@ -2116,6 +2229,8 @@ async function detachedLeg(
       ...holders(before, after),
       "# Once every pane is shown again, the busy one left in front",
       ...holders(before, shownAgain),
+      `# Taken out of a pane put away over the switches: ${removals.reduce((n, one) => n + one.count, 0)}, by what each was and where it sat`,
+      ...removals.slice(0, 20).map((one) => `  ${one.count}× ${one.what}`),
       `# The transcripts' lists (tabs in order: ${tabs.join(", ")}; the busy one second)`,
       ...listings.map((one) => `  ${JSON.stringify(one)}`),
     ].join("\n")}\n`
@@ -2650,9 +2765,25 @@ const run = async (kit: Kit) => {
     await doubleArrow(webkit, "WebKit");
     await silentLeg(webkit, "WebKit");
   };
-  // TAB_RETURN_LEGS=busy: scene 1 alone, its busy returns.
+  // TAB_RETURN_LEGS=busy: scene 1 alone, its busy returns, then 1a and 1b
+  // again on WebKit, each a person's press.
   if (process.env.TAB_RETURN_LEGS === "busy") {
     await isolated.page.close();
+    const webkit = await desk([front, busy, previewed], front, "webkit");
+    await leg(
+      webkit,
+      `1a (WebKit): busy, back after ${SHORT_MS / 1000}s`,
+      busy,
+      "busy"
+    );
+    await leg(
+      webkit,
+      `1b (WebKit): busy, back after ${BACKLOG_MS / 60_000} min`,
+      busy,
+      "busy",
+      BACKLOG_MS
+    );
+    await webkit.page.close();
   } else {
     await previewLegs();
   }
@@ -2670,6 +2801,15 @@ const run = async (kit: Kit) => {
         `${back.scene}: no task longer than two frames' budget (${2 * LONG_TASK_MS}ms) on a CPU ${SLOWER}x slower`,
         back.longest * SLOWER <= 2 * LONG_TASK_MS,
         `the longest ${back.longest}ms of CPU, ${back.longest * SLOWER}ms slower; ${back.longestWhat.slice(0, 300)}`
+      );
+    }
+    // An untraced busy return (WebKit's) has no task to read: the frame the
+    // dashboard draws first after the press stands for it, on this CPU.
+    if (!back.traced && back.kind === "busy") {
+      kit.check(
+        `${back.scene}: the dashboard's first frame after the press comes within ${2 * LONG_TASK_MS}ms`,
+        (back.frames[0] ?? Number.POSITIVE_INFINITY) <= 2 * LONG_TASK_MS,
+        `frames ${back.frames.slice(0, 6).join(", ")}ms after the press`
       );
     }
     if (back.traced) {

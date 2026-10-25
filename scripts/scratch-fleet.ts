@@ -10,7 +10,7 @@
  * The mock answers every harness's model request (Anthropic messages for
  * Claude Code, OpenAI chat completions for opencode and pi) with the words
  * the probe's `respond` picks, streamed at its pace, and keeps every request
- * it answered in `seen`.
+ * it answered in `seen` (the oldest one's text let go past `SEEN_CHARS`).
  */
 import { Database } from "bun:sqlite";
 import {
@@ -119,6 +119,17 @@ const toolFailed = (content: unknown): boolean =>
     (block) => block.type === "tool_result" && block.is_error === true
   );
 
+/**
+ * The most text the mock's log (`seen`) holds across its requests, chars.
+ * Every request carries its whole conversation, so a long session's log
+ * grew with the square of its turns: tab-return's busy session, 437
+ * requests in, held 834M chars of bodies and 742M of words, 3.3 GB of the
+ * probe's heap, and past 8 GB by the end of its legs. Past this, the oldest
+ * requests let their text go first. Our own call: room for any spec's
+ * short sessions whole, and a bound on a long one's.
+ */
+const SEEN_CHARS = 100_000_000;
+
 /** One request the mock answered. */
 export interface Seen {
   /**
@@ -149,6 +160,11 @@ export interface Seen {
   last: string;
   /** `last` carries words read mid-turn, from {@link MID_TURN} on. */
   lastMidTurn: boolean;
+  /**
+   * Its `body`, `all` and `last` were let go (emptied) to keep the fleet's
+   * log within {@link SEEN_CHARS}; what else it says stands.
+   */
+  letGo: boolean;
   /**
    * {@link afterTool}, and the tool's result was an error: Anthropic's
    * `is_error` on its `tool_result` (chat completions mark none).
@@ -1715,6 +1731,24 @@ async function standUp(
 
   // ── The mock model endpoint ───────────────────────────────────────────
   const seen: Seen[] = [];
+  /** The text the requests in `seen` still hold, chars, and the first one not yet let go. */
+  const seenText = { chars: 0, from: 0 };
+  /**
+   * Keeps what `seen` holds within {@link SEEN_CHARS}: the newest request
+   * whole, the oldest let go of their text first (`letGo`).
+   */
+  const keepWithin = (one: Seen) => {
+    seenText.chars += one.body.length + one.all.length + one.last.length;
+    while (seenText.chars > SEEN_CHARS && seenText.from < seen.length - 1) {
+      const old = seen[seenText.from] as Seen;
+      seenText.chars -= old.body.length + old.all.length + old.last.length;
+      old.body = "";
+      old.all = "";
+      old.last = "";
+      old.letGo = true;
+      seenText.from += 1;
+    }
+  };
   /** Token-count requests the mock got, and the hold a spec puts on their answers ({@link holdCountTokens}). */
   const countTokens = { asked: 0, held: null as Promise<void> | null };
   /** Holds every token-count answer, as a slow Anthropic would, until the release this answers is called. */
@@ -1776,6 +1810,7 @@ async function standUp(
         all: words.map((said) => said.text).join("\n"),
         body: JSON.stringify(body),
         ...newestOf(words),
+        letGo: false,
         tools: (body.tools?.length ?? 0) > 0,
         // Anthropic names a tool at its top; chat completions, in `function`.
         toolNames: (body.tools ?? []).flatMap((tool) => {
@@ -1784,6 +1819,7 @@ async function standUp(
         }),
       };
       seen.push(one);
+      keepWithin(one);
       const reply = await options.respond(one);
       const chat = path.endsWith("/chat/completions");
       const refused = refusalOf(reply, chat);
