@@ -23,7 +23,8 @@
  * - (a2) The parent reads the server's climb in memory, naming A's item and
  *   the server, as A takes no word (the old leak-notice-workspace (w3)).
  * - (a2b) The parent's person's transcript draws that as CawCo's notice
- *   row, its line naming A's item, never as their own message (core
+ *   row, its line naming A's item and saying the server still runs
+ *   ({@link A_LEAK_END}), never as their own message (core
  *   transcript-rules.ts `cawcoRow`; the old leak-notice-workspace (w3b)).
  * - (a3) The parent reads no leftover of A's.
  * - (a4) Once the artifact is deleted, the server is gone within a sweep's
@@ -56,6 +57,7 @@ import {
   signal as signalPid,
 } from "../../../packages/core/src/signal";
 import { leakWords } from "../../../packages/core/src/words/leaks";
+import { noticeLine } from "../../../packages/core/src/words/notices";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
@@ -72,6 +74,17 @@ const MARK_A = "endedProbeA";
 /** The unix socket A's server also answers on, in its TMPDIR. */
 const SOCKET_A = "ended-a.sock";
 const PAGE_A = "ended probe page A";
+/** A's item's title, as the parent's notice row names it. */
+const TITLE_A = "Serve a page";
+/**
+ * How the row of A's server's climb ends in the parent's transcript: naming
+ * A's item, then its live state, "· still running" while the artifact keeps
+ * the server (core words/notices.ts `leaking`, `noticeLine`).
+ */
+const A_LEAK_END = noticeLine({
+  line: ` in ${TITLE_A}`,
+  live: "running",
+});
 const TITLE_B = "Ended probe page B";
 /** The unix socket B's served server also answers on, in its TMPDIR. */
 const SOCKET_B = "ended-b.sock";
@@ -450,7 +463,7 @@ const spec: Spec = {
       });
     try {
       // A: a server of the delegate's own, shown by the parent's preview.
-      const a = await delegate("A", "Serve a page");
+      const a = await delegate("A", TITLE_A);
       const wa = workspaceOf(a.workspaceId);
       const artifact = crypto.randomUUID();
       const now = Date.now();
@@ -532,7 +545,7 @@ const spec: Spec = {
             (block) =>
               block.type === "ui.system_note" &&
               block.metadata?.notice === "leak" &&
-              !!block.metadata.noteTitle?.endsWith(" in Serve a page")
+              !!block.metadata.noteTitle?.endsWith(A_LEAK_END)
           ),
         JSON.stringify(
           parentRows.map((block) => ({ type: block.type, ...block.metadata }))
