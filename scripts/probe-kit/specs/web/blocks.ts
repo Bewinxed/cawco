@@ -712,11 +712,18 @@ async function tabAndBlock(
           ?.getAttribute("data-columns") ?? 0
       ),
       body: Math.round(body?.getBoundingClientRect().height ?? 0),
+      // The pane's view less its head padding and its foot: its padding,
+      // or the run its edge fade covers there, whichever is more.
       paneContent: pane
         ? Math.round(
             pane.clientHeight -
               Number.parseFloat(styles?.paddingBlockStart ?? "0") -
-              Number.parseFloat(styles?.paddingBlockEnd ?? "0")
+              Math.max(
+                Number.parseFloat(styles?.paddingBlockEnd ?? "0"),
+                Number.parseFloat(
+                  styles?.getPropertyValue("--fade-foot") ?? "0"
+                ) || 0
+              )
           )
         : 0,
       headH: Math.round(
@@ -735,7 +742,7 @@ async function tabAndBlock(
     };
   });
   kit.check(
-    "board: with Spend placed on it, the board is the page's first block, the row's width, its body the pane's height less its head, the view after it",
+    "board: with Spend placed on it, the board is the page's first block, the row's width, its body the pane's height less its head and its foot fade, the view after it",
     board.view === "blocks" &&
       board.order === `board,view:${VIEW}` &&
       board.span === board.columns &&

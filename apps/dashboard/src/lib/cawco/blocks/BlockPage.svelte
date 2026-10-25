@@ -181,12 +181,19 @@
       return;
     }
     const pane = scroller;
+    // The foot: the pane's own padding, or the run its edge fade covers
+    // there (edge-fade.css `--fade-foot`), whichever is more. The board's
+    // columns scroll inside it, so a board standing under the fade kept
+    // each column's last card faded at its column's end.
     const measure = () => {
       const styles = getComputedStyle(pane);
       fill =
         pane.clientHeight -
         Number.parseFloat(styles.paddingBlockStart) -
-        Number.parseFloat(styles.paddingBlockEnd);
+        Math.max(
+          Number.parseFloat(styles.paddingBlockEnd),
+          Number.parseFloat(styles.getPropertyValue("--fade-foot")) || 0
+        );
     };
     // Read now, and a change in the next frame (frameObserver): a filling
     // block takes its height from it.

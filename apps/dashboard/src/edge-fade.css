@@ -15,6 +15,18 @@
   inherits: false;
   initial-value: 0px;
 }
+/* The run at a faded block scroller's foot its fade covers while more is
+   below: its fade length, plus any `--fade-inset-end`. A box sized to the
+   scroller's view that scrolls its own items (a block page's board, its
+   columns scrolling inside) stands this far clear of the foot, or its last
+   item sits under the outer fade with nothing left to scroll it out
+   (BlockPage reads it). Registered so a read of it is a length in px; 0px
+   on any box that wears no block fade. */
+@property --fade-foot {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
 /* Where a tab track's edge fades are cut short (TabsList `capFades`) and
    the run each fade takes from it (PaneTabs' phone row): read by the
    track's own mask alone, and moved as the track scrolls under a swipe,
@@ -88,6 +100,9 @@
     :where(.kit-edge-fade, .kit-edge-fade-block) {
       --fade-len: var(--c-edge-fade-len-phone);
     }
+  }
+  :where(.kit-edge-fade-block) {
+    --fade-foot: calc(var(--fade-len) + var(--fade-inset-end, 0px));
   }
   :where(.kit-edge-fade) {
     mask-image: linear-gradient(
