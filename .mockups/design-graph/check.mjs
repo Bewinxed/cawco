@@ -661,6 +661,46 @@ async function boxes(browser, w, h, engine) {
   await page.close();
 }
 
+// ---- The five pins the old page answered and didn't build (#7, #11, #13, #14, #18), read from the engine ----
+async function pins(browser, w, h, engine) {
+  const V = w + "-" + engine;
+  const { page, errors, ev } = await openPage(browser, w, h);
+  // #7: the agent's dials, each a slider; Field gap moved draws on the form at once.
+  const dials = await ev(() => [...document.querySelectorAll(".gsec[data-current] .dials .dial")].map((d) => ({ name: d.querySelector("span").textContent, slider: !!d.querySelector('input[type="range"]') })));
+  await page.locator('.gsec[data-current] .dials .dial:nth-child(2) input[type="range"]').fill("20"); await page.waitForTimeout(200);
+  const gap = await ev(() => getComputedStyle(document.querySelector(".stage .field")).marginBlockEnd);
+  ok(V, "#7: the agent's two dials, Corner radius and Field gap, each a slider; Field gap at 20 draws the form's fields 20px apart", dials.map((d) => d.name).join() === "Corner radius,Field gap" && dials.every((d) => d.slider) && gap === "20px", JSON.stringify({ dials, gap }));
+  if (await ev(() => document.documentElement.dataset.layout !== "desk")) { await page.click('#faces [data-face="move"]'); await page.waitForTimeout(400); }
+  // An edit, so the head carries Original | Edited, its count and Reset: a key's nudge on a bar.
+  await page.focus('.clip[data-key="label"] .bar'); await page.keyboard.press("ArrowRight"); await page.waitForTimeout(400);
+  const head = await ev(() => {
+    const el = document.querySelector(".dock-head"), d = document.getElementById("dock"), r = el.getBoundingClientRect(), mid = r.top + r.height / 2;
+    const kids = [...el.children].filter((k) => getComputedStyle(k).display !== "none").flatMap((k) => (k.classList.contains("edits") ? [...k.children] : [k])).filter((k) => k.getClientRects().length).map((k) => k.getBoundingClientRect());
+    const ruler = document.getElementById("ruler"), pill = getComputedStyle(ruler, "::after"), rr = ruler.getBoundingClientRect();
+    // A facts line is one line: every part of it on one middle, nothing wider than it.
+    const facts = [...document.querySelectorAll(".clip .facts")].map((f) => { const b = f.getBoundingClientRect(), m = b.top + b.height / 2; return { wide: f.scrollWidth > f.clientWidth + 1, off: Math.max(0, ...[...f.children].filter((c) => c.getClientRects().length).map((c) => { const q = c.getBoundingClientRect(); return Math.abs(q.top + q.height / 2 - m); })) }; });
+    return {
+      // A narrow dock leaves the count to the rows (its container query): it is asked for where the dock is wide.
+      parts: ["#compare", "#resetAll", ".dock-title", "#play", "#loop", ...(d.clientWidth >= 440 ? [".edits-count"] : [])].filter((q) => { const e = el.querySelector(q); return !e || !e.getClientRects().length; }),
+      off: Math.round(Math.max(...kids.map((k) => Math.abs(k.top + k.height / 2 - mid))) * 10) / 10,
+      inside: kids.every((k) => k.left >= r.left - 0.5 && k.right <= r.right + 0.5),
+      height: Math.round(r.height), rowH: parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--c-row-h")),
+      hairline: getComputedStyle(el).borderBottomWidth, across: Math.round(r.width - d.clientWidth),
+      factsWide: facts.filter((f) => f.wide).length, factsTall: facts.filter((f) => f.off > 2).length,
+      spill: [...el.querySelectorAll("*")].filter((k) => { const q = k.getBoundingClientRect(); return q.width > 0 && (q.left < r.left - 0.5 || q.right > r.right + 0.5); }).map((k) => (k.id || k.className) + " " + Math.round(k.getBoundingClientRect().left) + "–" + Math.round(k.getBoundingClientRect().right) + " in " + Math.round(r.left) + "–" + Math.round(r.right)),
+      says: ruler.dataset.t, pill: { content: pill.content, radius: parseFloat(pill.borderTopLeftRadius), h: parseFloat(pill.height) || rr.height, bg: pill.backgroundColor, ink: __k.color("--ink-solid") },
+    };
+  });
+  ok(V, "#11: the dock's head is one row of the row's height, its name then Original | Edited, the count, Reset, play and loop, all inside it; each clip's facts one line", head.parts.length === 0 && head.off <= 2 && head.inside && head.height <= head.rowH + 1 && head.factsWide === 0 && head.factsTall === 0, JSON.stringify(head));
+  ok(V, "#14: a 1px hairline the dock's whole width under its head", head.hairline === "1px" && Math.abs(head.across) <= 1, JSON.stringify({ hairline: head.hairline, across: head.across }));
+  ok(V, "#13: the playhead's head is an ink pill on the ruler saying the time in figures", /^\d+$/.test(head.says || "") && head.pill.radius >= head.pill.h / 2 - 0.5 && head.pill.bg === head.pill.ink, JSON.stringify({ says: head.says, pill: head.pill }));
+  // #18: no corner grip: the only resize marks are the two arcs (section A), no L-shaped grip anywhere.
+  const grips = await ev(() => ({ grips: [...document.querySelectorAll("#panel *, #dock *")].filter((e) => /grip/i.test(e.getAttribute("class") || "") && !/grabber/i.test(e.getAttribute("class") || "")).map((e) => e.getAttribute("class")), arcs: [...document.querySelectorAll("svg.arc")].map((a) => a.id) }));
+  ok(V, "#18: no corner grip; the resize handles are the two arcs", grips.grips.length === 0 && grips.arcs.join() === "arcP,arcD", JSON.stringify(grips));
+  ok(V, "pins: no console errors", errors.length === 0, errors.join(" | "));
+  await page.close();
+}
+
 // ---- Less motion: every motion's reduced form (fades, nothing moves) ----
 async function reducedMotion(browser) {
   const V = "1440-reduced-chromium";
@@ -762,6 +802,7 @@ await reducedMotion(browser);
 await reviewFixes(browser, "chromium");
 await boxes(browser, 1440, 900, "chromium");
 await boxes(browser, 390, 844, "chromium");
+for (const [w, h] of [[1440, 900], [768, 1024], [390, 844]]) await pins(browser, w, h, "chromium");
 if (!process.env.NO_CAPS) await captures(browser);
 await browser.close();
 await webkitMotion();
@@ -769,6 +810,7 @@ await webkitMotion();
   const wk = await pw.webkit.launch({ executablePath: pw.webkit.executablePath() });
   await boxes(wk, 1440, 900, "webkit");
   await boxes(wk, 390, 844, "webkit");
+  for (const [w, h] of [[1440, 900], [768, 1024], [390, 844]]) await pins(wk, w, h, "webkit");
   await reviewFixes(wk, "webkit");
   await wk.close();
 }

@@ -1371,6 +1371,7 @@ function updateTime() {
   const rb = $("ruler").getBoundingClientRect(), tb = $("tl").getBoundingClientRect();
   $("playhead").style.setProperty("--ph-y", rb.bottom - tlTop() - px("--space-1") / 2 + "px");
   $("readout").innerHTML = '<b class="fig">' + Math.round(t) + '</b> / <span class="fig">' + Math.round(len) + '<span class="unit">ms</span></span>';
+  $("ruler").dataset.t = Math.round(t);
   $("play").toggleAttribute("data-playing", !!playing);
   $("play").setAttribute("aria-label", playing ? "Pause" : "Play");
   updateDash();
@@ -2104,7 +2105,11 @@ addEventListener("pointerdown", hideTip, true);
 
 // ---- Dials: what the agent put up for tuning on this component ----
 const dials = {
-  form: [{ name: "Corner radius", min: 0, max: 16, step: 1, unit: "px", value: 8, apply: (v) => rootEl.style.setProperty("--mock-radius", v + "px") }],
+  // The agent decides what it puts up (pin 7): here two sliders, the form's corners and the room between its fields.
+  form: [
+    { name: "Corner radius", min: 0, max: 16, step: 1, unit: "px", value: 8, apply: (v) => rootEl.style.setProperty("--mock-radius", v + "px") },
+    { name: "Field gap", min: 4, max: 32, step: 1, unit: "px", value: 11, apply: (v) => rootEl.style.setProperty("--mock-field-gap", v + "px") },
+  ],
   row: [{ name: "Row padding", min: 6, max: 20, step: 1, unit: "px", value: 12, apply: (v) => rootEl.style.setProperty("--mock-row-pad", v + "px") }],
 };
 function drawDials(cid = tab) {
