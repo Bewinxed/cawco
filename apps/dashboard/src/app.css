@@ -58,16 +58,22 @@
      nothing between the mark and the row's own element is a stacking
      context: a row's link that is one (a `translate`, a filter, an opacity
      at rest) keeps the mark's level inside it, and the group, drawn after
-     the link, rides over the mark. Scoped to the row that owns the group
-     and stopped at the group, so a child's own mark and deck inside it are
-     its own affair. The mark and its pieces are named by attributes of their
+     the link, rides over the mark. Scoped to what stands before the group
+     in the row that owns it (the mark is always there) and stopped at the
+     group, so a child's own mark and deck inside it are its own affair.
+     Found from the group's earlier siblings, never from the row around it:
+     with the row as the scope's root, `:has()` asked of the row for every
+     row put into its group, and a held list's reorder restyled every mark
+     and deck of the project (137 elements, 2.8ms of a 12ms frame; probe-kit
+     held-reorder). The mark and its pieces are named by attributes of their
      own: under a state (the scope's, the hold's, the draw's), Chrome keys an
      attribute selector to the attribute's name alone, and
      `[data-slot="tree-mark"]` restyled every `data-slot` in the tree. */
   @scope (
-    :is(li, [data-nest-host]):has(
-      > [data-flip-anchor]:not([data-branch-wait], [data-state="closing"])
-    )
+    :is(li, [data-nest-host])
+      > :has(
+        ~ [data-flip-anchor]:not([data-branch-wait], [data-state="closing"])
+      )
   ) to ([data-flip-anchor]) {
     [data-tree-mark] [data-tree-mark-deck] {
       visibility: hidden;
