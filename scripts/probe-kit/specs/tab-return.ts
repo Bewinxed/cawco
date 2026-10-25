@@ -146,6 +146,15 @@ const HEAVY_MS = 8;
  * harness's round trip): how many turns an absence lets through.
  */
 const TURN_MS = 3000;
+/**
+ * Live turns streamed into the busy session, its tab away, before the first
+ * return: more turns than the rows a return mounts at its tail (23), so each
+ * busy return reads a tail of the same rows. A live turn's rows hold more
+ * than a seeded turn's, and the tail 1a and 1c read held 591, 786 or 1111
+ * elements as the live turns behind it differed: those that ran before the
+ * seed was seen, and three more for each contended try.
+ */
+const PRIMED_TURNS = 20;
 /** The most a leg's released turns may take. */
 const RELEASE_MS = 5 * 60_000;
 /** After the last released turn, for its frames to reach the page. */
@@ -507,9 +516,14 @@ function sceneModel() {
   const tag = crypto.randomUUID().slice(0, 6);
   const mark = (name: string) => `tab-return ${name} ${tag}`;
   const counts: { busy?: number } = {};
-  /** The last busy request let through; null while the turns run freely. */
-  const pace: { upTo: number | null; open: (() => void) | null } = {
-    upTo: null,
+  /**
+   * The last busy request let through: the seed's, then each as a leg lets
+   * it. No live turn runs on its own: those that ran while a poll was still
+   * to see the seed changed, run to run, what the tail every busy return
+   * reads was made of.
+   */
+  const pace: { upTo: number; open: (() => void) | null } = {
+    upTo: SEED,
     open: null,
   };
   const turn = () =>
@@ -519,7 +533,7 @@ function sceneModel() {
   /** The busy session's `n`th turn: seeded fast, then live (30 words at 40ms, a second's tool), once its leg lets it. */
   const busyTurn = async (n: number): Promise<Reply> => {
     const live = n > SEED;
-    while (live && pace.upTo !== null && n > pace.upTo) {
+    while (live && n > pace.upTo) {
       await turn();
     }
     const id = String(n).padStart(5, "0");
@@ -552,13 +566,9 @@ function sceneModel() {
     }
     return { everyMs: 5, words: ["Done."] };
   };
-  /** From now on a busy turn waits for its leg. */
-  const hold = () => {
-    pace.upTo = counts.busy ?? 0;
-  };
   /** Lets `turns` more busy turns run, and answers once each has run whole: its tool's output sent back, the next turn waiting. */
   const release = async (turns: number) => {
-    const upTo = (pace.upTo ?? 0) + turns;
+    const upTo = pace.upTo + turns;
     pace.upTo = upTo;
     const began = Date.now();
     while ((counts.busy ?? 0) <= upTo && Date.now() - began < RELEASE_MS) {
@@ -571,7 +581,7 @@ function sceneModel() {
       );
     }
   };
-  return { counts, hold, mark, release, respond };
+  return { counts, mark, release, respond };
 }
 
 /** The pane's frame for `id` and the press's input, the reach first, as two-pane-perf's `point`. */
@@ -2477,10 +2487,9 @@ const run = async (kit: Kit) => {
   await until(
     `${SEED} calls in the busy session`,
     () => scene.counts,
-    (c) => (c.busy ?? 0) > SEED + 5,
+    (c) => (c.busy ?? 0) > SEED,
     30 * 60_000
   );
-  scene.hold();
   // TAB_RETURN_LEGS=detached: the detached-node leg alone; with
   // TAB_RETURN_DEV=1 on the dev server, so each holder's closure is said at
   // its source file and line.
@@ -2585,6 +2594,11 @@ const run = async (kit: Kit) => {
     busy,
     "chromium"
   );
+  // The busy tab away (the desk leaves the quiet one in front), its tail
+  // streamed full: every row a busy return mounts is a live turn streamed
+  // while it was away, whatever a contended leg's retry added since.
+  await scene.release(PRIMED_TURNS);
+  await isolated.page.waitForTimeout(LANDED_MS);
 
   const backs: Back[] = [];
   const loopReads: LoopRead[] = [];
