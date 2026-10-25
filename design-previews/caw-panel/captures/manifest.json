@@ -1,0 +1,66 @@
+[
+  {
+    "fork": "Where the can't-start block stands on a full thread",
+    "option": "A",
+    "width": 1440,
+    "scheme": "day",
+    "file": "block-A-1440-day.png",
+    "caption": "A · pinned above the composer, desk by day: the can't-start block pinned above the composer, the thread readable above it. No machine is online; the thread is Cawco's Caw thread of 14 October."
+  },
+  {
+    "fork": "Where the can't-start block stands on a full thread",
+    "option": "B",
+    "width": 1440,
+    "scheme": "day",
+    "file": "block-B-1440-day.png",
+    "caption": "B · the panel's centre, desk by day: the can't-start block at the panel's centre, the thread hidden behind it. No machine is online; the thread is Cawco's Caw thread of 14 October."
+  },
+  {
+    "fork": "Where the can't-start block stands on a full thread",
+    "option": "A",
+    "width": 1440,
+    "scheme": "night",
+    "file": "block-A-1440-night.png",
+    "caption": "A · pinned above the composer, desk by night: the can't-start block pinned above the composer, the thread readable above it. No machine is online; the thread is Cawco's Caw thread of 14 October."
+  },
+  {
+    "fork": "Where the can't-start block stands on a full thread",
+    "option": "B",
+    "width": 1440,
+    "scheme": "night",
+    "file": "block-B-1440-night.png",
+    "caption": "B · the panel's centre, desk by night: the can't-start block at the panel's centre, the thread hidden behind it. No machine is online; the thread is Cawco's Caw thread of 14 October."
+  },
+  {
+    "fork": "Where the can't-start block stands on a full thread",
+    "option": "A",
+    "width": 390,
+    "scheme": "day",
+    "file": "block-A-390-day.png",
+    "caption": "A · pinned above the composer, phone by day: the can't-start block pinned above the composer, the thread readable above it. No machine is online; the thread is Cawco's Caw thread of 14 October."
+  },
+  {
+    "fork": "Where the can't-start block stands on a full thread",
+    "option": "B",
+    "width": 390,
+    "scheme": "day",
+    "file": "block-B-390-day.png",
+    "caption": "B · the panel's centre, phone by day: the can't-start block at the panel's centre, the thread hidden behind it. No machine is online; the thread is Cawco's Caw thread of 14 October."
+  },
+  {
+    "fork": "Where the can't-start block stands on a full thread",
+    "option": "A",
+    "width": 390,
+    "scheme": "night",
+    "file": "block-A-390-night.png",
+    "caption": "A · pinned above the composer, phone by night: the can't-start block pinned above the composer, the thread readable above it. No machine is online; the thread is Cawco's Caw thread of 14 October."
+  },
+  {
+    "fork": "Where the can't-start block stands on a full thread",
+    "option": "B",
+    "width": 390,
+    "scheme": "night",
+    "file": "block-B-390-night.png",
+    "caption": "B · the panel's centre, phone by night: the can't-start block at the panel's centre, the thread hidden behind it. No machine is online; the thread is Cawco's Caw thread of 14 October."
+  }
+]

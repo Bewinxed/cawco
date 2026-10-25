@@ -3,8 +3,8 @@
  * .design-foundations/plans/2026-10-24-caw-panel.md), read from the engine
  * on a static server of the folder as it stands:
  *
- * 1. Boxes, at 1440 and 390, in every state (each cause of can't start,
- *    each fork): the page never scrolls sideways; nothing in a panel
+ * 1. Boxes, at 1440, 680 and 390, in every state (each cause of can't
+ *    start, each fork): the page never scrolls sideways; nothing in a panel
  *    reaches past its sides and no words spill their box; the capsule, the
  *    small title, the rows' words and pairs, the block's parts, the
  *    composer and the starters stand clear of each other; Caw, wherever he
@@ -246,9 +246,10 @@ function readCaws(device: Device): { at: string; off: number }[] {
 }
 
 /**
- * The panel's controls drawn in coral (the action, the brand, link ink):
- * each one by name. The surface keeps one, Send (DESIGN.md, The Coral Is
- * Where You Act Rule).
+ * Everything in the panel painted in coral (the action, the brand, link
+ * ink), by its words, fill, edge or glyph: each one by name. The surface
+ * keeps one, Send, its act (DESIGN.md, The Coral Is Where You Act Rule):
+ * no reader's mark and no hairline takes it.
  */
 function readCoralActs(device: Device): string[] {
   const { panel, shown, name } = shownIn(device);
@@ -272,15 +273,27 @@ function readCoralActs(device: Device): string[] {
   probe.remove();
   const coral = (e: Element) => {
     const cs = getComputedStyle(e);
-    const paint = [cs.color, cs.backgroundColor, cs.backgroundImage].join(" ");
+    const edged = Number.parseFloat(cs.borderTopWidth) > 0;
+    const paint = [
+      cs.backgroundColor,
+      cs.backgroundImage,
+      edged ? cs.borderTopColor : "",
+      // Ink only where it draws: words, or a glyph's currentColor.
+      e.querySelector(":scope > svg") ||
+      [...e.childNodes].some(
+        (n) => n.nodeType === Node.TEXT_NODE && n.textContent?.trim()
+      )
+        ? cs.color
+        : "",
+    ].join(" ");
     return CORAL.some((c) => paint.includes(c));
   };
-  return [
-    ...panel.querySelectorAll(
-      "button, a, [role='link'], [role='menuitem'], [role='button']"
-    ),
-  ]
-    .filter((e) => shown(e) && coral(e))
+  const all = [...panel.querySelectorAll("*")].filter(
+    (e) => shown(e) && !e.closest("svg") && coral(e)
+  );
+  // A coral control counts once, not again for what it holds.
+  return all
+    .filter((e) => !all.some((o) => o !== e && o.contains(e)))
     .map(name);
 }
 
@@ -320,21 +333,18 @@ const sideways = (page: Page) =>
   );
 
 interface Case {
-  arcs: string;
   block: string | null;
   cause: string | null;
   device: Device;
   state: string;
 }
 
-/** Every case the boxes are read in: each fork of the arcs, each state, each cause and fork of the block, each device. */
+/** Every case the boxes are read in: each state, each cause and fork of the block, each device. */
 function cases(devices: Device[]): Case[] {
-  return ["A", "B"].flatMap((arcs) =>
-    STATES.flatMap((state) =>
-      (state === "cant" ? ["A", "B"] : [null]).flatMap((block) =>
-        (state === "cant" ? CAUSES : [null]).flatMap((cause) =>
-          devices.map((device) => ({ arcs, block, cause, device, state }))
-        )
+  return STATES.flatMap((state) =>
+    (state === "cant" ? ["A", "B"] : [null]).flatMap((block) =>
+      (state === "cant" ? CAUSES : [null]).flatMap((cause) =>
+        devices.map((device) => ({ block, cause, device, state }))
       )
     )
   );
@@ -342,9 +352,6 @@ function cases(devices: Device[]): Case[] {
 
 /** Brings the page to a case, pressing only the switches that differ. */
 async function arrive(page: Page, view: string, at: Case, was: Case | null) {
-  if (at.arcs !== was?.arcs) {
-    await pick(page, "arcs", at.arcs);
-  }
   if (at.block && at.block !== was?.block) {
     await pick(page, "block", at.block);
   }
@@ -359,7 +366,7 @@ async function arrive(page: Page, view: string, at: Case, was: Case | null) {
 
 /** One case's findings, each named for where it was read. */
 async function findings(page: Page, view: string, at: Case) {
-  const where = `${view} ${at.device} ${at.state}${at.cause ? `/${at.cause}` : ""} arcs ${at.arcs}${at.block ? ` block ${at.block}` : ""}`;
+  const where = `${view} ${at.device} ${at.state}${at.cause ? `/${at.cause}` : ""}${at.block ? ` block ${at.block}` : ""}`;
   const [spills, overlaps, caws, wide, corals, words] = await Promise.all([
     page.evaluate(readSpills, at.device),
     page.evaluate(readOverlaps, at.device),
@@ -380,7 +387,7 @@ async function findings(page: Page, view: string, at: Case) {
     ...(wide > 0 ? [`${where}: the page scrolls ${wide}px sideways`] : []),
     ...(corals.length === 1 && corals[0]?.includes("send")
       ? []
-      : [`${where}: coral acts ${JSON.stringify(corals)}`]),
+      : [`${where}: coral painted on ${JSON.stringify(corals)}`]),
     ...words.map((line) => `${where}: ${line}`),
   ];
 }
@@ -400,10 +407,9 @@ async function boxesEverywhere(
     problems.push(...(await findings(page, view, at)));
     was = at;
   }
-  await pick(page, "arcs", "A");
   await pick(page, "block", "A");
   kit.check(
-    `${view}: in all ${all.length} cases nothing spills or overlaps, the page never scrolls sideways, one Caw stands on the panel's axis within 1px, Send is the one coral act on both forks, and the can't-start block's words stand at its start`,
+    `${view}: in all ${all.length} cases nothing spills or overlaps, the page never scrolls sideways, one Caw stands on the panel's axis within 1px, Send is the one thing in coral, and the can't-start block's words stand at its start`,
     problems.length === 0,
     problems.slice(0, 12).join("\n      ")
   );
@@ -421,11 +427,29 @@ async function showDevice(page: Page, view: string, device: Device) {
   }
 }
 
+/**
+ * The thread as it went on after Caw's ask, read back up to the card: the
+ * card in the middle of the scroller, undocked, with turns under it.
+ */
+const atCard = async (page: Page) => {
+  await pick(page, "state", "rest");
+  await pick(page, "state", "docked");
+  await page.evaluate(() => {
+    for (const p of document.querySelectorAll(".panel")) {
+      const s = p.querySelector('[data-slot="scroller"]') as HTMLElement;
+      const card = p.querySelector(".card") as HTMLElement;
+      const room = s.getBoundingClientRect();
+      s.scrollTop +=
+        card.getBoundingClientRect().top - room.top - room.height / 3;
+    }
+  });
+  await settled(page);
+};
+
 /* ── Docking ─────────────────────────────────────────────────────── */
 
 async function docking(kit: Kit, page: Page, device: Device, label: string) {
-  await pick(page, "state", "rest");
-  await pick(page, "state", "needs");
+  await atCard(page);
   const panel = `.panel[data-device="${device}"]`;
   // The card in view; the message after it is the one read.
   const motion = await readMotion(
@@ -444,9 +468,12 @@ async function docking(kit: Kit, page: Page, device: Device, label: string) {
           zone.bottom
         );
         const z = p.getBoundingClientRect().width / p.offsetWidth;
-        // Past the floor by the hysteresis and a pixel.
-        s.scrollTop +=
-          (card.getBoundingClientRect().bottom - (floor - 9 * z)) / z;
+        // Past the floor by the hysteresis and a pixel, on a whole offset
+        // (WebKit drops the fraction of a scrollTop it is given).
+        s.scrollTop = Math.ceil(
+          s.scrollTop +
+            (card.getBoundingClientRect().bottom - (floor - 9 * z)) / z
+        );
         const watched = card.closest("li")?.nextElementSibling as HTMLElement;
         watched.dataset.watched = "";
         (window as unknown as { __base: number }).__base =
@@ -483,12 +510,17 @@ async function docking(kit: Kit, page: Page, device: Device, label: string) {
       rows: p.querySelectorAll('[data-slot="rows"] li').length,
     };
   }, panel);
-  const moves = motion.at.map((a) => a.value.moved);
+  // Measured from where the message stands at the dock's 0: the scroll that
+  // crosses the floor may land a fraction of a pixel off its asked offset
+  // (the engine's snap, 5/64px on a thread whose height isn't whole).
+  const start = motion.at[0]?.value.moved ?? 0;
+  const moves = motion.at.map((a) => a.value.moved - start);
   kit.check(
-    `${label} ${device}: the card docks past the floor, and the message under it moves 0px at the dock's 0, ½ and 1 and once landed (within 0.01px)`,
+    `${label} ${device}: the card docks past the floor, and the message under it moves 0px from the dock's 0 through its ½ and 1 and once landed (within 0.01px)`,
     motion.runs.some((r) => r.name === "card-dock") &&
       after.rows === 1 &&
-      [...moves, after.moved].every((m) => Math.abs(m) <= 0.01),
+      Math.abs(start) < 0.125 &&
+      [...moves, after.moved - start].every((m) => Math.abs(m) <= 0.01),
     JSON.stringify({ moves, after, stack: motion.at.map((a) => a.value.stack) })
   );
   kit.check(
@@ -614,7 +646,7 @@ const MOMENTS: Moment[] = [
     run: "row-from-elsewhere",
     within: DESK,
     from: afresh("needs"),
-    act: press('.moment:text("A delegate asks")'),
+    act: press('.moment:text("An ask comes in")'),
     read: { selector: `${DESK} [data-slot="stack"]`, value: "height" },
   },
   {
@@ -637,7 +669,7 @@ const MOMENTS: Moment[] = [
       await afresh("docked")(page);
       for (let i = 0; i < 3; i += 1) {
         // biome-ignore lint/performance/noAwaitInLoops: each ask lands before the next, as a person's would
-        await page.locator('.moment:text("A delegate asks")').click();
+        await page.locator('.moment:text("An ask comes in")').click();
         await settled(page);
       }
     },
@@ -824,8 +856,7 @@ async function scrollLinked(kit: Kit, page: Page) {
 
 async function reduced(kit: Kit, page: Page) {
   await pick(page, "motion", "reduced");
-  await pick(page, "state", "rest");
-  await pick(page, "state", "needs");
+  await atCard(page);
   const dock = await readMotion(
     page,
     () =>
@@ -887,7 +918,7 @@ async function expandedStack(kit: Kit, page: Page) {
   await afresh("docked")(page);
   for (let i = 0; i < 5; i += 1) {
     // biome-ignore lint/performance/noAwaitInLoops: each ask lands before the next
-    await page.locator('.moment:text("A delegate asks")').click();
+    await page.locator('.moment:text("An ask comes in")').click();
     await settled(page);
   }
   for (const device of ["desk", "phone"]) {
@@ -931,6 +962,17 @@ async function causeKeepsTail(kit: Kit, page: Page) {
   await pick(page, "block", "A");
   await afresh("cant")(page);
   await pick(page, "cause", "machine");
+  // The thread's last note is the one a message written now carries: send one in each panel (his own words from the thread).
+  for (const device of ["desk", "phone"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one panel's composer at a time
+    await showDevice(page, "1440", device as Device);
+    const field = page.locator(
+      `.panel[data-device="${device}"] [data-slot="field"]`
+    );
+    await field.fill("we have x-use here for posting");
+    await field.press("Enter");
+    await settled(page);
+  }
   const clipped = () =>
     page.evaluate(async () => {
       await (
@@ -979,7 +1021,7 @@ async function dockFootAndWheel(kit: Kit, page: Page, label: string) {
   const foot: Record<string, number[]> = {};
   for (const device of ["desk", "phone"]) {
     // biome-ignore lint/performance/noAwaitInLoops: one panel at a time, from a fresh state
-    await afresh("needs")(page);
+    await atCard(page);
     foot[device] = await page.evaluate(async (selector) => {
       const p = document.querySelector(selector) as HTMLElement;
       const s = p.querySelector('[data-slot="scroller"]') as HTMLElement;
@@ -996,18 +1038,21 @@ async function dockFootAndWheel(kit: Kit, page: Page, label: string) {
       }
       return [
         p.querySelectorAll('[data-slot="rows"] li').length,
-        Math.max(...moved.map(Math.abs)),
+        // From the dock's first painted frame: a foot that lands a fraction
+        // of a pixel off (the engine's snap of a fractional scroll, 5/64px
+        // on a thread whose height isn't whole) is the scroll's, not the dock's.
+        Math.max(...moved.map((m) => Math.abs(m - (moved[0] ?? 0)))),
       ];
     }, `.panel[data-device="${device}"]`);
   }
   kit.check(
-    `${label}: at the thread's foot the card docks and the last message moves 0px in every painted frame (Desk and Phone)`,
+    `${label}: at the thread's foot the card docks and the last message moves 0px in every painted frame from the dock's first (Desk and Phone)`,
     Object.values(foot).every(
       ([rows, moved]) => rows === 1 && (moved ?? 1) <= 0.01
     ),
     JSON.stringify(foot)
   );
-  await afresh("needs")(page);
+  await atCard(page);
   const box = await page
     .locator(`${DESK} [data-slot="scroller"]`)
     .boundingBox();
@@ -1255,7 +1300,7 @@ async function posesAt(
 
 /** Every Caw pose, Day and Night, in every state and cause on both blocks: his figure and props stand inside the image's box. */
 async function poseFrames(kit: Kit, page: Page, view: string) {
-  const all = cases(["desk", "phone"]).filter((c) => c.arcs === "A");
+  const all = cases(["desk", "phone"]);
   const problems: string[] = [];
   const seen = new Map<string, number>();
   for (const theme of ["light", "dark"]) {
@@ -1326,6 +1371,121 @@ async function hiddenFrames(kit: Kit, page: Page, warnings: string[]) {
   );
 }
 
+/**
+ * The rules audit's rows (2026-10-25), read on the docked card's row and
+ * the thread, Day and Night: Deny and Approve are untinted peers set apart
+ * (The Peer Rule); the capsule's New thread and Close are the bare plus and
+ * close; each turn's head mark is centred in the 28px lead column; the
+ * page behind holds no title over a machine and a path.
+ */
+async function auditRows(kit: Kit, page: Page) {
+  await afresh("docked")(page);
+  for (const theme of ["light", "dark"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one theme, then the other
+    await pick(page, "theme", theme);
+    const read = await page.evaluate(() => {
+      const panel = document.querySelector(
+        '.panel[data-device="desk"]'
+      ) as HTMLElement;
+      const probe = document.createElement("i");
+      panel.append(probe);
+      const token = (name: string, prop: "color" | "backgroundColor") => {
+        probe.style.color = `var(${name})`;
+        probe.style.backgroundColor = `var(${name})`;
+        return getComputedStyle(probe)[prop];
+      };
+      const want = {
+        bg: token("--surface-recess", "backgroundColor"),
+        edge: token("--border-button-outline", "color"),
+        ink: token("--ink-strong", "color"),
+      };
+      probe.remove();
+      const row = panel.querySelector(
+        '[data-slot="rows"] li[data-card] .row'
+      ) as HTMLElement;
+      const peer = (which: string) => {
+        const b = row.querySelector(`.peer.${which}`) as HTMLElement;
+        const cs = getComputedStyle(b);
+        const r = b.getBoundingClientRect();
+        return {
+          bg: cs.backgroundColor,
+          edge: `${cs.borderTopWidth} ${cs.borderTopColor}`,
+          ink: cs.color,
+          left: r.left,
+          right: r.right,
+        };
+      };
+      const deny = peer("deny");
+      const approve = peer("approve");
+      const what = (
+        row.querySelector(".what") as HTMLElement
+      ).getBoundingClientRect();
+      const rowBox = row.getBoundingClientRect();
+      const pad = Number.parseFloat(getComputedStyle(row).paddingRight);
+      const heads = [...panel.querySelectorAll(".thread .who")].map((h) => {
+        const mark = h.querySelector(".mark") as HTMLElement;
+        const inner = mark.querySelector("img, svg") as Element;
+        const m = mark.getBoundingClientRect();
+        const i = inner.getBoundingClientRect();
+        return {
+          lead: m.width,
+          off: i.left + i.width / 2 - (m.left + m.width / 2),
+          paint: getComputedStyle(mark).backgroundColor,
+        };
+      });
+      return {
+        want,
+        deny,
+        approve,
+        gap: approve.left - deny.right,
+        denyAtText: deny.left - what.left,
+        approveAtEdge: rowBox.right - pad - approve.right,
+        capsule: [...panel.querySelectorAll(".capsule .cap-item")].map(
+          (b) =>
+            `${b.getAttribute("aria-label")}:${b.querySelector("use")?.getAttribute("href")}`
+        ),
+        heads,
+        backdrop: [
+          ...document.querySelectorAll(".page-body > p, .phone-page"),
+        ].map((p) => p.textContent?.trim()),
+      };
+    });
+    const peerOk = [read.deny, read.approve].every(
+      (p) =>
+        p.bg === read.want.bg &&
+        p.edge === `1px ${read.want.edge}` &&
+        p.ink === read.want.ink
+    );
+    kit.check(
+      `${theme}: Deny and Approve are untinted peers (the recessed fill, the outline edge, ink-strong) standing apart: Deny on the text column, Approve on the trailing edge, at least 32px between`,
+      peerOk &&
+        read.gap >= 32 &&
+        Math.abs(read.denyAtText) <= 0.5 &&
+        Math.abs(read.approveAtEdge) <= 0.5,
+      JSON.stringify(read)
+    );
+    kit.check(
+      `${theme}: the capsule's New thread and Close are the bare plus and close; each turn's mark is centred in the 28px lead column on no fill; the page behind has no title over a machine and a path`,
+      read.capsule.join(" ") ===
+        "New thread:#i-plus More:#i-menu-dots Close:#i-close" &&
+        read.heads.length > 0 &&
+        read.heads.every(
+          (h) =>
+            Math.abs(h.lead - 28) <= 0.5 &&
+            Math.abs(h.off) <= 0.5 &&
+            h.paint === "rgba(0, 0, 0, 0)"
+        ) &&
+        read.backdrop.length === 0,
+      JSON.stringify({
+        capsule: read.capsule,
+        heads: read.heads.slice(0, 3),
+        backdrop: read.backdrop,
+      })
+    );
+  }
+  await pick(page, "theme", "light");
+}
+
 /** At 1440 and 390: the boxes, docking, the review's round and motion, each where it runs. */
 async function readSize(
   kit: Kit,
@@ -1351,6 +1511,7 @@ async function readSize(
     await docking(kit, page, "phone", size);
   }
   if (runs("round")) {
+    await auditRows(kit, page);
     await expandedStack(kit, page);
     await causeKeepsTail(kit, page);
     await dockFootAndWheel(kit, page, size);
@@ -1397,8 +1558,12 @@ const spec: Spec = {
         if (runs("poses")) {
           await poseFrames(kit, page, size);
         }
-        // 680 is read for the poses alone.
-        if (size !== "680") {
+        // 680 is read for the poses and the boxes.
+        if (size === "680") {
+          if (runs("boxes")) {
+            await boxesEverywhere(kit, page, size, ["desk", "phone"]);
+          }
+        } else {
           await readSize(kit, page, size, warnings);
         }
         kit.check(

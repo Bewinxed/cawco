@@ -12,17 +12,6 @@
   <body>
     <svg aria-hidden="true" height="0" style="position: absolute" width="0">
       <!-- Solar (Iconify @iconify-json/solar 1.2.13), and the house's own plus, close and tick (apps/dashboard components/icons). -->
-      <symbol id="i-add-circle" viewBox="0 0 24 24">
-        <g
-          fill="none"
-          stroke="currentColor"
-          stroke-linecap="round"
-          stroke-width="1.5"
-        >
-          <circle cx="12" cy="12" r="10" />
-          <path d="M15 12L12 12M12 12L9 12M12 12L12 9M12 12L12 15" />
-        </g>
-      </symbol>
       <symbol id="i-menu-dots" viewBox="0 0 24 24">
         <g fill="currentColor">
           <path
@@ -35,17 +24,6 @@
             d="M14 12C14 13.1 13.1 14 12 14C10.9 14 10 13.1 10 12C10 10.9 10.9 10 12 10C13.1 10 14 10.9 14 12Z"
             opacity=".5"
           />
-        </g>
-      </symbol>
-      <symbol id="i-close-circle" viewBox="0 0 24 24">
-        <g
-          fill="none"
-          stroke="currentColor"
-          stroke-linecap="round"
-          stroke-width="1.5"
-        >
-          <circle cx="12" cy="12" r="10" />
-          <path d="M14.5 9.5L9.5 14.5M9.5 9.5L14.5 14.5" />
         </g>
       </symbol>
       <symbol id="i-send" viewBox="0 0 24 24">
@@ -134,7 +112,9 @@
           stack as it scrolls away; the message box stays while Caw can’t start,
           with him as a hero above it; Caw names the thread, with a floating
           title and glass actions. Scroll the thread, press what is on screen,
-          and switch states here.
+          and switch states here. The thread is Cawco’s Caw thread of 14
+          October as the hub holds it, and what else waits is what waits in
+          Cawco and on the fleet today.
         </p>
       </div>
       <div class="switches">
@@ -190,21 +170,8 @@
         </fieldset>
       </div>
       <div class="switches">
-        <fieldset class="switch" data-control="arcs">
-          <legend>Fork 1 · what the bar’s arcs count</legend>
-          <div class="seg">
-            <label
-              ><input checked name="arcs" type="radio" value="A" />A · this
-              page’s scope <span class="rec">· recommended</span></label
-            >
-            <label
-              ><input name="arcs" type="radio" value="B" />B · the fleet, with a
-              signpost</label
-            >
-          </div>
-        </fieldset>
         <fieldset class="switch" data-control="block">
-          <legend>Fork 2 · where the block stands on a full thread</legend>
+          <legend>Fork · where the block stands on a full thread</legend>
           <div class="seg">
             <label
               ><input checked name="block" type="radio" value="A" />A · pinned
@@ -279,14 +246,12 @@
             <span class="tab">Threads</span>
           </div>
           <div aria-hidden="true" class="page-body">
-            <p class="project">Cawco-Dev</p>
-            <p class="where">obelisk-of-light · /home/bewinxed/cockpit</p>
             <div class="lanes">
               <div>
-                Ready 29
+                Idea
                 <div class="ticket"></div>
               </div>
-              <div>Working</div>
+              <div>Draft</div>
               <div>Review</div>
             </div>
           </div>
@@ -336,7 +301,7 @@
             <svg aria-hidden="true" class="glyph burger">
               <use href="#i-burger" />
             </svg>
-            <span class="title">Cawco-Dev</span>
+            <span class="title">Cawco</span>
             <button
               aria-expanded="true"
               class="caw-tab"
@@ -346,10 +311,6 @@
               <img alt="" src="stills/caw-head.png" />
               <svg aria-hidden="true" class="arcs" viewBox="0 0 28 28"></svg>
             </button>
-          </div>
-          <div aria-hidden="true" class="phone-page">
-            <p class="project">Cawco-Dev</p>
-            <p class="where">obelisk-of-light · /home/bewinxed/cockpit</p>
           </div>
           <div class="sheet" data-panel-host>
             <button
@@ -375,9 +336,6 @@
             hidden
             type="button"
           ></button>
-          <p class="signpost" data-slot="signpost" hidden>
-            <a href="#home-needs">3 waiting in other projects</a>
-          </p>
           <div aria-hidden="true" class="stack-foot"></div>
         </div>
         <div class="scroller" data-slot="scroller">
@@ -484,7 +442,7 @@
               type="button"
             >
               <svg aria-hidden="true" class="glyph">
-                <use href="#i-add-circle" />
+                <use href="#i-plus" />
               </svg>
             </button>
             <button
@@ -508,7 +466,7 @@
               type="button"
             >
               <svg aria-hidden="true" class="glyph">
-                <use href="#i-close-circle" />
+                <use href="#i-close" />
               </svg>
             </button>
           </div>
