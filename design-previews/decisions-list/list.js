@@ -427,7 +427,7 @@ function group(key, pages, opts = {}) {
     body += `<div class="fold" data-fold="${key}" inert><div class="fold-in">${rows(tail, shown)}</div></div>
       <button class="more" type="button" data-more="${key}" aria-expanded="false"><span>${plural(tail.length, `more ${key} page`)}</span><span class="chev">${ic("down", "sm")}</span></button>`;
   }
-  return `<section class="grp" data-group="${key}" data-count="${n}"${opts.edge ? ` data-edge="${opts.edge}"` : ""}>
+  return `<section class="grp" data-group="${key}" data-count="${n}">
     <div class="ghead"><span class="mark">${ic(g.glyph, g.ink)}</span><div class="gtext">${title}</div></div>
     ${line}${body}
   </section>`;
@@ -470,7 +470,7 @@ function listState(cfg, phone) {
   const sentCount = pages.filter((p) => p.standing === "sent").length;
   const decided = pages.filter((p) => p.standing === "decided").length;
   const firstOffered = list[2][1].findIndex(canMakeTasks);
-  const sections = list.map(([key, members], i) => {
+  const sections = list.map(([key, members]) => {
     const line =
       key === "open" && members.length === 0
         ? `Nothing waits on you. Agents have ${sentCount} pages; ${decided} are decided.`
@@ -483,7 +483,6 @@ function listState(cfg, phone) {
       hover = 0;
     }
     return group(key, members, {
-      edge: i === 2 ? "live" : "",
       line,
       hover,
       unfold: key === "closed" && cfg.state === "closed",
@@ -608,7 +607,9 @@ function metaOf(page, total, gone) {
 /**
  * The page's one act, at its foot (DESIGN.md's decision card: "Only the
  * page's own Send"): Send while it needs you; once sent and read (or its
- * session ended), Make tasks where Send stood (answer 7).
+ * session ended), Make tasks where Send stood (answer 7). Make tasks is the
+ * kit's outline button: the head's Ask Caw (the phone's dock +) is the view's
+ * one coral control.
  */
 function footOf(page) {
   let act = "";
@@ -621,7 +622,6 @@ function footOf(page) {
     act = btn("Reopen", { attrs: `data-page-act="reopen" data-for="${page.name}"` });
   } else if (canMakeTasks(page)) {
     act = btn("Make tasks", {
-      v: "primary",
       attrs: `data-page-act="make-tasks" data-for="${page.name}"`,
     });
   } else if (page.standing === "decided" && page.making) {

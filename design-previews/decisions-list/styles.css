@@ -1179,11 +1179,6 @@
     border-block-start: 1px solid var(--border-hairline);
   }
 
-  /* The live sections (Open, Later) part from the rest with the vermillion hairline, as Needs you parts from Notices. */
-  .grp[data-edge="live"] {
-    border-block-start-color: var(--brand-solid);
-  }
-
   .ghead {
     align-items: center;
     min-block-size: var(--c-pill-h);
@@ -1789,6 +1784,33 @@
     &.night {
       display: inline-block;
     }
+  }
+
+  /*
+   * His head by night wears the first use's paper rim. The first-use still
+   * draws its rim 4px wide on its 384px picture: 0.83px at the 80px it is drawn
+   * at, and he reads. The head's still draws 2px on 192px: 0.5px at 48px and
+   * 0.25px at 24px, a dotted outline round a body the roost swallows. So the
+   * head grows its outline in paper by the difference (the Caw panel's rim,
+   * drop-shadows round his own outline), and every head's rim is the first
+   * use's on screen.
+   */
+  .seat {
+    --caw-size: 48px;
+  }
+
+  .gitem.caw,
+  .cawtab {
+    --caw-size: 24px;
+  }
+
+  :root.dark :is(.seat, .gitem.caw, .cawtab) .caw-still.night {
+    --caw-rim: calc(80px * 4 / 384);
+    --caw-rim-grow: calc(var(--caw-rim) - var(--caw-size) * 2 / 192);
+    filter: drop-shadow(var(--caw-rim-grow) 0 0 var(--paper))
+      drop-shadow(calc(var(--caw-rim-grow) * -1) 0 0 var(--paper))
+      drop-shadow(0 var(--caw-rim-grow) 0 var(--paper))
+      drop-shadow(0 calc(var(--caw-rim-grow) * -1) 0 var(--paper));
   }
 
   .starters {

@@ -1,12 +1,16 @@
 /**
  * The Decisions list preview (design-previews/decisions-list/), a static page
  * served as its folder, held to what the owner reads on it, on Chromium and
- * WebKit at the desk's 1440 and the phone's 390, and at 1110, the width of
- * the panel it is judged in:
+ * WebKit at the desk's 1440, the narrow desk's 680 and the phone's 390, and
+ * at 1110, the width of the panel it is judged in:
  *
- * - every state draws: nothing spills and no control covers text
- *   (journeys/scan.ts), read down the whole page, which never scrolls
- *   sideways;
+ * - every state draws, by day and by night: nothing spills and no control
+ *   covers text (journeys/scan.ts), read down the whole page, which never
+ *   scrolls sideways, and the sweep totals zero;
+ * - each frame spends one coral control in every state, and the list draws
+ *   no coral line;
+ * - by night every head Caw wears the first-use Caw's paper rim, its width
+ *   on screen and its fill;
  * - each frame fits whole in the width it is given, and no ancestor clips it;
  * - one row per page: no page has two rows, and the groups count all 25;
  * - every row's title stands on one start edge;
@@ -277,6 +281,101 @@ const frameFacts = (page: Page, which: string) =>
     };
   }, which);
 
+/**
+ * The coral a frame spends, read off the engine: every control shown whose
+ * computed fill is the action's (`action-surface` at rest or under the
+ * pointer, or `action-solid`), and every line in the list drawn in
+ * `brand-solid`, with the words it carries.
+ */
+const coralFacts = (page: Page, which: string) =>
+  page.evaluate((kind) => {
+    const frame = document.querySelector<HTMLElement>(
+      `#stage [data-frame="${kind}"]`
+    );
+    if (!frame) {
+      return null;
+    }
+    const probe = document.createElement("span");
+    frame.append(probe);
+    const fill = (value: string) => {
+      probe.style.background = value;
+      const s = getComputedStyle(probe);
+      return { image: s.backgroundImage, color: s.backgroundColor };
+    };
+    const rest = fill("var(--action-surface)");
+    const hover = fill("var(--action-surface-hover)");
+    const solid = fill("var(--action-solid)").color;
+    probe.style.background = "";
+    probe.style.borderColor = "var(--brand-solid)";
+    const brand = getComputedStyle(probe).borderTopColor;
+    probe.remove();
+    const shown = (el: Element) => {
+      const r = el.getBoundingClientRect();
+      return (
+        r.width > 0.5 &&
+        r.height > 0.5 &&
+        !el.closest("[inert]") &&
+        getComputedStyle(el).visibility !== "hidden"
+      );
+    };
+    const controls = [
+      ...frame.querySelectorAll("button, a, [role='button']"),
+    ].filter((el) => {
+      if (!shown(el)) {
+        return false;
+      }
+      const s = getComputedStyle(el);
+      return (
+        s.backgroundImage === rest.image ||
+        s.backgroundImage === hover.image ||
+        s.backgroundColor === solid
+      );
+    });
+    const sides = ["top", "right", "bottom", "left"];
+    const lines = [...frame.querySelectorAll("[data-list] *")]
+      .filter((el) => {
+        const s = getComputedStyle(el);
+        return sides.some(
+          (side) =>
+            Number.parseFloat(s.getPropertyValue(`border-${side}-width`)) > 0 &&
+            s.getPropertyValue(`border-${side}-style`) !== "none" &&
+            s.getPropertyValue(`border-${side}-color`) === brand
+        );
+      })
+      .map((el) => ({
+        at: `${el.tagName.toLowerCase()}.${[...el.classList].join(".")}`,
+        name: el.getAttribute("aria-label") ?? "",
+        words: (el as HTMLElement).innerText.trim().slice(0, 40),
+      }));
+    return {
+      coral: controls.map(
+        (el) =>
+          el.getAttribute("aria-label") ||
+          (el as HTMLElement).innerText.trim() ||
+          el.tagName.toLowerCase()
+      ),
+      lines,
+    };
+  }, which);
+
+/** One coral control in each frame, and no coral line in the list that says nothing. */
+async function coral(kit: Kit, page: Page, tag: string, state: string) {
+  for (const kind of ["desk", "phone"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one frame at a time
+    const c = await coralFacts(page, kind);
+    kit.check(
+      `${tag} ${state} ${kind}: one coral control`,
+      c !== null && c.coral.length === 1,
+      JSON.stringify(c?.coral)
+    );
+    kit.check(
+      `${tag} ${state} ${kind}: no coral line in the list (the hairline between Not now and Sent is gone)`,
+      c !== null && c.lines.length === 0,
+      JSON.stringify(c?.lines)
+    );
+  }
+}
+
 /** The whole page scanned screen by screen, and its width. */
 async function sweep(page: Page): Promise<string[]> {
   const found: string[] = [];
@@ -353,27 +452,38 @@ async function boxes(kit: Kit, page: Page, tag: string, state: string) {
   }
 }
 
-async function everyState(kit: Kit, page: Page, tag: string): Promise<void> {
-  for (const state of STATES) {
-    // biome-ignore lint/performance/noAwaitInLoops: one state at a time, each drawn and read in turn
-    await press(page, "State", state);
-    const sw = await switchState(page, "State");
-    const stamped = await page.evaluate(
-      () => document.querySelector<HTMLElement>("#stage")?.dataset.state
-    );
-    kit.check(
-      `${tag} ${state}: its switch shows it and the stage draws it`,
-      sw.count === 1 && sw.value === state && stamped === state,
-      JSON.stringify({ sw, stamped })
-    );
-    await boxes(kit, page, tag, state);
-    const found = process.env.DL_QUICK ? [] : await sweep(page);
-    kit.check(
-      `${tag} ${state}: nothing spills, nothing covers text`,
-      found.length === 0,
-      found.slice(0, 6).join(" | ")
-    );
+/** Every state by day and by night: its switch, its boxes, its coral, and the sweep. */
+async function everyState(kit: Kit, page: Page, tag: string): Promise<number> {
+  let spilled = 0;
+  for (const theme of ["light", "dark"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one scheme at a time
+    await press(page, "Theme", theme);
+    const at = theme === "light" ? tag : `${tag} Night`;
+    for (const state of STATES) {
+      // biome-ignore lint/performance/noAwaitInLoops: one state at a time, each drawn and read in turn
+      await press(page, "State", state);
+      const sw = await switchState(page, "State");
+      const stamped = await page.evaluate(
+        () => document.querySelector<HTMLElement>("#stage")?.dataset.state
+      );
+      kit.check(
+        `${at} ${state}: its switch shows it and the stage draws it`,
+        sw.count === 1 && sw.value === state && stamped === state,
+        JSON.stringify({ sw, stamped })
+      );
+      await boxes(kit, page, at, state);
+      await coral(kit, page, at, state);
+      const found = process.env.DL_QUICK ? [] : await sweep(page);
+      spilled += found.length;
+      kit.check(
+        `${at} ${state}: nothing spills, nothing covers text`,
+        found.length === 0,
+        found.slice(0, 6).join(" | ")
+      );
+    }
   }
+  await press(page, "Theme", "light");
+  return spilled;
 }
 
 /* ---------------------------------------------- the owner's journeys */
@@ -951,6 +1061,109 @@ async function firstUseAxis(kit: Kit, page: Page, tag: string): Promise<void> {
   );
 }
 
+/**
+ * Each night Caw's paper rim as drawn, in CSS px at the size he is laid out
+ * at: the rim his picture carries (the median run of light ink in from his
+ * outline, read off the picture's own pixels) scaled to his size, plus what
+ * his computed filter grows round his outline; and each part's fill against
+ * the paper token.
+ */
+const rims = (page: Page) =>
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one function serialized into the page, so every rule it reads lives inside it
+  page.evaluate(async () => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--paper)";
+    document.body.append(probe);
+    const paper = getComputedStyle(probe).color;
+    probe.remove();
+    const rgb = (text: string) => (text.match(/[\d.]+/g) ?? []).map(Number);
+    const near = (a: number[], b: number[]) =>
+      a.length >= 3 && a.slice(0, 3).every((v, i) => Math.abs(v - b[i]) <= 24);
+    const imgs = [
+      ...document.querySelectorAll<HTMLImageElement>(
+        "#stage img.caw-still.night"
+      ),
+    ].filter((img) => img.getBoundingClientRect().width > 0);
+    const out: {
+      at: string;
+      size: number;
+      rim: number;
+      own: number;
+      grow: number;
+      inkIsPaper: boolean;
+      growIsPaper: boolean;
+    }[] = [];
+    for (const img of imgs) {
+      // biome-ignore lint/performance/noAwaitInLoops: one picture at a time
+      await img.decode();
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx?.drawImage(img, 0, 0);
+      const px = ctx?.getImageData(0, 0, w, h).data ?? new Uint8ClampedArray();
+      const runs: number[] = [];
+      const inks: number[][] = [];
+      for (let y = 0; y < h; y += 1) {
+        for (let x = 0; x < w; x += 1) {
+          const at = (y * w + x) * 4;
+          const before = x === 0 ? 0 : px[at - 1];
+          if (px[at + 3] > 128 && before <= 128) {
+            let r = 0;
+            while (x + r < w) {
+              const p = (y * w + x + r) * 4;
+              if (
+                px[p + 3] <= 128 ||
+                (px[p] + px[p + 1] + px[p + 2]) / 3 <= 170
+              ) {
+                break;
+              }
+              inks.push([px[p], px[p + 1], px[p + 2]]);
+              r += 1;
+            }
+            runs.push(r);
+          }
+        }
+      }
+      runs.sort((a, b) => a - b);
+      const own =
+        (runs[Math.floor(runs.length / 2)] ?? 0) * (img.offsetWidth / w);
+      const ink = [0, 1, 2].map(
+        (i) => inks.reduce((s, p) => s + p[i], 0) / Math.max(1, inks.length)
+      );
+      const { filter } = getComputedStyle(img);
+      const shadows =
+        filter === "none" ? [] : filter.split("drop-shadow(").slice(1);
+      const grow = Math.max(
+        0,
+        ...shadows.map((s) =>
+          Math.max(
+            ...[...s.matchAll(/(-?[\d.]+)px/g)].map((m) =>
+              Math.abs(Number(m[1]))
+            )
+          )
+        )
+      );
+      // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
+      const colour = /^(rgba?\([^)]*\)|color\([^)]*\)|oklch\([^)]*\))/;
+      const colours = shadows.map((s) => colour.exec(s.trim())?.[1] ?? s);
+      out.push({
+        at: img.closest("[data-caw]")
+          ? "first"
+          : (img.parentElement?.className ?? ""),
+        size: img.offsetWidth,
+        rim: Math.round((own + grow) * 1000) / 1000,
+        own: Math.round(own * 1000) / 1000,
+        grow: Math.round(grow * 1000) / 1000,
+        inkIsPaper: near(ink, rgb(paper)),
+        growIsPaper: colours.every((c) => c === paper),
+      });
+    }
+    return { paper, out };
+  });
+
 async function night(kit: Kit, page: Page, tag: string): Promise<void> {
   await press(page, "State", "open2");
   await press(page, "Theme", "dark");
@@ -984,6 +1197,22 @@ async function night(kit: Kit, page: Page, tag: string): Promise<void> {
       dayStills.length === nightStills.length &&
       dayStills.every((src) => src.endsWith("-day.png")),
     JSON.stringify({ nightStills, dayStills })
+  );
+  await press(page, "State", "first");
+  const r = await rims(page);
+  await press(page, "State", "open2");
+  const first = r.out.filter((o) => o.at === "first");
+  const heads = r.out.filter((o) => o.at !== "first");
+  kit.check(
+    `${tag} Night: every head Caw wears the first-use Caw's paper rim at his own size (its width on screen within 0.05px, its fill the paper)`,
+    first.length === 2 &&
+      heads.length >= 2 &&
+      first.every((f) => f.inkIsPaper) &&
+      heads.every(
+        (h) =>
+          Math.abs(h.rim - first[0].rim) < 0.05 && h.inkIsPaper && h.growIsPaper
+      ),
+    JSON.stringify(r)
   );
   const found = process.env.DL_QUICK ? [] : await sweep(page);
   kit.check(
@@ -1037,7 +1266,7 @@ async function onePage(
   url: string,
   engine: Engine,
   view: View
-): Promise<void> {
+): Promise<number> {
   const tag = `${engine} ${view}`;
   const page = await kit.page(view, { engine, theme: "light" });
   const errors: string[] = [];
@@ -1051,7 +1280,17 @@ async function onePage(
   await page.waitForSelector("#stage [data-frame]");
   await page.evaluate(() => document.fonts.ready);
 
-  await everyState(kit, page, tag);
+  const spilled = await everyState(kit, page, tag);
+  if (view === "narrowDesk") {
+    await night(kit, page, tag);
+    kit.check(
+      `${tag}: no console error, no page error`,
+      errors.length === 0,
+      errors.slice(0, 4).join(" | ")
+    );
+    await page.close();
+    return spilled;
+  }
   await everyRowOpens(kit, page, tag);
   await waysForward(kit, page, tag);
   await removedPictures(kit, page, tag);
@@ -1078,6 +1317,7 @@ async function onePage(
     errors.slice(0, 4).join(" | ")
   );
   await page.close();
+  return spilled;
 }
 
 /**
@@ -1112,14 +1352,20 @@ const run = async (kit: Kit): Promise<void> => {
   const server = serve();
   try {
     const quick = Boolean(process.env.DL_QUICK);
+    let spilled = 0;
     for (const engine of quick
       ? (["chromium"] as const)
       : (["chromium", "webkit"] as const)) {
-      for (const view of ["desk", "phone"] as const) {
+      for (const view of ["desk", "narrowDesk", "phone"] as const) {
         // biome-ignore lint/performance/noAwaitInLoops: one page at a time
-        await onePage(kit, server.url, engine, view);
+        spilled += await onePage(kit, server.url, engine, view);
       }
     }
+    kit.check(
+      `the overflow sweep over every state, by day and by night, at 1440, 680 and 390 on ${quick ? "Chromium" : "Chromium and WebKit"}, totals zero`,
+      spilled === 0,
+      `${spilled} found`
+    );
   } finally {
     server.stop();
   }
