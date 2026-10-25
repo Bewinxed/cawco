@@ -5,7 +5,10 @@
  * component's markup (parts.js, captured by capture/capture.ts); this file
  * places them, by the pane's own rules (PinFloat's placement, ported line
  * for line below) and each option's sizes, and plays the house motion for
- * opening and handing off: the card grows from its pill (PinFloat `grow`),
+ * opening and handing off: the card grows out of its pill as every kit
+ * popover does (its captured `popMotion` classes, by the stylesheet's own
+ * `@starting-style`, its origin at the pill) and goes back into it
+ * (`popOut`),
  * a rail changing size tweens its width (motion/morph: --dur-morph on
  * --ease-drawer) while what it held fades out and what it holds fades in,
  * a rail arriving comes in from its end (PreviewPane `railIn`: --dur-panel
@@ -64,7 +67,8 @@ const T = {
   reach: px("--c-pin-card-reading-room", 320),
   railW: px("--c-comments-w", 320),
   composeW: px("--c-pin-card-w", 280),
-  press: px("--press-scale", 0.97),
+  popScale: px("--pop-scale", 0.92),
+  popRise: px("--pop-rise", 8),
   clearance: px("--space-3", 11),
   menu: ms("--dur-menu", 140),
   control: ms("--dur-control", 120),
@@ -81,7 +85,7 @@ const motionOk = () =>
   matchMedia("(prefers-reduced-motion: no-preference)").matches;
 
 const RULES = {
-  a: "Every comment opens next to what it is about, two fifths of the page area wide (280 to 480px), as tall as the room from its pin to the foot. On a phone it is a drawer at the bottom. This is what ships today.",
+  a: "Every comment opens next to what it is about, growing out of its pin, two fifths of the page area wide (280 to 480px) and as tall as what it holds. Near the foot it moves up to stay whole. Beside a wide element it stands above or below it, and scrolls inside only when that room can't hold it. On a phone it is a drawer at the bottom. This is what ships today.",
   b: "A comment opens in a 320px card next to what it is about, at most 480px or half the page area tall. One that needs more opens in Comments instead, which widens to 400px to hold it. On a phone a short one is a drawer at the bottom and a long one opens in its row of the Comments list.",
   c: "A new comment is written in a 280px card next to its spot. Every thread opens in a panel on the right, as tall as the page area, 400px to start, dragged anywhere from 300px to half the pane, in place of the Comments list. On a phone it is a drawer at the bottom.",
 };
@@ -318,12 +322,19 @@ function build() {
   let float = null;
   if (stands === "card" || stands === "sheet") {
     float = floatShell(stands === "sheet" ? "float-sheet" : "float");
+    if (stands === "card") {
+      // PinFloat: it mounts closed, and opens once it is placed (render).
+      float.dataset.state = "closed";
+    }
     float.append(threadParts(true));
     room.append(float);
   } else if (stands === "compose") {
     float = floatShell("float-bare");
     if (phone) {
       float.dataset.sheet = "true";
+      delete float.dataset.state;
+    } else {
+      float.dataset.state = "closed";
     }
     float.append(fragment(PARTS.composer));
     room.append(float);
@@ -547,8 +558,8 @@ function openRow(list) {
 }
 
 /* ---- Placement: PinFloat's, line for line. ---- */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: PinFloat's `place` and `tallest`, ported line for line so the card stands where the pane puts it
-function placeOf({ mark, box, room, width, height, reach }) {
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: PinFloat's `place`, ported line for line so the card stands where the pane puts it
+function placeOf({ mark, box, room, width, natural, cap }) {
   const { gap, clear } = T;
   const parts = box ? [mark, box] : [mark];
   const left = Math.max(0, Math.min(...parts.map((one) => one.x)));
@@ -561,67 +572,92 @@ function placeOf({ mark, box, room, width, height, reach }) {
     room.h,
     Math.max(...parts.map((one) => one.y + one.h))
   );
-  const about =
+  const subject =
     right > left && bottom > top
       ? { x: left, y: top, w: right - left, h: bottom - top }
       : mark;
-  const inside = (l, t) => ({
-    left: Math.max(gap, Math.min(l, room.w - width - gap)),
-    top: Math.max(gap, Math.min(t, room.h - height - gap)),
-  });
-  const least = Math.min(reach, height || reach);
-  let place;
-  const end = about.x + about.w + clear;
-  const start = about.x - clear - width;
-  const under = room.h - (about.y + about.h + clear) - gap;
-  const over = about.y - clear - gap;
-  if (end + width <= room.w - gap) {
-    place = { ...inside(end, mark.y), side: "end", origin: "top left" };
-  } else if (start >= gap) {
-    place = { ...inside(start, mark.y), side: "start", origin: "top right" };
-  } else if (under >= least || over >= least) {
-    place =
-      under >= least
+  const full = Math.max(0, Math.min(room.h - 2 * gap, cap));
+  const tall = Math.min(natural, full);
+  const pill = mark;
+  const besideOf = (about) => {
+    const end = about.x + about.w + clear;
+    if (end + width <= room.w - gap) {
+      return { left: end, side: "right" };
+    }
+    const start = about.x - clear - width;
+    return start >= gap ? { left: start, side: "left" } : null;
+  };
+  const besideTop = Math.max(gap, Math.min(pill.y, room.h - gap - tall));
+  const across = Math.max(gap, Math.min(pill.x, room.w - width - gap));
+  const under = room.h - (subject.y + subject.h + clear) - gap;
+  const over = subject.y - clear - gap;
+  const belowPill = room.h - (pill.y + pill.h + clear) - gap;
+  const abovePill = pill.y - clear - gap;
+  const nextTo = besideOf(subject);
+  const alone = besideOf(pill);
+  let spot;
+  if (nextTo) {
+    spot = { ...nextTo, top: besideTop, max: full };
+  } else if (under >= tall) {
+    spot = {
+      left: across,
+      top: subject.y + subject.h + clear,
+      side: "bottom",
+      max: Math.min(under, full),
+    };
+  } else if (over >= tall) {
+    spot = {
+      left: across,
+      top: subject.y - clear - tall,
+      side: "top",
+      max: Math.min(over, full),
+    };
+  } else if (Math.max(under, over) >= Math.min(T.reach, tall)) {
+    spot =
+      under >= over
         ? {
-            ...inside(mark.x, about.y + about.h + clear),
-            side: "below",
-            origin: "top left",
+            left: across,
+            top: subject.y + subject.h + clear,
+            side: "bottom",
+            max: Math.min(under, full),
           }
-        : {
-            ...inside(mark.x, about.y - clear - height),
-            side: "above",
-            origin: "bottom left",
-          };
+        : { left: across, top: gap, side: "top", max: Math.min(over, full) };
+  } else if (alone) {
+    spot = { ...alone, top: besideTop, max: full };
+  } else if (belowPill >= tall || belowPill >= abovePill) {
+    spot = {
+      left: across,
+      top: pill.y + pill.h + clear,
+      side: "bottom",
+      max: Math.max(0, Math.min(belowPill, full)),
+    };
   } else {
-    const belowPill = room.h - (mark.y + mark.h + clear) - gap;
-    place =
-      belowPill < reach && mark.y - clear - gap > belowPill
-        ? {
-            ...inside(mark.x, mark.y - clear - height),
-            side: "above-pill",
-            origin: "bottom left",
-          }
-        : {
-            ...inside(mark.x, mark.y + mark.h + clear),
-            side: "below-pill",
-            origin: "top left",
-          };
+    spot = {
+      left: across,
+      top: pill.y - clear - Math.min(tall, abovePill),
+      side: "top",
+      max: Math.max(0, Math.min(abovePill, full)),
+    };
   }
-  let tallest;
-  if (place.side === "above") {
-    tallest = about.y - clear - gap;
-  } else if (place.side === "below") {
-    tallest = room.h - (about.y + about.h + clear) - gap;
-  } else if (place.side === "above-pill") {
-    tallest = mark.y - clear - gap;
-  } else if (place.side === "below-pill") {
-    tallest = room.h - (mark.y + mark.h + clear) - gap;
-  } else {
-    const below = room.h - Math.max(gap, mark.y) - gap;
-    tallest = below >= reach ? below : room.h - 2 * gap;
-  }
-  return { ...place, tallest };
+  const standing = Math.min(tall, spot.max);
+  const inside = (value, most) => Math.max(0, Math.min(value, most));
+  return {
+    ...spot,
+    origin: {
+      x: inside(pill.x + pill.w / 2 - spot.left, width),
+      y: inside(pill.y + pill.h / 2 - spot.top, standing),
+    },
+  };
 }
+
+/** PinFloat's `natural`: its height with nothing capping it, its thread's room's overflow and its own counted. */
+const naturalOf = (float) => {
+  let past = float.scrollHeight - float.clientHeight;
+  for (const room of float.querySelectorAll("[data-pin-room]")) {
+    past += room.scrollHeight - room.clientHeight;
+  }
+  return float.offsetHeight + Math.max(0, past);
+};
 
 /** A box in the well's own px (the frame may be drawn scaled). */
 const inWell = (node) => {
@@ -701,24 +737,22 @@ function layout() {
       state.option === "b" && !look.composing
         ? bCap(size.h)
         : Number.POSITIVE_INFINITY;
-    for (let pass = 0; pass < 3; pass += 1) {
-      const place = placeOf({
-        mark,
-        box,
-        room: size,
-        width: float.offsetWidth,
-        height: float.offsetHeight,
-        reach: T.reach,
-      });
-      float.dataset.side = place.side;
-      float.style.setProperty("--float-x", `${place.left}px`);
-      float.style.setProperty("--float-y", `${place.top}px`);
-      float.style.setProperty("--float-origin", place.origin);
-      float.style.setProperty(
-        "--float-max",
-        `${Math.max(0, Math.min(place.tallest, cap))}px`
-      );
-    }
+    const place = placeOf({
+      mark,
+      box,
+      room: size,
+      width: float.offsetWidth,
+      natural: naturalOf(float),
+      cap,
+    });
+    float.dataset.side = place.side;
+    float.style.setProperty("--float-x", `${place.left}px`);
+    float.style.setProperty("--float-y", `${place.top}px`);
+    float.style.setProperty(
+      "--float-origin",
+      `${place.origin.x}px ${place.origin.y}px`
+    );
+    float.style.setProperty("--float-max", `${place.max}px`);
   } else if (float) {
     float.style.setProperty("--float-max", "calc(100% - 2 * var(--space-2))");
     if (state.option === "b" && !look.composing) {
@@ -763,18 +797,9 @@ function playOpen() {
   const ok = motionOk();
   const runs = [];
   if (float && !float.dataset.sheet) {
-    // PinFloat `grow`: from --press-scale as it fades in, over --dur-menu.
-    runs.push(
-      float.animate(
-        ok
-          ? [
-              { opacity: 0, transform: `scale(${T.press})` },
-              { opacity: 1, transform: "scale(1)" },
-            ]
-          : [{ opacity: 0 }, { opacity: 1 }],
-        { duration: T.menu, easing: T.easeOut }
-      )
-    );
+    // The kit's pop, out of the pill: its captured classes' own
+    // `@starting-style` transitions, begun as it was laid out.
+    runs.push(...float.getAnimations());
   } else if (float) {
     runs.push(
       float.animate([{ opacity: 0 }, { opacity: 1 }], {
@@ -876,7 +901,35 @@ function wireThread() {
   const close = holder?.querySelector('button[aria-label="Close"]');
   close?.addEventListener("click", async () => {
     const runs = [];
-    if (holder === float) {
+    if (holder === float && !float.dataset.sheet) {
+      // `popOut`: back toward the pill it stands beside, shrinking to the
+      // pop scale as it fades, over --dur-exit on the drawer curve.
+      const toward = {
+        bottom: [0, -1],
+        top: [0, 1],
+        right: [-1, 0],
+        left: [1, 0],
+      }[float.dataset.side ?? "bottom"];
+      runs.push(
+        float.animate(
+          motionOk()
+            ? [
+                { opacity: 1, scale: 1, translate: "0px 0px" },
+                {
+                  opacity: 0,
+                  scale: T.popScale,
+                  translate: `${toward[0] * T.popRise}px ${toward[1] * T.popRise}px`,
+                },
+              ]
+            : [{ opacity: 1 }, { opacity: 0 }],
+          {
+            duration: motionOk() ? T.exit : T.control,
+            easing: T.easeDrawer,
+            fill: "forwards",
+          }
+        )
+      );
+    } else if (holder === float) {
       runs.push(
         float.animate([{ opacity: 1 }, { opacity: 0 }], {
           duration: T.control,
@@ -1070,13 +1123,29 @@ function render({ play }) {
   }
   syncSwitches();
   build();
-  const { scroller, target, well } = built;
+  const { scroller, target, well, float } = built;
+  // A card opens once it is placed (PinFloat `opened`): from `closed` to
+  // `open`, the kit's pop. A frame drawn again for what is not an opening
+  // (the list toggled) shows its card standing: it opens with no transition.
+  const card = float && !float.dataset.sheet ? float : null;
+  const opening = play === "open";
+  if (card && !opening) {
+    card.style.transition = "none";
+  }
   const top = inWell(target).y + scroller.scrollTop;
   scroller.scrollTop = Math.max(0, top - TARGET_AT * well.clientHeight);
   layout();
   settleRooms();
   layout();
   scroller.addEventListener("scroll", () => layout(), { passive: true });
+  if (card) {
+    getComputedStyle(card).translate;
+    card.dataset.state = "open";
+    if (!opening) {
+      getComputedStyle(card).opacity;
+      card.style.transition = "";
+    }
+  }
   save();
   if (play === "open") {
     playOpen();

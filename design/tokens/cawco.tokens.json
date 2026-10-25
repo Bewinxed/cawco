@@ -4223,7 +4223,7 @@
         "value": 320,
         "unit": "px"
       },
-      "$description": "The room from where a thread beside its pin stands to the well's foot under which it stops hanging from the pill and takes the well's height, its foot on the well's (DESIGN.md, A thread beside its pin). Web only.",
+      "$description": "The least room above or below what a comment is about that its card takes, scrolling inside, where neither side holds it whole and nothing beside it has room; with less on both sides it stands beside its pill alone, over the element (DESIGN.md, A thread beside its pin). Web only.",
       "$extensions": {
         "dev.cawco": {
           "platforms": ["web"]

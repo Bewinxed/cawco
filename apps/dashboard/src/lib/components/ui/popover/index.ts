@@ -8,6 +8,7 @@ export {
   default as Content,
   default as PopoverContent,
   floatingSurface,
+  popMotion,
 } from "./popover-content.svelte";
 export {
   default as Portal,

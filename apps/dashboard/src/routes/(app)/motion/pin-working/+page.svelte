@@ -7,7 +7,9 @@
    * pin is a fixture, and `window.__pinWorking` (or the head's buttons) puts
    * the agent to work, lands its reply, or sets it at rest, so the pin-working
    * probe reads where the mark stands, where the reply lands, and the dot's
-   * one breath.
+   * one breath. `?at=foot` stands the pill near the well's foot, and `hide`
+   * and `show` close and open the card again, so the probe reads it grow
+   * out of its pill and rise to stand whole.
    */
   import { accountsWords } from "@cawco/core";
   import type { Pin, ThreadEntry } from "@cawco/core/comments";
@@ -60,7 +62,17 @@
     thread,
   } satisfies Pin);
 
+  /** The card stands open. */
+  let shown = $state(true);
   const bench = {
+    /** The card closed, as its Close leaves it. */
+    hide() {
+      shown = false;
+    },
+    /** The card opened again from its pill. */
+    show() {
+      shown = true;
+    },
     /** The agent at work on the pin, the thread as it was sent. */
     work() {
       thread = [...FIRST];
@@ -88,8 +100,16 @@
     roomW = node.clientWidth;
     roomH = node.clientHeight;
   });
+  /** The pill near the well's foot (`?at=foot`), else near its top. */
+  const foot =
+    new URLSearchParams(globalThis.location?.search ?? "").get("at") === "foot";
   /** The pill's box in the well, as the page reports a pin's mark. */
-  const MARK = { x: 24, y: 72, w: 20, h: 20 };
+  const MARK = $derived({
+    x: 24,
+    y: foot ? Math.max(72, roomH - 64) : 72,
+    w: 20,
+    h: 20,
+  });
 </script>
 
 <svelte:head><title>Pin working bench · CawCo</title></svelte:head>
@@ -117,31 +137,33 @@
         tail="bottom-start"
       />
     </span>
-    <PinFloat
-      label="Comment {pin.number}"
-      mark={MARK}
-      pin={pin.number}
-      room={{ w: roomW, h: roomH }}
-      sheet={phone.current || coarse.current}
-      slot="pin-card"
-    >
-      <PinCard
-        agentName={accountsWords.harnesses.claude}
-        {draft}
-        link="/artifact/bench#pin-12"
-        {live}
-        name="Hero headline"
-        onclose={() => undefined}
-        ondelete={async () => undefined}
-        onfind={() => undefined}
-        onplace={() => undefined}
-        onreply={() => undefined}
-        onresolve={() => undefined}
-        onretry={() => undefined}
-        parent="Hero"
-        {pin}
-        problem={null}
-      />
-    </PinFloat>
+    {#if shown}
+      <PinFloat
+        label="Comment {pin.number}"
+        mark={MARK}
+        pin={pin.number}
+        room={{ w: roomW, h: roomH }}
+        sheet={phone.current || coarse.current}
+        slot="pin-card"
+      >
+        <PinCard
+          agentName={accountsWords.harnesses.claude}
+          {draft}
+          link="/artifact/bench#pin-12"
+          {live}
+          name="Hero headline"
+          onclose={() => undefined}
+          ondelete={async () => undefined}
+          onfind={() => undefined}
+          onplace={() => undefined}
+          onreply={() => undefined}
+          onresolve={() => undefined}
+          onretry={() => undefined}
+          parent="Hero"
+          {pin}
+          problem={null}
+        />
+      </PinFloat>
+    {/if}
   </div>
 </main>

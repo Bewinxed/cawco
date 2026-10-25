@@ -29,6 +29,18 @@
  * dot, a loop of `--breath` on `--ease-in-out`; held at 0, ½ and 1 of it
  * the dot's opacity reads 1, `--breath-floor` and 1.
  *
+ * And at 1440, on Chromium and WebKit, the card opening out of its pill
+ * near the well's foot (`?at=foot`; the owner: "why is the panel animation
+ * from bottom left when it should be "growing" from the comment just how we
+ * do the hover menu?"): closed and opened again, its runs held on the clock
+ * (the DevTools Animation domain on Chromium, the page's held clock on
+ * WebKit) and sought to 0, ½ and 1. They are the kit's pop (opacity, scale
+ * and translate over --dur-pop on --ease-drawer); at each its transform
+ * origin stands on its edge facing the pill at the pill's height, never a
+ * corner; it grows from --pop-scale and fades in. It stands as tall as what
+ * it holds, moved up from the pill's top to stand whole above the well's
+ * foot, never cut by it nor stretched to it.
+ *
  *   bun scripts/probe-kit/run.ts web pin-working
  */
 import type { Page } from "playwright-core";
@@ -176,7 +188,7 @@ async function boxes(kit: Kit, base: string): Promise<void> {
       // biome-ignore lint/performance/noAwaitInLoops: one viewport at a time
       const page = await kit.page(view, { theme });
       await open(page, url, DOT);
-      // The card's entrance (PinFloat's grow, --dur-menu) has landed.
+      // The card's entrance (the kit's pop, --dur-pop) has landed.
       await page.waitForTimeout(400);
       const read = await page.evaluate(readWorking);
       const at = `${width} ${theme}`;
@@ -366,10 +378,149 @@ async function breath(kit: Kit, base: string): Promise<void> {
   }
 }
 
+/** The card as it stands in the pin room, its pill's box and what it holds, px. Runs in the page. */
+function readGrow() {
+  const room = document.querySelector<HTMLElement>('[data-slot="pin-room"]');
+  const card = room?.querySelector<HTMLElement>('[data-slot="pin-card"]');
+  // The pill's box as the bench tells the card (its MARK, 20px square,
+  // where its holder stands), as the overlay tells the pane a pin's mark.
+  const pill = room?.querySelector<HTMLElement>(
+    ":scope > span:has([data-mark])"
+  );
+  if (!(room && card && pill)) {
+    return null;
+  }
+  const at = room.getBoundingClientRect();
+  const told = pill.getBoundingClientRect();
+  const p = { left: told.left, top: told.top, width: 20, height: 20 };
+  const thread = card.querySelector<HTMLElement>("[data-pin-room]");
+  const style = getComputedStyle(card);
+  const [ox = 0, oy = 0] = style.transformOrigin
+    .split(" ")
+    .map((one) => Number.parseFloat(one));
+  const root = getComputedStyle(document.documentElement);
+  return {
+    side: card.dataset.side ?? "",
+    state: card.dataset.state ?? "",
+    box: {
+      x: card.offsetLeft,
+      y: card.offsetTop,
+      w: card.offsetWidth,
+      h: card.offsetHeight,
+    },
+    origin: { x: card.offsetLeft + ox, y: card.offsetTop + oy },
+    pill: { x: p.left - at.left, y: p.top - at.top, w: p.width, h: p.height },
+    room: { w: room.clientWidth, h: room.clientHeight },
+    scrolls: thread ? thread.scrollHeight - thread.clientHeight : 0,
+    opacity: Number(style.opacity),
+    scale: style.scale === "none" ? 1 : Number.parseFloat(style.scale),
+    gap: Number.parseFloat(root.getPropertyValue("--space-2")),
+    popScale: Number.parseFloat(root.getPropertyValue("--pop-scale")),
+    pop: Number.parseFloat(root.getPropertyValue("--dur-pop")),
+    drawer: root.getPropertyValue("--ease-drawer").trim(),
+  };
+}
+
+async function grow(kit: Kit, base: string): Promise<void> {
+  const url = `${base}/motion/pin-working`;
+  for (const engine of ["chromium", "webkit"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one engine at a time
+    const page = await kit.page("desk", { engine });
+    await open(page, `${url}?at=foot`, CARD);
+    await bench(page, url, "hide");
+    await page.locator(CARD).waitFor({ state: "detached" });
+    const motion = await readMotion(
+      page,
+      () => bench(page, url, "show"),
+      CARD,
+      {
+        own: true,
+        fractions: [0, 0.5, 1],
+        read: () => page.evaluate(readGrow),
+      }
+    );
+    const tag = `1440 foot (${engine})`;
+    const reads = motion.at.map((one) => one.value);
+    const [first, middle, last] = reads;
+    if (!(first && middle && last)) {
+      kit.check(
+        `${tag}: the card read at 0, ½ and 1`,
+        false,
+        JSON.stringify(reads)
+      );
+      await page.context().close();
+      continue;
+    }
+    const names = motion.runs.map((run) => run.name).sort();
+    kit.check(
+      `${tag}: opening the card runs the kit's pop on it alone, opacity, scale and translate over --dur-pop (${first.pop}ms) on --ease-drawer (${motion.by} clock)`,
+      names.join() === "opacity,scale,translate" &&
+        motion.runs.every(
+          (run) =>
+            run.type === "CSSTransition" &&
+            near(run.end - run.delay, first.pop, 1) &&
+            run.easing.replaceAll(" ", "") === first.drawer.replaceAll(" ", "")
+        ),
+      JSON.stringify(
+        motion.runs.map(({ name, type, end, easing }) => ({
+          name,
+          type,
+          end,
+          easing,
+        }))
+      )
+    );
+    for (const [fraction, read] of [
+      [0, first],
+      [0.5, middle],
+      [1, last],
+    ] as const) {
+      const { box, pill, origin } = read;
+      const facing = read.side === "left" ? box.x + box.w : box.x;
+      const mid = pill.y + pill.h / 2;
+      kit.check(
+        `${tag} at ${fraction}: its transform origin stands at its pill, on its edge facing the pill (${read.side}) at the pill's height (origin ${r1(origin.x)}, ${r1(origin.y)}; edge ${r1(facing)}, pill centre ${r1(mid)}), never a corner`,
+        (read.side === "right" || read.side === "left") &&
+          near(origin.x, facing, 1) &&
+          near(origin.y, mid, 1) &&
+          origin.y > box.y + 1 &&
+          origin.y < box.y + box.h - 1,
+        JSON.stringify(read)
+      );
+    }
+    kit.check(
+      `${tag}: sought to 0, ½ and 1 it grows from the pop scale and fades in (scale ${first.scale} → ${r1(middle.scale * 1000) / 1000} → ${last.scale}, opacity ${first.opacity} → ${r1(middle.opacity * 100) / 100} → ${last.opacity})`,
+      near(first.scale, first.popScale, 0.005) &&
+        middle.scale > first.scale &&
+        middle.scale < 1 &&
+        near(last.scale, 1, 0.001) &&
+        first.opacity < 0.01 &&
+        middle.opacity > 0 &&
+        middle.opacity < 1 &&
+        last.opacity > 0.999 &&
+        last.state === "open",
+      JSON.stringify({ first, middle, last })
+    );
+    const { box, pill, room, gap } = last;
+    kit.check(
+      `${tag}: its pill near the well's foot (top ${r1(pill.y)} of ${room.h}px), the card stands as tall as what it holds (${box.h}px, ${last.scrolls}px of scroll), moved up from the pill's top to stand whole (${r1(box.y)} to ${r1(box.y + box.h)}, its foot --space-2 above the well's), level with its pill`,
+      last.scrolls <= 1 &&
+        box.y < pill.y - 1 &&
+        box.y >= gap - 0.5 &&
+        near(box.y + box.h, room.h - gap, 1) &&
+        pill.y + pill.h / 2 >= box.y &&
+        pill.y + pill.h / 2 <= box.y + box.h,
+      JSON.stringify(last)
+    );
+    await page.context().close();
+  }
+}
+
 const spec: Spec = {
   name: "pin-working",
   run: async (kit: Kit) => {
     const base = await kit.bench();
+    await grow(kit, base);
     await boxes(kit, base);
     await breath(kit, base);
   },

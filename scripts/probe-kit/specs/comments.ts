@@ -1029,10 +1029,10 @@ const cardBeside = (
     cardBox.y < el.y + el.h &&
     el.y < cardBox.y + cardBox.height;
   const at: Record<string, boolean> = {
-    end: Math.abs(cardBox.x - (about.right + GAP)) <= 3,
-    start: Math.abs(cardBox.x + cardBox.width - (about.x - GAP)) <= 3,
-    below: Math.abs(cardBox.y - (about.bottom + GAP)) <= 3,
-    above: Math.abs(cardBox.y + cardBox.height - (about.y - GAP)) <= 3,
+    right: Math.abs(cardBox.x - (about.right + GAP)) <= 3,
+    left: Math.abs(cardBox.x + cardBox.width - (about.x - GAP)) <= 3,
+    bottom: Math.abs(cardBox.y - (about.bottom + GAP)) <= 3,
+    top: Math.abs(cardBox.y + cardBox.height - (about.y - GAP)) <= 3,
   };
   return !over && !!side && !!at[side];
 };
@@ -4518,15 +4518,19 @@ const movedBy = (one: SizingBox | null, two: SizingBox | null) =>
  * a finger (a touch tablet), 820 with a mouse and Comments open, 1440 with
  * Comments open and 1920 with them shut. For each, its thread opened:
  * - with a mouse, a card beside its pill, never on it, two fifths of the
- *   well held between 280px and 480px, inside the well, running down to
- *   the well's foot (its foot `--space-2` from it) where it stands beside
- *   the pill;
+ *   well held between 280px and 480px, inside the well, as tall as what it
+ *   holds up to the well's height less `--space-2` each side (the owner:
+ *   "it should show besides the comment but should have handling to grow
+ *   taller when appropriate"), never stretched to the well's foot past
+ *   what it holds; beside its pill, its top at the pill's or moved up only
+ *   as far as it takes to stand whole;
  * - under a finger, the well's foot sheet, the well's whole width, its
  *   pill wholly above it;
  * - its head and its reply inside it and still to the pixel while the
- *   replies scroll to their middle, the card itself not scrolling;
+ *   replies scroll to their middle (where they scroll: only at the card's
+ *   tallest), the card itself not scrolling;
  * - the long reply opened at its first line, at the top of the room its
- *   replies scroll in;
+ *   replies scroll in, or the whole thread in view where it fits;
  * - and nothing on the page spilling sideways, the sweep's total zero.
  */
 const sizingChecks = async (on: On) => {
@@ -5203,12 +5207,35 @@ const sizingPlace = async (
     return;
   }
   const wanted = await readingWidth(screen);
-  const beside = read.side === "end" || read.side === "start";
+  const beside = read.side === "right" || read.side === "left";
+  // As tall as what it holds, up to the well less --space-2 each side: its
+  // thread's room scrolls only at that height; beside its pill, its top at
+  // the pill's, or moved up only as far as it takes to stand whole.
+  const cardH = read.card ? read.card.bottom - read.card.top : 0;
+  const wellH = read.well ? read.well.bottom - read.well.top : 0;
+  const tallest = wellH - 2 * 7;
+  const natural =
+    cardH + (read.room ? Math.max(0, read.room.scroll - read.room.client) : 0);
+  const tall = Math.min(natural, tallest);
+  const scrollsOnlyAtTallest =
+    !read.room ||
+    read.room.scroll <= read.room.client + 1 ||
+    !beside ||
+    cardH >= tallest - 1.5;
+  const levelTop =
+    !(beside && read.card && read.well && pill) ||
+    Math.abs(
+      read.card.top -
+        Math.max(
+          read.well.top + 7,
+          Math.min(pill.top, read.well.bottom - 7 - tall)
+        )
+    ) <= 2.5;
   const footDown =
-    !(beside && read.card && read.well) ||
-    read.card.bottom >= read.well.bottom - 7 - 1.5;
+    !(beside && read.card) ||
+    (Math.abs(cardH - tall) <= 1.5 && scrollsOnlyAtTallest && levelTop);
   on.kit.check(
-    `${tag}: the thread is a card ${Math.round(cardW)}px wide (two fifths of the ${Math.round(wellW)}px well held between 280 and 480: ${Math.round(wanted)}px) on the pill's ${read.side} side, clear of its pill and inside the well${beside ? ", its foot at the well's" : ""}`,
+    `${tag}: the thread is a card ${Math.round(cardW)}px wide (two fifths of the ${Math.round(wellW)}px well held between 280 and 480: ${Math.round(wanted)}px) on the pill's ${read.side} side, clear of its pill and inside the well${beside ? `, as tall as what it holds (${Math.round(cardH)}px of ${Math.round(natural)}px, the well's tallest ${Math.round(tallest)}px), level with its pill or moved up to stand whole` : ""}`,
     !read.sheet &&
       Math.abs(cardW - wanted) <= 1 &&
       !!pill &&
@@ -5235,9 +5262,8 @@ const sizingHold = async (
   const headMoved = movedBy(read.before.head, read.after.head);
   const footMoved = movedBy(read.before.foot, read.after.foot);
   on.kit.check(
-    `${tag}: its head and its reply stand inside it and hold still while the long reply scrolls between them (head moved ${headMoved}px, reply ${footMoved}px; ${read.room?.client} of ${read.room?.scroll}px shown), the card itself not scrolling`,
+    `${tag}: its head and its reply stand inside it and hold still while the long reply scrolls between them, where it scrolls (head moved ${headMoved}px, reply ${footMoved}px; ${read.room?.client} of ${read.room?.scroll}px shown), the card itself not scrolling`,
     !!read.room &&
-      read.room.scroll > read.room.client + 1 &&
       boxInside(read.before.head, read.card) &&
       boxInside(read.before.foot, read.card) &&
       headMoved === 0 &&
@@ -5246,8 +5272,12 @@ const sizingHold = async (
     JSON.stringify(read)
   );
   on.kit.check(
-    `${tag}: the long reply opens at its first line, ${read.opensAt === null ? "unread" : `${Math.round(read.opensAt)}px`} from the top of the room it scrolls in`,
-    read.opensAt !== null && Math.abs(read.opensAt) <= 1,
+    `${tag}: the long reply opens at its first line, ${read.opensAt === null ? "unread" : `${Math.round(read.opensAt)}px`} from the top of the room it scrolls in, or the whole thread stands in view (${read.room?.client} of ${read.room?.scroll}px)`,
+    read.opensAt !== null &&
+      (Math.abs(read.opensAt) <= 1 ||
+        (!!read.room &&
+          read.room.scroll <= read.room.client + 1 &&
+          read.room.top === 0)),
     JSON.stringify(read.room)
   );
   const spills = await screen.evaluate(sideSpills);

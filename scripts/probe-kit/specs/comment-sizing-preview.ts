@@ -17,8 +17,12 @@
  *    bullets) against the room it scrolls in, and where scrolling remains,
  *    why.
  * 4. The opening and the hand-off on the house clocks, held and sought to
- *    their middle: the card grows from its pill over --dur-menu on
- *    --ease-out; a rail widening to hold the thread tweens its width over
+ *    their middle: A's card grows out of its pill as every kit popover does
+ *    (the kit's pop: opacity, scale from --pop-scale and translate over
+ *    --dur-pop on --ease-drawer), its transform origin at the pill (on its
+ *    edge facing the pill, at the pill's height), held at 0, ½ and 1 on the
+ *    DevTools Animation domain (Chromium) or the page's held clock (WebKit);
+ *    a rail widening to hold the thread tweens its width over
  *    --dur-morph on --ease-drawer while the list fades out over --dur-exit
  *    and the thread fades in on the width's clock; a rail arriving comes in
  *    over --dur-panel on --ease-drawer; what opens in a list or a short card
@@ -26,14 +30,20 @@
  * 5. C's handle: dragged by a mouse it stops at 300px and at half the pane,
  *    the keyboard's Home and End too, and its width survives a reload, as
  *    does a thread B handed to Comments.
- * 6. No console error.
+ * 6. A's card is as tall as what it holds, up to the page area: the
+ *    owner's long thread near the foot moves up to stand whole beside its
+ *    pill (never cut at the foot, never stretched to it), scrolling inside
+ *    only at the page area's full height; a short exchange stays short, its
+ *    top at its pill's.
+ * 7. The overflow sweep totals zero at 1440, 1037 × 760 and 390.
+ * 8. No console error.
  *
  *   bun scripts/probe-kit/run.ts comment-sizing-preview
  */
 import { join, normalize } from "node:path";
 import type { Page } from "playwright-core";
 import type { Engine, Kit, Spec, View } from "../kit";
-import { ROOT } from "../kit";
+import { ROOT, readMotion } from "../kit";
 
 const DIR = join(ROOT, "design-previews", "comment-sizing");
 const OPTIONS = ["a", "b", "c"] as const;
@@ -354,7 +364,7 @@ function readFrame(): Read {
 
 const why = (option: Option, read: Read): string => {
   if (read.stands === "card") {
-    return `the card's tallest is the room ${read.floatSide === "above" ? "above what it is about" : "from its pin to the well's foot"}${option === "b" ? ", capped at min(480px, 50% of the well)" : ""}`;
+    return `the card's tallest is ${read.floatSide === "top" || read.floatSide === "bottom" ? `the room ${read.floatSide === "top" ? "above" : "below"} what it is about` : "the page area's height"}${option === "b" ? ", capped at min(480px, 50% of the well)" : ""}`;
   }
   if (read.stands === "sheet" || read.stands === "bottom") {
     return "the drawer stops at its share of the well, the page lifted above it";
@@ -372,12 +382,14 @@ async function boxesLeg(
   base: string,
   engine: Engine,
   screen: ScreenName
-): Promise<void> {
+): Promise<number> {
+  let spills = 0;
   for (const option of OPTIONS) {
     for (const which of CASES) {
       // biome-ignore lint/performance/noAwaitInLoops: one frame at a time on one page
       await load(page, base, option, which, screen);
       const read = await page.evaluate(readFrame);
+      spills += read.overflow.length;
       const at = `${engine} ${screen} ${option.toUpperCase()} ${which}`;
       kit.check(
         `${at}: the frame stands at its real size (scale ${read.s})`,
@@ -440,6 +452,271 @@ async function boxesLeg(
       }
     }
   }
+  return spills;
+}
+
+/** A's card as it stands, in the pin room's px, with its pill's and what it holds. Runs in the page. */
+function readCard() {
+  const frame = document.querySelector<HTMLElement>('[data-slot="frame"]');
+  const room = frame?.querySelector<HTMLElement>('[data-slot="pin-room"]');
+  const card = frame?.querySelector<HTMLElement>('[data-slot="pin-card"]');
+  const pill = frame?.querySelector<HTMLElement>('[data-page-pin="3"]')
+    ?.firstElementChild as HTMLElement | null | undefined;
+  if (!(room && card && pill)) {
+    return null;
+  }
+  const at = room.getBoundingClientRect();
+  const p = pill.getBoundingClientRect();
+  const thread = card.querySelector<HTMLElement>("[data-pin-room]");
+  const style = getComputedStyle(card);
+  const [ox, oy] = style.transformOrigin
+    .split(" ")
+    .map((one) => Number.parseFloat(one));
+  return {
+    side: card.dataset.side ?? "",
+    state: card.dataset.state ?? "",
+    // Its laid-out box, which no transform moves.
+    box: {
+      x: card.offsetLeft,
+      y: card.offsetTop,
+      w: card.offsetWidth,
+      h: card.offsetHeight,
+    },
+    origin: { x: card.offsetLeft + (ox ?? 0), y: card.offsetTop + (oy ?? 0) },
+    pill: { x: p.left - at.left, y: p.top - at.top, w: p.width, h: p.height },
+    well: { w: room.clientWidth, h: room.clientHeight },
+    natural:
+      card.offsetHeight +
+      Math.max(
+        0,
+        card.scrollHeight -
+          card.clientHeight +
+          (thread ? thread.scrollHeight - thread.clientHeight : 0)
+      ),
+    scrolls: thread ? thread.scrollHeight - thread.clientHeight : 0,
+    opacity: Number(style.opacity),
+    scale: style.scale,
+    translate: style.translate,
+    gap: Number.parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue("--space-2")
+    ),
+    popScale: Number.parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue("--pop-scale")
+    ),
+  };
+}
+type CardRead = NonNullable<ReturnType<typeof readCard>>;
+
+/** `value` brought onto [`low`, `high`]. */
+const onto = (value: number, low: number, high: number) =>
+  Math.max(low, Math.min(value, high));
+/** A computed `scale` as a number: `none` is 1. */
+const scaleOf = (value: string) =>
+  value === "none" ? 1 : Number.parseFloat(value);
+
+/**
+ * A's card grows out of its pill (the owner: "why is the panel animation
+ * from bottom left when it should be "growing" from the comment just how we
+ * do the hover menu?"): Replay opens it again, its runs held on the clock
+ * (the DevTools Animation domain on Chromium, `Animation.setPaused` and
+ * `seekAnimations`; the page's held clock on WebKit) and sought to 0, ½ and
+ * 1; at each its transform origin stands at its pill, its scale and opacity
+ * go from the kit's pop to rest, and its runs are the kit's pop.
+ */
+async function growLeg(
+  kit: Kit,
+  page: Page,
+  base: string,
+  engine: Engine,
+  screen: ScreenName
+): Promise<void> {
+  await load(page, base, "a", "long", screen);
+  const drawer = await page.evaluate(() =>
+    getComputedStyle(document.documentElement)
+      .getPropertyValue("--ease-drawer")
+      .trim()
+  );
+  const pop = await page.evaluate(() =>
+    Number.parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue("--dur-pop")
+    )
+  );
+  const motion = await readMotion(
+    page,
+    () =>
+      page.evaluate(() =>
+        document.querySelector<HTMLElement>('[data-slot="replay"]')?.click()
+      ),
+    '[data-slot="pin-card"]',
+    {
+      own: true,
+      fractions: [0, 0.5, 1],
+      read: () => page.evaluate(readCard),
+    }
+  );
+  const at = `${engine} ${screen} A long`;
+  const names = motion.runs.map((run) => run.name).sort();
+  const same = (a: string, b: string) =>
+    a.replaceAll(" ", "") === b.replaceAll(" ", "");
+  kit.check(
+    `${at}: opening runs the kit's pop on the card alone, opacity, scale and translate over --dur-pop (${pop}ms) on --ease-drawer (${motion.by} clock)`,
+    ["opacity", "scale", "translate"].every((name) => names.includes(name)) &&
+      motion.runs.every(
+        (run) =>
+          run.type === "CSSTransition" &&
+          Math.abs(run.end - run.delay - pop) < 1 &&
+          same(run.easing, drawer)
+      ),
+    JSON.stringify(
+      motion.runs.map(({ name, type, end, easing }) => ({
+        name,
+        type,
+        end,
+        easing,
+      }))
+    )
+  );
+  const reads = motion.at.map((one) => one.value);
+  const [first, middle, last] = reads;
+  if (!(first && middle && last)) {
+    kit.check(
+      `${at}: the card read at 0, ½ and 1`,
+      false,
+      JSON.stringify(reads)
+    );
+    return;
+  }
+  for (const [fraction, read] of [
+    [0, first],
+    [0.5, middle],
+    [1, last],
+  ] as const) {
+    const { box, pill, origin } = read as CardRead;
+    const want = {
+      x: onto(pill.x + pill.w / 2, box.x, box.x + box.w),
+      y: onto(pill.y + pill.h / 2, box.y, box.y + box.h),
+    };
+    const beside = read.side === "right" || read.side === "left";
+    kit.check(
+      `${at} at ${fraction}: its transform origin stands at its pill, on its ${read.side} side${beside ? ", on the edge facing the pill at the pill's height" : ""} (origin ${origin.x.toFixed(1)}, ${origin.y.toFixed(1)}; pill centre ${(pill.x + pill.w / 2).toFixed(1)}, ${(pill.y + pill.h / 2).toFixed(1)}), not a corner of the card`,
+      Math.abs(origin.x - want.x) <= 1 &&
+        Math.abs(origin.y - want.y) <= 1 &&
+        (!beside || (origin.y > box.y + 1 && origin.y < box.y + box.h - 1)),
+      JSON.stringify(read)
+    );
+  }
+  const s0 = scaleOf(first.scale);
+  const s5 = scaleOf(middle.scale);
+  const s1 = scaleOf(last.scale);
+  kit.check(
+    `${at}: sought to 0, ½ and 1 it grows from the pop scale and fades in (scale ${s0} → ${s5} → ${s1}, opacity ${first.opacity} → ${middle.opacity.toFixed(2)} → ${last.opacity}), open`,
+    Math.abs(s0 - first.popScale) < 0.005 &&
+      s5 > s0 &&
+      s5 < 1 &&
+      Math.abs(s1 - 1) < 0.001 &&
+      first.opacity < 0.01 &&
+      middle.opacity > 0 &&
+      middle.opacity < 1 &&
+      last.opacity > 0.999 &&
+      last.state === "open",
+    JSON.stringify({ first, middle, last })
+  );
+}
+
+/** Where A's card stands for its height: beside its pill, or over or under what it is about. */
+function standsFor(kit: Kit, at: string, read: CardRead): void {
+  const { box, pill, well, gap } = read;
+  const full = well.h - 2 * gap;
+  const whole = box.y >= gap - 0.5 && box.y + box.h <= well.h - gap + 0.5;
+  const span = `${box.y.toFixed(0)} to ${(box.y + box.h).toFixed(0)}`;
+  if (read.side === "right" || read.side === "left") {
+    const tall = Math.min(read.natural, full);
+    const top = onto(pill.y, gap, well.h - gap - tall);
+    const pillMid = pill.y + pill.h / 2;
+    kit.check(
+      `${at}: beside its pill (${read.side}), the card is as tall as what it holds (${box.h}px of ${read.natural}px, the page area ${well.h}px), whole on screen (${span}), level with its pill (centre at ${pillMid.toFixed(0)}), its top at the pill's (${pill.y.toFixed(0)}) or moved up only as far as it takes to stand whole (${top.toFixed(0)}); it scrolls inside (${read.scrolls}px) only at the page area's full height`,
+      Math.abs(box.h - tall) <= 1 &&
+        whole &&
+        pillMid >= box.y &&
+        pillMid <= box.y + box.h &&
+        Math.abs(box.y - top) <= 1 &&
+        (read.scrolls <= 1 || box.h >= full - 1),
+      JSON.stringify(read)
+    );
+    return;
+  }
+  // Over or under what it is about (wider than the room beside it): as
+  // tall as what it holds, or the whole room on that side, scrolling.
+  const fills =
+    read.side === "top"
+      ? Math.abs(box.y - gap) <= 1
+      : Math.abs(box.y + box.h - (well.h - gap)) <= 1;
+  const held =
+    Math.abs(box.h - read.natural) <= 1
+      ? read.scrolls <= 1
+      : fills && read.scrolls > 1;
+  kit.check(
+    `${at}: ${read.side === "top" ? "above" : "below"} what it is about (no room beside it), the card is as tall as what it holds (${box.h}px of ${read.natural}px), whole on screen (${span}), or takes that side's whole room and scrolls inside (${read.scrolls}px)`,
+    whole && held,
+    JSON.stringify(read)
+  );
+}
+
+/** The owner's long thread near the foot: whole, never stretched, growing out of its pill. */
+function longFor(kit: Kit, at: string, read: CardRead): void {
+  const { box, pill, well, gap } = read;
+  const full = well.h - 2 * gap;
+  const beside = read.side === "right" || read.side === "left";
+  const low = pill.y + Math.min(read.natural, full) > well.h - gap;
+  const pillMid = pill.y + pill.h / 2;
+  const whole = box.y >= gap - 0.5 && box.y + box.h <= well.h - gap + 0.5;
+  const rises = !(beside && low) || box.y < pill.y - 1;
+  kit.check(
+    `${at}: near the foot the long thread stands whole (${box.y.toFixed(0)} to ${(box.y + box.h).toFixed(0)} of ${well.h}px), never stretched past what it holds (${box.h}px of ${read.natural}px)${beside ? `, rising above its pill (its top ${box.y.toFixed(0)}px, the pill's ${pill.y.toFixed(0)}px)` : ""}, its origin at the pill (${read.origin.y.toFixed(0)}px, the pill's centre ${pillMid.toFixed(0)}px) so it grows ${read.origin.y > box.y + box.h / 2 ? "upward" : "downward"} out of it`,
+    whole &&
+      box.h <= read.natural + 1 &&
+      rises &&
+      Math.abs(read.origin.y - onto(pillMid, box.y, box.y + box.h)) <= 1,
+    JSON.stringify(read)
+  );
+}
+
+/**
+ * A's height: the owner's long thread near the foot moves up to stand whole
+ * beside its pill, or over or under an element too wide to stand beside, as
+ * tall as what it holds up to the room there (inner scroll only there); a
+ * short exchange stays short.
+ */
+async function heightLeg(
+  kit: Kit,
+  page: Page,
+  base: string,
+  engine: Engine,
+  screen: ScreenName
+): Promise<void> {
+  for (const which of ["long", "short"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one frame at a time on one page
+    await load(page, base, "a", which, screen);
+    const read = await page.evaluate(readCard);
+    const at = `${engine} ${screen} A ${which}`;
+    if (!read) {
+      kit.check(`${at}: the card stands`, false);
+      continue;
+    }
+    standsFor(kit, at, read);
+    if (which === "long") {
+      longFor(kit, at, read);
+      continue;
+    }
+    const full = read.well.h - 2 * read.gap;
+    kit.check(
+      `${at}: the short exchange stays short, as tall as what it holds (${read.box.h}px of ${read.natural}px, in a ${read.well.h}px page area), never stretched toward the foot, its entries whole (${read.scrolls}px of scroll)`,
+      Math.abs(read.box.h - read.natural) <= 1 &&
+        read.box.h < full - 1 &&
+        read.scrolls <= 1,
+      JSON.stringify(read)
+    );
+  }
 }
 
 /** Every run the page holds, by what it moves: its target's slot, its length and its curve. Runs in the page. */
@@ -497,15 +774,6 @@ async function motionLeg(
     want: { slot: string; ms: number; easing: string; prop: string }[];
     mid?: string;
   }[] = [
-    {
-      option: "a",
-      which: "long",
-      screen: "window",
-      what: "A's card grows from its pill",
-      want: [
-        { slot: "pin-card", ms: 140, easing: curves.out, prop: "transform" },
-      ],
-    },
     {
       option: "b",
       which: "long",
@@ -762,7 +1030,7 @@ async function pageWidthLeg(
   page: Page,
   engine: Engine,
   view: number
-): Promise<void> {
+): Promise<number> {
   const over = await page.evaluate(
     () =>
       document.documentElement.scrollWidth -
@@ -772,6 +1040,7 @@ async function pageWidthLeg(
     `${engine} at ${view}: the preview page scrolls no wider than the window (${over}px)`,
     over <= 0
   );
+  return over > 0 ? 1 : 0;
 }
 
 const spec: Spec = {
@@ -785,6 +1054,7 @@ const spec: Spec = {
       ) as Engine[];
       for (const engine of engines) {
         const errors: string[] = [];
+        let spills = 0;
         for (const screen of Object.keys(SCREENS) as ScreenName[]) {
           const shape = SCREENS[screen];
           // biome-ignore lint/performance/noAwaitInLoops: one engine's pages one at a time
@@ -805,8 +1075,12 @@ const spec: Spec = {
           });
           await page.goto(base);
           await page.evaluate(() => localStorage.clear());
-          await boxesLeg(kit, page, base, engine, screen);
-          await pageWidthLeg(kit, page, engine, shape.window);
+          spills += await boxesLeg(kit, page, base, engine, screen);
+          spills += await pageWidthLeg(kit, page, engine, shape.window);
+          if (screen !== "phone") {
+            await growLeg(kit, page, base, engine, screen);
+            await heightLeg(kit, page, base, engine, screen);
+          }
           await capLeg(kit, page, base, engine, screen);
           if (screen === "window") {
             await motionLeg(kit, page, base, engine);
@@ -817,6 +1091,10 @@ const spec: Spec = {
           }
           await page.close();
         }
+        kit.check(
+          `${engine}: the overflow sweep at 1440, 1037 × 760 and 390 totals ${spills}`,
+          spills === 0
+        );
         kit.check(
           `${engine}: no console or page error`,
           errors.length === 0,

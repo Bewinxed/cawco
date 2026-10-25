@@ -184,4 +184,22 @@
       <span></span>
     </PinFloat>
   </div>
+  <!-- A card on each other side of its pill (left, under, over), not
+       captured as parts: standing here, the stylesheet's rules for each side
+       its pop rises from are kept in house.css. -->
+  {#each [{ w: 900, x: 860, y: 100 }, { w: 300, x: 10, y: 10 }, { w: 300, x: 10, y: 370 }] as at (`${at.w}-${at.y}`)}
+    <div
+      style="position: relative; inline-size: {at.w}px; block-size: 400px"
+    >
+      <PinFloat
+        label="Comment 3"
+        mark={{ x: at.x, y: at.y, w: 20, h: 20 }}
+        pin={3}
+        room={{ w: at.w, h: 400 }}
+        slot="pin-card"
+      >
+        <span></span>
+      </PinFloat>
+    </div>
+  {/each}
 </main>

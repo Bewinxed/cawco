@@ -22,11 +22,21 @@
    * `hang`: a card that hangs from its anchor opens and closes on its own
    * clock (motion/hang, HangCard); with reduced motion the kit's fade runs.
    */
+  /**
+   * The `pop` motion alone, for a surface that wears its own look but opens
+   * as every kit popover does (PinFloat's comment card, from its pill):
+   * `data-state="open"` and the side of its anchor it stands on as
+   * `data-side` (`top`, `right`, `bottom`, `left`), its origin set at its
+   * anchor; it leaves by `popOut` with the same side.
+   */
+  export const popMotion =
+    "transition-opacity duration-(--dur-pop) ease-drawer [--kit-rise:0_calc(-1*var(--pop-rise))] side-left:[--kit-rise:var(--pop-rise)_0] side-right:[--kit-rise:calc(-1*var(--pop-rise))_0] side-top:[--kit-rise:0_var(--pop-rise)] data-closed:opacity-0 starting:data-open:opacity-0 data-closed:duration-(--dur-exit) motion-safe:data-closed:scale-(--pop-scale) motion-safe:starting:data-open:scale-(--pop-scale) motion-safe:[transition-property:opacity,translate,scale] motion-safe:data-closed:[translate:var(--kit-rise)] motion-safe:starting:data-open:[translate:var(--kit-rise)]";
+
   export const floatingSurface = tv({
     base: "rounded-lg concentric-in r-outer-lg border border-border-control bg-surface-raised p-c-floating-pad text-ink-strong shadow-overlay",
     variants: {
       motion: {
-        pop: "transition-opacity duration-(--dur-pop) ease-drawer [--kit-rise:0_calc(-1*var(--pop-rise))] side-left:[--kit-rise:var(--pop-rise)_0] side-right:[--kit-rise:calc(-1*var(--pop-rise))_0] side-top:[--kit-rise:0_var(--pop-rise)] data-closed:opacity-0 starting:data-open:opacity-0 data-closed:duration-(--dur-exit) motion-safe:data-closed:scale-(--pop-scale) motion-safe:starting:data-open:scale-(--pop-scale) motion-safe:[transition-property:opacity,translate,scale] motion-safe:data-closed:[translate:var(--kit-rise)] motion-safe:starting:data-open:[translate:var(--kit-rise)]",
+        pop: popMotion,
         hang: "motion-reduce:transition-opacity motion-reduce:duration-(--dur-pop) motion-reduce:ease-drawer motion-reduce:data-closed:opacity-0 motion-reduce:starting:data-open:opacity-0 motion-reduce:data-closed:duration-(--dur-exit)",
       },
       /**

@@ -701,7 +701,6 @@
     var(--ease-in-out) infinite;
   --animate-step-shimmer: step-shimmer var(--breath) var(--ease-in-out) infinite;
   --animate-row-flash: row-flash calc(var(--dur-fade) * 3) var(--ease-out) both;
-  --animate-pin-card-in: pin-card-in var(--dur-pop) var(--ease-out);
   --animate-mention-tip-in: mention-tip-in var(--dur-menu) var(--ease-out);
   --animate-mark-in: mark-in var(--dur-pop) var(--ease-out) both;
   --animate-sheet-in: sheet-in var(--dur-panel) var(--ease-drawer);
@@ -833,12 +832,6 @@
   @keyframes row-flash {
     from {
       opacity: 0.35;
-    }
-  }
-  @keyframes pin-card-in {
-    from {
-      opacity: 0;
-      transform: translateY(var(--pop-rise)) scale(var(--press-scale));
     }
   }
   @keyframes mention-tip-in {

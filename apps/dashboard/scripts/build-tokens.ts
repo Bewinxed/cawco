@@ -176,8 +176,7 @@ const ANIMATIONS: Record<string, string> = {
   // A config row the change just landed on flashes from 35% up.
   "animate-row-flash":
     "row-flash calc(var(--dur-fade) * 3) var(--ease-out) both",
-  // Cards and marks arriving: a pin's card, a mention's tip, an unlock's mark.
-  "animate-pin-card-in": "pin-card-in var(--dur-pop) var(--ease-out)",
+  // Marks arriving: a mention's tip, an unlock's mark.
   "animate-mention-tip-in": "mention-tip-in var(--dur-menu) var(--ease-out)",
   "animate-mark-in": "mark-in var(--dur-pop) var(--ease-out) both",
   // A kit sheet slides in and out from its side (`--sheet-away`).
@@ -265,8 +264,6 @@ const KEYFRAMES: Record<string, string> = {
   "step-shimmer":
     "from {\n  background-position: 0% 0;\n}\nto {\n  background-position: 100% 0;\n}",
   "row-flash": "from {\n  opacity: 0.35;\n}",
-  "pin-card-in":
-    "from {\n  opacity: 0;\n  transform: translateY(var(--pop-rise)) scale(var(--press-scale));\n}",
   "mention-tip-in": "from {\n  opacity: 0;\n  scale: var(--press-scale);\n}",
   "mark-in":
     "from {\n  opacity: 0;\n  scale: 0.25;\n  filter: blur(var(--space-1));\n}",
