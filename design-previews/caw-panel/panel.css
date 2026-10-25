@@ -1471,7 +1471,8 @@ button {
   object-fit: contain;
 }
 
-/* The scroller's foot fades while more is below (the house edge fade). */
+/* The scroller's edges fade while more is past them (the house edge fade):
+   its foot while more is below, its top while more is above. */
 .scroller[data-more-below] {
   -webkit-mask-image: linear-gradient(
     to bottom,
@@ -1480,6 +1481,36 @@ button {
   );
   mask-image: linear-gradient(
     to bottom,
+    #000 calc(100% - var(--c-edge-fade-len)),
+    transparent
+  );
+}
+
+.scroller[data-more-above] {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--c-edge-fade-len)
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--c-edge-fade-len)
+  );
+}
+
+.scroller[data-more-above][data-more-below] {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--c-edge-fade-len),
+    #000 calc(100% - var(--c-edge-fade-len)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--c-edge-fade-len),
     #000 calc(100% - var(--c-edge-fade-len)),
     transparent
   );

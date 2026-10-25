@@ -997,6 +997,7 @@ class Panel {
       ? 0
       : Math.min(1, s.scrollTop / LINKED);
     this.slot("edge").style.opacity = String(edge);
+    s.toggleAttribute("data-more-above", s.scrollTop > 1);
     s.toggleAttribute(
       "data-more-below",
       s.scrollTop < s.scrollHeight - s.clientHeight - 1

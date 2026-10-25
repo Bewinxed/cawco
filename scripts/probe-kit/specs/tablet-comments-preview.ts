@@ -868,6 +868,14 @@ const spec: Spec = {
         const errors: string[] = [];
         const house = new HouseRules(kit, engine, {
           scope: '[data-slot="frame"]',
+          except: [
+            {
+              rule: "coral",
+              selector: '[data-mark][data-state="sent"]',
+              reason:
+                "a sent pin's pill, filled action-solid once sent (DESIGN.md, A pin's pill): one per comment on the page and its rows, a mark, not the view's act",
+            },
+          ],
         });
         let spills = 0;
         for (const width of WIDTHS) {
