@@ -1623,6 +1623,28 @@ const serviceSpawn = (
     }
   );
 
+/**
+ * Every fleet process whose exit has resolved. Bun, as node, leaves
+ * `exitCode` null for a process a signal ended (`signalCode` names the
+ * signal: a hub stopped with SIGTERM reads `exitCode null, signalCode
+ * SIGTERM` once `exited` has resolved), so `exitCode` cannot say a process
+ * is gone; its awaited exit can. Each is marked by {@link tracked} as it is
+ * spawned, ahead of any caller's own wait on it.
+ */
+const ENDED = new WeakSet<object>();
+
+/** `child`, marked in {@link ENDED} once its exit resolves. */
+const tracked = <T extends { exited: Promise<number> }>(child: T): T => {
+  child.exited.then(
+    () => ENDED.add(child),
+    () => ENDED.add(child)
+  );
+  return child;
+};
+
+/** Whether `child`'s exit has resolved: it is gone, however it ended. */
+const ended = (child: object): boolean => ENDED.has(child);
+
 /** A launch's two log files, in the order a role's are read: its stdout's, then its stderr's. */
 const LOG_EXTENSIONS = [".log", ".err"];
 
@@ -2214,7 +2236,7 @@ async function standUp(
       },
       wrap
     );
-    procs[role] = child;
+    procs[role] = tracked(child);
     errs[role] = err;
     console.log(`… ${role} started, pid ${child.pid}`);
     return child;
@@ -2226,7 +2248,7 @@ async function standUp(
     signal: "SIGTERM" | "SIGKILL" = "SIGTERM"
   ) => {
     const child = procs[role];
-    if (!child || child.exitCode !== null) {
+    if (!child || ended(child)) {
       return;
     }
     child.kill(signal);
@@ -2251,7 +2273,7 @@ async function standUp(
    */
   const freeze = (role: Role, frozen: boolean) => {
     const child = procs[role];
-    const pid = child?.exitCode === null ? spawnedPid(child) : undefined;
+    const pid = child && !ended(child) ? spawnedPid(child) : undefined;
     if (pid === undefined) {
       throw new Error(`${role} is not running`);
     }
@@ -2333,7 +2355,7 @@ async function standUp(
   /** sessiond and every process under it, as a control-group stop ends them. */
   const killSessiond = async () => {
     const child = procs.sessiond;
-    if (!child) {
+    if (!child || ended(child)) {
       return;
     }
     const pid = pidOf(child);
@@ -2925,7 +2947,7 @@ async function standUp(
       return { child, err };
     };
     const sessiond = start("sessiond");
-    machineProcs.push(sessiond.child);
+    machineProcs.push(tracked(sessiond.child));
     await waitingOn(
       `${machineId}'s sessiond`,
       sessiond.child,
@@ -2937,7 +2959,7 @@ async function standUp(
     );
     const agent = start("agent");
     // Stopped before its sessiond, as the first machine's is.
-    machineProcs.unshift(agent.child);
+    machineProcs.unshift(tracked(agent.child));
     await agentOnline(
       `${machineId}'s agent`,
       agent.child,
@@ -3150,7 +3172,7 @@ async function standUp(
     // The added machines', agents first: a frozen one is thawed to hear it,
     // and a sessiond takes the processes under it along.
     for (const child of machineProcs) {
-      if (child.exitCode !== null) {
+      if (ended(child)) {
         continue;
       }
       const pid = pidOf(child);

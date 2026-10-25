@@ -1128,16 +1128,19 @@
              the screen's, its centre on the tabs' centre line, which stand
              on the bar's floor, in a 44px touch area that starts at the
              screen's edge (its glyph padded in, so the box and its focus
-             ring never run past the screen). Tactile press: it dips under the finger, with
+             ring never run past the screen) and fills the 44px bar top to
+             floor: the glyph is padded down to the tabs' centre line (twice
+             its drop from the box's own centre), never the box moved, so the
+             box stays inside its bar. Tactile press: it dips under the finger, with
              less motion not at all. -->
         <button
           data-slot="burger"
           aria-label={sidebarWords.openNavigation}
-          class="select-none desk:hidden size-c-btn-h-lg -ms-space-2 grid place-items-center border-none border-current bg-transparent rounded-sm text-ink-strong transition-[background] duration-(--dur-control) ease-in-out hover:bg-surface-hover motion-safe:active:scale-(--press-scale) max-desk:self-start max-desk:ms-0 max-desk:ps-c-bar-phone-edge max-desk:justify-items-start max-desk:focus-inset max-desk:mt-(--burger-top) max-desk:text-ink-muted max-desk:group-data-floating/top:pointer-events-auto"
+          class="select-none desk:hidden size-c-btn-h-lg -ms-space-2 grid place-items-center border-none border-current bg-transparent rounded-sm text-ink-strong transition-[background] duration-(--dur-control) ease-in-out hover:bg-surface-hover motion-safe:active:scale-(--press-scale) max-desk:self-start max-desk:ms-0 max-desk:ps-c-bar-phone-edge max-desk:justify-items-start max-desk:focus-inset max-desk:pt-(--burger-drop) max-desk:text-ink-muted max-desk:group-data-floating/top:pointer-events-auto"
           onclick={() => {
             railOpen = true;
           }}
-          style:--burger-top={"calc(var(--c-top-bar-h) - var(--c-tab-row-h) / 2 - var(--c-btn-h-lg) / 2)"}
+          style:--burger-drop={"calc(2 * (var(--c-top-bar-h) - var(--c-tab-row-h) / 2 - var(--c-btn-h-lg) / 2))"}
           type="button"
           bind:this={burger}
         >
