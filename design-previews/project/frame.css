@@ -1182,6 +1182,29 @@ pre {
 .pane-facts .labels {
   margin-inline-start: auto;
 }
+/* Open session: the bare glyph after its plan ring, a finger's 44px round it. */
+.pane-open-session {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  color: var(--ink-muted);
+  transition: color var(--dur-control) var(--ease-out);
+}
+.pane-open-session::after {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 50%;
+  width: var(--c-touch-floor);
+  height: var(--c-touch-floor);
+  translate: -50% -50%;
+  content: "";
+}
+@media (hover: hover) {
+  .pane-open-session:hover {
+    color: var(--ink-strong);
+  }
+}
 
 .pill {
   display: inline-grid;
@@ -1562,9 +1585,6 @@ pre {
   gap: var(--space-3);
   padding-block: var(--space-1);
 }
-.steps li[data-now] {
-  font-weight: 500;
-}
 
 .pane-foot {
   position: relative;
@@ -1925,6 +1945,10 @@ pre {
   .pane-scroll,
   .pane-tabs {
     padding-inline: var(--c-screen-margin);
+  }
+  /* Its 44px area reaches past the glyph further than the screen's margin: in by the difference. */
+  .pane-open-session {
+    margin-inline-end: calc((var(--c-touch-floor) - var(--icon-md)) / 2 - var(--c-screen-margin));
   }
   .pane .chips {
     display: grid;

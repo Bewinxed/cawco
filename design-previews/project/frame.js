@@ -788,7 +788,7 @@ const drawRing = (count) => {
 
 /* ---------- The task pane ---------- */
 
-const TABS = ["Task", "Session", "Changes", "History"];
+const TABS = ["Task", "Changes", "History"];
 
 const FILES = {
   "tsk-16": {
@@ -816,9 +816,6 @@ const FILES = {
 };
 
 const defaultTab = (task) => {
-  if (task.stage === "working") {
-    return "session";
-  }
   if (task.stage === "review") {
     return "changes";
   }
@@ -938,18 +935,6 @@ const tabPanel = (task, tab) => {
       <div class="prows">${fileRows}</div>
     </div>`;
   }
-  if (tab === "session") {
-    return `<div class="ppanel" role="tabpanel" aria-label="Session">
-      <h3 class="mark-line">${ring(task.ring ?? [7, 7])}<span>Plan · ${(task.ring ?? [7, 7]).join(" of ")} done</span></h3>
-      <ol class="steps">
-        <li>Read the tide feed's offsets</li>
-        <li>Find where BST is applied</li>
-        <li data-now>${task.step ?? "Write the fix and its test"}</li>
-        <li>Run the checks</li>
-      </ol>
-      <a class="btn outline sm" href="#session"><span>Open session</span>${use("square-top-down", "glyph sm")}</a>
-    </div>`;
-  }
   if (tab === "history") {
     return `<div class="ppanel" role="tabpanel" aria-label="History">
       <div class="prows">
@@ -969,6 +954,16 @@ const tabPanel = (task, tab) => {
   </div>`;
 };
 
+/**
+ * The task's session, opened where the dashboard opens sessions: its plan
+ * ring for progress at a glance, then the bare glyph, a finger's 44px
+ * around it.
+ */
+const openSession = (task) => {
+  const plan = task.ring ?? [7, 7];
+  return `${ring(plan)}<span class="visually-hidden">Plan ${plan.join(" of ")} done</span><a class="pane-open-session" href="#session" aria-label="Open session" title="Open session">${use("square-top-down")}</a>`;
+};
+
 const tabsHTML = (tab) =>
   `<div class="ptabs" role="tablist" aria-label="Task sections"><span class="ptabs-thumb" aria-hidden="true"></span>${TABS.map(
     (name) =>
@@ -983,7 +978,7 @@ const paneHTML = (task) => `
         <code>${task.id}</code>
       </div>
       <h2 class="pane-title" data-slot="pane-title">${task.title}</h2>
-      <p class="pane-facts mark-line">${stagePill(task)}${task.agent ? `${agentMark(task.agent)}<span class="who">${task.agent}</span>` : ""}<span>${task.age ? `${task.age} ago` : ""}</span><span class="labels">${task.labels ?? ""}</span></p>
+      <p class="pane-facts mark-line">${stagePill(task)}${task.agent ? `${agentMark(task.agent)}<span class="who">${task.agent}</span>` : ""}<span>${task.age ? `${task.age} ago` : ""}</span><span class="labels">${task.labels ?? ""}</span>${task.agent ? openSession(task) : ""}</p>
     </header>
     ${reviewCard(task)}
   </div>

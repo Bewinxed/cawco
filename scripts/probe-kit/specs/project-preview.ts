@@ -45,6 +45,9 @@
  *   blocks' title and lines), while Caw keeps the composition's axis;
  * - the pane's tab strip stands directly over its panel, and the panel
  *   shows whole above the composer;
+ * - the pane's tabs are Task, Changes and History (no Session tab): its
+ *   head opens the session instead, “Open session” to #session, a bare
+ *   glyph with a 44px hit area, the plan ring just before it;
  * - a board with more past an edge wears the house edge fade there (the
  *   pane or Caw's column narrowing it, the Dropped column opened);
  * - the preview page shows one frame at a time where both can't be read
@@ -1727,6 +1730,118 @@ const motions = async (
 const sweepTotals = new Map<number, number>();
 
 /**
+ * The open pane's session, read from the engine: its tabs (no Session tab
+ * or panel), the open-session control in its head (its accessible name,
+ * where it opens, a bare glyph with no box of its own, and a 44px hit area
+ * read by hit-testing its corners), and the plan ring just before it.
+ */
+const sessionParts = (page: Page) =>
+  page.evaluate(() => {
+    const control = document.querySelector<HTMLAnchorElement>(
+      '.pane-head a[aria-label="Open session"]'
+    );
+    const tabs = [...document.querySelectorAll(".pane-tabs .ptab")].map((tab) =>
+      (tab.textContent ?? "").trim()
+    );
+    const sessionPanel = Boolean(
+      document.querySelector(
+        '[data-tab="session"], [role="tabpanel"][aria-label="Session"]'
+      )
+    );
+    if (!control) {
+      return { tabs, sessionPanel, control: null };
+    }
+    const box = control.getBoundingClientRect();
+    const x = box.left + box.width / 2;
+    const y = box.top + box.height / 2;
+    // A pixel inside the 44px area's corners: its centre falls between
+    // pixels, and a point on the screen's own last edge hits nothing.
+    const reach = 21;
+    const corners = [
+      [x - reach, y - reach],
+      [x + reach, y - reach],
+      [x - reach, y + reach],
+      [x + reach, y + reach],
+    ].map(([cx, cy]) => {
+      const hit = document.elementFromPoint(cx, cy);
+      return hit && (hit === control || control.contains(hit))
+        ? ""
+        : `${Math.round(cx)},${Math.round(cy)} hits ${hit ? `${hit.localName}.${[...hit.classList].join(".")}` : "nothing"}`;
+    });
+    const style = getComputedStyle(control);
+    const area = getComputedStyle(control, "::after");
+    const glyph = control.querySelector("svg.glyph use");
+    const ring = control.parentElement?.querySelector("svg.ring");
+    const ringBox = ring?.getBoundingClientRect();
+    return {
+      tabs,
+      sessionPanel,
+      control: {
+        name: control.getAttribute("aria-label"),
+        href: control.getAttribute("href"),
+        area: [Number.parseFloat(area.width), Number.parseFloat(area.height)],
+        corners: corners.filter((miss) => miss === "").length,
+        misses: corners.filter(Boolean),
+        bare:
+          style.backgroundColor === "rgba(0, 0, 0, 0)" &&
+          style.backgroundImage === "none" &&
+          style.boxShadow === "none" &&
+          Number.parseFloat(style.borderTopWidth) === 0 &&
+          control.children.length === 1,
+        glyph: glyph?.getAttribute("href") ?? "",
+        ring: ringBox
+          ? {
+              before: ringBox.right <= box.left + 0.5,
+              gap: box.left - ringBox.right,
+              level: Math.abs(
+                ringBox.top + ringBox.height / 2 - (box.top + box.height / 2)
+              ),
+            }
+          : null,
+      },
+    };
+  });
+
+const checkSession = async (
+  kit: Kit,
+  page: Page,
+  where: string
+): Promise<void> => {
+  const parts = await sessionParts(page);
+  kit.check(
+    `${where}: the pane's tabs are Task, Changes and History, with no Session tab or panel`,
+    parts.tabs.join(",") === "Task,Changes,History" && !parts.sessionPanel,
+    `${parts.tabs.join(", ")}; session panel ${parts.sessionPanel}`
+  );
+  const control = parts.control;
+  kit.check(
+    `${where}: its head opens the session: “Open session”, to #session, a bare square-top-down glyph, a 44px hit area`,
+    Boolean(
+      control &&
+      control.href === "#session" &&
+      control.bare &&
+      control.glyph === "#i-square-top-down" &&
+      control.area.every((side) => Math.abs(side - 44) <= 0.5) &&
+      control.corners === 4
+    ),
+    control
+      ? `${control.name} → ${control.href}, bare ${control.bare}, glyph ${control.glyph}, area ${control.area.join("×")}px, ${control.corners} of 4 corners hit${control.misses.length > 0 ? ` (${control.misses.join("; ")})` : ""}`
+      : "no Open session control in the pane's head"
+  );
+  kit.check(
+    `${where}: the session's plan ring stands just before it, on its line`,
+    Boolean(
+      control?.ring?.before &&
+      control.ring.gap <= 12.5 &&
+      control.ring.level <= 1
+    ),
+    control?.ring
+      ? `${control.ring.gap.toFixed(1)}px before it, ${control.ring.level.toFixed(1)}px off its middle`
+      : "no ring"
+  );
+};
+
+/**
  * The open pane's verdict bar: while the card runs on under it, the house
  * edge fade (40px, a phone's 16px) stands over its top and nothing of the
  * card shows below it; scrolled to the card's foot the fade is gone, and
@@ -1971,6 +2086,7 @@ const checkState = async (
   await checkFixes(kit, page, where);
   if (state === "open") {
     await checkVerdictFade(kit, page, where);
+    await checkSession(kit, page, where);
     const pane = paneFaults(await paneParts(page));
     kit.check(
       `${where}: the tab strip stands over its whole panel`,
