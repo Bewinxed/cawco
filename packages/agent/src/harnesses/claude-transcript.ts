@@ -422,11 +422,13 @@ const isCompactBoundary = (r: { type: string; subtype?: unknown }): boolean =>
  * conversation left (a retry, an edit, a rewind) is never on it. A
  * preserved record stands once, where it was said, and not again after the
  * summary: `original` holds each record as the file first wrote it
- * ({@link firstWrites}).
+ * ({@link firstWrites}). A boundary whose logical parent the file never
+ * wrote goes on from the row above it.
  */
 function withSetAside(
   chain: ChainNode[],
-  original: Map<string, ChainNode>
+  original: Map<string, ChainNode>,
+  records: readonly ChainNode[]
 ): ChainNode[] {
   const [head] = chain;
   const before: ChainNode[] = [];
@@ -436,9 +438,32 @@ function withSetAside(
       return original.get(r.parentUuid);
     }
     const logical = r.logicalParentUuid;
-    return isCompactBoundary(r) && typeof logical === "string"
-      ? original.get(logical)
-      : undefined;
+    if (!(isCompactBoundary(r) && typeof logical === "string")) {
+      return;
+    }
+    return original.get(logical) ?? rowAbove(r);
+  };
+  // Claude Code names a logical parent it never wrote now and then
+  // (anthropics/claude-code#46603, #49996): the boundary then goes on from
+  // the nearest row above it in the file, the first persisted record before
+  // it (#55818 reads it so; so it is in all six such boundaries of a real
+  // 413 MB session).
+  let firstAt: Map<string, number> | undefined;
+  const rowAbove = (boundary: ChainNode): ChainNode | undefined => {
+    if (!firstAt) {
+      firstAt = new Map();
+      for (const [i, r] of records.entries()) {
+        if (!firstAt.has(r.uuid)) {
+          firstAt.set(r.uuid, i);
+        }
+      }
+    }
+    for (let i = (firstAt.get(boundary.uuid) ?? 0) - 1; i >= 0; i -= 1) {
+      const above = records[i];
+      if (typeof above?.uuid === "string" && above.uuid) {
+        return original.get(above.uuid);
+      }
+    }
   };
   for (
     let node = head && isCompactBoundary(head) ? onFrom(head) : undefined;
@@ -644,7 +669,9 @@ function* walkSteps(
   }
   yield;
   const { chainSet } = found;
-  let active = said ? withSetAside(found.chain, original) : found.chain;
+  let active = said
+    ? withSetAside(found.chain, original, records)
+    : found.chain;
   for (const r of active) {
     chainSet.add(r.uuid);
   }

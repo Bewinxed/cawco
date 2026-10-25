@@ -21,7 +21,8 @@
  * (e) a transcript deleted while it is paged reads as none, and no read
  *     throws;
  * (f) the conversation as it was said reaches back to the first prompt,
- *     across compactions whose block the CLI wrote twice;
+ *     across compactions whose logical parent was never written, and those
+ *     whose block the CLI wrote twice;
  * (d) (a) and (b) hold for pi sessions pi itself wrote (pi-transcripts.ts:
  *     tool calls, retried failures, compactions, background commands'
  *     notices, a branch left behind);
@@ -312,8 +313,9 @@ const claudeParity = async (
 
 /**
  * (f) The conversation as it was said reaches back to the transcript's
- * first prompt across every compaction, those whose block the CLI wrote
- * twice too (claude-transcripts.ts `compaction`).
+ * first prompt across every compaction, those whose logical parent was
+ * never written and those whose block the CLI wrote twice too
+ * (claude-transcripts.ts `compaction`).
  */
 const reachesFirstPrompt = async (
   { check }: Kit,
@@ -333,7 +335,7 @@ const reachesFirstPrompt = async (
     .find((r) => r.type === "user" && typeof r.message?.content === "string");
   const whole = await claudeReader(path).whole();
   check(
-    `f: ${path.replace(dir, "written")}'s conversation as it was said (${whole.length} entries) starts at its first prompt, across compactions whose block was written twice`,
+    `f: ${path.replace(dir, "written")}'s conversation as it was said (${whole.length} entries) starts at its first prompt, across compactions whose logical parent was never written or whose block was written twice`,
     first !== undefined && whole.some((entry) => entry.uuid === first.uuid),
     `first prompt ${first?.uuid}, the read's first entry ${whole[0]?.uuid}`
   );

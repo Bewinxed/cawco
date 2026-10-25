@@ -74,6 +74,8 @@ class TranscriptWriter {
   parent: string | null = null;
   /** That record as written. */
   last: Record<string, unknown> | null = null;
+  /** The compactions written so far. */
+  compactions = 0;
   turn = 0;
   readonly running: Task[] = [];
   /** Sends absorbed mid-turn, one of which the next session start may hand again. */
@@ -407,7 +409,8 @@ const step = (
 
 /**
  * A `/compact`: the boundary starts a chain of its own, its summary hangs
- * from it. Now and then the CLI writes the block again later
+ * from it, its logical parent the record before it, or one never written
+ * (below). Now and then the CLI writes the block again later
  * (anthropics/claude-code#92089): the boundary, the summary and the record
  * it kept, that one now hung from the summary, all under their old uuids.
  * The kept record is the boundary's logical parent, so its later copy leads
@@ -415,7 +418,11 @@ const step = (
  */
 const compaction = (writer: TranscriptWriter): void => {
   const kept = writer.last;
-  const before = writer.parent;
+  // Every third one's logical parent is a record the CLI never wrote
+  // (anthropics/claude-code#46603, #49996: 9 of a real session's 50).
+  writer.compactions += 1;
+  const phantom = writer.compactions % 3 === 2;
+  const before = phantom ? writer.id("uuid") : writer.parent;
   writer.parent = null;
   writer.chained({
     type: "system",
@@ -436,7 +443,7 @@ const compaction = (writer: TranscriptWriter): void => {
     },
   });
   const summary = writer.last;
-  if (kept && boundary && summary && writer.chance(0.3)) {
+  if (!phantom && kept && boundary && summary && writer.chance(0.3)) {
     writer.line(boundary);
     writer.line(summary);
     const again = { ...kept, parentUuid: summary.uuid };
