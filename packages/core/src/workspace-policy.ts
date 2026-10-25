@@ -1190,7 +1190,10 @@ const projectFolder = async (id: string): Promise<string[]> => {
  * ({@link projectFolder}), and a session of the project may name a file in
  * it as a delegate's input ({@link inputDenial}). None on a machine that is
  * not the hub's, where the folder does not exist (its delegates read the
- * folder with `folder_read`).
+ * folder with `folder_read`). The hub makes the folder before it cuts a
+ * workspace of the project (hub project-folder.ts `makeProjectFolder`), so a
+ * boundary has the folder from its first start, and its form does not change
+ * when the folder is first used.
  */
 export const projectFolderOf = async (project: string): Promise<string[]> => {
   if (!PROJECT_ID.test(project)) {

@@ -661,16 +661,18 @@ const firstRestart = async (
       JSON.stringify(had.get(one.workspaceId)) !==
       JSON.stringify(after.get(one.workspaceId))
   );
-  kit.check(
-    `1: an agent restart starts no idle workspace's boundary and hands none over, ${RE_FORMED} of them of an older form: each keeps its one boundary process`,
-    moved.length === 0 &&
-      idle.every((one) => had.get(one.workspaceId)?.length === 1),
-    moved
+  const notOne = idle.filter((one) => had.get(one.workspaceId)?.length !== 1);
+  const listed = (list: readonly Delegated[]) =>
+    list
       .map(
         (one) =>
-          `${one.tag}: ${had.get(one.workspaceId)?.join(",")} → ${after.get(one.workspaceId)?.join(",")}`
+          `${one.tag}: ${had.get(one.workspaceId)?.join(",") || "none"} → ${after.get(one.workspaceId)?.join(",") || "none"}`
       )
-      .join("; ") || "none moved"
+      .join("; ") || "none";
+  kit.check(
+    `1: an agent restart starts no idle workspace's boundary and hands none over, ${RE_FORMED} of them of an older form: each keeps its one boundary process`,
+    moved.length === 0 && notOne.length === 0,
+    `moved: ${listed(moved)}; not one boundary before the restart: ${listed(notOne)}`
   );
   kit.check(
     "1: its start-up pass leaves the idle ones as they are, as the agent records",
