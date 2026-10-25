@@ -12,7 +12,10 @@
  *    1100 and 1500.
  * 2. Nothing covers what the comment is about: the commented element stands
  *    whole inside the page area, and the card, a sheet or the composer
- *    meets neither it nor its pill.
+ *    meets neither it nor its pill; but for a card standing beside its pill
+ *    over an element too wide to stand beside whose rooms above and below
+ *    can't hold all of it (PinFloat: a long thread is read whole, never in a
+ *    sliver).
  * 3. The owner's case, measured: the agent's reply (about 180 words with
  *    bullets) against the room it scrolls in, and where scrolling remains,
  *    why.
@@ -73,6 +76,8 @@ interface Box {
   y: number;
 }
 interface Read {
+  /** What of the element the card itself covers, px². */
+  cardCover: number;
   /** The commented element's area outside the page area or under a card, a sheet or the composer, px². */
   covered: number;
   coveredBy: string;
@@ -80,6 +85,8 @@ interface Read {
   holder: Box | null;
   /** A pill the card or a sheet stands on, px². */
   onPill: number;
+  /** The card stands on the element because nothing round it holds all of it: too wide to stand beside, too little room above and below. */
+  overByRule: string | null;
   /** What spills sideways, each as `what: px`. */
   overflow: string[];
   /** The list's foot sheet stands in the well. */
@@ -283,6 +290,36 @@ function readFrame(): Read {
     }
   }
   const pill = q('[data-page-pin="3"], [data-page-pin="new"]');
+  // PinFloat's one case for standing on the element: beside its pill alone,
+  // where the element leaves no room beside it and neither its room above
+  // nor below holds the whole card (clear 11px, gap 7px).
+  let overByRule: string | null = null;
+  const cardCover = target && float ? meet(box(target), box(float)) : 0;
+  if (target && float && pill && cardCover > 1) {
+    const t = box(target);
+    const p = box(pill.firstElementChild ?? pill);
+    const top = Math.min(t.y, p.y);
+    const bottom = Math.max(t.y + t.h, p.y + p.h);
+    const left = Math.min(t.x, p.x);
+    const right = Math.max(t.x + t.w, p.x + p.w);
+    const card = box(float);
+    const room = float.querySelector<HTMLElement>("[data-pin-room]");
+    const natural =
+      card.h +
+      Math.max(0, float.scrollHeight - float.clientHeight) +
+      (room ? Math.max(0, room.scrollHeight - room.clientHeight) : 0);
+    const above = top - 11 - 7;
+    const below = well.h - bottom - 11 - 7;
+    const noBeside = right + 11 + card.w > well.w - 7 && left - 11 - card.w < 7;
+    const besidePill =
+      (float.dataset.side === "right" &&
+        Math.abs(card.x - (p.x + p.w + 11)) <= 1) ||
+      (float.dataset.side === "left" &&
+        Math.abs(card.x + card.w - (p.x - 11)) <= 1);
+    if (noBeside && besidePill && natural > Math.max(above, below)) {
+      overByRule = `beside its pill alone: ${Math.round(natural)}px to hold, ${Math.round(above)}px above and ${Math.round(below)}px below the element, no room beside it`;
+    }
+  }
   let onPill = 0;
   if (pill) {
     for (const el of [float, sheet]) {
@@ -357,6 +394,8 @@ function readFrame(): Read {
     overflow,
     covered,
     coveredBy: coveredBy.trim(),
+    overByRule,
+    cardCover,
     onPill,
     reply,
   };
@@ -401,8 +440,11 @@ async function boxesLeg(
         read.overflow.slice(0, 6).join("; ")
       );
       kit.check(
-        `${at}: what the comment is about stands whole in the page area, nothing over it${read.stands === "none" ? "" : ` (the thread ${read.stands}${read.floatSide ? `, ${read.floatSide}` : ""})`}`,
-        read.covered <= 1,
+        read.overByRule
+          ? `${at}: the card stands on what the comment is about only as PinFloat allows it, ${read.overByRule}`
+          : `${at}: what the comment is about stands whole in the page area, nothing over it${read.stands === "none" ? "" : ` (the thread ${read.stands}${read.floatSide ? `, ${read.floatSide}` : ""})`}`,
+        read.covered <= 1 ||
+          (read.overByRule !== null && read.covered - read.cardCover <= 1),
         read.coveredBy
       );
       kit.check(

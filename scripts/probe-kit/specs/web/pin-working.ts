@@ -6,18 +6,17 @@
  *
  * At 390 (the well's foot sheet, under a finger), 680 and 1440, in both
  * schemes:
- * 1. The agent's speaker line stands where its reply will: under the last
- *    entry, its mark on the column the agent's earlier mark stands on, the
- *    live dot on that mark's top-end corner. The working turn says no words
- *    on screen beyond the agent's name, and "The agent is working on it" to
- *    a screen reader (its status); no "Working on it…" is left.
- * 2. Nothing overlaps: the card's head, every entry, the working turn and
- *    the foot stand one under another inside the card, the working turn
- *    inside the thread's room, and neither the card nor the page scrolls
- *    sideways.
- * 3. Landed, the reply's mark stands where the working mark stood (in the
- *    thread's own coordinates, its scroll counted), and the working turn is
- *    gone.
+ * 1. Who has the comment is its status, never a speaker line (the owner:
+ *    a speaker line under his words read as the session answering): at the
+ *    card's foot one status line, "Sent to" and the session's chip, then
+ *    "· working on it" after the live dot, its words and the dot inside the
+ *    foot; the thread holds the person's and the agent's entries alone,
+ *    nothing of the working state among them; no "Working on it…" is left.
+ * 2. Nothing overlaps: the card's head, every entry and the foot stand one
+ *    under another inside the card, the entries inside the thread's room,
+ *    and neither the card nor the page scrolls sideways.
+ * 3. Landed, the reply is the thread's last entry, the agent's, and the
+ *    status line still says "Sent to" with no "working on it" nor live dot.
  *
  * At 1440, in both schemes, one clock: put to work by one change, the
  * card's working mark and the pin's own pill each run one `breath`, of
@@ -44,7 +43,6 @@
  *   bun scripts/probe-kit/run.ts web pin-working
  */
 import type { Page } from "playwright-core";
-import { accountsWords } from "../../../../packages/core/src/words/accounts";
 import { commentWords } from "../../../../packages/core/src/words/comments";
 import { readBreath } from "../../breath";
 import type { Kit, Spec, View } from "../../kit";
@@ -61,8 +59,6 @@ const DOT = `${WORKING} [data-slot="live-dot"]`;
 /** The pin's own pill in the well, wearing its live dot. */
 const PILL_DOT =
   '[data-slot="pin-room"] > span > [data-mark] [data-dot="live"]';
-/** The accessible name the working state keeps. */
-const SAID = commentWords.working;
 
 interface Box {
   bottom: number;
@@ -72,23 +68,26 @@ interface Box {
 }
 
 interface Read {
-  /** The earlier agent entry's mark. */
-  agentMark: Box | null;
+  /** Each entry's speaker, in order. */
+  by: string[];
   card: Box | null;
   cardSpills: boolean;
+  /** The live dot in the status line. */
   dot: Box | null;
   entries: Box[];
   foot: Box | null;
   head: Box | null;
-  /** The working mark, in the room's own coordinates (its scroll counted). */
-  inRoom: { left: number; top: number } | null;
-  mark: Box | null;
+  /** Anything of the working state inside the thread's room. */
+  inThread: boolean;
   oldWords: boolean;
   pageSpills: boolean;
   room: Box | null;
-  said: string;
-  shown: string;
-  turn: Box | null;
+  /** The status line's words, as shown. */
+  status: string;
+  /** The status line stands inside the foot. */
+  statusInFoot: boolean;
+  /** The working words and their dot stand inside the status line. */
+  working: Box | null;
 }
 
 function readWorking(): Read {
@@ -101,62 +100,29 @@ function readWorking(): Read {
   };
   const card = document.querySelector<HTMLElement>('[data-slot="pin-card"]');
   const room = card?.querySelector<HTMLElement>("[data-pin-room]") ?? null;
-  const turn = card?.querySelector<HTMLElement>('[data-slot="working"]');
-  const mark = turn?.querySelector('[data-slot="dot"]');
-  const roomBox = box(room);
-  const markBox = box(mark);
-  const status = turn?.querySelector('[role="status"]');
-  const visible = turn?.querySelector("[data-turn-who]");
+  const foot = card?.querySelector('[data-slot="foot"]');
+  const status = card?.querySelector<HTMLElement>('[data-slot="sent-to"]');
+  const working = status?.querySelector('[data-slot="working"]');
+  const entries = [
+    ...(card?.querySelectorAll<HTMLElement>('[data-slot="entry"]') ?? []),
+  ];
   return {
-    agentMark: box(
-      card?.querySelector(
-        '[data-slot="entry"][data-by="agent"] [data-slot="dot"]'
-      )
-    ),
     card: box(card),
     cardSpills: !!card && card.scrollWidth > card.clientWidth + 0.5,
-    dot: box(turn?.querySelector('[data-slot="live-dot"]')),
-    entries: [...(card?.querySelectorAll('[data-slot="entry"]') ?? [])].flatMap(
-      (el) => box(el) ?? []
-    ),
-    foot: box(card?.querySelector('[data-slot="foot"]')),
+    dot: box(working?.querySelector('[data-slot="live-dot"]')),
+    entries: entries.flatMap((el) => box(el) ?? []),
+    by: entries.map((el) => el.dataset.by ?? ""),
+    foot: box(foot),
     head: box(card?.querySelector('[data-slot="head"]')),
-    inRoom:
-      room && roomBox && markBox
-        ? {
-            left: markBox.left - roomBox.left,
-            top: markBox.top - roomBox.top + room.scrollTop,
-          }
-        : null,
-    mark: markBox,
+    inThread: !!room?.querySelector(
+      '[data-slot="working"], [data-slot="live-dot"]'
+    ),
     oldWords: (card?.textContent ?? "").includes("Working on it"),
     pageSpills: document.documentElement.scrollWidth > window.innerWidth + 0.5,
-    room: roomBox,
-    said: status?.textContent?.trim() ?? "",
-    shown: (visible as HTMLElement | null)?.innerText.trim() ?? "",
-    turn: box(turn),
-  };
-}
-
-/** The landed reply's mark, in the room's own coordinates. */
-function readLanded(): {
-  inRoom: { left: number; top: number } | null;
-  working: boolean;
-} {
-  const card = document.querySelector('[data-slot="pin-card"]');
-  const room = card?.querySelector<HTMLElement>("[data-pin-room]");
-  const agents = card?.querySelectorAll(
-    '[data-slot="entry"][data-by="agent"] [data-slot="dot"]'
-  );
-  const mark = agents?.[agents.length - 1];
-  if (!(room && mark)) {
-    return { inRoom: null, working: false };
-  }
-  const r = mark.getBoundingClientRect();
-  const at = room.getBoundingClientRect();
-  return {
-    inRoom: { left: r.left - at.left, top: r.top - at.top + room.scrollTop },
-    working: !!card?.querySelector('[data-slot="working"]'),
+    room: box(room),
+    status: (status?.innerText ?? "").replaceAll(/\s+/g, " ").trim(),
+    statusInFoot: !!(foot && status && foot.contains(status)),
+    working: box(working),
   };
 }
 
@@ -192,7 +158,21 @@ async function boxes(kit: Kit, base: string): Promise<void> {
       await page.waitForTimeout(400);
       const read = await page.evaluate(readWorking);
       const at = `${width} ${theme}`;
-      const stack = [read.head, ...read.entries, read.turn, read.foot];
+      const { sentTo, workingOnIt: workingOn } = commentWords;
+      kit.check(
+        `${at}: who has the comment is its status, never a speaker line: at the card's foot "${sentTo}", the session's chip, then "· ${workingOn}" after the live dot; the thread holds its ${read.entries.length} entries alone, nothing of the working state among them; no "Working on it…"`,
+        read.statusInFoot &&
+          read.status.startsWith(sentTo) &&
+          read.status.endsWith(`· ${workingOn}`) &&
+          !!(read.dot && read.working) &&
+          read.dot.left >= read.working.left - 0.5 &&
+          read.dot.right <= read.working.right + 0.5 &&
+          !read.inThread &&
+          read.by.join() === "person,agent,person" &&
+          !read.oldWords,
+        `\n    status "${read.status}" in foot ${read.statusInFoot}; dot ${JSON.stringify(read.dot)} in ${JSON.stringify(read.working)}; entries by ${read.by.join()}; working state in the thread ${read.inThread}; old words ${read.oldWords}`
+      );
+      const stack = [read.head, ...read.entries, read.foot];
       const stacked =
         stack.every(Boolean) &&
         stack.every((one, i) => {
@@ -200,32 +180,17 @@ async function boxes(kit: Kit, base: string): Promise<void> {
           return !(one && next && crosses(one, next));
         });
       const inside =
-        !!(read.card && read.turn && read.room) &&
-        read.turn.left >= read.room.left - 0.5 &&
-        read.turn.right <= read.room.right + 0.5 &&
-        read.turn.top >= read.room.top - 0.5 &&
+        !!(read.card && read.room) &&
         read.room.left >= read.card.left - 0.5 &&
-        read.room.right <= read.card.right + 0.5;
-      const last = read.entries.at(-1);
-      const placed =
-        !!(read.mark && read.agentMark && last && read.turn) &&
-        near(read.mark.left, read.agentMark.left) &&
-        read.turn.top >= last.bottom - 0.5;
-      const cornered =
-        !!(read.dot && read.mark) &&
-        near((read.dot.left + read.dot.right) / 2, read.mark.right, 3) &&
-        near((read.dot.top + read.dot.bottom) / 2, read.mark.top, 3);
+        read.room.right <= read.card.right + 0.5 &&
+        read.entries.every(
+          (one) =>
+            !!read.room &&
+            one.left >= read.room.left - 0.5 &&
+            one.right <= read.room.right + 0.5
+        );
       kit.check(
-        `${at}: the agent's speaker line stands where its reply will (under the last entry, its mark on the agent's column), the live dot on its mark's top-end corner; on screen only the agent's name, "${SAID}" its status; no "Working on it…"`,
-        placed &&
-          cornered &&
-          read.shown === accountsWords.harnesses.claude &&
-          read.said === SAID &&
-          !read.oldWords,
-        `\n    mark ${JSON.stringify(read.mark)} agent ${JSON.stringify(read.agentMark)} last ${JSON.stringify(last)} turn ${JSON.stringify(read.turn)} dot ${JSON.stringify(read.dot)} shown "${read.shown}" said "${read.said}" old ${read.oldWords}`
-      );
-      kit.check(
-        `${at}: the head, every entry, the working turn and the foot stand one under another, the working turn inside the thread's room; nothing spills sideways`,
+        `${at}: the head, every entry and the foot stand one under another, the entries inside the thread's room inside the card; nothing spills sideways`,
         stacked && inside && !read.cardSpills && !read.pageSpills,
         `\n    ${stack.map((one) => (one ? `${r1(one.top)}–${r1(one.bottom)}` : "∅")).join(", ")}; room ${JSON.stringify(read.room)} card ${JSON.stringify(read.card)} spills ${read.cardSpills}/${read.pageSpills}`
       );
@@ -234,15 +199,16 @@ async function boxes(kit: Kit, base: string): Promise<void> {
         .locator(`${CARD} [data-slot="entry"][data-by="agent"]`)
         .nth(1)
         .waitFor({ timeout: 5000 });
-      await page.waitForTimeout(200);
-      const landed = await page.evaluate(readLanded);
+      await page.locator(WORKING).waitFor({ state: "detached" });
+      const landed = await page.evaluate(readWorking);
       kit.check(
-        `${at}: the landed reply's mark stands where the working mark stood, and the working turn is gone`,
-        !!(landed.inRoom && read.inRoom) &&
-          near(landed.inRoom.left, read.inRoom.left) &&
-          near(landed.inRoom.top, read.inRoom.top) &&
-          !landed.working,
-        `\n    working at ${JSON.stringify(read.inRoom)}, reply at ${JSON.stringify(landed.inRoom)}, working turn left ${landed.working}`
+        `${at}: landed, the reply is the thread's last entry, the agent's, and the status line says "${sentTo}" with no "${workingOn}" nor live dot`,
+        landed.by.join() === "person,agent,person,agent" &&
+          landed.status.startsWith(sentTo) &&
+          !landed.status.includes(workingOn) &&
+          !landed.dot &&
+          !landed.inThread,
+        `\n    entries by ${landed.by.join()}; status "${landed.status}"; dot ${JSON.stringify(landed.dot)}`
       );
       await page.context().close();
     }
@@ -520,9 +486,9 @@ const spec: Spec = {
   name: "pin-working",
   run: async (kit: Kit) => {
     const base = await kit.bench();
-    await grow(kit, base);
     await boxes(kit, base);
     await breath(kit, base);
+    await grow(kit, base);
   },
 };
 

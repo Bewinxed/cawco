@@ -4217,19 +4217,6 @@
         }
       }
     },
-    "c-pin-card-reading-room": {
-      "$type": "dimension",
-      "$value": {
-        "value": 320,
-        "unit": "px"
-      },
-      "$description": "The least room above or below what a comment is about that its card takes, scrolling inside, where neither side holds it whole and nothing beside it has room; with less on both sides it stands beside its pill alone, over the element (DESIGN.md, A thread beside its pin). Web only.",
-      "$extensions": {
-        "dev.cawco": {
-          "platforms": ["web"]
-        }
-      }
-    },
     "c-target-stroke": {
       "$type": "dimension",
       "$value": {

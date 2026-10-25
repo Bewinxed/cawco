@@ -162,6 +162,7 @@
           parent="Hero"
           {pin}
           problem={null}
+          session="bench-session"
         />
       </PinFloat>
     {/if}

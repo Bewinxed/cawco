@@ -11,18 +11,18 @@
   Its height is what it holds, up to the well's height less `--space-2`
   each side; only a card the whole well can't hold scrolls inside (the
   owner: "it should show besides the comment but should have handling to
-  grow taller when appropriate"). It never stands over what the comment is
-  about: the element's box and the pill together (`subject`). It stands
-  beside them at their end side, else at their start side, its top at the
-  pill's, shifted up as far as it takes to stand whole in the well (the room
-  above the pill once the room below it runs out); else below them, else
-  above them, where that side holds it whole; else on whichever of those
-  two holds more, at that side's room, scrolling inside, where that is at
-  least `--c-pin-card-reading-room` (or its own height, when that is less).
-  Only an element that leaves no such room has the card beside its pill
-  alone, at the well's height, else under or over the pill, whichever holds
-  more, at that side's room. Always `--space-2` from
-  the pill as drawn, its focus ring included, inside the well. A pin not on
+  grow taller when appropriate"). It stands clear of what the comment is
+  about (the element's box and the pill together, `subject`) wherever that
+  leaves room for all of it: beside them at their end side, else at their
+  start side, its top at the pill's, shifted up as far as it takes to stand
+  whole in the well (the room above the pill once the room below it runs
+  out); else below them, else above them, where that side holds it whole.
+  An element too wide to stand beside, whose rooms above and below can't
+  hold the thread, has it beside its pill alone, over the element, the same
+  way (the owner: "i can't read here", of a long thread scrolling in the
+  room above one); else under or over the pill, whichever holds more, at
+  that side's room. Always `--space-2` from the pill as drawn, its focus
+  ring included, inside the well. A pin not on
   the page (its element gone) stands at the well's top-right. On a phone,
   under a finger, and wherever the pane says so (`sheet`), it is the well's
   foot sheet, full width, standing over a software keyboard by the well's
@@ -157,8 +157,6 @@
    * nothing of the pill ever stands on it.
    */
   const clear = $derived(gap + 4);
-  /** The least room above or below what it is about that it takes, scrolling, rather than standing over it: `--c-pin-card-reading-room`. */
-  const reach = $derived(numberOf("--c-pin-card-reading-room") || 320);
 
   /**
    * What the comment is about, in the well: the pill and its element's box
@@ -242,16 +240,6 @@
         side: "top",
         max: over,
       };
-    } else if (Math.max(under, over) >= Math.min(reach, tall)) {
-      spot =
-        under >= over
-          ? {
-              left: across,
-              top: subject.y + subject.h + clear,
-              side: "bottom",
-              max: under,
-            }
-          : { left: across, top: gap, side: "top", max: over };
     } else if (alone) {
       spot = { ...alone, top: besideTop, max: full };
     } else if (belowPill >= tall || belowPill >= abovePill) {

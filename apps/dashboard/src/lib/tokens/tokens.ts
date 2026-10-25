@@ -304,7 +304,6 @@ export type TokenSize =
   | "size.c-comments-w"
   | "size.c-pin-card-w"
   | "size.c-pin-card-reading-w"
-  | "size.c-pin-card-reading-room"
   | "size.c-target-stroke"
   | "size.c-target-gap"
   | "size.c-sheet-inspector-w"

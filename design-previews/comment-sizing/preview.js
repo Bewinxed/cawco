@@ -64,7 +64,6 @@ const ms = (name, fallback) => {
 const T = {
   gap: px("--space-2", 7),
   pin: px("--c-pin", 20),
-  reach: px("--c-pin-card-reading-room", 320),
   railW: px("--c-comments-w", 320),
   composeW: px("--c-pin-card-w", 280),
   popScale: px("--pop-scale", 0.92),
@@ -85,7 +84,7 @@ const motionOk = () =>
   matchMedia("(prefers-reduced-motion: no-preference)").matches;
 
 const RULES = {
-  a: "Every comment opens next to what it is about, growing out of its pin, two fifths of the page area wide (280 to 480px) and as tall as what it holds. Near the foot it moves up to stay whole. Beside a wide element it stands above or below it, and scrolls inside only when that room can't hold it. On a phone it is a drawer at the bottom. This is what ships today.",
+  a: "Every comment opens next to what it is about, growing out of its pin, two fifths of the page area wide (280 to 480px) and as tall as what it holds. Near the foot it moves up to stay whole. Beside an element too wide to stand next to, it stands above or below it when that room holds it whole, else beside its pin over the element; it scrolls inside only when the whole page area can't hold it. On a phone it is a drawer at the bottom. This is what ships today.",
   b: "A comment opens in a 320px card next to what it is about, at most 480px or half the page area tall. One that needs more opens in Comments instead, which widens to 400px to hold it. On a phone a short one is a drawer at the bottom and a long one opens in its row of the Comments list.",
   c: "A new comment is written in a 280px card next to its spot. Every thread opens in a panel on the right, as tall as the page area, 400px to start, dragged anywhere from 300px to half the pane, in place of the Comments list. On a phone it is a drawer at the bottom.",
 };
@@ -612,16 +611,6 @@ function placeOf({ mark, box, room, width, natural, cap }) {
       side: "top",
       max: Math.min(over, full),
     };
-  } else if (Math.max(under, over) >= Math.min(T.reach, tall)) {
-    spot =
-      under >= over
-        ? {
-            left: across,
-            top: subject.y + subject.h + clear,
-            side: "bottom",
-            max: Math.min(under, full),
-          }
-        : { left: across, top: gap, side: "top", max: Math.min(over, full) };
   } else if (alone) {
     spot = { ...alone, top: besideTop, max: full };
   } else if (belowPill >= tall || belowPill >= abovePill) {

@@ -743,8 +743,6 @@
     --c-pin-card-w: 280px;
     /* A comment's composer and its thread beside its pin over the page (DESIGN.md, Placing a comment; A thread beside its pin; the owner's pick "Beside the comment", comment-card-sizing): one width for both, so a card never changes width as it goes from composer to thread. Two fifths of the well (the pin room is the size container), held between 280px and 480px: 415px at a 1357px pane with the 320px rail open, about 50 characters a line (Google Docs: 35 to 50; Radix Themes maxWidth 480). Web only. */
     --c-pin-card-reading-w: clamp(280px, 40cqi, 480px);
-    /* The least room above or below what a comment is about that its card takes, scrolling inside, where neither side holds it whole and nothing beside it has room; with less on both sides it stands beside its pill alone, over the element (DESIGN.md, A thread beside its pin). Web only. */
-    --c-pin-card-reading-room: 320px;
     /* The overlay's line round a chosen target and the page's root in Comment mode: the content's own edge weight, never the focus ring's (DESIGN.md, The One Target Rule). */
     --c-target-stroke: 1px;
     /* How far outside a bare chosen target (no border and no background of its own: a bare text container, a label-and-field group) the overlay's line stands, so it never touches the glyphs; its corners grow with it. A target that draws its own box takes the line on its border box, at 0 (DESIGN.md, The One Target Rule). */
