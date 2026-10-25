@@ -488,7 +488,42 @@ export const opencodeDataDir = (): string => join(xdgDataHome(), "opencode");
 export const opencodeAccountHome = (accountId: string): string =>
   join(sessionIdentityDir(), "opencode-accounts", accountId);
 
-/** Every OpenCode database on the machine: the machine server's, then each account server's. */
+/**
+ * Where the data homes of OpenCode servers that workspaces' Linux views run
+ * are (agent opencode.ts): one folder per workspace, outside its state dir,
+ * so a workspace retired and cut again reopens its sessions.
+ */
+export const opencodeViewsDir = (): string =>
+  join(homedir(), ".cawco", "opencode-views");
+
+/**
+ * The data home of the OpenCode server workspace `workspace`'s Linux view
+ * runs for sessions on `account` (none: the machine's own sign-ins): its own
+ * database, its sessions the view's.
+ */
+export const opencodeViewHome = (workspace: string, account?: string): string =>
+  join(
+    opencodeViewsDir(),
+    workspace,
+    account === undefined ? "home" : join("accounts", account)
+  );
+
+/** Every view's server's data home on the machine ({@link opencodeViewHome}). */
+const opencodeViewHomes = (): string[] => {
+  const root = opencodeViewsDir();
+  const views = existsSync(root) ? readdirSync(root) : [];
+  return views.flatMap((workspace) => {
+    const accounts = join(root, workspace, "accounts");
+    return [
+      opencodeViewHome(workspace),
+      ...(existsSync(accounts) ? readdirSync(accounts) : []).map((account) =>
+        opencodeViewHome(workspace, account)
+      ),
+    ];
+  });
+};
+
+/** Every OpenCode database on the machine: the machine server's, each account server's, then each view's server's. */
 export const opencodeDatabases = (): string[] => {
   const accounts = join(sessionIdentityDir(), "opencode-accounts");
   const homes = existsSync(accounts) ? readdirSync(accounts) : [];
@@ -497,6 +532,7 @@ export const opencodeDatabases = (): string[] => {
     ...homes.map((account) =>
       join(opencodeAccountHome(account), "opencode", "opencode.db")
     ),
+    ...opencodeViewHomes().map((home) => join(home, "opencode", "opencode.db")),
   ].filter((path) => existsSync(path));
 };
 

@@ -52,6 +52,7 @@ import type {
   WorkspaceRef,
 } from "@cawco/core";
 import {
+  CAWCO_ENV,
   CONTROL_MODEL_CATALOG,
   CONTROL_SUPPORTED_COMMANDS,
   CUSTODY_HELD,
@@ -70,6 +71,8 @@ import {
   opencodeAccountHome,
   opencodeDatabases,
   opencodeDataDir,
+  opencodeViewHome,
+  opencodeViewsDir,
   workspaceScratchDir,
   workspaceSpillDir,
   xdgDataHome,
@@ -111,7 +114,7 @@ import {
   SessionAddressRefused,
 } from "../harness";
 import { KeeperPool } from "../keepers";
-import { overlaySync } from "../layer";
+import { enterSpawn, inView, overlaySync, viewMember } from "../layer";
 import { syncSection } from "../loop-watch";
 import { isMachineAgent } from "../machine-agent";
 import { fleetMcpMoved, MCP_CONNECT_MS } from "../mcp-status";
@@ -384,12 +387,27 @@ const STRAY_SWEEP_MS = 5 * 60_000;
  * never reads that file. A 1.x account server kept no database here; it
  * used the machine's.
  */
-const prepareAccountServer = async (account: string): Promise<void> => {
-  const snapshots = join(opencodeDataDir(), "snapshot");
-  await mkdir(snapshots, { recursive: true });
-  const dir = join(opencodeAccountHome(account), "opencode");
+const prepareAccountServer = (account: string): Promise<void> =>
+  prepareHome(opencodeAccountHome(account));
+
+/**
+ * A data home of a server of its own (an account's, a view's) ready for it:
+ * its `opencode` dir, owner-only, and no `auth.json` (its credential goes
+ * through its API). An account's links the machine's snapshot dir in, so
+ * undo follows a session that moves between servers of the person's folders.
+ * A view's keeps snapshots of its own (`shared` false): its server sees the
+ * folder as the view has it, at the path the person's own servers snapshot
+ * it at, and the two trees never share one history.
+ */
+const prepareHome = async (home: string, shared = true): Promise<void> => {
+  const dir = join(home, "opencode");
   await mkdir(dir, { recursive: true, mode: 0o700 });
   await rm(join(dir, "auth.json"), { force: true });
+  if (!shared) {
+    return;
+  }
+  const snapshots = join(opencodeDataDir(), "snapshot");
+  await mkdir(snapshots, { recursive: true });
   const link = join(dir, "snapshot");
   const found = await lstat(link).catch(() => undefined);
   if (!found?.isSymbolicLink()) {
@@ -397,6 +415,47 @@ const prepareAccountServer = async (account: string): Promise<void> => {
     await symlink(snapshots, link);
   }
 };
+
+/** How the homes record names a view's server ({@link homeOf}). */
+const VIEW_HOME = "view:";
+
+/**
+ * The server whose database holds a session, as the homes record names it:
+ * "" the machine's, an account's id for that account's, or `view:<id>` for
+ * the server workspace `<id>`'s Linux view runs (`view:<id>/<account>` for
+ * its sessions on an account).
+ */
+const homeOf = (account: string | undefined, view?: string): string => {
+  if (view !== undefined) {
+    return `${VIEW_HOME}${view}${account === undefined ? "" : `/${account}`}`;
+  }
+  return account ?? "";
+};
+
+/** A homes record's entry read back ({@link homeOf}): its account and view. */
+const homeParts = (
+  home: string
+): { account: string | undefined; view?: string } => {
+  if (!home.startsWith(VIEW_HOME)) {
+    return { account: home || undefined };
+  }
+  const [view = "", account] = home.slice(VIEW_HOME.length).split("/");
+  return { account, view };
+};
+
+/**
+ * A view's server's spawn: entered into the workspace's view while it runs
+ * (layer.ts `enterSpawn`), so its file tools read and write the folder as
+ * the view has it, never the person's folder beneath; on the host while it
+ * does not run, a server that only reads or moves the view's sessions, which
+ * no session ever runs in ({@link OpencodeHarness.#ensureView}).
+ */
+const enterView = (view: string, spec: ProcSpec): ProcSpec =>
+  viewMember(view) ? enterSpawn(view, spec) : spec;
+
+/** The workspace whose Linux view a session works in, when it is one. */
+const viewOf = (ctx: HarnessContext): string | undefined =>
+  ctx.workspace && overlaySync(ctx.workspace) ? ctx.workspace : undefined;
 
 /**
  * The hub's MCP server as 2.0 configures a remote server (`mcp.servers.<name>`).
@@ -1641,6 +1700,13 @@ interface ServerSlot {
    * the watcher's to replace or retire.
    */
   starting: boolean;
+  /**
+   * The workspace whose Linux view this server runs in, for its sessions on
+   * `account` (or none): its own data home ({@link opencodeViewHome}), which
+   * outlives the view, so a workspace cut again reopens its sessions.
+   * Undefined for the machine's and an account's, on the host.
+   */
+  readonly view?: string;
 }
 
 /** Each account's OpenCode models, by OpenCode's provider id, as its own server last listed them. */
@@ -1763,6 +1829,8 @@ export class OpencodeHarness implements Harness {
   };
   /** Every account's own server this agent keeps or has a record of, by account. */
   readonly #accounts = new Map<string, ServerSlot>();
+  /** Every view's server this agent keeps or has a record of, by its home ({@link homeOf}). */
+  readonly #views = new Map<string, ServerSlot>();
   #recorded: Promise<void> | null = null;
   /** An account's server being replaced or verified by the config watcher: one at a time. */
   #accountApplying = false;
@@ -1783,7 +1851,7 @@ export class OpencodeHarness implements Harness {
     this.#machine.ready = ready;
   }
 
-  #newOwner(account: string | undefined): OpencodeServerOwner {
+  #newOwner(account: string | undefined, view?: string): OpencodeServerOwner {
     return new OpencodeServerOwner(
       () => this.sessiond(),
       (epoch) => this.#keepers.byEpoch(epoch),
@@ -1791,8 +1859,31 @@ export class OpencodeHarness implements Harness {
         attachOpencodeServer({ sessiond, procId, spec, signal }),
       isMachineAgent,
       (identity) => this.#whyNotIdle(identity),
-      account
+      account,
+      view === undefined
+        ? undefined
+        : { workspace: view, enter: (spec) => enterView(view, spec) }
     );
+  }
+
+  /** The view's server slot for sessions on `account`, made on first use. */
+  #viewSlot(view: string, account: string | undefined): ServerSlot {
+    const home = homeOf(account, view);
+    let slot = this.#views.get(home);
+    if (!slot) {
+      slot = {
+        account,
+        view,
+        applied: null,
+        client: null,
+        idleSince: null,
+        owner: this.#newOwner(account, view),
+        ready: null,
+        starting: false,
+      };
+      this.#views.set(home, slot);
+    }
+    return slot;
   }
 
   /** The account's server slot, made on first use. */
@@ -1813,13 +1904,30 @@ export class OpencodeHarness implements Harness {
     return slot;
   }
 
-  /** The server a session on `account` runs in: that account's own, or the machine's. */
-  #slotOf(account: string | undefined): ServerSlot {
+  /**
+   * The server a session on `account` runs in: in a workspace's Linux view
+   * (`view`), that view's own for the account; else the account's own, or
+   * the machine's.
+   */
+  #slotOf(account: string | undefined, view?: string): ServerSlot {
+    if (view !== undefined) {
+      return this.#viewSlot(view, account);
+    }
     return account === undefined ? this.#machine : this.#accountSlot(account);
   }
 
   #slots(): ServerSlot[] {
-    return [this.#machine, ...this.#accounts.values()];
+    return [this.#machine, ...this.#accounts.values(), ...this.#views.values()];
+  }
+
+  /** A slot's server in words, for the log. */
+  #slotName(slot: ServerSlot): string {
+    if (slot.view !== undefined) {
+      return `workspace ${slot.view.slice(0, 8)}'s view's`;
+    }
+    return slot.account === undefined
+      ? "the machine's"
+      : `account ${slot.account}'s`;
   }
 
   /** The slot whose server a generation is (or was). */
@@ -1847,6 +1955,12 @@ export class OpencodeHarness implements Harness {
     this.#recorded ??= (async () => {
       for (const account of await OpencodeServerOwner.recordedAccounts()) {
         this.#accountSlot(account);
+      }
+      for (const {
+        workspace,
+        account,
+      } of await OpencodeServerOwner.recordedViews()) {
+        this.#viewSlot(workspace, account);
       }
       await Promise.all(
         this.#slots().map((slot) => slot.owner.liveGenerations())
@@ -1985,15 +2099,19 @@ export class OpencodeHarness implements Harness {
     // A credential the agent wrote reaches the account's running server now
     // (2.0 applies a switch from the next request, settled #8).
     onAccountCredential((account) => {
-      const slot = this.#accounts.get(account);
-      if (!slot?.client) {
-        return;
+      for (const slot of [
+        this.#accounts.get(account),
+        ...[...this.#views.values()].filter((one) => one.account === account),
+      ]) {
+        if (!slot?.client) {
+          continue;
+        }
+        this.#putCredential(account, slot.client).catch((error: unknown) =>
+          console.warn(
+            `[opencode] ${this.#slotName(slot)} server: account ${account}'s credential did not reach it: ${errorText(error)}`
+          )
+        );
       }
-      this.#putCredential(account, slot.client).catch((error: unknown) =>
-        console.warn(
-          `[opencode] account ${account}: its credential did not reach its server: ${errorText(error)}`
-        )
-      );
     });
     setOpencodeAccountsHost({
       carryOut: (account) => this.#carryOut(account),
@@ -2050,7 +2168,7 @@ export class OpencodeHarness implements Harness {
     for (const root of roots) {
       // biome-ignore lint/performance/noAwaitInLoops: one move at a time; each exports, imports and removes in order
       await this.#setHome([root.id], account);
-      await this.#bringHome(root.id, undefined);
+      await this.#bringHome(root.id, "");
     }
     const slot = this.#accountSlot(account);
     slot.client = null;
@@ -2221,7 +2339,10 @@ export class OpencodeHarness implements Harness {
    * not (a change the watcher left for the next need, {@link #applyIfNeeded},
    * included). Refused, in words, when either cannot be had.
    */
-  async #configCurrent(account: string | undefined): Promise<void> {
+  async #configCurrent(
+    account: string | undefined,
+    view?: string
+  ): Promise<void> {
     // biome-ignore lint/suspicious/noUnnecessaryConditions: #converging is set in #ensure, a different method
     if (!this.#converging) {
       return;
@@ -2243,15 +2364,18 @@ export class OpencodeHarness implements Harness {
         );
       }
     }
-    if (account === undefined) {
+    if (account === undefined && view === undefined) {
       return;
     }
-    const slot = this.#accounts.get(account);
+    const slot =
+      view === undefined
+        ? this.#accounts.get(account as string)
+        : this.#views.get(homeOf(account, view));
     if (!slot?.client) {
-      // Its server starts on the current launch (#ensureAccount).
+      // Its server starts on the current launch (#ensureAccount, #ensureView).
       return;
     }
-    const { revision, launch } = await this.#accountRevision(account);
+    const { revision, launch } = await this.#slotRevision(slot);
     if (slot.applied !== revision) {
       await this.#replaceAccount(slot, launch, revision);
     }
@@ -2446,13 +2570,14 @@ export class OpencodeHarness implements Harness {
       }
       const gone = slot.owner.active;
       console.info(
-        `[opencode] ${slot.account ? `account ${slot.account}'s` : "the machine's"} server ${gone?.procId}/${gone?.pid}: no keeper holds it; a server on the current keeper takes its new sessions`
+        `[opencode] ${this.#slotName(slot)} server ${gone?.procId}/${gone?.pid}: no keeper holds it; a server on the current keeper takes its new sessions`
       );
       slot.client = null;
       slot.ready = null;
-      await (slot.account === undefined
-        ? this.#ensure()
-        : this.#ensureAccount(slot.account));
+      // A view's starts again when a session there needs it, in its view.
+      if (slot.view === undefined) {
+        await this.#ensureHome(homeOf(slot.account));
+      }
     }
   }
 
@@ -2504,7 +2629,7 @@ export class OpencodeHarness implements Harness {
   /** An account's server no session has been on for {@link ACCOUNT_SERVER_IDLE_MS} is retired. */
   async #retireIdleAccounts(): Promise<void> {
     const now = Date.now();
-    for (const slot of this.#accounts.values()) {
+    for (const slot of [...this.#accounts.values(), ...this.#views.values()]) {
       if (
         !slot.owner.active ||
         this.#slotHeld(slot) ||
@@ -2523,11 +2648,12 @@ export class OpencodeHarness implements Harness {
       slot.ready = null;
       slot.applied = null;
       console.info(
-        `[opencode] account ${slot.account}: no session on its server for ${ACCOUNT_SERVER_IDLE_MS / 60_000} minutes`
+        `[opencode] ${this.#slotName(slot)} server: no session on it for ${ACCOUNT_SERVER_IDLE_MS / 60_000} minutes`
       );
       // biome-ignore lint/performance/noAwaitInLoops: one retirement at a time; each reads the keeper
       await slot.owner.retireActive();
     }
+    await this.#dropGoneViews();
   }
 
   /** How the account's server is launched: the machine's launch, on the account's data dir and provider settings. */
@@ -2555,6 +2681,43 @@ export class OpencodeHarness implements Harness {
     };
   }
 
+  /**
+   * How a view's server is launched: the machine's launch on the view's own
+   * data home ({@link opencodeViewHome}), with its account's provider
+   * settings on one, and CawCo's plugin told the workspace it serves
+   * (`CAWCO_ENV.viewWorkspace`): views of one folder share its path.
+   */
+  async #viewLaunch(
+    view: string,
+    account: string | undefined
+  ): Promise<ServerLaunch> {
+    return serverLaunch(
+      await this.#launchConfig(),
+      await this.#plugin(),
+      this.#desiredHash,
+      {
+        ...(account === undefined ? {} : opencodeAccountEnv(account)),
+        XDG_DATA_HOME: opencodeViewHome(view, account),
+        [CAWCO_ENV.viewWorkspace]: view,
+      }
+    );
+  }
+
+  /** What a slot's running server must have been verified on: an account's ({@link #accountRevision}) or a view's. */
+  async #slotRevision(slot: ServerSlot): Promise<{
+    revision: string;
+    launch: ServerLaunch;
+  }> {
+    if (slot.view === undefined) {
+      return await this.#accountRevision(slot.account as string);
+    }
+    const launch = await this.#viewLaunch(slot.view, slot.account);
+    return {
+      launch,
+      revision: `${this.#desiredVersion}/${launchOf(launch)}`,
+    };
+  }
+
   /** Every running account's server squared with the machine's config and binary, once the machine's own is. */
   async #convergeAccounts(): Promise<void> {
     // biome-ignore lint/suspicious/noUnnecessaryConditions: #accountApplying is held across this method's awaits
@@ -2563,13 +2726,23 @@ export class OpencodeHarness implements Harness {
     }
     this.#accountApplying = true;
     try {
-      for (const slot of this.#accounts.values()) {
+      for (const slot of [
+        ...this.#accounts.values(),
+        ...this.#views.values(),
+      ]) {
         const { account } = slot;
-        if (slot.starting || !(account && slot.owner.active && slot.client)) {
+        if (
+          slot.starting ||
+          !(
+            (account || slot.view !== undefined) &&
+            slot.owner.active &&
+            slot.client
+          )
+        ) {
           continue;
         }
         // biome-ignore lint/performance/noAwaitInLoops: one server is replaced at a time
-        const { revision, launch } = await this.#accountRevision(account);
+        const { revision, launch } = await this.#slotRevision(slot);
         if (
           slot.starting ||
           (slot.applied === revision && !(await slot.owner.onRetiringKeeper()))
@@ -2580,7 +2753,7 @@ export class OpencodeHarness implements Harness {
           await this.#replaceAccount(slot, launch, revision);
         } catch (error) {
           console.warn(
-            `[opencode] account ${account}: its server was not replaced: ${errorText(error)}; tried again on the next tick`
+            `[opencode] ${this.#slotName(slot)} server was not replaced: ${errorText(error)}; tried again on the next tick`
           );
         }
       }
@@ -2601,11 +2774,16 @@ export class OpencodeHarness implements Harness {
     launch: ServerLaunch,
     revision: string
   ): Promise<void> {
-    const { account } = slot;
-    if (account === undefined) {
+    const { account, view } = slot;
+    if (account === undefined && view === undefined) {
       throw new Error("The machine's server is replaced by its own apply.");
     }
-    await prepareAccountServer(account);
+    await prepareHome(
+      view === undefined
+        ? opencodeAccountHome(account as string)
+        : opencodeViewHome(view, account),
+      view === undefined
+    );
     await slot.owner.replace(
       launch,
       async (identity, signal) => {
@@ -2617,16 +2795,19 @@ export class OpencodeHarness implements Harness {
           signal,
           launch
         );
-        await this.#putCredential(account, candidate);
+        await this.#putSlotCredential(slot, candidate);
       },
       (identity) => {
         const client = this.#adopt(slot, identity);
         slot.applied = revision;
         // biome-ignore lint/complexity/noVoid: publication does not wait for busy incumbent sessions to migrate
         void this.#handoffIdle().catch(console.warn);
-        // What it offers, as the catalog it started on says (#catalog).
-        // biome-ignore lint/complexity/noVoid: the catalog read rides on the start; nothing waits on it
-        void this.#readAccountCatalogSoon(account, client);
+        // What it offers, as the catalog it started on says (#catalog): an
+        // account's own server alone lists its catalog.
+        if (account !== undefined && view === undefined) {
+          // biome-ignore lint/complexity/noVoid: the catalog read rides on the start; nothing waits on it
+          void this.#readAccountCatalogSoon(account, client);
+        }
       }
     );
   }
@@ -2664,7 +2845,7 @@ export class OpencodeHarness implements Harness {
    * server, on the same database: the session is already there.
    */
   #migrate(session: OpencodeSession): Promise<void> {
-    const slot = this.#slotOf(session.account);
+    const slot = this.#slotOf(session.account, session.view);
     const target = slot.owner.active;
     const old = this.#sessionOwners.get(session.instanceId);
     const { sessionId } = session;
@@ -2796,8 +2977,8 @@ export class OpencodeHarness implements Harness {
     // session last ran: it starts again, and the session goes to it. A
     // message sent is an explicit attempt, as a session's start is: a start
     // refused earlier is tried again for it (ServerStart).
-    if (session.account !== undefined) {
-      await this.#ensureAccount(session.account, true);
+    if (session.account !== undefined || session.view !== undefined) {
+      await this.#ensureHome(homeOf(session.account, session.view), true);
     }
     await this.#migrate(session);
     if (this.#sessions.get(session.instanceId) !== session) {
@@ -2822,7 +3003,7 @@ export class OpencodeHarness implements Harness {
     /** Bound elsewhere than its own server's active generation. */
     const away = (session: OpencodeSession): ServerIdentity | undefined => {
       const owner = this.#sessionOwners.get(session.instanceId);
-      const target = this.#slotOf(session.account).owner.active;
+      const target = this.#slotOf(session.account, session.view).owner.active;
       return owner && target && owner.procId !== target.procId
         ? owner
         : undefined;
@@ -3709,7 +3890,7 @@ export class OpencodeHarness implements Harness {
     this.#generationClients.set(identity.procId, client);
     const generations = this.#generations();
     for (const session of this.#sessions.values()) {
-      if (this.#slotOf(session.account) !== slot) {
+      if (this.#slotOf(session.account, session.view) !== slot) {
         continue;
       }
       const old = this.#sessionOwners.get(session.instanceId);
@@ -3949,6 +4130,161 @@ export class OpencodeHarness implements Harness {
         slot.starting = false;
       });
     return slot.ready;
+  }
+
+  /**
+   * The server of `home` ({@link homeOf}): the machine's, an account's own,
+   * or a view's ({@link #ensureView}), the one running or one started now.
+   */
+  #ensureHome(home: string, attempt = false): Promise<OpencodeClient> {
+    const { account, view } = homeParts(home);
+    if (view !== undefined) {
+      return this.#ensureView(view, account, attempt);
+    }
+    return account === undefined
+      ? this.#ensure(attempt)
+      : this.#ensureAccount(account, attempt);
+  }
+
+  /**
+   * The server workspace `view`'s Linux view runs for its sessions on
+   * `account` (none: the machine's own sign-ins), on its own data home
+   * ({@link opencodeViewHome}): the one running, or one started now,
+   * entered into the view (`enterView`) with CawCo's plugin told its
+   * workspace, and with the account's credential on it (the machine's own
+   * sign-ins for none). The machine's is up first, as for an account's. A
+   * generation started on the host while the view did not run (one that read
+   * or moved its sessions) runs no session: once the view runs, it is ended
+   * and one is started in the view before any session is opened there.
+   */
+  #ensureView(
+    view: string,
+    account: string | undefined,
+    attempt = false
+  ): Promise<OpencodeClient> {
+    const slot = this.#viewSlot(view, account);
+    const { active } = slot.owner;
+    if (active && viewMember(view) && !inView(view, active.pid)) {
+      slot.client = null;
+      slot.ready = slot.owner.endAll().then(
+        () => {
+          slot.ready = null;
+          return this.#ensureView(view, account, attempt);
+        },
+        (error: unknown) => {
+          slot.ready = null;
+          throw error;
+        }
+      );
+      console.info(
+        `[opencode] ${this.#slotName(slot)} server ${active.procId}/${active.pid} ran on the host while the view did not: ended, and one in the view takes its sessions`
+      );
+      return slot.ready;
+    }
+    if (slot.client) {
+      return Promise.resolve(slot.client);
+    }
+    if (attempt && slot.ready && slot.owner.refusal) {
+      return slot.ready.catch(() => this.#ensureView(view, account, true));
+    }
+    slot.ready ??= (async () => {
+      slot.starting = true;
+      await this.#ensure(attempt);
+      const { revision, launch } = await this.#slotRevision(slot);
+      await prepareHome(opencodeViewHome(view, account), false);
+      const identity = await slot.owner.ensure(launch, {
+        inputs: await startInputs(launch),
+        attempt,
+      });
+      if (identity.launch === launchOf(launch)) {
+        const adopted = this.#adopt(slot, identity);
+        answerOf(
+          await askOpencode((options) => adopted.server.info(options)),
+          "its server info"
+        );
+        // As an account's (#ensureAccount): verified on the machine's binary
+        // while the machine's config converges, else the watcher's to replace.
+        // biome-ignore lint/suspicious/noUnnecessaryConditions: #converging is set in #ensure
+        if (this.#converging) {
+          try {
+            await this.#verifyApply(
+              adopted,
+              identity,
+              this.#desiredVersion,
+              undefined,
+              launch
+            );
+            slot.applied = revision;
+          } catch (error) {
+            console.info(
+              `[opencode] ${this.#slotName(slot)} server is on another binary; the watcher replaces it at rest (${errorText(error)})`
+            );
+          }
+        }
+        await this.#putSlotCredential(slot, adopted);
+      } else {
+        await this.#replaceAccount(slot, launch, revision);
+      }
+      const { client } = slot;
+      if (!client) {
+        throw new Error(
+          `Workspace ${view.slice(0, 8)}'s OpenCode server went away.`
+        );
+      }
+      console.info(
+        `[opencode] ${this.#slotName(slot)} server is ${slot.owner.active?.procId}/${slot.owner.active?.pid}, ${slot.owner.active && inView(view, slot.owner.active.pid) ? "in its view" : "on the host, its view not running"}`
+      );
+      return client;
+    })()
+      .catch((error: unknown) => {
+        slot.ready = null;
+        throw error;
+      })
+      .finally(() => {
+        slot.starting = false;
+      });
+    return slot.ready;
+  }
+
+  /**
+   * The credential a server of its own runs on: an account's, or, on a
+   * view's server for no account, the machine's own sign-ins, copied from the
+   * machine's server as each is there (`#ownCredentials`), each under its own
+   * id, which a copy made earlier keeps.
+   */
+  async #putSlotCredential(
+    slot: ServerSlot,
+    client: OpencodeClient
+  ): Promise<void> {
+    if (slot.account !== undefined) {
+      await this.#putCredential(slot.account, client);
+      return;
+    }
+    if (slot.view === undefined) {
+      return;
+    }
+    const own = await this.#ownCredentials();
+    const put = await askOpencode(async (options) => {
+      const stored = new Set(
+        (await client.credential.list(options)).map((entry) => entry.id)
+      );
+      for (const credential of own) {
+        if (!stored.has(credential.id)) {
+          // biome-ignore lint/performance/noAwaitInLoops: a few sign-ins, each its own request
+          await client.credential.create(
+            {
+              id: credential.id,
+              integrationID: credential.integrationID,
+              label: `The machine's own sign-in, for workspace ${slot.view?.slice(0, 8)}`,
+              value: credential.value as CredentialCreateInput["value"],
+              activate: true,
+            },
+            options
+          );
+        }
+      }
+    });
+    answerOf(put, `the machine's sign-ins on ${this.#slotName(slot)} server`);
   }
 
   /**
@@ -5005,6 +5341,7 @@ export class OpencodeHarness implements Harness {
       // session opens in the server of the account it runs on now (moved
       // there first when its database is another server's).
       const account = spec.accountDir?.accountId;
+      const view = viewOf(ctx);
       if (
         !busy[0] &&
         (spec.reattachOnly === "busy" || spec.reattachOnly === "inspect")
@@ -5012,12 +5349,10 @@ export class OpencodeHarness implements Harness {
         return;
       }
       if (!busy[0]) {
-        await (account === undefined
-          ? this.#ensure()
-          : this.#ensureAccount(account));
-        await this.#bringHome(resume.sessionKey, account);
+        await this.#ensureHome(homeOf(account, view));
+        await this.#bringHome(resume.sessionKey, homeOf(account, view));
       }
-      const target = this.#slotOf(account).owner.active;
+      const target = this.#slotOf(account, view).owner.active;
       const chosen =
         busy[0] ??
         (target
@@ -5144,13 +5479,13 @@ export class OpencodeHarness implements Harness {
     // earlier is tried again for it, once, before anything reads the
     // refusal (ServerStart). Every other read answers with the refusal.
     const account = spec.accountDir?.accountId;
+    const view = viewOf(ctx);
+    const home = homeOf(account, view);
     if (
       this.#serverOwner.refusal ||
-      (account !== undefined && this.#accounts.get(account)?.owner.refusal)
+      (home !== "" && this.#slotOf(account, view).owner.refusal)
     ) {
-      await (account === undefined
-        ? this.#ensure(true)
-        : this.#ensureAccount(account, true));
+      await this.#ensureHome(home, true);
     }
     if (spec.resume && !spec.resume.fork) {
       const recovered = await this.reattach(spec, ctx);
@@ -5160,7 +5495,7 @@ export class OpencodeHarness implements Harness {
     }
     if (!spec.resume) {
       await this.#ensure(true);
-      await this.#configCurrent(account);
+      await this.#configCurrent(account, view);
     }
     return this.#open(spec, ctx);
   }
@@ -5171,57 +5506,100 @@ export class OpencodeHarness implements Harness {
     return (await readJson<Record<string, string>>(SESSION_HOMES)) ?? {};
   }
 
-  /** Records that `sessionId` (and its children) is in `account`'s server's database; the machine's for none. */
-  async #setHome(
-    sessionIds: string[],
-    account: string | undefined
-  ): Promise<void> {
+  /** Records that `sessionId` (and its children) is in the database of `home`'s server ({@link homeOf}). */
+  async #setHome(sessionIds: string[], home: string): Promise<void> {
     const homes = await this.#homes();
     for (const id of sessionIds) {
-      homes[id] = account ?? "";
+      homes[id] = home;
     }
     await writeJson(SESSION_HOMES, homes);
   }
 
   /** The server whose database holds `sessionId`, started if it is not running. */
   async #homeClient(sessionId: string): Promise<OpencodeClient> {
-    const home = (await this.#homes())[sessionId];
-    return home ? await this.#ensureAccount(home) : await this.#ensure();
+    return await this.#ensureHome((await this.#homes())[sessionId] ?? "");
+  }
+
+  /** A home in words, for the log ({@link homeOf}). */
+  #homeName(home: string): string {
+    const { account, view } = homeParts(home);
+    if (view !== undefined) {
+      return `workspace ${view.slice(0, 8)}'s view's`;
+    }
+    return account === undefined ? "the machine's" : `account ${account}'s`;
   }
 
   /**
-   * The session moved into `account`'s server's database (the machine's for
-   * none) when another's holds it: exported whole from the server that holds
-   * it, imported into the target at its own location (2.0's import keeps
-   * every id and ignores the location the session carries, settled #7), its
-   * subagent sessions after it, then removed from the server it left. Undo
-   * follows it: every server keeps its snapshots in the machine's one dir.
+   * Each view's server whose workspace has no layer on this machine any
+   * more (archived) and whose home no session's record names: its servers
+   * ended, its record and its data home gone ({@link opencodeViewHome}).
+   * One a session still names stays, so that session reads and goes on
+   * where it is: a workspace cut again reopens it.
    */
-  async #bringHome(
-    sessionId: string,
-    account: string | undefined
-  ): Promise<void> {
+  async #dropGoneViews(): Promise<void> {
+    const named = new Set(Object.values(await this.#homes()));
+    for (const [home, slot] of [...this.#views]) {
+      const view = slot.view as string;
+      if (
+        overlaySync(view) ||
+        slot.starting ||
+        this.#slotHeld(slot) ||
+        [...named].some(
+          (each) => each === home || homeParts(each).view === view
+        )
+      ) {
+        continue;
+      }
+      try {
+        // biome-ignore lint/performance/noAwaitInLoops: one view at a time; each ends its servers first
+        await slot.owner.endAll();
+        await slot.owner.forget();
+      } catch (error) {
+        console.warn(
+          `[opencode] ${this.#slotName(slot)} server: not let go of yet: ${errorText(error)}`
+        );
+        continue;
+      }
+      this.#views.delete(home);
+      if (![...this.#views.values()].some((one) => one.view === view)) {
+        await rm(join(opencodeViewsDir(), view), {
+          recursive: true,
+          force: true,
+        });
+      }
+      console.info(
+        `[opencode] workspace ${view.slice(0, 8)}: archived, and no session is in its view's server's database: that server's record and data home are gone`
+      );
+    }
+  }
+
+  /**
+   * The session moved into the database of `to`'s server ({@link homeOf}:
+   * the machine's, an account's, a view's) when another's holds it:
+   * exported whole from the server that holds it (a view's that does not
+   * run started on the host for it, `enterView`), imported into the target
+   * at its own location (2.0's import keeps every id and ignores the
+   * location the session carries, settled #7), its subagent sessions after
+   * it, then removed from the server it left. Undo follows it between the
+   * person's folders' servers, which keep their snapshots in the machine's
+   * one dir; a view's keeps its own (`prepareHome`).
+   */
+  async #bringHome(sessionId: string, to: string): Promise<void> {
     const home = (await this.#homes())[sessionId] ?? "";
-    if (home === (account ?? "")) {
+    if (home === to) {
       return;
     }
     const prior = this.#moves.get(sessionId);
     if (prior) {
       return prior;
     }
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one move exports, imports, records and removes in order
     const moving = (async () => {
       const ask = async <T>(
         what: string,
         read: (options: { signal: AbortSignal }) => Promise<T>
       ): Promise<T> => answerOf(await askOpencode(read), what);
-      const source = home
-        ? await this.#ensureAccount(home)
-        : await this.#ensure();
-      const target =
-        account === undefined
-          ? await this.#ensure()
-          : await this.#ensureAccount(account);
+      const source = await this.#ensureHome(home);
+      const target = await this.#ensureHome(to);
       let root: Awaited<ReturnType<OpencodeClient["session"]["export"]>>;
       try {
         root = await ask(`the export of ${sessionId}`, (options) =>
@@ -5278,13 +5656,13 @@ export class OpencodeHarness implements Harness {
       }
       await this.#setHome(
         exported.map((one) => one.info.id),
-        account
+        to
       );
       await ask(`the removal of ${sessionId}`, (options) =>
         source.session.remove({ sessionID: sessionId }, options)
       );
       console.info(
-        `[opencode] session ${sessionId} moved from ${home ? `account ${home}'s` : "the machine's"} server to ${account ? `account ${account}'s` : "the machine's"}, with ${children.length} subagent session(s)`
+        `[opencode] session ${sessionId} moved from ${this.#homeName(home)} server to ${this.#homeName(to)}, with ${children.length} subagent session(s)`
       );
     })().finally(() => this.#moves.delete(sessionId));
     this.#moves.set(sessionId, moving);
@@ -5302,24 +5680,17 @@ export class OpencodeHarness implements Harness {
       identity: ServerIdentity;
     }
   ): Promise<OpencodeSession> {
-    // A Linux view of a folder (layer.ts) is a mount namespace its processes
-    // enter: OpenCode's server serves every session of its account from one
-    // process on the host, outside it, where its file tools would write the
-    // person's folder itself. Such a session does not start.
-    if (ctx.workspace && overlaySync(ctx.workspace)) {
-      throw new Error(
-        `This session didn't start: OpenCode serves every session of its account from one server on this machine, outside the view of ${ctx.cwd} that workspace ${ctx.workspace} works in, so its file tools would write your folder itself. Delegate this work to Claude Code or pi on this machine, or to OpenCode on a Mac.`
-      );
-    }
     // The account a session runs on is the server it runs in: the account's
-    // own, with that account's credential; on no account, the machine's.
+    // own, with that account's credential; on no account, the machine's. In
+    // a workspace's Linux view (layer.ts), a mount namespace its processes
+    // enter, it runs in the view's own server for that account, entered into
+    // the view, whose file tools read and write the folder as the view has
+    // it (#ensureView).
     const account = spec.accountDir?.accountId;
-    const slot = this.#slotOf(account);
-    const client =
-      existing?.client ??
-      (await (account === undefined
-        ? this.#ensure()
-        : this.#ensureAccount(account)));
+    const view = viewOf(ctx);
+    const home = homeOf(account, view);
+    const slot = this.#slotOf(account, view);
+    const client = existing?.client ?? (await this.#ensureHome(home));
     const identity = existing?.identity ?? slot.owner.active;
     if (!identity) {
       throw new Error(
@@ -5391,16 +5762,16 @@ export class OpencodeHarness implements Harness {
       sessionId = forked.id;
       await this.#setHome(
         [sessionId],
-        (await this.#homes())[spec.resume.sessionKey] || undefined
+        (await this.#homes())[spec.resume.sessionKey] ?? ""
       );
-      await this.#bringHome(sessionId, account);
+      await this.#bringHome(sessionId, home);
     } else if (spec.resume) {
       // Re-open: a session persists in its server's database, so resuming is
       // addressing the id again — but only an id a server here holds. A key
       // nobody holds is refused loudly rather than addressed blindly.
       assertOpencodeKey(spec.resume.sessionKey, "resume");
       const { sessionKey } = spec.resume;
-      await this.#bringHome(sessionKey, account);
+      await this.#bringHome(sessionKey, home);
       let found: Bounded<SessionInfo>;
       try {
         found = await askOpencode((options) =>
@@ -5444,7 +5815,7 @@ export class OpencodeHarness implements Harness {
         agent,
         ...(model ? { model: JSON.stringify(model) } : {}),
       };
-      await this.#setHome([sessionId], account);
+      await this.#setHome([sessionId], home);
     }
     if (!ctx.recordSessionAddress) {
       throw new Error(
@@ -5498,6 +5869,7 @@ export class OpencodeHarness implements Harness {
       instructions: spec.instructions,
       deniedRules,
       account,
+      view,
       fence: spec.fence === true,
       lead: spec.lead === true,
       applied,

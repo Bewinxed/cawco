@@ -696,6 +696,8 @@ export interface OpencodeSessionOptions {
    * or answered (undefined). The harness keeps it as a sign-in's fault.
    */
   turnOutcome: (provider: string, refusal: string | undefined) => void;
+  /** The workspace whose Linux view's own server it runs in; undefined: one on the host. */
+  view: string | undefined;
 }
 
 export class OpencodeSession implements HarnessSession {
@@ -734,6 +736,11 @@ export class OpencodeSession implements HarnessSession {
   readonly instanceId: string;
   /** The CawCo account this session runs on, whose own server it runs in; undefined: the machine's. */
   readonly account: string | undefined;
+  /**
+   * The workspace whose Linux view's own server it runs in, for its account
+   * (opencode.ts `#ensureView`); undefined: the account's or the machine's.
+   */
+  readonly view: string | undefined;
   readonly #ctx: HarnessContext;
   #client: OpencodeClient;
   readonly #directory: string;
@@ -850,6 +857,7 @@ export class OpencodeSession implements HarnessSession {
   constructor(options: OpencodeSessionOptions) {
     this.instanceId = options.instanceId;
     this.account = options.account;
+    this.view = options.view;
     this.#ctx = options.ctx;
     this.#client = options.client;
     this.sessionId = options.sessionId;
