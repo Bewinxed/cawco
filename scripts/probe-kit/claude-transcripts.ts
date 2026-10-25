@@ -72,6 +72,8 @@ class TranscriptWriter {
   #clock = Date.UTC(2026, 9, 1);
   /** The chain's last record: the next one's parent. */
   parent: string | null = null;
+  /** That record as written. */
+  last: Record<string, unknown> | null = null;
   turn = 0;
   readonly running: Task[] = [];
 
@@ -124,14 +126,16 @@ class TranscriptWriter {
   /** A chained record: hung from the chain's last, and the chain's last from now on. */
   chained(record: Record<string, unknown>, keep = true): string {
     const uuid = this.id("uuid");
-    this.line({
+    const written = {
       ...this.envelope(this.parent),
       ...record,
       uuid,
       timestamp: this.at(),
-    });
+    };
+    this.line(written);
     if (keep) {
       this.parent = uuid;
+      this.last = written;
     }
     return uuid;
   }
@@ -396,9 +400,16 @@ const step = (
   }
 };
 
-/** A `/compact`: the boundary starts a chain of its own, its summary hangs from it. */
+/**
+ * A `/compact`: the boundary starts a chain of its own, its summary hangs
+ * from it. Now and then its `logicalParentUuid` names a record the CLI never
+ * wrote, as 9 of a real 413 MB session's 50 boundaries do: what was said
+ * before it is still the conversation's last record above it.
+ */
 const compaction = (writer: TranscriptWriter): void => {
-  const before = writer.parent;
+  const lost = writer.chance(0.2);
+  const kept = writer.last;
+  const before = lost ? writer.id("uuid") : writer.parent;
   writer.parent = null;
   writer.chained({
     type: "system",
@@ -408,6 +419,7 @@ const compaction = (writer: TranscriptWriter): void => {
     compactMetadata: { trigger: "auto", preTokens: 160_000 + writer.turn },
     level: "info",
   });
+  const boundary = writer.last;
   writer.chained({
     type: "user",
     isCompactSummary: true,
@@ -417,6 +429,20 @@ const compaction = (writer: TranscriptWriter): void => {
       content: `This session is being continued from a previous conversation that ran out of context. ${writer.words(200)}`,
     },
   });
+  const summary = writer.last;
+  // Now and then the CLI writes the block again: the boundary, the summary
+  // and the record it kept, that one now hung from the summary (1,274
+  // records written twice in a real 413 MB session). The kept record is
+  // the boundary's logical parent, so its later copy leads back to the
+  // boundary.
+  if (!lost && kept && boundary && summary && writer.chance(0.3)) {
+    writer.line(boundary);
+    writer.line(summary);
+    const again = { ...kept, parentUuid: summary.uuid };
+    writer.line(again);
+    writer.parent = kept.uuid as string;
+    writer.last = again;
+  }
 };
 
 /** One turn: what was queued, the prompt (or a task's notification), its steps and its end. */

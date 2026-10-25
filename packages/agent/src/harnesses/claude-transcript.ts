@@ -384,6 +384,17 @@ function findActiveChain(
   return { chain, chainSet };
 }
 
+/** Each record by uuid as the file first wrote it (a later copy of one is not where it was said). */
+function firstWrites(records: readonly ChainNode[]): Map<string, ChainNode> {
+  const m = new Map<string, ChainNode>();
+  for (const r of records) {
+    if (typeof r.uuid === "string" && !m.has(r.uuid)) {
+      m.set(r.uuid, r);
+    }
+  }
+  return m;
+}
+
 /** Whether `r` is the line Claude Code starts a compacted conversation on. */
 const isCompactBoundary = (r: { type: string; subtype?: unknown }): boolean =>
   r.type === "system" && r.subtype === "compact_boundary";
@@ -401,23 +412,56 @@ const isCompactBoundary = (r: { type: string; subtype?: unknown }): boolean =>
  * The walk follows one record's parent at a time, so a branch the
  * conversation left (a retry, an edit, a rewind) is never on it. A
  * preserved record stands once, where it was said, and not again after the
- * summary.
+ * summary: `original` holds each record as the file first wrote it
+ * ({@link firstWrites}), for the CLI writes a compaction's boundary, summary
+ * and kept records again after the boundary, and a later copy's links lead
+ * back into the conversation after it (1,274 records written twice in a
+ * real 413 MB session, its walk caught in such a loop 9,666 entries back).
  */
 function withSetAside(
   chain: ChainNode[],
-  original: Map<string, ChainNode>
+  original: Map<string, ChainNode>,
+  records: readonly ChainNode[]
 ): ChainNode[] {
   const [head] = chain;
   const before: ChainNode[] = [];
   const seen = new Set<string>();
+  let place: Map<string, number> | undefined;
+  // A boundary whose `logicalParentUuid` names no record here (the CLI
+  // names one it never wrote: 9 of a real 413 MB session's 50 boundaries)
+  // goes on from the conversation's last message above it in the file.
+  const saidAbove = (boundary: ChainNode): ChainNode | undefined => {
+    if (!place) {
+      place = new Map();
+      for (const [i, r] of records.entries()) {
+        if (!place.has(r.uuid)) {
+          place.set(r.uuid, i);
+        }
+      }
+    }
+    for (let i = (place.get(boundary.uuid) ?? 0) - 1; i >= 0; i -= 1) {
+      const r = records[i];
+      if (
+        r &&
+        (r.type === "user" || r.type === "assistant") &&
+        !r.isSidechain
+      ) {
+        return original.get(r.uuid);
+      }
+    }
+  };
   const onFrom = (r: ChainNode): ChainNode | undefined => {
     if (r.parentUuid) {
       return original.get(r.parentUuid);
     }
+    if (!isCompactBoundary(r)) {
+      return;
+    }
     const logical = r.logicalParentUuid;
-    return isCompactBoundary(r) && typeof logical === "string"
-      ? original.get(logical)
-      : undefined;
+    return (
+      (typeof logical === "string" ? original.get(logical) : undefined) ??
+      saidAbove(r)
+    );
   };
   for (
     let node = head && isCompactBoundary(head) ? onFrom(head) : undefined;
@@ -613,7 +657,7 @@ function* walkSteps(
   said: boolean
 ): Generator<void, ChainNode[]> {
   const byUuid = buildUuidMap(records);
-  const original = said ? new Map(byUuid) : byUuid;
+  const original = said ? firstWrites(records) : byUuid;
   yield;
   const skippedAnchors = relinkCompactBoundaries(byUuid);
   yield;
@@ -623,7 +667,9 @@ function* walkSteps(
   }
   yield;
   const { chainSet } = found;
-  let active = said ? withSetAside(found.chain, original) : found.chain;
+  let active = said
+    ? withSetAside(found.chain, original, records)
+    : found.chain;
   for (const r of active) {
     chainSet.add(r.uuid);
   }
