@@ -141,8 +141,11 @@
 }
 
 /* A fluid track's segment while another tab stands under the hover ghost
-   (TabsList): the ghost reads as the thing about to take over. */
-@custom-variant beside-ghost (:where([data-slot="ff-tabs-list"]:has([data-slot="ff-tab"][data-ghosted]:not([data-tab-item-selected]))) > &);
+   (TabsList): the ghost reads as the thing about to take over. The list's
+   highlight says its ghost stands shown (`data-ghost-shown`: a tab under
+   it and not the chosen one); as a `:has()` over the tabs, each choice
+   scheduled the list's children to restyle. */
+@custom-variant beside-ghost (:where([data-slot="ff-tabs-list"][data-ghost-shown]) > &);
 
 /* Not under the pointer, whatever the pointer (Tailwind's `not-hover:`
    also matches wherever its hover cannot happen). */

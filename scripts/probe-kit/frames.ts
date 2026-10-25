@@ -49,6 +49,8 @@ export const SCROLLER = '[aria-label="Session transcript"]';
 const CLASS_ATTRIBUTE = / class='([^' ]*)[^']*'/;
 /** A style invalidation that restyles a container's whole subtree. */
 const SUBTREE = /subtree/i;
+/** A restyle asked for because the element is a `:has()` rule's subject. */
+const HAS_REASON = /:has\(\)/;
 /**
  * A frame's phases besides style and layout, as the trace names them: what
  * a sampled profile counts as "(program)" when no script is on the stack.
@@ -941,9 +943,11 @@ export async function traceMain(
         (data.changedId && `#${data.changedId}`) ||
         (data.changedPseudo && `:${data.changedPseudo}`) ||
         "?";
-      const node = (data.nodeName ?? "?")
-        .replace(CLASS_ATTRIBUTE, ".$1")
-        .slice(0, 50);
+      // A `:has()` anchor is said with its whole class list, as `askedIn` says a subject.
+      const node =
+        change === ":has"
+          ? (data.nodeName ?? "?").slice(0, 400)
+          : (data.nodeName ?? "?").replace(CLASS_ATTRIBUTE, ".$1").slice(0, 50);
       const key = `${change} on ${node}`;
       counted.set(key, (counted.get(key) ?? 0) + 1);
     }
@@ -969,9 +973,12 @@ export async function traceMain(
     const counted = new Map<string, number>();
     for (const one of asks) {
       if (one.ts >= from && one.ts < to) {
-        const node = (one.args?.data?.nodeName ?? "?")
-          .replace(CLASS_ATTRIBUTE, ".$1")
-          .slice(0, 60);
+        const name = one.args?.data?.nodeName ?? "?";
+        // A `:has()` subject is said with its whole class list: its first
+        // class (`relative`) names no rule, and the list names the one.
+        const node = HAS_REASON.test(one.args?.data?.reason ?? "")
+          ? name.slice(0, 400)
+          : name.replace(CLASS_ATTRIBUTE, ".$1").slice(0, 60);
         const key = `${one.args?.data?.reason ?? "?"} on ${node}${changeOf(one)}`;
         counted.set(key, (counted.get(key) ?? 0) + 1);
       }

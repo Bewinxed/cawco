@@ -502,8 +502,21 @@ export function highlight(options: HighlightOptions) {
     /** The rows the layers stand on, watched for their own size (set below, with its observer). */
     let watchRows: () => void = () => undefined;
 
+    /**
+     * The ghost stands shown, or not: on its layer, and on the container as
+     * `data-ghost-shown` for what dims beside it (a fluid track's segment,
+     * `beside-ghost`). Said by the container, not found by what it holds:
+     * as a `:has()` over its rows, each row chosen scheduled the container's
+     * children to restyle. Written only when it changes, as `setGlide`.
+     */
+    const showGhostLayer = (on: boolean) => {
+      show(ghost, on);
+      if (container.hasAttribute("data-ghost-shown") !== on) {
+        container.toggleAttribute("data-ghost-shown", on);
+      }
+    };
     const showOrCover = () => {
-      show(ghost, !(covered && ghostRow?.matches(covered)));
+      showGhostLayer(!(covered && ghostRow?.matches(covered)));
     };
     const showGhost = (row: HTMLElement | null) => {
       if (!withGhost || skipped) {
@@ -519,7 +532,7 @@ export function highlight(options: HighlightOptions) {
       if (!(row && box)) {
         cancelAnimationFrame(following);
         row?.removeAttribute("data-ghosted");
-        show(ghost, false);
+        showGhostLayer(false);
         ghostRow = null;
         watchRows();
         letGo();
@@ -1282,6 +1295,7 @@ export function highlight(options: HighlightOptions) {
       trail.remove();
       pill.remove();
       delete container.dataset.highlight;
+      container.removeAttribute("data-ghost-shown");
       if (ownIsolate) {
         container.classList.remove("isolate");
       }

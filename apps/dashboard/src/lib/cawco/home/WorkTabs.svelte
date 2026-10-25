@@ -744,11 +744,14 @@
        reflow neither enters these copies nor ghosts them when they go. With
        no successor (a group that goes, "Show fewer"), where they stood:
        under what stays. Layered, over the rows' top, each old row in the
-       place its successor takes. -->
+       place its successor takes. Whether rows stay is the rows box's own
+       `data-rows`, not found by what it holds: as `:has([data-key])`, each
+       row written or put in under it scheduled the box's children to
+       restyle, on a pane tab's press as on any other. -->
   <div
     data-layer={layer || undefined}
     aria-hidden="true"
-    class="pointer-events-none absolute inset-x-0 top-0 bottom-auto not-data-layer:top-full [[data-slot=work-tabs-rows]:has([data-key])>&]:not-data-layer:top-(--leave-top)"
+    class="pointer-events-none absolute inset-x-0 top-0 bottom-auto not-data-layer:top-full [[data-slot=work-tabs-rows][data-rows]>&]:not-data-layer:top-(--leave-top)"
     data-leaving
     data-reflow
     inert
@@ -902,6 +905,7 @@
         >
           {#each drawn as entry (entry.group.machineId)}
             {@const id = entry.group.machineId}
+            {@const tops = under(shown, entry.rows, null)}
             <!-- A flex column, so its header's margin stays inside it: closed
                  to nothing, a group takes no room at all. Every group keeps
                  the room a seam would take; the seam itself is drawn in it,
@@ -926,7 +930,11 @@
                 headAnim(entry.kind, id),
                 headUnseen(entry.kind, id)
               )}
-              <div data-slot="work-tabs-rows" class="relative">
+              <div
+                data-slot="work-tabs-rows"
+                class="relative"
+                data-rows={tops.length > 0 || undefined}
+              >
                 {#if plan?.layered.has(id) && entry.gone.length}
                   <!-- The rows this machine had, leaving in the places the new
                    ones take, each new one arriving as its place clears. -->
@@ -941,7 +949,7 @@
                   data-slot="work-tabs-session-tree"
                   class="m-0 flex list-none flex-col gap-(--tree-gap) p-0"
                 >
-                  {#each under(shown, entry.rows, null) as row (`${swap.gen}:${row.id}`)}
+                  {#each tops as row (`${swap.gen}:${row.id}`)}
                     <SessionTree
                       {current}
                       flip={!plan}

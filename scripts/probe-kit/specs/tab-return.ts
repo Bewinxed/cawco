@@ -162,6 +162,12 @@ const SPACE_RUN = /\s+/;
 const ROW_ESTIMATE = 21;
 /** How long leg 3 shows each silent session before reading its pane: its read has long landed. */
 const SILENT_MS = 5000;
+/**
+ * What a press restyles past the pane it shows: the strip's tabs, the rail's
+ * rows, the composer's away state: 16 and 67 past it on 2026-10-25 (1a 607
+ * restyled with a 591-element pane, 1c 853 with 786).
+ */
+const PRESS_RESTYLE_ROOM = 100;
 /** A press this soon after the reach comes while the warm pane's rows are still staged (Transcript `parkRows`). */
 const PRESS_IN_STAGING_MS = 40;
 /** An interaction's length in `inputsOf`'s line. */
@@ -197,8 +203,16 @@ interface Back {
   longestWhat: string;
   /** A return to the preview: what its page's own window said of it. */
   page?: PageBack;
+  /** Elements in the pane the press shows, read as the pointer came; 0 where unread. */
+  paneElements: number;
   /** When the switch was pressed, epoch ms. */
   pressAt: number;
+  /** The press's own task (its pointerup), CPU ms; NaN where untraced. */
+  pressCpu: number;
+  /** That task's restyles a `:has()` asked for, anywhere but the pressed tab (`hasAsksOf`). */
+  pressHas: string[];
+  /** The elements that task restyled; NaN where untraced. */
+  pressRestyled: number;
   /**
    * The press's own task (its pointerup) said whole, as `reachWhat`, with
    * its script's sampled self time by the bundle file it ran in.
@@ -1419,20 +1433,47 @@ async function checkPaneLookup(
 /** A sampled function's bundle file: `name@file:line:column`, or the engine's own. */
 const FILE_OF = /@([^:@]+):\d+:\d+$/;
 
+/** A trace's naming of the pressed tab's own box (TabItem `group/ff-tab`). */
+const PRESSED_TAB = /^SPAN class='group\/ff-tab /;
+/** Where a restyle ask or a scheduled set names its element: `<why> on <node>`. */
+const ASKED_ON = / on (.*?)(?: \(by [^)]*\))?$/;
+
 /**
- * The press's own task, the first pointerup at or after the press: said
- * whole (`line`), and its script's sampled self time summed by the bundle
- * file each function ran in, the most first.
+ * A task's restyles a `:has()` asked for (a subject "Affected by :has()",
+ * or a non-subject anchor's sets scheduled by `:has`), but those on the
+ * pressed tab's own box: its press fill reads its own hit's `:active`
+ * (`hit-pressed`), a restyle of the tab itself, never of what it holds.
+ */
+function hasAsksOf(task: MainTask): string[] {
+  return [
+    ...task.invalidated.filter(([what]) =>
+      what.startsWith("Affected by :has()")
+    ),
+    ...task.scheduled.filter(([what]) => what.startsWith(":has on ")),
+  ]
+    .filter(([what]) => !PRESSED_TAB.test(ASKED_ON.exec(what)?.[1] ?? ""))
+    .map(([what, n]) => `${what} ${n}x`);
+}
+
+/** The press's own task: the first pointerup at or after the press. */
+function pressTaskOf(tasks: MainTask[], madeMark: number): MainTask | null {
+  return (
+    tasks.find(
+      (one) => one.at >= madeMark && one.ran === "a pointerup event"
+    ) ?? null
+  );
+}
+
+/**
+ * The press's own task said whole (`line`), what asked for its restyle, and
+ * its script's sampled self time summed by the bundle file each function ran
+ * in, the most first.
  */
 function pressLine(
-  tasks: MainTask[],
-  madeMark: number,
+  task: MainTask | null,
   main: MainThread,
   line: (task: MainTask) => string
 ): string {
-  const task = tasks.find(
-    (one) => one.at >= madeMark && one.ran === "a pointerup event"
-  );
   if (!task) {
     return "no pointerup traced";
   }
@@ -1446,7 +1487,43 @@ function pressLine(
     .slice(0, 8)
     .map(([file, ms]) => `${file} ${ms.toFixed(1)}ms`)
     .join(", ");
-  return `${line(task)}; by file: ${files}`;
+  const asked =
+    task.invalidated.map(([what, n]) => `${what} ${n}x`).join("; ") ||
+    "nothing traced";
+  return `${line(task)}; its restyle asked for by: ${asked}; by file: ${files}`;
+}
+
+/** The press's own task as a return reads it: said whole, its CPU, its restyle and what a `:has()` asked of it. */
+function pressTaskRead(
+  task: MainTask | null,
+  main: MainThread,
+  line: (task: MainTask) => string
+): Pick<Read, "pressWhat" | "pressCpu" | "pressRestyled" | "pressHas"> {
+  const pressWhat = pressLine(task, main, line);
+  if (!task) {
+    return {
+      pressWhat,
+      pressCpu: Number.NaN,
+      pressRestyled: Number.NaN,
+      pressHas: [],
+    };
+  }
+  return {
+    pressWhat,
+    pressCpu: task.cpu,
+    pressRestyled: task.restyled,
+    pressHas: hasAsksOf(task),
+  };
+}
+
+/** Elements in pane `pane`, all it holds; 0 while it stands nowhere. */
+function paneElementsOf(page: Page, pane: string): Promise<number> {
+  return page.evaluate((id) => {
+    const box = document.querySelector(
+      `[data-slot="pane"][data-pane="${CSS.escape(id)}"]`
+    );
+    return box ? box.querySelectorAll("*").length : 0;
+  }, pane);
 }
 
 /**
@@ -1495,6 +1572,7 @@ async function measureBack(
   let styleBefore: readonly [number, number] = [0, 0];
   let styleAfter: readonly [number, number] = [0, 0];
   const held = await census(page);
+  const paneElements = await paneElementsOf(page, id);
   const { sizes: sizesBefore, rewritten } = await itemSizesOf(page, id);
   await markWarm(page, id);
   let reachEpoch = 0;
@@ -1597,6 +1675,7 @@ async function measureBack(
   const beforePress = own.filter((task) => task.at < madeMark);
   const reach = longestOf(beforePress);
   const warmed = reachTaskOf(beforePress, markAt("two-pane:warm:0"));
+  const pressTask = pressTaskOf(own, madeMark);
   /** A task said whole: what it ran, when, its CPU and restyle, what scheduled it, its sampled stacks. */
   const taskLine = (task: MainTask) =>
     `${task.ran}, ${Math.round((task.at - madeMark) / 1000)}ms after the press: ${task.cpu.toFixed(1)}ms of CPU, ${task.restyled} elements in ${Math.round(task.styleMs)}ms of style; scheduled by ${
@@ -1692,7 +1771,8 @@ async function measureBack(
     reachWhat: reach ? taskLine(reach) : "nothing",
     warmTask: warmed ? warmed.cpu : Number.NaN,
     warmWhat: warmed ? taskLine(warmed) : "no warm traced",
-    pressWhat: pressLine(own, madeMark, main, taskLine),
+    ...pressTaskRead(pressTask, main, taskLine),
+    paneElements,
     heavy:
       own
         .filter((task) => task.cpu >= HEAVY_MS)
@@ -1969,6 +2049,10 @@ async function pressBack(
     warmTask: Number.NaN,
     warmWhat: "not traced",
     pressWhat: "not traced",
+    pressCpu: Number.NaN,
+    pressRestyled: Number.NaN,
+    pressHas: [],
+    paneElements: 0,
     shown: "not read",
     shownCounts: [],
     staging: "not read",
@@ -2014,6 +2098,29 @@ function checkStaging(kit: Kit, back: Back): void {
     `${back.scene}: the reach task (its warm and the frame laying the pane out) within ${REACH_TASK_MS}ms of CPU (${REACH_TASK_MS * SLOWER}ms ${SLOWER}x slower)`,
     back.warmTask <= REACH_TASK_MS,
     back.warmWhat.slice(0, 600)
+  );
+}
+
+/**
+ * A traced busy return's press, its own task (its pointerup): within the two
+ * frames' budget on the slower CPU, restyling the pane it shows and the
+ * strip and rail it changes, and nothing a `:has()` found by what an element
+ * holds.
+ */
+function checkPress(kit: Kit, back: Back): void {
+  if (!(back.traced && back.kind === "busy")) {
+    return;
+  }
+  kit.check(
+    `${back.scene}: the press's own task (its pointerup) within ${2 * LONG_TASK_MS}ms on a CPU ${SLOWER}x slower`,
+    back.pressCpu * SLOWER <= 2 * LONG_TASK_MS,
+    `${back.pressCpu.toFixed(1)}ms of CPU, ${(back.pressCpu * SLOWER).toFixed(0)}ms slower; ${back.pressWhat.slice(0, 300)}`
+  );
+  kit.check(
+    `${back.scene}: the press restyles at most the ${back.paneElements} elements of the pane it shows and ${PRESS_RESTYLE_ROOM} more (its strip, the rail, the composer), and nothing for a :has() but the pressed tab`,
+    back.pressRestyled <= back.paneElements + PRESS_RESTYLE_ROOM &&
+      back.pressHas.length === 0,
+    `${back.pressRestyled} elements restyled; asked for by a :has(): ${back.pressHas.join("; ") || "nothing"}`
   );
 }
 
@@ -2803,6 +2910,7 @@ const run = async (kit: Kit) => {
         `the longest ${back.longest}ms of CPU, ${back.longest * SLOWER}ms slower; ${back.longestWhat.slice(0, 300)}`
       );
     }
+    checkPress(kit, back);
     // An untraced busy return (WebKit's) has no task to read: the frame the
     // dashboard draws first after the press stands for it, on this CPU.
     if (!back.traced && back.kind === "busy") {
