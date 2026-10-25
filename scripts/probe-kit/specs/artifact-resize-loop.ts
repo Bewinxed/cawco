@@ -42,6 +42,16 @@
  *   over the composer and the ring, the composer's focus gone, its top the
  *   open stop's ({@link runPhoneSheetLeaves}).
  *
+ * - A design preview beside its session, Comments open, in the owner's
+ *   window (1920×1000, the panel at its widest: the page's well 819×881, as
+ *   his stood when it shook), on Chromium and WebKit ({@link runStill}): its
+ *   page a frame scaled to the window whose height sits a hair past the
+ *   well's. Watched standing for 3 s, no element of the panel or the page
+ *   changes its clientWidth, no scrollbar comes or goes, the frame loads
+ *   nothing again, the rail lists the page's two pins and no skeleton, and
+ *   nothing logs an error. `--still <folder>[?query]` runs that leg alone on
+ *   any preview's folder (the owner's comment-sizing preview).
+ *
  * On opening and over every sweep, the page sent the hub no error report
  * and logged no ResizeObserver loop. A desk page draws its scrollbars as a
  * desk's Chromium does (the kit's `scrollbars`): the card starting to scroll
@@ -54,8 +64,13 @@
  *
  *   bun scripts/probe-kit/run.ts artifact-resize-loop
  *   bun scripts/probe-kit/run.ts artifact-resize-loop --phone-sheet 20
+ *   bun scripts/probe-kit/run.ts artifact-resize-loop --still
+ *   bun scripts/probe-kit/run.ts artifact-resize-loop --still "$PWD/design-previews/comment-sizing?option=a&case=short&screen=desk"
  */
-import type { Page } from "playwright-core";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import type { Frame, Page } from "playwright-core";
+import type { Pin } from "../../../packages/core/src/comments";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import {
   COMPOSER,
@@ -69,7 +84,7 @@ import {
   settle,
   type Theme,
 } from "../kit";
-import { pagePins } from "../pins";
+import { pagePins, writePagePins } from "../pins";
 
 const CREATE = "mcp__cawco__artifact_create";
 const COMMAND = /PROBE-CALL:(\d+)/g;
@@ -1599,6 +1614,14 @@ const run = async (kit: Kit) => {
     return;
   }
   const base = await fleet.dashboard();
+  const still = stillOnly();
+  if (still) {
+    for (const engine of ["chromium", "webkit"] as const) {
+      // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each its own report
+      await runStill(kit, base, fleet, session, { engine, ...still });
+    }
+    return;
+  }
   const repeat = phoneSheetRuns();
   if (repeat > 0) {
     for (let at = 0; at < repeat; at += 1) {
@@ -1702,6 +1725,10 @@ const run = async (kit: Kit) => {
     // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each its own report
     await runPageSweep(kit, base, one);
   }
+  for (const engine of ["chromium", "webkit"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each its own report
+    await runStill(kit, base, fleet, session, { engine });
+  }
 };
 
 /** A desk window from 1440 wide to 900 and back, in 20px steps. */
@@ -1772,6 +1799,462 @@ const PANEL_FRAME =
 
 /** The desk's widths Files is picked from, down to the split's edge. */
 const FILES_WIDTHS = [1440, 1100, 1000, 920];
+
+/**
+ * A design preview of the common kind: a frame drawn at its real size and
+ * scaled to the window's width from a ResizeObserver, its height set at
+ * load to sit 4px past the window's, so the page scrolls by a hair. Its root
+ * keeps its scrollbar's gutter (`scrollbar-gutter: stable`): the scrollbar
+ * standing or not never changes the width the scale is read from; and the
+ * scale is written in the frame after the observer's delivery. Without
+ * it the page loops by itself on a desk's scrollbars (comment-sizing's
+ * preview.js `scaleOf`, owner 2026-10-25: "this page keeps shaking with
+ * scrollbars opening and closing rapidly"): the scrollbar takes width, the
+ * scale and the height drop under the window's, the scrollbar goes, and
+ * round again every frame.
+ */
+const STILL_PAGE = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A frame scaled to the window</title>
+<style>
+  :root { scrollbar-gutter: stable; }
+  body { margin: 0; font: 16px/1.4 system-ui, sans-serif; }
+  .stage { display: grid; justify-items: center; gap: 12px; padding: 24px; }
+  h1 { margin: 0; font-size: 20px; }
+  .fit { position: relative; inline-size: calc(var(--w) * var(--s) * 1px); block-size: calc(var(--h) * var(--s) * 1px); }
+  .frame { position: absolute; inset-block-start: 0; inset-inline-start: 0; inline-size: calc(var(--w) * 1px); block-size: calc(var(--h) * 1px); transform: scale(var(--s)); transform-origin: 0 0; background: #e8e8ee; }
+  .frame p { margin: 48px; font-size: 32px; }
+</style>
+</head>
+<body>
+<main class="stage">
+  <h1 id="here">A frame scaled to the window</h1>
+  <div class="fit"><div class="frame"><p id="there">The frame, at 1440 wide.</p></div></div>
+</main>
+<script>
+  const W = 1440;
+  const stage = document.querySelector(".stage");
+  const fit = document.querySelector(".fit");
+  const scale = () => {
+    const style = getComputedStyle(stage);
+    const room = stage.clientWidth - parseFloat(style.paddingInlineStart) - parseFloat(style.paddingInlineEnd);
+    return Math.min(1, room / W);
+  };
+  let s = scale();
+  fit.style.setProperty("--w", String(W));
+  fit.style.setProperty("--s", String(s));
+  fit.style.setProperty("--h", "0");
+  const above = fit.getBoundingClientRect().top + scrollY;
+  const below = parseFloat(getComputedStyle(stage).paddingBlockEnd);
+  fit.style.setProperty("--h", String((innerHeight + 4 - above - below) / s));
+  // The scale is written in the next frame, never inside the delivery: the
+  // write grows the stage it watches, which WebKit would report as a loop.
+  let next = 0;
+  new ResizeObserver(() => {
+    next ||= requestAnimationFrame(() => {
+      next = 0;
+      const now = scale();
+      if (Math.abs(now - s) > 0.001) {
+        s = now;
+        fit.style.setProperty("--s", String(s));
+      }
+    });
+  }).observe(stage);
+</script>
+</body>
+</html>`;
+
+/** How long the panel is watched standing, ms. */
+const STILL_MS = 3000;
+/** The owner's window: his panel beside the session stood 1163×990, its page's well about 818 wide. */
+const OWNER_WINDOW = { width: 1920, height: 1000 };
+/** The panel's share of the split (Split.svelte `keys.width`, its widest) that stands its page's well about 818 wide in {@link OWNER_WINDOW}, as his did. */
+const OWNER_SHARE = 70;
+/** The session's split pane, where its panel stands. */
+const SIDE_PANE = "[data-side-pane]";
+const RAIL = '[data-slot="comment-rail"]';
+
+/** One element whose box moved while it should have stood still. */
+interface Moved {
+  /** How many frames it changed in. */
+  changes: number;
+  el: string;
+  values: number[];
+  /** clientWidth, scrollHeight, or the width its vertical scrollbar takes. */
+  what: "bar" | "height" | "width";
+}
+
+/**
+ * Every element under `scope` (the document's root included), read each
+ * frame for `ms`: its clientWidth, its scrollHeight where it scrolls, and
+ * the width its vertical scrollbar takes (the root's: the window's width
+ * less its own). Answers each element that changed, and how.
+ */
+const watchStill = ({ scope, ms }: { scope: string | null; ms: number }) =>
+  new Promise<Moved[]>((done) => {
+    const root = document.documentElement;
+    const under = scope ? document.querySelector(scope) : root;
+    const els = under ? [root, ...under.querySelectorAll("*")] : [root];
+    const name = (el: Element) => {
+      const slot = el.getAttribute("data-slot");
+      const cls = [...el.classList]
+        .filter((one) => !one.startsWith("svelte-"))
+        .slice(0, 2)
+        .join(".");
+      const holder = el.parentElement?.closest("[data-slot], [aria-label]");
+      const within = holder
+        ? ` in ${holder.tagName.toLowerCase()}[${holder.getAttribute("data-slot") ?? holder.getAttribute("aria-label")}]`
+        : "";
+      return `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ""}${cls ? `.${cls}` : ""}${slot ? `[${slot}]` : ""}${within}`;
+    };
+    const bar = (el: Element) => {
+      if (el === root) {
+        return window.innerWidth - root.clientWidth;
+      }
+      const html = el as HTMLElement;
+      const style = getComputedStyle(html);
+      return Math.round(
+        html.offsetWidth -
+          html.clientWidth -
+          Number.parseFloat(style.borderLeftWidth) -
+          Number.parseFloat(style.borderRightWidth)
+      );
+    };
+    const scrolls = (el: Element) =>
+      el === root ||
+      ["auto", "scroll"].includes(getComputedStyle(el).overflowY);
+    const read = (el: Element) => ({
+      width: el.clientWidth,
+      height: scrolls(el) ? el.scrollHeight : 0,
+      bar: scrolls(el) ? bar(el) : 0,
+    });
+    const seen = new Map(
+      els.map((el) => {
+        const now = read(el);
+        return [
+          el,
+          {
+            width: [now.width],
+            height: [now.height],
+            bar: [now.bar],
+          } as Record<Moved["what"], number[]>,
+        ];
+      })
+    );
+    const ends = performance.now() + ms;
+    const tick = () => {
+      for (const [el, values] of seen) {
+        if (!el.isConnected) {
+          continue;
+        }
+        const now = read(el);
+        for (const what of ["width", "height", "bar"] as const) {
+          if (values[what].at(-1) !== now[what]) {
+            values[what].push(now[what]);
+          }
+        }
+      }
+      if (performance.now() < ends) {
+        requestAnimationFrame(tick);
+        return;
+      }
+      done(
+        [...seen].flatMap(([el, values]) =>
+          (["width", "height", "bar"] as const)
+            .filter((what) => values[what].length > 1)
+            .map((what) => ({
+              what,
+              changes: values[what].length - 1,
+              el: name(el),
+              values: values[what].slice(0, 6),
+            }))
+        )
+      );
+    };
+    requestAnimationFrame(tick);
+  });
+
+/** A comment on `selector` by the person, as the overlay writes one. */
+const stillPin = (number: number, selector: string, words: string): Pin => ({
+  id: `probe-still-pin-${number}`,
+  number,
+  kind: "comment",
+  anchor: { selector, source: null, text: words },
+  at: new Date().toISOString(),
+  by: "person",
+  elements: [],
+  point: { x: 0.5, y: 0.5 },
+  thread: [
+    {
+      id: `probe-still-entry-${number}`,
+      by: "person",
+      text: `Still pin ${number}`,
+      at: new Date().toISOString(),
+    },
+  ],
+});
+
+/** What the rail draws: its pins' rows, by number, and its skeleton rows. */
+const railNow = (page: Page) =>
+  page.evaluate((rail) => {
+    const list = document.querySelector(rail);
+    return {
+      rows: [...(list?.querySelectorAll("[data-pin-row]") ?? [])]
+        .map((row) => Number(row.getAttribute("data-pin-row")))
+        .sort((a, b) => a - b),
+      skeletons:
+        list?.querySelectorAll('[data-slot="skeleton-row"]').length ?? 0,
+    };
+  }, RAIL);
+
+/** Where the preview stands: its page's well (the frame) and the rail beside it. */
+const stillGeometry = (page: Page) =>
+  page.evaluate(
+    ({ pane, rail }) => {
+      const box = (el: Element | null) => {
+        if (!el) {
+          return null;
+        }
+        const r = el.getBoundingClientRect();
+        return [r.x, r.y, r.width, r.height].map(Math.round).join(",");
+      };
+      return {
+        frame: box(document.querySelector(`${pane} iframe[title="Preview"]`)),
+        rail: box(document.querySelector(rail)),
+      };
+    },
+    { pane: SIDE_PANE, rail: RAIL }
+  );
+
+/**
+ * A preview beside its session, Comments open, in the owner's window
+ * ({@link OWNER_WINDOW}): once it has loaded and its rail has read its
+ * pins, watched standing for {@link STILL_MS}. Over that time no element of
+ * the panel or of the page changes its clientWidth, nothing's scrollbar
+ * comes or goes, the frame loads nothing again, the rail lists the page's
+ * pins and no skeleton, and nothing is logged as an error.
+ *
+ * `folder` is the preview's folder; unset, {@link STILL_PAGE} is written to
+ * one. `--still <folder>` reads any page so (the owner's comment-sizing
+ * preview at `design-previews/comment-sizing`).
+ */
+export const runStill = async (
+  kit: Kit,
+  base: string,
+  fleet: KitFleet,
+  session: string,
+  leg: { engine: "chromium" | "webkit"; folder?: string; query?: string }
+) => {
+  const folder = leg.folder ?? join(fleet.repo, "probe-still-preview");
+  if (!leg.folder) {
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(join(folder, "index.html"), STILL_PAGE);
+  }
+  const name = `still preview, ${leg.engine}${leg.folder ? ` (${leg.folder})` : ""}`;
+  const { id } = await fleet.api<{ id: string }>(
+    `/api/instances/${session}/artifacts`,
+    {
+      kind: "preview",
+      does: "judge",
+      ask: "Judge the frame scaled to the window",
+      name: `still-${leg.engine}`,
+      dir: folder,
+    }
+  );
+  await fleet.api(`/api/instances/${session}/artifacts/${id}/show`, {});
+  const page = await kit.page("desk", {
+    engine: leg.engine,
+    theme: "light",
+    init: [heldBack],
+    // A desk's Chromium draws its scrollbars beside what a box holds; WebKit lays them over it.
+    scrollbars: leg.engine === "chromium",
+  });
+  await page.addInitScript(
+    ({ comments, width, share }) => {
+      localStorage.setItem(comments, "open");
+      localStorage.setItem(width, String(share));
+    },
+    {
+      comments: `cawco-preview-comments:${session}`,
+      width: `cawco.preview.width.${session}`,
+      share: OWNER_SHARE,
+    }
+  );
+  await page.setViewportSize(OWNER_WINDOW);
+  const said = heard(page);
+  /** Each console error with the document that said it. */
+  const errorsFrom: string[] = [];
+  page.on("console", (line) => {
+    if (line.type() === "error" && !kitsOwnMessage(line.text())) {
+      errorsFrom.push(`${line.location().url}: ${line.text()}`);
+    }
+  });
+  const loads: string[] = [];
+  page.on("request", (request) => {
+    if (request.resourceType() === "document") {
+      loads.push(request.url());
+    }
+  });
+  await open(page, `${base}/session/${session}`, PANEL_FRAME);
+  let frame = (await until(
+    "the preview's page in the panel, its doc joined",
+    async () => {
+      const handle = await page.locator(PANEL_FRAME).first().elementHandle();
+      const inside = await handle?.contentFrame();
+      const joined = await inside
+        ?.evaluate(
+          () =>
+            !!(window as unknown as { cawcoArtifact?: { doc?: unknown } })
+              .cawcoArtifact?.doc
+        )
+        .catch(() => false);
+      return joined ? inside : null;
+    },
+    Boolean,
+    60_000
+  )) as Frame;
+  if (leg.query) {
+    // The page at the address he had it at; it loads again before the watch.
+    await frame.evaluate((query) => {
+      location.search = query;
+    }, leg.query);
+    await page.waitForTimeout(500);
+    frame = (await until(
+      "the preview's page at its address, its doc joined",
+      async () => {
+        const handle = await page.locator(PANEL_FRAME).first().elementHandle();
+        const inside = await handle?.contentFrame();
+        const there = await inside
+          ?.evaluate(
+            (query) =>
+              location.search === `?${query}` &&
+              !!(window as unknown as { cawcoArtifact?: { doc?: unknown } })
+                .cawcoArtifact?.doc,
+            leg.query
+          )
+          .catch(() => false);
+        return there ? inside : null;
+      },
+      Boolean,
+      60_000
+    )) as Frame;
+  }
+  if (Object.keys(await pagePins(frame)).length === 0) {
+    await writePagePins(
+      frame,
+      stillPin(1, "h1", "A frame scaled to the window"),
+      stillPin(2, "body", "The page")
+    );
+  }
+  // Each goes to the session by itself: its delivery stamps it, and its
+  // pill and its row's mark turn sent, before the watch.
+  await until(
+    "the page's comments delivered by themselves",
+    async () =>
+      Object.values(await pagePins(frame)).every((pin) => !!pin.sentAt),
+    Boolean,
+    20_000
+  ).catch(() => false);
+  const written = Object.values(await pagePins(frame))
+    .map((pin) => pin.number)
+    .sort((a, b) => a - b);
+  const listed = await until(
+    "the rail listing the page's pins",
+    () => railNow(page),
+    (now) => now.rows.join() === written.join() && now.skeletons === 0,
+    30_000
+  ).catch(() => railNow(page));
+  await settle(page);
+  await frames(page);
+  const start = await mark(page, said);
+  const loadsBefore = loads.length;
+  const errorsBefore = said.errors.length;
+  const [panel, inPage] = await Promise.all([
+    page.evaluate(watchStill, { scope: SIDE_PANE, ms: STILL_MS }),
+    frame.evaluate(watchStill, { scope: null, ms: STILL_MS }),
+  ]);
+  const watched = await mark(page, said);
+  const rail = await railNow(page);
+  const geometry = await stillGeometry(page);
+  const where = JSON.stringify(geometry);
+  const widths = [...panel, ...inPage].filter((one) => one.what === "width");
+  kit.check(
+    `${name}: over ${STILL_MS / 1000}s no element of the panel or its page changes its clientWidth (frame and rail at ${where})`,
+    widths.length === 0,
+    JSON.stringify({
+      panel: panel.filter((one) => one.what === "width").slice(0, 12),
+      page: inPage.filter((one) => one.what === "width").slice(0, 12),
+    })
+  );
+  const bars = [...panel, ...inPage].filter((one) => one.what === "bar");
+  kit.check(
+    `${name}: no scrollbar comes or goes, in the panel or its page`,
+    bars.length === 0,
+    JSON.stringify({
+      bars,
+      heights: [...panel, ...inPage]
+        .filter((one) => one.what === "height")
+        .slice(0, 12),
+    })
+  );
+  kit.check(
+    `${name}: the page loads nothing again while it stands`,
+    loads.length === loadsBefore,
+    JSON.stringify(loads.slice(loadsBefore))
+  );
+  kit.check(
+    `${name}: the rail lists the page's pins (${written.join(", ")}), no skeleton`,
+    written.length === 2 &&
+      listed.rows.join() === written.join() &&
+      rail.rows.join() === written.join() &&
+      rail.skeletons === 0,
+    JSON.stringify({ written, listed, rail })
+  );
+  const errors = said.errors.filter((line) => !kitsOwnMessage(line));
+  kit.check(
+    `${name}: no console error from opening it to the end of the watch`,
+    errors.length === 0,
+    JSON.stringify({
+      errors: errorsFrom,
+      pageErrors: errors,
+      during: said.errors.slice(errorsBefore),
+      loopFrames: await page.evaluate(() => window.__loopFrames ?? []),
+      // WebKit runs the kit's init scripts in every frame: the page's own loops, named.
+      pageLoopFrames: await frame
+        .evaluate(() => window.__loopFrames ?? [])
+        .catch(() => []),
+    })
+  );
+  await checkQuiet(
+    kit,
+    page,
+    said,
+    `${name}: standing ${STILL_MS / 1000}s`,
+    start,
+    watched
+  );
+  await page.context().close();
+};
+
+/**
+ * `--still [folder[?query]]`: the still preview alone ({@link runStill}), on
+ * Chromium and WebKit, and nothing else; a folder's page at its query when
+ * one is given.
+ */
+const stillOnly = (): { folder?: string; query?: string } | null => {
+  const at = process.argv.indexOf("--still");
+  if (at === -1) {
+    return null;
+  }
+  const named = process.argv[at + 1];
+  if (!named || named.startsWith("--")) {
+    return {};
+  }
+  const [folder, query] = named.split("?");
+  return query ? { folder, query } : { folder };
+};
 
 const spec: Spec = { name: "artifact-resize-loop", run };
 export default spec;
