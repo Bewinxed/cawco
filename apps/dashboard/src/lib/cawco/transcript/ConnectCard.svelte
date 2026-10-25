@@ -408,7 +408,7 @@
           >
             {askWords.connectWaiting(connect.server)}
           </p>
-        {:else if !reachable && !done}
+        {:else if !(reachable || done)}
           <p
             data-slot="wait"
             class="m-0 text-size-meta text-ink-muted"
