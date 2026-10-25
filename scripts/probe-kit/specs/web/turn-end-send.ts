@@ -33,8 +33,13 @@
  * g. OpenCode's `/mcp`, whose end sends no `result`: at rest the tail stays
  *    not busy; into a running turn, the pulse stays busy with the turn.
  * h. A Claude Code subagent's written words reach its branch.
+ * i. OpenCode's server refuses a send (a plugin of the probe's throws in its
+ *    prompt hook): at rest the session is not busy; into a running turn the
+ *    turn stays busy until its own end.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg, one engine, one step at a time
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
 import type { Page } from "playwright-core";
 import type { Harness, Reply, Seen } from "../../../scratch-fleet";
 import { MACHINE, until } from "../../../scratch-fleet";
@@ -69,6 +74,31 @@ const AWAY_EVERY_MS = 250;
 /** When the model's last word of each harness's away turn goes out, ms epoch, by harness. */
 const awayEnds = new Map<string, number>();
 const AWAY_OF = /PROBE-AWAY-(\w+)/;
+
+/** A send the probe's OpenCode plugin refuses at admission ({@link REFUSE_PLUGIN}). */
+const REFUSE = "PROBE-REFUSE";
+/** A turn that runs for some seconds, for a refused send to join. */
+const TURN = "PROBE-TURN";
+const TURN_WORDS = 60;
+const TURN_EVERY_MS = 250;
+/**
+ * The probe's OpenCode plugin, the fleet's own (`/api/fleet/opencode-plugins`):
+ * its prompt hook throws on a prompt that says {@link REFUSE}, so the server
+ * does not admit it ("If preparation fails or is interrupted, OpenCode does
+ * not admit the prompt", opencode.ai/v2/docs/build/plugins, Prompt
+ * admission) and the agent's `session.prompt` call fails.
+ */
+const REFUSE_PLUGIN = `export default {
+  id: "refuseprobe.plugin",
+  async setup(ctx) {
+    await ctx.session.hook("prompt", (event) => {
+      if (event.prompt.text.includes(${JSON.stringify(REFUSE)})) {
+        throw new Error("The probe's plugin refuses this prompt.");
+      }
+    });
+  },
+};
+`;
 
 const BRANCH_CALL = "PROBE-BRANCH-CALL";
 const BRANCH_TASK = "PROBE-BRANCH-TASK";
@@ -110,6 +140,9 @@ const respond = (request: Seen): Reply => {
       awayEnds.set(away, Date.now() + AWAY_WORDS * AWAY_EVERY_MS);
     }
     return { everyMs: AWAY_EVERY_MS, words: words(AWAY_WORDS, "step") };
+  }
+  if (request.last.includes(TURN)) {
+    return { everyMs: TURN_EVERY_MS, words: words(TURN_WORDS, "step") };
   }
   if (request.last.includes(LONG)) {
     return { everyMs: 300, words: words(200, "step") };
@@ -770,6 +803,105 @@ async function branchLeg(kit: Kit, fleet: KitFleet): Promise<void> {
   );
 }
 
+/**
+ * i. OpenCode's server refuses a send at admission (`#dispatchPrompt`'s
+ *    catch): the probe's own fleet plugin ({@link REFUSE_PLUGIN}) throws in
+ *    its prompt hook, in a folder of the leg's own, whose location first
+ *    boots with it in place. At rest, the refused send's record fails and
+ *    the session is not busy, tail and pulse. Into a running turn, the
+ *    refused send fails as well, the pulse and the tail stay busy while
+ *    that turn runs, and both say not busy once it ends.
+ */
+async function refusedLeg(kit: Kit, fleet: KitFleet): Promise<void> {
+  const put = await fetch(
+    `${fleet.base}/api/fleet/opencode-plugins/refuseprobe`,
+    {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ module: REFUSE_PLUGIN }),
+    }
+  );
+  if (!put.ok) {
+    throw new Error(
+      `the probe's plugin was refused: ${put.status} ${await put.text()}`
+    );
+  }
+  await until(
+    "the probe's plugin applied on the machine",
+    () =>
+      JSON.parse(
+        fleet.query<{ fleet: string | null }>(
+          "SELECT fleet FROM agents WHERE machine_id = ?",
+          MACHINE
+        )[0]?.fleet ?? "{}"
+      ) as { harnessConfig?: Record<string, { state: string }> },
+    (report) =>
+      report.harnessConfig?.["opencodePlugins:refuseprobe"]?.state ===
+      "applied",
+    120_000
+  );
+  const folder = join(fleet.sandbox, "refused");
+  await mkdir(folder, { recursive: true });
+  const session = await fleet.spawn("opencode", "Turn end refused", folder);
+  const state = async () => {
+    const [read, pulse] = [
+      await hubPage(fleet, session),
+      await hubPulse(fleet, session),
+    ];
+    return { tail: read.tail?.busy, pulse: pulse?.busy };
+  };
+  const said = (now: { tail?: boolean; pulse?: boolean }) =>
+    `tail busy ${now.tail}, pulse ${now.pulse === undefined ? "none" : `busy ${now.pulse}`}`;
+
+  const restSend = await fleet.send(session, `${REFUSE} at rest`);
+  const restRow = await until(
+    "the refused send's record",
+    () => fleet.sendRow(restSend),
+    (row) => row.state === "failed",
+    60_000
+  ).catch(() => fleet.sendRow(restSend));
+  await Bun.sleep(2000);
+  const rest = await state();
+  kit.check(
+    "opencode: a send its server refuses at rest fails, and the session is not busy, tail and pulse",
+    restRow?.state === "failed" && rest.tail === false && rest.pulse !== true,
+    `record ${restRow?.state} (${restRow?.reason ?? "no reason"}); ${said(rest)}`
+  );
+
+  await fleet.send(session, `${TURN} a while`);
+  await until(
+    "the turn under way, on the hub's tail and pulse",
+    state,
+    (now) => now.tail === true && now.pulse === true,
+    60_000
+  );
+  const midSend = await fleet.send(session, `${REFUSE} into the turn`);
+  const midRow = await until(
+    "the refused send's record",
+    () => fleet.sendRow(midSend),
+    (row) => row.state === "failed",
+    30_000
+  ).catch(() => fleet.sendRow(midSend));
+  await Bun.sleep(2000);
+  const mid = await state();
+  const ended = await until(
+    "the turn's end",
+    state,
+    (now) => now.tail === false && now.pulse === false,
+    TURN_WORDS * TURN_EVERY_MS + 60_000
+  ).catch(state);
+  kit.check(
+    "opencode: a send its server refuses while a turn runs fails, the turn stays busy, and both say not busy once it ends",
+    midRow?.state === "failed" &&
+      mid.tail === true &&
+      mid.pulse === true &&
+      ended.tail === false &&
+      ended.pulse === false,
+    `record ${midRow?.state} (${midRow?.reason ?? "no reason"}); after the refusal ${said(mid)}; at the turn's end ${said(ended)}`
+  );
+  await fleet.stopSession(session);
+}
+
 const spec: Spec = {
   name: "turn-end-send",
   run: async (kit) => {
@@ -793,6 +925,7 @@ const spec: Spec = {
     await mcpLeg(kit, fleet);
     await subagentLeg(kit, fleet);
     await branchLeg(kit, fleet);
+    await refusedLeg(kit, fleet);
   },
 };
 export default spec;
