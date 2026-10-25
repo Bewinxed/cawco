@@ -6,7 +6,6 @@
       "id": "status",
       "question": "Status glyphs: bare, and in which cut?",
       "bar": "Bare, a row mixes Solar's 1.5 line strokes with neighbours in its filled bold cut, so the bare ones read at about two thirds of their mass, and the i and ! are the weakest at 16px. The third draws the whole row in the line cut, each glyph's strokes weighed to within 0.7–1.4 of the row's ink at 16, 20 and 24px. Day on the left, night on the right, real size; hold a picture to see today's.",
-      "recommended": "line",
       "candidates": [
         {
           "id": "today",
@@ -66,7 +65,6 @@
       "id": "stop-idle",
       "question": "Line cut: Stopped and Idle, outlined or filled?",
       "bar": "Only if you pick the line cut above. Stopped and Idle go together. A filled square at the row's footprint would carry 4–5× the row's ink, so filled means Solar's own size. Day on the left, night on the right, real size; hold a picture to see today's.",
-      "recommended": "filled",
       "candidates": [
         {
           "id": "filled",
@@ -108,7 +106,6 @@
       "id": "configure",
       "question": "Configure rail: tiles off, and in which cut?",
       "bar": "Bare, a row mixes Solar's 1.5 line strokes with neighbours in its filled bold cut, so the bare ones read at about two thirds of their mass, and the i and ! are the weakest at 16px. The third draws the whole row in the line cut, each glyph's strokes weighed to within 0.7–1.4 of the row's ink at 16, 20 and 24px. Day on the left, night on the right, real size; hold a picture to see today's.",
-      "recommended": "line",
       "candidates": [
         {
           "id": "today",
@@ -168,7 +165,6 @@
       "id": "menus",
       "question": "Menus and tabs: bare, and in which cut?",
       "bar": "Bare, a row mixes Solar's 1.5 line strokes with neighbours in its filled bold cut, so the bare ones read at about two thirds of their mass, and the i and ! are the weakest at 16px. The third draws the whole row in the line cut, each glyph's strokes weighed to within 0.7–1.4 of the row's ink at 16, 20 and 24px. Day on the left, night on the right, real size; hold a picture to see today's.",
-      "recommended": "line",
       "candidates": [
         {
           "id": "today",
@@ -228,7 +224,6 @@
       "id": "chips",
       "question": "Delegate chips: sprite without its tile?",
       "bar": "Day on the left, night on the right, real size; hold a picture to see today's.",
-      "recommended": "bare",
       "candidates": [
         {
           "id": "today",
@@ -261,7 +256,6 @@
       "id": "canvas",
       "question": "Canvas tools: bare?",
       "bar": "Day on the left, night on the right, real size; hold a picture to see today's.",
-      "recommended": "bare",
       "candidates": [
         {
           "id": "today",
@@ -294,7 +288,6 @@
       "id": "others",
       "question": "Everything else: bare?",
       "bar": "Day on the left, night on the right, real size; hold a picture to see today's.",
-      "recommended": "bare",
       "candidates": [
         {
           "id": "today",
@@ -327,7 +320,6 @@
       "id": "tree",
       "question": "Session rows: the sprite without its tile?",
       "bar": "Day on the left, night on the right, real size; hold a picture to see today's.",
-      "recommended": "bare",
       "candidates": [
         {
           "id": "today",
@@ -360,7 +352,6 @@
       "id": "clock",
       "question": "Clock: which glyph?",
       "bar": "His rule: no circle, square or box around a Solar glyph; where Solar has no container-less version, draw one in Solar's style. Every Solar clock has its ring. Day on the left, night on the right, real size; hold a picture to see today's.",
-      "recommended": "drawn",
       "candidates": [
         {
           "id": "today",
@@ -406,7 +397,6 @@
       "id": "server",
       "question": "Server: which glyph?",
       "bar": "His rule: no circle, square or box around a Solar glyph; where Solar has no container-less version, draw one in Solar's style. Day on the left, night on the right, real size; hold a picture to see today's.",
-      "recommended": "line",
       "candidates": [
         {
           "id": "today",

@@ -12,7 +12,6 @@
       "file": "q1-status-today-1440-light.png",
       "question": "Status glyphs: bare, and in which cut?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 1440,
       "scheme": "light"
     },
@@ -20,7 +19,6 @@
       "file": "q1-status-bare-1440-light.png",
       "question": "Status glyphs: bare, and in which cut?",
       "option": "Without its container",
-      "recommended": false,
       "width": 1440,
       "scheme": "light"
     },
@@ -28,7 +26,6 @@
       "file": "q1-status-line-1440-light.png",
       "question": "Status glyphs: bare, and in which cut?",
       "option": "The whole row in Solar's line cut",
-      "recommended": true,
       "width": 1440,
       "scheme": "light"
     },
@@ -43,7 +40,6 @@
       "file": "q2-stop-idle-filled-1440-light.png",
       "question": "Line cut: Stopped and Idle, outlined or filled?",
       "option": "Both filled, Solar's size",
-      "recommended": true,
       "width": 1440,
       "scheme": "light"
     },
@@ -51,7 +47,6 @@
       "file": "q2-stop-idle-outlined-1440-light.png",
       "question": "Line cut: Stopped and Idle, outlined or filled?",
       "option": "Both outlined",
-      "recommended": false,
       "width": 1440,
       "scheme": "light"
     },
@@ -66,7 +61,6 @@
       "file": "q3-configure-today-1440-light.png",
       "question": "Configure rail: tiles off, and in which cut?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 1440,
       "scheme": "light"
     },
@@ -74,7 +68,6 @@
       "file": "q3-configure-bare-1440-light.png",
       "question": "Configure rail: tiles off, and in which cut?",
       "option": "Without its container",
-      "recommended": false,
       "width": 1440,
       "scheme": "light"
     },
@@ -82,7 +75,6 @@
       "file": "q3-configure-line-1440-light.png",
       "question": "Configure rail: tiles off, and in which cut?",
       "option": "The whole row in Solar's line cut",
-      "recommended": true,
       "width": 1440,
       "scheme": "light"
     },
@@ -97,7 +89,6 @@
       "file": "q4-menus-today-1440-light.png",
       "question": "Menus and tabs: bare, and in which cut?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 1440,
       "scheme": "light"
     },
@@ -105,7 +96,6 @@
       "file": "q4-menus-bare-1440-light.png",
       "question": "Menus and tabs: bare, and in which cut?",
       "option": "Without its container",
-      "recommended": false,
       "width": 1440,
       "scheme": "light"
     },
@@ -113,7 +103,6 @@
       "file": "q4-menus-line-1440-light.png",
       "question": "Menus and tabs: bare, and in which cut?",
       "option": "The whole row in Solar's line cut",
-      "recommended": true,
       "width": 1440,
       "scheme": "light"
     },
@@ -128,7 +117,6 @@
       "file": "q5-chips-today-1440-light.png",
       "question": "Delegate chips: sprite without its tile?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 1440,
       "scheme": "light"
     },
@@ -136,7 +124,6 @@
       "file": "q5-chips-bare-1440-light.png",
       "question": "Delegate chips: sprite without its tile?",
       "option": "Without its container",
-      "recommended": true,
       "width": 1440,
       "scheme": "light"
     },
@@ -151,7 +138,6 @@
       "file": "q6-canvas-today-1440-light.png",
       "question": "Canvas tools: bare?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 1440,
       "scheme": "light"
     },
@@ -159,7 +145,6 @@
       "file": "q6-canvas-bare-1440-light.png",
       "question": "Canvas tools: bare?",
       "option": "Without its container",
-      "recommended": true,
       "width": 1440,
       "scheme": "light"
     },
@@ -174,7 +159,6 @@
       "file": "q7-others-today-1440-light.png",
       "question": "Everything else: bare?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 1440,
       "scheme": "light"
     },
@@ -182,7 +166,6 @@
       "file": "q7-others-bare-1440-light.png",
       "question": "Everything else: bare?",
       "option": "Without its container",
-      "recommended": true,
       "width": 1440,
       "scheme": "light"
     },
@@ -197,7 +180,6 @@
       "file": "q8-tree-today-1440-light.png",
       "question": "Session rows: the sprite without its tile?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 1440,
       "scheme": "light"
     },
@@ -205,7 +187,6 @@
       "file": "q8-tree-bare-1440-light.png",
       "question": "Session rows: the sprite without its tile?",
       "option": "Without its container",
-      "recommended": true,
       "width": 1440,
       "scheme": "light"
     },
@@ -220,7 +201,6 @@
       "file": "q9-clock-today-1440-light.png",
       "question": "Clock: which glyph?",
       "option": "Today, kept as it is",
-      "recommended": false,
       "width": 1440,
       "scheme": "light"
     },
@@ -228,7 +208,6 @@
       "file": "q9-clock-line-1440-light.png",
       "question": "Clock: which glyph?",
       "option": "Solar's line clock",
-      "recommended": false,
       "width": 1440,
       "scheme": "light"
     },
@@ -236,7 +215,6 @@
       "file": "q9-clock-drawn-1440-light.png",
       "question": "Clock: which glyph?",
       "option": "Drawn bare, in Solar's style",
-      "recommended": true,
       "width": 1440,
       "scheme": "light"
     },
@@ -251,7 +229,6 @@
       "file": "q10-server-today-1440-light.png",
       "question": "Server: which glyph?",
       "option": "Today, kept as it is",
-      "recommended": false,
       "width": 1440,
       "scheme": "light"
     },
@@ -259,7 +236,6 @@
       "file": "q10-server-line-1440-light.png",
       "question": "Server: which glyph?",
       "option": "Solar's line server",
-      "recommended": true,
       "width": 1440,
       "scheme": "light"
     },
@@ -267,7 +243,6 @@
       "file": "q10-server-drawn-1440-light.png",
       "question": "Server: which glyph?",
       "option": "Drawn bare, in Solar's style",
-      "recommended": false,
       "width": 1440,
       "scheme": "light"
     },
@@ -288,7 +263,6 @@
       "file": "q1-status-today-390-light.png",
       "question": "Status glyphs: bare, and in which cut?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 390,
       "scheme": "light"
     },
@@ -296,7 +270,6 @@
       "file": "q1-status-bare-390-light.png",
       "question": "Status glyphs: bare, and in which cut?",
       "option": "Without its container",
-      "recommended": false,
       "width": 390,
       "scheme": "light"
     },
@@ -304,7 +277,6 @@
       "file": "q1-status-line-390-light.png",
       "question": "Status glyphs: bare, and in which cut?",
       "option": "The whole row in Solar's line cut",
-      "recommended": true,
       "width": 390,
       "scheme": "light"
     },
@@ -319,7 +291,6 @@
       "file": "q2-stop-idle-filled-390-light.png",
       "question": "Line cut: Stopped and Idle, outlined or filled?",
       "option": "Both filled, Solar's size",
-      "recommended": true,
       "width": 390,
       "scheme": "light"
     },
@@ -327,7 +298,6 @@
       "file": "q2-stop-idle-outlined-390-light.png",
       "question": "Line cut: Stopped and Idle, outlined or filled?",
       "option": "Both outlined",
-      "recommended": false,
       "width": 390,
       "scheme": "light"
     },
@@ -342,7 +312,6 @@
       "file": "q3-configure-today-390-light.png",
       "question": "Configure rail: tiles off, and in which cut?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 390,
       "scheme": "light"
     },
@@ -350,7 +319,6 @@
       "file": "q3-configure-bare-390-light.png",
       "question": "Configure rail: tiles off, and in which cut?",
       "option": "Without its container",
-      "recommended": false,
       "width": 390,
       "scheme": "light"
     },
@@ -358,7 +326,6 @@
       "file": "q3-configure-line-390-light.png",
       "question": "Configure rail: tiles off, and in which cut?",
       "option": "The whole row in Solar's line cut",
-      "recommended": true,
       "width": 390,
       "scheme": "light"
     },
@@ -373,7 +340,6 @@
       "file": "q4-menus-today-390-light.png",
       "question": "Menus and tabs: bare, and in which cut?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 390,
       "scheme": "light"
     },
@@ -381,7 +347,6 @@
       "file": "q4-menus-bare-390-light.png",
       "question": "Menus and tabs: bare, and in which cut?",
       "option": "Without its container",
-      "recommended": false,
       "width": 390,
       "scheme": "light"
     },
@@ -389,7 +354,6 @@
       "file": "q4-menus-line-390-light.png",
       "question": "Menus and tabs: bare, and in which cut?",
       "option": "The whole row in Solar's line cut",
-      "recommended": true,
       "width": 390,
       "scheme": "light"
     },
@@ -404,7 +368,6 @@
       "file": "q5-chips-today-390-light.png",
       "question": "Delegate chips: sprite without its tile?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 390,
       "scheme": "light"
     },
@@ -412,7 +375,6 @@
       "file": "q5-chips-bare-390-light.png",
       "question": "Delegate chips: sprite without its tile?",
       "option": "Without its container",
-      "recommended": true,
       "width": 390,
       "scheme": "light"
     },
@@ -427,7 +389,6 @@
       "file": "q6-canvas-today-390-light.png",
       "question": "Canvas tools: bare?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 390,
       "scheme": "light"
     },
@@ -435,7 +396,6 @@
       "file": "q6-canvas-bare-390-light.png",
       "question": "Canvas tools: bare?",
       "option": "Without its container",
-      "recommended": true,
       "width": 390,
       "scheme": "light"
     },
@@ -450,7 +410,6 @@
       "file": "q7-others-today-390-light.png",
       "question": "Everything else: bare?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 390,
       "scheme": "light"
     },
@@ -458,7 +417,6 @@
       "file": "q7-others-bare-390-light.png",
       "question": "Everything else: bare?",
       "option": "Without its container",
-      "recommended": true,
       "width": 390,
       "scheme": "light"
     },
@@ -473,7 +431,6 @@
       "file": "q8-tree-today-390-light.png",
       "question": "Session rows: the sprite without its tile?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 390,
       "scheme": "light"
     },
@@ -481,7 +438,6 @@
       "file": "q8-tree-bare-390-light.png",
       "question": "Session rows: the sprite without its tile?",
       "option": "Without its container",
-      "recommended": true,
       "width": 390,
       "scheme": "light"
     },
@@ -496,7 +452,6 @@
       "file": "q9-clock-today-390-light.png",
       "question": "Clock: which glyph?",
       "option": "Today, kept as it is",
-      "recommended": false,
       "width": 390,
       "scheme": "light"
     },
@@ -504,7 +459,6 @@
       "file": "q9-clock-line-390-light.png",
       "question": "Clock: which glyph?",
       "option": "Solar's line clock",
-      "recommended": false,
       "width": 390,
       "scheme": "light"
     },
@@ -512,7 +466,6 @@
       "file": "q9-clock-drawn-390-light.png",
       "question": "Clock: which glyph?",
       "option": "Drawn bare, in Solar's style",
-      "recommended": true,
       "width": 390,
       "scheme": "light"
     },
@@ -527,7 +480,6 @@
       "file": "q10-server-today-390-light.png",
       "question": "Server: which glyph?",
       "option": "Today, kept as it is",
-      "recommended": false,
       "width": 390,
       "scheme": "light"
     },
@@ -535,7 +487,6 @@
       "file": "q10-server-line-390-light.png",
       "question": "Server: which glyph?",
       "option": "Solar's line server",
-      "recommended": true,
       "width": 390,
       "scheme": "light"
     },
@@ -543,7 +494,6 @@
       "file": "q10-server-drawn-390-light.png",
       "question": "Server: which glyph?",
       "option": "Drawn bare, in Solar's style",
-      "recommended": false,
       "width": 390,
       "scheme": "light"
     },
@@ -564,7 +514,6 @@
       "file": "q1-status-today-1440-dark.png",
       "question": "Status glyphs: bare, and in which cut?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 1440,
       "scheme": "dark"
     },
@@ -572,7 +521,6 @@
       "file": "q1-status-bare-1440-dark.png",
       "question": "Status glyphs: bare, and in which cut?",
       "option": "Without its container",
-      "recommended": false,
       "width": 1440,
       "scheme": "dark"
     },
@@ -580,7 +528,6 @@
       "file": "q1-status-line-1440-dark.png",
       "question": "Status glyphs: bare, and in which cut?",
       "option": "The whole row in Solar's line cut",
-      "recommended": true,
       "width": 1440,
       "scheme": "dark"
     },
@@ -595,7 +542,6 @@
       "file": "q2-stop-idle-filled-1440-dark.png",
       "question": "Line cut: Stopped and Idle, outlined or filled?",
       "option": "Both filled, Solar's size",
-      "recommended": true,
       "width": 1440,
       "scheme": "dark"
     },
@@ -603,7 +549,6 @@
       "file": "q2-stop-idle-outlined-1440-dark.png",
       "question": "Line cut: Stopped and Idle, outlined or filled?",
       "option": "Both outlined",
-      "recommended": false,
       "width": 1440,
       "scheme": "dark"
     },
@@ -618,7 +563,6 @@
       "file": "q3-configure-today-1440-dark.png",
       "question": "Configure rail: tiles off, and in which cut?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 1440,
       "scheme": "dark"
     },
@@ -626,7 +570,6 @@
       "file": "q3-configure-bare-1440-dark.png",
       "question": "Configure rail: tiles off, and in which cut?",
       "option": "Without its container",
-      "recommended": false,
       "width": 1440,
       "scheme": "dark"
     },
@@ -634,7 +577,6 @@
       "file": "q3-configure-line-1440-dark.png",
       "question": "Configure rail: tiles off, and in which cut?",
       "option": "The whole row in Solar's line cut",
-      "recommended": true,
       "width": 1440,
       "scheme": "dark"
     },
@@ -649,7 +591,6 @@
       "file": "q4-menus-today-1440-dark.png",
       "question": "Menus and tabs: bare, and in which cut?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 1440,
       "scheme": "dark"
     },
@@ -657,7 +598,6 @@
       "file": "q4-menus-bare-1440-dark.png",
       "question": "Menus and tabs: bare, and in which cut?",
       "option": "Without its container",
-      "recommended": false,
       "width": 1440,
       "scheme": "dark"
     },
@@ -665,7 +605,6 @@
       "file": "q4-menus-line-1440-dark.png",
       "question": "Menus and tabs: bare, and in which cut?",
       "option": "The whole row in Solar's line cut",
-      "recommended": true,
       "width": 1440,
       "scheme": "dark"
     },
@@ -680,7 +619,6 @@
       "file": "q5-chips-today-1440-dark.png",
       "question": "Delegate chips: sprite without its tile?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 1440,
       "scheme": "dark"
     },
@@ -688,7 +626,6 @@
       "file": "q5-chips-bare-1440-dark.png",
       "question": "Delegate chips: sprite without its tile?",
       "option": "Without its container",
-      "recommended": true,
       "width": 1440,
       "scheme": "dark"
     },
@@ -703,7 +640,6 @@
       "file": "q6-canvas-today-1440-dark.png",
       "question": "Canvas tools: bare?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 1440,
       "scheme": "dark"
     },
@@ -711,7 +647,6 @@
       "file": "q6-canvas-bare-1440-dark.png",
       "question": "Canvas tools: bare?",
       "option": "Without its container",
-      "recommended": true,
       "width": 1440,
       "scheme": "dark"
     },
@@ -726,7 +661,6 @@
       "file": "q7-others-today-1440-dark.png",
       "question": "Everything else: bare?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 1440,
       "scheme": "dark"
     },
@@ -734,7 +668,6 @@
       "file": "q7-others-bare-1440-dark.png",
       "question": "Everything else: bare?",
       "option": "Without its container",
-      "recommended": true,
       "width": 1440,
       "scheme": "dark"
     },
@@ -749,7 +682,6 @@
       "file": "q8-tree-today-1440-dark.png",
       "question": "Session rows: the sprite without its tile?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 1440,
       "scheme": "dark"
     },
@@ -757,7 +689,6 @@
       "file": "q8-tree-bare-1440-dark.png",
       "question": "Session rows: the sprite without its tile?",
       "option": "Without its container",
-      "recommended": true,
       "width": 1440,
       "scheme": "dark"
     },
@@ -772,7 +703,6 @@
       "file": "q9-clock-today-1440-dark.png",
       "question": "Clock: which glyph?",
       "option": "Today, kept as it is",
-      "recommended": false,
       "width": 1440,
       "scheme": "dark"
     },
@@ -780,7 +710,6 @@
       "file": "q9-clock-line-1440-dark.png",
       "question": "Clock: which glyph?",
       "option": "Solar's line clock",
-      "recommended": false,
       "width": 1440,
       "scheme": "dark"
     },
@@ -788,7 +717,6 @@
       "file": "q9-clock-drawn-1440-dark.png",
       "question": "Clock: which glyph?",
       "option": "Drawn bare, in Solar's style",
-      "recommended": true,
       "width": 1440,
       "scheme": "dark"
     },
@@ -803,7 +731,6 @@
       "file": "q10-server-today-1440-dark.png",
       "question": "Server: which glyph?",
       "option": "Today, kept as it is",
-      "recommended": false,
       "width": 1440,
       "scheme": "dark"
     },
@@ -811,7 +738,6 @@
       "file": "q10-server-line-1440-dark.png",
       "question": "Server: which glyph?",
       "option": "Solar's line server",
-      "recommended": true,
       "width": 1440,
       "scheme": "dark"
     },
@@ -819,7 +745,6 @@
       "file": "q10-server-drawn-1440-dark.png",
       "question": "Server: which glyph?",
       "option": "Drawn bare, in Solar's style",
-      "recommended": false,
       "width": 1440,
       "scheme": "dark"
     },
@@ -840,7 +765,6 @@
       "file": "q1-status-today-390-dark.png",
       "question": "Status glyphs: bare, and in which cut?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 390,
       "scheme": "dark"
     },
@@ -848,7 +772,6 @@
       "file": "q1-status-bare-390-dark.png",
       "question": "Status glyphs: bare, and in which cut?",
       "option": "Without its container",
-      "recommended": false,
       "width": 390,
       "scheme": "dark"
     },
@@ -856,7 +779,6 @@
       "file": "q1-status-line-390-dark.png",
       "question": "Status glyphs: bare, and in which cut?",
       "option": "The whole row in Solar's line cut",
-      "recommended": true,
       "width": 390,
       "scheme": "dark"
     },
@@ -871,7 +793,6 @@
       "file": "q2-stop-idle-filled-390-dark.png",
       "question": "Line cut: Stopped and Idle, outlined or filled?",
       "option": "Both filled, Solar's size",
-      "recommended": true,
       "width": 390,
       "scheme": "dark"
     },
@@ -879,7 +800,6 @@
       "file": "q2-stop-idle-outlined-390-dark.png",
       "question": "Line cut: Stopped and Idle, outlined or filled?",
       "option": "Both outlined",
-      "recommended": false,
       "width": 390,
       "scheme": "dark"
     },
@@ -894,7 +814,6 @@
       "file": "q3-configure-today-390-dark.png",
       "question": "Configure rail: tiles off, and in which cut?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 390,
       "scheme": "dark"
     },
@@ -902,7 +821,6 @@
       "file": "q3-configure-bare-390-dark.png",
       "question": "Configure rail: tiles off, and in which cut?",
       "option": "Without its container",
-      "recommended": false,
       "width": 390,
       "scheme": "dark"
     },
@@ -910,7 +828,6 @@
       "file": "q3-configure-line-390-dark.png",
       "question": "Configure rail: tiles off, and in which cut?",
       "option": "The whole row in Solar's line cut",
-      "recommended": true,
       "width": 390,
       "scheme": "dark"
     },
@@ -925,7 +842,6 @@
       "file": "q4-menus-today-390-dark.png",
       "question": "Menus and tabs: bare, and in which cut?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 390,
       "scheme": "dark"
     },
@@ -933,7 +849,6 @@
       "file": "q4-menus-bare-390-dark.png",
       "question": "Menus and tabs: bare, and in which cut?",
       "option": "Without its container",
-      "recommended": false,
       "width": 390,
       "scheme": "dark"
     },
@@ -941,7 +856,6 @@
       "file": "q4-menus-line-390-dark.png",
       "question": "Menus and tabs: bare, and in which cut?",
       "option": "The whole row in Solar's line cut",
-      "recommended": true,
       "width": 390,
       "scheme": "dark"
     },
@@ -956,7 +870,6 @@
       "file": "q5-chips-today-390-dark.png",
       "question": "Delegate chips: sprite without its tile?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 390,
       "scheme": "dark"
     },
@@ -964,7 +877,6 @@
       "file": "q5-chips-bare-390-dark.png",
       "question": "Delegate chips: sprite without its tile?",
       "option": "Without its container",
-      "recommended": true,
       "width": 390,
       "scheme": "dark"
     },
@@ -979,7 +891,6 @@
       "file": "q6-canvas-today-390-dark.png",
       "question": "Canvas tools: bare?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 390,
       "scheme": "dark"
     },
@@ -987,7 +898,6 @@
       "file": "q6-canvas-bare-390-dark.png",
       "question": "Canvas tools: bare?",
       "option": "Without its container",
-      "recommended": true,
       "width": 390,
       "scheme": "dark"
     },
@@ -1002,7 +912,6 @@
       "file": "q7-others-today-390-dark.png",
       "question": "Everything else: bare?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 390,
       "scheme": "dark"
     },
@@ -1010,7 +919,6 @@
       "file": "q7-others-bare-390-dark.png",
       "question": "Everything else: bare?",
       "option": "Without its container",
-      "recommended": true,
       "width": 390,
       "scheme": "dark"
     },
@@ -1025,7 +933,6 @@
       "file": "q8-tree-today-390-dark.png",
       "question": "Session rows: the sprite without its tile?",
       "option": "Today (in its container)",
-      "recommended": false,
       "width": 390,
       "scheme": "dark"
     },
@@ -1033,7 +940,6 @@
       "file": "q8-tree-bare-390-dark.png",
       "question": "Session rows: the sprite without its tile?",
       "option": "Without its container",
-      "recommended": true,
       "width": 390,
       "scheme": "dark"
     },
@@ -1048,7 +954,6 @@
       "file": "q9-clock-today-390-dark.png",
       "question": "Clock: which glyph?",
       "option": "Today, kept as it is",
-      "recommended": false,
       "width": 390,
       "scheme": "dark"
     },
@@ -1056,7 +961,6 @@
       "file": "q9-clock-line-390-dark.png",
       "question": "Clock: which glyph?",
       "option": "Solar's line clock",
-      "recommended": false,
       "width": 390,
       "scheme": "dark"
     },
@@ -1064,7 +968,6 @@
       "file": "q9-clock-drawn-390-dark.png",
       "question": "Clock: which glyph?",
       "option": "Drawn bare, in Solar's style",
-      "recommended": true,
       "width": 390,
       "scheme": "dark"
     },
@@ -1079,7 +982,6 @@
       "file": "q10-server-today-390-dark.png",
       "question": "Server: which glyph?",
       "option": "Today, kept as it is",
-      "recommended": false,
       "width": 390,
       "scheme": "dark"
     },
@@ -1087,7 +989,6 @@
       "file": "q10-server-line-390-dark.png",
       "question": "Server: which glyph?",
       "option": "Solar's line server",
-      "recommended": true,
       "width": 390,
       "scheme": "dark"
     },
@@ -1095,7 +996,6 @@
       "file": "q10-server-drawn-390-dark.png",
       "question": "Server: which glyph?",
       "option": "Drawn bare, in Solar's style",
-      "recommended": false,
       "width": 390,
       "scheme": "dark"
     },
@@ -1112,16 +1012,9 @@
       "scheme": "light",
       "width": 1440,
       "question": 1,
-      "count": "Three options, side by side",
       "countBottom": 184,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y250",
-        "bare@x537,y250",
-        "line@x890,y250"
-      ],
-      "back": null,
-      "recommended": "line",
+      "optionTops": ["today@x184,y250", "bare@x537,y250", "line@x890,y250"],
       "docOverflowX": 0
     },
     {
@@ -1129,25 +1022,9 @@
       "scheme": "light",
       "width": 1440,
       "question": 2,
-      "count": "Two options, side by side",
       "countBottom": 177,
       "fold": 900,
-      "optionTops": [
-        "filled@x184,y243",
-        "outlined@x537,y243"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 1",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "filled",
+      "optionTops": ["filled@x184,y243", "outlined@x537,y243"],
       "docOverflowX": 0
     },
     {
@@ -1155,26 +1032,9 @@
       "scheme": "light",
       "width": 1440,
       "question": 3,
-      "count": "Three options, side by side",
       "countBottom": 192,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y258",
-        "bare@x537,y258",
-        "line@x890,y258"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 2",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x184,y258", "bare@x537,y258", "line@x890,y258"],
       "docOverflowX": 0
     },
     {
@@ -1182,26 +1042,9 @@
       "scheme": "light",
       "width": 1440,
       "question": 4,
-      "count": "Three options, side by side",
       "countBottom": 192,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y258",
-        "bare@x537,y258",
-        "line@x890,y258"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 3",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x184,y258", "bare@x537,y258", "line@x890,y258"],
       "docOverflowX": 0
     },
     {
@@ -1209,25 +1052,9 @@
       "scheme": "light",
       "width": 1440,
       "question": 5,
-      "count": "Two options, side by side",
       "countBottom": 148,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y214",
-        "bare@x537,y214"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 4",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x184,y214", "bare@x537,y214"],
       "docOverflowX": 0
     },
     {
@@ -1235,25 +1062,9 @@
       "scheme": "light",
       "width": 1440,
       "question": 6,
-      "count": "Two options, side by side",
       "countBottom": 148,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y214",
-        "bare@x537,y214"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 5",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x184,y214", "bare@x537,y214"],
       "docOverflowX": 0
     },
     {
@@ -1261,25 +1072,9 @@
       "scheme": "light",
       "width": 1440,
       "question": 7,
-      "count": "Two options, side by side",
       "countBottom": 148,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y214",
-        "bare@x537,y214"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 6",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x184,y214", "bare@x537,y214"],
       "docOverflowX": 0
     },
     {
@@ -1287,25 +1082,9 @@
       "scheme": "light",
       "width": 1440,
       "question": 8,
-      "count": "Two options, side by side",
       "countBottom": 148,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y214",
-        "bare@x537,y214"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 7",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x184,y214", "bare@x537,y214"],
       "docOverflowX": 0
     },
     {
@@ -1313,26 +1092,9 @@
       "scheme": "light",
       "width": 1440,
       "question": 9,
-      "count": "Three options, side by side",
       "countBottom": 177,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y243",
-        "line@x537,y243",
-        "drawn@x890,y243"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 8",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "drawn",
+      "optionTops": ["today@x184,y243", "line@x537,y243", "drawn@x890,y243"],
       "docOverflowX": 0
     },
     {
@@ -1340,26 +1102,9 @@
       "scheme": "light",
       "width": 1440,
       "question": 10,
-      "count": "Three options, side by side",
       "countBottom": 163,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y229",
-        "line@x537,y229",
-        "drawn@x890,y229"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 9",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x184,y229", "line@x537,y229", "drawn@x890,y229"],
       "docOverflowX": 0
     },
     {
@@ -1367,16 +1112,9 @@
       "scheme": "light",
       "width": 680,
       "question": 1,
-      "count": "Three options, side by side",
       "countBottom": 183,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y249",
-        "bare@x367,y249",
-        "line@x720,y249"
-      ],
-      "back": null,
-      "recommended": "line",
+      "optionTops": ["today@x14,y249", "bare@x367,y249", "line@x720,y249"],
       "docOverflowX": 0
     },
     {
@@ -1384,25 +1122,9 @@
       "scheme": "light",
       "width": 680,
       "question": 2,
-      "count": "Two options, side by side",
       "countBottom": 176,
       "fold": 900,
-      "optionTops": [
-        "filled@x14,y242",
-        "outlined@x367,y242"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 1",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "filled",
+      "optionTops": ["filled@x14,y242", "outlined@x367,y242"],
       "docOverflowX": 0
     },
     {
@@ -1410,26 +1132,9 @@
       "scheme": "light",
       "width": 680,
       "question": 3,
-      "count": "Three options, side by side",
       "countBottom": 191,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y257",
-        "bare@x367,y257",
-        "line@x720,y257"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 2",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x14,y257", "bare@x367,y257", "line@x720,y257"],
       "docOverflowX": 0
     },
     {
@@ -1437,26 +1142,9 @@
       "scheme": "light",
       "width": 680,
       "question": 4,
-      "count": "Three options, side by side",
       "countBottom": 191,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y257",
-        "bare@x367,y257",
-        "line@x720,y257"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 3",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x14,y257", "bare@x367,y257", "line@x720,y257"],
       "docOverflowX": 0
     },
     {
@@ -1464,25 +1152,9 @@
       "scheme": "light",
       "width": 680,
       "question": 5,
-      "count": "Two options, side by side",
       "countBottom": 147,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y213",
-        "bare@x367,y213"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 4",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y213", "bare@x367,y213"],
       "docOverflowX": 0
     },
     {
@@ -1490,25 +1162,9 @@
       "scheme": "light",
       "width": 680,
       "question": 6,
-      "count": "Two options, side by side",
       "countBottom": 147,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y213",
-        "bare@x367,y213"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 5",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y213", "bare@x367,y213"],
       "docOverflowX": 0
     },
     {
@@ -1516,25 +1172,9 @@
       "scheme": "light",
       "width": 680,
       "question": 7,
-      "count": "Two options, side by side",
       "countBottom": 147,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y213",
-        "bare@x367,y213"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 6",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y213", "bare@x367,y213"],
       "docOverflowX": 0
     },
     {
@@ -1542,25 +1182,9 @@
       "scheme": "light",
       "width": 680,
       "question": 8,
-      "count": "Two options, side by side",
       "countBottom": 147,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y213",
-        "bare@x367,y213"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 7",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y213", "bare@x367,y213"],
       "docOverflowX": 0
     },
     {
@@ -1568,26 +1192,9 @@
       "scheme": "light",
       "width": 680,
       "question": 9,
-      "count": "Three options, side by side",
       "countBottom": 176,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y242",
-        "line@x367,y242",
-        "drawn@x720,y242"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 8",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "drawn",
+      "optionTops": ["today@x14,y242", "line@x367,y242", "drawn@x720,y242"],
       "docOverflowX": 0
     },
     {
@@ -1595,26 +1202,9 @@
       "scheme": "light",
       "width": 680,
       "question": 10,
-      "count": "Three options, side by side",
       "countBottom": 162,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y228",
-        "line@x367,y228",
-        "drawn@x720,y228"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 9",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x14,y228", "line@x367,y228", "drawn@x720,y228"],
       "docOverflowX": 0
     },
     {
@@ -1622,16 +1212,9 @@
       "scheme": "light",
       "width": 390,
       "question": 1,
-      "count": "Three options, side by side",
       "countBottom": 212,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y278",
-        "bare@x367,y278",
-        "line@x720,y278"
-      ],
-      "back": null,
-      "recommended": "line",
+      "optionTops": ["today@x14,y278", "bare@x367,y278", "line@x720,y278"],
       "docOverflowX": 0
     },
     {
@@ -1639,25 +1222,9 @@
       "scheme": "light",
       "width": 390,
       "question": 2,
-      "count": "Two options, side by side",
       "countBottom": 190,
       "fold": 844,
-      "optionTops": [
-        "filled@x14,y256",
-        "outlined@x367,y256"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 1",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "filled",
+      "optionTops": ["filled@x14,y256", "outlined@x367,y256"],
       "docOverflowX": 0
     },
     {
@@ -1665,26 +1232,9 @@
       "scheme": "light",
       "width": 390,
       "question": 3,
-      "count": "Three options, side by side",
       "countBottom": 220,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y286",
-        "bare@x367,y286",
-        "line@x720,y286"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 2",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x14,y286", "bare@x367,y286", "line@x720,y286"],
       "docOverflowX": 0
     },
     {
@@ -1692,26 +1242,9 @@
       "scheme": "light",
       "width": 390,
       "question": 4,
-      "count": "Three options, side by side",
       "countBottom": 220,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y286",
-        "bare@x367,y286",
-        "line@x720,y286"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 3",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x14,y286", "bare@x367,y286", "line@x720,y286"],
       "docOverflowX": 0
     },
     {
@@ -1719,25 +1252,9 @@
       "scheme": "light",
       "width": 390,
       "question": 5,
-      "count": "Two options, side by side",
       "countBottom": 146,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y212",
-        "bare@x367,y212"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 4",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y212", "bare@x367,y212"],
       "docOverflowX": 0
     },
     {
@@ -1745,25 +1262,9 @@
       "scheme": "light",
       "width": 390,
       "question": 6,
-      "count": "Two options, side by side",
       "countBottom": 146,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y212",
-        "bare@x367,y212"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 5",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y212", "bare@x367,y212"],
       "docOverflowX": 0
     },
     {
@@ -1771,25 +1272,9 @@
       "scheme": "light",
       "width": 390,
       "question": 7,
-      "count": "Two options, side by side",
       "countBottom": 146,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y212",
-        "bare@x367,y212"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 6",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y212", "bare@x367,y212"],
       "docOverflowX": 0
     },
     {
@@ -1797,25 +1282,9 @@
       "scheme": "light",
       "width": 390,
       "question": 8,
-      "count": "Two options, side by side",
       "countBottom": 146,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y212",
-        "bare@x367,y212"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 7",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y212", "bare@x367,y212"],
       "docOverflowX": 0
     },
     {
@@ -1823,26 +1292,9 @@
       "scheme": "light",
       "width": 390,
       "question": 9,
-      "count": "Three options, side by side",
       "countBottom": 175,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y241",
-        "line@x367,y241",
-        "drawn@x720,y241"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 8",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "drawn",
+      "optionTops": ["today@x14,y241", "line@x367,y241", "drawn@x720,y241"],
       "docOverflowX": 0
     },
     {
@@ -1850,26 +1302,9 @@
       "scheme": "light",
       "width": 390,
       "question": 10,
-      "count": "Three options, side by side",
       "countBottom": 175,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y241",
-        "line@x367,y241",
-        "drawn@x720,y241"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 9",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x14,y241", "line@x367,y241", "drawn@x720,y241"],
       "docOverflowX": 0
     },
     {
@@ -1877,16 +1312,9 @@
       "scheme": "dark",
       "width": 1440,
       "question": 1,
-      "count": "Three options, side by side",
       "countBottom": 184,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y250",
-        "bare@x537,y250",
-        "line@x890,y250"
-      ],
-      "back": null,
-      "recommended": "line",
+      "optionTops": ["today@x184,y250", "bare@x537,y250", "line@x890,y250"],
       "docOverflowX": 0
     },
     {
@@ -1894,25 +1322,9 @@
       "scheme": "dark",
       "width": 1440,
       "question": 2,
-      "count": "Two options, side by side",
       "countBottom": 177,
       "fold": 900,
-      "optionTops": [
-        "filled@x184,y243",
-        "outlined@x537,y243"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 1",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "filled",
+      "optionTops": ["filled@x184,y243", "outlined@x537,y243"],
       "docOverflowX": 0
     },
     {
@@ -1920,26 +1332,9 @@
       "scheme": "dark",
       "width": 1440,
       "question": 3,
-      "count": "Three options, side by side",
       "countBottom": 192,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y258",
-        "bare@x537,y258",
-        "line@x890,y258"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 2",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x184,y258", "bare@x537,y258", "line@x890,y258"],
       "docOverflowX": 0
     },
     {
@@ -1947,26 +1342,9 @@
       "scheme": "dark",
       "width": 1440,
       "question": 4,
-      "count": "Three options, side by side",
       "countBottom": 192,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y258",
-        "bare@x537,y258",
-        "line@x890,y258"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 3",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x184,y258", "bare@x537,y258", "line@x890,y258"],
       "docOverflowX": 0
     },
     {
@@ -1974,25 +1352,9 @@
       "scheme": "dark",
       "width": 1440,
       "question": 5,
-      "count": "Two options, side by side",
       "countBottom": 148,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y214",
-        "bare@x537,y214"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 4",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x184,y214", "bare@x537,y214"],
       "docOverflowX": 0
     },
     {
@@ -2000,25 +1362,9 @@
       "scheme": "dark",
       "width": 1440,
       "question": 6,
-      "count": "Two options, side by side",
       "countBottom": 148,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y214",
-        "bare@x537,y214"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 5",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x184,y214", "bare@x537,y214"],
       "docOverflowX": 0
     },
     {
@@ -2026,25 +1372,9 @@
       "scheme": "dark",
       "width": 1440,
       "question": 7,
-      "count": "Two options, side by side",
       "countBottom": 148,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y214",
-        "bare@x537,y214"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 6",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x184,y214", "bare@x537,y214"],
       "docOverflowX": 0
     },
     {
@@ -2052,25 +1382,9 @@
       "scheme": "dark",
       "width": 1440,
       "question": 8,
-      "count": "Two options, side by side",
       "countBottom": 148,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y214",
-        "bare@x537,y214"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 7",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x184,y214", "bare@x537,y214"],
       "docOverflowX": 0
     },
     {
@@ -2078,26 +1392,9 @@
       "scheme": "dark",
       "width": 1440,
       "question": 9,
-      "count": "Three options, side by side",
       "countBottom": 177,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y243",
-        "line@x537,y243",
-        "drawn@x890,y243"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 8",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "drawn",
+      "optionTops": ["today@x184,y243", "line@x537,y243", "drawn@x890,y243"],
       "docOverflowX": 0
     },
     {
@@ -2105,26 +1402,9 @@
       "scheme": "dark",
       "width": 1440,
       "question": 10,
-      "count": "Three options, side by side",
       "countBottom": 163,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y229",
-        "line@x537,y229",
-        "drawn@x890,y229"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 9",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x184,y229", "line@x537,y229", "drawn@x890,y229"],
       "docOverflowX": 0
     },
     {
@@ -2132,16 +1412,9 @@
       "scheme": "dark",
       "width": 680,
       "question": 1,
-      "count": "Three options, side by side",
       "countBottom": 183,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y249",
-        "bare@x367,y249",
-        "line@x720,y249"
-      ],
-      "back": null,
-      "recommended": "line",
+      "optionTops": ["today@x14,y249", "bare@x367,y249", "line@x720,y249"],
       "docOverflowX": 0
     },
     {
@@ -2149,25 +1422,9 @@
       "scheme": "dark",
       "width": 680,
       "question": 2,
-      "count": "Two options, side by side",
       "countBottom": 176,
       "fold": 900,
-      "optionTops": [
-        "filled@x14,y242",
-        "outlined@x367,y242"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 1",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "filled",
+      "optionTops": ["filled@x14,y242", "outlined@x367,y242"],
       "docOverflowX": 0
     },
     {
@@ -2175,26 +1432,9 @@
       "scheme": "dark",
       "width": 680,
       "question": 3,
-      "count": "Three options, side by side",
       "countBottom": 191,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y257",
-        "bare@x367,y257",
-        "line@x720,y257"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 2",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x14,y257", "bare@x367,y257", "line@x720,y257"],
       "docOverflowX": 0
     },
     {
@@ -2202,26 +1442,9 @@
       "scheme": "dark",
       "width": 680,
       "question": 4,
-      "count": "Three options, side by side",
       "countBottom": 191,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y257",
-        "bare@x367,y257",
-        "line@x720,y257"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 3",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x14,y257", "bare@x367,y257", "line@x720,y257"],
       "docOverflowX": 0
     },
     {
@@ -2229,25 +1452,9 @@
       "scheme": "dark",
       "width": 680,
       "question": 5,
-      "count": "Two options, side by side",
       "countBottom": 147,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y213",
-        "bare@x367,y213"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 4",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y213", "bare@x367,y213"],
       "docOverflowX": 0
     },
     {
@@ -2255,25 +1462,9 @@
       "scheme": "dark",
       "width": 680,
       "question": 6,
-      "count": "Two options, side by side",
       "countBottom": 147,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y213",
-        "bare@x367,y213"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 5",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y213", "bare@x367,y213"],
       "docOverflowX": 0
     },
     {
@@ -2281,25 +1472,9 @@
       "scheme": "dark",
       "width": 680,
       "question": 7,
-      "count": "Two options, side by side",
       "countBottom": 147,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y213",
-        "bare@x367,y213"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 6",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y213", "bare@x367,y213"],
       "docOverflowX": 0
     },
     {
@@ -2307,25 +1482,9 @@
       "scheme": "dark",
       "width": 680,
       "question": 8,
-      "count": "Two options, side by side",
       "countBottom": 147,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y213",
-        "bare@x367,y213"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 7",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y213", "bare@x367,y213"],
       "docOverflowX": 0
     },
     {
@@ -2333,26 +1492,9 @@
       "scheme": "dark",
       "width": 680,
       "question": 9,
-      "count": "Three options, side by side",
       "countBottom": 176,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y242",
-        "line@x367,y242",
-        "drawn@x720,y242"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 8",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "drawn",
+      "optionTops": ["today@x14,y242", "line@x367,y242", "drawn@x720,y242"],
       "docOverflowX": 0
     },
     {
@@ -2360,26 +1502,9 @@
       "scheme": "dark",
       "width": 680,
       "question": 10,
-      "count": "Three options, side by side",
       "countBottom": 162,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y228",
-        "line@x367,y228",
-        "drawn@x720,y228"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 9",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x14,y228", "line@x367,y228", "drawn@x720,y228"],
       "docOverflowX": 0
     },
     {
@@ -2387,16 +1512,9 @@
       "scheme": "dark",
       "width": 390,
       "question": 1,
-      "count": "Three options, side by side",
       "countBottom": 212,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y278",
-        "bare@x367,y278",
-        "line@x720,y278"
-      ],
-      "back": null,
-      "recommended": "line",
+      "optionTops": ["today@x14,y278", "bare@x367,y278", "line@x720,y278"],
       "docOverflowX": 0
     },
     {
@@ -2404,25 +1522,9 @@
       "scheme": "dark",
       "width": 390,
       "question": 2,
-      "count": "Two options, side by side",
       "countBottom": 190,
       "fold": 844,
-      "optionTops": [
-        "filled@x14,y256",
-        "outlined@x367,y256"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 1",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "filled",
+      "optionTops": ["filled@x14,y256", "outlined@x367,y256"],
       "docOverflowX": 0
     },
     {
@@ -2430,26 +1532,9 @@
       "scheme": "dark",
       "width": 390,
       "question": 3,
-      "count": "Three options, side by side",
       "countBottom": 220,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y286",
-        "bare@x367,y286",
-        "line@x720,y286"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 2",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x14,y286", "bare@x367,y286", "line@x720,y286"],
       "docOverflowX": 0
     },
     {
@@ -2457,26 +1542,9 @@
       "scheme": "dark",
       "width": 390,
       "question": 4,
-      "count": "Three options, side by side",
       "countBottom": 220,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y286",
-        "bare@x367,y286",
-        "line@x720,y286"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 3",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x14,y286", "bare@x367,y286", "line@x720,y286"],
       "docOverflowX": 0
     },
     {
@@ -2484,25 +1552,9 @@
       "scheme": "dark",
       "width": 390,
       "question": 5,
-      "count": "Two options, side by side",
       "countBottom": 146,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y212",
-        "bare@x367,y212"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 4",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y212", "bare@x367,y212"],
       "docOverflowX": 0
     },
     {
@@ -2510,25 +1562,9 @@
       "scheme": "dark",
       "width": 390,
       "question": 6,
-      "count": "Two options, side by side",
       "countBottom": 146,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y212",
-        "bare@x367,y212"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 5",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y212", "bare@x367,y212"],
       "docOverflowX": 0
     },
     {
@@ -2536,25 +1572,9 @@
       "scheme": "dark",
       "width": 390,
       "question": 7,
-      "count": "Two options, side by side",
       "countBottom": 146,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y212",
-        "bare@x367,y212"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 6",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y212", "bare@x367,y212"],
       "docOverflowX": 0
     },
     {
@@ -2562,25 +1582,9 @@
       "scheme": "dark",
       "width": 390,
       "question": 8,
-      "count": "Two options, side by side",
       "countBottom": 146,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y212",
-        "bare@x367,y212"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 7",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y212", "bare@x367,y212"],
       "docOverflowX": 0
     },
     {
@@ -2588,26 +1592,9 @@
       "scheme": "dark",
       "width": 390,
       "question": 9,
-      "count": "Three options, side by side",
       "countBottom": 175,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y241",
-        "line@x367,y241",
-        "drawn@x720,y241"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 8",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "drawn",
+      "optionTops": ["today@x14,y241", "line@x367,y241", "drawn@x720,y241"],
       "docOverflowX": 0
     },
     {
@@ -2615,26 +1602,9 @@
       "scheme": "dark",
       "width": 390,
       "question": 10,
-      "count": "Three options, side by side",
       "countBottom": 175,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y241",
-        "line@x367,y241",
-        "drawn@x720,y241"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 9",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x14,y241", "line@x367,y241", "drawn@x720,y241"],
       "docOverflowX": 0
     },
     {
@@ -2642,16 +1612,9 @@
       "scheme": "light",
       "width": 1440,
       "question": 1,
-      "count": "Three options, side by side",
       "countBottom": 184,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y250",
-        "bare@x537,y250",
-        "line@x890,y250"
-      ],
-      "back": null,
-      "recommended": "line",
+      "optionTops": ["today@x184,y250", "bare@x537,y250", "line@x890,y250"],
       "docOverflowX": 0
     },
     {
@@ -2659,25 +1622,9 @@
       "scheme": "light",
       "width": 1440,
       "question": 2,
-      "count": "Two options, side by side",
       "countBottom": 177,
       "fold": 900,
-      "optionTops": [
-        "filled@x184,y243",
-        "outlined@x537,y243"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 1",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "filled",
+      "optionTops": ["filled@x184,y243", "outlined@x537,y243"],
       "docOverflowX": 0
     },
     {
@@ -2685,26 +1632,9 @@
       "scheme": "light",
       "width": 1440,
       "question": 3,
-      "count": "Three options, side by side",
       "countBottom": 192,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y258",
-        "bare@x537,y258",
-        "line@x890,y258"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 2",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x184,y258", "bare@x537,y258", "line@x890,y258"],
       "docOverflowX": 0
     },
     {
@@ -2712,26 +1642,9 @@
       "scheme": "light",
       "width": 1440,
       "question": 4,
-      "count": "Three options, side by side",
       "countBottom": 192,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y258",
-        "bare@x537,y258",
-        "line@x890,y258"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 3",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x184,y258", "bare@x537,y258", "line@x890,y258"],
       "docOverflowX": 0
     },
     {
@@ -2739,25 +1652,9 @@
       "scheme": "light",
       "width": 1440,
       "question": 5,
-      "count": "Two options, side by side",
       "countBottom": 148,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y214",
-        "bare@x537,y214"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 4",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x184,y214", "bare@x537,y214"],
       "docOverflowX": 0
     },
     {
@@ -2765,25 +1662,9 @@
       "scheme": "light",
       "width": 1440,
       "question": 6,
-      "count": "Two options, side by side",
       "countBottom": 148,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y214",
-        "bare@x537,y214"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 5",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x184,y214", "bare@x537,y214"],
       "docOverflowX": 0
     },
     {
@@ -2791,25 +1672,9 @@
       "scheme": "light",
       "width": 1440,
       "question": 7,
-      "count": "Two options, side by side",
       "countBottom": 148,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y214",
-        "bare@x537,y214"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 6",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x184,y214", "bare@x537,y214"],
       "docOverflowX": 0
     },
     {
@@ -2817,25 +1682,9 @@
       "scheme": "light",
       "width": 1440,
       "question": 8,
-      "count": "Two options, side by side",
       "countBottom": 148,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y214",
-        "bare@x537,y214"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 7",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x184,y214", "bare@x537,y214"],
       "docOverflowX": 0
     },
     {
@@ -2843,26 +1692,9 @@
       "scheme": "light",
       "width": 1440,
       "question": 9,
-      "count": "Three options, side by side",
       "countBottom": 177,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y243",
-        "line@x537,y243",
-        "drawn@x890,y243"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 8",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "drawn",
+      "optionTops": ["today@x184,y243", "line@x537,y243", "drawn@x890,y243"],
       "docOverflowX": 0
     },
     {
@@ -2870,26 +1702,9 @@
       "scheme": "light",
       "width": 1440,
       "question": 10,
-      "count": "Three options, side by side",
       "countBottom": 163,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y229",
-        "line@x537,y229",
-        "drawn@x890,y229"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 9",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x184,y229", "line@x537,y229", "drawn@x890,y229"],
       "docOverflowX": 0
     },
     {
@@ -2897,16 +1712,9 @@
       "scheme": "light",
       "width": 680,
       "question": 1,
-      "count": "Three options, side by side",
       "countBottom": 183,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y249",
-        "bare@x367,y249",
-        "line@x720,y249"
-      ],
-      "back": null,
-      "recommended": "line",
+      "optionTops": ["today@x14,y249", "bare@x367,y249", "line@x720,y249"],
       "docOverflowX": 0
     },
     {
@@ -2914,25 +1722,9 @@
       "scheme": "light",
       "width": 680,
       "question": 2,
-      "count": "Two options, side by side",
       "countBottom": 176,
       "fold": 900,
-      "optionTops": [
-        "filled@x14,y242",
-        "outlined@x367,y242"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 1",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "filled",
+      "optionTops": ["filled@x14,y242", "outlined@x367,y242"],
       "docOverflowX": 0
     },
     {
@@ -2940,26 +1732,9 @@
       "scheme": "light",
       "width": 680,
       "question": 3,
-      "count": "Three options, side by side",
       "countBottom": 191,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y257",
-        "bare@x367,y257",
-        "line@x720,y257"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 2",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x14,y257", "bare@x367,y257", "line@x720,y257"],
       "docOverflowX": 0
     },
     {
@@ -2967,26 +1742,9 @@
       "scheme": "light",
       "width": 680,
       "question": 4,
-      "count": "Three options, side by side",
       "countBottom": 191,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y257",
-        "bare@x367,y257",
-        "line@x720,y257"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 3",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x14,y257", "bare@x367,y257", "line@x720,y257"],
       "docOverflowX": 0
     },
     {
@@ -2994,25 +1752,9 @@
       "scheme": "light",
       "width": 680,
       "question": 5,
-      "count": "Two options, side by side",
       "countBottom": 147,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y213",
-        "bare@x367,y213"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 4",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y213", "bare@x367,y213"],
       "docOverflowX": 0
     },
     {
@@ -3020,25 +1762,9 @@
       "scheme": "light",
       "width": 680,
       "question": 6,
-      "count": "Two options, side by side",
       "countBottom": 147,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y213",
-        "bare@x367,y213"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 5",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y213", "bare@x367,y213"],
       "docOverflowX": 0
     },
     {
@@ -3046,25 +1772,9 @@
       "scheme": "light",
       "width": 680,
       "question": 7,
-      "count": "Two options, side by side",
       "countBottom": 147,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y213",
-        "bare@x367,y213"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 6",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y213", "bare@x367,y213"],
       "docOverflowX": 0
     },
     {
@@ -3072,25 +1782,9 @@
       "scheme": "light",
       "width": 680,
       "question": 8,
-      "count": "Two options, side by side",
       "countBottom": 147,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y213",
-        "bare@x367,y213"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 7",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y213", "bare@x367,y213"],
       "docOverflowX": 0
     },
     {
@@ -3098,26 +1792,9 @@
       "scheme": "light",
       "width": 680,
       "question": 9,
-      "count": "Three options, side by side",
       "countBottom": 176,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y242",
-        "line@x367,y242",
-        "drawn@x720,y242"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 8",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "drawn",
+      "optionTops": ["today@x14,y242", "line@x367,y242", "drawn@x720,y242"],
       "docOverflowX": 0
     },
     {
@@ -3125,26 +1802,9 @@
       "scheme": "light",
       "width": 680,
       "question": 10,
-      "count": "Three options, side by side",
       "countBottom": 162,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y228",
-        "line@x367,y228",
-        "drawn@x720,y228"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 9",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x14,y228", "line@x367,y228", "drawn@x720,y228"],
       "docOverflowX": 0
     },
     {
@@ -3152,16 +1812,9 @@
       "scheme": "light",
       "width": 390,
       "question": 1,
-      "count": "Three options, side by side",
       "countBottom": 212,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y278",
-        "bare@x367,y278",
-        "line@x720,y278"
-      ],
-      "back": null,
-      "recommended": "line",
+      "optionTops": ["today@x14,y278", "bare@x367,y278", "line@x720,y278"],
       "docOverflowX": 0
     },
     {
@@ -3169,25 +1822,9 @@
       "scheme": "light",
       "width": 390,
       "question": 2,
-      "count": "Two options, side by side",
       "countBottom": 190,
       "fold": 844,
-      "optionTops": [
-        "filled@x14,y256",
-        "outlined@x367,y256"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 1",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "filled",
+      "optionTops": ["filled@x14,y256", "outlined@x367,y256"],
       "docOverflowX": 0
     },
     {
@@ -3195,26 +1832,9 @@
       "scheme": "light",
       "width": 390,
       "question": 3,
-      "count": "Three options, side by side",
       "countBottom": 220,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y286",
-        "bare@x367,y286",
-        "line@x720,y286"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 2",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x14,y286", "bare@x367,y286", "line@x720,y286"],
       "docOverflowX": 0
     },
     {
@@ -3222,26 +1842,9 @@
       "scheme": "light",
       "width": 390,
       "question": 4,
-      "count": "Three options, side by side",
       "countBottom": 220,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y286",
-        "bare@x367,y286",
-        "line@x720,y286"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 3",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x14,y286", "bare@x367,y286", "line@x720,y286"],
       "docOverflowX": 0
     },
     {
@@ -3249,25 +1852,9 @@
       "scheme": "light",
       "width": 390,
       "question": 5,
-      "count": "Two options, side by side",
       "countBottom": 146,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y212",
-        "bare@x367,y212"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 4",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y212", "bare@x367,y212"],
       "docOverflowX": 0
     },
     {
@@ -3275,25 +1862,9 @@
       "scheme": "light",
       "width": 390,
       "question": 6,
-      "count": "Two options, side by side",
       "countBottom": 146,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y212",
-        "bare@x367,y212"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 5",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y212", "bare@x367,y212"],
       "docOverflowX": 0
     },
     {
@@ -3301,25 +1872,9 @@
       "scheme": "light",
       "width": 390,
       "question": 7,
-      "count": "Two options, side by side",
       "countBottom": 146,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y212",
-        "bare@x367,y212"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 6",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y212", "bare@x367,y212"],
       "docOverflowX": 0
     },
     {
@@ -3327,25 +1882,9 @@
       "scheme": "light",
       "width": 390,
       "question": 8,
-      "count": "Two options, side by side",
       "countBottom": 146,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y212",
-        "bare@x367,y212"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 7",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y212", "bare@x367,y212"],
       "docOverflowX": 0
     },
     {
@@ -3353,26 +1892,9 @@
       "scheme": "light",
       "width": 390,
       "question": 9,
-      "count": "Three options, side by side",
       "countBottom": 175,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y241",
-        "line@x367,y241",
-        "drawn@x720,y241"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 8",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "drawn",
+      "optionTops": ["today@x14,y241", "line@x367,y241", "drawn@x720,y241"],
       "docOverflowX": 0
     },
     {
@@ -3380,26 +1902,9 @@
       "scheme": "light",
       "width": 390,
       "question": 10,
-      "count": "Three options, side by side",
       "countBottom": 175,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y241",
-        "line@x367,y241",
-        "drawn@x720,y241"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 9",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x14,y241", "line@x367,y241", "drawn@x720,y241"],
       "docOverflowX": 0
     },
     {
@@ -3407,16 +1912,9 @@
       "scheme": "dark",
       "width": 1440,
       "question": 1,
-      "count": "Three options, side by side",
       "countBottom": 184,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y250",
-        "bare@x537,y250",
-        "line@x890,y250"
-      ],
-      "back": null,
-      "recommended": "line",
+      "optionTops": ["today@x184,y250", "bare@x537,y250", "line@x890,y250"],
       "docOverflowX": 0
     },
     {
@@ -3424,25 +1922,9 @@
       "scheme": "dark",
       "width": 1440,
       "question": 2,
-      "count": "Two options, side by side",
       "countBottom": 177,
       "fold": 900,
-      "optionTops": [
-        "filled@x184,y243",
-        "outlined@x537,y243"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 1",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "filled",
+      "optionTops": ["filled@x184,y243", "outlined@x537,y243"],
       "docOverflowX": 0
     },
     {
@@ -3450,26 +1932,9 @@
       "scheme": "dark",
       "width": 1440,
       "question": 3,
-      "count": "Three options, side by side",
       "countBottom": 192,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y258",
-        "bare@x537,y258",
-        "line@x890,y258"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 2",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x184,y258", "bare@x537,y258", "line@x890,y258"],
       "docOverflowX": 0
     },
     {
@@ -3477,26 +1942,9 @@
       "scheme": "dark",
       "width": 1440,
       "question": 4,
-      "count": "Three options, side by side",
       "countBottom": 192,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y258",
-        "bare@x537,y258",
-        "line@x890,y258"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 3",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x184,y258", "bare@x537,y258", "line@x890,y258"],
       "docOverflowX": 0
     },
     {
@@ -3504,25 +1952,9 @@
       "scheme": "dark",
       "width": 1440,
       "question": 5,
-      "count": "Two options, side by side",
       "countBottom": 148,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y214",
-        "bare@x537,y214"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 4",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x184,y214", "bare@x537,y214"],
       "docOverflowX": 0
     },
     {
@@ -3530,25 +1962,9 @@
       "scheme": "dark",
       "width": 1440,
       "question": 6,
-      "count": "Two options, side by side",
       "countBottom": 148,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y214",
-        "bare@x537,y214"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 5",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x184,y214", "bare@x537,y214"],
       "docOverflowX": 0
     },
     {
@@ -3556,25 +1972,9 @@
       "scheme": "dark",
       "width": 1440,
       "question": 7,
-      "count": "Two options, side by side",
       "countBottom": 148,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y214",
-        "bare@x537,y214"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 6",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x184,y214", "bare@x537,y214"],
       "docOverflowX": 0
     },
     {
@@ -3582,25 +1982,9 @@
       "scheme": "dark",
       "width": 1440,
       "question": 8,
-      "count": "Two options, side by side",
       "countBottom": 148,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y214",
-        "bare@x537,y214"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 7",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x184,y214", "bare@x537,y214"],
       "docOverflowX": 0
     },
     {
@@ -3608,26 +1992,9 @@
       "scheme": "dark",
       "width": 1440,
       "question": 9,
-      "count": "Three options, side by side",
       "countBottom": 177,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y243",
-        "line@x537,y243",
-        "drawn@x890,y243"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 8",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "drawn",
+      "optionTops": ["today@x184,y243", "line@x537,y243", "drawn@x890,y243"],
       "docOverflowX": 0
     },
     {
@@ -3635,26 +2002,9 @@
       "scheme": "dark",
       "width": 1440,
       "question": 10,
-      "count": "Three options, side by side",
       "countBottom": 163,
       "fold": 900,
-      "optionTops": [
-        "today@x184,y229",
-        "line@x537,y229",
-        "drawn@x890,y229"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 9",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x184,y229", "line@x537,y229", "drawn@x890,y229"],
       "docOverflowX": 0
     },
     {
@@ -3662,16 +2012,9 @@
       "scheme": "dark",
       "width": 680,
       "question": 1,
-      "count": "Three options, side by side",
       "countBottom": 183,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y249",
-        "bare@x367,y249",
-        "line@x720,y249"
-      ],
-      "back": null,
-      "recommended": "line",
+      "optionTops": ["today@x14,y249", "bare@x367,y249", "line@x720,y249"],
       "docOverflowX": 0
     },
     {
@@ -3679,25 +2022,9 @@
       "scheme": "dark",
       "width": 680,
       "question": 2,
-      "count": "Two options, side by side",
       "countBottom": 176,
       "fold": 900,
-      "optionTops": [
-        "filled@x14,y242",
-        "outlined@x367,y242"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 1",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "filled",
+      "optionTops": ["filled@x14,y242", "outlined@x367,y242"],
       "docOverflowX": 0
     },
     {
@@ -3705,26 +2032,9 @@
       "scheme": "dark",
       "width": 680,
       "question": 3,
-      "count": "Three options, side by side",
       "countBottom": 191,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y257",
-        "bare@x367,y257",
-        "line@x720,y257"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 2",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x14,y257", "bare@x367,y257", "line@x720,y257"],
       "docOverflowX": 0
     },
     {
@@ -3732,26 +2042,9 @@
       "scheme": "dark",
       "width": 680,
       "question": 4,
-      "count": "Three options, side by side",
       "countBottom": 191,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y257",
-        "bare@x367,y257",
-        "line@x720,y257"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 3",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x14,y257", "bare@x367,y257", "line@x720,y257"],
       "docOverflowX": 0
     },
     {
@@ -3759,25 +2052,9 @@
       "scheme": "dark",
       "width": 680,
       "question": 5,
-      "count": "Two options, side by side",
       "countBottom": 147,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y213",
-        "bare@x367,y213"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 4",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y213", "bare@x367,y213"],
       "docOverflowX": 0
     },
     {
@@ -3785,25 +2062,9 @@
       "scheme": "dark",
       "width": 680,
       "question": 6,
-      "count": "Two options, side by side",
       "countBottom": 147,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y213",
-        "bare@x367,y213"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 5",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y213", "bare@x367,y213"],
       "docOverflowX": 0
     },
     {
@@ -3811,25 +2072,9 @@
       "scheme": "dark",
       "width": 680,
       "question": 7,
-      "count": "Two options, side by side",
       "countBottom": 147,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y213",
-        "bare@x367,y213"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 6",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y213", "bare@x367,y213"],
       "docOverflowX": 0
     },
     {
@@ -3837,25 +2082,9 @@
       "scheme": "dark",
       "width": 680,
       "question": 8,
-      "count": "Two options, side by side",
       "countBottom": 147,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y213",
-        "bare@x367,y213"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 7",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y213", "bare@x367,y213"],
       "docOverflowX": 0
     },
     {
@@ -3863,26 +2092,9 @@
       "scheme": "dark",
       "width": 680,
       "question": 9,
-      "count": "Three options, side by side",
       "countBottom": 176,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y242",
-        "line@x367,y242",
-        "drawn@x720,y242"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 8",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "drawn",
+      "optionTops": ["today@x14,y242", "line@x367,y242", "drawn@x720,y242"],
       "docOverflowX": 0
     },
     {
@@ -3890,26 +2102,9 @@
       "scheme": "dark",
       "width": 680,
       "question": 10,
-      "count": "Three options, side by side",
       "countBottom": 162,
       "fold": 900,
-      "optionTops": [
-        "today@x14,y228",
-        "line@x367,y228",
-        "drawn@x720,y228"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 9",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x14,y228", "line@x367,y228", "drawn@x720,y228"],
       "docOverflowX": 0
     },
     {
@@ -3917,16 +2112,9 @@
       "scheme": "dark",
       "width": 390,
       "question": 1,
-      "count": "Three options, side by side",
       "countBottom": 212,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y278",
-        "bare@x367,y278",
-        "line@x720,y278"
-      ],
-      "back": null,
-      "recommended": "line",
+      "optionTops": ["today@x14,y278", "bare@x367,y278", "line@x720,y278"],
       "docOverflowX": 0
     },
     {
@@ -3934,25 +2122,9 @@
       "scheme": "dark",
       "width": 390,
       "question": 2,
-      "count": "Two options, side by side",
       "countBottom": 190,
       "fold": 844,
-      "optionTops": [
-        "filled@x14,y256",
-        "outlined@x367,y256"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 1",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "filled",
+      "optionTops": ["filled@x14,y256", "outlined@x367,y256"],
       "docOverflowX": 0
     },
     {
@@ -3960,26 +2132,9 @@
       "scheme": "dark",
       "width": 390,
       "question": 3,
-      "count": "Three options, side by side",
       "countBottom": 220,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y286",
-        "bare@x367,y286",
-        "line@x720,y286"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 2",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x14,y286", "bare@x367,y286", "line@x720,y286"],
       "docOverflowX": 0
     },
     {
@@ -3987,26 +2142,9 @@
       "scheme": "dark",
       "width": 390,
       "question": 4,
-      "count": "Three options, side by side",
       "countBottom": 220,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y286",
-        "bare@x367,y286",
-        "line@x720,y286"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 3",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x14,y286", "bare@x367,y286", "line@x720,y286"],
       "docOverflowX": 0
     },
     {
@@ -4014,25 +2152,9 @@
       "scheme": "dark",
       "width": 390,
       "question": 5,
-      "count": "Two options, side by side",
       "countBottom": 146,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y212",
-        "bare@x367,y212"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 4",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y212", "bare@x367,y212"],
       "docOverflowX": 0
     },
     {
@@ -4040,25 +2162,9 @@
       "scheme": "dark",
       "width": 390,
       "question": 6,
-      "count": "Two options, side by side",
       "countBottom": 146,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y212",
-        "bare@x367,y212"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 5",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y212", "bare@x367,y212"],
       "docOverflowX": 0
     },
     {
@@ -4066,25 +2172,9 @@
       "scheme": "dark",
       "width": 390,
       "question": 7,
-      "count": "Two options, side by side",
       "countBottom": 146,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y212",
-        "bare@x367,y212"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 6",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y212", "bare@x367,y212"],
       "docOverflowX": 0
     },
     {
@@ -4092,25 +2182,9 @@
       "scheme": "dark",
       "width": 390,
       "question": 8,
-      "count": "Two options, side by side",
       "countBottom": 146,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y212",
-        "bare@x367,y212"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 7",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "bare",
+      "optionTops": ["today@x14,y212", "bare@x367,y212"],
       "docOverflowX": 0
     },
     {
@@ -4118,26 +2192,9 @@
       "scheme": "dark",
       "width": 390,
       "question": 9,
-      "count": "Three options, side by side",
       "countBottom": 175,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y241",
-        "line@x367,y241",
-        "drawn@x720,y241"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 8",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "drawn",
+      "optionTops": ["today@x14,y241", "line@x367,y241", "drawn@x720,y241"],
       "docOverflowX": 0
     },
     {
@@ -4145,26 +2202,9 @@
       "scheme": "dark",
       "width": 390,
       "question": 10,
-      "count": "Three options, side by side",
       "countBottom": 175,
       "fold": 844,
-      "optionTops": [
-        "today@x14,y241",
-        "line@x367,y241",
-        "drawn@x720,y241"
-      ],
-      "back": {
-        "text": "",
-        "label": "Back to question 9",
-        "w": 44,
-        "h": 44,
-        "bg": "rgba(0, 0, 0, 0)",
-        "bgImage": "none",
-        "border": "0px",
-        "shadow": "none",
-        "svg": true
-      },
-      "recommended": "line",
+      "optionTops": ["today@x14,y241", "line@x367,y241", "drawn@x720,y241"],
       "docOverflowX": 0
     }
   ],
@@ -4173,158 +2213,1630 @@
       "engine": "chromium",
       "scheme": "light",
       "width": 1440,
-      "actionRgb": "oklch(0.555 0.17 33)",
-      "coral": "light-dark(oklch(55.5% 0.17 33), oklch(54% 0.165 33))",
-      "buttons": 11,
-      "coralOnes": [
-        "Copy picks"
-      ],
-      "bigBottom": 697,
-      "fold": 900
+      "coral": ["Copy picks"],
+      "recommends": false
     },
     {
       "engine": "chromium",
       "scheme": "light",
       "width": 680,
-      "actionRgb": "oklch(0.555 0.17 33)",
-      "coral": "light-dark(oklch(55.5% 0.17 33), oklch(54% 0.165 33))",
-      "buttons": 11,
-      "coralOnes": [
-        "Copy picks"
-      ],
-      "bigBottom": 696,
-      "fold": 900
+      "coral": ["Copy picks"],
+      "recommends": false
     },
     {
       "engine": "chromium",
       "scheme": "light",
       "width": 390,
-      "actionRgb": "oklch(0.555 0.17 33)",
-      "coral": "light-dark(oklch(55.5% 0.17 33), oklch(54% 0.165 33))",
-      "buttons": 11,
-      "coralOnes": [
-        "Copy picks"
-      ],
-      "bigBottom": 695,
-      "fold": 844
+      "coral": ["Copy picks"],
+      "recommends": false
     },
     {
       "engine": "chromium",
       "scheme": "dark",
       "width": 1440,
-      "actionRgb": "oklch(0.54 0.165 33)",
-      "coral": "light-dark(oklch(55.5% 0.17 33), oklch(54% 0.165 33))",
-      "buttons": 11,
-      "coralOnes": [
-        "Copy picks"
-      ],
-      "bigBottom": 697,
-      "fold": 900
+      "coral": ["Copy picks"],
+      "recommends": false
     },
     {
       "engine": "chromium",
       "scheme": "dark",
       "width": 680,
-      "actionRgb": "oklch(0.54 0.165 33)",
-      "coral": "light-dark(oklch(55.5% 0.17 33), oklch(54% 0.165 33))",
-      "buttons": 11,
-      "coralOnes": [
-        "Copy picks"
-      ],
-      "bigBottom": 696,
-      "fold": 900
+      "coral": ["Copy picks"],
+      "recommends": false
     },
     {
       "engine": "chromium",
       "scheme": "dark",
       "width": 390,
-      "actionRgb": "oklch(0.54 0.165 33)",
-      "coral": "light-dark(oklch(55.5% 0.17 33), oklch(54% 0.165 33))",
-      "buttons": 11,
-      "coralOnes": [
-        "Copy picks"
-      ],
-      "bigBottom": 695,
-      "fold": 844
+      "coral": ["Copy picks"],
+      "recommends": false
     },
     {
       "engine": "webkit",
       "scheme": "light",
       "width": 1440,
-      "actionRgb": "oklch(0.555 0.17 33)",
-      "coral": "light-dark(oklch(55.5% 0.17 33), oklch(54% 0.165 33))",
-      "buttons": 11,
-      "coralOnes": [
-        "Copy picks"
-      ],
-      "bigBottom": 697,
-      "fold": 900
+      "coral": ["Copy picks"],
+      "recommends": false
     },
     {
       "engine": "webkit",
       "scheme": "light",
       "width": 680,
-      "actionRgb": "oklch(0.555 0.17 33)",
-      "coral": "light-dark(oklch(55.5% 0.17 33), oklch(54% 0.165 33))",
-      "buttons": 11,
-      "coralOnes": [
-        "Copy picks"
-      ],
-      "bigBottom": 696,
-      "fold": 900
+      "coral": ["Copy picks"],
+      "recommends": false
     },
     {
       "engine": "webkit",
       "scheme": "light",
       "width": 390,
-      "actionRgb": "oklch(0.555 0.17 33)",
-      "coral": "light-dark(oklch(55.5% 0.17 33), oklch(54% 0.165 33))",
-      "buttons": 11,
-      "coralOnes": [
-        "Copy picks"
-      ],
-      "bigBottom": 695,
-      "fold": 844
+      "coral": ["Copy picks"],
+      "recommends": false
     },
     {
       "engine": "webkit",
       "scheme": "dark",
       "width": 1440,
-      "actionRgb": "oklch(0.54 0.165 33)",
-      "coral": "light-dark(oklch(55.5% 0.17 33), oklch(54% 0.165 33))",
-      "buttons": 11,
-      "coralOnes": [
-        "Copy picks"
-      ],
-      "bigBottom": 697,
-      "fold": 900
+      "coral": ["Copy picks"],
+      "recommends": false
     },
     {
       "engine": "webkit",
       "scheme": "dark",
       "width": 680,
-      "actionRgb": "oklch(0.54 0.165 33)",
-      "coral": "light-dark(oklch(55.5% 0.17 33), oklch(54% 0.165 33))",
-      "buttons": 11,
-      "coralOnes": [
-        "Copy picks"
-      ],
-      "bigBottom": 696,
-      "fold": 900
+      "coral": ["Copy picks"],
+      "recommends": false
     },
     {
       "engine": "webkit",
       "scheme": "dark",
       "width": 390,
-      "actionRgb": "oklch(0.54 0.165 33)",
-      "coral": "light-dark(oklch(55.5% 0.17 33), oklch(54% 0.165 33))",
-      "buttons": 11,
-      "coralOnes": [
-        "Copy picks"
-      ],
-      "bigBottom": 695,
-      "fold": 844
+      "coral": ["Copy picks"],
+      "recommends": false
     }
   ],
-  "failures": []
+  "failures": [],
+  "controls": [
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 1440,
+      "question": 1,
+      "glyphControls": [],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 1440,
+      "question": 2,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 1440,
+      "question": 3,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 1440,
+      "question": 4,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 1440,
+      "question": 5,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 1440,
+      "question": 6,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 1440,
+      "question": 7,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 1440,
+      "question": 8,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 1440,
+      "question": 9,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 1440,
+      "question": 10,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 680,
+      "question": 1,
+      "glyphControls": [],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 680,
+      "question": 2,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Filled\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 680,
+      "question": 3,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 680,
+      "question": 4,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 680,
+      "question": 5,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 680,
+      "question": 6,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 680,
+      "question": 7,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 680,
+      "question": 8,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 680,
+      "question": 9,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 680,
+      "question": 10,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 390,
+      "question": 1,
+      "glyphControls": [],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 390,
+      "question": 2,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Filled\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 390,
+      "question": 3,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 390,
+      "question": 4,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 390,
+      "question": 5,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 390,
+      "question": 6,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 390,
+      "question": 7,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 390,
+      "question": 8,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 390,
+      "question": 9,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 390,
+      "question": 10,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 1,
+      "glyphControls": [],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 2,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 3,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 4,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 5,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 6,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 7,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 8,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 9,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 10,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 680,
+      "question": 1,
+      "glyphControls": [],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 680,
+      "question": 2,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Filled\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 680,
+      "question": 3,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 680,
+      "question": 4,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 680,
+      "question": 5,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 680,
+      "question": 6,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 680,
+      "question": 7,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 680,
+      "question": 8,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 680,
+      "question": 9,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 680,
+      "question": 10,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 390,
+      "question": 1,
+      "glyphControls": [],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 390,
+      "question": 2,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Filled\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 390,
+      "question": 3,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 390,
+      "question": 4,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 390,
+      "question": 5,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 390,
+      "question": 6,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 390,
+      "question": 7,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 390,
+      "question": 8,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 390,
+      "question": 9,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 390,
+      "question": 10,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 1440,
+      "question": 1,
+      "glyphControls": [],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 1440,
+      "question": 2,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 1440,
+      "question": 3,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 1440,
+      "question": 4,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 1440,
+      "question": 5,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 1440,
+      "question": 6,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 1440,
+      "question": 7,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 1440,
+      "question": 8,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 1440,
+      "question": 9,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 1440,
+      "question": 10,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 680,
+      "question": 1,
+      "glyphControls": [],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 680,
+      "question": 2,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Filled\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 680,
+      "question": 3,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 680,
+      "question": 4,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 680,
+      "question": 5,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 680,
+      "question": 6,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 680,
+      "question": 7,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 680,
+      "question": 8,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 680,
+      "question": 9,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 680,
+      "question": 10,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 390,
+      "question": 1,
+      "glyphControls": [],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 390,
+      "question": 2,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Filled\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 390,
+      "question": 3,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 390,
+      "question": 4,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 390,
+      "question": 5,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 390,
+      "question": 6,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 390,
+      "question": 7,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 390,
+      "question": 8,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 390,
+      "question": 9,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 390,
+      "question": 10,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 1,
+      "glyphControls": [],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 2,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 3,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 4,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 5,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 6,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 7,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 8,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 9,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 10,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 680,
+      "question": 1,
+      "glyphControls": [],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 680,
+      "question": 2,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Filled\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 680,
+      "question": 3,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 680,
+      "question": 4,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 680,
+      "question": 5,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 680,
+      "question": 6,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 680,
+      "question": 7,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 680,
+      "question": 8,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 680,
+      "question": 9,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 680,
+      "question": 10,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 390,
+      "question": 1,
+      "glyphControls": [],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 390,
+      "question": 2,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Filled\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 390,
+      "question": 3,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 390,
+      "question": 4,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 390,
+      "question": 5,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 390,
+      "question": 6,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 390,
+      "question": 7,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 390,
+      "question": 8,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 390,
+      "question": 9,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 390,
+      "question": 10,
+      "glyphControls": ["back 44x44 box:false"],
+      "boxedControls": [
+        "way \"1 Today\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false",
+        "pick \"Pick\" glyph:false"
+      ]
+    }
+  ],
+  "reshot": [
+    "q1-status-1440-light-first.png",
+    "q1-status-line-1440-light.png",
+    "q2-stop-idle-1440-light-first.png",
+    "q2-stop-idle-filled-1440-light.png",
+    "q3-configure-1440-light-first.png",
+    "q3-configure-line-1440-light.png",
+    "q4-menus-1440-light-first.png",
+    "q4-menus-line-1440-light.png",
+    "q5-chips-1440-light-first.png",
+    "q5-chips-bare-1440-light.png",
+    "q6-canvas-1440-light-first.png",
+    "q6-canvas-bare-1440-light.png",
+    "q7-others-1440-light-first.png",
+    "q7-others-bare-1440-light.png",
+    "q8-tree-1440-light-first.png",
+    "q8-tree-bare-1440-light.png",
+    "q9-clock-1440-light-first.png",
+    "q9-clock-drawn-1440-light.png",
+    "q10-server-1440-light-first.png",
+    "q10-server-line-1440-light.png",
+    "q1-status-390-light-first.png",
+    "q1-status-line-390-light.png",
+    "q2-stop-idle-390-light-first.png",
+    "q2-stop-idle-filled-390-light.png",
+    "q3-configure-390-light-first.png",
+    "q3-configure-line-390-light.png",
+    "q4-menus-390-light-first.png",
+    "q4-menus-line-390-light.png",
+    "q5-chips-390-light-first.png",
+    "q5-chips-bare-390-light.png",
+    "q6-canvas-390-light-first.png",
+    "q6-canvas-bare-390-light.png",
+    "q7-others-390-light-first.png",
+    "q7-others-bare-390-light.png",
+    "q8-tree-390-light-first.png",
+    "q8-tree-bare-390-light.png",
+    "q9-clock-390-light-first.png",
+    "q9-clock-drawn-390-light.png",
+    "q10-server-390-light-first.png",
+    "q10-server-line-390-light.png",
+    "q1-status-1440-dark-first.png",
+    "q1-status-line-1440-dark.png",
+    "q2-stop-idle-1440-dark-first.png",
+    "q2-stop-idle-filled-1440-dark.png",
+    "q3-configure-1440-dark-first.png",
+    "q3-configure-line-1440-dark.png",
+    "q4-menus-1440-dark-first.png",
+    "q4-menus-line-1440-dark.png",
+    "q5-chips-1440-dark-first.png",
+    "q5-chips-bare-1440-dark.png",
+    "q6-canvas-1440-dark-first.png",
+    "q6-canvas-bare-1440-dark.png",
+    "q7-others-1440-dark-first.png",
+    "q7-others-bare-1440-dark.png",
+    "q8-tree-1440-dark-first.png",
+    "q8-tree-bare-1440-dark.png",
+    "q9-clock-1440-dark-first.png",
+    "q9-clock-drawn-1440-dark.png",
+    "q10-server-1440-dark-first.png",
+    "q10-server-line-1440-dark.png",
+    "q1-status-390-dark-first.png",
+    "q1-status-line-390-dark.png",
+    "q2-stop-idle-390-dark-first.png",
+    "q2-stop-idle-filled-390-dark.png",
+    "q3-configure-390-dark-first.png",
+    "q3-configure-line-390-dark.png",
+    "q4-menus-390-dark-first.png",
+    "q4-menus-line-390-dark.png",
+    "q5-chips-390-dark-first.png",
+    "q5-chips-bare-390-dark.png",
+    "q6-canvas-390-dark-first.png",
+    "q6-canvas-bare-390-dark.png",
+    "q7-others-390-dark-first.png",
+    "q7-others-bare-390-dark.png",
+    "q8-tree-390-dark-first.png",
+    "q8-tree-bare-390-dark.png",
+    "q9-clock-390-dark-first.png",
+    "q9-clock-drawn-390-dark.png",
+    "q10-server-390-dark-first.png",
+    "q10-server-line-390-dark.png"
+  ]
 }

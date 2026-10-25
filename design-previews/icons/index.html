@@ -157,17 +157,6 @@
         text-overflow: ellipsis;
         font-weight: var(--weight-strong);
       }
-      .way .r {
-        font-size: var(--text-meta);
-        line-height: var(--leading-meta);
-        color: var(--ink-muted);
-      }
-      .way svg,
-      .pick svg {
-        inline-size: 16px;
-        block-size: 16px;
-        flex: none;
-      }
       /* The options, side by side: all of them at a desk, the next one at the
          edge on a phone, a swipe or a press on its number away. */
       .strip {
@@ -215,17 +204,6 @@
         font-weight: var(--weight-strong);
         margin: 0;
         overflow-wrap: anywhere;
-      }
-      .badge {
-        display: inline-block;
-        margin: var(--space-1) 0 0;
-        padding: 1px var(--space-2);
-        border-radius: var(--radius-xs);
-        background: var(--surface-recess);
-        color: var(--ink-muted);
-        font-size: var(--text-meta);
-        line-height: var(--leading-meta);
-        font-weight: var(--weight-body);
       }
       .why {
         grid-column: 1 / -1;
@@ -382,9 +360,8 @@
       const storeKey = () => `probe-review:${manifest.id ?? manifest.title}`;
       const save = () =>
         localStorage.setItem(storeKey(), JSON.stringify(picks));
-      // Solar's linear chevron, and the house tick (24px grid, 1.5 stroke, round caps).
+      // Solar's linear chevron.
       const chevronLeft = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5L9 12L15 19" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-      const tick = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12.5L9.5 17L19 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
       const words = ["", "one", "two", "three", "four", "five", "six"];
 
       function shot(item) {
@@ -428,12 +405,6 @@
         el.setAttribute("aria-label", `Option ${i + 1}: ${c.label}`);
         el.innerHTML = `<div class="head"><div><p class="name"></p></div><button class="pick" type="button"></button><p class="why"></p></div><div class="shots"></div>`;
         el.querySelector(".name").textContent = c.label;
-        if (d.recommended === c.id) {
-          const b = document.createElement("span");
-          b.className = "badge";
-          b.textContent = "Recommended";
-          el.querySelector(".head > div").append(b);
-        }
         el.querySelector(".why").textContent = c.result ?? "";
         const shots = el.querySelector(".shots");
         for (const item of c.items) {
@@ -441,7 +412,7 @@
         }
         const btn = el.querySelector(".pick");
         const chosen = picks[d.id] === c.id;
-        btn.innerHTML = chosen ? `${tick}<span>Picked</span>` : "<span>Pick</span>";
+        btn.textContent = chosen ? "Picked" : "Pick";
         btn.setAttribute(
           "aria-label",
           chosen ? `Picked ${c.label}` : `Pick ${c.label}`
@@ -497,17 +468,11 @@
           w.dataset.option = c.id;
           w.setAttribute("aria-controls", `opt-${c.id}`);
           const picked = picks[d.id] === c.id;
-          w.innerHTML = `<span class="w">${picked ? tick : ""}<span class="n"></span></span>`;
+          w.innerHTML = `<span class="w"><span class="n"></span></span>`;
           w.querySelector(".n").textContent = `${i + 1} ${c.short ?? c.label}`;
-          if (d.recommended === c.id) {
-            const r = document.createElement("span");
-            r.className = "r";
-            r.textContent = "Recommended";
-            w.append(r);
-          }
           w.setAttribute(
             "aria-label",
-            `Option ${i + 1}: ${c.label}${d.recommended === c.id ? ", recommended" : ""}${picked ? ", picked" : ""}`
+            `Option ${i + 1}: ${c.label}${picked ? ", picked" : ""}`
           );
           w.onclick = () => {
             strip.scrollTo({
