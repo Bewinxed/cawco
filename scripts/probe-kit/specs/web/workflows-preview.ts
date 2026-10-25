@@ -78,7 +78,7 @@ const MOTIONS: Motion[] = [
     option: "C",
     id: "c-add",
     job: "create",
-    probe: '[data-canvas-host] [data-node="2"]',
+    probe: '[data-canvas-host] [data-node="1"]',
     prop: "opacity",
   },
   {

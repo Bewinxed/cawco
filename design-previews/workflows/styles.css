@@ -901,9 +901,14 @@
       background: var(--selected-bg);
       color: var(--selected-ink);
 
-      .ic,
-      .count {
+      .ic {
         color: var(--selected-icon);
+      }
+
+      /* The count is ink, not a glyph: coral ink on the wash (DESIGN.md
+         Selected), 4.73:1, where the icon's coral stands 3.14:1. */
+      .count {
+        color: var(--selected-ink);
       }
     }
   }
@@ -2067,6 +2072,12 @@
     );
     background-size: 18px 18px;
     overflow: clip;
+
+    /* The caption stands on the well itself, so no dot of the ground runs
+       under its words (muted ink on a dot is 4.40:1). */
+    .shape-cap {
+      background: var(--surface-well);
+    }
 
     /* On the canvas the shape is the canvas: it fills the box, with no card
        of its own over the dotted ground. */
