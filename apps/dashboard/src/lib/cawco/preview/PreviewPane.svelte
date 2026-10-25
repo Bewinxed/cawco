@@ -121,6 +121,7 @@
     revealOn,
     rise,
   } from "../motion/curves.svelte";
+  import { settleAway } from "../motion/rest.js";
   import { closeInto } from "../motion/share.svelte";
   import { pressOutside } from "../press-outside";
   import { refusals } from "../refusals.svelte";
@@ -583,12 +584,18 @@
   let unloaded = $state(untrack(() => !onScreen));
   /** The page said it is held (`cawco:held`). */
   let pageHeld = $state(false);
+  /** The hold's pass over the pane its page was let go from, while it is still away (motion/rest.ts `settleAway`). */
+  let settling: (() => void) | null = null;
   function unload() {
     unloaded = true;
     standing = null;
     loaded = false;
     connected = false;
     pageHeld = false;
+    // Let go off screen, the cover stands waiting again in a pane put away:
+    // what that starts is finished there, as the put-away's own pass does.
+    settling?.();
+    settling = section ? settleAway(section) : null;
   }
   $effect(() => {
     if (isCanvas) {
@@ -610,6 +617,8 @@
       return;
     }
     loadedPanes.shown(paneId);
+    settling?.();
+    settling = null;
     untrack(() => post({ type: "cawco:release" }));
     if (untrack(() => unloaded)) {
       return afterPaint(() => {

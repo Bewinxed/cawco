@@ -55,20 +55,7 @@ export function holdSkipped(away: boolean) {
     if (!away) {
       return;
     }
-    let task: ReturnType<typeof setTimeout> | undefined;
-    const frame = requestAnimationFrame(() => {
-      task = setTimeout(() => {
-        for (const loop of node.querySelectorAll(".loops")) {
-          getComputedStyle(loop).getPropertyValue("animation-play-state");
-        }
-        for (const run of node.getAnimations({ subtree: true })) {
-          const end = Number(run.effect?.getComputedTiming().endTime);
-          if (run.playState === "running" && Number.isFinite(end)) {
-            run.finish();
-          }
-        }
-      });
-    });
+    const settled = settleAway(node);
     tellFrames(node, true);
     const loaded = (event: Event) => {
       if (event.target instanceof HTMLIFrameElement) {
@@ -78,11 +65,41 @@ export function holdSkipped(away: boolean) {
     // `load` reaches no ancestor of a frame but in its capture phase.
     node.addEventListener("load", loaded, true);
     return () => {
-      cancelAnimationFrame(frame);
-      clearTimeout(task);
+      settled();
       node.removeEventListener("load", loaded, true);
       tellFrames(node, false);
     };
+  };
+}
+
+/**
+ * The hold's pass over `node`, in a pane away, once the frame that changed
+ * it has painted: its loops' style asked for, and its runs that end
+ * finished ({@link holdSkipped}). Run as the pane goes away, and again by
+ * what changes it while it is away: a preview letting its page go past the
+ * bound (PreviewPane `unload`) stands its cover waiting again, and the
+ * wait-grace fade its page's readiness had paused mid-wait ran on in the
+ * pane put away (WebKit restyles under the skip; tab-return 3: one
+ * `kit-fade-in` running in 3 panes off screen). Returns the cancel.
+ */
+export function settleAway(node: Element): () => void {
+  let task: ReturnType<typeof setTimeout> | undefined;
+  const frame = requestAnimationFrame(() => {
+    task = setTimeout(() => {
+      for (const loop of node.querySelectorAll(".loops")) {
+        getComputedStyle(loop).getPropertyValue("animation-play-state");
+      }
+      for (const run of node.getAnimations({ subtree: true })) {
+        const end = Number(run.effect?.getComputedTiming().endTime);
+        if (run.playState === "running" && Number.isFinite(end)) {
+          run.finish();
+        }
+      }
+    });
+  });
+  return () => {
+    cancelAnimationFrame(frame);
+    clearTimeout(task);
   };
 }
 
