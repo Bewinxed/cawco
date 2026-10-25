@@ -17,7 +17,15 @@ const $$ = (selector, scope = document) => [
 
 const token = (name) => getComputedStyle(ROOT).getPropertyValue(name).trim();
 const ms = (name) => {
-  const value = token(name);
+  let value = token(name);
+  /* A duration worked out from others (calc) is read as the engine resolves it. */
+  if (value.startsWith("calc(")) {
+    const probe = document.createElement("i");
+    probe.style.transitionDuration = `var(${name})`;
+    document.body.append(probe);
+    value = getComputedStyle(probe).transitionDuration;
+    probe.remove();
+  }
   return value.endsWith("ms")
     ? Number.parseFloat(value)
     : Number.parseFloat(value) * 1000;
@@ -41,6 +49,36 @@ const run = (element, keyframes, { dur, ease, id, delay = 0, fill }) => {
 };
 const frame = () =>
   new Promise((done) => requestAnimationFrame(() => done(undefined)));
+
+/**
+ * Caw's calm loops (live work breathing: the Working glyph, his running
+ * note's dot) move only while something waits on the person. Once nothing
+ * does, each finishes the breath it is in and settles at full ink, so the
+ * page comes to rest; under reduced motion none starts.
+ */
+const syncBreath = () => {
+  const attend = Object.keys(S.needs).length > 0 && motionOk();
+  for (const glyph of $$(".breathe")) {
+    const breath = glyph.getAnimations().find((each) => each.id === "breath");
+    if (attend && breath) {
+      breath.effect.updateTiming({ iterations: Number.POSITIVE_INFINITY });
+    } else if (attend) {
+      const ease = token("--ease-in-out");
+      const loop = glyph.animate(
+        [
+          { opacity: 1, easing: ease },
+          { opacity: Number(token("--breath-floor")), offset: 0.5, easing: ease },
+          { opacity: 1 },
+        ],
+        { duration: ms("--breath"), iterations: Number.POSITIVE_INFINITY }
+      );
+      loop.id = "breath";
+    } else if (breath) {
+      const { currentIteration } = breath.effect.getComputedTiming();
+      breath.effect.updateTiming({ iterations: (currentIteration ?? 0) + 1 });
+    }
+  }
+};
 
 const use = (id, cls = "glyph") =>
   `<svg class="${cls}" aria-hidden="true"><use href="#i-${id}"/></svg>`;
@@ -437,8 +475,13 @@ const COLUMNS = [
   ["done", "Done"],
 ];
 
-const boardKind = () =>
-  PHONE.matches && S.layout === "list" ? "list" : "columns";
+/** The desk's columns; under the drawer's line the grouped list, or the columns sideways led by the Needs-you lane. */
+const boardKind = () => {
+  if (!PHONE.matches) {
+    return "columns";
+  }
+  return S.layout === "list" ? "list" : "lane";
+};
 
 const colHTML = (key, name) => `
   <div class="col" data-col="${key}">
@@ -451,16 +494,17 @@ const buildBoard = () => {
   const board = $('[data-slot="board"]');
   const kind = boardKind();
   S.boardKind = kind;
-  const order =
-    kind === "list"
-      ? [
-          ["needs", "Needs you"],
-          ["working", "Working"],
-          ["review", "Review"],
-          ["ready", "Ready"],
-          ["done", "Done"],
-        ]
-      : COLUMNS;
+  const order = {
+    list: [
+      ["needs", "Needs you"],
+      ["working", "Working"],
+      ["review", "Review"],
+      ["ready", "Ready"],
+      ["done", "Done"],
+    ],
+    lane: [["needs", "Needs you"], ...COLUMNS],
+    columns: COLUMNS,
+  }[kind];
   const dropped = S.dropped
     ? colHTML("dropped", "Dropped")
     : `<button class="dropped-rail" type="button" data-act="dropped" aria-label="Show 4 dropped tasks"><span>Dropped</span><span class="num">4</span></button>`;
@@ -482,7 +526,7 @@ const groups = () => {
   }
   for (const task of S.tasks) {
     let key = task.stage;
-    if (kind === "list" && S.needs[task.id]) {
+    if (kind !== "columns" && S.needs[task.id]) {
       key = "needs";
     }
     out.get(key)?.push(task);
@@ -503,11 +547,13 @@ const place = () => {
   }
   const board = $('[data-slot="board"]');
   const seen = new Set();
+  let laneArrives = false;
   for (const [key, list] of groups()) {
     const col = $(`.col[data-col="${key}"]`, board);
     if (!col) {
       continue;
     }
+    laneArrives ||= key === "needs" && col.hidden && list.length > 0;
     col.hidden = key === "needs" && list.length === 0;
     $(".col-count", col).textContent = list.length > 0 ? String(list.length) : "";
     const cards = $(".col-cards", col);
@@ -539,7 +585,13 @@ const place = () => {
       node.remove();
     }
   }
+  /* The sideways columns hold the column they were snapped to; the lane,
+     arriving at their start, is shown instead (the cards' FLIP carries the move). */
+  if (laneArrives && S.boardKind === "lane") {
+    board.scrollLeft = 0;
+  }
   markEdges();
+  syncBreath();
 };
 
 /**
@@ -966,6 +1018,29 @@ const placeThumb = (track, animate) => {
 
 const taskOf = (id) => S.tasks.find((task) => task.id === id);
 
+/**
+ * The pane's scroller wears the house edge fade where more of it lies past
+ * an edge: its head once scrolled away, and its foot while the card runs on
+ * under the verdict bar, which holds there (the bar stands above its own
+ * place in the card).
+ */
+const markPane = () => {
+  const scroll = $(".pane-scroll");
+  if (!scroll) {
+    return;
+  }
+  scroll.toggleAttribute("data-more-start", scroll.scrollTop > 1);
+  const bar = $('[data-slot="decision"]', scroll);
+  const card = bar?.closest(".pcard");
+  if (bar && card) {
+    bar.toggleAttribute(
+      "data-stuck",
+      card.getBoundingClientRect().bottom > bar.getBoundingClientRect().bottom + 1.5
+    );
+  }
+};
+const paneSizes = new ResizeObserver(markPane);
+
 const drawPane = () => {
   const pane = $('[data-slot="pane"]');
   const task = taskOf(S.selected);
@@ -974,6 +1049,14 @@ const drawPane = () => {
   }
   pane.innerHTML = paneHTML(task);
   placeThumb($(".ptabs", pane), false);
+  const scroll = $(".pane-scroll", pane);
+  scroll.addEventListener("scroll", markPane, { passive: true });
+  paneSizes.disconnect();
+  paneSizes.observe(scroll);
+  for (const part of scroll.children) {
+    paneSizes.observe(part);
+  }
+  markPane();
 };
 
 /** The pane's title flown from the card's (The One Object Rule). */
@@ -1488,6 +1571,7 @@ const drawCaw = () => {
         `<button class="caw-starter" type="button" data-words="${words}">${words}</button>`
     )
     .join("");
+  syncBreath();
 };
 
 /** Deny or Approve on a card or a row of Caw's column: the band goes and the card settles. */
@@ -1977,6 +2061,8 @@ const paintActs = () => {
     ask.classList.toggle("primary", !act);
     ask.classList.toggle("outline", Boolean(act));
   }
+  markPane();
+  syncBreath();
 };
 
 /* ---------- The ⋯ menu ---------- */
