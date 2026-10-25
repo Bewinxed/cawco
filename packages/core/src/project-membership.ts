@@ -85,22 +85,45 @@ export interface MemberTreeRow {
 
 /**
  * The session at the top of a row's chain of parents, over every row known
- * (a cycle stops where it closes): the row a tree is listed by.
+ * (a cycle stops where it closes): the row a tree is listed by. One finder
+ * per `byId`, which it reads as it stands: each chain is walked once, the
+ * first time a row in it is asked, and every row on it is answered from
+ * then on with no walk (a board of two thousand rows asks it of every row on
+ * every change, most of them delegates). A cycle's rows all answer the row
+ * the first walk into it closed at.
  */
 export function topsIn<T extends MemberTreeRow>(
   byId: ReadonlyMap<string, T>
 ): (row: T) => T {
-  return (row) => {
-    const seen = new Set<string>([row.id]);
+  /** Each walked row's top; null while its own walk is on it. */
+  const tops = new Map<string, T | null>();
+  const parentOf = (row: T): T | undefined =>
+    row.parentInstanceId ? byId.get(row.parentInstanceId) : undefined;
+  /** Up from `row` to a row with no parent here, one already answered, or the one the chain closes on. */
+  const walk = (row: T): T => {
+    const chain: T[] = [];
     let at = row;
-    for (
-      let up = at.parentInstanceId ? byId.get(at.parentInstanceId) : undefined;
-      up && !seen.has(up.id);
-      up = at.parentInstanceId ? byId.get(at.parentInstanceId) : undefined
-    ) {
-      seen.add(up.id);
-      at = up;
+    let top: T | undefined;
+    while (top === undefined) {
+      tops.set(at.id, null);
+      chain.push(at);
+      const parent = parentOf(at);
+      const held = parent && tops.get(parent.id);
+      if (!parent || held === null) {
+        top = at;
+      } else if (held) {
+        top = held;
+      } else {
+        at = parent;
+      }
     }
-    return at;
+    for (const one of chain) {
+      tops.set(one.id, top);
+    }
+    return top;
   };
+  // A row with no parent here is its own top: answered with nothing held.
+  return (row) =>
+    tops.get(row.id) ??
+    (row.parentInstanceId && byId.has(row.parentInstanceId) ? walk(row) : row);
 }

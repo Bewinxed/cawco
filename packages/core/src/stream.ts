@@ -295,6 +295,13 @@ export const HEARTBEAT_INTERVAL_MS = 20_000;
 /** How long after asking a client waits for anything at all before calling the socket dead. */
 export const HEARTBEAT_DEADLINE_MS = 10_000;
 
+/**
+ * The name of the User Timing measure a dashboard makes of each take of
+ * what its socket said (its `detail` the messages taken): what a probe
+ * reads a hub message's cost from once messages are taken after a frame.
+ */
+export const HUB_TAKE_MEASURE = "cawco hub messages";
+
 /** Everything the stream protocol can put on the dashboard socket. */
 export type StreamServerMessage =
   | StreamBacklog

@@ -64,8 +64,14 @@ export function listedOf(
     }
   }
   const room = Math.max(0, OLDER_ROWS - listed.size);
-  rest.sort((a, b) => lastAt(b) - lastAt(a));
-  for (const row of rest.length - room > 1 ? rest.slice(0, room) : rest) {
+  // The newest first, each row's time read once rather than twice per
+  // comparison: a project holds hundreds.
+  const newest = rest
+    .map((row) => ({ row, at: lastAt(row) }))
+    .sort((a, b) => b.at - a.at);
+  for (const { row } of newest.length - room > 1
+    ? newest.slice(0, room)
+    : newest) {
     listed.add(row.id);
   }
   return listed;

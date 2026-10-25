@@ -94,7 +94,9 @@ const claude = $derived.by((): ClaudeRings | null => {
     ),
     bench: view.bench,
     forecast,
-    instances: cawco.instances,
+    // The live rows, which are all an account's rings count: the board's
+    // two thousand, filtered once per account, ran on every row's change.
+    instances: cawco.runningInstances,
     now: state.now,
     routing: view.routing.find((one) => one.provider === forecast.provider),
   });
@@ -113,7 +115,7 @@ const openCode = $derived.by((): RingAccount | null => {
   }
   return openCodeRing(
     reading,
-    cawco.instances.filter(
+    cawco.runningInstances.filter(
       (row) =>
         row.harness === "opencode" &&
         (row.status === "running" || row.status === "starting")

@@ -97,7 +97,10 @@ function liftChains<T extends TreeRow>(
  */
 function fillDescendants<T extends TreeRow>(lines: TreeLine<T>[]): void {
   for (const [at, line] of lines.entries()) {
-    for (const below of lines.slice(at + 1)) {
+    // Read in place: a copy of the rest for every line made a list of a
+    // thousand rows copy half a million.
+    for (let next = at + 1; next < lines.length; next += 1) {
+      const below = lines[next] as TreeLine<T>;
       if (below.depth <= line.depth) {
         break;
       }
@@ -215,7 +218,7 @@ export function rooted<T extends TreeRow & { origin?: SessionOrigin }>(
 ): T[] {
   const byId = new Map(rows.map((row) => [row.id, row]));
   const kept = new Map<string, boolean>();
-  const keeps = (row: T, seen: Set<string>): boolean => {
+  const keeps = (row: T): boolean => {
     const known = kept.get(row.id);
     if (known !== undefined) {
       return known;
@@ -223,15 +226,20 @@ export function rooted<T extends TreeRow & { origin?: SessionOrigin }>(
     const parent = row.parentInstanceId
       ? byId.get(row.parentInstanceId)
       : undefined;
-    let keep = !parent && standsAlone(row);
-    if (parent && !seen.has(parent.id)) {
-      seen.add(row.id);
-      keep = keeps(parent, seen);
+    if (!parent) {
+      const keep = standsAlone(row);
+      kept.set(row.id, keep);
+      return keep;
     }
+    // Asked while its chain is walked: a chain that comes back to it is a
+    // loop, which ends at no top. One answer per row, with no set of the
+    // rows seen made for each (a list of two thousand made as many).
+    kept.set(row.id, false);
+    const keep = keeps(parent);
     kept.set(row.id, keep);
     return keep;
   };
-  return rows.filter((row) => keeps(row, new Set()));
+  return rows.filter(keeps);
 }
 
 /**

@@ -520,7 +520,7 @@ export function contextOf(sessionId: string): SessionContext | null {
   if (instance?.machineId && isSessionRow(instance)) {
     return {
       machine: instance.machineId,
-      cwd: instance.cwd ?? "",
+      cwd: instance.cwd,
       harness: instance.harness,
     };
   }

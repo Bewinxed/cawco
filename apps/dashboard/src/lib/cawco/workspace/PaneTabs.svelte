@@ -1521,7 +1521,7 @@
               <IconArrowRight />
               <span>Continue in new session…</span>
             </ContextMenu.Item>
-            {@const row = cawco.instances.find((one) => one.id === tab.id)}
+            {@const row = cawco.rowOf(tab.id)}
             {#if row}
               <AccountSubmenu instance={row} />
             {/if}

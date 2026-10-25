@@ -206,9 +206,7 @@
    * hub is reachable ({@link accountOpen}).
    */
   const machineAway = $derived(!(machineId && machineConnected(machineId)));
-  const editable = $derived(
-    !machineAway && cawco.runningInstances.some((item) => item.id === sessionId)
-  );
+  const editable = $derived(!machineAway && cawco.liveId(sessionId));
   /** A move can be asked: the hub takes it in any state of the session (accounts/switch.svelte.ts). */
   const accountOpen = $derived(cawco.status === "connected");
   /** Why the live controls are locked, and until when. */

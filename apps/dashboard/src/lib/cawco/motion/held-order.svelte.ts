@@ -13,9 +13,17 @@
  * A committed reorder is a plain re-render of a keyed `{#each}`, so the
  * list's `reflow()` slides each row to its new slot (motion/rows); with less
  * motion they snap. One mechanism, no `animate:` beside it.
+ *
+ * Each list is its own (7433e2b3, mechanism 7): its reorder falling due
+ * wakes that list alone, and while its order is the one it showed it hands
+ * back the very array it handed back before, so what reads it does nothing
+ * ("If the new value of a derived is referentially identical to its
+ * previous value, downstream updates will be skipped",
+ * svelte.dev/docs/svelte/$derived). One count for every list re-ran every
+ * held list on each one's timer, each joining its two thousand ids.
  */
 import type { Attachment } from "svelte/attachments";
-import { SvelteSet } from "svelte/reactivity";
+import { unlessSame } from "../board.svelte";
 
 const SETTLE_MS = 2000;
 const GAP_MS = 5000;
@@ -23,27 +31,55 @@ const GAP_MS = 5000;
 interface Held {
   /** When a reorder last landed. */
   committed: number;
+  /** What the list handed back last: handed back again while it holds the same rows. */
+  out: unknown[];
   /** The newest computed order not yet shown, and since when it has stood. */
-  pending: string;
+  pending: string[] | null;
   shown: string[];
   since: number;
   timer?: ReturnType<typeof setTimeout>;
 }
 
 const lists = new Map<string, Held>();
-/** Bumped when a held reorder falls due, so the lists reading it re-run. */
-let due = $state(0);
-/** Scopes the pointer or focus is inside: their lists keep their order. */
-const inside = new SvelteSet<string>();
+/**
+ * Each list's count, by its key, bumped when its held reorder falls due: a
+ * key of a `$state` object is a signal of its own, so the list reading it
+ * re-runs, and no other.
+ */
+const dues: Record<string, number> = $state({});
+/**
+ * Scopes the pointer or focus is inside: their lists keep their order. A
+ * scope is never taken out, only turned off, so the scopes are walked by
+ * their names and a list reads only the scopes it is in.
+ */
+const inside: Record<string, boolean> = $state({});
 
 const blocked = (key: string): boolean => {
-  for (const scope of inside) {
-    if (key.startsWith(scope)) {
+  for (const scope of Object.keys(inside)) {
+    if (key.startsWith(scope) && inside[scope]) {
       return true;
     }
   }
   return false;
 };
+
+/** Two orders of the same ids. */
+const sameOrder = (a: readonly string[] | null, b: readonly string[]) =>
+  a !== null && a.length === b.length && a.every((id, i) => id === b[i]);
+
+/** `next`, or what the list handed back last while it holds the same rows in the same order. */
+function handBack<T>(list: Held, next: T[]): T[] {
+  list.out = unlessSame(list.out, next);
+  return list.out as T[];
+}
+
+/** Stops the list's timer, if one is waiting. */
+function stopTimer(list: Held): void {
+  if (list.timer !== undefined) {
+    clearTimeout(list.timer);
+    list.timer = undefined;
+  }
+}
 
 /**
  * Where a row that just arrived goes in the held order: after the row that
@@ -80,18 +116,19 @@ export function heldOrder<T>(
   rows: T[],
   id: (row: T) => string
 ): T[] {
-  // Reads `due` and the scopes, so a list re-derives when a held reorder
-  // falls due or the pointer leaves it.
-  const stop = due >= 0 && blocked(key);
+  // Reads its own count and the scopes it is in, so the list re-derives
+  // when its held reorder falls due or the pointer leaves it.
+  const stop = (dues[key] ?? 0) >= 0 && blocked(key);
   const computed = rows.map(id);
   const at = Date.now();
   const list = lists.get(key);
   if (!list) {
     lists.set(key, {
       shown: computed,
-      pending: "",
+      pending: null,
       since: at,
       committed: 0,
+      out: rows,
     });
     return rows;
   }
@@ -100,33 +137,42 @@ export function heldOrder<T>(
     list.shown.filter((row) => present.has(row)),
     computed
   );
-  const target = computed.join("\n");
-  if (held.join("\n") === target) {
+  if (sameOrder(held, computed)) {
     list.shown = computed;
-    list.pending = "";
-    clearTimeout(list.timer);
-    return rows;
+    list.pending = null;
+    stopTimer(list);
+    return handBack(list, rows);
   }
-  if (list.pending !== target) {
-    list.pending = target;
+  if (!sameOrder(list.pending, computed)) {
+    list.pending = computed;
     list.since = at;
   }
   const ready = Math.max(list.since + SETTLE_MS, list.committed + GAP_MS);
-  clearTimeout(list.timer);
+  if (stop || at >= ready) {
+    stopTimer(list);
+  }
   if (!stop && at >= ready) {
     list.shown = computed;
-    list.pending = "";
+    list.pending = null;
     list.committed = at;
-    return rows;
+    return handBack(list, rows);
   }
-  if (!stop) {
+  // One timer at a time: the moment a reorder falls due only moves later
+  // (a newer order waits its own settle), so a timer set for an earlier
+  // moment wakes the list, which sets the next. A list asked again before
+  // it falls due (a pulse moving a row's time) set its timer anew each time.
+  if (!stop && list.timer === undefined) {
     list.timer = setTimeout(() => {
-      due += 1;
+      list.timer = undefined;
+      dues[key] = (dues[key] ?? 0) + 1;
     }, ready - at);
   }
   list.shown = held;
   const byId = new Map(rows.map((row) => [id(row), row]));
-  return held.map((row) => byId.get(row) as T);
+  return handBack(
+    list,
+    held.map((row) => byId.get(row) as T)
+  );
 }
 
 /**
@@ -138,11 +184,7 @@ export function holdWhileInside(scope: string): Attachment<HTMLElement> {
     let pointer = false;
     let focus = false;
     const sync = () => {
-      if (pointer || focus) {
-        inside.add(scope);
-      } else {
-        inside.delete(scope);
-      }
+      inside[scope] = pointer || focus;
     };
     const enter = () => {
       pointer = true;
@@ -169,7 +211,7 @@ export function holdWhileInside(scope: string): Attachment<HTMLElement> {
       node.removeEventListener("pointerleave", leave);
       node.removeEventListener("focusin", focusIn);
       node.removeEventListener("focusout", focusOut);
-      inside.delete(scope);
+      inside[scope] = false;
     };
   };
 }

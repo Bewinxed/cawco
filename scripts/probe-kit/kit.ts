@@ -500,6 +500,18 @@ function installRuns(): void {
 const VITE = join(DASHBOARD, "node_modules", ".bin", "vite");
 
 /**
+ * `PROBE_SOURCEMAP=hidden`: the build writes a map beside each chunk and
+ * names none in it, so a long animation frame's script is said at its
+ * source line (live-read.ts `sourceAt`) with the code served unchanged. A
+ * build's key carries it (`treeKey`): one built without maps is not one
+ * built with them.
+ */
+const sourcemapArgs = (): string[] =>
+  process.env.PROBE_SOURCEMAP
+    ? ["--sourcemap", process.env.PROBE_SOURCEMAP]
+    : [];
+
+/**
  * Every vite this process started (a build, a server) that has not ended:
  * each is ended as the process exits, however it exits but a SIGKILL. A stop signal
  * reaches the exit through scratch-fleet.ts's own handlers, which end the
@@ -523,7 +535,7 @@ const viteBuild = async (): Promise<void> => {
   // `PROBE_BUILD_LOCK` names a lock file builds on this host share
   // (`flock`): one build at a time across the workspaces that name it.
   const lock = process.env.PROBE_BUILD_LOCK;
-  const build = [VITE, "build", "--mode", "bench"];
+  const build = [VITE, "build", "--mode", "bench", ...sourcemapArgs()];
   const child = Bun.spawn(lock ? ["flock", lock, ...build] : build, {
     cwd: DASHBOARD,
     // This process's own, git's repository variables gone (scratch-fleet.ts
@@ -614,6 +626,7 @@ const gitSays = async (args: string[], input?: string): Promise<string> => {
  */
 const treeKey = async (): Promise<string> => {
   const hash = new Bun.CryptoHasher("sha256");
+  hash.update(sourcemapArgs().join(" "));
   const [tracked, root] = await Promise.all([
     gitSays(["ls-tree", "-r", "HEAD", "--", ...BUILD_DIRS]),
     gitSays(["ls-tree", "HEAD"]),

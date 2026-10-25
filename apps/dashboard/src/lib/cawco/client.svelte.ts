@@ -102,6 +102,7 @@ import type {
 import {
   HEARTBEAT_DEADLINE_MS,
   HEARTBEAT_INTERVAL_MS,
+  HUB_TAKE_MEASURE,
   WIRE_PROTOCOL,
 } from "@cawco/core/stream";
 import type {
@@ -148,7 +149,7 @@ import { announcingParts, clientLine } from "@cawco/core/wire";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { askWords } from "@cawco/core/words/asks";
 import { catalogWords } from "@cawco/core/words/catalog";
-import { untrack } from "svelte";
+import { flushSync, untrack } from "svelte";
 import { SvelteMap } from "svelte/reactivity";
 import {
   CONTROL_TIMEOUT_MS,
@@ -165,6 +166,7 @@ import { page as servedPage } from "$app/state";
 import type { Activity } from "./activity";
 import { activityOf, runningSubagents } from "./activity";
 import { deletePreview } from "./artifact-api";
+import { Keyed, Pulse, type PulseReading, unlessSame } from "./board.svelte";
 import { currentClientId } from "./client-id";
 import { readInstalls, takeInstallsFrame } from "./connect/installs.svelte";
 import { devDebug } from "./dev-debug";
@@ -181,7 +183,7 @@ import {
 import { newId } from "./id";
 import {
   type BoardRow,
-  indexInstances,
+  type InstanceIndex,
   instanceForSession,
   resolveSessionTitle,
   transcriptUrl,
@@ -762,14 +764,97 @@ let catalogLeftOut = $state.raw<Record<string, string[]>>({});
 const catalogsTried = $state<Record<string, true>>({});
 
 /**
- * Every instance the hub knows, as immutable rows replaced whole — never
- * edited in place. Raw state: the fleet is ~a thousand rows, and a deep proxy
- * made every field read of every row a tracked signal, so a list render or a
- * lookup paid a proxy trap per row per field.
+ * Every instance the hub knows, in the hub's order, as immutable rows
+ * replaced whole — never edited in place. Raw state: the fleet is ~two
+ * thousand rows, and a deep proxy made every field read of every row a
+ * tracked signal. A walk over the board reads this; a row asked for by its
+ * id is read from {@link rowsById}, which wakes on that row alone.
  */
 let hubRows = $state.raw<InstanceRow[]>([]);
-/** The hub's rows, as every reader of the rows reads them. */
+/** The hub's rows, as every walk over the rows reads them. */
 const instances = $derived(hubRows);
+/** Each hub row by its id, each key its own signal (board.svelte.ts). */
+const rowsById = new Keyed<InstanceRow>();
+/** Each session key's rows, by key, the same way. */
+const rowsBySession = new Keyed<readonly InstanceRow[]>();
+
+/**
+ * What each hub row's session needs from you ({@link activityNow}), held
+ * per row: every list asks it of every row it holds, and asked afresh each
+ * time, a turn ending somewhere re-ran it for the whole board. Each is
+ * worked out again only when what it reads moves (its row, its pulse's
+ * activity, its parked asks, its subscription). Made as the row arrives,
+ * in the socket's or a read's handler, outside every component, so no
+ * component's teardown takes it.
+ */
+class RowActivity {
+  readonly id: string;
+  readonly value = $derived.by(() => activityNow(this.id));
+  constructor(id: string) {
+    this.id = id;
+  }
+}
+const rowActivity = new Map<string, RowActivity>();
+
+/**
+ * The hub's rows as `next` has them: each row that moved (`moved`) and each
+ * gone (`gone`) written to the keyed store, key by key, so a delta wakes
+ * only the readers of the rows it carried; then the list itself.
+ */
+function holdRows(
+  next: InstanceRow[],
+  moved: readonly InstanceRow[],
+  gone: readonly string[]
+): void {
+  for (const id of gone) {
+    const was = rowsById.get(id);
+    if (was) {
+      leaveSession(was);
+      rowsById.delete(id);
+      rowActivity.delete(id);
+    }
+  }
+  for (const row of moved) {
+    const was = rowsById.get(row.id);
+    if (was === row) {
+      continue;
+    }
+    if (was) {
+      leaveSession(was);
+    }
+    rowsById.set(row.id, row);
+    joinSession(row);
+    if (!rowActivity.has(row.id)) {
+      rowActivity.set(row.id, new RowActivity(row.id));
+    }
+  }
+  hubRows = next;
+}
+
+/** A row out of its session key's rows. */
+function leaveSession(row: InstanceRow): void {
+  if (!row.sessionId) {
+    return;
+  }
+  const rest = (rowsBySession.get(row.sessionId) ?? []).filter(
+    (one) => one.id !== row.id
+  );
+  if (rest.length > 0) {
+    rowsBySession.set(row.sessionId, rest);
+  } else {
+    rowsBySession.delete(row.sessionId);
+  }
+}
+
+/** A row into its session key's rows. */
+function joinSession(row: InstanceRow): void {
+  if (row.sessionId) {
+    rowsBySession.set(row.sessionId, [
+      ...(rowsBySession.get(row.sessionId) ?? []),
+      row,
+    ]);
+  }
+}
 
 /**
  * One child a session's tray lists (DelegateTray): a delegate, by its work
@@ -930,34 +1015,118 @@ const threadOf = (id: string): ThreadSummary | undefined => {
   const threadId = threadIdOf(id);
   return threadId ? threadsById.get(threadId) : undefined;
 };
-/** The same rows looked up by id and by session, threads among them, rebuilt once per change. */
-const instanceIndex = $derived(
-  indexInstances([...instances, ...allThreadRows])
+/** Each thread's row by its `thread:` id. */
+const threadRowsById = $derived(
+  new Map(allThreadRows.map((row) => [row.id, row] as const))
 );
-const runningInstances = $derived(instances.filter(isLive));
+/** Every row by id, threads among them, for a walk over all of them. */
+const walkedById = $derived(
+  new Map<string, BoardRow>([...rowsById, ...threadRowsById])
+);
+
+/**
+ * Every row by its id, threads among them: each `get` and `has` one key's
+ * read ({@link rowsById}, or the threads' own), so a lookup wakes on its
+ * own row and a delta of another wakes nothing. A walk over all of them
+ * wakes on any change.
+ */
+class BoardById implements ReadonlyMap<string, BoardRow> {
+  get(id: string): BoardRow | undefined {
+    return isThreadTab(id) ? threadRowsById.get(id) : rowsById.get(id);
+  }
+  has(id: string): boolean {
+    return isThreadTab(id) ? threadRowsById.has(id) : rowsById.has(id);
+  }
+  get size(): number {
+    return walkedById.size;
+  }
+  entries(): MapIterator<[string, BoardRow]> {
+    return walkedById.entries();
+  }
+  keys(): MapIterator<string> {
+    return walkedById.keys();
+  }
+  values(): MapIterator<BoardRow> {
+    return walkedById.values();
+  }
+  [Symbol.iterator](): MapIterator<[string, BoardRow]> {
+    return walkedById.entries();
+  }
+  forEach(
+    each: (
+      row: BoardRow,
+      id: string,
+      map: ReadonlyMap<string, BoardRow>
+    ) => void
+  ): void {
+    for (const [id, row] of walkedById) {
+      each(row, id, this);
+    }
+  }
+}
+
+/**
+ * The rows looked up by id and by session, threads among them: one object
+ * for good, each lookup a keyed read (`BoardById`, {@link rowsBySession}).
+ * Rebuilt whole on every change, it woke every reader of every row.
+ */
+const instanceIndex: InstanceIndex<BoardRow> = {
+  byId: new BoardById(),
+  bySession: rowsBySession,
+};
+
+/**
+ * A derived list that hands back the array it handed back before while it
+ * holds the same rows in the same order (board.svelte.ts `unlessSame`), so what
+ * reads it is not woken by a row that moved outside it.
+ */
+function keepsLast<T>(list: () => T[]): () => T[] {
+  let was: T[] | undefined;
+  return () => {
+    was = unlessSame(was, list());
+    return was;
+  };
+}
+
+const runningInstances = $derived.by(keepsLast(() => instances.filter(isLive)));
 /**
  * What a list shows running: sessions (a lead is its threads, thread-tabs.ts
  * `inLists`) and the threads Caw works on or waits on you in.
  */
-const runningRows = $derived([
-  ...inLists(runningInstances),
-  ...threadRows.filter((row) => row.status === "running"),
-]);
+const runningRows = $derived.by(
+  keepsLast(() => [
+    ...inLists(runningInstances),
+    ...threadRows.filter((row) => row.status === "running"),
+  ])
+);
+const listedInstances = $derived.by(
+  keepsLast(() => instances.filter(isListed))
+);
 /** What a list shows of every listed session: as `runningRows`, with every thread. */
-const listedRows = $derived([
-  ...inLists(instances.filter(isListed)),
-  ...threadRows,
-]);
+const listedRows = $derived.by(
+  keepsLast(() => [...inLists(listedInstances), ...threadRows])
+);
+/** `listedRows` by id, built once per change for every list that walks their trees. */
+const listedById = $derived(
+  new Map(listedRows.map((row) => [row.id, row] as const))
+);
 /** The sessions of every lead the hub knows: a list leaves their transcripts out too. */
-const leadSessions = $derived<ReadonlySet<string>>(
-  new Set(
+let leadsWere: ReadonlySet<string> = new Set();
+const leadSessions = $derived.by<ReadonlySet<string>>(() => {
+  const leads = new Set(
     instances.flatMap((row) =>
       row.role === "lead" && row.sessionId ? [row.sessionId] : []
     )
-  )
-);
-const staleInstances = $derived(instances.filter(isStale));
-const listedInstances = $derived(instances.filter(isListed));
+  );
+  if (
+    leads.size !== leadsWere.size ||
+    [...leads].some((id) => !leadsWere.has(id))
+  ) {
+    leadsWere = leads;
+  }
+  return leadsWere;
+});
+const staleInstances = $derived.by(keepsLast(() => instances.filter(isStale)));
 
 const state = $state({
   fleetMcp: null as import("@cawco/core").FleetMcpServer[] | null,
@@ -1081,20 +1250,6 @@ const state = $state({
    */
   starters: {} as Record<string, ProjectStarter[]>,
   sessions: {} as Record<string, SessionState>,
-  /**
-   * Each instance's coarse now-state, pushed by the daemon ~1/sec (broadcast).
-   * The rail reads this for sessions it has not subscribed to — the ones whose
-   * frame-fed {@link SessionState} is either absent or frozen at the last frame
-   * before the tab closed.
-   */
-  pulses: {} as Record<string, SessionPulse>,
-  /**
-   * When each session's current turn began, epoch ms, as its pulses tell it:
-   * the `at` of the first pulse after an idle one that was not idle. Absent
-   * while the session is idle. The fleet board orders a working session by
-   * it, so a session keeps its place for as long as it works.
-   */
-  turnSince: {} as Record<string, number>,
   /**
    * The line an ask leaves when it ends with no answer from this tab:
    * withdrawn before it was answered (the turn interrupted, the session
@@ -2134,8 +2289,8 @@ function prependTranscriptPage(
  * server, as `page` (`servedPage`) is: the store's own state is the
  * client's alone.
  */
-function pulseOf(instanceId: string): SessionPulse | undefined {
-  const held = state.pulses[instanceId];
+function pulseOf(instanceId: string): PulseReading | undefined {
+  const held = heldPulse(instanceId);
   if (held || state.liveRead) {
     return held;
   }
@@ -2143,12 +2298,38 @@ function pulseOf(instanceId: string): SessionPulse | undefined {
     .pulses?.[instanceId];
 }
 
-/** Starts a session's turn clock at the first pulse that is not idle, and stops it at the idle one. */
-function trackTurn(instanceId: string, pulse: SessionPulse): void {
-  if (pulse.activity === "idle") {
-    delete state.turnSince[instanceId];
+/**
+ * Each instance's coarse now-state, pushed by the daemon ~1/sec (broadcast).
+ * The rail reads this for sessions it has not subscribed to — the ones whose
+ * frame-fed {@link SessionState} is either absent or frozen at the last frame
+ * before the tab closed. Each a {@link Pulse}, a signal per field, so a
+ * pulse wakes what reads the fields it moved.
+ */
+const pulses = new Map<string, Pulse>();
+/**
+ * Moved when a session pulses for the first time: what every read of a
+ * session with no pulse yet waits on. Most of the board never pulses (it
+ * sleeps), and a list ordered by when each row last moved reads them all.
+ */
+let pulsesAdded = $state(0);
+
+/** The store's pulse for a session, read so its reader wakes when one first comes. */
+function heldPulse(instanceId: string): Pulse | undefined {
+  const held = pulses.get(instanceId);
+  return held || pulsesAdded < 0 ? held : undefined;
+}
+
+/**
+ * Takes a session's pulse at least as new as the one held: into its
+ * {@link Pulse}, each field only when it moved, or as its first.
+ */
+function takePulse(instanceId: string, pulse: SessionPulse): void {
+  const held = pulses.get(instanceId);
+  if (held) {
+    held.take(pulse);
   } else {
-    state.turnSince[instanceId] ??= pulse.at;
+    pulses.set(instanceId, new Pulse(pulse));
+    pulsesAdded += 1;
   }
 }
 
@@ -2165,7 +2346,7 @@ function trackTurn(instanceId: string, pulse: SessionPulse): void {
  * the pulse on the broadcast, and their order across the two is no one's
  * to promise.
  */
-function applyPulse(target: SessionState, pulse: SessionPulse): void {
+function applyPulse(target: SessionState, pulse: PulseReading): void {
   target.busy = pulse.busy;
   if (!equal(target.currentTool, pulse.currentTool)) {
     target.currentTool = pulse.currentTool;
@@ -2414,7 +2595,12 @@ function adoptInstances(rows: InstanceRow[]): void {
   if (next === hubRows) {
     return;
   }
-  hubRows = next;
+  const present = new Set(next.map((row) => row.id));
+  holdRows(
+    next,
+    next,
+    hubRows.filter((row) => !present.has(row.id)).map((row) => row.id)
+  );
   for (const target of Object.values(state.sessions)) {
     hydrate(target);
   }
@@ -2477,7 +2663,13 @@ function patchInstances(upserts: InstanceRow[], removed: string[]): void {
   if (next === hubRows) {
     return;
   }
-  hubRows = next;
+  // The rows as `next` holds them: an upsert equal to the row held keeps it.
+  const upserted = new Set(upserts.map((row) => row.id));
+  holdRows(
+    next,
+    next.filter((row) => upserted.has(row.id)),
+    removed
+  );
   for (const row of upserts) {
     const held = state.sessions[row.id];
     if (held) {
@@ -3098,33 +3290,6 @@ function foldDelegateEvent(list: DelegateEvent[], event: DelegateEvent): void {
   }
 }
 
-/**
- * Folds the hub's pulse snapshot (`instancesFrame.pulses`) into the client's
- * own pulse map. A merge, not a replace: a per-instance `pulse` frame is not
- * ordered against a snapshot the hub took moments before the `instances`
- * frame carrying it left, so whichever pulse actually happened later, by its
- * own `at`, is the one kept.
- */
-function mergePulses(
-  current: Record<string, SessionPulse>,
-  incoming: Record<string, SessionPulse> | undefined
-): Record<string, SessionPulse> {
-  if (!incoming) {
-    return current;
-  }
-  let next = current;
-  for (const [instanceId, pulse] of Object.entries(incoming)) {
-    const existing = next[instanceId];
-    if ((!existing || pulse.at >= existing.at) && !equal(existing, pulse)) {
-      if (next === current) {
-        next = { ...current };
-      }
-      next[instanceId] = pulse;
-    }
-  }
-  return next;
-}
-
 /** Files one event under the delegate it is about, pushed or freshly read. */
 function recordDelegateEvent(event: DelegateEvent): void {
   // Written, then read back: a `$state` write lands on the proxy and never on
@@ -3300,10 +3465,18 @@ function handleFrame(frame: FramePayload): void {
       }
     }
     // Every connection seeds now-state; subsequent changes arrive as pulses.
+    // A merge, not a replace: a per-instance `pulse` frame is not ordered
+    // against a snapshot the hub took moments before the `instances` frame
+    // carrying it left, so whichever pulse actually happened later, by its
+    // own `at`, is the one kept.
     if (frame.kind === "instances") {
-      state.pulses = mergePulses(state.pulses, frame.pulses);
-      for (const [id, pulse] of Object.entries(state.pulses)) {
-        trackTurn(id, pulse);
+      for (const [id, pulse] of Object.entries(frame.pulses ?? {})) {
+        const held = pulses.get(id);
+        if (!held || pulse.at >= held.at) {
+          takePulse(id, pulse);
+        }
+      }
+      for (const [id, pulse] of pulses) {
         const held = state.sessions[id];
         if (held) {
           applyPulse(held, pulse);
@@ -3504,17 +3677,15 @@ function handleFrame(frame: FramePayload): void {
   }
 
   if (frame.kind === "pulse") {
-    const previous = state.pulses[frame.instanceId];
-    if (
-      equal(previous, frame.pulse) ||
-      (previous && previous.at > frame.pulse.at)
-    ) {
+    const previous = pulses.get(frame.instanceId);
+    if (previous && previous.at > frame.pulse.at) {
       return;
     }
     // The daemon's coarse now-state, broadcast — this is the whole of what the
-    // rail knows about a session this browser has not subscribed to.
-    state.pulses[frame.instanceId] = frame.pulse;
-    trackTurn(frame.instanceId, frame.pulse);
+    // rail knows about a session this browser has not subscribed to. Field
+    // by field: a pulse inside a turn moves its row's time and tool, and
+    // wakes no list that files the session by its activity.
+    takePulse(frame.instanceId, frame.pulse);
     const held = state.sessions[frame.instanceId];
     if (held) {
       applyPulse(held, frame.pulse);
@@ -5489,56 +5660,7 @@ function bind(socket: WebSocket): void {
     line.receive(String(event.data));
   };
   startHeartbeat(socket);
-  line.listen((message) => {
-    // The hub is reached once its board on this socket is read: the board is
-    // the first frame the hub owes every socket (`olderThanHub`), and a proxy
-    // in front of it (the dashboard's own server, a preview's relay) accepts
-    // the upgrade before it knows whether the hub is there, so an open socket
-    // proves nothing (counted on open, every such socket reset the backoff and
-    // reread the fleet each second the hub was down). Not the socket's first
-    // message either: until the board is applied the store holds the last
-    // hub's machines and rows, and "connected" over them let a page asking
-    // after a hub restart ask a machine that wasn't back yet. The board is
-    // applied in this same turn, before anything reads the status.
-    if (
-      state.status !== "connected" &&
-      (message as { payload?: FramePayload }).payload?.kind === "instances"
-    ) {
-      hubReached();
-    }
-    if (olderThanHub(message)) {
-      return;
-    }
-    // A session's own frames are sequenced; everything else — the board,
-    // pulses, permissions, replies — is broadcast as an envelope.
-    if (handleStreamMessage(streamState, streamHost, message)) {
-      sweepOnTraffic();
-      return;
-    }
-    if (
-      handlePlanMessage(state.plans, message, (instanceId) =>
-        streamHost.sendToHub({ type: "plan.resync", instanceId })
-      )
-    ) {
-      return;
-    }
-    const envelope = message as Envelope<FramePayload>;
-    if (envelope.verb !== "frames") {
-      return;
-    }
-    const { payload } = envelope;
-    adoptAskMachine(envelope);
-    // The hub's own refusal names the request it answers on the envelope
-    // alone: read from the payload only, it settled nothing, and whoever
-    // asked waited out the timeout while the reason went to the console.
-    handleFrame(
-      payload.kind === "error" && !payload.requestId
-        ? { ...payload, requestId: envelope.requestId }
-        : payload
-    );
-    sweepOnTraffic();
-  });
-
+  line.listen(holdMessage);
   socket.onclose = socketClosed;
 
   socket.onerror = () => {
@@ -5549,8 +5671,158 @@ function bind(socket: WebSocket): void {
   };
 }
 
+/**
+ * The hub's messages read off the socket and not yet taken, in order: all
+ * of them are taken in one task once the page has drawn its next frame,
+ * so a burst costs the store one update, and a message that lands while a
+ * press is being drawn (a tab switch) waits for that frame instead of
+ * holding it (7433e2b3, mechanisms 2 and 6).
+ */
+const heldMessages: unknown[] = [];
+let takeAsked = false;
+/** When the take waiting was asked for, and when its task was posted (the page's clock). */
+const taking = { askedAt: 0, postedAt: 0 };
+/** When the person last pressed or typed: a pointer down, a key. */
+let pressedAt = Number.NEGATIVE_INFINITY;
+/**
+ * The longest a press holds a waiting take back past its ask, ms: the
+ * press's frame is drawn first, and a person typing on never holds the
+ * hub's word back longer than this. Our own call.
+ */
+const PRESS_HOLD_MS = 250;
+/** Posts the take as a task of its own, behind the frame that asked for it. */
+const takeChannel = browser ? new MessageChannel() : null;
+
+/** The take, posted from the next frame: it runs once that frame is drawn. */
+function takeAfterFrame(): void {
+  requestAnimationFrame(() => {
+    taking.postedAt = performance.now();
+    takeChannel?.port2.postMessage(0);
+  });
+}
+
+if (takeChannel) {
+  takeChannel.port1.onmessage = () => {
+    // A press that came in after the take was posted runs before it, and
+    // its frame is drawn before the take: it waits for the next frame.
+    if (
+      pressedAt > taking.postedAt &&
+      !document.hidden &&
+      performance.now() - taking.askedAt < PRESS_HOLD_MS
+    ) {
+      takeAfterFrame();
+      return;
+    }
+    takeHeld();
+  };
+  const pressed = () => {
+    pressedAt = performance.now();
+  };
+  for (const type of ["pointerdown", "keydown"] as const) {
+    addEventListener(type, pressed, { capture: true, passive: true });
+  }
+  // A page put away draws no frames: what waits is taken at once, and so is
+  // everything after, until it is shown again.
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      takeHeld();
+    }
+  });
+}
+
+function holdMessage(message: unknown): void {
+  heldMessages.push(message);
+  if (takeAsked) {
+    return;
+  }
+  takeAsked = true;
+  taking.askedAt = performance.now();
+  if (document.hidden) {
+    taking.postedAt = taking.askedAt;
+    takeChannel?.port2.postMessage(0);
+    return;
+  }
+  takeAfterFrame();
+}
+
+/**
+ * Takes every message held, in the order the socket read them, and the
+ * store's update with them, in this task. What it cost is marked
+ * ({@link HUB_TAKE_MEASURE}, its detail the messages taken), which a probe
+ * reads against the messages it saw arrive (live-perf).
+ */
+function takeHeld(): void {
+  takeAsked = false;
+  if (heldMessages.length === 0) {
+    return;
+  }
+  const began = performance.now();
+  const batch = heldMessages.splice(0);
+  for (const message of batch) {
+    takeMessage(message);
+  }
+  flushSync();
+  performance.measure(HUB_TAKE_MEASURE, {
+    start: began,
+    detail: batch.length,
+  });
+}
+
+/** One message off the hub's socket, taken into the store. */
+function takeMessage(message: unknown): void {
+  // The hub is reached once its board on this socket is read: the board is
+  // the first frame the hub owes every socket (`olderThanHub`), and a proxy
+  // in front of it (the dashboard's own server, a preview's relay) accepts
+  // the upgrade before it knows whether the hub is there, so an open socket
+  // proves nothing (counted on open, every such socket reset the backoff and
+  // reread the fleet each second the hub was down). Not the socket's first
+  // message either: until the board is applied the store holds the last
+  // hub's machines and rows, and "connected" over them let a page asking
+  // after a hub restart ask a machine that wasn't back yet. The board is
+  // applied in this same turn, before anything reads the status.
+  if (
+    state.status !== "connected" &&
+    (message as { payload?: FramePayload }).payload?.kind === "instances"
+  ) {
+    hubReached();
+  }
+  if (olderThanHub(message)) {
+    return;
+  }
+  // A session's own frames are sequenced; everything else — the board,
+  // pulses, permissions, replies — is broadcast as an envelope.
+  if (handleStreamMessage(streamState, streamHost, message)) {
+    sweepOnTraffic();
+    return;
+  }
+  if (
+    handlePlanMessage(state.plans, message, (instanceId) =>
+      streamHost.sendToHub({ type: "plan.resync", instanceId })
+    )
+  ) {
+    return;
+  }
+  const envelope = message as Envelope<FramePayload>;
+  if (envelope.verb !== "frames") {
+    return;
+  }
+  const { payload } = envelope;
+  adoptAskMachine(envelope);
+  // The hub's own refusal names the request it answers on the envelope
+  // alone: read from the payload only, it settled nothing, and whoever
+  // asked waited out the timeout while the reason went to the console.
+  handleFrame(
+    payload.kind === "error" && !payload.requestId
+      ? { ...payload, requestId: envelope.requestId }
+      : payload
+  );
+  sweepOnTraffic();
+}
+
 /** The socket is gone, closed by either side or dropped as dead: everything that went with it. */
 function socketClosed(): void {
+  // What the socket said before it closed is taken before its close is.
+  takeHeld();
   stopHeartbeat();
   state.status = "disconnected";
   // A socket that closed is an attempt that is over, one way or the other.
@@ -8831,33 +9103,65 @@ export async function takeOverBrowser(
   }
 }
 
+/** What a session needs from you — `idle` for one nothing has been heard from. */
+function activityNow(instanceId: string): Activity {
+  const thread = threadOf(instanceId);
+  if (thread) {
+    return THREAD_DOING[thread.status];
+  }
+  const target = state.sessions[instanceId];
+  // Blocked wins everywhere: a parked permission is broadcast, not filtered.
+  if (target && target.pending.length > 0) {
+    return "blocked";
+  }
+  const row = rowsById.get(instanceId);
+  // Its project is moving for it: working from the move's start (a yes
+  // the move waits on is its parked ask, above).
+  if (row?.status === "moving") {
+    return "working";
+  }
+  const pulse = pulseOf(instanceId);
+  if (pulse?.activity === "blocked" && !(target && isSubscribed(instanceId))) {
+    return "blocked";
+  }
+  if ((row?.runningDelegates ?? 0) > 0) {
+    return "working";
+  }
+  // An open session's frames are live and authoritative; anything else falls
+  // back to the daemon's pulse — the only word on a session this browser has
+  // not subscribed to, whose frame-fed state is frozen at the tab that closed.
+  if (target && isSubscribed(instanceId)) {
+    return activityOf(target);
+  }
+  if (pulse) {
+    return pulse.activity;
+  }
+  return target ? activityOf(target) : "idle";
+}
+
 /**
  * Every permission waiting on the user, across every machine. This is the
  * question the fleet view exists to answer, so it is derived from the sessions
- * themselves rather than tracked separately.
+ * themselves rather than tracked separately: once per change to what it
+ * reads, each asking session's own row read by its id.
  */
-function blockedRequests(): BlockedRequest[] {
-  // A session the hub says has ended (stopped, discarded, asleep, failed)
-  // answers to nobody; its asks are not the operator's. One whose machine
-  // the hub cannot reach (`unknown`) may still be running and waiting: its
-  // asks stay, marked stale, so "needs you" is never a false negative
-  // (PRODUCT.md) while a machine or the hub is away. Across a reconnect the
-  // asks themselves hold as last read until the hub's snapshot replaces
-  // them (`adoptPending`).
-  const ended = new Set(
-    instances
-      .filter((row) => !(isLive(row) || isStale(row)))
-      .map((row) => row.id)
-  );
-  const away = new Set(instances.filter(isStale).map((row) => row.id));
-
+const blocked = $derived.by((): BlockedRequest[] => {
   const rows: BlockedRequest[] = [];
   for (const target of Object.values(state.sessions)) {
     if (target.pending.length === 0) {
       continue;
     }
+    // A session the hub says has ended (stopped, discarded, asleep,
+    // failed) answers to nobody; its asks are not the operator's. One whose
+    // machine the hub cannot reach (`unknown`) may still be running and
+    // waiting: its asks stay, marked stale, so "needs you" is never a false
+    // negative (PRODUCT.md) while a machine or the hub is away. Across a
+    // reconnect the asks themselves hold as last read until the hub's
+    // snapshot replaces them (`adoptPending`).
+    const row = rowsById.get(target.instanceId);
+    const ended = row !== undefined && !(isLive(row) || isStale(row));
     const machine = state.machines.find(
-      (row) => row.machineId === target.machineId
+      (one) => one.machineId === target.machineId
     );
     for (const request of target.pending) {
       // A delegate's ask is the parent's to answer, not the user's: it stays on
@@ -8867,10 +9171,7 @@ function blockedRequests(): BlockedRequest[] {
       }
       // A post to another person's repository held for you outlives its
       // session (hub upstream-asks.ts): the hub makes it once you approve.
-      if (
-        ended.has(target.instanceId) &&
-        request.toolName !== UPSTREAM_POST_TOOL
-      ) {
+      if (ended && request.toolName !== UPSTREAM_POST_TOOL) {
         continue;
       }
       rows.push({
@@ -8879,12 +9180,31 @@ function blockedRequests(): BlockedRequest[] {
         hostname: machine?.hostname ?? target.machineId,
         cwd: target.cwd,
         request,
-        stale: away.has(target.instanceId),
+        stale: row !== undefined && isStale(row),
       });
     }
   }
+  // The very list it gave before while it says the same asks the same
+  // way: a frame that moved a session's transcript re-asks this, and a
+  // new list woke every list that leaves the asks out.
+  if (
+    rows.length === blockedWas.length &&
+    rows.every((one, i) => sameAsk(one, blockedWas[i]))
+  ) {
+    return blockedWas;
+  }
+  blockedWas = rows;
   return rows;
-}
+});
+let blockedWas: BlockedRequest[] = [];
+const sameAsk = (a: BlockedRequest, b: BlockedRequest | undefined): boolean =>
+  b !== undefined &&
+  a.request === b.request &&
+  a.instanceId === b.instanceId &&
+  a.machineId === b.machineId &&
+  a.hostname === b.hostname &&
+  a.cwd === b.cwd &&
+  a.stale === b.stale;
 
 /** What the palette groups by: what this machine was given, then the harness's own. */
 const COMMAND_ORDER: Record<AvailableCommand["type"], number> = {
@@ -9095,6 +9415,14 @@ export const cawco = {
   get instances() {
     return instances;
   },
+  /** One hub row by its id, read on its own: it wakes when that row moves, and no other. */
+  rowOf: (instanceId: string): InstanceRow | undefined =>
+    rowsById.get(instanceId),
+  /** Whether the hub still reaches this session (one of `runningInstances`), read off its own row. */
+  liveId: (instanceId: string): boolean => {
+    const row = rowsById.get(instanceId);
+    return row !== undefined && isLive(row);
+  },
   get instanceIndex() {
     return instanceIndex;
   },
@@ -9114,6 +9442,10 @@ export const cawco = {
   /** Listed sessions as lists show them: leads as their threads. */
   get listedRows() {
     return listedRows;
+  },
+  /** The listed rows by id: one map for every list that walks their trees (the rail's, Recent's). */
+  get listedById(): ReadonlyMap<string, BoardRow> {
+    return listedById;
   },
   /** Sessions that are a project's lead: never listed, nor their stored transcripts. */
   get leadSessions() {
@@ -9245,7 +9577,7 @@ export const cawco = {
     if (item) {
       return itemChild(item);
     }
-    const row = instances.find((each) => each.id === instanceId);
+    const row = rowsById.get(instanceId);
     return row && isStarted(row) ? sessionChild(row) : undefined;
   },
   /** A followed session's plan, live: its steps, its spec, an attempt's to-dos. */
@@ -9318,43 +9650,12 @@ export const cawco = {
     }
     return null;
   },
-  /** What a session needs from you — `idle` for one nothing has been heard from. */
-  activityOf: (instanceId: string): Activity => {
-    const thread = threadOf(instanceId);
-    if (thread) {
-      return THREAD_DOING[thread.status];
-    }
-    const target = state.sessions[instanceId];
-    // Blocked wins everywhere: a parked permission is broadcast, not filtered.
-    if (target && target.pending.length > 0) {
-      return "blocked";
-    }
-    // Its project is moving for it: working from the move's start (a yes
-    // the move waits on is its parked ask, above).
-    if (instanceIndex.byId.get(instanceId)?.status === "moving") {
-      return "working";
-    }
-    const pulse = pulseOf(instanceId);
-    if (
-      pulse?.activity === "blocked" &&
-      !(target && isSubscribed(instanceId))
-    ) {
-      return "blocked";
-    }
-    if ((instanceIndex.byId.get(instanceId)?.runningDelegates ?? 0) > 0) {
-      return "working";
-    }
-    // An open session's frames are live and authoritative; anything else falls
-    // back to the daemon's pulse — the only word on a session this browser has
-    // not subscribed to, whose frame-fed state is frozen at the tab that closed.
-    if (target && isSubscribed(instanceId)) {
-      return activityOf(target);
-    }
-    if (pulse) {
-      return pulse.activity;
-    }
-    return target ? activityOf(target) : "idle";
-  },
+  /**
+   * What a session needs from you — `idle` for one nothing has been heard
+   * from. A hub row's is held per row ({@link RowActivity}).
+   */
+  activityOf: (instanceId: string): Activity =>
+    rowActivity.get(instanceId)?.value ?? activityNow(instanceId),
   /**
    * Whether the session's own main loop is in a turn, its delegates and
    * subagents aside: what a project's Caw is doing himself, where
@@ -9392,7 +9693,7 @@ export const cawco = {
   },
   /** When the session's current turn began, ms epoch; `undefined` while it is idle. */
   turnSince: (instanceId: string): number | undefined =>
-    state.turnSince[instanceId],
+    heldPulse(instanceId)?.since,
   /** The line an ask left: withdrawn unanswered, or answered elsewhere; none for one answered here or still waiting. */
   askEnd: (requestId: string): Message | undefined => state.askEnds[requestId],
   /**
@@ -9457,9 +9758,9 @@ export const cawco = {
     return pulseOf(instanceId)?.runningSubagents ?? 0;
   },
   get blocked(): BlockedRequest[] {
-    return blockedRequests();
+    return blocked;
   },
   get blockedCount(): number {
-    return blockedRequests().length;
+    return blocked.length;
   },
 };

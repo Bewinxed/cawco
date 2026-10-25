@@ -95,13 +95,28 @@ export function threadRowOf(
   };
 }
 
+/** Each hub row as it hangs under its thread, while the row stands (rows are replaced whole). */
+const underThreads = new WeakMap<InstanceRow, InstanceRow>();
+
 /**
  * A session Caw's work started, under the thread it works for (the hub's
  * `threadId`) rather than under his lead session: the thread is where that
  * work was asked for.
  */
-export const underThread = (row: InstanceRow): InstanceRow =>
-  row.threadId ? { ...row, parentInstanceId: threadTabId(row.threadId) } : row;
+export const underThread = (row: InstanceRow): InstanceRow => {
+  if (!row.threadId) {
+    return row;
+  }
+  // The same row each time: a list that keeps its array while its rows
+  // are the same ones (board.svelte.ts `unlessSame`) would see a copy made anew
+  // as a row that moved.
+  let moved = underThreads.get(row);
+  if (!moved) {
+    moved = { ...row, parentInstanceId: threadTabId(row.threadId) };
+    underThreads.set(row, moved);
+  }
+  return moved;
+};
 
 /**
  * Sessions as every list of them shows them — the rail, Home's tabs and
