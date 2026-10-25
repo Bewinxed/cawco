@@ -35,6 +35,11 @@
  *   `resolveReal`). The delegate does not see the person's edits made after
  *   the clone.
  *
+ * A linked worktree (its `.git` a file naming the person's git dirs) gets a
+ * copy like any repository's, whose `.git` is then made a repository of its
+ * own that borrows the person's objects (workspace.ts `ownRepository`): no
+ * git dir of the person's is written.
+ *
  * A clone cut by a build before layers (`~/.worktrees/<repo>-<id8>`, a git
  * clone of its own) is a `copy` with no base: its path is CawCo's own folder,
  * its git holds its work, and it retires as a copy does ({@link layerOf}).
@@ -74,6 +79,7 @@ import type {
 } from "@cawco/core";
 import { claudeHome, workspacesDir } from "@cawco/core/paths";
 import { commandLine } from "@cawco/core/process-identity";
+import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { listedPid, signal as signalPid } from "@cawco/core/signal";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
@@ -103,8 +109,15 @@ export interface Layer {
   /** The folder the workspace was made from, at its real path. */
   folder: string;
   form: LayerForm;
-  /** A repository's root (its `.git` a directory of its own), or any other folder. */
+  /** A repository's root (its `.git` a directory, or a file naming one), or any other folder. */
   kind: WorkspaceKind;
+  /**
+   * A linked worktree's (or a submodule's checkout's) git dirs, when F's
+   * `.git` is a file naming them ({@link kindOf}): the copy's `.git` is a
+   * repository of its own borrowing `common`'s objects (workspace.ts
+   * `ownRepository`), which its boundary reads (core workspace-policy.ts).
+   */
+  linked?: LinkedGit;
   /** Whether the copy is whole: one that is not was cut short, and is cleared. */
   made: boolean;
   /** Copy: whether the root `node_modules` is still F's, by a link ({@link LINKED_MODULES}). */
@@ -121,6 +134,16 @@ export interface Layer {
   seen?: Record<string, number>;
   /** When the delegate's view of F began (epoch ms): the line a conflict is read from. */
   started: number;
+}
+
+/**
+ * A linked worktree's git dirs, as git resolves its `.git` file
+ * (gitrepository-layout(5)): its own (`gitDir`, where its HEAD and index
+ * are) and the common one (`common`, its objects, refs and config).
+ */
+export interface LinkedGit {
+  common: string;
+  gitDir: string;
 }
 
 /** The folder a workspace's layer keeps its own files in. */
@@ -696,15 +719,42 @@ export const ownModules = (id: string): Promise<void> => {
 
 // --------------------------------------------------------------- the making
 
-/** Whether `folder` is a repository's root whose `.git` is a directory of its own. */
-const kindOf = async (folder: string): Promise<WorkspaceKind> => {
+/**
+ * What `folder` is: a repository's root whose `.git` is a directory of its
+ * own; one whose `.git` is a file naming its git dirs (a linked worktree,
+ * `git worktree add`, or a submodule's checkout), those dirs as git reads
+ * them, read only; or any other folder.
+ */
+const kindOf = async (
+  folder: string
+): Promise<{ kind: WorkspaceKind; linked?: LinkedGit }> => {
   const git = await lstat(join(folder, ".git")).catch(() => undefined);
-  if (git?.isFile()) {
+  if (git?.isDirectory()) {
+    return { kind: "repo" };
+  }
+  if (!git?.isFile()) {
+    return { kind: "folder" };
+  }
+  const ran = Bun.spawnSync(
+    [
+      "git",
+      ...SAFE_GIT_FLAGS,
+      "-C",
+      folder,
+      "rev-parse",
+      "--path-format=absolute",
+      "--absolute-git-dir",
+      "--git-common-dir",
+    ],
+    { env: { ...hostEnvironment(), ...SAFE_GIT_ENV }, stderr: "pipe" }
+  );
+  const [gitDir, common] = ran.stdout.toString().trim().split("\n");
+  if (ran.exitCode !== 0 || !(gitDir && common)) {
     throw new Error(
-      `${folder} is a git worktree, whose repository lives outside it, so a workspace of it would write that repository: delegate from the repository's own checkout`
+      `${join(folder, ".git")} is a file that git does not follow to a repository, so ${folder} cannot have a workspace: ${ran.stderr.toString().trim() || `git exited ${ran.exitCode}`}`
     );
   }
-  return git?.isDirectory() ? "repo" : "folder";
+  return { kind: "repo", linked: { common, gitDir } };
 };
 
 /**
@@ -718,7 +768,7 @@ export const makeLayer = async (
   folder: string,
   path: string
 ): Promise<Layer> => {
-  const kind = await kindOf(folder);
+  const { kind, linked: git } = await kindOf(folder);
   const started = Date.now();
   if (process.platform === "linux") {
     const dir = layerDir(id);
@@ -731,6 +781,7 @@ export const makeLayer = async (
       folder,
       form: "overlay",
       kind,
+      ...(git ? { linked: git } : {}),
       made: false,
       mounts,
       path: folder,
@@ -746,6 +797,7 @@ export const makeLayer = async (
     folder,
     form: "copy",
     kind,
+    ...(git ? { linked: git } : {}),
     made: false,
     path,
     started,

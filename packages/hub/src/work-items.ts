@@ -5050,7 +5050,7 @@ export const createWorkItems = ({
   ): void => {
     const source = db
       .activeWorkspacesOn(workspace.machineId)
-      .find((each) => each.path === workspace.repoRoot);
+      .find((each) => ownCopy(each) && each.path === workspace.repoRoot);
     db.recordProjectRepository({
       projectId,
       machineId: workspace.machineId,
@@ -5961,10 +5961,12 @@ export const createWorkItems = ({
   ): Promise<string | undefined> => {
     const inside = (root: string): boolean =>
       path === root || path.startsWith(`${root}/`);
+    // A Linux view's path is the person's folder, no clone of its own
+    // ({@link ownCopy}): a session there runs on the host as theirs do.
     const filed = [
       ...db.activeWorkspacesOn(machineId),
       ...db.heldWorkspaces().filter((one) => one.machineId === machineId),
-    ].find((one) => inside(one.path));
+    ].find((one) => ownCopy(one) && inside(one.path));
     const held =
       filed ??
       ((await call(machineId, CONTROL_CLONE_HOLDING, [
