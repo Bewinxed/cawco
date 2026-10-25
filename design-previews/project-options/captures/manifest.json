@@ -1,0 +1,254 @@
+[
+  {
+    "part": "H",
+    "option": "H1",
+    "width": 1440,
+    "file": "H-H1-1440.png",
+    "caption": "One bar in one row: the title and the obelisk-of-light place on the left, the six views and the waiting hand in the centre, New task, Filter, More and the coral Ask Caw on the right."
+  },
+  {
+    "part": "H",
+    "option": "H1",
+    "width": 1037,
+    "file": "H-H1-1037.png",
+    "caption": "The same one bar at his window: the six views fold into a Board pill beside the waiting hand."
+  },
+  {
+    "part": "H",
+    "option": "H1",
+    "width": 390,
+    "file": "H-H1-390.png",
+    "caption": "The phone's bar is the title and More; the views, the waiting hand and the coral Ask Caw sit in the docked foot bar."
+  },
+  {
+    "part": "H",
+    "option": "H2",
+    "width": 1440,
+    "file": "H-H2-1440.png",
+    "caption": "Two rows: the title, the place, More and Ask Caw on top; under them a shelf with the six views, the waiting hand, New task and Filter."
+  },
+  {
+    "part": "H",
+    "option": "H2",
+    "width": 1037,
+    "file": "H-H2-1037.png",
+    "caption": "The two rows at his window: all six views stay named on the shelf."
+  },
+  {
+    "part": "H",
+    "option": "H2",
+    "width": 390,
+    "file": "H-H2-390.png",
+    "caption": "On the phone H2 is the same as H1: the title and More on top, the views and Ask Caw in the foot bar."
+  },
+  {
+    "part": "D",
+    "option": "D1",
+    "width": 1440,
+    "file": "D-D1-1440.png",
+    "caption": "Five columns share the width with no strip; empty stages are a head over a one-row well."
+  },
+  {
+    "part": "D",
+    "option": "D1",
+    "width": 1037,
+    "file": "D-D1-1037.png",
+    "caption": "At his window the columns can't fit, so the board turns into D2: the stage strip over 300px columns that scroll sideways."
+  },
+  {
+    "part": "D",
+    "option": "D2",
+    "width": 1440,
+    "file": "D-D2-1440.png",
+    "caption": "The stage strip with every count over 300px columns: Ready, Working and Review whole, Done cut at the edge, Dropped past it."
+  },
+  {
+    "part": "D",
+    "option": "D2",
+    "width": 1037,
+    "file": "D-D2-1037.png",
+    "caption": "The same board at his window: the strip keeps every stage and count in view while two columns and part of a third show."
+  },
+  {
+    "part": "P",
+    "option": "P1",
+    "width": 390,
+    "file": "P-P1-390.png",
+    "caption": "The stage strip wraps to two rows over Ready's cards: every stage and count in the first view."
+  },
+  {
+    "part": "P",
+    "option": "P2",
+    "width": 390,
+    "file": "P-P2-390.png",
+    "caption": "One grouped list: Ready open under its head, the other four heads pinned above the foot bar."
+  },
+  {
+    "part": "T",
+    "option": "T1",
+    "width": 1440,
+    "file": "T-T1-1440.png",
+    "caption": "The Table: rows grouped by stage under sticky heads with counts; Done and Dropped folded and pinned at the foot."
+  },
+  {
+    "part": "T",
+    "option": "T1",
+    "width": 390,
+    "file": "T-T1-390.png",
+    "caption": "The phone's Table: one group open, the other heads pinned above the foot bar."
+  },
+  {
+    "part": "C",
+    "option": "C1",
+    "width": 1440,
+    "file": "C-C1-1440.png",
+    "caption": "tsk-17 waits in Working with the needs-you mark (dot, hand, asks) and its ask on a line of its own; tsk-16 waits in Review. Drawn for the state."
+  },
+  {
+    "part": "C",
+    "option": "C1",
+    "width": 390,
+    "file": "C-C1-390.png",
+    "caption": "The phone opens on Working, where tsk-17's ask stands with its mark. Drawn for the state."
+  },
+  {
+    "part": "C",
+    "option": "C2",
+    "width": 1440,
+    "file": "C-C2-1440.png",
+    "caption": "The same waiting card with Deny and Approve as untinted peers at its foot, for a permission. Drawn for the state."
+  },
+  {
+    "part": "C",
+    "option": "C2",
+    "width": 390,
+    "file": "C-C2-390.png",
+    "caption": "Deny and Approve at opposite ends of the card on the phone. Drawn for the state."
+  },
+  {
+    "part": "K",
+    "option": "K1-top",
+    "width": 1440,
+    "file": "K-K1-top-1440.png",
+    "caption": "tsk-16's pane beside the board, opened at its title: the task, its jump strip, then its description first."
+  },
+  {
+    "part": "K",
+    "option": "K1-top",
+    "width": 390,
+    "file": "K-K1-top-390.png",
+    "caption": "The pane as its own page on the phone, opened at its title, Send back and Approve docked at the foot."
+  },
+  {
+    "part": "K",
+    "option": "K1-review",
+    "width": 1440,
+    "file": "K-K1-review-1440.png",
+    "caption": "tsk-16's pane opened on its Result: the title condensed in the bar, the jump strip sticky, the handed-in result and Send back, Approve in view."
+  },
+  {
+    "part": "K",
+    "option": "K1-review",
+    "width": 390,
+    "file": "K-K1-review-390.png",
+    "caption": "The phone's pane opened on the Result, the verdict docked at the foot."
+  },
+  {
+    "part": "F",
+    "option": "F1",
+    "width": 1440,
+    "file": "F-F1-1440.png",
+    "caption": "The hub didn't answer: one band under the bar says who, when it retries and what to do, over the board as it last read. Drawn for the state."
+  },
+  {
+    "part": "F",
+    "option": "F1",
+    "width": 390,
+    "file": "F-F1-390.png",
+    "caption": "The band stacks to three lines on the phone, the board kept under it. Drawn for the state."
+  },
+  {
+    "part": "F",
+    "option": "F2",
+    "width": 1440,
+    "file": "F-F2-1440.png",
+    "caption": "The hub didn't answer: a stale dot on the place, its popover open with who, when and what to do; the board kept. Drawn for the state."
+  },
+  {
+    "part": "F",
+    "option": "F2",
+    "width": 390,
+    "file": "F-F2-390.png",
+    "caption": "The stale mark beside the phone's title, its popover open under the bar. Drawn for the state."
+  },
+  {
+    "part": "S",
+    "option": "S1",
+    "width": 1440,
+    "file": "S-S1-1440.png",
+    "caption": "Caw's column with no title bar: Caw on the axis, his line, three starters stacked as full sentences, the composer."
+  },
+  {
+    "part": "S",
+    "option": "S1",
+    "width": 390,
+    "file": "S-S1-390.png",
+    "caption": "The half-height sheet on the phone: Caw, his line and the stack don't fit above the composer, so the stack scrolls."
+  },
+  {
+    "part": "S",
+    "option": "S2",
+    "width": 1440,
+    "file": "S-S2-1440.png",
+    "caption": "Caw's column with the three starters as one row docked over the composer, scrolling sideways."
+  },
+  {
+    "part": "S",
+    "option": "S2",
+    "width": 390,
+    "file": "S-S2-390.png",
+    "caption": "The half-height sheet: Caw's line, the row of starters and the composer."
+  },
+  {
+    "part": "H",
+    "option": "Today",
+    "width": 1440,
+    "file": "H-Today-1440.png",
+    "caption": "Today at 1440: the view strip over a two-row head with the path, five columns with kind words under each name."
+  },
+  {
+    "part": "H",
+    "option": "Today",
+    "width": 1037,
+    "file": "H-Today-1037.png",
+    "caption": "Today at his window: the strip cut at Dec…, the head's two rows, three columns in view."
+  },
+  {
+    "part": "H",
+    "option": "Today",
+    "width": 390,
+    "file": "H-Today-390.png",
+    "caption": "Today on the phone: the title three times, Ready's cards in full and the other stages a sliver at the right edge."
+  },
+  {
+    "part": "D",
+    "option": "Today",
+    "width": 1440,
+    "file": "D-Today-1440.png",
+    "caption": "Today at 1440: the view strip over a two-row head with the path, five columns with kind words under each name."
+  },
+  {
+    "part": "D",
+    "option": "Today",
+    "width": 1037,
+    "file": "D-Today-1037.png",
+    "caption": "Today at his window: the strip cut at Dec…, the head's two rows, three columns in view."
+  },
+  {
+    "part": "P",
+    "option": "Today",
+    "width": 390,
+    "file": "P-Today-390.png",
+    "caption": "Today on the phone: the title three times, Ready's cards in full and the other stages a sliver at the right edge."
+  }
+]

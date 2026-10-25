@@ -1,0 +1,1403 @@
+{
+ "source": "tasks.tgz: the hub records of Cawco-Dev, 2026-10-25",
+ "tasks": [
+  {
+   "id": "tsk-1",
+   "title": "Run Apple's production test notification after CawCo's first release",
+   "stage": "ready",
+   "labels": [
+    "cawco-pro",
+    "release"
+   ],
+   "description": "Apple's App Store Server API answers 401 to every production call until an app has a production release (https://github.com/apple/app-store-server-library-node/issues/60: \"Apps without a production release are not authorized to call any production endpoints\"). Twelve tries on 2026-10-08 got 401; the sandbox test passed end to end (Cawrier verified it, and its forward to Yield got 200).\n\nAt CawCo's first App Store release:\n- call `POST https://api.storekit.itunes.apple.com/inApps/v1/notifications/test` with an App Store Server API token signed by the team key 5JW54DXB77 that carries `bid: \"dev.cawco.app\"`. `~/asc.py` on the Mac signs ASC tokens without `bid`, so add an optional bid argument to it for this;\n- confirm Cawrier logs the verified TEST notification and the Yield forward's 200;\n- confirm Yield shows it under Notifications.",
+   "acceptance": "- Production TEST notification sent and answered 200 by Apple\n- Cawrier log shows it verified and forwarded, with Yield answering 200\n- Yield's Notifications list shows the TEST event",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1791488712000,
+   "createdBy": "Build Cawrier push relay for Pro",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-2",
+   "title": "Move the macOS workspace boundary onto srt once allowMachRegister ships",
+   "stage": "ready",
+   "labels": [
+    "boundary",
+    "waiting-upstream"
+   ],
+   "description": "Blocked upstream: @anthropic-ai/sandbox-runtime has no `mach-register` allowance (issue #210), so Chromium/Playwright can't start inside srt on macOS (\"bootstrap_check_in … MachPortRendezvousServer: Permission denied (1100)\"). The fix is PR #598 \"feat(macos): allowMachRegister\", open since 2026-09-22, reviewed and tested by a third party, unmerged.\n\nStart this when a released srt version's sandbox-config schema has `allowMachRegister`. Check with: `npm view @anthropic-ai/sandbox-runtime version` plus `gh pr view 598 -R anthropic-experimental/sandbox-runtime --json state,mergedAt`. I check it at every nightly cut.\n\nUntil then, the Mac runs the Seatbelt profile generated from workspacePolicy() (queued item \"Move the Linux boundary onto srt\", decision 9).\n\nThe work: run the Mac on the same srt runner and boundary-host as Linux (artifacts/srt-eval/REPORT.md §7). Set `allowMachRegister` and the matching `allowMachLookup` to the narrowest prefixes Chromium needs: the PR's own table shows register and lookup must share a prefix. Bump the pinned srt to that release, then delete profileOf and the macOS Seatbelt generation. Keep the swift, xcodebuild and log shims (srt #67: Seatbelt doesn't nest).",
+   "acceptance": "- run-mac-checks.sh (artifacts/srt-eval) passes on the Mac inside srt: every escape row blocked, swift build, the xcodebuild simulator build and Playwright Chromium all pass.\n- `grep -n profileOf packages/agent/src/boundary.ts` finds nothing.\n- One live Mac delegate starts a dev server and drives it with Playwright after the deploy.",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1791548164000,
+   "createdBy": "Design multi-account credential routing",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-3",
+   "title": "Preview tool rework: comments on previews and the canvas panel",
+   "stage": "ready",
+   "labels": [
+    "design",
+    "preview",
+    "p4"
+   ],
+   "description": "Now a child of tsk-4 (artifacts, projects plan §5.10): the comments design below is unchanged and ships as that spec's slice 4, with the canvas-panel layout folded into the artifact panel (DESIGN.md \"Artifact panel, canvas and ink\"). Original brief follows.\n\nRework the preview tool: comments on previews, plus the canvas-panel layout. It's P4 work in the projects PRD (§5.7, D18 to D20) and is done at that stage. It is NOT waiting on the owner. His screenshot (2026-10-10) is reference material for when this is designed, described in words in .design-foundations/plans/2026-10-06-projects.md §5.7 Canvas (957a58f6): Claude's canvas panel, with the document name as a title dropdown, comments and Share at the top, floating tool and view groups, and an empty state offering both the person's path and the agent's.\n\nThe preview-comments design is ready: Fable advisor item f365c35b \"Design preview comments fit\" (ended 2026-10-09; result in the hub's work_items.result, full report and ASCII wireframes in that advisor session's transcript).\n- Select becomes Comment (key C).\n- Picks become numbered pins plus a list in the pane.\n- The selection chip, its popover and selection.md are deleted.\n- \"Send N\" sends unsent comments and picks as one turn; replies, resolve and reopen happen in the card.\n- iOS draws its own header, card and list as native sheets over the unchanged WKWebView overlay.\n\nWhen its turn comes: fold the canvas-panel reference into that design. Have an Opus leaf build a preview from the dashboard's real components (mock route) for the owner to see. Then build it. A finished build doesn't wait on the owner's go-ahead.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1791618758000,
+   "createdBy": "we need to continue the work that is here claude/zealous-pascal-19onlg history e",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 1
+  },
+  {
+   "id": "tsk-4",
+   "title": "Build artifacts: the pen canvas, live pages and ink on any artifact",
+   "stage": "ready",
+   "labels": [
+    "ready-for-agent",
+    "artifacts",
+    "design",
+    "p4"
+   ],
+   "description": "Spec for projects plan §5.10 (D22–D27), `.design-foundations/plans/2026-10-06-projects.md`; pixels in DESIGN.md \"Artifact panel, canvas and ink\"; terms in WORDS.md. Grilled with the owner on 2026-10-13; the decision log carries his words. tsk-3 (preview comments, the canvas-panel layout) is a child of this task and folds in unchanged.\n\n### Problem Statement\n\nThe operator thinks in diagrams and marks. On the iPad Pro with a pencil there is no way to draw something for the agent, and a drawing sent as a picture is a dead end: the agent cannot change it and send it back. Feedback on a preview is a tap on one element; a circle drawn around a region, with a word beside it, has nowhere to go. And the preview itself is a window, not a place: a questionnaire the agent sends cannot see its answers being filled in, cannot be extended as the conversation goes, and loses its state on a refresh or in a new tab.\n\n### Solution\n\nThe preview becomes the **artifact**: a document a session made that you work in, kept by the hub, in one panel per session. Three kinds share everything: a **page** (HTML the agent wrote), a **canvas** (an Excalidraw drawing by either side) and a **preview** (a dev server shown live). A pen swipe up on the composer grows the pill into a canvas the way it grows into the recall wheel; Attach → Draw, ⌘⇧D and the panel's + open one anywhere. A canvas goes to the agent as an outline it can navigate plus a picture, and the agent draws back in skeleton elements or Mermaid; the drawing updates in place on every screen. Ink on any artifact is drawn in the overlay, anchored to the elements under it, and a radial menu at the stroke's end makes it an annotation, a comment, or an illustration. Every artifact is one Yjs document the hub syncs and persists, so a tab of its own, the iPad and the panel are the same thing, and a page the agent re-publishes morphs in place without losing what was typed.\n\n### User Stories\n\n1. As the operator on an iPad Pro, I want to swipe up from the composer with the pencil and get a canvas, so that I can draw what I mean without leaving the conversation.\n2. As the operator, I want a finger's swipe up to keep opening the recall wheel, so that the new gesture takes nothing away.\n3. As the operator on a phone, a mouse or a finger, I want Attach → Draw (and ⌘⇧D on the web) to open the same canvas, so that drawing is not pencil-only.\n4. As the operator, I want the canvas to grow out of the composer the way the wheel does and keep the text field below it, so that I can draw and type in one place.\n5. As the operator, I want to drag the canvas's top edge to resize it, so that it takes the room I want.\n6. As the operator, I want a Dock button that sends the canvas to the side like the preview, and Undock to bring it back, so that the layout is mine.\n7. As the operator on an iPad, I want my finger to pan and pinch while the pencil draws, so that drawing feels like Notes and Freeform.\n8. As the operator, I want pressure in my strokes, so that the drawing looks like what I drew.\n9. As the operator, I want a stroke I hold still at its end to snap to a line, arrow, rectangle, ellipse or triangle, so that diagrams are tidy without picking tools.\n10. As the operator, I want the pencil's double-tap to toggle the eraser, so that the pencil's own convention works.\n11. As the operator, I want shapes, arrows, text and a selection tool on the canvas, so that I can diagram, not only sketch.\n12. As the operator, I want Done to fold the canvas into a chip in the composer and Send to fly it into the transcript, so that a drawing is a message like any other.\n13. As the agent, I want a canvas to arrive as an outline (ids, types, text, boxes, arrow bindings) plus a picture, so that I can both see it and refer to its parts by id.\n14. As the agent, I want to draw back in skeleton elements or Mermaid, so that I write the format I write best and the host fills in the rest.\n15. As the agent, I want to create a canvas unprompted and edit an existing one by id, so that diagrams are mine to keep and iterate.\n16. As the operator, I want the agent's edit to appear on my canvas in place, with nothing moving under my pen, so that iteration is live and calm.\n17. As the operator, I want my half-drawn stroke never overwritten by the agent, so that two hands on one canvas is safe.\n18. As the agent, I want a write that lands on an element the operator changed since my last read to be flagged in the result, so that I know what moved.\n19. As the operator, I want a questionnaire the agent sends to notice my answers as I give them, so that I never have to say \"done\" field by field.\n20. As the agent, I want the operator's changes delivered as one message after a short quiet, and at once while my turn is running, so that I can add questions as answers come in without a turn per click.\n21. As the agent, I want to re-publish a page and have it morph in place, keeping focus, scroll and typed values, so that an update is never jarring.\n22. As the operator, I want to open an artifact in a new tab and find the same tools and state, so that a bigger screen is not a disconnected preview.\n23. As the operator, I want an artifact to survive closing the panel, refreshing and switching device, so that nothing is lost by accident.\n24. As the operator, I want a panel per session listing its artifacts newest first, so that I can find any page, canvas or preview the session made.\n25. As the agent inside a project, I want to escalate an artifact into the repository, so that work worth keeping is versioned with the project.\n26. As the operator, I want to ink on any artifact with the pencil at once, with a finger still scrolling, so that marking up is as natural as reading.\n27. As the operator, I want the ink to stay exactly on what I marked through scrolling, resizing and the agent's edits, so that a circle still circles the thing.\n28. As the operator, I want an icon at the stroke's end whose radial menu lets me annotate, comment, illustrate or erase with one press-and-drag, so that the ink's meaning is one gesture away.\n29. As the operator, I want an annotation to pin the elements under the ink with their source location, so that the agent knows what file and line I mean.\n30. As the operator, I want a comment to open a thread the agent can reply to and resolve, so that feedback has a place to live.\n31. As the operator, I want ignored ink to go along as a picture on the next Send, so that a doodle is never lost or in the way.\n32. As the operator, I want \"Send N\" to send unsent pins, comments and picks as one turn, so that feedback is batched the way I give it.\n33. As the operator, I want reduced motion respected (fades only) and VoiceOver to reach the canvas, the panel's list and every tool, so that the feature is usable without the gestures.\n34. As the operator, I want every control 44 pt under a finger, so that the pencil and the finger both land.\n35. As the agent, I want each tool to answer only what the hub stored, so that \"shown\" means shown.\n\n### Implementation Decisions\n\n- **One concept.** Artifact, with kinds page, canvas and preview; one store, one overlay, one bridge, one panel. The plan's §5.7 Svelte Flow surface is dropped; a project's artifacts are the same panel at project scope. Words: artifact, page, canvas (now a drawing), preview, pin, comment (WORDS.md).\n- **The document.** One Yjs doc per artifact. Maps: `state` (every page field by name or id plus picks, notes, dials; `data-cawco-choice` kept for custom widgets), `elements` (the canvas through y-excalidraw; element-level last-writer-wins by version and versionNonce, Excalidraw's own reconcile rule; an element being edited locally is kept), `ink` (stroke groups relative to their anchor element's box, with page coordinates, selector and source), `comments` and `pins` (tsk-3). The hub is the sync server (y-websocket protocol over the preview listener) and persists the update log in SQLite. Keys outlive revisions.\n- **Agent access.** Tools read a JSON snapshot (state, pins, comments, the canvas outline, optionally a PNG) and write JSON patches applied as one Y transaction; a write on an element the person changed since the last read is applied and flagged. The `.excalidraw` file is the truth; the agent writes skeleton elements (`convertToExcalidrawElements`) or Mermaid (`@excalidraw/mermaid-to-excalidraw`). A send carries the file, the outline and the PNG through the existing `attachments`/`images` contract.\n- **Live updates.** A re-published page morphs in place with idiomorph (`restoreFocus`, the active field's value kept). A canvas changes in place through the binding. A morph or remote element change waits for pointer-up and field blur. A dev-server preview keeps its own HMR.\n- **Delivery.** Changes batch into one message after 3 s of quiet (`--dur-wait-grace` × 3), and go at once while the session's turn runs. \"Send N\" sends unsent pins, comments and picks as one turn (tsk-3).\n- **Its own tab.** The dashboard's artifact route with the panel's chrome and the same doc. The overlay has one transport seam: parent window (iframe), WebKit handler (iOS), direct hub socket (own tab).\n- **The panel.** The preview sheet's recipe; head with the artifact's name as the title control, Open in new tab, Dock/Undock, Comment, Reload, Close; the list newest first. `artifact_promote` writes `artifacts/<name>/` into a project's repository.\n- **The canvas.** `@excalidraw/excalidraw` (MIT) in the overlay host, chrome hidden, our tool rail on house tokens; pen mode on iPad; shape recognition ours, in v1, on `--dur-press-hold`; the pencil's double-tap toggles the eraser. tldraw is out (commercial licence required in production). PencilKit is not used.\n- **Entrances and motion.** Pen swipe up on the pill (touch type decides; the pencil leaves the wheel's recognizer in the app; `pointerType === \"pen\"` on the web); Attach → Draw; ⌘⇧D; the panel's +. The grown shape rises to the canvas with the field below; top-edge resize, floor 40 %; Dock is a shared-element flight into the panel; Done folds to a chip; Send flies the chip. Phones: Attach → Draw, full height, Dock to the drawer. DESIGN.md decides every value.\n- **Ink.** An SVG layer in the page's document; strokes from Pointer Events (pen, pressure, tilt, coalesced and predicted events) rendered with perfect-freehand; a finger never inks; stroke groups anchored to the deepest containing element; the icon at the stroke's end and its four-sector radial menu (Annotate → numbered pin on the elements under the ink; Comment → pin with a thread; Illustrate → a picture; Erase); ignored ink is a picture on the next Send; re-anchoring by selector after a revision, unplaceable ink to the \"moved\" tray. The selection chip, its popover and selection.md are deleted (tsk-3).\n- **Tools** (designed under `writing-for-agents`; CLI equivalents under the same role checks; `show_preview` and `read_choices` replaced, not aliased): `artifact_create(kind, name, html|elements|mermaid|dir|port)`, `artifact_update(id, html|patch|elements|delete|mermaid)`, `artifact_read(id, png?)` with a `since` cursor, `artifact_show(id)`, `artifact_promote(id)`; `comment_*` from tsk-3.\n- **Change rules.** Cutover, no shims; no fallbacks without the owner's word; Solar duotone icons; tokens only; DESIGN.md is law.\n\n### Testing Decisions\n\nThere are no unit tests in this repository; proof is build, lint, type-check and live checks, and a UI change is proven from the engine (computed styles, geometry, scrubbed animations, pixel diff against an approved baseline) before any picture is read.\n\n- **One seam: the hub's artifact API** (REST for create/read/show/promote, the sync endpoint for the live doc, the MCP tools over it). Every behaviour is observable there: a field answered in a page shows up in the doc; an agent patch shows up in the page; a stroke group lands with its anchor; a re-publish keeps focus and values; a tool answers what the hub stored.\n- **Driven through the existing probe kit** (`scripts/probe-kit/specs`, playwright-core and webkit-caw) against the real dashboard with a real page under the overlay, asserting on the hub's read of the doc and on engine geometry; the MCP tools through the MCP bridge script (prior art: the admin-gating probe).\n- **iOS:** the simulator probe pattern of `probe-ios-composer.ts` (it reads the composer's DEBUG swipe log) extended to the pen swipe's decisions and the morph's frames (layer `speed = 0`, `timeOffset`, presentation values); the web view's content is the same overlay, proven once on the web seam.\n- **The live check is the owner's,** once, on the deployed product: a canvas drawn with the pencil on the iPad reaches the agent as an outline and a picture; the agent's edit shows on the iPad without a reload; a form the agent re-publishes keeps what was typed; ink stays on its element through a scroll and an agent edit.\n\n### Out of Scope\n\nMac Catalyst work; awareness cursors and multi-user presence; a drawing engine of our own; tldraw; two-way sync of artifacts to outside tools.\n\n### Further Notes\n\n- Sources for every library decision are in the plan's §10 (tldraw licence, Excalidraw MIT and pen mode, reconcile rule, mermaid-to-excalidraw, Yjs and y-websocket, y-excalidraw, idiomorph, WebKit pen Pointer Events, coalesced and predicted events, why not PencilKit).\n- Build order that keeps each slice landable: (1) the artifact store and sync, the panel listing existing previews and pages as artifacts, `show_preview`/`read_choices` cut over to the tools; (2) pages: field tracking, batched delivery, idiomorph re-publish, the own-tab route; (3) the canvas: engine, entrances, morph, Dock, outline/PNG send, agent writes; (4) ink and the radial menu, with tsk-3's pins and comments; (5) shape recognition and the iPad pen rules; (6) `artifact_promote`. Each slice ships with its probe spec.\n- A design preview for the owner's pick (the morph, the tool rail, the radial menu) is built by an Opus leaf from the dashboard's real components on a mock route before the canvas slice is built, per the fleet's rule; the UX fit comes from a Fable advisor briefed with the file, a screenshot, the requirement and the ask.",
+   "acceptance": "- A pen swipe up on the composer opens a canvas on the iPad app and on the web with a pen; a finger's swipe still opens the recall wheel.\n- Attach → Draw, ⌘⇧D and the panel's + open a canvas on every device.\n- The canvas stands above the field, resizes by its top edge, docks to the side and undocks; Done leaves a chip, Send sends the file, the outline and the PNG.\n- The agent creates and edits a canvas by tool; its edit appears in place with no reload and never touches an element being drawn.\n- A page the agent re-publishes keeps focus, scroll and typed values; its fields reach the agent as one batched message and at once during its turn.\n- An artifact opened in a new tab, on the iPad and in the panel is the same document and survives refresh.\n- Ink drawn with the pencil stays on its element through scroll, resize and edits; the radial menu's four actions behave as specified; \"Send N\" carries pins, comments and pictures.\n- Shape recognition snaps a held stroke to line, arrow, rectangle, ellipse or triangle.\n- `show_preview`, `read_choices`, the selection chip, its popover and selection.md are gone (grep shows no references), and the build, lint and type-check are green.\n- Probe-kit specs cover the hub artifact API for each slice; the iOS swipe and morph probes pass.",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1791883596000,
+   "createdBy": "Grill iPad pencil canvas and markup PRD",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 6
+  },
+  {
+   "id": "tsk-5",
+   "title": "Let a parent withdraw a queued delegate, and end items whose session is gone",
+   "stage": "done",
+   "labels": [
+    "fleet",
+    "bug"
+   ],
+   "description": "Found 2026-10-13: the Fable session's delegate d9555b0d was queued behind owns overlaps and its parent could not withdraw or re-scope it. `stop_delegate` resolves only sessions (delegation-actions.ts stopDelegate ~1550, resolveDelegate ~845), and a queued delegate has none yet. work-items.ts `unqueue` (~1718: drop the row, publish the chip's removal) runs only when the parent is gone or the start throws. `delegate_list` (all) doesn't show queued delegates either. The orchestrator dropped the queued_work_items row by hand, leaving a ghost tray chip until the hub restarted.\n\nAlso found the same day: work items stay `running` forever when their session can never finish them. On obelisk, ed1435a2 \"Run sleep probe 4\" and 7b16852b \"Run sleep probe 8\" (2026-10-05) point at instance ids 4c24ed0b and 5073a7fe, which have no instances row at all. Seven more (d3de5c61, c4bfc660, 82de73f7, 5a7110fa, 37a7c004, 727ae77d, f3fca633) belong to sessions asleep since 2026-09-30 to 10-05, with no finish_item and no wait set.\n\nBuild:\n- `stop_delegate` given a queued delegate's id (full, or its 8-character prefix) withdraws it through `unqueue`, only for the caller's own queue rows (parent_instance_id) or a project it leads. It answers: Withdrew your queued delegate “<title>” (<id8>): it never started, so it has no session or workspace.\n- `delegate_list` lists the caller's queued delegates as state `queued`, with queued_at and what holds it: the live item and the glob that overlaps (the ownsBlocker result).\n- Update the stop_delegate tool description in delegation-tools.ts to say it also withdraws a queued delegate.\n- A work item whose session row no longer exists ends as failed with \"its session is gone\", at hub start and whenever a session row is deleted. Its parent is told, as for any failure.\n- A work item whose session sleeps with no turn, no wait and no finish_item for longer than the hub's idle timeout: decide from the code what the parent was already told when that turn ended. If the parent got a \"turn complete\" report, it owns the decision and the item stays. If nothing told the parent, tell it now. Report which case these seven are.\nDo it after tsk-4 slice 1 lands: that slice owns delegation-tools.ts and delegation-actions.ts.",
+   "acceptance": "- stop_delegate on one of your queued delegates removes its queued_work_items row and its tray chip, and answers with the withdraw sentence\n- stop_delegate on someone else's queued delegate is refused with the existing \"not your delegate\" wording\n- delegate_list shows a queued delegate with state queued and the item and glob holding it\n- after the deploy, ed1435a2 and 7b16852b read failed with \"its session is gone\", and no live item points at a missing session\n- typecheck and lint:changed pass; live check: queue a delegate behind an owns overlap on the deployed hub, list it, withdraw it, and see its chip go",
+   "todos": [],
+   "attempts": [
+    {
+     "workItemId": "e2082d86-48b3-4b16-aff0-1e16e3c279b6",
+     "state": "done",
+     "endedHow": null,
+     "startedAt": 1791888859084,
+     "endedAt": 1791889749712,
+     "headline": null
+    }
+   ],
+   "result": {
+    "workItemId": "e2082d86-48b3-4b16-aff0-1e16e3c279b6",
+    "at": 1791889749712,
+    "headline": null,
+    "report": "Closed finding 2 in commit 6e995ee4 (work-items.ts only): the dependency install is no longer counted as a check.\n\n`runChecks` now returns a `CheckRun { installs, outcomes }`. The install records (`InstallOutcome`) are kept apart from the item's check outcomes, and every count is taken from `outcomes`, which holds the item's checks only:\n- The delegate's answer reads \"All 2 checks passed.\" for two checks. The check lines start with \"- installed dependencies: bun install (bun.lock changed since the dependencies were installed) (Xs)\" on its own line, followed by the two check lines.\n- The parent's report and the landing text use the same lines, so the install line sits above the checks with no count change.\n- If the workspace's own install fails, the answer is \"Dependencies didn't install, so no checks ran. The item is still running: …\" with no count. Below it comes a \"- dependencies didn't install: …\" line with the installer's output and stderr.\n- The landing recheck after the hub rebases onto newer main goes through the same `failedRun` text: \"…ran the checks again. 1 of 2 checks failed.\" or \"Dependencies didn't install, so no checks ran.\".\n- If that recheck installed and then passed, the landing line says \"…with the checks run again; installed dependencies first: bun install (…)\".\n- On another machine, a failed install fails only the checks bound for that machine, still counted as checks. Its install line is shown above them.\n- `depsCheck` is gone.\n\nChecks: `bun run typecheck` exit 0; `bun run lint:changed` clean. I did not render the new texts in a live check run."
+   },
+   "closeReason": null,
+   "createdAt": 1791884840000,
+   "createdBy": "we need to continue the work that is here claude/zealous-pascal-19onlg history e",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-6",
+   "title": "Share the Mac between leaves: one build and simulator slot for everyone",
+   "stage": "done",
+   "labels": [
+    "fleet",
+    "apple",
+    "bug"
+   ],
+   "description": "Found 2026-10-13 13:05: the owner's Mac reached a load average of 675. Four Mac leaves ran at once, each booting its own iOS Simulator (236 simulator-runtime processes), plus two Xcode builds. One of those builds was a direct `xcodebuild` in a leaf's clone, outside build-both.sh's slot. The Mac agent then answered the hub late (\"unrouted reply … kind=control_result machine=271a214a\"), and the fleet skill push of the patched unlazy never reached the Mac.\n\nToday:\n- apps/apple/scripts/build-both.sh serializes builds through `shlock` on `$ROOT/.locks/.machine` (lines 131-145).\n- ROOT differs by caller. Inside a workspace it is `$XDG_CACHE_HOME/cawco-apple` (the shared workspace cache, `~/.cawco/workspace-cache/xdg/cawco-apple`). From the orchestrator's SSH it is `~/build/cawco-apple`. So TestFlight and orchestrator builds don't share the lock with workspace builds.\n- Nothing bounds simulators: every live proof boots its own, and leaves also run xcodebuild directly.\n\nBuild:\n1. One lock folder for every caller: the workspace cache path, which the SSH side can write too.\n2. `apps/apple/scripts/mac-slot.sh`, a Mac-wide slot every Apple leaf uses for anything outside build-both.sh: `mac-slot.sh build -- <cmd…>` and `mac-slot.sh sim -- <cmd…>`.\n   - The build slot is the same lock build-both.sh holds.\n   - The sim slot holds at most 2 simulators booted machine-wide.\n   - It boots the simulator for the command, hands it the UDID in an env var, and shuts it down and deletes it when the command ends or its caller goes, by the same heartbeat-and-process-group pattern build-both.sh uses.\n3. Every Apple brief already names build-both.sh. Add mac-slot.sh to the probe-kit Apple docs and to the brief template the orchestrator uses.\n\nProof on the Mac:\n- three concurrent `mac-slot.sh sim` callers: the third waits until one ends, and the simulators are deleted afterwards;\n- a direct-build caller waits behind a running build-both.sh;\n- killing a caller mid-run frees its slot and deletes its simulator.",
+   "acceptance": "- build-both.sh from a workspace and from the orchestrator's SSH contend for one lock\n- at most 2 simulators booted machine-wide through mac-slot.sh; a third caller waits\n- a caller killed mid-run frees its slot and its simulator is deleted\n- bash -n on both scripts",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "Built by c16e84512 and faace784e (the Mac slot queue).",
+   "createdAt": 1791885991000,
+   "createdBy": "we need to continue the work that is here claude/zealous-pascal-19onlg history e",
+   "completedAt": 1792053706000,
+   "startedAt": null,
+   "comments": 1
+  },
+  {
+   "id": "tsk-7",
+   "title": "Find why hang-cards fails \"panel-to-jump held at half the size\"",
+   "stage": "done",
+   "labels": [
+    "apple",
+    "bug"
+   ],
+   "description": "Found 2026-10-13 by the probe-slot leaf (cda94bb6) running scripts/probe-ios-hang-cards.ts on cockpit-1cc58017's build (main at eaf72844, which has the push-tap fix): 237 PASS, 1 FAIL:\n\n\"FAIL iphone light: panel-to-jump held at half the size: … at time 0.000: w 390.0 (390.0 to 390.0) h 160.0 (63.0 to 160.0)\"\n\nThat build is the one going to TestFlight (iOS from main after eaf72844). Decide first whether the app regressed or the probe's expectation is stale:\n- run the probe on main's current build through the Mac slots (build-both.sh, then scripts/lib/mac-sim.ts / mac-slot.sh sim);\n- find the last commit where this check passed (git log on the Caw panel and Jump transition code, and on the probe; bisect with builds through the build slot if needed);\n- quote the line that sets the panel's height at time 0.\nIf it's the app, fix the transition so the panel morphs into Jump as the probe's spec says. If it's the probe, correct the expectation to the design that superseded it, citing the commit. Proof: the probe passes on main, all of iPhone and iPad.",
+   "acceptance": "- the cause is named with the commit that introduced it and the line that produces h 160 at time 0\n- scripts/probe-ios-hang-cards.ts passes in full on main's build\n- scripts/probe-ios-question-keyboard.ts runs once on main's build through the slots and passes: cda94bb6 moved its ConnectHardwareKeyboard=false write to after boot (a slot simulator arrives booted), and that probe hasn't run since; if the software keyboard doesn't show, fix the probe so it does\n- iOS builds both targets",
+   "todos": [],
+   "attempts": [
+    {
+     "workItemId": "a86bb046-cebe-4e40-b1e9-20e897b44c27",
+     "state": "cancelled",
+     "endedHow": "Stopped",
+     "startedAt": 1792053778400,
+     "endedAt": 1792053789679,
+     "headline": null
+    },
+    {
+     "workItemId": "8e26ff50-f36c-402a-a3fa-1e91e3a1d883",
+     "state": "cancelled",
+     "endedHow": "Stopped",
+     "startedAt": 1791889367611,
+     "endedAt": 1791889386153,
+     "headline": null
+    }
+   ],
+   "result": null,
+   "closeReason": "Cause: probe clock (f55080ee3), fixed by e721820d3. Hang-cards 238 PASS on main (iPhone and iPad). Question-keyboard 29/29 PASS on main 3e31bd221 outside a workspace. iOS builds both targets.",
+   "createdAt": 1791888380000,
+   "createdBy": "we need to continue the work that is here claude/zealous-pascal-19onlg history e",
+   "completedAt": 1792066948000,
+   "startedAt": 1792053778000,
+   "comments": 1
+  },
+  {
+   "id": "tsk-8",
+   "title": "Make Apple session flows tell the truth",
+   "stage": "done",
+   "labels": [
+    "apple",
+    "ux"
+   ],
+   "description": "Apple side of the Stay In Context audit (report: /home/bewinxed/.cawco/workspace-cache/briefs/stay-in-context/report.md; DESIGN.md's Stay In Context Rule, c9719da0: four questions, with the decision's weight setting the shape; the owner: \"This fluid ux is the bar for any part of this project. Keeps the user in context\", and \"now you'll end up copying the pattern instead of the first principle philosophy that made it happen\").\n\nFix on Apple:\n- Stop a session: SessionMenus.swift:57 and PeekController.swift:281 drop the refusal with `try?`. Read the command's stage, as CawPanel.stageWords does (CawPanel.swift:260), and show a refusal on the row.\n- Archive, Rename, Delete transcript, Keep/discard spin-off, Start from the project head, Fork, Continue, dismiss a delegate-tray item, Reload sessions: per the report's Apple sketches, using TaskSheetController.problemLabel() + morph as the row-fault recipe.\n- The machine menu's \"Log in…\" (Machines.swift:489) points at a web flow that no longer exists (MachineLogin.svelte is gone; sign-in moved to Configure → Accounts). Route it to what the web does now.\nNot here: Forget a project (ShellController.swift:1541). The iOS project-page port (workspace 67c5a474) was told to make it name the running sessions before committing, so check that it landed and leave it alone if it did.\nStart when a Mac slot frees up: keep at most three Apple leaves on the Mac. Build through build-both.sh and run simulators through mac-slot.sh sim.",
+   "acceptance": "- each listed flow answers the four questions on Apple, proven from the view hierarchy and a DEBUG log on a scratch hub, including a forced refusal shown on its row\n- no `try?` remains on a person-run hub action in CawCoScreens\n- iOS builds both targets",
+   "todos": [],
+   "attempts": [
+    {
+     "workItemId": "b4a52132-cb21-45f4-9f13-bff88443348c",
+     "state": "cancelled",
+     "endedHow": "Stopped",
+     "startedAt": 1791889372088,
+     "endedAt": 1791889386342,
+     "headline": null
+    }
+   ],
+   "result": null,
+   "closeReason": "Built by 260fe9ce5.",
+   "createdAt": 1791889212000,
+   "createdBy": "we need to continue the work that is here claude/zealous-pascal-19onlg history e",
+   "completedAt": 1792053706000,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-9",
+   "title": "Carry out a person's move of a session parked at its limit at once",
+   "stage": "done",
+   "labels": [
+    "ready-for-agent",
+    "hub",
+    "at-limit",
+    "bug"
+   ],
+   "description": "Owner, 2026-10-13, on a second orchestrator appearing beside his stranded one: \"did u spawn a new session?\" then \"This is your doing\".\n\n### What actually happened (hub 0.1.11-nightly.2748, 0d0ac162; local time UTC+3)\n\n- 8ddfd8a7 (mainline orchestrator, 12 live delegates) hit rand@'s limit. Its process stayed alive and kept opening turns of its own that the limit refused (15:17:20, 15:17:32, 15:26:23).\n- The at-limit controller decided to MOVE it whole to jude@. The machine refused the carry: `[accounts] 8ddfd8a7…: stays on its account; its data could not be carried to 676d0582…: its process runs`. The agent's rest test (`holding()`) counted background tasks and wake-ups as live work, while the hub's `sessionIdle` said idle. The refusal was logged misleadingly as `continuing on jude@petralab.ai failed at start`. It repeated at 15:22:32.\n- 15:24:39: a \"continue in a new session\" request for 8ddfd8a7 (`POST /api/instances/8ddfd8a7/continue` without `inPlace`, the dashboard's \"Continue in new session\" shape) started summariser 89023635. At 15:26:31 it created 23cb5219. The hub logged no caller. Neither 8ddfd8a7 nor the artifacts session called continue_session.\n- 15:26:23: the artifacts session's hand move (`POST …/account` to jude@) answered `pending`, owed to a turn end the limit kept refusing.\n- The 12 delegates were re-parented to 23cb5219 by the orchestrator by hand in SQL, not by the hub. (Since d5c9e357 a new-session continuation adopts the source's live delegates itself.)\n\n### Fixed in 2afeec1e\n- A carry of a session parked at its limit counts as at rest: background tasks and wake-ups are ignored; a running turn, a parked ask or an unread send still block.\n- A hand move (`byHand`) is the only thing the at-limit controller does to that session: it carries it out between turns or holds until the chosen account's reset, and never moves it elsewhere or continues it from a summary.\n- An in-place continuation refused with \"its process runs\" waits a beat instead of retrying tightly.\n- Log lines name who asked for every continuation (person, session via continue_session, or the at-limit controller), and every hand move with its outcome.\nProof: probe-in-place.ts case (e), PROOF PASSED. Live check after deploy: a hand move of a session stranded at its limit logs `asked by hand to move … moved` (or pending, then `carrying out the move a person asked`), relaunches on the new account, with no `its process runs` and no unasked continuation line.",
+   "acceptance": "- The log lines that created 23cb5219 are quoted in the report, naming the path.\n- A session with a hand move owed is never continued from a summary by the at-limit controller.\n- A hand move of a session parked at its limit happens at once: the process relaunches on the new account with --resume, no new instance row, delegates keep their parent.\n- The session-limit proof row for that case passes; typecheck and lint are green.",
+   "todos": [],
+   "attempts": [
+    {
+     "workItemId": "c1fa1cec-b94b-4f4b-a2ad-1760ac9a031e",
+     "state": "done",
+     "endedHow": null,
+     "startedAt": 1791897132207,
+     "endedAt": 1791903332068,
+     "headline": null
+    }
+   ],
+   "result": {
+    "workItemId": "c1fa1cec-b94b-4f4b-a2ad-1760ac9a031e",
+    "at": 1791903332068,
+    "headline": null,
+    "report": "The real-crash path and an outside SIGKILL are now covered by probe-in-place case (h) (commit e6e667ef on main fbd3cedb). No product code changed: the crash path behaved as written.\n\n## What the case does\n- **Stand-in:** it now words its CLI's end from sessiond's listing of the child, as the SDK does:\n  - SIGTERM: \"exited with code 143\", since Claude Code catches it;\n  - another signal: \"terminated by signal X\";\n  - an exit of its own: \"exited with code N\".\n  \n  A `crash-turn` message makes its CLI exit 1 with \"fatal: the stand-in's CLI crashed on purpose\" on stderr, worded as the SDK does: \"Claude Code process exited with code 1. stderr: …\".\n- **H1 (crash).** Asserts:\n  - the dashboard is shown the failure in the CLI's words, with \"A message to it starts it again\" and no \"exited with code\";\n  - the row reads `error`;\n  - a person's send starts it again with its conversation (SPAWN … resume, the send read, the row `running`).\n- **H2 (outside SIGKILL).** Asserts:\n  - the transcript line reads \"Ended from outside CawCo (SIGKILL)\";\n  - no failure is shown;\n  - the row is not `error`;\n  - \"exited with code\" appears nowhere in the hub log.\n\n## Output (`bun scripts/probe-in-place.ts`: PROOF PASSED; cases (a) to (g) pass in the same run)\n```\n── (h) the crash as a dashboard is shown it\n   a7f562c0-… Claude Code stopped on its own: fatal: the stand-in's CLI crashed on purpose. A message to it starts it again.\n── (h) the crashed row, then after a send\n   Private a7f562c0 error\n   Private a7f562c0 running\n── (h) the stand-in: what H1's processes did\n   SPAWN a7f562c0-… conversation-a7f562c0-38b2 account=<B> fresh\n   TURN a7f562c0-… crash-turn: one more piece of work.\n   CRASH a7f562c0-…\n   SPAWN a7f562c0-… conversation-a7f562c0-38b2 account=<B> resume\n   TURN a7f562c0-… Carry on after the crash.\n── (h) the SIGKILL's transcript line\n   Ended from outside CawCo (SIGKILL)\n── (h) the hub log\n   [session] Private 26000f42: Ended from outside CawCo (SIGKILL). Something on its machine ended its process; its next message starts it again.\n── (h) the killed row\n   Private 26000f42 sleeping\n```\n\n## Checks\n- `bun run typecheck`: exit 0.\n- `bun run lint`: \"Checked 1642 files … No fixes applied.\"\n\n## Note\nFor SIGKILL the stand-in gives the SDK's real wording, \"terminated by signal SIGKILL\": a SIGKILLed CLI can't exit with a code. The adapter's mapping of exit 137 to SIGKILL is the same code-over-128 rule that case (g) exercises with 143."
+   },
+   "closeReason": "attempt c1fa1cec done",
+   "createdAt": 1791897103000,
+   "createdBy": "Grill iPad pencil canvas and markup PRD",
+   "completedAt": 1791898548000,
+   "startedAt": 1791897132000,
+   "comments": 0
+  },
+  {
+   "id": "tsk-10",
+   "title": "Give the phone project page back its fixed-chrome height",
+   "stage": "done",
+   "labels": [
+    "proposed",
+    "phone",
+    "ui"
+   ],
+   "description": "From routines review v3 (assets/dff2569f/routines-review-v3.md, N5): at 390×844 about 205px is fixed chrome on a project page (top bar, project head, New session row, tab strip), and content scrolls visibly under the strip. Phone is first-class. Run the UI workflow: journey first (what is the person doing on a phone project page), then a Fable advisor with the file, a current screenshot at 390, the requirement and this finding, then the owner's pick, then build.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "Built by 40243cd20: on a phone the page is one scroller and its views sit in a bar at the foot (owner picked B, the thumb bar).",
+   "createdAt": 1791913629000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792143688000,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-11",
+   "title": "Show a project's custom views in the iOS and Mac app",
+   "stage": "done",
+   "labels": [
+    "ios",
+    "parity"
+   ],
+   "description": "Parity gap found by the OpenUI views leaf (7ef5460e): the app has no screen that lists or opens a project's custom views; no Swift calls the views endpoint. PRD §5.2: \"The app shows the same block in a web view running the dashboard's renderer.\" Once the OpenUI cutover lands (it adds a chromeless single-view dashboard route), the app lists the project's views beside its built-in ones (as the web strip does) and opens each in a WKWebView on that route, with the hub's auth. Keep/discard of a draft view in place, as on the web. Owner: \"ios should have 1:1 parity with the web app\".",
+   "acceptance": "- The project screen on iPhone, iPad and Mac lists custom views like the web's strip\n- Opening one shows it rendered by the dashboard renderer in a web view, with live Query data\n- A draft can be kept or discarded in place\n- Proven on a scratch hub via the app's DEBUG probe log",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "Built by c5b56c6e3; closing under the cockpit stages that no longer ask the owner to review.",
+   "createdAt": 1791916156000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792053701000,
+   "startedAt": null,
+   "comments": 1
+  },
+  {
+   "id": "tsk-12",
+   "title": "Show Settings › Models (Jev route, TypeSafe key) in the iOS and Mac app",
+   "stage": "done",
+   "labels": [
+    "ios",
+    "parity"
+   ],
+   "description": "Web parity gap from 0ad2f1ab/0d8f7d9f: apps/dashboard/src/routes/config/models/+page.svelte holds the OpenRouter connection and a Jev group: the route Jev takes now, the TypeSafe key row (\"Held, ends …1a2b\" / \"Not set\", a secure field, Save key, Remove key, answering in place) and the \"Suggest skills and MCP servers while typing\" switch (/api/jev/suggest). The app has no such section. Port it as an iOS/Mac Configure section the way Configure → Accounts is being ported (leaf 37271b83, on the Mac), from the regenerated client. Owner: \"ios should have 1:1 parity with the web app\". Needs the Mac (asleep since ~18:24Z).",
+   "acceptance": "- iPhone, iPad and Mac Configure list a Models section matching the web page\n- Save key, Remove key and the suggest switch each answer in place with the hub's words\n- Proven on a scratch hub via the app's DEBUG probe log",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "Built by bc376175e.",
+   "createdAt": 1791918349000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792053704000,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-13",
+   "title": "Show fleet-watch notices and the fleet-watch switch in the iOS and Mac app",
+   "stage": "done",
+   "labels": [
+    "ios",
+    "parity"
+   ],
+   "description": "Parity gap from fleet watch (7a09ee61): the hub publishes fleet_watch.notices and pushes each to the phone with the session push shape. The Apple Needs-you lane draws nothing for them (Wire.swift ignores the frame), and the app has no fleet-watch switch or facts like the web's Settings › Models \"Fleet watch\" group. Add the notice row to Needs you, using the session-row recipe the dashboard's NeedsCard uses for kind \"watch\", and the Fleet watch group in Configure, beside tsk-12's Models section. Owner: \"ios should have 1:1 parity with the web app\". Needs the Mac.",
+   "acceptance": "- A fleet-watch notice shows as a Needs-you row on iPhone, iPad and Mac, and opens its session\n- Configure shows the Fleet watch switch and its facts; the switch answers in place\n- Proven on a scratch hub via the app's DEBUG probe log",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "Built by bc376175e.",
+   "createdAt": 1791919696000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792053705000,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-14",
+   "title": "Answer the iOS app's remaining confirms in place, as the web does",
+   "stage": "done",
+   "labels": [
+    "ios",
+    "parity"
+   ],
+   "description": "DESIGN.md's Open Page Rule (almost no blocking dialog or sheet; answer in place, on the row it was asked from). The web moved its remaining modal confirms in place (464cb194, and leaf 2f8e29eb finishing the rest). On iOS, ConfirmDialog( still opens at:\n- SessionMenus.swift:95, :108, :124, :194 (Delete transcript, Remove session, Discard; they open from their row via KitDialogController.origin, but are still a dialog);\n- Machines.swift:671;\n- NewSessionPickers.swift:534 (\"Switch to Full Send?\").\nShellController.swift:1483 (Forget project) belongs to the iOS project-views leaf 67c5a474, and ActsProbe.swift:224 is a DEBUG probe; leave both. Match each flow to the web's in-place equivalent once 2f8e29eb lands (read the web flow first: same words, same states, same refusal handling, via SessionActs), and delete ConfirmDialog if nothing is left using it. Found by the stale-items audit (assets/f140e25c). Owner: \"ios should have 1:1 parity with the web app\". Needs the Mac.",
+   "acceptance": "- Each listed flow answers in place on its row or field, with the web's words; a refusal stays there in the hub's words\n- No ConfirmDialog( remains outside ShellController's forget flow (owned elsewhere) and DEBUG probes, or ConfirmDialog is deleted\n- Proven on a scratch hub via the app's DEBUG probe log, on iPhone and iPad",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "Built by 22db2563d.",
+   "createdAt": 1791920187000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792053705000,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-15",
+   "title": "Let Maestro and XCUITest run inside a Mac workspace",
+   "stage": "ready",
+   "labels": [
+    "infra",
+    "ios"
+   ],
+   "description": "From a CawCo workspace on the Mac, Maestro's XCTest runner fails: \"Failed to connect to unix domain socket at path /private/tmp/com.apple.launchd.*/com.apple.testmanagerd.unix-domain.socket: 1 Operation not permitted\", and Maestro writes ~/.maestro outside the boundary (worked around with -Duser.home). So the probe-ios-*.ts scripts that drive Maestro only run from the owner's shell; leaves use MobileBuildMCP's snapshot_ui/tap/type_text instead. Found by the iOS Models leaf (bc376175). Fix in the macOS workspace boundary: allow the testmanagerd socket and give Maestro a home inside the workspace, without opening anything else.",
+   "acceptance": "- A probe-ios-*.ts script that drives Maestro runs to completion from inside a Mac workspace.\n- The boundary allows nothing beyond the testmanagerd socket and the workspace-local Maestro home.",
+   "todos": [],
+   "attempts": [
+    {
+     "workItemId": "1b2685e5-7fda-4e67-a74c-fcb7a6c038c1",
+     "state": "cancelled",
+     "endedHow": "Stopped",
+     "startedAt": 1792053550935,
+     "endedAt": 1792053789871,
+     "headline": null
+    }
+   ],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1791952829000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": null,
+   "startedAt": 1792053550000,
+   "comments": 1
+  },
+  {
+   "id": "tsk-16",
+   "title": "Make the webkit-caw probe pass on obelisk",
+   "stage": "done",
+   "labels": [
+    "probe-kit"
+   ],
+   "description": "`bun scripts/probe-kit/run.ts web webkit-caw` fails on main (f702a8f2): \"longest: 37ms at +773 in open 17 (our code 0ms); 29ms … (our code 0ms)\". The page's own code is 0–4ms inside the long intervals, so the cause is WebKit's frame cadence on this machine (headless WebKit under load), not the dashboard. Found by the three-spec leaf (0210a8f1). Find whether the spec measures something WebKit on this machine can't deliver (then the spec should measure the dashboard's own frame cost, which it already reports as \"our code\"), or whether a kit setting (headless flags, CPU contention with parallel fleets) causes it. Don't loosen any limit on the dashboard's own cost.",
+   "acceptance": "- webkit-caw passes alone and in the full web run on obelisk.\n- Its limits on the dashboard's own per-frame cost are unchanged.",
+   "todos": [
+    {
+     "text": "Full web run on committed fix",
+     "done": false
+    },
+    {
+     "text": "finish_item with findings (first-press cold cost, compositing not bounded)",
+     "done": false
+    }
+   ],
+   "attempts": [
+    {
+     "workItemId": "1e957c60-03fb-4ca1-bdc5-cede4cbfd69f",
+     "state": "done",
+     "endedHow": null,
+     "startedAt": 1792053555544,
+     "endedAt": 1792116375953,
+     "headline": "webkit-caw now bounds the dashboard's own main-thread CPU per frame instead of WebKit's frame cadence, and Caw's first press dropped from 21–28ms to 14–21ms. Rebased onto main, it passes alone and in the full web run (first press 14ms both times), with the 25ms limit unchanged."
+    }
+   ],
+   "result": {
+    "workItemId": "1e957c60-03fb-4ca1-bdc5-cede4cbfd69f",
+    "at": 1792116375953,
+    "headline": "webkit-caw now bounds the dashboard's own main-thread CPU per frame instead of WebKit's frame cadence, and Caw's first press dropped from 21–28ms to 14–21ms. Rebased onto main, it passes alone and in the full web run (first press 14ms both times), with the 25ms limit unchanged.",
+    "report": "## Root cause\nThe failure (\"37ms … our code 0ms\") was the engine. Headless WPE composites every frame of the open in software GL: Mesa llvmpipe runs one thread per core (\"The default value is the number of CPU cores present\", https://docs.mesa3d.org/envvars.html) and a frame waits for the slowest thread.\n- At rest the page composites nothing and never drops a frame.\n- An open costs about 3s of compositing CPU, against about 80ms more on the main thread.\n- A blank page's frames stall to 63ms quiet and 225ms under load.\n- LP_NUM_THREADS set to 1 or 4 does not cure it.\n- The page's own work in wall time also stretches with load: a 10ms Svelte flush took 67ms.\n\n## Changes (rebased onto main: ca8b2386, a4ea1d95, 626061fb, d8681010, a1ab4ae9)\n1. **New kit instrument, `scripts/probe-kit/cpu.ts` + `cpu-worker.ts`.** It reads the WebKit web process's main-thread CPU per frame interval from schedstat (\"time spent on the cpu (in nanoseconds)\", https://docs.kernel.org/scheduler/sched-stats.html), sampled every 0.25ms on a worker.\n   - WebKit's 1ms-floored page clock (Performance.cpp `timePrecision { 1_ms }`, `std::floor`) is aligned to the sampler by bounding round trips.\n   - Each window is bracketed by grain plus kernel tick (CONFIG_HZ, read from the kernel config) and capped at the interval as the page reads it, so it is never charged more than the old check read.\n   - The web process is named by dominance over the other descendant processes during a busy page task.\n   - Raster (SkiaCPUWorker) and compositing CPU are reported per open.\n   - `attribute` also times setInterval callbacks and `on…` handlers.\n2. **webkit-caw:** the 25ms limit is unchanged and now applies to the page's main-thread CPU per interval. A new assertion checks that the rehearsal ran unseen.\n3. **Product: GlassCard's unseen first open is now a whole rehearsal.** The card opens, grows, shuts and folds once after load, invisible and inert, with focus left in place.\n   - Its join is its own (`rehearsalJoined`). It arms the morph and never touches the shared `barGlass.joined`; touching it had broke the caw-notices bench's seam, fixed in 626061fb.\n   - A real open during the rehearsal ends it and takes the join over.\n   - `quiet` was removed from hang.ts and HangCard. It was the old warm-up's alone; main's new grow and fold no longer read it.\n   - Bisect for the cold work: inert, grow, three placings, the smile clip and a join layer did nothing. A keyboard open, or a full grow with the join armed, did. The cold work was the open with the join armed, not anything drawn.\n\n## First press, before and after\n- Before: 21–28ms of main-thread CPU on a quiet machine (later presses ≤15).\n- After: 14–21ms. On a1ab4ae9: 14ms alone and 14ms in the full run.\n\n## Proof\n- 30ms of fixed work reads 31.1ms of CPU quiet and 33ms with 64 busy loops, while its wall time reads 64–68ms.\n- The check fails on injected script (38–45ms, named) and counts a reflow injected without script.\n- Rehearsal check: 1 drawn-out state, 0 visible, glass joined in 0.\n- svelte-check 0 errors; biome and tsc clean.\n\n## Acceptance (on a1ab4ae9)\n- `bun scripts/probe-kit/run.ts web webkit-caw` → ALL PASS (heaviest 14ms of CPU).\n- Full web run → webkit-caw: all three PASS (heaviest 14ms).\n- The full run's other failures are not this change's. hang's baseline diffs reproduce identically on pristine origin/main 05a4010a: caw/machines/jump desk 190/188px, caw-staged 15540px, session-card and tab-menu sizes. 08a00d40 changed the visuals without new baselines."
+   },
+   "closeReason": "attempt 1e957c60 done; Jev shows its 2 acceptance criteria met",
+   "createdAt": 1791966514000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792116376000,
+   "startedAt": 1792053555000,
+   "comments": 0
+  },
+  {
+   "id": "tsk-17",
+   "title": "Fix the iOS crash loop when opening the orchestrator chat",
+   "stage": "ready",
+   "labels": [
+    "ios",
+    "bug",
+    "crash"
+   ],
+   "description": "Owner, verbatim: \"Thr ios app keeps crashing\" / \"It was working then crashed when I opened this chat then now refuses to start just keeps crashing\" (2026-10-15 ~19:58 local; \"this chat\" = the orchestrator session 23cb5219-f410-4369-83d2-2e1d1fa3e6a7 in project cockpit).\n\nBuild TestFlight 20261015.3 (commit bf44793ea; app binary UUID 74899E51-F2FB-389F-9AFC-07A78C9BA937), iPhone18,2, iOS 27.0 (24A5418b). MetricKit reports on obelisk: ~/.local/share/cawco/diagnostics/apple/62d2b4cdb59d5442.json (SIGABRT, crashing thread: UIKitCore layout → QuartzCore commit → libobjc exception → libc++abi abort; the only CawCo frame there is CawCo+32000, main) and cbb6907145e47930.json (watchdog 0x8BADF00D, failed to terminate after 5s). Other CawCo frames in the report (another thread): 13069568, 13064832, 13442876, 13442628, 13938332, 14279428, 14215188, 14218880, 14613864, 45553, 33265, 47021. The report also carries WebKit/BrowserEngineKit and RiveRuntime frames.\n\nLeading suspect (not proven): a layer given NaN/inf geometry during layout of the session screen's preview panel. At ~18:50 local the fleet's previews were switched from host mode to port mode, and this session showed a preview (port-mode address `{port}`); 20261015.3 had never received a port-mode preview address from a live session. Containment done: this session's shown preview was closed on the hub (DELETE /api/instances/23cb5219…/preview, 200).\n\nDo: symbolicate both reports on the Mac with the build's dSYM (`scripts/apple-diagnostics.sh <id>` per apple-diagnostics.ts), name the exact line and the value that was NaN/invalid, fix it in the app (guard at the source of the value, not a try/catch around CA), and make the hub never send a frame an installed build can't handle (check the wire guard covers the preview address shape for 20261015.3). Reproduce in the simulator first with the same session state (port-mode preview frame on a session with a shown preview) and prove the fix with a probe-kit iOS spec. Lands main; the fix ships in the next TestFlight.",
+   "acceptance": "- The crash's line is named from the symbolicated report.\n- A simulator probe reproduces the crash on 20261015.3's code path and passes after the fix.\n- Opening a session with a port-mode preview shown no longer crashes the app.",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1792083663000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 1
+  },
+  {
+   "id": "tsk-18",
+   "title": "Replace the component canvas's grid of frames with the design graph",
+   "stage": "ready",
+   "labels": [
+    "canvas/artifacts",
+    "partial",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-18 11:14Z: \"if i'm designing a certian component with ai, it can use the preview sheet ot open a design graph for a component that break down all the screens, components, and the states into all the possible permutations\"\n- 10-21 04:56Z: \"oh wait this is a canvas? i didn't even know until i relaized i can zoom out\"\n- 10-21 04:58Z: \"this is kinda of usless and redundant, the way it is now, if u have a more complex form are u going to have o(n) forms on this page? don't tell me these are generated manually\"\n- 10-21 05:01Z: \"also i said sth before about design graphs\"\n- 10-21 05:04Z: \"use the mockup tool NOW to iterate with me on how things will look like\"\n- 10-21 10:48Z: \"I'm a visual person, i don't get this design-graph-screens, why not show some animations or mockups for me to get\"\n- 10-22 04:34Z: \"also let's resume work on the artifact and mockup stuff from yesterday, were we done or was there pending stuff\"\n- 10-23 10:32Z: \"i don't recall that we finished discussion the design graph, why did you start building on it?\"\n- 10-23 18:45Z: \"we already said we're replacing this view nigga, i'm not reading nor reviewing 96 cards\"\n- 10-23: \"THE FUCKING ARTIFACT/CANVAS TOOL WORK WE ALREADY WERE DISCUSSING 2 DAYS AGO\"\n\nWants: the canvas view that draws every state of a component as a grid of frames is replaced by a design graph of states. It's designed with him through mockups until he's done discussing it, and only then built.\n\nState: partial. The grid canvas has been on main since d769fdc65 (10-19). The design graph exists only as mockups r21–r28 (cawco-safe/ef4084a0-design-graph-r28, b9312a7fb). On design-graph afd72126, 7 of 9 picked: resize=edges, token-rule=snap, compare=segments, after-edit=replay, machine-names=headers, change-marks=washes, verdict=pins. The build ac2a1407 is paused on his word.\n\nNext: finish the discussion first. Show him r28 with the resize handle and answer his pins (tasks below). Put the open questions (clip controls, springs, his pins 25–30) on one page. Write the picks into PRD §5.10. Only then brief one build that replaces the grid canvas.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1792782116000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-19",
+   "title": "Redraw the design graph mockup from his pins",
+   "stage": "ready",
+   "labels": [
+    "canvas/artifacts",
+    "partial",
+    "owner-ask"
+   ],
+   "description": "His pins on the design-graph mockup page (729b1a67):\n- 10-21 05:30Z: \"u have no title sfor what each state is supposed to be nor a description, just plain dots, meaningless\"\n- 10-21 05:37Z: \"what if there are many states, the grpah becomes tiny and unusable, is the panel resizeable?\"\n- 10-21 06:01Z: \"this is even worse, to switch between the states and the other page u are switching me from one graph to the other? terrible ux approach\"\n- 10-21 06:52Z: \"so much useless copy everywhere\"\n- 10-21 07:12Z: \"why is the play button not lining up with the button labels down there? ... the ms should be in a chip, the -- variable need sto be the first thing\"\n- 10-21 05:24Z: \"are you using handrolled graph primitives instead of svelteflow\"\n- 10-22 04:37Z: \"this persistent drag handle is ugly, please don't use deisgn patterns from 2015\"\n- 10-22 04:39Z: \"you seem to do most of the ui is n barely readable lables and highlights\"\n- 10-22 04:40Z: \"the popover opens very far away from whatever chip you click\" | \"the morph between show/hide isn't smooth, it hsould animate the same way the top-right bar morphs the menus out\"\n- 10-22 04:41Z: \"the sections and their outlines aren't clear\" | \"also the arrows could use some modern ui polish, this isn't how modern uis do it\"\n\nWants: every pin on the design-graph mockup is answered and fixed in the next round he sees.\n\nState: partial. Rounds r21–r28 are on cawco-safe/* branches. Pins 25–30 (10-22) have no build. Nothing has been shown to him since r28.\n\nNext: reply to each open pin with what changed, show r28 (or r29) with the fixes, and keep his pins as the design-graph build's acceptance list.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1792782121000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-20",
+   "title": "Show and settle the resize handle, answering his unanswered pins",
+   "stage": "ready",
+   "labels": [
+    "canvas/artifacts",
+    "waiting-on-pick",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-21 05:59Z (pin): \"there's no corner grip here, also the grip u put is barely visible, and interferes with the text here\"\n- 10-22, pin 4 on resize-handle-pick: \"why do i have ot make this same note so many times?\"\n- 10-22, pin 5 on resize-handle-pick: \"this is literlal the same mockups as the last time, the fuck?\", then \"HELLO\"\n\nWants: a resize handle that isn't the same rejected mockup again, shown to him, with his pins answered.\n\nState: waiting on his pick. resize-handle-pick 4b49b891 is 0 of 1. Round 28's iPadOS corner handle (b9312a7fb, cawco-safe/ef4084a0-design-graph-r28) has never been shown to him. Pins 4 and 5 are unanswered.\n\nNext: reply on pins 4 and 5, revise the page to show r28's handle readable in place, then wait for his pick.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1792782124000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-21",
+   "title": "Let comments pin to elements inside a canvas",
+   "stage": "done",
+   "labels": [
+    "comments",
+    "dropped",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-21 05:16Z: \"how can i make a comment on the graph mockp, am i not able to comment?\"\n- 10-22 04:18Z: \"i'm unable to comment on this stupi canvas it selects the whole page did u design it as a single element or an image?\"\n\nWants: clicking an element inside a canvas or mockup pins the comment to that element, not to the whole page.\n\nState: dropped. No commit on main since 10-22 about choosing an element inside a canvas or frame for a pin.\n\nNext: reproduce on a canvas page, find why the pin takes the whole page, fix it at the source, and prove it on his scenario.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "his scenario on the deployed 5450 dashboard passes: a comment inside a live canvas, in a decision page and in a plain canvas, pins the one button pressed (anchor names it, box matches) and survives a reload",
+   "createdAt": 1792782126000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792830333000,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-22",
+   "title": "Stop selected elements' comments saying \"the element is gone\"",
+   "stage": "done",
+   "labels": [
+    "comments",
+    "partial",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-21 06:52Z: \"if i make a comment on the whole page it keeps saying \\\"the element is gone\\\"\"\n- 10-22 08:25Z: \"also elements i select still dismiss their elements saying \\\"element is gone\\\"\"\n\nWants: a comment on a selected element keeps its element. No false \"element is gone\".\n\nState: partial. b2deaf5fb (10-21) fixed the whole-page case. His 10-22 report on selected elements came after it, and no later fix was found.\n\nNext: reproduce with a selected element on a live page, trace the gone check, fix it, and prove it on his scenario.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "c786463c6 (a pin whose element's words change in place is never said gone), in nightly 5450",
+   "createdAt": 1792782128000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792830037000,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-23",
+   "title": "Fix the comment popover jump, the marker overlap and the session row under his comment",
+   "stage": "done",
+   "labels": [
+    "comments",
+    "in-progress",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-23 18:33Z: \"bug on comments, clicking between comments flashes the comment popover from where it was in the previously opened comment to where it was in the new one and it jumps between them before it settles also look how the comment icon is overtaking the panel with no regards to layout or padding\"\n- 10-23 18:34Z: \"why does the session name appear below the comment with its icon and a blue dot? like this it sounds as if the agent is orchestrating cockpit fleet work\\\" as a repsonse to my comment, stupid!\"\n\nWants: switching comments doesn't flash or jump, the marker respects the card's layout, and nothing under his comment reads as the agent's reply.\n\nState: in progress with delegate 7aeb9cbf. The invariants it was given: the first frame is at the final place; the marker and card never intersect; who has the comment is a status line with a verb, never an author line.\n\nNext: read 7aeb9cbf's report, then check on his screen.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "b5d9505f9 + dbee2f38f (opens beside the pin, no jump), in nightly 5408; comments spec ALL PASS",
+   "createdAt": 1792782132000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792830038000,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-24",
+   "title": "Build the compact tablet Comments panel that comments grow out of",
+   "stage": "ready",
+   "labels": [
+    "comments",
+    "in-progress",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-23 18:03Z (note on tablet-list): \"create a compact view forthe comment panelfor tablet viewpoertand let the comments grow out of it just how the hoveringthing on the top right does\"\n- 10-23 18:05Z (answer, which hovering thing): \"Caw's panel\"\n\nWants: on a tablet, the Comments list is a compact panel, and a comment opens by growing out of it the way Caw's panel does.\n\nState: in progress. 7aeb9cbf builds the reading size and opening at the first line. The tablet compact panel comes to the orchestrator unopened, for his judgment.\n\nNext: show the tablet panel to him as one live drawing when it arrives.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1792782135000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-25",
+   "title": "Group pin-reply notifications per file",
+   "stage": "done",
+   "labels": [
+    "comments",
+    "in-progress",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-23 15:54Z (answer): \"depends on the reply i guess? not sure\"\n- 10-23 18:10Z (note on pin-replies, picked asks-only): \"group notifications per file when many replies arrive together?\"\n\nWants: when many pin replies arrive together, they reach him as one notification per file.\n\nState: in progress. Delegate b6c332d7 (\"Pin replies reach you only when asking\") was briefed to group per artifact: Web Push `tag` and APNs `thread-id` set to the artifact's id, one Needs you row per artifact with a count. The audit didn't see it in the plan text.\n\nNext: read b6c332d7's report and check that the grouping landed.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "8fccff121: pin replies that ask reach Needs you and push, grouped per artifact",
+   "createdAt": 1792782138000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792830039000,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-26",
+   "title": "Set up the cawco address as one tray led by caw the character",
+   "stage": "ready",
+   "labels": [
+    "onboarding",
+    "in-progress",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-20 18:02Z: \"also i still can't use cawco.local on the mac or here to instantly connect to cawco's hub\"\n- 10-22 15:12Z: \"I still can't access cawco on my Mac via cawco.local nor cawco.direct nor even through the obelisk ip or magic DNA name\"\n- 10-22 15:15Z: \"we already had a long discussion regarding the different designs to have an easy address to access cawco, what happened to that\"\n- 10-22 17:05Z: \"bro are u not able to let each hub set up a cawco.local thing that points to the hub? i don't see the issue, explain?\"\n- 10-22 17:31Z: \"you realize how retarded u implementing a feature where i type cawco.local <- literally our app name THEN typing :3455\"\n- 10-22 17:39Z: \"On tailscale just use a tailscale name space service as u said, for other popular similar tailscale stuff research the equivalent feature and use it\"\n- 10-23 09:04Z (pin): \"why are we using http instead of https?\"\n- 10-23 (pin): \"bro YOU are the one who said we need https for clipboard, and I said \\\"why not https\\\" not \\\"why http\\\"?\"\n- 10-23 (pin): \"all 4 options sound retarded, it's literally a simple task, it should be in cawco's onboarding or triggerable from the settings, also didn't i say http://cawco.local:3456 <- is pointless since it's literally the same as localhost:3456? did u have amnesia? also why the FUCK do i have to click \\\"see it at real size\\\" to go back and forth? terrible decision UX\"\n- 10-23 18:10Z (note on old-address-page): \"still didn't see the design page for it??\"\n- 10-23 18:36Z: \"caw should drive the thing as with all the other flows...\"\n- 10-23 18:38Z: \"i didn't mean \\\"Caw\\\" the agent, i meant \\\"caw\\\" the character, u design a smooth onboarding flow using mobbin, benji's family, simple but expandable for advanced details or raw stuff\"\n- 10-23 18:39Z: \"IT'S A SINGLE TRAY NIGGA, ONLY THE CAWCO ADDRESS SETUP\"\n- 10-23: \"no one said it's not needed i was asking for an explanation, advisor needs to integrate this step smoothly into the onboarding, No one will start their cawco journey on their phones first\"\n- 10-23: \"and we laready talked that this doesn't work just for tailscale, but others\"\n- 10-23: \"u also have backlot tools to edit a character to a certain pose or format, feel free to use\"\n\nWants: typing a plain word opens CawCo on every device, without a port. It's set up in one Family-style tray led by caw the character, simple, with details and raw output one press away. It runs in onboarding and from Settings. The phone step is integrated from the desk. It covers Tailscale, Headscale and NetBird, and says plainly when the network is unsupported. cawco.local is left off.\n\nState: in progress. References are in (3b661931). The advisor 6ddc57c4 recommends Option A. c98c4bd6 is drawing live trays (no frame grids), and c3e444d3 is settling the open facts.\n\nNext: a decision page with one live tray per option for his morning. Build after his pick, then delete the address-cawco and address-setup pages.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1792782146000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-27",
+   "title": "Finish the project page: agent-guided start instead of the plain input, and the Pipeline tab",
+   "stage": "ready",
+   "labels": [
+    "projects",
+    "waiting-on-pick",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-18 10:49Z: \"why do just-made projects look like this now? didn't i already give feedback on how it should be? there's no way to see caw and have it guide us through setting up the project, and you still have the stupid plain input box\"\n- 10-18 10:57Z: \"to make a new session in the project i have to click click a + or a button which opens a popover plain input that i type into, intead of the agnet-guided project management that i talked about, check how claude projects or other uniichat does it\"\n- 10-18 11:00Z: \"mate, i already had a long discussion with you and fable about how projects will do it, i don't need you to redo the work again!\"\n- 10-18 (pin on e7dd70ad): \"this isn't a pipeline, and it's useless the way it is now\"\n- 10-23 10:32Z: \"and we haven't finished the projects nor tasks and todos view\"\n\nWants: the project page works the way he and Fable discussed. Caw guides setting up and working in a project, instead of a + that opens a plain input, and the page is redesigned from his pins.\n\nState: waiting on his pick. project-screens d063282e: the Pipeline tab is 0 of 1. Four parts fixed from his pins (6e91abb3, c65b10e5, cb66d67e, 88de5191) were designed, then taken off main by 54d22b6a3; their programs are on cawco/decision-pages-r3. The build 384b1dd6 is paused. Setup-on-ask landed (fe03b2886).\n\nNext: ask the Pipeline pick on its page, build the four fixed parts (they need no pick), and check the new-session entry against his \"agent-guided\" words.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1792782151000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-28",
+   "title": "Pick and build the plan view (tasks and to-dos)",
+   "stage": "ready",
+   "labels": [
+    "plans/tasks",
+    "waiting-on-pick",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-19 04:43Z: \"u mentioned that the revised plan view is done? where is it\"\n- 10-19 04:44Z: \"where is the design\" / \"and did you use mobbin-web mcp to see how other projects do their plans?\"\n- 10-19 05:09Z: \"for the plan, i don't want to reference chatgpt and these popular apps because they can't design for shit, check apps like hilos, Cofounder, RelevanceAI, Base44\"\n- 10-19 05:18Z (answer): \"Wait for my plan-view pick\"\n- 10-23 10:32Z: \"and we haven't finished the projects nor tasks and todos view\"\n\nWants: a plan view he picks from the design page, then built.\n\nState: waiting on his pick. plan-steps 016ec441 offers One list, Lanes, or Crew first (recommended); the branch is cawco-safe/78594e11-plan-view-rebased. The plan-changes backend landed (ab7eb8ba8, 899e8d4b0, d6a000cb6). The page predates the 10-22 PRD move of the plan to a floating layer (800b8d6eb).\n\nNext: re-check the page against the floating-layer change, put it in front of him, and build from 78594e11 after his pick.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1792782155000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-29",
+   "title": "Decide Caw's panel",
+   "stage": "ready",
+   "labels": [
+    "Caw",
+    "waiting-on-pick",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-20 (note on caw-panel): \"it seems ur just patching things on top of each other … stop making bullshit ui\"\n- 10-18 (pins on cb99ce8f): \"the composer is obscuring the page\", \"why are you left-aligning caw\", \"this notice white rectangle isn't the used pattern\"\n\nWants: Caw's panel redesigned from its purpose, not patched.\n\nState: waiting on his pick. caw-panel 78a326ed is 0 of 3, never shown: one panel or three, the message box while Caw can't start, and the thread name. Its embeds read \"waiting on session\".\n\nNext: check that the embeds render, show him the page, and build after his picks.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1792782158000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-30",
+   "title": "Rebuild the pairing screen from his picks",
+   "stage": "ready",
+   "labels": [
+    "onboarding",
+    "waiting-on-pick",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-17 (pins on pairing-round-2): \"Why not fucking make the code line up with the qr code…\", \"Green fill? Really?\", \"Layout shift bonanza\"\n- 10-18 (pin 3 on caw-pairing-picks): \"these still don't line up!\"\n\nWants: the pairing screen with the code aligned, no green fill, no layout shift, and the caw poses he picked.\n\nState: waiting on his pick. pairing-behaviour d02dc1de is 0 of 5. caw-pairing-picks 52d22dc8 has 3 picks made but not sent; qr-face, squeeze and wince are open. The live screen was pulled by 839905866; the branch is cawco/pairing-page d471f23fe.\n\nNext: ask him to finish both pages and press Send, then rebuild the live screen from them.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1792782160000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-31",
+   "title": "Settle presence across devices and the away notes",
+   "stage": "ready",
+   "labels": [
+    "presence",
+    "waiting-on-pick",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-22 09:32Z: \"we already talked yesterday about presence detection, what happened to that?\"\n- 10-22 16:29Z: \"well, is there another way to have presence detection that isn't reliant on that api? this is what u should be asking\"\n- 10-22 16:35Z: \"huh what if i open the same tab on my mobile or on the ios or mac app talk through there then go idle there, what then?\"\n\nWants: presence that knows which device he's on, the phone and the apps included, with the away notes settled.\n\nState: waiting on his pick. On owner-presence a0029072, 6 of 9 picks are built (266526c19, 3dc2043da, 7694f149a); notes-place, ring-mark and hold-from are open. His 10-22 16:35 cross-device question has no answer on any page.\n\nNext: answer the cross-device question with research on the page, then ask the three open cards.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1792782163000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-32",
+   "title": "Add an inline connect card for agents to ask him to sign in",
+   "stage": "ready",
+   "labels": [
+    "Caw",
+    "in-progress",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-23 16:13Z: \"um i didn't ask to reseearch how to login to gmail via claude, that's obvious, but i was asking for a way for an agent to spawn an oauth card in the transcript that i can use to oauth into stuff it asked for, a connect card inline\"\n- quick-calls-1023: picked \"An inline Connect card\"\n\nWants: an agent can put an OAuth Connect card in the transcript, and he signs in from it. The hub keeps the credential, the running session gets access, and the card turns into \"Connected as you\".\n\nState: in progress. References are gathered (cca0c591) and the advisor's options are in (4e109685; A, the browser ask's sibling, is recommended). a395f86f drew A, B and C. Open: who can use the credential (fleet or project).\n\nNext: a decision page for his morning with one picture per option, never the frame grid. Build after his pick.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1792782167000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-33",
+   "title": "Let delegates work in folders that aren't git repositories",
+   "stage": "ready",
+   "labels": [
+    "fleet/machines",
+    "waiting-on-pick",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-22 15:58Z: \"it should not be restricted to git repositories, this was in the original design and i said not everything in the world is a git repository or coding project\"\n- 10-22 16:09Z: \"i anticipate from now that ur going to hardcode these paths or do some stipid manual handling for either kind of directiores\"\n\nWants: a delegate can work in any folder, through one mechanism and with no hardcoded paths.\n\nState: waiting on his pick. On delegates-any-folder f82b2d15, \"how\" is picked (the live folder layer). The path, untracked files and service restart cards are open, and the macFUSE update from 4.10.2 to 5.3 needs his OK. Nothing is built.\n\nNext: get his three picks and the macFUSE yes, then build.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1792782170000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-34",
+   "title": "Fix the root cause of held workspaces",
+   "stage": "done",
+   "labels": [
+    "fleet/machines",
+    "waiting-on-pick",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-18 04:38Z: \"why do we keep dealing iwth held workspaces? it happened many times\"\n\nWants: workspaces stop ending up held.\n\nState: 24 workspaces are held tonight (about 50 GB), most with commits on no remote. There's no decision page and no commit on why workspaces end up held.\n\nNext: find why items end with unlanded commits (failed landings, stalls at account limits, stopped items), fix the cause, and put any call that's genuinely his on a page with the cause and the fix. Settle today's 24: push each to origin cawco-safe/<ws8>-<topic>, then archive it.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "b1e657216 + 533019cb1 (held only when needed; retire ends only CawCo's leftovers), workspace-holds passed obelisk and Mac; in 5408",
+   "createdAt": 1792784183000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792830040000,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-35",
+   "title": "Design CawCo's hub backup and restore",
+   "stage": "ready",
+   "labels": [
+    "fleet/machines",
+    "dropped",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-22 17:24Z: \"What if I format my obelisk today and git clone and start developing again, are you accounting for this?\"\n- 10-22 17:26Z: \"So this isn't a file over app design?\"\n- 10-22 17:29Z: \"How do other software handle backups like this? Also is this a cawco concern? Cawco dev environment concern, or something else?\"\n- 10-22 17:35Z: \"and how are u gonna do that? o_o\"\n\nWants: an answer to how CawCo's hub data and secrets survive a format, and a design for it.\n\nState: dropped. There's no page, task, plan step or commit about backup or restore since 10-22.\n\nNext: research how comparable self-hosted products back up (prior art, with sources), have an advisor design it, and put the answer to his last question on a decision page.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1792784186000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-36",
+   "title": "Finish the monorepo and devtools rework",
+   "stage": "done",
+   "labels": [
+    "devtools",
+    "in-progress",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-22 16:19Z: \"biome can do the switch stuff, and all of eslint stuff can be done in biome or already has a plugin\"\n- 10-22 16:39Z: \"https://github.com/auvred/golar (maybe there's something better out there)\"\n- 10-23 12:04Z: \"why do typechecks for changes that are  specific to certain packages typecheck the other packages? is our monorepo setup flawed? can flaws in golar be fixed on our side and submitted as a PR?\"\n- 10-23 13:55Z (note): \"Um I'm sure we can fix it, what's the compiled part? Can't we fix it?\"\n- 10-23 15:58Z: \"what's the common practice? don't we just have a pr with all the fixes and we build from it or?\"\n- 10-23 15:59Z (pin): \"alright i'm satisfied, fix it in golar\"\n- 10-23: \"including the monorepo rework\"\n- 10-23: \"And again what's spinning up my pc so much didn't we finish the monorepo lint and dev tool rework yet?\"\n\nWants: Golar fixed in a fork as the one type checker, project references and caches so nothing is checked twice, ESLint replaced by Biome and Golar, a warm gate, and a nightly that doesn't re-check.\n\nState: landed on main at 03e3fb780. `bun run check` is the one check. CPU-seconds for a warm hub edit fell from 468 to 113, and for nothing changed from 435 to 11. The gate and release use it. Open: on the Mac the check fails (host run r243). @golar/svelte parses every .svelte with an older svelte, which I believe comes from the Mac's home node_modules, and the failed build writes .svelte.js files into src; 6f5ee601 is fixing it in the fork (v0.1.11-cawco.2). Also open: a Golar crash under ~20 parallel `--traceResolution` runs (exit 134, \"traceback did not unwind completely\", 1 in 4).\n\nNext: land 6f5ee601's Mac fix, rerun the Mac, and fix the parallel crash in the fork.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "d1d2e180a: one check on Golar cawco.5, crash fixes in the fork, no workarounds; passes on obelisk and the Mac",
+   "createdAt": 1792784192000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792830041000,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-37",
+   "title": "Retire every pixel and style baseline compare",
+   "stage": "done",
+   "labels": [
+    "devtools",
+    "in-progress",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-20 03:52Z: \"aim for general ui aeshtetic and correctness, not byte identical and image diff-identical\"\n- 10-20 15:50Z: \"Didn't I say twice to not focus on byte identical but general aesthetic ui and correctness?\"\n- 10-22 05:25Z: \"i already said before (this is the 5th time) to judge for general ui aesthetic and ui/ux and general correctness, NOT picture diffs\"\n- 10-23 13:59Z: \"Stop it! How thr fuck am I going to grok through 1444 images?\"\n- 10-23: \"Who thr fuck asked it to do a surface walk\"\n- 10-23: \"I literally told you to not waste time visually reading the 1444 screens and u went ahead and did it anyways?\"\n- 10-23: \"Delete it! You're just token masturbating\"\n- 10-23: \"And literally no one asked for that tape to even exist\"\n\nWants: UI checks judge general correctness only. The pixel and style baselines, the tape, the review tooling and the all-states walk go.\n\nState: b7a3c8e1b landed. It deleted 643 baseline files and their compares, the review and approval tooling, the hub tape (56 MB) and its recorder, the surfaces walk, and the 7 specs that used it, for −38,469 lines. Follow-up with c79dcfe7: six specs still save screenshots for a reviewer (hub-states, comments, caw-guided, session-sheet, component-canvas, canvas-shots), and those go too.\n\nNext: land the follow-up and grep for `screenshot(` to show nothing writes pictures for him.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "b7a3c8e1b + e3cdfb00d removed every baseline compare and capture written for review",
+   "createdAt": 1792784197000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792830042000,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-38",
+   "title": "Rework workflows into the delegation tree",
+   "stage": "done",
+   "labels": [
+    "workflows",
+    "in-progress",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-22 07:02Z: \"did u even check if workflows as a feature is correct here, it's been here since we did many design reitrations, so it's worth a re-analysis by an advisor\"\n- 10-22 07:02Z: \"like can it handover previews, files, etc? it's gone stale\"\n- 10-23 16:06Z: \"Oh and yesterday we talked about workflows and if they need to be reworked, what happened to that work?\"\n- 10-23 16:08Z: \"um i don't know what the advisor's opinion are on these picks and what's the tradeoff and what needs to be built for each\"\n- workflows-future (aae00a84): picked tree \"The delegation tree is the run\"\n- quick-calls-1023: picked \"Delete them with the engine\" (the app's Workflows screens)\nWants: workflows re-thought and reworked into what he picked, \"The delegation tree is the run\".\nState: in progress.\n- W1 removal (a4a2839a, b380eac52, WIRE_PROTOCOL 28, migration 0298). The two calls were settled by change rules 1 and 2 (cutover, no shims; a fallback needs his authorisation), so they don't go to him: the old TestFlight builds are marked unsupported with no bridge (the expire command waits for the app hold, on tsk-59), and protocolRange is 4–4 with no 410 routes. Resumes at its account reset.\n- W3, the Pi Durable stored holds, is with 080488de.\n- W2, the tree run (stop walks the tree, background items, request keys, interrupted reports, a routine starting an orchestrator), follows W1.\n- Approval → pick page is a role-doc change that needs his approval.\nNext: W1 lands, then W2.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "W1-W3 landed (71a7fe215, tree run 43bbe3fef..e5d7089c7, routine Orchestrator); tree-run and j8-routines pass; in 5450",
+   "createdAt": 1792784202000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792830044000,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-39",
+   "title": "Put the advisor's view, tradeoffs and build cost on every decision card",
+   "stage": "done",
+   "labels": [
+    "decision pages",
+    "dropped",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-23 16:08Z: \"um i don't know what the advisor's opinion are on these picks and what's the tradeoff and what needs to be built for each (time to code is not a factor, that's your job and ur good at it)\"\n\nWants: each card says what the advisor thinks, the trade-off, and what each option needs built.\n\nState: dropped. No decision-page skill or page change was made for it after 10-23 16:08.\n\nNext: add it to the decision-page skill (a fleet write, his approval), and revise the open pages to carry it.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "97feaf871: every card shows Recommended with its reason, and each option's Gets, Costs and Builds; in 5450",
+   "createdAt": 1792784204000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792830045000,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-40",
+   "title": "Use the decision page's full width on a big screen",
+   "stage": "ready",
+   "labels": [
+    "decision pages",
+    "partial",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-20 03:22Z: \"you're using a very unstyled and very plain page with all left alignment it seems like you haven't aplied the design system to the openui elements?\"\n- 10-21 11:00Z: \"even now a decision page expanded on a big screen doesn't use the space at all (different bug idk if superseded)\"\n\nWants: an expanded decision page uses a big screen's space.\n\nState: partial. 9fd908c7d (10-20) covered styling. Nothing was found for the wide layout after 10-21.\n\nNext: check an expanded page at 1440 and wider, and lay it out for the width, proven by box assertions.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1792784207000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-41",
+   "title": "Stop a card note being stored twice",
+   "stage": "done",
+   "labels": [
+    "decision pages",
+    "partial",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-23 12:53Z: \"Fix both (Recommended)\" (the note shows twice, and the reader lists cards as loose values)\n\nWants: a note lands once, and a program page reads as N of M picked.\n\nState: partial. 3594b3885 fixed the count. No commit was found for the duplicate note, which comes from a field with an id being captured twice.\n\nNext: fix the page's field capture so a card's note isn't also a loose field.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "0e929733e keeps a card's note once; 3594b3885 fixed the count",
+   "createdAt": 1792784209000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792796107000,
+   "startedAt": null,
+   "comments": 1
+  },
+  {
+   "id": "tsk-42",
+   "title": "Say \"landing gate\" and the take-over line in plain words",
+   "stage": "done",
+   "labels": [
+    "words",
+    "in-progress",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-23 17:40Z: \"wtf is \\\"the person is using this browser privately\\\" i thought it was being hacked\"\n- 10-23 18:07Z (pin): \"what the fuck is a landing gate\"\n- 10-23 18:10Z (note on shield-words): \"this is still not clear, use asc-100 technical english\"\n\nWants: what agents and he read about take-over and landing is clear, plain technical English, with no internal jargon.\n\nState: the take-over words are done. c5a4c23bf and 8dcaf3f0f set: \"The person took over this browser in CawCo. Do not use your browser tools. Your browser tools work again when the person presses Hand back.\" The \"landing gate\" pin has no fix: the term still shows in what he reads (gate reports, pages).\n\nNext: find every place \"landing gate\" reaches him, replace it with plain words in WORDS.md and the product, and answer the pin.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "merge checks everywhere: 1edd81fb6 + 25b778718 in the product and repo, roles/orchestrator.md and projects/cockpit-orchestrator.md fleet docs rewritten, pin 3974efd1 answered",
+   "createdAt": 1792784212000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792798020000,
+   "startedAt": null,
+   "comments": 1
+  },
+  {
+   "id": "tsk-43",
+   "title": "Fix the black panel during browser take-over",
+   "stage": "done",
+   "labels": [
+    "browser",
+    "in-progress",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-23 17:41Z: \"also this showed during one browser takeover, screen stayed black, is it a bug or?\"\n\nWants: take-over shows the browser, not a black panel or a NO_ARTIFACT error.\n\nState: 68e319fbc landed. The panel draws the browser's live stream with Take over / Hand back, a taken port moves to a free one, and a failed start drops its take-over. The host spec browser-takeover-view is running on obelisk (r244). Follow-ups: DESIGN.md's Browser view recipe (0455bc40), and the app has no browser view (owed when the app hold lifts).\n\nNext: r244 passes, a nightly, then check on his screen.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "checked live on 5408: take-over shows the moving page (frames 130→207→283), Hand back clears it, no console errors",
+   "createdAt": 1792784215000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792830046000,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-44",
+   "title": "Stop old sessions being woken by notices",
+   "stage": "done",
+   "labels": [
+    "fleet/machines",
+    "in-progress",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-23: \"somethign froze the pc twice! i just had to reboot before we get stuck again\" / \"SOMETHING KEEPS TRIGGER VERY OLD SESSIONS AND I KEEP GETTING NOTIFICATIONS FORM VERY OLD SESSIONS AND IT'S CRASHING THE PC\" / \"THERE ARE OLD SESSIONS ALL RESUMED IT WILL CRASH MY 5 HOUR USAGE\"\n- 10-23 18:10Z (note on triage-sessions): \"ancient bullshit and we alreadyu removed telegram, is this even a question?\"\n\nWants: old sessions stay asleep, and no Triage sessions spawn for them.\n\nState: c5a4c23bf is in nightly 5278 (installed 21:57). 8dcaf3f0f landed: a whole close sentence, and an item asleep for more than a day is held, not woken. Tonight 7 Triage sessions and 46 old open-turn sessions were stopped. Follow-up with e7b59c6b: the held notice survives a hub restart (a stored flag).\n\nNext: the follow-up lands, a nightly, then a live spawn count after restarting the hub and agent.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "rechecked on 5450: since the 11:0x install only current sessions opened a turn (hub DB instances.turn_open_at), no session older than a day woke",
+   "createdAt": 1792784219000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792830191000,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-45",
+   "title": "Edit harness config only through admin tools",
+   "stage": "done",
+   "labels": [
+    "fleet/machines",
+    "in-progress",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-23 12:12Z: \"do we have admin tools to edit these that the agents should use instead?\"\n- 10-23 12:19Z: \"Admin tools only (Recommended)\"\n- 10-23 18:10Z (note on mcp-hook-refuse, picked allow): \"user choice in the end\"\n\nWants: delegates change harness config only through the admin tools; hooks that call an MCP tool stay his choice.\n\nState: 09f761ac's tip a763e5c94 passed both host runs, r237 obelisk and r238 Mac (`ALL PASS`). It was told to land, and is stalled on its account limit until 23:40.\n\nNext: it lands after the reset; confirm it's on main.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "81c7722d9 + fabeb79aa: harness config through admin tools, reaching only that project's sessions on every harness",
+   "createdAt": 1792784222000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792830048000,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-46",
+   "title": "Show his git issues and PRs in CawCo",
+   "stage": "ready",
+   "labels": [
+    "Caw",
+    "waiting-on-pick",
+    "owner-ask"
+   ],
+   "description": "His words (to Caw, 10-23): \"conenct cawco's git so issues and prs etc show up here\"\n\nWants: a project's tracker issues and PRs show up in CawCo.\n\nState: waiting on his pick. On owner-2026-10-18 (d9796060), \"Which outside tracker comes first?\" and \"Whose key does a project's tracker sign in with?\" have no pick. That night Caw couldn't start because of the sandbox bug, fixed in f06739040 and c3b01bd18.\n\nNext: ask the two tracker cards again on a fresh page, then build.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1792784225000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-47",
+   "title": "Ask for a sentence-shaped approval card when an agent edits an MCP",
+   "stage": "ready",
+   "labels": [
+    "approvals",
+    "partial",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-19 05:41Z: \"when an agent edits an mcp like this, surely we can think of a better ux? like for example [caw branding] [agent] on [session] needs to [reason] allow it to [action] [target] edit [x] with [a], and [b] with chips, story, rich chip links and a story?\"\n\nWants: approval asks read as one sentence with chips: who, on which session, needs what, and why.\n\nState: partial. The sessions \"Design sentence-shaped approval card\" (e1032ce1), \"Build new approval card and decision page\" (fa565a90) and \"Finish approval card build\" (ab72abb9) ran on 10-19. No commit has touched packages/core/src/permission-presentation.ts for it since.\n\nNext: read ab72abb9's report and workspace to see where the build stopped, then land it or say why it stopped.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1792784228000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-48",
+   "title": "Preview non-HTML projects by falling back to HTML elements",
+   "stage": "ready",
+   "labels": [
+    "canvas/artifacts",
+    "dropped",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-21 13:34Z: \"uh what astro and nuxt? doesn't the preview tool preview whatever the project behind it is doing?\"\n- 10-21 13:51Z: \"i mentioned before a thousand times that for non-html projects we can do itj ust like figma and fall back on html elements? lol o_o\"\n\nWants: the preview and canvas work for any project. For non-HTML ones, they fall back to HTML elements, as Figma does.\n\nState: dropped. Nothing on main after 10-21.\n\nNext: research how Figma and similar tools draw non-HTML UIs; have an advisor write how the canvas handles non-HTML projects; put the design on a page for him; build after his pick.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1792784238000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-49",
+   "title": "Publish the chip design page for each chip category",
+   "stage": "ready",
+   "labels": [
+    "chips",
+    "partial",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-22 06:52Z: \"also throw a canvas work on design decisions for how chips hsould look like , for each category of chips, right now no way to distinguish which chips are for what purpose\"\n- 10-22 07:06Z: \"no need to cut the workflow chip, the fuck?\"\n\nWants: a design of chips per category, so he can tell chips apart, then a pick.\n\nState: partial. The page program 0c29d1ca5 on cawco-safe/c3223b5a-chip-design-decision-page-glyph-and-dot was never published, and canvases 51904ee9 and 30dce752 were never opened. Stories commit 6351f6fe8 is not on origin. 906ca8bfe made every kind a chip on the old look. Workflows are being removed (tsk-38), so the workflow chip goes with them.\n\nNext: push 6351f6fe8 and publish the page with one picture per option (no frame grid), then build after his pick.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1792784241000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-50",
+   "title": "Point him at what changed after an agent answers his comment",
+   "stage": "ready",
+   "labels": [
+    "comments",
+    "partial",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-21 09:00Z: \"okay in the psat 30m u did a lot of updates but i have no idea what they are or what's before/after nor do i know on this preview what i hae to check next\"\n- 10-21 09:26Z: \"u should be able to guide me to where i need to look, get it? like when i add a comment and u respond and then a ui element is updated it should say so somehow\"\n\nWants: when an agent updates a page after his comment, the page shows what changed and where to look next.\n\nState: partial. 4bbb7908b (\"changed since you looked\") and f3296814c (canvas changes wear the done wash) landed. Nothing guides him to the next thing to check.\n\nNext: confirm on a live page whether a reply that changed an element points at it, then build the missing part.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1792784243000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-51",
+   "title": "Close menus on an outside click without trapping the page",
+   "stage": "done",
+   "labels": [
+    "dashboard",
+    "dropped",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-22 10:03Z: \"there' sstill keyboard focus bugs on some menus, this one for example clicking outside the usage doesn't dismiss it, disables interaction with all elements until its closed\"\n\nWants: every menu dismisses on an outside click and never blocks the rest of the page.\n\nState: dropped. Nothing on main since 10-22.\n\nNext: reproduce on the usage menu, fix the shared menu primitive (not one menu), and prove it with a box and focus assertion across every menu.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "4c7798d09, 13e61ca94, eef55c56d: outside presses never trap the page and focus returns to the opener (Safari included); in 5450",
+   "createdAt": 1792784246000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792830049000,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-52",
+   "title": "Rethink the sidebar highlight and the message row's edit icon",
+   "stage": "ready",
+   "labels": [
+    "dashboard",
+    "partial",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-21 04:36Z: \"for example, u have an issue with edit icon overlap. but u should think why is the icon there what else should be there what is the user trying to do is the message container layout correct\"\n- 10-21 04:49Z: \"even here the highlight ring doesn't even follow the contours of the container\"\n\nWants: a design critique of the message container and the highlight, fixed at the cause, not one-off patches.\n\nState: partial. select-none (c3de4a8a3, 49538c6c3) and the pointer hand (cee84b516) landed on 10-21. Nothing addresses the ring's contour or the message container itself.\n\nNext: critique the message row with interface-craft, then fix the ring's radius in the shared style.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1792784249000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-53",
+   "title": "Let the mobile Safari preview sheet cover the composer and chip row",
+   "stage": "done",
+   "labels": [
+    "dashboard",
+    "dropped",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-20 04:02Z: \"also i have an issue with the mobile safari where the preview sheet should cover the composer and the chip row, lost space\"\n\nWants: on a phone, the preview sheet covers the composer and the chips.\n\nState: dropped. Nothing on main.\n\nNext: check it in real WebKit at a phone width, then fix the sheet's layer, proven by a box assertion.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "42880249b: the phone sheet climbs back over the composer and chips once focus leaves, proven in WebKit with an iPhone agent and in Chromium (elementFromPoint covered); ships with the next nightly",
+   "createdAt": 1792784250000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792799898000,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-54",
+   "title": "Keep the preview pane put when a preview is deleted, and tidy its pending state",
+   "stage": "done",
+   "labels": [
+    "canvas/artifacts",
+    "dropped",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-19 04:49Z: \"when u deleted the preview the preview pane switched to another preview so as a user i'm thinking u need someting from me on that view\"\n- 10-19 04:51Z: \"looks very messy, look at the path above spilling out, and the hyperlink thing? this is terrible ux for a loading/pending state\"\n\nWants: deleting a preview doesn't put another in front of him, and the loading state is clean.\n\nState: dropped as such. 2a6f8a40f (tonight) stopped Remove from bringing a handed artifact forward, but deleting a preview still brings the next one forward, and the pending state is unchanged.\n\nNext: check both on the live panel, then fix them.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "84aa41627 (agent delete closes the panel, nothing comes forward) and ea531f57a (pending path on one row, full path on hover), proven by artifact-delete-panel, preview-cover and component-canvas 14d; ships with the next nightly",
+   "createdAt": 1792784253000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792799897000,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-55",
+   "title": "Stop \"machine hasn't responded in time\" notices for the hub's own machine",
+   "stage": "done",
+   "labels": [
+    "notifications",
+    "dropped",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-20 02:58Z: \"and some useless notif like \\\"obelisk hasn't responded in time\\\" some delegates having this issue, but ur on this same machine so it doesn't make sense\"\n- 10-21 11:43Z: \"how is not on your machine when ur literally on the same machine?\"\n\nWants: no \"not responded\" notices about the machine the hub itself runs on.\n\nState: dropped. The \"finished its turn\" half landed in daf1cb1e7.\n\nNext: find the notice's source and why it fires about the hub's own machine, then fix the cause.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "bba4f9df2 (notice only after 2 min of silence with sessions on it); since the 5450 install the hub logged no not-responded notice about obelisk",
+   "createdAt": 1792784256000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792830192000,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-56",
+   "title": "Stop the orchestrator editing .md files instead of the memory tool, deterministically",
+   "stage": "ready",
+   "labels": [
+    "fleet config",
+    "dropped",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-22 04:52Z: \"why do u keep editing .md files directly instead of using the memory tool? how can i prevent this behavior determinisitcally\"\n- 10-22 08:17Z: \"/home/bewinxed/.cache/cawco-orchestrator/connect-machine/implementer-deviations.md are you cheating around not using the memory tool? what's this\"\n\nWants: a rule enforced by a tool (a hook or a deny), so memory goes through the memory tool.\n\nState: dropped. A hook already blocks writes under an account's claude/ folder, but not notes kept as .md files under ~/.cache/cawco-orchestrator.\n\nNext: propose the hook through admin_hooks_write for his approval: what it blocks, and where working inputs for delegates may still go.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1792784259000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-57",
+   "title": "Confirm the memory consolidation landed",
+   "stage": "done",
+   "labels": [
+    "fleet config",
+    "partial",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-22 04:55Z: \"dispatch a delegate with /writing-for-agents to consolidate, removing all redundant memories and quotes from myself instead of distilling hte meaning, and no-longer-required guidance that is already enforced by a tool or otherwise\"\n\nWants: the memory documents consolidated, with no redundant entries, no raw quotes, and nothing a tool already enforces.\n\nState: partial. The session \"Consolidate cockpit orchestrator memory\" (02f171f0) ran, but its outcome couldn't be read.\n\nNext: read 02f171f0's report and the memory documents' versions (admin_memory_read), and finish whatever is left.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "fleet docs checked; last raw quotes removed from projects/cockpit-orchestrator.md",
+   "createdAt": 1792784262000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792798930000,
+   "startedAt": null,
+   "comments": 1
+  },
+  {
+   "id": "tsk-58",
+   "title": "Answer whether something better than Podman exists for the Mac",
+   "stage": "done",
+   "labels": [
+    "fleet/machines",
+    "dropped",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-23 12:49Z (note on obelisk-pods): \"is there a betterthing that podman like orbstack for mac?modern developer andlean?\"\n\nWants: a researched answer on an OrbStack-like container runtime for the Mac.\n\nState: dropped. obelisk-pods picked catatonit; the note has no answer.\n\nNext: research OrbStack, Colima (the Mac runs Colima today), Apple's container tool and Podman machine, with sources, and answer on the page.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "researched with sources (report 2bf48eeb); the choice is the mac-runtime card on his next decision page",
+   "createdAt": 1792784264000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792798021000,
+   "startedAt": null,
+   "comments": 1
+  },
+  {
+   "id": "tsk-59",
+   "title": "Keep the owed app work until he lifts the iOS/Mac hold",
+   "stage": "ready",
+   "labels": [
+    "app",
+    "waiting-on-pick",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-20 18:01Z: \"DO NOT WASTE TIME O N IOS OR M AC I SAID\"\n- 10-22 07:10Z: \"nothing gets done on the ios part until i say so\"\n- 10-23 15:12Z: \"nah u can simply look for \\\"stop all ios and mac work\\\"\"\n- 10-23 18:10Z (note on send-picks-swift, picked Now): \"looks like pending work u haven't completed?\"\nWants: no iOS or Mac work until he says so, and what the app owes waits in one list.\nWhat the app owes:\n- Find secret dots\n- skeleton pulse\n- Comment mode (app-comment-mode 3b922138)\n- the update-wait row\n- Files arrows and focus\n- the pin working mark and live dot\n- caret focus\n- the model search frame\n- a browser take-over view (the hub page answers 404 since 68e319fbc)\n- decoding `asks` and `renotify` (8fccff121)\n- a push of kind \"mcp\" (ecebe9cfc, a fleet MCP sign-in ended) opens Needs you, not the board: Push.swift `route`, add \"mcp\" beside \"needs\", \"pairing\"\n- once a build from the workflow removal (tsk-38, a4a2839a) is on TestFlight: expire TestFlight builds 20261015, 20261015.3, 20261017, 20261018 (`bash apps/apple/scripts/testflight.sh --expire <build>`). The hub stops sending workflowRunId/workflowStepId/workflowEvent with no bridge (change rule 1), so until then those builds just show no runs.\n- build-both.sh: end its own build's `ibtoold --sending-client-environment` processes by process tree when xcodebuild exits (CawCo flags them as leftovers; found by 0e12ffb6)\nDone under his exception: Send picks removed (ab98009ab; iOS gate + Mac Catalyst compile pass).\nExceptions he made: removing Send picks (done) and deleting the Workflows screens (in tsk-38).\nNext: wait for his word, then build the list.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1792784268000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 6
+  },
+  {
+   "id": "tsk-60",
+   "title": "Make find show what it finds",
+   "stage": "done",
+   "labels": [
+    "orchestrator",
+    "in-progress",
+    "owner-ask"
+   ],
+   "description": "His words:\n- 10-23 ~22:15: \"Why aren't u using the find tool\"\n- 10-23: \"u keep getting amnesia\" / \"ANOTHER AMNESIA\" / \"THIS IS THE 9TH TIME I'M REPEATING THIS\"\n\nWants: past discussions are looked up, not forgotten.\n\nState: in progress with a7b7e763. The orchestrator did call find about six times tonight. It finds the right turn and withholds it: \"(not shown: its turn could not be read to check it for secrets: 9d1686d7… is not in its stored transcript now)\". It ranks summariser prompts as \"person\", and reports \"still indexing\" on both machines, so I grepped transcripts by hand instead. The fix masks secrets in the indexed text instead of withholding the hit, ranks his words first, and makes indexing finish after a restart.\n\nNext: land it, then run his query \"we literally removed the slot pool yesterday\" live and see his 10-23 10:32 words as the top hit.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "checked live 10-24: find for \"we literally removed the slot pool yesterday\" returns his 10-23 words",
+   "createdAt": 1792784277000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792830050000,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-61",
+   "title": "Stop pages sitting stale after an update",
+   "stage": "done",
+   "labels": [
+    "dashboard",
+    "owner-ask",
+    "in-progress"
+   ],
+   "description": "His screenshot, 10-24 ~03:30: the session pane's band read \"CawCo updated — this page has stopped updating. It reloads once you're not using it.\" hours after nightly 5408 installed (02:13).\n\nWants: after an update the open page catches up promptly without losing anything, and he can reload at once.\n\nCause (reload.svelte.ts busy()): the reload waits while any draft is unsent or any dialog, menu, popover or drawer is open, so a draft or an open surface holds the page stale indefinitely, and the band offers no action.\n\nNext: be37a4f5 makes drafts and open surfaces survive a reload, holds only for active typing, and adds a Reload button to the band; proven in Chromium and WebKit.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": "de6b991da shipped in nightly 5450, installed on all four machines 11:0x: a stale page reloads 30 s after typing stops, keeps drafts and the open panel, and the band has Reload (stale-reload spec ALL PASS in Chromium and WebKit desk/phone)",
+   "createdAt": 1792800369000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": 1792829129000,
+   "startedAt": null,
+   "comments": 0
+  },
+  {
+   "id": "tsk-62",
+   "title": "Give workflows a home of their own, apart from routines",
+   "stage": "ready",
+   "labels": [
+    "workflows",
+    "owner-ask",
+    "design"
+   ],
+   "description": "His words, 10-24 ~12:00: \"wait so how do i define workflows now?\" then \"wait....why would workflows be merged with routines?? those are two very different things o_o\".\n\nContext: on 10-23 he picked \"The delegation tree is the run\" (workflows-future aae00a84): a workflow is a brief an orchestrator carries out, steps are delegates, and a routine can start one. The engine was removed (71a7fe215), and routines gained \"Each run starts: An orchestrator\" (f4cb7dd4d). The gap: there is no place to define and keep a workflow on its own. Its brief lives only in a routine's prompt or a new session's first message.\n\nWants (my reading, put to him to confirm): a workflow as its own saved thing in a project, with a name, its brief and optionally its expected steps. It starts by hand, a routine can point at it as a trigger, and the orchestrator runs it as the delegation tree.\n\nNext: prior art (research leaf), then a Fable advisor design, then a decision page. The build waits for his pick.",
+   "acceptance": "",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1792831545000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 1
+  },
+  {
+   "id": "tsk-63",
+   "title": "Decide what an early cross-organization account move does, from the compaction benchmark",
+   "stage": "ready",
+   "labels": [
+    "accounts",
+    "compaction"
+   ],
+   "description": "On 10-25 at 07:05 the hub moved the orchestrator session from jude@petralab.ai to bewinxed@gmail.com about 40 minutes before jude was forecast to run out (07:45). The cache was warm, and five minutes earlier the hub had decided it would stay. The move happened because the owner was watching: at-limit.ts rule 7 drops the free wait for a watched session, and rule 8 moves a watched session across organizations when the cold re-read is under the 600k floor. It moved whole and re-read 479k tokens cold ($3.83). A move compacts only at 600k or more, and never at a forecast (`compact: !carries && input.cause !== \"refused-credential\" && input.cause !== \"forecast\" && … reported >= policy.moveWholeUnderK * 1000`). Compacting first on the warm account would have cost about a tenth of that.\n\nThe owner's words: \"not sure why we didn't compact here before moving on or if this move was necessary now\", then on the choice: \"finish the benchmark first, add this as a task\".\n\nThis waits on the compaction benchmark (design 50b8e3cc, harness aa8e5136, finished by the benchmark run task). Then decide, against his account strategy: compact on the warm account before a cross-organization move, wait for the limit, or keep today's rule. Bring it to him with the benchmark's numbers.",
+   "acceptance": "- The compaction benchmark has reported, with results and the paper draft.\n- A decision page puts the early-move choice to the owner with measured costs: compact-then-move vs whole move vs wait for the limit.\n- His pick is built in packages/hub/src/at-limit.ts and checked against his account strategy (a move within one organization keeps the cache; a session waits only when its reset comes before its cache lapses; etc.).",
+   "todos": [],
+   "attempts": [],
+   "result": null,
+   "closeReason": null,
+   "createdAt": 1792901713000,
+   "createdBy": "Orchestrate cockpit fleet work",
+   "completedAt": null,
+   "startedAt": null,
+   "comments": 0
+  }
+ ]
+}

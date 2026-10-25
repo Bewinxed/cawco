@@ -83,6 +83,8 @@ export const VIEWS = {
   deskPanel: { width: 390, height: 844, touch: false },
   /** Past the phone's line and under the drawer's: the rail is a sheet, the bar is the desk's. */
   narrowDesk: { width: 680, height: 900, touch: false },
+  /** The owner's own browser window as he works in it (his capture of the project page). */
+  window1037: { width: 1037, height: 760, touch: false },
   /** The widest phone, a Pro Max's 430pt. */
   phoneWide: { width: 430, height: 932, touch: true },
   /** The simulators the iOS specs pair with: iPhone 16 Pro and iPad Pro 13-inch (M4), portrait. */

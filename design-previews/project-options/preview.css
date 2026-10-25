@@ -1,0 +1,197 @@
+/* What stands round the captured parts, on the house's tokens: the frame's
+   layout (the Shell's rail, the page's column, the body beside the pane or
+   Caw's column; a phone's scroller under its two bars) and the switch page
+   (index.html). The parts themselves are house.css's. */
+
+/* ---- The frame ---- */
+html,
+body {
+  block-size: 100%;
+}
+body {
+  overflow: hidden;
+  font: var(--type-body);
+}
+#page {
+  block-size: 100%;
+}
+.po-today {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+  object-position: top left;
+}
+
+.po-desk {
+  display: flex;
+  block-size: 100%;
+}
+.po-rail {
+  flex: none;
+  display: block;
+}
+.po-main {
+  display: flex;
+  flex: auto;
+  flex-direction: column;
+  min-inline-size: 0;
+  background: var(--surface-recess);
+}
+.po-head {
+  position: relative;
+  z-index: 4;
+  flex: none;
+}
+.po-band {
+  flex: none;
+  padding: 0 var(--space-6) var(--space-2) var(--space-7);
+}
+.po-body {
+  display: flex;
+  flex: auto;
+  min-block-size: 0;
+}
+.po-content {
+  flex: auto;
+  min-inline-size: 0;
+  padding: var(--space-3) var(--space-6) 0 var(--space-7);
+}
+/* The Table holds its own scroll between its pinned heads. */
+.po-content-list {
+  padding-inline: 0;
+}
+.po-side {
+  flex: none;
+  min-block-size: 0;
+}
+.po-side-pane {
+  inline-size: var(--po-pane);
+}
+.po-side-caw {
+  inline-size: var(--po-column);
+}
+
+/* A phone: the page scrolls under the top bar and over the docked foot. */
+.po-phone {
+  position: relative;
+  block-size: 100%;
+  overflow: hidden;
+  --po-top: var(--c-top-bar-h);
+}
+.po-phone-scroll {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-block: var(--c-top-bar-h) var(--po-foot);
+}
+/* A grouped list (P2, the Table) holds its own scroll between its pinned heads. */
+.po-phone-fill {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.po-phone-fill > [data-board],
+.po-phone-fill > [data-list] {
+  flex: auto;
+  min-block-size: 0;
+}
+.po-phone-band {
+  padding: 0 var(--space-3) var(--space-2);
+}
+.po-phone-top {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 4;
+}
+.po-phone-popover {
+  position: absolute;
+  inset: var(--c-top-bar-h) var(--space-3) auto;
+  z-index: 5;
+}
+.po-phone-foot {
+  position: absolute;
+  inset: auto var(--space-3) var(--space-4);
+  z-index: 4;
+}
+.po-phone-sheet {
+  position: absolute;
+  inset: auto 0 0;
+  block-size: var(--po-sheet);
+  z-index: 6;
+}
+
+/* ---- The switch page (index.html) ---- */
+.po-index {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  block-size: auto;
+  min-block-size: 100%;
+  padding: var(--space-5) var(--space-6);
+  overflow: auto;
+  box-sizing: border-box;
+}
+.po-index h1 {
+  margin: 0;
+  font: var(--type-title);
+}
+.po-index p {
+  margin: 0;
+  max-inline-size: var(--c-measure);
+  color: var(--ink-muted);
+}
+.po-switches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+}
+.po-switch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-inline-size: 0;
+}
+.po-switch > span {
+  font: var(--type-meta);
+  color: var(--ink-muted);
+}
+.po-switch > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+.po-switch button {
+  min-block-size: var(--c-btn-h-sm);
+  padding: 0 var(--space-3);
+  border: var(--border-width) solid var(--border-control);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--ink-strong);
+  font: var(--type-label);
+  cursor: pointer;
+}
+.po-switch button[aria-checked="true"] {
+  border-color: var(--brand-solid);
+  background: var(--surface-recess);
+}
+.po-notes {
+  max-inline-size: var(--c-measure);
+  font: var(--type-meta);
+  color: var(--ink-muted);
+}
+.po-notes ul {
+  margin: 0;
+  padding-inline-start: var(--space-5);
+}
+.po-stage {
+  overflow: hidden;
+}
+.po-stage iframe {
+  display: block;
+  border: var(--border-width) solid var(--border-hairline);
+  border-radius: var(--radius-sm);
+  background: var(--surface-recess);
+  transform-origin: top left;
+}

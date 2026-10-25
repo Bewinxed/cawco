@@ -1,0 +1,32 @@
+/* The capture stage's stylesheet: the dashboard's own (app.css, every
+   token, recipe and utility it ships), with this folder added to what
+   Tailwind reads for classes, so the options' utilities are built from the
+   same tokens. The few sizes the options name that the token source has no
+   token for yet stand here, each the advisor's number (report 1168cfbb);
+   one that is picked becomes a token in design/tokens before it ships. */
+@import "../../../apps/dashboard/src/app.css";
+@source "./";
+
+@theme {
+  /* D1: the width at which five columns stand side by side (report 2a). */
+  --container-po-fit: 1100px;
+}
+
+:root {
+  /* D2's column (report 2a). */
+  --po-col: 300px;
+  /* The task pane beside the board (report part 3). */
+  --po-pane: 480px;
+  /* Caw's column beside the page (report part 5). */
+  --po-column: 400px;
+  /* Caw's phone sheet at half height (report part 5). */
+  --po-sheet: 420px;
+  /* Caw's hero, 120px tall (report part 6, pose 4). */
+  --po-caw-hero: 120px;
+  /* Where a list's heads pin: under a bar, and over a phone's docked bar
+     (the composer's shell and its space-4 off the foot, as ViewBar docks). */
+  --po-top: 0px;
+  --po-foot: calc(
+    var(--c-composer-field) + 2 * var(--c-inset-composer) + var(--space-4)
+  );
+}
