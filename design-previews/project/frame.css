@@ -886,18 +886,6 @@ pre {
   opacity: 0.25;
 }
 
-/* Live work breathes: the Working glyph on a card. */
-@keyframes breath {
-  50% {
-    opacity: var(--breath-floor);
-  }
-}
-@media (prefers-reduced-motion: no-preference) {
-  .breathe {
-    animation: breath var(--breath) var(--ease-in-out) infinite;
-  }
-}
-
 /* The skeleton, at the real layout's size, on one clock. */
 @keyframes skeleton-pulse {
   50% {
@@ -926,6 +914,13 @@ pre {
   width: min(100%, var(--c-composer-w));
   padding-block: var(--space-8) var(--space-8);
   text-align: start;
+}
+/* The failure takes the surface's centre at its own words' measure, so Caw
+   stands over them on their axis; past that measure they wrap and it takes
+   the column. */
+.fault {
+  width: fit-content;
+  max-width: min(100%, var(--c-composer-w));
 }
 .caw-hero,
 .caw-fault {
@@ -1087,7 +1082,7 @@ pre {
   max-width: 60ch;
   font: var(--type-body);
   color: var(--ink-strong);
-  text-wrap: balance;
+  text-wrap: pretty;
 }
 .fault-why {
   max-width: 60ch;
@@ -1101,6 +1096,8 @@ pre {
   margin-block-start: var(--space-5);
 }
 .fault-details {
+  /* It takes the block's width and never widens it: Caw holds still when it opens. */
+  contain: inline-size;
   width: 100%;
   margin-block-start: var(--space-3);
   padding: var(--space-3) var(--space-4);
@@ -1137,6 +1134,13 @@ pre {
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
+  /* The house edge fade's length: 40px, a phone's 16px. */
+  --fade-len: var(--c-edge-fade-len);
+}
+/* Scrolled down, its head fades out under the pane's top edge; its foot's
+   fade is the verdict bar's, which holds there (see .decision). */
+.pane-scroll[data-more-start] {
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--fade-len));
 }
 .pane-tabs {
   display: grid;
@@ -1411,7 +1415,8 @@ pre {
 }
 .decision {
   position: sticky;
-  inset-block-end: calc(-1 * var(--space-3));
+  /* Held on the scroller's own foot, past its padding, so nothing shows under it. */
+  inset-block-end: calc(-1 * var(--space-5));
   display: grid;
   /* Approve's cell is where Send back's note unfolds; Send back keeps its own. */
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1421,6 +1426,22 @@ pre {
   border-block-start: 1px solid var(--border-hairline);
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
   background: var(--surface-raised);
+}
+/* While the card runs on under the bar, the house edge fade above it, so
+   what passes under it reads as more, never as a cut. */
+.decision::before {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: 100%;
+  height: var(--fade-len);
+  background: linear-gradient(to bottom, transparent, var(--surface-raised));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-control) var(--ease-out);
+  content: "";
+}
+.decision[data-stuck]::before {
+  opacity: 1;
 }
 .decision > [data-act="approve"],
 .note-cell {
@@ -1772,8 +1793,9 @@ pre {
   .main {
     grid-template-rows: var(--c-top-bar-h) minmax(0, 1fr) auto;
   }
+  /* His glass stands as far in from the trailing edge as the burger from the leading one. */
   .bar {
-    padding-inline: var(--space-1) 0;
+    padding-inline: var(--space-1);
   }
   .bar-burger {
     display: inline-grid;
@@ -1796,9 +1818,8 @@ pre {
   }
   .glass {
     height: 32px;
-    padding: var(--c-bar-group-pad) var(--space-2) var(--c-bar-group-pad) var(--c-bar-group-pad);
-    border-inline-end: 0;
-    border-radius: 16px 0 0 16px;
+    padding: var(--c-bar-group-pad);
+    border-radius: var(--radius-pill);
   }
   .glass-caw {
     width: 24px;
@@ -1864,6 +1885,10 @@ pre {
     overflow-x: auto;
     overflow-y: visible;
   }
+  /* Needs you is a lane, not a stage: it leads the sideways columns too. */
+  .app[data-layout="columns"] .board:has(> .col[data-col="needs"]:not([hidden])) {
+    grid-template-columns: repeat(5, 82%) auto;
+  }
   .app[data-layout="columns"] .col {
     scroll-snap-align: start;
   }
@@ -1875,9 +1900,11 @@ pre {
     padding: var(--space-3) var(--space-4);
   }
 
+  .empty {
+    width: 100%;
+  }
   .empty,
   .fault {
-    width: 100%;
     margin-inline: auto;
     padding-block: var(--space-6);
   }
@@ -1985,11 +2012,13 @@ pre {
   .app[data-layout="columns"] .board {
     grid-template-columns: repeat(4, calc(50% - var(--space-3) / 2)) auto;
   }
+  .app[data-layout="columns"] .board:has(> .col[data-col="needs"]:not([hidden])) {
+    grid-template-columns: repeat(5, calc(50% - var(--space-3) / 2)) auto;
+  }
   .starters {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .empty,
-  .fault {
+  .empty {
     width: min(100%, var(--c-composer-w));
   }
 }
@@ -2003,6 +2032,9 @@ pre {
 @media (width < 640px) {
   .board .col-head {
     padding-block-start: var(--space-2);
+  }
+  .pane-scroll {
+    --fade-len: var(--c-edge-fade-len-phone);
   }
 }
 

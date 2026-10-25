@@ -27,8 +27,9 @@
  *   a board scrolled sideways never cuts a column at its leading edge;
  * - the empty project's starters share one height;
  * - "needs you" said once per kind on each width: in words once (the
- *   head's filter on a desk, the group head on a phone), and as the spark
- *   band on a desk or the view bar's chip on a phone; no control inside an
+ *   head's filter on a desk, the Needs-you lane's head on a phone, which
+ *   leads both forks), and as the spark band on a desk or the view bar's
+ *   chip on a phone; no control inside an
  *   anchor; the permission's card answers with Deny then Approve, the
  *   question's with Answer;
  * - Caw's column: his name and ✕ in the head with no mark, the asks first
@@ -53,6 +54,20 @@
  *   ¾ and 1 of its own length, moves the whole way on its own curve: each
  *   reading strictly between its ends, and within 0.06 of where the run's
  *   easing puts it (no hold, no jump);
+ * - the top bar's glass (Caw's chip on a phone) stands whole, its pill
+ *   unbroken, 4px in from the trailing edge;
+ * - the open pane's card runs on under its verdict bar beneath the house
+ *   edge fade (40px, a phone's 16px) with nothing of it below the bar; at
+ *   the card's foot that fade is gone and the scroller's head fades;
+ * - Caw's calm loops (the Working glyph's breath, his running note's dot)
+ *   run only while something waits on him: at rest nothing moves, and once
+ *   the last ask is answered each finishes the breath it is in and settles
+ *   at full ink;
+ * - each block Caw heads hugs what it holds (a line's drawn reach, wrapped
+ *   words' own box, a control's box), so his axis is its own;
+ * - the sweep: no box cut at the side of what clips it or the screen (the
+ *   board alone runs sideways), no two runs of words drawn over each other
+ *   where they show; its total at 390, 680 and 1440 is zero;
  * - no console error on any page.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one page, one state at a time
@@ -980,6 +995,342 @@ const edgeFade = (page: Page) =>
     };
   });
 
+/** The top bar's glass (Caw's chip on a phone): how far in from the trailing edge, and whether its pill is whole. */
+const glassWhole = (page: Page) =>
+  page.evaluate(() => {
+    const glass = document.querySelector(".glass") as HTMLElement;
+    const box = glass.getBoundingClientRect();
+    const style = getComputedStyle(glass);
+    return {
+      inset: document.documentElement.clientWidth - box.right,
+      edge: Number.parseFloat(style.borderRightWidth),
+      radii: [
+        style.borderTopLeftRadius,
+        style.borderTopRightRadius,
+        style.borderBottomRightRadius,
+        style.borderBottomLeftRadius,
+      ],
+    };
+  });
+
+/**
+ * The pane's scroller at its verdict bar: whether the card runs on under
+ * the bar, the fade drawn over its top edge then (its opacity, length and
+ * paint), and how much of the card shows below the bar.
+ */
+const verdictFade = (page: Page) =>
+  page.evaluate(() => {
+    const scroll = document.querySelector(".pane-scroll") as HTMLElement | null;
+    const bar = document.querySelector('[data-slot="decision"]');
+    if (!(scroll && bar)) {
+      return null;
+    }
+    const card = bar.closest(".pcard") as HTMLElement;
+    const fade = getComputedStyle(bar, "::before");
+    const barBox = bar.getBoundingClientRect();
+    const view = scroll.getBoundingClientRect();
+    return {
+      under: card.getBoundingClientRect().bottom - barBox.bottom > 1.5,
+      opacity: Number(fade.opacity),
+      length: Number.parseFloat(fade.height),
+      paint: fade.backgroundImage,
+      below:
+        Math.min(view.bottom, card.getBoundingClientRect().bottom) -
+        barBox.bottom,
+      startMask: getComputedStyle(scroll).maskImage,
+      scrollTop: scroll.scrollTop,
+    };
+  });
+
+/** Every animation running in the page, by name, and how many glyphs breathe. */
+const runningNow = (page: Page) =>
+  page.evaluate(() => {
+    const { needs } = (
+      window as unknown as {
+        preview: { state: { needs: Record<string, unknown> } };
+      }
+    ).preview.state;
+    const running = document
+      .getAnimations()
+      .filter((animation) => animation.playState === "running");
+    return {
+      running: running.map(
+        (animation) =>
+          `${animation.id || (animation as CSSAnimation).animationName || "transition"}×${animation.effect?.getComputedTiming().iterations}`
+      ),
+      breaths: running.filter(
+        (animation) =>
+          animation.id === "breath" &&
+          animation.effect?.getComputedTiming().iterations ===
+            Number.POSITIVE_INFINITY
+      ).length,
+      breathers: document.querySelectorAll(".breathe").length,
+      attend: Object.keys(needs).length > 0,
+    };
+  });
+
+/**
+ * Each block Caw heads (the empty project's, the failure's, a first
+ * thread's): its box against the reach of what it holds besides him (the
+ * words' drawn lines, the boxes of its controls). The block hugs that
+ * reach, so his axis is its axis.
+ */
+const cawHug = (page: Page) =>
+  page.evaluate(() => {
+    const draws = (element: Element): boolean => {
+      const style = getComputedStyle(element);
+      return (
+        element.matches("button, form, textarea, input, a") ||
+        style.backgroundColor !== "rgba(0, 0, 0, 0)" ||
+        style.boxShadow !== "none" ||
+        Number.parseFloat(style.borderTopWidth) > 0
+      );
+    };
+    const reach = (
+      element: Element
+    ): { left: number; right: number; lines: number }[] => {
+      const box = element.getBoundingClientRect();
+      if (
+        box.width === 0 ||
+        getComputedStyle(element).visibility !== "visible"
+      ) {
+        return [];
+      }
+      // A control or a drawn box reaches its own edges.
+      if (draws(element)) {
+        return [{ left: box.left, right: box.right, lines: 1 }];
+      }
+      const worded = [...element.childNodes].some(
+        (node) =>
+          node.nodeType === Node.TEXT_NODE && (node.textContent ?? "").trim()
+      );
+      if (worded) {
+        // One line reaches as far as it is drawn; words that wrap reach
+        // the measure they wrap in (their own box).
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        const rects = [...range.getClientRects()].filter(
+          (rect) => rect.width > 0
+        );
+        const lines = new Set(rects.map((rect) => Math.round(rect.top))).size;
+        return lines > 1
+          ? [{ left: box.left, right: box.right, lines }]
+          : [
+              {
+                left: Math.min(...rects.map((rect) => rect.left)),
+                right: Math.max(...rects.map((rect) => rect.right)),
+                lines,
+              },
+            ];
+      }
+      return [...element.children].flatMap(reach);
+    };
+    return [
+      ...document.querySelectorAll<HTMLImageElement>(
+        ".caw-hero, .caw-fault, .caw-first"
+      ),
+    ]
+      .filter((caw) => caw.getBoundingClientRect().width > 0)
+      .map((caw) => {
+        const block = caw.parentElement as HTMLElement;
+        const box = block.getBoundingClientRect();
+        const held = [...block.children]
+          .filter((kid) => kid !== caw)
+          .flatMap(reach);
+        return {
+          who: caw.className,
+          left: Math.min(...held.map((each) => each.left)) - box.left,
+          right: box.right - Math.max(...held.map((each) => each.right)),
+          width: box.width,
+        };
+      });
+  });
+
+/**
+ * The page-wide sweep, on what is drawn where it shows: every box cut by
+ * the box that clips it, or the screen, at its sides (the board alone runs
+ * sideways by design, its edges faded, and a truncating line ends in its
+ * ellipsis), and every two runs of words drawn over each other. A run is
+ * read where it shows: inside every box that clips it, and clear of a
+ * layer standing over it (a sheet, a pinned bar).
+ */
+const sweep = (page: Page): Promise<string[]> =>
+  page.evaluate(() => {
+    interface Rect {
+      bottom: number;
+      left: number;
+      right: number;
+      top: number;
+    }
+    const shown = (element: Element): boolean => {
+      const box = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return (
+        box.width > 0 &&
+        box.height > 0 &&
+        style.visibility === "visible" &&
+        !element.closest(".visually-hidden, .sprite")
+      );
+    };
+    const clips = (element: Element): boolean => {
+      const style = getComputedStyle(element);
+      return style.overflowX !== "visible" || style.overflowY !== "visible";
+    };
+    const inner = (element: Element): Rect => {
+      const box = element.getBoundingClientRect();
+      const left = box.left + element.clientLeft;
+      const top = box.top + element.clientTop;
+      return {
+        left,
+        top,
+        right: left + element.clientWidth,
+        bottom: top + element.clientHeight,
+      };
+    };
+    const meet = (a: Rect, b: Rect): Rect => ({
+      left: Math.max(a.left, b.left),
+      top: Math.max(a.top, b.top),
+      right: Math.min(a.right, b.right),
+      bottom: Math.min(a.bottom, b.bottom),
+    });
+    const screen: Rect = {
+      left: 0,
+      top: 0,
+      right: document.documentElement.clientWidth,
+      bottom: innerHeight,
+    };
+    const name = (element: Element) =>
+      `${element.localName}.${[...element.classList].join(".")} “${(element.textContent ?? "").trim().slice(0, 20)}”`;
+    const all = [...document.querySelectorAll(".app *")].filter(shown);
+
+    /** The nearest box that clips this one, or none (the screen). */
+    const clipperOf = (element: Element): Element | null => {
+      let at = element.parentElement;
+      while (at && at !== document.body && !clips(at)) {
+        at = at.parentElement;
+      }
+      return at && at !== document.body ? at : null;
+    };
+    /** A clip by design: the board's sideways run, a truncating line's ellipsis or clamp. */
+    const meant = (host: Element): boolean => {
+      const style = getComputedStyle(host);
+      return (
+        host.matches(".board") ||
+        style.textOverflow === "ellipsis" ||
+        style.getPropertyValue("-webkit-line-clamp") !== "none"
+      );
+    };
+    const cut = all.flatMap((element) => {
+      const host = clipperOf(element);
+      if (host && meant(host)) {
+        return [];
+      }
+      const edge = host ? inner(host) : screen;
+      const box = element.getBoundingClientRect();
+      const over = Math.max(edge.left - box.left, box.right - edge.right);
+      return over > 0.5
+        ? [
+            `${name(element)} is cut ${over.toFixed(1)}px at the side of ${host ? name(host) : "the screen"}`,
+          ]
+        : [];
+    });
+
+    /** What of a box shows: inside every box that clips it and the screen. */
+    const showing = (element: Element): Rect => {
+      let rect: Rect = element.getBoundingClientRect();
+      for (let at = clipperOf(element); at; at = clipperOf(at)) {
+        rect = meet(rect, inner(at));
+      }
+      return meet(rect, screen);
+    };
+    const layers = all.filter(
+      (element) =>
+        element.matches(".pane, .caw-col, .decision, .col-head") &&
+        ["absolute", "fixed", "sticky"].includes(
+          getComputedStyle(element).position
+        )
+    );
+    /** A layer as wide as the run cuts it at its own top or foot. */
+    const trim = (rect: Rect, over: Rect): Rect => {
+      if (over.top <= rect.top + 0.5 && over.bottom > rect.top) {
+        return { ...rect, top: Math.max(rect.top, over.bottom) };
+      }
+      if (over.bottom >= rect.bottom - 0.5 && over.top < rect.bottom) {
+        return { ...rect, bottom: Math.min(rect.bottom, over.top) };
+      }
+      return rect;
+    };
+    const holds = (over: Rect, rect: Rect): boolean => {
+      const x = (rect.left + rect.right) / 2;
+      const y = (rect.top + rect.bottom) / 2;
+      return x > over.left && x < over.right && y > over.top && y < over.bottom;
+    };
+    /** One layer over a run: as wide as it, it cuts it; over its middle, it hides it. */
+    const under = (rect: Rect, over: Rect): Rect | null => {
+      if (over.left <= rect.left + 0.5 && over.right >= rect.right - 0.5) {
+        return trim(rect, over);
+      }
+      return holds(over, rect) ? null : rect;
+    };
+    const some = (rect: Rect | null): Rect | null =>
+      rect && rect.right - rect.left > 0.5 && rect.bottom - rect.top > 0.5
+        ? rect
+        : null;
+    /** What of a run shows clear of every layer standing over it. */
+    const clear = (element: Element, rect: Rect): Rect | null => {
+      let left: Rect | null = rect;
+      for (const layer of layers) {
+        if (left && !(layer.contains(element) || element.contains(layer))) {
+          left = under(left, layer.getBoundingClientRect());
+        }
+      }
+      return some(left);
+    };
+    /** A run at no opacity (a label's other wording, held in its cell) draws nothing. */
+    const inked = (element: Element): boolean => {
+      for (let at: Element | null = element; at; at = at.parentElement) {
+        if (Number(getComputedStyle(at).opacity) === 0) {
+          return false;
+        }
+      }
+      return true;
+    };
+    const runs = all
+      .filter(
+        (element) =>
+          inked(element) &&
+          [...element.childNodes].some(
+            (node) =>
+              node.nodeType === Node.TEXT_NODE &&
+              (node.textContent ?? "").trim()
+          )
+      )
+      .flatMap((element) => {
+        const rect = clear(element, showing(element));
+        return rect ? [{ element, rect }] : [];
+      });
+    const covers: string[] = [];
+    runs.forEach((one, i) => {
+      for (const other of runs.slice(i + 1)) {
+        if (
+          one.element.contains(other.element) ||
+          other.element.contains(one.element)
+        ) {
+          continue;
+        }
+        const both = meet(one.rect, other.rect);
+        const w = both.right - both.left;
+        const h = both.bottom - both.top;
+        if (w > 0.5 && h > 0.5) {
+          covers.push(
+            `${name(one.element)} and ${name(other.element)} drawn over each other (${w.toFixed(1)}×${h.toFixed(1)})`
+          );
+        }
+      }
+    });
+    return [...cut, ...covers];
+  });
+
 /** The preview page's frames: which show, and at what scale. */
 const shownFrames = (page: Page) =>
   page.evaluate(() =>
@@ -1361,6 +1712,154 @@ const motions = async (
 
 /* ---------- The run ---------- */
 
+/** The sweep's faults over every state read, by the width read at. */
+const sweepTotals = new Map<number, number>();
+
+/**
+ * The open pane's verdict bar: while the card runs on under it, the house
+ * edge fade (40px, a phone's 16px) stands over its top and nothing of the
+ * card shows below it; scrolled to the card's foot the fade is gone, and
+ * the scroller's head fades instead. The scroll is put back as found.
+ */
+const checkVerdictFade = async (
+  kit: Kit,
+  page: Page,
+  where: string
+): Promise<void> => {
+  const length = (page.viewportSize()?.width ?? 0) < 640 ? 16 : 40;
+  const top = await verdictFade(page);
+  const scrollTo = (to: "end" | "start") =>
+    page.evaluate((end) => {
+      const scroll = document.querySelector(".pane-scroll") as HTMLElement;
+      scroll.scrollTop = end === "end" ? scroll.scrollHeight : 0;
+    }, to);
+  await scrollTo("end");
+  await still(page);
+  const foot = await verdictFade(page);
+  await scrollTo("start");
+  await still(page);
+  const back = await verdictFade(page);
+  kit.check(
+    `${where}: the card runs on under the verdict bar beneath the house edge fade, and none of it shows below the bar`,
+    Boolean(
+      top?.under &&
+      top.opacity === 1 &&
+      Math.abs(top.length - length) <= 0.5 &&
+      top.paint.includes("gradient") &&
+      top.below <= 0.5
+    ),
+    top
+      ? `under ${top.under}, fade ${top.opacity} × ${top.length}px (${top.paint.slice(0, 40)}), ${top.below.toFixed(1)}px of card below the bar`
+      : "no verdict bar"
+  );
+  kit.check(
+    `${where}: at the card's foot the bar's fade is gone and the scroller's head fades; back at the top, its head is sharp`,
+    Boolean(
+      foot &&
+      back &&
+      !foot.under &&
+      foot.opacity === 0 &&
+      foot.startMask.includes("gradient") &&
+      back.under &&
+      back.opacity === 1 &&
+      back.startMask === "none"
+    ),
+    `foot: under ${foot?.under}, fade ${foot?.opacity}, head ${foot?.startMask.slice(0, 30)}; top again: fade ${back?.opacity}, head ${back?.startMask.slice(0, 30)}`
+  );
+};
+
+/**
+ * Both asks answered from the board: each breathing glyph finishes the
+ * breath it is in (still running, now finite) and settles at full ink, and
+ * then nothing runs.
+ */
+const checkSettle = async (
+  kit: Kit,
+  page: Page,
+  origin: string,
+  where: string
+): Promise<void> => {
+  await openFrame(page, origin, "waiting");
+  await page.click('.card[data-id="tsk-19"] [data-card-perm="approve"]');
+  await still(page);
+  await page.click('.card[data-id="tsk-16"] [data-card-answer]');
+  await still(page);
+  await page.click('.chip[data-answer="Correct them in place"]');
+  const finishing = await page.evaluate(() =>
+    document
+      .getAnimations()
+      .filter((animation) => animation.id === "breath")
+      .map((animation) => ({
+        state: animation.playState,
+        iterations: Number(animation.effect?.getComputedTiming().iterations),
+      }))
+  );
+  await page.waitForFunction(
+    () =>
+      !document.getAnimations().some((animation) => animation.id === "breath"),
+    null,
+    { timeout: 5000 }
+  );
+  await still(page);
+  const after = await runningNow(page);
+  const ink = await page.evaluate(() =>
+    [...document.querySelectorAll(".breathe")].map((glyph) =>
+      Number(getComputedStyle(glyph).opacity)
+    )
+  );
+  kit.check(
+    `${where}: answered, each breath finishes the one it is in and settles at full ink, then nothing runs`,
+    finishing.length > 0 &&
+      finishing.every(
+        ({ iterations, state }) =>
+          state === "running" && Number.isFinite(iterations)
+      ) &&
+      after.running.length === 0 &&
+      ink.every((opacity) => opacity === 1),
+    `as the last ask was answered: ${finishing.map(({ iterations, state }) => `${state} for ${iterations}`).join(", ") || "no breath"}; then ${after.running.join(", ") || "nothing running"}, ink ${ink.join(", ")}`
+  );
+};
+
+/** The glass whole, the loops at rest, Caw's blocks hugging what they hold, and the sweep, in one state. */
+const checkFixes = async (
+  kit: Kit,
+  page: Page,
+  where: string
+): Promise<void> => {
+  const glass = await glassWhole(page);
+  kit.check(
+    `${where}: the top bar's glass stands whole, its pill unbroken, 4px in from the trailing edge`,
+    glass.inset >= 3.5 && glass.edge >= 1 && new Set(glass.radii).size === 1,
+    `${glass.inset.toFixed(1)}px in, its trailing edge ${glass.edge}px, radii ${glass.radii.join(" ")}`
+  );
+  const motion = await runningNow(page);
+  kit.check(
+    motion.attend
+      ? `${where}: while something waits on him, his calm loops breathe, and only they run`
+      : `${where}: at rest nothing moves, the Working glyph's breath included`,
+    motion.attend
+      ? motion.breaths === motion.breathers &&
+          motion.running.length === motion.breaths
+      : motion.running.length === 0,
+    `${motion.running.join(", ") || "nothing running"}; ${motion.breathers} breathing glyph(s)`
+  );
+  for (const hug of await cawHug(page)) {
+    kit.check(
+      `${where}: ${hug.who}'s block hugs what he heads, so his axis is its own`,
+      hug.left <= 0.5 && hug.right <= 0.5,
+      `what he heads reaches ${hug.left.toFixed(1)}px and ${hug.right.toFixed(1)}px short of the ${hug.width.toFixed(1)}px block's edges`
+    );
+  }
+  const swept = await sweep(page);
+  const width = page.viewportSize()?.width ?? 0;
+  sweepTotals.set(width, (sweepTotals.get(width) ?? 0) + swept.length);
+  kit.check(
+    `${where}: the sweep finds nothing past the screen and no words over words`,
+    swept.length === 0,
+    swept.slice(0, 6).join("; ")
+  );
+};
+
 /** One state of the frame, at one size on one engine: its boxes, its cards, Caw and the pane. */
 const checkState = async (
   kit: Kit,
@@ -1444,7 +1943,9 @@ const checkState = async (
     fade.faded,
     fade.detail
   );
+  await checkFixes(kit, page, where);
   if (state === "open") {
+    await checkVerdictFade(kit, page, where);
     const pane = paneFaults(await paneParts(page));
     kit.check(
       `${where}: the tab strip stands over its whole panel`,
@@ -1487,11 +1988,10 @@ const checkWaiting = async (
   said: Awaited<ReturnType<typeof needsSaid>>
 ): Promise<void> => {
   const desk = (page.viewportSize()?.width ?? 0) >= 901;
-  // The phone's columns fork has no Needs-you lane: there the chip says it alone.
-  const lane = desk || !page.url().includes("layout=columns");
+  // Under the drawer's line the Needs-you lane leads both forks: its head says it, the chip again.
   kit.check(
-    `${where}: "needs you" said ${lane ? "once in words, and once" : "only"} as ${desk ? "the spark band" : "the view bar's chip"}`,
-    said.words.length === (lane ? 1 : 0) && (desk ? said.bands > 0 : said.chip),
+    `${where}: "needs you" said once in words, and once as ${desk ? "the spark band" : "the view bar's chip"}`,
+    said.words.length === 1 && (desk ? said.bands > 0 : said.chip),
     `${said.words.join(" | ") || "no words"}; ${said.bands} band(s), chip ${said.chip}`
   );
   const answers = await cardAnswers(page);
@@ -1685,6 +2185,7 @@ const checkFlows = async (
   await checkCaw(kit, page, `${where} first thread`, true);
   await openFrame(page, origin, "open");
   await checkDecision(kit, page, `${where} the pane's decision`);
+  await checkSettle(kit, page, origin, `${where} the asks answered`);
 };
 
 const boxes = async (kit: Kit, origin: string): Promise<void> => {
@@ -1738,6 +2239,13 @@ const probe = async (kit: Kit): Promise<void> => {
   const origin = `http://127.0.0.1:${server.port}`;
   try {
     await boxes(kit, origin);
+    for (const width of [390, 680, 1440]) {
+      kit.check(
+        `the sweep at ${width} totals zero over both engines, every state, Day and Night`,
+        sweepTotals.get(width) === 0,
+        `${sweepTotals.get(width) ?? "no reading"}`
+      );
+    }
     for (const engine of ENGINES) {
       await motions(kit, origin, engine);
     }
