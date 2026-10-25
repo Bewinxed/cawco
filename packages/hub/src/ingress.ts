@@ -19,7 +19,7 @@
  *   connection's projects that name none are polled with it from the moment
  *   it names them, by whichever way it signed in; dropping a project or
  *   removing the connection stops it ({@link Ingress.followConnection}).
- *   With no connection named, its repository isn't polled, and its ingress
+ *   With no connection granted, its repository isn't polled, and its ingress
  *   view says so.
  * - **Connector polls**: any connection's read-only tool, called on an
  *   interval of 60 s or more; its items diffed by id and version against
@@ -42,7 +42,7 @@
  * - **A merged pull request** an attempt opened moves its task on
  *   (dispatch.ts `pullRequestMerged`), once, since only the insert calls it.
  */
-import { type InstanceRow, readsGitHubApi } from "@cawco/core";
+import { configurePage, type InstanceRow, readsGitHubApi } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { Elysia, status, t } from "elysia";
 import { RE2JS } from "re2js";
@@ -975,7 +975,7 @@ export const createIngress = ({
       state =
         "Nothing is polled: the project's checkout has no origin on github.com.";
     } else if (!connection) {
-      state = `Its repository ${repo} isn't polled: name a GitHub connection for it.`;
+      state = `Its repository ${repo} isn't polled: grant the project a GitHub connection in ${configurePage("connections")}.`;
     } else if (poller?.reason) {
       state = `Polling ${repo} with ${connection}; its last poll stopped: ${poller.reason}`;
     } else {
@@ -1053,7 +1053,7 @@ export const createIngress = ({
       store.githubPoller(projectId) ??
       refuse(
         409,
-        "This project names no GitHub connection, so its repository isn't polled."
+        `This project has no GitHub connection, so its repository isn't polled. Grant it one in ${configurePage("connections")}.`
       );
     if ((poller.resumeAt?.getTime() ?? 0) > Date.now()) {
       refuse(
