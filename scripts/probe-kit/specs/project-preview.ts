@@ -54,8 +54,10 @@
  *   ¾ and 1 of its own length, moves the whole way on its own curve: each
  *   reading strictly between its ends, and within 0.06 of where the run's
  *   easing puts it (no hold, no jump);
- * - the top bar's glass (Caw's chip on a phone) stands whole, its pill
- *   unbroken, 4px in from the trailing edge;
+ * - the top bar's glass stands whole 4px in on a desk; on a phone it hangs
+ *   from Caw's tucked tab: flush and square at the screen's trailing edge
+ *   with no edge drawn there, a whole pill at its leading side, none of it
+ *   off screen;
  * - the open pane's card runs on under its verdict bar beneath the house
  *   edge fade (40px, a phone's 16px) with nothing of it below the bar; at
  *   the card's foot that fade is gone and the scroller's head fades;
@@ -995,20 +997,29 @@ const edgeFade = (page: Page) =>
     };
   });
 
-/** The top bar's glass (Caw's chip on a phone): how far in from the trailing edge, and whether its pill is whole. */
-const glassWhole = (page: Page) =>
+/**
+ * The top bar's glass: how far in from the screen's trailing edge, its
+ * leading and trailing corners and edges, and whether any of it is off
+ * screen. On a phone it hangs from Caw's tucked tab (DESIGN.md, Caw's
+ * panel): its trailing side is the screen's edge, square, with no edge drawn.
+ */
+const glassShape = (page: Page) =>
   page.evaluate(() => {
     const glass = document.querySelector(".glass") as HTMLElement;
     const box = glass.getBoundingClientRect();
     const style = getComputedStyle(glass);
+    const view = document.documentElement.clientWidth;
+    const px = (value: string) => Number.parseFloat(value);
     return {
-      inset: document.documentElement.clientWidth - box.right,
-      edge: Number.parseFloat(style.borderRightWidth),
-      radii: [
-        style.borderTopLeftRadius,
-        style.borderTopRightRadius,
-        style.borderBottomRightRadius,
-        style.borderBottomLeftRadius,
+      inset: view - box.right,
+      off: Math.max(-box.left, box.right - view, 0),
+      half: box.height / 2,
+      leadEdge: px(style.borderLeftWidth),
+      trailEdge: px(style.borderRightWidth),
+      lead: [px(style.borderTopLeftRadius), px(style.borderBottomLeftRadius)],
+      trail: [
+        px(style.borderTopRightRadius),
+        px(style.borderBottomRightRadius),
       ],
     };
   });
@@ -1826,11 +1837,25 @@ const checkFixes = async (
   page: Page,
   where: string
 ): Promise<void> => {
-  const glass = await glassWhole(page);
+  const glass = await glassShape(page);
+  const tucked = (page.viewportSize()?.width ?? 0) < 901;
+  const shape = `${glass.inset.toFixed(1)}px in, ${glass.off.toFixed(1)}px off screen; leading corners ${glass.lead.join("/")}px, edge ${glass.leadEdge}px; trailing corners ${glass.trail.join("/")}px, edge ${glass.trailEdge}px`;
   kit.check(
-    `${where}: the top bar's glass stands whole, its pill unbroken, 4px in from the trailing edge`,
-    glass.inset >= 3.5 && glass.edge >= 1 && new Set(glass.radii).size === 1,
-    `${glass.inset.toFixed(1)}px in, its trailing edge ${glass.edge}px, radii ${glass.radii.join(" ")}`
+    tucked
+      ? `${where}: Caw's glass hangs from his tucked tab: flush and square at the screen's edge with no edge drawn there, a whole pill at its leading side, none of it off screen`
+      : `${where}: the top bar's glass stands whole, 4px in from the trailing edge`,
+    tucked
+      ? Math.abs(glass.inset) <= 0.5 &&
+          glass.off <= 0.5 &&
+          glass.trail.every((radius) => radius === 0) &&
+          glass.trailEdge === 0 &&
+          glass.leadEdge >= 1 &&
+          glass.lead.every((radius) => Math.abs(radius - glass.half) <= 0.5)
+      : glass.inset >= 3.5 &&
+          glass.off === 0 &&
+          glass.trailEdge >= 1 &&
+          new Set([...glass.lead, ...glass.trail]).size === 1,
+    shape
   );
   const motion = await runningNow(page);
   kit.check(

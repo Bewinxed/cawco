@@ -1793,9 +1793,8 @@ pre {
   .main {
     grid-template-rows: var(--c-top-bar-h) minmax(0, 1fr) auto;
   }
-  /* His glass stands as far in from the trailing edge as the burger from the leading one. */
   .bar {
-    padding-inline: var(--space-1);
+    padding-inline: var(--space-1) 0;
   }
   .bar-burger {
     display: inline-grid;
@@ -1818,8 +1817,9 @@ pre {
   }
   .glass {
     height: 32px;
-    padding: var(--c-bar-group-pad);
-    border-radius: var(--radius-pill);
+    padding: var(--c-bar-group-pad) var(--space-2) var(--c-bar-group-pad) var(--c-bar-group-pad);
+    border-inline-end: 0;
+    border-radius: 16px 0 0 16px;
   }
   .glass-caw {
     width: 24px;
