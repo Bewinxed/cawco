@@ -1310,9 +1310,17 @@ async function scrollIntoTurn(page: Page, fraction: number): Promise<void> {
   await page.waitForTimeout(400);
 }
 
-/** Reloads the page as an update does; whether its list was drawn. */
+/**
+ * Reloads the page as an update does; whether its list was drawn. The new
+ * document's: waited for from the page's `location.reload()` alone, the old
+ * document's list answered before the navigation committed, and the place
+ * was read off the new one's server markup before it hydrated (WebKit, under
+ * load: no transcript of the new document had run, its view at the strip).
+ */
 async function reload(page: Page): Promise<boolean> {
+  const loaded = page.waitForEvent("load");
   await page.evaluate(() => location.reload());
+  await loaded;
   return page
     .waitForSelector("[data-transcript-shown]", { timeout: 60_000 })
     .then(
