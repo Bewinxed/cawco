@@ -17,7 +17,7 @@
  * - {@link inCopy}: a command run in the copy, through the view's namespace
  *   while it runs (layer.ts `viewArgv`), as the agent's own git there runs.
  */
-import { existsSync, lstatSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readlinkSync } from "node:fs";
 import { join, relative } from "node:path";
 import { viewArgv } from "../../packages/agent/src/layer";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "../../packages/core/src/safe-git";
@@ -68,6 +68,9 @@ export const isView = (fleet: CopyFleet, ws: CopyRef): boolean => {
   // view (agent layer.ts `makeLayer`), elsewhere a copy of its own.
   return layer ? layer.form === "overlay" : process.platform === "linux";
 };
+
+/** A mountinfo path's octal escapes (`\040` for a space). */
+const OCTAL_ESCAPE = /\\([0-7]{3})/g;
 
 const within = (path: string, root: string): boolean =>
   path === root || path.startsWith(`${root}/`);
@@ -216,21 +219,37 @@ export const copyGone = (fleet: CopyFleet, ws: CopyRef): boolean => {
   return !existsSync(ws.path);
 };
 
-/** The view's holder's record: `<pid> <mount namespace> <user namespace>` (layer.ts `viewFile`). */
+/**
+ * The view's holder, from its record (`<pid> <mount namespace> <user
+ * namespace>`, layer.ts `viewFile`): while it runs in the namespace the
+ * record names, and that namespace bears the view's mark (layer.ts
+ * `viewMarked`: its layer dir bound onto itself), so a record its view
+ * outlived never names another process's namespace.
+ */
 const viewPid = (fleet: CopyFleet, id: string): number | undefined => {
+  const layerDir = join(stateDirOf(fleet, id), "layer");
   try {
-    const [pid] = readFileSync(
-      join(stateDirOf(fleet, id), "layer", "view"),
-      "utf8"
-    )
+    const [pid, mnt] = readFileSync(join(layerDir, "view"), "utf8")
       .trim()
       .split(" ");
     const number = Number(pid);
-    return Number.isInteger(number) && existsSync(`/proc/${number}`)
-      ? number
-      : undefined;
+    if (
+      !Number.isInteger(number) ||
+      readlinkSync(`/proc/${number}/ns/mnt`) !== mnt
+    ) {
+      return;
+    }
+    const marked = readFileSync(`/proc/${number}/mountinfo`, "utf8")
+      .split("\n")
+      .some(
+        (line) =>
+          (line.split(" ")[4] ?? "").replace(OCTAL_ESCAPE, (_, code: string) =>
+            String.fromCharCode(Number.parseInt(code, 8))
+          ) === layerDir
+      );
+    return marked ? number : undefined;
   } catch {
-    // No view started, or its record gone with it.
+    // No view started, its record gone with it, or its holder gone.
   }
 };
 
