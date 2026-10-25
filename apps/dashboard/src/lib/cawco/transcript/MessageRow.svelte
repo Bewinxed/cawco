@@ -1,9 +1,18 @@
+<script lang="ts" module>
+  import { MediaQuery } from "svelte/reactivity";
+  import { buttonVariants } from "#lib/components/ui/button/index.js";
+
+  /** No pointer hovers: the handle stands on the speaker line instead of the strip. One for every row. */
+  const coarse = new MediaQuery("(pointer: coarse)");
+  /** A strip button's box before the strip is built (`stripBuilt`): the kit's ghost `icon-sm`, as the Button draws it. */
+  const STRIP_BUTTON = buttonVariants({ size: "icon-sm", variant: "ghost" });
+</script>
+
 <script lang="ts">
   import type { HarnessKind, PermissionMode } from "@cawco/core/harness";
   import { commonWords } from "@cawco/core/words/common";
   import { transcriptWords } from "@cawco/core/words/transcript";
   import { tick, untrack } from "svelte";
-  import { MediaQuery } from "svelte/reactivity";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { CURVE, dur, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { folds } from "#lib/cawco/motion/fold.svelte.js";
@@ -123,8 +132,6 @@
   let copyFailed = $state(false);
   let editError = $state("");
   let editor = $state<HTMLTextAreaElement | null>(null);
-  /** No pointer hovers: the handle stands on the speaker line instead of the strip. */
-  const coarse = new MediaQuery("(pointer: coarse)");
   /** The keyboard's focus is on one of the strip's buttons. */
   let stripFocused = $state(false);
   let sheetOpen = $state(false);
@@ -482,6 +489,41 @@
   const selected = $derived(
     (stripFocused && strip) || editing || (sheetOpen && strip)
   );
+  /**
+   * THE STRIP IS BUILT THE FIRST TIME THE TURN IS REACHED FOR.
+   *
+   * Its three buttons, each in its tooltip, were most of what a reader's
+   * turn cost to mount: 3.3ms of a row's 4.5 as a wheel brought rows into
+   * the list (transcript-holds' steady wheel, profiled). At rest the strip
+   * is unseen and takes its room, so until the pointer comes onto the turn
+   * or the keyboard's focus comes into it (`stripBuilt`) it holds plain
+   * buttons of the same box, named as the real ones are. The strip itself
+   * stays the same element, so its fade in plays as before; a plain button
+   * that takes the focus hands it to the real one it stands for, in the
+   * same task.
+   */
+  let stripBuilt = $state(false);
+  function buildStrip(): void {
+    stripBuilt = true;
+  }
+  /** A plain strip button took the focus or a press: the strip is built, and the real button takes it. */
+  function reachStrip(event: Event): void {
+    const plain = event.currentTarget as HTMLElement;
+    const label = plain.getAttribute("aria-label") ?? "";
+    const held = plain.parentElement;
+    const pressed = event.type === "click";
+    stripBuilt = true;
+    // biome-ignore lint/complexity/noVoid: fire-and-forget: the strip is built in the flush this awaits
+    void tick().then(() => {
+      const real = held?.querySelector<HTMLElement>(
+        `[aria-label="${CSS.escape(label)}"]`
+      );
+      real?.focus();
+      if (pressed) {
+        real?.click();
+      }
+    });
+  }
   function stripFocus(event: FocusEvent): void {
     stripFocused =
       event.target instanceof Element && event.target.matches(":focus-visible");
@@ -695,71 +737,96 @@
     onfocusin={stripFocus}
     onfocusout={stripBlur}
   >
-    {#if canCopy}
-      <Tip label={transcriptWords.copyMessage}>
-        {#snippet children(tip)}
-          <Button
-            {...tip}
-            aria-busy={copying || undefined}
-            aria-label={transcriptWords.copyMessage}
-            onclick={whileIdle<MouseEvent>(() => copying, copyWords)}
-            size="icon-sm"
-            variant="ghost"
-          >
-            <PendingContent
-              failed={copyFailed}
-              icon={IconCopy}
-              pending={copying}
-            />
-          </Button>
-        {/snippet}
-      </Tip>
-    {/if}
-    {#if canEdit}
-      <Tip label={transcriptWords.editMessage}>
-        {#snippet children(tip)}
-          <Button
-            {...tip}
-            aria-label={transcriptWords.editMessage}
-            onclick={startEditing}
-            size="icon-sm"
-            variant="ghost"
-          >
-            <IconPenLine aria-hidden="true" />
-          </Button>
-        {/snippet}
-      </Tip>
-    {/if}
-    {#if canFork}
-      <Tip label={transcriptWords.forkFromHere}>
-        {#snippet children(tip)}
-          <Button
-            {...tip}
-            aria-busy={forkPending || undefined}
-            aria-disabled={forkPending || undefined}
-            aria-label={transcriptWords.forkFromHere}
-            onclick={whileIdle<MouseEvent>(
-              () => forkPending,
-              (event) =>
-                branch(
-                  event.currentTarget instanceof HTMLElement
-                    ? event.currentTarget
-                    : null
-                )
-            )}
-            size="icon-sm"
-            variant="ghost"
-          >
-            <PendingContent
-              failed={!!editError}
-              icon={IconFork}
-              pending={forkPending}
-            />
-          </Button>
-        {/snippet}
-      </Tip>
+    {#if !stripBuilt}
+      {#if canCopy}
+        {@render plain(transcriptWords.copyMessage)}
+      {/if}
+      {#if canEdit}
+        {@render plain(transcriptWords.editMessage)}
+      {/if}
+      {#if canFork}
+        {@render plain(transcriptWords.forkFromHere)}
+      {/if}
+    {:else}
+      {#if canCopy}
+        <Tip label={transcriptWords.copyMessage}>
+          {#snippet children(tip)}
+            <Button
+              {...tip}
+              aria-busy={copying || undefined}
+              aria-label={transcriptWords.copyMessage}
+              onclick={whileIdle<MouseEvent>(() => copying, copyWords)}
+              size="icon-sm"
+              variant="ghost"
+            >
+              <PendingContent
+                failed={copyFailed}
+                icon={IconCopy}
+                pending={copying}
+              />
+            </Button>
+          {/snippet}
+        </Tip>
+      {/if}
+      {#if canEdit}
+        <Tip label={transcriptWords.editMessage}>
+          {#snippet children(tip)}
+            <Button
+              {...tip}
+              aria-label={transcriptWords.editMessage}
+              onclick={startEditing}
+              size="icon-sm"
+              variant="ghost"
+            >
+              <IconPenLine aria-hidden="true" />
+            </Button>
+          {/snippet}
+        </Tip>
+      {/if}
+      {#if canFork}
+        <Tip label={transcriptWords.forkFromHere}>
+          {#snippet children(tip)}
+            <Button
+              {...tip}
+              aria-busy={forkPending || undefined}
+              aria-disabled={forkPending || undefined}
+              aria-label={transcriptWords.forkFromHere}
+              onclick={whileIdle<MouseEvent>(
+                () => forkPending,
+                (event) =>
+                  branch(
+                    event.currentTarget instanceof HTMLElement
+                      ? event.currentTarget
+                      : null
+                  )
+              )}
+              size="icon-sm"
+              variant="ghost"
+            >
+              <PendingContent
+                failed={!!editError}
+                icon={IconFork}
+                pending={forkPending}
+              />
+            </Button>
+          {/snippet}
+        </Tip>
+      {/if}
     {/if}
   </span>
+{/snippet}
+
+<!-- A strip button before the strip is built: its box and its name (`stripBuilt`). -->
+{#snippet plain(label: string)}
+  <button
+    aria-label={label}
+    class={STRIP_BUTTON}
+    data-slot="button"
+    data-variant="ghost"
+    onclick={reachStrip}
+    onfocus={reachStrip}
+    type="button"
+  ></button>
 {/snippet}
 
 <!-- Where nothing hovers: one handle on the speaker line, at rest, to the
@@ -794,6 +861,8 @@
     class="group/turn"
     data-message={message.id}
     {grouped}
+    onfocusin={buildStrip}
+    onpointerenter={buildStrip}
     {runsOn}
     you
     {@attach land(() => (grouped ? undefined : sent), {
