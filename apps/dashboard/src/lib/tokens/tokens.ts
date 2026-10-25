@@ -544,7 +544,7 @@ export type TokenSize =
   | "size.c-find-phone-h"
   | "size.c-find-head-h"
   | "size.c-find-skeleton-tall"
-  | "size.c-head-who-basis"
+  | "size.c-project-head-h"
   | "size.c-project-details-measure"
   | "size.c-project-details-label-w"
   | "size.c-project-details-select-w"

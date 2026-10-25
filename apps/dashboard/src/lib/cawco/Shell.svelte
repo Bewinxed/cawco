@@ -924,6 +924,11 @@
     files.sheet = true;
   }
 
+  /** A project's page, whose head names it (ProjectHead). */
+  const onProject = $derived(
+    !routeError && page.route.id === "/(app)/project/[id]"
+  );
+
   /**
    * What the bar names: the page's own name where it has one (a
    * conversation's title, a project's name), else its section.
@@ -1221,9 +1226,11 @@
               {/if}
             </div>
           {/if}
-          {#if hosting || stripHosted || (!railed && onSession)}
+          {#if hosting || stripHosted || (!railed && onSession) || onProject}
             <!-- The strips above have the slot; on a phone the session's tabs
-               are its own row, and the board needs no name over it. -->
+               are its own row, and the board needs no name over it. A
+               project's page names itself in its head (ProjectHead), so the
+               bar doesn't say its name twice. -->
           {:else if narrow && page.url.pathname.startsWith("/config/")}
             <!-- Inside a section on a phone the rail is its own page, so the bar
                leads back to it. -->

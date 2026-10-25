@@ -1018,8 +1018,8 @@ public enum Size {
     public static let cFindHeadH: Double = 28
     /// The skeleton standing for a finder row with its reason.
     public static let cFindSkeletonTall: Double = 54
-    /// A project head's name column: the width it holds before its actions wrap under it.
-    public static let cHeadWhoBasis: Double = 288
+    /// A project head's one row: Caw's seat, which every control in it centres on.
+    public static let cProjectHeadH: Double = 48
     /// The project details tray's content measure.
     public static let cProjectDetailsMeasure: Double = 512
     /// The project details rows' label column.

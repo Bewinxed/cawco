@@ -190,11 +190,16 @@
        place, unless the count is the parent's own status (`countIsStatus`):
        then only a pointer brings it. With a dot the face is cut away round
        it: a hole in its mask, filled while a working mark's echo beats
-       (motion/echo's `data-beating`), when its dot is away too. -->
+       (motion/echo's `data-beating`), when its dot is away too. A tile
+       showing its count is flat, its hue alone: the sheen is for faces, and
+       the figures hold 4.5:1 on the flat hue (DESIGN.md, Tree mark). -->
   <span
     data-slot="tile"
     aria-hidden="true"
-    class="absolute inset-0 grid place-items-center rounded-xs bg-(--fill) bg-mark-overlay group-data-bare/mark:bg-transparent group-data-bare/mark:bg-none motion-safe:scale-(--press-by) motion-safe:transition-[--press-by] motion-safe:duration-(--dur-toggle) motion-safe:ease-out motion-safe:mark-pressed:press-by-(--press-scale) group-data-dot/mark:mask-(--hole-mask) mark-beating:mask-none"
+    class={[
+      "absolute inset-0 grid place-items-center rounded-xs bg-(--fill) group-data-bare/mark:bg-transparent group-data-bare/mark:bg-none motion-safe:scale-(--press-by) motion-safe:transition-[--press-by] motion-safe:duration-(--dur-toggle) motion-safe:ease-out motion-safe:mark-pressed:press-by-(--press-scale) group-data-dot/mark:mask-(--hole-mask) mark-beating:mask-none",
+      !(has && !faceAlways) && "bg-mark-overlay",
+    ]}
     style:--hole={dot
       ? "calc(var(--status-dot-size) / 2 + var(--status-dot-cut))"
       : undefined}

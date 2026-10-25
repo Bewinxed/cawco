@@ -55,7 +55,6 @@ export { default as IconBook2 } from "~icons/solar/book-2-bold-duotone";
 export { default as IconBook } from "~icons/solar/book-bold-duotone";
 export { default as IconBox } from "~icons/solar/box-bold-duotone";
 export { default as IconSubagent } from "~icons/solar/branching-paths-down-bold-duotone";
-export { default as IconFork } from "~icons/solar/branching-paths-up-bold-duotone";
 /** A release's Fixed section (ReleaseNotes). */
 export { default as IconBug } from "~icons/solar/bug-bold-duotone";
 /** Work set for dates: a Caw starter that plans on the calendar. */
@@ -135,6 +134,8 @@ export {
   default as IconAgent,
   default as IconGhost,
 } from "~icons/solar/ghost-smile-bold-duotone";
+/** Fork, Spin off: a session forked from another (the bare cut, no enclosure). */
+export { default as IconFork } from "~icons/solar/git-fork-bold-duotone";
 export {
   default as IconGlobe,
   default as IconToolWeb,

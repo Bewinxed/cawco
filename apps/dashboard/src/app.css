@@ -934,12 +934,14 @@
   }
 }
 
-/* ---- The bar's glass group (Shell's `tools`): its items (FilesItem,
-   MachinesButton, Jump: `[data-bar-item]`), an item's count
-   (`data-slot="num"`) and its symbol (`data-slot="bar-symbol"`). An item's
-   own utilities (a symbol's tone tint) outrank these by layer. */
+/* ---- The bar's glass group (Shell's `tools`, and a head's group: BarGlass
+   `form="group"`): its items (FilesItem, MachinesButton, Jump:
+   `[data-bar-item]`), an item's count (`data-slot="num"`) and its symbol
+   (`data-slot="bar-symbol"`). A project's head sets its place as a bare item
+   of the same recipe, outside its group (ProjectHead). An item's own
+   utilities (a symbol's tone tint) outrank these by layer. */
 @layer components {
-  [data-slot="tools"] [data-bar-item] {
+  :is([data-slot="tools"], [data-slot="project-head"]) [data-bar-item] {
     position: relative;
     display: inline-flex;
     flex: none;
@@ -969,7 +971,8 @@
       white-space: nowrap;
     }
   }
-  [data-slot="tools"] [data-slot="bar-symbol"] {
+  :is([data-slot="tools"], [data-slot="project-head"])
+    [data-slot="bar-symbol"] {
     inline-size: var(--c-bar-symbol);
     block-size: var(--c-bar-symbol);
     color: var(--ink-muted);

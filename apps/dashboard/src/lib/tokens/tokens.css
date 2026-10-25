@@ -1198,8 +1198,8 @@
     --c-find-head-h: 28px;
     /* The skeleton standing for a finder row with its reason. */
     --c-find-skeleton-tall: 54px;
-    /* A project head's name column: the width it holds before its actions wrap under it. */
-    --c-head-who-basis: 18rem;
+    /* A project head's one row: Caw's seat, which every control in it centres on. */
+    --c-project-head-h: 48px;
     /* The project details tray's content measure. */
     --c-project-details-measure: 32rem;
     /* The project details rows' label column. */

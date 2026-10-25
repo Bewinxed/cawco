@@ -6252,13 +6252,13 @@
       },
       "$description": "The skeleton standing for a finder row with its reason."
     },
-    "c-head-who-basis": {
+    "c-project-head-h": {
       "$type": "dimension",
       "$value": {
-        "value": 18,
-        "unit": "rem"
+        "value": 48,
+        "unit": "px"
       },
-      "$description": "A project head's name column: the width it holds before its actions wrap under it."
+      "$description": "A project head's one row: Caw's seat, which every control in it centres on."
     },
     "c-project-details-measure": {
       "$type": "dimension",

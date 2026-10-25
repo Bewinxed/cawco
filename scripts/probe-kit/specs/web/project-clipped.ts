@@ -50,6 +50,14 @@
  *     from 900, with the rail where it rests, the chosen view is a tab (the
  *     owner: at 900 it showed only the ⋯). The overflow sweep
  *     (journeys/scan.ts) totals zero there.
+ *  4. The project's head is one row at every width (DESIGN.md, The Title
+ *     Bars Follow Liquid Glass Rule: "One bar, one row"): the name on one
+ *     line, every control's centre within 1px of the row's, nothing
+ *     wrapped; nothing in it on the coral (`action-surface`); its place and
+ *     its capsule's items bare symbols, each named for a screen reader and,
+ *     where a pointer rests (640 and wider), in its tooltip; under 640px the
+ *     capsule holds More alone. The overflow sweep totals zero on the board
+ *     at every width.
  *
  *   bun scripts/probe-kit/run.ts web project-clipped
  *   PROBE_CLIPPED_ENGINES=chromium bun scripts/probe-kit/run.ts web project-clipped
@@ -59,6 +67,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { MACHINE, type Reply, type Seen, until } from "../../../scratch-fleet";
+import { commonWords } from "../../../../packages/core/src/words/common";
+import { projectWords } from "../../../../packages/core/src/words/project";
 import { scan } from "../../journeys/scan";
 import { type Engine, type Kit, open, type Spec, settle } from "../../kit";
 
@@ -737,7 +747,165 @@ const leg = async (
     await stripFills(kit, page, tag, width >= 900 && rail === null);
     await viewsMenu(kit, page, tag, !withTask && rail === null);
   }
+  if (!withTask && rail === null) {
+    await headRow(kit, page, tag, width);
+  }
   await page.close();
+};
+
+/**
+ * The project's head, read off the engine: its row (the header's box, the
+ * title's lines, each control's centre), anything in it on the coral, and
+ * its bare symbols (the place, and the capsule's items) with their names.
+ */
+const readHead = (page: Page) =>
+  page.evaluate(() => {
+    const head = document.querySelector<HTMLElement>(
+      '[data-slot="project-head"]'
+    );
+    if (!head) {
+      return null;
+    }
+    const shown = (el: Element) =>
+      el.checkVisibility({ visibilityProperty: true }) &&
+      el.getBoundingClientRect().width > 0;
+    const mid = (el: Element) => {
+      const r = el.getBoundingClientRect();
+      return (r.top + r.bottom) / 2;
+    };
+    const title = head.querySelector('[data-slot="title"]');
+    const name = head.querySelector<HTMLElement>('[data-slot="name"]');
+    const range = document.createRange();
+    if (name) {
+      range.selectNodeContents(name);
+    }
+    const lines = new Set(
+      [...range.getClientRects()].map((r) => Math.round(r.top))
+    ).size;
+    const controls = [
+      ...head.querySelectorAll<HTMLElement>(
+        'button, a[href], [data-slot="tools"]'
+      ),
+    ].filter(shown);
+    const row = mid(head.querySelector('[data-slot="who"]') ?? head);
+    // The coral, by its token: what wears its class, or paints its fill
+    // (`action-surface` is a gradient: the fill is its background image).
+    const probe = document.createElement("div");
+    probe.style.backgroundImage = "var(--action-surface)";
+    document.body.append(probe);
+    const coral = getComputedStyle(probe).backgroundImage;
+    probe.remove();
+    const onCoral = [head, ...head.querySelectorAll<HTMLElement>("*")]
+      .filter(
+        (el) =>
+          (el.getAttribute("class") ?? "").includes("action-surface") ||
+          (coral !== "none" &&
+            shown(el) &&
+            getComputedStyle(el).backgroundImage === coral)
+      )
+      .map((el) => el.outerHTML.slice(0, 120));
+    const capsule = head.querySelector('[data-slot="tools"]');
+    const symbols = [...head.querySelectorAll<HTMLElement>("[data-bar-item]")]
+      .filter(shown)
+      .map((el) => ({
+        name: el.getAttribute("aria-label") ?? "",
+        inCapsule: capsule?.contains(el) ?? false,
+        words: (el.textContent ?? "").trim(),
+        symbol: el.querySelector("svg") !== null,
+      }));
+    return {
+      height: head.getBoundingClientRect().height,
+      lines,
+      titleTop: title?.getBoundingClientRect().top ?? null,
+      off: controls
+        .map((el) => ({
+          what:
+            el.getAttribute("aria-label") ??
+            el.dataset.slot ??
+            el.textContent?.trim().slice(0, 30) ??
+            el.tagName,
+          by: Math.round(Math.abs(mid(el) - row) * 10) / 10,
+        }))
+        .filter((one) => one.by > 1),
+      coral,
+      onCoral,
+      symbols,
+    };
+  });
+
+/**
+ * The project's head is one row (DESIGN.md, The Title Bars Follow Liquid
+ * Glass Rule), nothing in it on the coral, and its bare symbols named, each
+ * in its tooltip where a pointer rests (640 and wider). Under 640px its
+ * capsule holds More alone. Then the overflow sweep over the board.
+ */
+const headRow = async (kit: Kit, page: Page, tag: string, width: number) => {
+  const head = await readHead(page);
+  if (!head) {
+    kit.check(`${tag}: the project's head stands`, false, "no project-head");
+    return;
+  }
+  kit.check(
+    `${tag}: the head is one row: the name on one line, every control centred on the row (${head.height.toFixed(1)}px tall)`,
+    head.lines === 1 && head.off.length === 0,
+    JSON.stringify({ lines: head.lines, off: head.off })
+  );
+  kit.check(
+    `${tag}: nothing in the head is on the coral (action-surface)`,
+    head.coral.startsWith("linear-gradient") && head.onCoral.length === 0,
+    `coral read as ${head.coral.slice(0, 60)}; ${head.onCoral.slice(0, 3).join(" | ")}`
+  );
+  const capsule = head.symbols.filter((one) => one.inCapsule);
+  const more = commonWords.moreFor("Tidewater");
+  const want =
+    width < 640 ? [more] : [projectWords.askCaw, projectWords.spinOff, more];
+  kit.check(
+    `${tag}: the head's symbols are bare and named (${head.symbols.map((one) => one.name).join(", ")}); the capsule holds ${want.join(", ")}`,
+    head.symbols.every(
+      (one) => one.name !== "" && one.words === "" && one.symbol
+    ) &&
+      head.symbols.some(
+        (one) => !one.inCapsule && one.name === projectWords.details
+      ) &&
+      capsule.map((one) => one.name).join("|") === want.join("|"),
+    JSON.stringify(head.symbols)
+  );
+  if (width >= 640) {
+    // Each named in its tooltip: the pointer rests on it, the tip says it.
+    const tips: { name: string; tip: string }[] = [];
+    for (const one of head.symbols) {
+      const item = page
+        .locator('[data-slot="project-head"] [data-bar-item]')
+        .filter({ visible: true })
+        .and(page.locator(`[aria-label="${one.name}"]`));
+      await item.hover();
+      const content = page.locator('[data-slot="tooltip-content"]').last();
+      const tip = await content
+        .waitFor({ state: "visible", timeout: 3000 })
+        .then(async () => ((await content.textContent()) ?? "").trim())
+        .catch(() => "");
+      tips.push({ name: one.name, tip });
+      await page.mouse.move(0, 0);
+      await content
+        .waitFor({ state: "hidden", timeout: 3000 })
+        .catch(() => undefined);
+    }
+    kit.check(
+      `${tag}: each of the head's symbols is named in its tooltip (${tips.map((one) => `${one.name}: “${one.tip}”`).join("; ")})`,
+      tips.every((one) =>
+        one.name === projectWords.details
+          ? one.tip !== ""
+          : one.tip === one.name
+      ),
+      JSON.stringify(tips)
+    );
+  }
+  const spills = await page.evaluate(scan);
+  kit.check(
+    `${tag}: the overflow sweep over the board totals ${spills.length}`,
+    spills.length === 0,
+    spills.slice(0, 6).join(" | ")
+  );
 };
 
 /**
