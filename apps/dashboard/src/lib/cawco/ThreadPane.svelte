@@ -1055,6 +1055,7 @@
       >
         <EmptyState
           actionWidth="fill"
+          axis
           line={cawOn === false
             ? "Caw is off, so he acts only when you write to him."
             : undefined}
@@ -1063,7 +1064,7 @@
           {#snippet mark()}
             <div
               data-slot="caw-80"
-              class="grid justify-items-start mb-space-3"
+              class="grid justify-items-center mb-space-3"
               data-share={projectId ? `caw:${projectId}` : undefined}
               out:seatHim|global
             >

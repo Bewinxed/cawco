@@ -4,8 +4,8 @@
 
   /**
    * A project's starters as cards (The Empty Starts Work Rule): each a
-   * sentence the person would say to Caw with the glyph for its kind of
-   * work. The starters are the hub's, written for the project from what it
+   * sentence the person would say to Caw; in `rows`, with the glyph for
+   * its kind of work. The starters are the hub's, written for the project from what it
    * holds now (project-starters.ts), in its order. A press hands the
    * sentence to whatever field stands under them (`onpick`); nothing is
    * sent. The empty board's (into Caw's panel, `lead.askStarter`) and a
@@ -50,7 +50,6 @@
     style:--cards-rows="1fr"
   >
     {#each starters as starter (starter.text)}
-      {@const Glyph = GLYPHS[starter.glyph]}
       <li class="group-data-rows/starters:max-w-full">
         <button
           data-slot="starter"
@@ -58,13 +57,19 @@
           onclick={() => onpick(starter.text)}
           type="button"
         >
-          <span class="mark-cell"
-            ><Glyph
-              data-starter-glyph
-              aria-hidden="true"
-              class="size-icon-md flex-none text-ink-strong"
-            /></span
-          >
+          <!-- Cards stand under Caw, the block's one glyph (DESIGN.md,
+               Empty), so a card is words alone; a row in his panel keeps
+               the glyph for its kind of work. -->
+          {#if rows}
+            {@const Glyph = GLYPHS[starter.glyph]}
+            <span class="mark-cell"
+              ><Glyph
+                data-starter-glyph
+                aria-hidden="true"
+                class="size-icon-md flex-none text-ink-strong"
+              /></span
+            >
+          {/if}
           <span class="flex min-w-0 flex-col gap-space-1" data-box>
             <span data-slot="starter-text" class="wrap-anywhere"
               >{starter.text}</span

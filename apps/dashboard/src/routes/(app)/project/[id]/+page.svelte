@@ -1973,6 +1973,7 @@
       <div data-slot="caw-empty" class="w-full max-w-c-starters-w" in:reveal>
         <EmptyState
           actionWidth="fill"
+          axis
           line={cawLine}
           title="Nothing on the board yet"
         >
@@ -1983,7 +1984,7 @@
                  or not. -->
             <div
               data-slot="caw-80"
-              class="mb-space-3 grid justify-items-start"
+              class="mb-space-3 grid justify-items-center"
               data-share="caw:{projectId}"
               out:sitDown|global
             >

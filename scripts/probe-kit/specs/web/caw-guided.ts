@@ -38,6 +38,9 @@
  *    (1280, 390), never under the head's actions.
  * 6. New project lands on the project's page with Caw's panel open on its
  *    Setup thread.
+ * 2b. (Run after 1, the board still empty.) Caw's mark and the hero's title stand on the hero's axis (thread,
+ *    board, Decisions), at 1440, 680 and 390 on Chromium and WebKit; the
+ *    board's and Decisions' starter cards draw no glyph; nothing spills.
  *
  *   bun scripts/probe-kit/run.ts web caw-guided
  */
@@ -1484,6 +1487,132 @@ const newProject = async (kit: Kit, setup: Setup) => {
   await page.close();
 };
 
+/** One hero read: Caw's axis, starter cards without a glyph, the sweep. */
+const heroRead = async (
+  kit: Kit,
+  page: Page,
+  at: string,
+  needCards: boolean
+) => {
+  const heroes = await page.evaluate(() =>
+    [...document.querySelectorAll('[data-slot="caw-80"]')]
+      .filter((mark) => mark.getBoundingClientRect().width > 0)
+      .map((mark) => {
+        const hero = mark.closest('[data-slot="empty"]');
+        const title = hero?.querySelector('[data-slot="empty-title"]');
+        const mid = (el: Element | null | undefined) => {
+          const r = el?.getBoundingClientRect();
+          return r ? r.left + r.width / 2 : null;
+        };
+        return {
+          in: mark.closest("[data-thread-hero]") ? "thread" : "page",
+          hero: mid(hero),
+          mark: mid(mark.firstElementChild ?? mark),
+          title: mid(title),
+        };
+      })
+  );
+  kit.check(
+    `${at}: Caw's mark and the title stand on the hero's axis (±1px)`,
+    heroes.length > 0 &&
+      heroes.every(
+        (h) =>
+          h.hero !== null &&
+          h.mark !== null &&
+          h.title !== null &&
+          Math.abs(h.mark - h.hero) <= 1 &&
+          Math.abs(h.title - h.hero) <= 1
+      ),
+    JSON.stringify(heroes)
+  );
+  const cards = await page.evaluate(() => {
+    const sel = '[data-slot="starter-cards"]:not([data-rows])';
+    return {
+      cards: document.querySelectorAll(`${sel} [data-slot="starter"]`).length,
+      glyphs: document.querySelectorAll(`${sel} [data-starter-glyph]`).length,
+    };
+  });
+  kit.check(
+    `${at}: no starter card draws a glyph`,
+    cards.glyphs === 0 && (!needCards || cards.cards > 0),
+    JSON.stringify(cards)
+  );
+  const spill = await sweep(page);
+  kit.check(
+    `${at}: the overflow sweep totals 0`,
+    spill.length === 0,
+    spill.join(" | ")
+  );
+};
+
+/**
+ * 7. Caw stands on the axis (DESIGN.md, The Caw Stands On The Axis Rule; the
+ * owner: "u seem to have left aligned him everywhere"): in the thread hero
+ * (his panel's new thread), on the empty board and on the empty Decisions
+ * tab, his 80px mark's centre and the title's centre stand on the hero's own
+ * vertical axis within 1px, at 1440, 680 and 390, on Chromium and WebKit.
+ * The board's and the Decisions tab's starter cards draw no glyph: Caw is
+ * the block's one mark (DESIGN.md, Empty). Nothing spills.
+ */
+/** One page's heroes on one engine at one leg: his panel open, then shut. */
+const heroPage = async (
+  kit: Kit,
+  setup: Setup,
+  engine: "chromium" | "webkit",
+  one: Leg,
+  where: "board" | "decisions"
+) => {
+  const tag = `${engine} ${one.name} ${where}`;
+  const page = await kit.page(one.view, { theme: "light", engine });
+  if (one.width) {
+    await page.setViewportSize({ width: one.width, height: 900 });
+  }
+  // The Decisions tab's starters are the hub's for that place; Jev's mock
+  // writes the board's, so the tab's arrive as the hub sends them.
+  const send = await hubFrames(page);
+  const url = where === "board" ? setup.url : `${setup.url}?view=decisions`;
+  await open(page, url, '[data-slot="caw-80"]');
+  if (where === "decisions") {
+    send({
+      kind: "starters.changed",
+      place: "decisions",
+      projectId: setup.project.id,
+      starters: [
+        {
+          glyph: "triage",
+          text: "Decide what the Friday launch ships",
+          sources: [],
+        },
+        {
+          glyph: "routine",
+          text: "Pick the booking page’s price",
+          sources: [],
+        },
+      ],
+    });
+  }
+  await settle(page, 600);
+  // His panel open (the thread hero), then shut (the page's own hero and its
+  // starter cards).
+  await heroRead(kit, page, `${tag} (open)`, false);
+  if (await page.locator(PANEL).count()) {
+    await page.keyboard.press("Escape");
+    await page.locator(PANEL).waitFor({ state: "detached" });
+    await settle(page, 600);
+  }
+  await heroRead(kit, page, `${tag} (shut)`, true);
+  await page.close();
+};
+
+const heroAxis = async (kit: Kit, setup: Setup) => {
+  for (const engine of ["chromium", "webkit"] as const) {
+    for (const one of LEGS) {
+      await heroPage(kit, setup, engine, one, "board");
+      await heroPage(kit, setup, engine, one, "decisions");
+    }
+  }
+};
+
 const run = async (kit: Kit) => {
   const setup = await setUp(kit);
   try {
@@ -1492,6 +1621,8 @@ const run = async (kit: Kit) => {
         await leg(kit, setup, one, theme);
       }
     }
+    // Before a starter is sent, while the board is still empty.
+    await heroAxis(kit, setup);
     const threadId = await starterSends(kit, setup);
     const ids = await filedTasks(kit, setup, threadId);
     await filedLegs(kit, setup, threadId, ids);

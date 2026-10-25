@@ -272,13 +272,14 @@
           <div class="max-w-c-starters-w">
             <EmptyState
               actionWidth="fill"
+              axis
               line={words.emptyCaw}
               title={words.empty}
             >
               {#snippet mark()}
                 <div
                   data-slot="caw-80"
-                  class="mb-space-3 grid justify-items-start"
+                  class="mb-space-3 grid justify-items-center"
                   data-share="caw:{projectId}"
                   out:sitDown|global
                 >

@@ -18,6 +18,12 @@
       inline: {
         true: "mark-line flex-row flex-wrap items-center gap-x-space-2 gap-y-space-1 py-0",
       },
+      /* Caw stands on the composition's axis (DESIGN.md, The Caw Stands On
+         The Axis Rule): the mark, title and why centre on the block's own
+         vertical axis; the action keeps its own layout. */
+      axis: {
+        true: "[&>:not([data-box])]:self-center [&>:not([data-box])]:text-center",
+      },
       pad: {
         pane: "px-space-6",
         transcript: "px-space-7 max-desk:px-space-5",
@@ -62,6 +68,7 @@
     line,
     action,
     inline = false,
+    axis = false,
     pad,
     actionWidth,
     class: className,
@@ -87,7 +94,7 @@
 
 <!-- mark-line: the block stacks its mark above the title; `inline` is a mark line through emptyStateVariants -->
 <div
-  class={cn(emptyStateVariants({ inline, pad }), className)}
+  class={cn(emptyStateVariants({ inline, axis, pad }), className)}
   data-slot="empty"
   {...restProps}
 >
