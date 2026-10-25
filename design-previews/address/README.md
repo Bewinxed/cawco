@@ -87,7 +87,8 @@ Then two steps, both scripts beside this README:
    6px of the clear ground); the source cut-out has 335. `python3 -I halo.py
    clean take.png clean.png --source source.png` measures both and, where the
    take's band is over the source's, floods from the clear ground through
-   light pixels no deeper than 12px (a pale prop keeps its inside). It then
+   light pixels (and the neutral mid-grey a fringe can start with at its
+   outer edge) no deeper than 12px (a pale prop keeps its inside). It then
    clears the violet ground left in small pockets (a patch under 400px of
    light pixels tinted blue over red, as between a wing and the body) and the
    soft halo under alpha 96.
@@ -104,8 +105,8 @@ feet, one beak, the large eye and the small second eye) and for its prop at
 | Moment | Still | Operation | Take |
 | --- | --- | --- | --- |
 | Start | `start.png` | wing on the right raised in a small wave | `tk_Lh_9EsTY5NmG9VDuW635o` |
-| Waiting for your sign-in | `waiting.png` | a spyglass at his large eye, pointing away from the beak, so the beak and the small second eye stay uncovered | `tk_TOimQK_cTSeseRWQ2-kfN`, cut out of `tk_47DF3jIKhaqyn__uDFoft` |
-| Waiting for your admin (Headscale) | `admin.png` | a large envelope leaning on his legs, his head and both wings as they are | `tk_CZpG76EjUabhQUJXkVfZw`, cut out of `tk_12XziJA79RmwdJlI0m8na` |
+| Waiting for your sign-in | `waiting.png` | the wing on the left raised, a short spyglass gripped in its tip beside his head, pointing out away from his face, the eyes and beak clear | `tk_C_bkfSOaDaz0qVW9YIbWx`, cut out of `tk_ZzaAHdU-GCeRVPEpFt3dy` |
+| Waiting for your admin (Headscale) | `admin.png` | a sealed envelope as tall as his legs beside his feet, both wings spread at full size | `tk_IWIJ1Ztgq5HboaC03trRI`, cut out of `tk_tPqt_rXB4bM797tfCxuCE` |
 | Setup key (NetBird's Start) | `key.png` | key added crosswise in his beak tip | `tk_bUOBAwEywYVHGms25bz7N` |
 | Answers (listening) | `listen.png` | head tilted, three sound lines beside it, both wings as they were | `tk_lxK6PfwZh6bIF4R5tM8-r`, cut out of `tk_Obt9H5MTRapgS4PvX3IiC` |
 | Phone, waiting | `phone.png` | phone added at his chest | `tk_Zs1BxX8g0NctuJpYJV_w1` |
@@ -122,13 +123,13 @@ open, as a small shrug." and adds the prop:
 | Failure | Still | Prop | Take |
 | --- | --- | --- | --- |
 | Client stopped | `shrug-plug.png` | a big unplugged power plug hanging on its cord from the wing tip | `tk_Y5k2WWfv5SI-13KXKyPWe`, cut out of `tk_sg27DA3pNkgrKhn8r7-Du` |
-| Unsupported network | `shrug-sign.png` | a signpost with two blank arrow boards beside his feet | `tk_wHkGCpwJe0MVyIOqI5r2Y`, cut out of `tk_1nIo7YrtsoOFeMSKZ7HBt` |
-| Sign-in link expired | `shrug-chain.png` | a chain of two big links from the wing tip, the lower one snapped open | `tk_SlVdtzGi1XsQ8z8URn704`, cut out of `tk_813zV9wTuzcc22T1m04Um` |
+| Unsupported network | `shrug-sign.png` | a signpost with two blank arrow boards beside his feet, all in a very thick black outline | `tk_TAF1q3ykp3xLLNzvRvmUj`, cut out of `tk_tIRW0EEoY-2VK-B5yK2n1` |
+| Sign-in link expired | `shrug-chain.png` | three big links from the wing tip in a very thick outline, the bottom one snapped open but still on the chain | `tk_7iWOqULn-l702HhKs6muH`, cut out of `tk_74IrxdQvEPO-QVEhR6rji` |
 | Another tailnet | `shrug-map.png` | a big unfolded map beside his feet, a vermilion dashed line winding to an X | `tk_flbuuxUg8rTWt3jYsWwsR`, cut out of `tk_etp6RHQtW8669pB0fUCC0` |
-| Admin refused | `shrug-envelope.png` | admin's envelope beside his feet, a vermilion cross stamped on it | `tk_nyyGNMORk9WaWOA4eC5KY`, cut out of `tk_FarbZO2fqgqUBfjHwHC_n` |
+| Admin refused | `shrug-envelope.png` | admin's envelope beside his feet, clear of the wing, a vermilion cross stamped on it | `tk_QT13mHZzGIDUm11bicD9k`, cut out of `tk_uTZ7gwboimz1QN-ERb1W_` |
 | Key refused | `shrug-key.png` | a big key standing beside his feet, its bow as wide as his head, the shaft snapped in two | `tk_ydDJMc4ZFhgkYcZbo4cFt`, cut out of `tk_H-UuKYR4R38YOZt_eAm8t` |
-| Name taken | `shrug-tag.png` | a large torn luggage tag hanging from his wing tip | `tk_zFVvO5ZW0WxGNdjJMOwbq`, cut out of `tk_esrnVofyY4rNrbOomvFPy`, its pale fringe cleaned by `halo.py` |
-| Doesn't answer | `shrug-phone.png` | a desk telephone beside his feet, the handset off the hook | `tk_iHoObbjYp7-UfRdx3Cusm`, cut out of `tk_BU29S9U09odQdzOw-ENSm` |
+| Name taken | `shrug-tag.png` | a large torn luggage tag on a short string from the very tip of the wing, below it, the string clear of the wing | `tk_Sj5xqerS_GnmSZvuyIsx1`, cut out of `tk_ewkCmIATpfrfLPcz5QkT3` |
+| Doesn't answer | `shrug-phone.png` | a telephone handset off the hook beside his feet, its coiled cord on the ground | `tk_1VummAUIzs4xJpIuKvDRZ`, cut out of `tk_iB9kgxRDuXXA8pAyOu3YK` |
 | Signed out | `shrug-hourglass.png` | a run-out hourglass beside him | `tk_aJfYqQK-FZUnj2jmjQ5Z_`, cut out of `tk_EacCJXTyV-z5D0r1paf7c` |
 | Certificates off | `shrug-cert.png` | a certificate with a vermilion seal beside his feet, torn halfway down | `tk_j6s5nj5fgIF3G0zRYUZVN`, cut out of `tk_g6xJgO6hx7ZPQ2OEEklbF` |
 
@@ -153,3 +154,19 @@ dwarf him or cover the wing on the right (`tk_1eePob8jqmc5HHAhSGj4b`,
 certificate held over the wing on the right (`tk_aYAcoziF8yU7thqipL-qc`,
 `tk_cd5L-3PiDJ2au86_PCsxP`). The plain shrug went with it: every failure now
 has its own prop.
+
+A second anatomy read sent back seven of the fifth round's stills: a
+spyglass over the eye and floating free, envelopes over the chest or a wing,
+a thin wing under the tag's string, wings left low or unequal under the sign,
+the envelope and the phone, and a faint chain whose snapped link floated
+loose. The sixth round re-made them, keeping only takes whose two wings
+measure alike: the vermilion each side of the body, right over left, within
+0.73 to 0.96 where the source gives 0.74 (the envelope's 1.11 counts its red
+cross; waiting's 0.50 is the left wing raised and spread to hold the
+spyglass, its other wing as in the source). Qwen kept the spyglass at the eye until the instruction placed the
+wing tip beside the head with background between it and his face. Passed
+over: the spyglasses still at the eye (`tk_AADZshMNWq45IH1hwuyAN` and its
+siblings, `tk_G-jkFurQ7awpi4oa54qWM`), chains with no visible break
+(`tk_dvY5__w286DNBNwodWtaO`, `tk_JDhvFcE8-7TYZVf4bp0S-`), tags on wings left
+low or small (`tk_HvU87Eg5GdIivMKcSmx8I`, `tk_ev2rh5vO3Uifrvf3ksP9c`), and
+every shrug whose right wing measured under 0.7 of the left.

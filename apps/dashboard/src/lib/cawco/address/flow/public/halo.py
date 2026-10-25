@@ -5,8 +5,10 @@ the transparent cut-out keeps. Measure the edge band (figure pixels within
 6px of the clear ground) for light pixels (alpha 32 or more, every channel
 above 150) and compare it with the source's; only a take whose band is over
 the source's level is flooded. The flood runs from the clear ground through
-light pixels and no deeper than the fringe (12px), so a pale prop keeps its
-inside even where its outline has a gap. Every take then loses the opaque
+the fringe's pixels (light ones, and the neutral mid-greys a fringe can start
+with at its outer edge: every channel above 90, within 30 of one another; the
+ink is under 60) and no deeper than the fringe (12px), so a pale prop keeps
+its inside even where its outline has a gap. Every take then loses the opaque
 ground's colour left in a pocket the flood can't reach (a patch of under
 400px of light pixels tinted blue over red, as the violet ground leaves it
 between a wing and the body; neither Caw nor a pale prop has that colour)
@@ -63,7 +65,10 @@ def flood(img: Image.Image) -> int:
             if 0 <= nx < w and 0 <= ny < h and depth[ny, nx] < 0:
                 depth[ny, nx] = depth[y, x] + 1
                 p = px[nx, ny]
-                if p[3] >= 32 and min(p[:3]) > 150:
+                if p[3] >= 32 and (
+                    min(p[:3]) > 150
+                    or (min(p[:3]) > 90 and max(p[:3]) - min(p[:3]) < 30)
+                ):
                     px[nx, ny] = (p[0], p[1], p[2], 0)
                     cleared += 1
                     q.append((nx, ny))
