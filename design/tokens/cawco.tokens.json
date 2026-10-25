@@ -6045,7 +6045,7 @@
         "value": 1348,
         "unit": "px"
       },
-      "$description": "The widest a decision page's one centred column stands (decisions/host): three option columns at the 60ch label measure (416px each), their two gaps and the page's and card's insets; under it the column is the room."
+      "$description": "The widest a decision page's one centred column stands (decisions/host): three option columns at the 60ch label measure (416px each), their two gaps and the page's and card's insets; under it the column is the room. A page holding a Preview of a page-sized design naming no width stands at the room's whole width, its words keeping their measure."
     },
     "c-decision-meter-w": {
       "$type": "dimension",

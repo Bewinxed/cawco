@@ -159,12 +159,13 @@
  *     runs (s) alone.
  *
  * (t) A page uses the window it's given and a Preview of a page-sized design
- *     (a folder's timeline) shows at a size the person can judge, at 1037,
- *     1440, 1920 and 2560 in Chromium and WebKit: the column the room up to
- *     1348px, the timeline with no width at the card's full width and a
- *     screen's 16:10, the one naming 1440px at it or scaled to fit with its
- *     words at 10px or more, Open full size bringing it to the panel's
- *     front; no overflow, no console error (`widthLeg`).
+ *     (a folder's timeline) shows at a size the person can judge, at 390,
+ *     1037, 1440 and 2529 (the owner's window) in Chromium and WebKit: a
+ *     page holding the timeline with no width the room's whole width, its
+ *     cards with it, the timeline at the card's full width and a screen's
+ *     16:10, the one naming 1440px at it or scaled to fit with its words at
+ *     10px or more, Open full size bringing it to the panel's front; no
+ *     overflow, no console error (`widthLeg`).
  *
  *   DECISION_PAGES=width bun scripts/probe-kit/run.ts decision-pages
  *
@@ -5522,15 +5523,13 @@ fineShown = Preview("${fine}", "The small-print timeline at its own width", [], 
 /** `--c-media-words-floor`. */
 const WORDS_FLOOR = 10;
 
-/** (t)'s windows: the owner's own, a laptop's, a 1080p and a 1440p display's. */
+/** (t)'s windows: a phone's, the owner's narrow one, a laptop's and the owner's desk window (2529×1232, where the timeline stood in a 1348px column: "it's not growing"). */
 const WIDTH_WINDOWS = [
+  { w: 390, h: 844 },
   { w: 1037, h: 760 },
   { w: 1440, h: 900 },
-  { w: 1920, h: 1080 },
-  { w: 2560, h: 1440 },
+  { w: 2529, h: 1232 },
 ] as const;
-/** `--c-decision-page-max`. */
-const PAGE_MAX = 1348;
 
 /** The page's column, its cards and the timeline's frame and well, read from the engine. */
 const widthRead = (folder: string) => {
@@ -5560,6 +5559,7 @@ const widthRead = (folder: string) => {
   return {
     room: document.querySelector("[data-slot=page-scroll]")?.clientWidth ?? 0,
     column: box(document.querySelector("[data-slot=page-column]"))?.w ?? 0,
+    foot: box(document.querySelector("[data-slot=page-foot] > div"))?.w ?? 0,
     cards: [...document.querySelectorAll("article[data-slot=decision]")].map(
       (one) => Math.round(one.getBoundingClientRect().width * 10) / 10
     ),
@@ -5612,7 +5612,7 @@ const openDrawn = async (page: Page, src: string, folder: string) => {
   await settle(page, 400);
 };
 
-/** (t)'s first page at one window: the column, three equal worded options, the timeline with no width at the card's full width, no overflow. */
+/** (t)'s first page at one window: the column the room's whole width (it holds a page-sized design naming no width), three equal worded options, the timeline with no width at the card's full width, no overflow. */
 async function plainChecks(
   kit: Kit,
   page: Page,
@@ -5626,20 +5626,24 @@ async function plainChecks(
     `iframe[data-cawco-artifact="${folder}"][data-drawn]`
   );
   const read = await page.evaluate(widthRead, folder);
-  const column = Math.min(read.room, PAGE_MAX);
+  const column = read.room;
   const card = column - 2 * read.pageIn;
   kit.check(
-    `${leg}: the column is the room up to ${PAGE_MAX}px: ${Math.round(read.column)}px in a ${read.room}px room (want ${column}), each card ${read.cards.join(", ")}px (want ${card})`,
+    `${leg}: a page holding a page-sized design is the room's whole width, its cards and its foot's edges with it: ${Math.round(read.column)}px in a ${read.room}px room (want ${column}), each card ${read.cards.join(", ")}px (want ${card}), the foot's row ${Math.round(read.foot)}px`,
     Math.abs(read.column - column) <= 1 &&
+      Math.abs(read.foot - column) <= 1 &&
       read.cards.length === 2 &&
       read.cards.every((one) => Math.abs(one - card) <= 1),
     JSON.stringify(read)
   );
   const [first = 0] = read.whenTracks;
+  // Under the phone's line (a card's body under three 190px tracks) they stand one to a row.
+  const abreast = page.viewportSize()?.width === 390 ? 1 : 3;
   kit.check(
-    `${leg}: three worded options stand as three equal columns (${read.whenTracks.join(", ")}px)`,
-    read.whenTracks.length === 3 &&
-      read.whenTracks.every((one) => Math.abs(one - first) <= 1),
+    `${leg}: three worded options stand as ${abreast === 3 ? "three equal columns" : "one to a row"} (${read.whenTracks.join(", ")}px)`,
+    read.whenTracks.length === abreast &&
+      read.whenTracks.every((one) => Math.abs(one - first) <= 1) &&
+      (abreast === 3 || Math.abs(first - read.body) <= 1),
     JSON.stringify(read.whenTracks)
   );
   const frameW = read.body - 2 * read.wellIn;
@@ -5790,10 +5794,12 @@ async function openFullCheck({
  * expand the page or on a larger display"; of a live timeline in a card:
  * "the view is too narrow and small for me to view how the graph/timeline
  * looks"). Two pages over a folder's preview of a timeline, each opened in
- * its own window at 1037, 1440, 1920 and 2560, in Chromium and WebKit:
- * - the column is the room up to `--c-decision-page-max` (1348px), the
- *   cards the column less the page's insets, a card of three worded
- *   options three equal tracks;
+ * its own window at 390, 1037, 1440 and 2529 (the owner's: "it's not
+ * growing", of the timeline in a 1348px column), in Chromium and WebKit:
+ * - a page holding the timeline naming no width is the room's whole width,
+ *   not held to `--c-decision-page-max`, so the timeline's card tracks the
+ *   window: the cards the room less the page's insets, a card of three
+ *   worded options three equal tracks;
  * - the timeline naming no width stands its card's options one to a row,
  *   its frame the card's body less its well's insets wide and a screen's
  *   16:10 of that tall (up to the media cap), its document loaded;

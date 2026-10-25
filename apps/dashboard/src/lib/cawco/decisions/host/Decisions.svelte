@@ -8,7 +8,13 @@
   pictured page (media that knows its own width: a Preview's `width`, a
   drawing, a picture, a diagram) as wide as the most options abreast its
   room holds with each at 1:1, never under that cap, or the room's whole
-  width where none fits. Its head is
+  width where none fits. A page holding a Preview of a page-sized design
+  that names no width (a whole screen that lays itself out to its frame,
+  its well's `data-fills`) stands at the room's whole width, its foot's
+  edges with it, so that design grows with the window (the owner, of a
+  live timeline in a 1348px column on his 2529px window: "it's not
+  growing"); its words keep their reading measure (`max-w-c-measure` on a
+  card's question, its advice and its options' words). Its head is
   the page head: Caw as the title's mark (The Mark Line Rule) and the title.
   Then the offline notice when CawCo does not show the page, and every
   decision and piece of media the program puts on it. The second row is the
@@ -247,7 +253,7 @@
 
 <!-- The page is the panel's height: its cards scroll in the first row and the foot stands in the second, the panel's full width, its parts on the column's edges, so the foot never stands over a card. A host's docked composer is the page's own bottom padding (its inset). The scroller and the foot keep the same gutter for a scrollbar, so the column and the foot's parts share their edges. -->
 <main
-  class="decision-page-insets grid h-dvh min-w-0 grid-rows-page-foot pb-(--page-inset-bottom)"
+  class="group/page decision-page-insets grid h-dvh min-w-0 grid-rows-page-foot pb-(--page-inset-bottom)"
   data-pictured={storyWidth > 0 ? "" : undefined}
   data-slot="decision-page"
   style:--page-w={pageWidth === null ? undefined : `${pageWidth}px`}
@@ -259,7 +265,7 @@
     data-slot="page-scroll"
   >
     <div
-      class="mx-auto flex w-full min-w-0 max-w-(--page-w) flex-col gap-space-5 px-(--page-in) pt-(--page-in) pb-space-5"
+      class="mx-auto flex w-full min-w-0 max-w-(--page-w) flex-col gap-space-5 px-(--page-in) pt-(--page-in) pb-space-5 has-data-fills:max-w-none"
       data-slot="page-column"
     >
       <header
@@ -301,7 +307,7 @@
     data-slot="page-foot"
   >
     <div
-      class="mx-auto flex w-full min-w-0 max-w-(--page-w) flex-wrap items-center justify-between gap-space-3 px-(--page-in)"
+      class="mx-auto flex w-full min-w-0 max-w-(--page-w) flex-wrap items-center justify-between gap-space-3 px-(--page-in) group-has-data-fills/page:max-w-none"
     >
       <p
         class="mark-line type-meta num flex min-w-0 grow items-center gap-space-3 text-ink-muted"

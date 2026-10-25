@@ -966,7 +966,7 @@ public enum Size {
     public static let cBlockRefusedBasis: Double = 288
     /// The composer canvas's top grab strip.
     public static let cCanvasGrabW: Double = 160
-    /// The widest a decision page's one centred column stands (decisions/host): three option columns at the 60ch label measure (416px each), their two gaps and the page's and card's insets; under it the column is the room.
+    /// The widest a decision page's one centred column stands (decisions/host): three option columns at the 60ch label measure (416px each), their two gaps and the page's and card's insets; under it the column is the room. A page holding a Preview of a page-sized design naming no width stands at the room's whole width, its words keeping their measure.
     public static let cDecisionPageMax: Double = 1348
     /// The length of a decision page's count bar in its sticky foot, beside "1 of 5 picked".
     public static let cDecisionMeterW: Double = 120
