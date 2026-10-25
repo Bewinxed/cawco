@@ -73,6 +73,7 @@ import type { HubLifetimeShape } from "../../../packages/hub/src/lifetime";
 import { createNotifications } from "../../../packages/hub/src/notifications";
 import type { RegistryShape } from "../../../packages/hub/src/registry";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { type Helper, helperOn } from "../hand-off";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 import { shaped } from "../words";
 import { atRest, type Phone, standInPhone } from "./turn-push";
@@ -246,25 +247,15 @@ const personLines = async (then: { since: () => Promise<string> }) =>
     .split("\n")
     .filter((line) => line.includes(presenceLogWords.subject));
 
+/** The session that hands the others their words (hand-off.ts), spawned with the fleet. */
+let helper: Helper | undefined;
+
 /** A hand-off from another session: CawCo's words to it, never the person's. */
-const handOff = async (fleet: KitFleet, instanceId: string, words: string) => {
-  await fleet.post({
-    type: "command",
-    commandId: crypto.randomUUID(),
-    kind: "send",
-    machineId: MACHINE,
-    sessionId: instanceId,
-    payload: {
-      instanceId,
-      message: {
-        type: "user",
-        uuid: crypto.randomUUID(),
-        message: { role: "user", content: words },
-        parent_tool_use_id: null,
-        origin: { kind: "peer", from: "presence-input-probe" },
-      },
-    },
-  });
+const handOff = async (instanceId: string, words: string): Promise<void> => {
+  if (!helper) {
+    throw new Error("hand-off: no helper session yet");
+  }
+  await helper.send(instanceId, words);
 };
 
 /** The request that opened with `words`: the turn its line was read at. */
@@ -771,7 +762,7 @@ const recapLegs = async (
   s1: string
 ): Promise<void> => {
   // Away: the hand-off's turn writes its notes under the line's heading.
-  await handOff(fleet, s1, "PROBE-AWAY: run the build.");
+  await handOff(s1, "PROBE-AWAY: run the build.");
   const awayTurn = await turnOf(fleet, "PROBE-AWAY");
   await until(
     "(c) the notes written",
@@ -810,7 +801,7 @@ const recapLegs = async (
   );
 
   // Not before: a hand-off between carries no recap.
-  await handOff(fleet, s1, "PROBE-PEER: carry on.");
+  await handOff(s1, "PROBE-PEER: carry on.");
   const peer = await turnOf(fleet, "PROBE-PEER");
   await atRest(fleet, s1);
   kit.check(
@@ -949,7 +940,7 @@ const phoneLegs = async (
   // The phone has the newest input: a finished turn's push goes to it.
   const pushedBefore = await phone.turns(s3);
   const toPhone = await fleet.logMark("hub");
-  await handOff(fleet, s3, "PROBE-PHONE: say ok.");
+  await handOff(s3, "PROBE-PHONE: say ok.");
   await turnOf(fleet, "PROBE-PHONE");
   await atRest(fleet, s3);
   const phoned = await until(
@@ -991,7 +982,7 @@ const phoneLegs = async (
   );
   const toDesk = await fleet.logMark("hub");
   const deskPushes = await phone.turns(s3);
-  await handOff(fleet, s3, "PROBE-DESK: say ok.");
+  await handOff(s3, "PROBE-DESK: say ok.");
   await turnOf(fleet, "PROBE-DESK");
   await atRest(fleet, s3);
   const held = await until(
@@ -1114,7 +1105,7 @@ const elsewhereLegs = async (
       (person) => person.state === "here" && person.on === null,
       10_000
     );
-    await handOff(fleet, s1, "PROBE-ELSE: carry on.");
+    await handOff(s1, "PROBE-ELSE: carry on.");
     const turn = await turnOf(fleet, "PROBE-ELSE");
     await atRest(fleet, s1);
     kit.check(
@@ -1155,7 +1146,7 @@ const elsewhereLegs = async (
         JSON.stringify(kept1)
       );
       const then = await fleet.logMark("hub");
-      await handOff(fleet, s3, "PROBE-ELSE-ALERT: say ok.");
+      await handOff(s3, "PROBE-ELSE-ALERT: say ok.");
       await turnOf(fleet, "PROBE-ELSE-ALERT");
       await atRest(fleet, s3);
       const held = await until(
@@ -1765,11 +1756,12 @@ const run = async (kit: Kit) => {
     const cwd = join(fleet.sandbox, "work");
     await mkdir(cwd, { recursive: true });
     await writeFile(join(cwd, "README.md"), "presence input probe\n");
+    helper = await helperOn(fleet, cwd);
     const sessions: string[] = [];
     for (const name of CONSENT_ONLY ? ["One"] : ["One", "Two", "Three"]) {
       // biome-ignore lint/performance/noAwaitInLoops: one session at a time, each up before the next
       const id = await fleet.spawn("claude", `Presence ${name}`, cwd);
-      await handOff(fleet, id, `PROBE-START-${name}: say ok.`);
+      await handOff(id, `PROBE-START-${name}: say ok.`);
       await turnOf(fleet, `PROBE-START-${name}`);
       await atRest(fleet, id);
       sessions.push(id);

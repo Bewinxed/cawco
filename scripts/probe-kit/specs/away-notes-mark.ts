@@ -11,7 +11,8 @@
  *
  * - (clock) the hub's away clock until the person sets one is 5 minutes, and
  *   the presence menu's row says so.
- * - (mark) with the person away (Appear away), a hand-off's turn writes its
+ * - (mark) with the person away (Appear away), a hand-off's turn (another
+ *   session's `handoff`, hand-off.ts) writes its
  *   notes under the heading its away line names: the hub's plan says
  *   `awayUnseen`, and the open page's ring wears the needs-you dot on its
  *   glyph's top-end corner (6px, `status-attn-glyph`, the glyph cut round
@@ -38,6 +39,7 @@ import type { SessionPlan } from "../../../packages/core/src/plan";
 import { planWords } from "../../../packages/core/src/words/plan";
 import { presenceWords } from "../../../packages/core/src/words/presence";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { type Helper, helperOn } from "../hand-off";
 import {
   type Engine,
   type Kit,
@@ -56,29 +58,15 @@ const LINE_BACK = "[CawCo presence] The person is back on this chat";
 const HEADINGS = /under "(## Since [^"]+)"/g;
 const RING = '[data-slot="plan-ring"]';
 
-/** A tool call one turn makes: called once its tool is offered, searched for first when it is not. */
-interface Call {
+/** How far one away turn's todo_write got: called once offered, searched for first when deferred. */
+interface Act {
   called: boolean;
   done: boolean;
-  searched: boolean;
-}
-
-/** One away turn: its tag, the lines it writes, and how far its todo_write got. */
-interface Act extends Call {
   lines: string[];
+  searched: boolean;
   tag: string;
 }
 const acts: Act[] = [];
-
-/** The helper session's hand-off to the session, one per away turn: CawCo's `handoff`, a peer's words. */
-interface HandOff extends Call {
-  marker: string;
-  target: string;
-  words: string;
-}
-const handOffs: HandOff[] = [];
-const HANDOFF = "mcp__cawco__handoff";
-const HANDOFF_MARK = "PROBE-HANDOFF:";
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const call = (name: string, input: object): Reply => ({
@@ -87,83 +75,41 @@ const call = (name: string, input: object): Reply => ({
   tool: { name, input },
 });
 
-/** One turn's tool call: the tool once offered (ToolSearch for it first), then "noted" after its answer. */
-const callOnce = (
-  request: Seen,
-  step: Call,
-  name: string,
-  input: () => object
-): Reply => {
-  if (step.called) {
-    if (request.afterTool) {
-      step.done = true;
-      return text("noted");
-    }
-    return text("ok");
-  }
-  if (request.toolNames.includes(name)) {
-    step.called = true;
-    return call(name, input());
-  }
-  if (!step.searched && request.toolNames.includes("ToolSearch")) {
-    step.searched = true;
-    return call("ToolSearch", { query: `select:${name}`, max_results: 1 });
-  }
-  step.called = true;
-  step.done = true;
-  return text(`${name} is not offered`);
-};
-
 /**
- * Every turn answers "ok". The helper's turn hands the session its words
- * (`handoff`); the session's away turn then writes its notes into its
- * plan's spec, under the heading its away line names.
+ * Every turn answers "ok"; an away turn, handed to the session by the
+ * helper (hand-off.ts), first writes its notes into the plan's spec, under
+ * the heading its away line names.
  */
 const respond = (request: Seen): Reply => {
   if (!request.tools) {
     return text("Probe title");
   }
-  if (request.all.includes(HANDOFF_MARK)) {
-    const handOff = handOffs.find(
-      (one) => !one.done && request.all.includes(one.marker)
-    );
-    return handOff
-      ? callOnce(request, handOff, HANDOFF, () => ({
-          target: handOff.target,
-          message: handOff.words,
-        }))
-      : text("ok");
-  }
   const act = acts.find((one) => !one.done && request.all.includes(one.tag));
   if (!act) {
     return text("ok");
   }
-  return callOnce(request, act, TODO, () => {
+  if (act.called) {
+    if (request.afterTool) {
+      act.done = true;
+      return text("noted");
+    }
+    return text("ok");
+  }
+  if (request.toolNames.includes(TODO)) {
+    act.called = true;
     const heading =
       [...request.all.matchAll(HEADINGS)].at(-1)?.[1] ?? "## Since ?";
-    return {
+    return call(TODO, {
       spec: `${heading}\n${act.lines.join("\n")}\n\n## Plan\nCarry on.`,
-    };
-  });
-};
-
-/** Another session hands `target` its words through CawCo's `handoff`: a peer's, not the person's. */
-const handOff = async (
-  fleet: KitFleet,
-  helper: string,
-  target: string,
-  words: string
-): Promise<void> => {
-  const marker = `${HANDOFF_MARK}${handOffs.length + 1}`;
-  handOffs.push({
-    marker,
-    target,
-    words,
-    called: false,
-    done: false,
-    searched: false,
-  });
-  await fleet.send(helper, `${marker} hand the session its next step.`);
+    });
+  }
+  if (!act.searched && request.toolNames.includes("ToolSearch")) {
+    act.searched = true;
+    return call("ToolSearch", { query: `select:${TODO}`, max_results: 1 });
+  }
+  act.called = true;
+  act.done = true;
+  return text(`${TODO} is not offered`);
 };
 
 /** The request whose last message holds `words`: the turn its line was read at. */
@@ -285,22 +231,16 @@ const awaySeenOf = (fleet: KitFleet, id: string): string | null =>
     id
   )[0]?.away_seen ?? null;
 
-/** The session whose plan is read, and the one that hands it its away turns. */
-interface Sessions {
-  helper: string;
-  session: string;
-}
-
 /** One away turn: the hand-off, its todo_write, the turn at rest. */
 const awayTurn = async (
   fleet: KitFleet,
-  { helper, session }: Sessions,
+  helper: Helper,
+  session: string,
   tag: string,
   lines: string[]
 ) => {
-  const act: Act = { tag, lines, called: false, done: false, searched: false };
-  acts.push(act);
-  await handOff(fleet, helper, session, `${tag}: run the build.`);
+  acts.push({ tag, lines, called: false, done: false, searched: false });
+  await helper.send(session, `${tag}: run the build.`);
   const turn = await turnOf(fleet, tag);
   await until(
     `${tag}'s notes in the plan`,
@@ -320,11 +260,11 @@ const legs = async (
   kit: Kit,
   fleet: KitFleet,
   dashboard: string,
-  sessions: Sessions,
+  helper: Helper,
+  session: string,
   engine: Engine,
   round: number
 ) => {
-  const { session } = sessions;
   const say = (words: string) => `(${engine}) ${words}`;
   const first = `- PROBE-NOTE-${round}a: the build went green`;
   const second = `- PROBE-NOTE-${round}b: the release is tagged`;
@@ -354,7 +294,7 @@ const legs = async (
     );
 
     // (mark) away, the session writes its notes; the open page's ring wears the dot.
-    const turn = await awayTurn(fleet, sessions, `PROBE-AWAY-${round}`, [
+    const turn = await awayTurn(fleet, helper, session, `PROBE-AWAY-${round}`, [
       first,
     ]);
     const hubPlan = await planOf(fleet, session);
@@ -449,7 +389,7 @@ const legs = async (
     );
 
     // (again) a new line under the heading: the mark comes back, live.
-    await awayTurn(fleet, sessions, `PROBE-AWAY-${round}-AGAIN`, [
+    await awayTurn(fleet, helper, session, `PROBE-AWAY-${round}-AGAIN`, [
       first,
       second,
     ]);
@@ -549,15 +489,14 @@ const run = async (kit: Kit) => {
   await fleet.agentUp();
   await fleet.accountSignedIn();
   const session = await fleet.spawn("claude", "Away notes", fleet.repo);
-  const helper = await fleet.spawn("claude", "Hands off", fleet.repo);
   await atRest(fleet, session);
-  await atRest(fleet, helper);
+  const helper = await helperOn(fleet, fleet.repo);
   const dashboard = await fleet.dashboard();
   await fleet.api("/api/person/away", { on: true });
   const engines: Engine[] = ["chromium", "webkit"];
   for (const [round, engine] of engines.entries()) {
     // biome-ignore lint/performance/noAwaitInLoops: one engine's legs at a time, on one fleet
-    await legs(kit, fleet, dashboard, { helper, session }, engine, round + 1);
+    await legs(kit, fleet, dashboard, helper, session, engine, round + 1);
   }
   await recapLeg(kit, fleet, dashboard, session);
 };

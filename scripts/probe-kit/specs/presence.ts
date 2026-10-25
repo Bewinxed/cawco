@@ -63,6 +63,7 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
+import { helperOn } from "../hand-off";
 import {
   type Engine,
   type Kit,
@@ -213,31 +214,6 @@ const beat = (
     ...(fields.idleMs === undefined ? {} : { idleMs: fields.idleMs }),
     ...(fields.machine === undefined ? {} : { machine: fields.machine }),
   });
-
-/** A hand-off from another session: CawCo's words to it, not the person's. */
-const handOff = async (
-  fleet: KitFleet,
-  instanceId: string,
-  words: string
-): Promise<void> => {
-  await fleet.post({
-    type: "command",
-    commandId: crypto.randomUUID(),
-    kind: "send",
-    machineId: MACHINE,
-    sessionId: instanceId,
-    payload: {
-      instanceId,
-      message: {
-        type: "user",
-        uuid: crypto.randomUUID(),
-        message: { role: "user", content: words },
-        parent_tool_use_id: null,
-        origin: { kind: "peer", from: "presence-probe" },
-      },
-    },
-  });
-};
 
 /** The request that opened with `words`: the turn its line was read at. */
 const turnOf = (fleet: KitFleet, words: string, harness: Harness) =>
@@ -410,6 +386,8 @@ const lineLegs = async (
   fleet: KitFleet,
   cwd: string
 ): Promise<void> => {
+  // A hand-off is another session's (hand-off.ts): CawCo's words, not the person's.
+  const helper = await helperOn(fleet, cwd);
   const ids = new Map<Harness, string>();
   for (const harness of HARNESSES) {
     // biome-ignore lint/performance/noAwaitInLoops: one session at a time, each up before the next
@@ -448,7 +426,7 @@ const lineLegs = async (
   for (const harness of HARNESSES) {
     const id = ids.get(harness) as string;
     // biome-ignore lint/performance/noAwaitInLoops: each turn read before the next
-    await handOff(fleet, id, `${tag("ELSE", harness)}: carry on.`);
+    await helper.send(id, `${tag("ELSE", harness)}: carry on.`);
     const seen = await turnOf(fleet, tag("ELSE", harness), harness);
     kit.check(
       `(line) ${harness}: a hand-off while the person is on another chat starts its turn with "here, elsewhere"`,
@@ -478,7 +456,7 @@ const lineLegs = async (
   for (const harness of HARNESSES) {
     const id = ids.get(harness) as string;
     // biome-ignore lint/performance/noAwaitInLoops: each turn read before the next
-    await handOff(fleet, id, `${tag("AWAY", harness)}: run the build.`);
+    await helper.send(id, `${tag("AWAY", harness)}: run the build.`);
     const seen = await turnOf(fleet, tag("AWAY", harness), harness);
     kit.check(
       `(line) ${harness}: Appear away on, a hand-off starts its turn with "away" and the notes' heading (agents go quiet)`,
