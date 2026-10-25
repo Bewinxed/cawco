@@ -4,7 +4,9 @@ The pairing flow as one static page: the card and Caw above it at their real
 size, Desk (544) and Phone (390), one control per moment and Replay. The code
 and its motion are r4's (`PairingQr.svelte`, `PairingPanel.svelte` on
 `cawco/pairing-page-r4`, ffea611a5) with only the changes the owner's pins
-asked; the endings are report a8f73fdb §3 and §4.
+asked; the endings are report a8f73fdb §3 and §4. Every word on the screen
+is the copy report 24b5859f (a Fable writer) wrote, verbatim: under the code
+nothing is said while waiting.
 
 ```sh
 python3 -m http.server -d design-previews/pairing 8080   # any static server on this folder
@@ -73,14 +75,14 @@ them: a separate reviewer reads anatomy, proportion and character.
 | Checking | `caw/checking.png` | `tk_Pg4KWYmyJkbZ-ydttEIdx` |
 | Paired | `caw/approved.png` | `tk_vdFvg-7_BXJtsxZg8_37W`, cut out of `tk_5MKhbxfDbzzuMFIGJzA9x` |
 | Removed | `caw/removed.png` | `tk_h71NPWAoipVsFPRpJtyDM`, cut out of `tk_ndbwdeDBJ35JXI4E7jExY` |
-| Not let in | `caw/denied.png` | `tk_Q-q2L8tsk-HsTV2vS97oa` |
-| That code expired | `caw/expired.png` | `tk_UUycqx4EcxvnLivv9rBYf` |
-| That scan didn't match | `caw/nomatch.png` | `tk_vYCT4PHo2PzsWV2p8AFkc`, cut out of `tk_zHhwGrEet-1dbYUGCLf48` |
-| Pairing didn't start (both causes) | `caw/failed.png` | `tk_gMv0Ked3Nln-dsB9KL8VS` |
+| Denied | `caw/denied.png` | `tk_Q-q2L8tsk-HsTV2vS97oa` |
+| The code expired | `caw/expired.png` | `tk_UUycqx4EcxvnLivv9rBYf` |
+| Wrong code | `caw/nomatch.png` | `tk_vYCT4PHo2PzsWV2p8AFkc`, cut out of `tk_zHhwGrEet-1dbYUGCLf48` |
+| Pairing is off, The hub didn't answer | `caw/failed.png` | `tk_gMv0Ked3Nln-dsB9KL8VS` |
 | The head (r4's app icon) | `caw/badge.png` | r4's |
 | The head, face shut | `caw/badge-shut.png` | `tk_yHUMib6tFcuJXcOasbqIn` |
 
-Paired, Removed and That scan didn't match were remade from the cut-out of
+Paired, Removed and Wrong code were remade from the cut-out of
 the open-eyed source, `tk_689t8aVLxt1_jA_ojCjfk`, on Qwen-Image's edit
 guide (QwenLM/Qwen-Image `prompt_utils.py`, the edit enhancer: "Keep the
 enhanced prompt direct and specific"; its example "Replace the man's hat
@@ -96,7 +98,7 @@ unchanged"): the operation, then one clause keeping the rest, `keepRest:
   screen lying on the ground beside his right foot, about as long as his
   foot; keep his open eyes, calm face, beak, body, two feet and the
   transparent background unchanged."
-- That scan didn't match: "Add a small beige smartphone pinched at the red
+- Wrong code: "Add a small beige smartphone pinched at the red
   tip of the wing on the right, the wing raised a little so the phone is in
   front of his beak, screen toward his eye; keep his open eyes, the wing on
   the left, beak, body, two feet and the transparent background unchanged."
