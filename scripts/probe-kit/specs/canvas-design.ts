@@ -2962,10 +2962,24 @@ type Holds = (leg: string) => Promise<void>;
  * frames in a row, so its fit has measured, folded and drawn. Read each
  * frame, never after a fixed sleep: a loaded machine draws frames late
  * (load 80 to 88 put a head's read before its fit landed, 2 or 3 of 353),
- * an idle one at once. Answers null once settled, else what still moved
- * at `ms`.
+ * an idle one at once.
+ *
+ * Its budget is in frames, as a fit's is: the fit measures in a frame's
+ * layout and writes in the next (SideSurface's frameObserver), so it rests
+ * within a few frames of any width, and one whose boxes still change after
+ * `frames` never will. Wall time bounds only an engine drawing too few
+ * frames to read (`ms`): timed in it alone, WebKit under a finger on a
+ * loaded host ran out 15 s after a window bounce with its last frame's head
+ * drawing every control whole, the 1440 width's fit, and its next read
+ * folded (1 of 353). Answers null once settled, else what it saw.
  */
-const HEAD_SETTLED = async (ms: number): Promise<string | null> => {
+const HEAD_SETTLED = async ({
+  frames: most,
+  ms,
+}: {
+  frames: number;
+  ms: number;
+}): Promise<string | null> => {
   const head = () =>
     document.querySelector<HTMLElement>(
       "[data-bench-pane] [data-slot=side-head]"
@@ -3005,22 +3019,46 @@ const HEAD_SETTLED = async (ms: number): Promise<string | null> => {
     });
   const deadline = performance.now() + ms;
   let last = "";
+  // What the wait saw, said when it ends unsettled: the frames drawn and
+  // their longest gap, and the layouts the boxes changed among.
+  let frames = 0;
+  let longest = 0;
+  let changes = 0;
+  let at = performance.now();
+  const layouts = new Map<string, number>();
+  const saw = () => {
+    const often = [...layouts]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([read, n]) => `${n}× ${read}`)
+      .join(" | ");
+    return `${frames} frames, the longest ${Math.round(longest)}ms apart; the boxes changed ${changes} times among ${layouts.size} layouts; ${moving().length} run(s) moving; boxes ${last}; most drawn: ${often}`;
+  };
   for (let same = 0; same < 2;) {
+    if (frames >= most) {
+      return `unsettled after ${most} frames: ${saw()}`;
+    }
     if (performance.now() > deadline) {
-      return `unsettled after ${ms}ms: ${moving().length} run(s) moving; boxes ${last}`;
+      return `too few frames drawn in ${ms}ms: ${saw()}`;
     }
     // biome-ignore lint/performance/noAwaitInLoops: one frame at a time until three read the same
     await new Promise((done) => requestAnimationFrame(done));
+    const time = performance.now();
+    longest = Math.max(longest, time - at);
+    at = time;
+    frames += 1;
     const now = boxes();
+    changes += now === last ? 0 : 1;
+    layouts.set(now, (layouts.get(now) ?? 0) + 1);
     same = now === last && moving().length === 0 ? same + 1 : 0;
     last = now;
   }
   return null;
 };
 
-/** The head settled (`HEAD_SETTLED`), as a leg reads it after each resize: null once settled, else what still moved after 15 s. */
+/** The head settled (`HEAD_SETTLED`), as a leg reads it after each resize: null once settled, else what it saw in 300 frames, or in 60 s of an engine drawing fewer. */
 const headSettled = (page: Page): Promise<string | null> =>
-  page.evaluate(HEAD_SETTLED, 15_000);
+  page.evaluate(HEAD_SETTLED, { frames: 300, ms: 60_000 });
 
 /** The bench pane set to `w` px wide (`transformOrigin` top left, for a zoom), or zoomed to `scale`. */
 const SET_PANE = ({ w, scale }: { scale?: number; w?: number }) => {
@@ -3219,16 +3257,33 @@ async function bounceLeg(
   await page.close();
 }
 
-/** B in Chromium and WebKit, under a mouse and a finger, for a component canvas and a plain preview, with Send standing and without. */
+const WORDS = /[\s,]+/;
+
+/** Whether `CANVAS_BOUNCE`'s words (none: all) each name one of a configuration's `words`. */
+const bounceRuns = (words: string[]): boolean =>
+  (process.env.CANVAS_BOUNCE ?? "")
+    .split(WORDS)
+    .filter(Boolean)
+    .every((word) => words.includes(word));
+
+/**
+ * B in Chromium and WebKit, under a mouse and a finger, for a component
+ * canvas and a plain preview, with Send standing and without.
+ * `CANVAS_BOUNCE=<words>` runs only the configurations every word names
+ * (`webkit phone component send`; `nosend` for no Send).
+ */
 async function bounces(kit: Kit, bench: string, stage: Stage): Promise<void> {
-  for (const view of ["desk", "phone"] as const) {
-    for (const engine of ["chromium", "webkit"] as const) {
-      for (const kind of ["component", "preview"] as const) {
-        for (const picks of [true, false]) {
-          // biome-ignore lint/performance/noAwaitInLoops: one page at a time
-          await bounceLeg(kit, bench, stage, engine, kind, picks, view);
-        }
-      }
+  const runs = (["desk", "phone"] as const).flatMap((view) =>
+    (["chromium", "webkit"] as const).flatMap((engine) =>
+      (["component", "preview"] as const).flatMap((kind) =>
+        [true, false].map((picks) => ({ view, engine, kind, picks }))
+      )
+    )
+  );
+  for (const { view, engine, kind, picks } of runs) {
+    if (bounceRuns([view, engine, kind, picks ? "send" : "nosend"])) {
+      // biome-ignore lint/performance/noAwaitInLoops: one page at a time
+      await bounceLeg(kit, bench, stage, engine, kind, picks, view);
     }
   }
 }
