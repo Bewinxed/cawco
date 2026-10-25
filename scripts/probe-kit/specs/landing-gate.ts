@@ -18,6 +18,12 @@
  *   - B: a delegate commits a deliberate type error. The answer it reads
  *     says it did not land, that `bun run typecheck` failed, and carries
  *     tsc's error (TS2322); its item is still running, its commit not on main.
+ *     B goes on in that same turn, as a leaf told "Fix it, commit, and call
+ *     finish_item again" does: it fixes the error once the spec has read its
+ *     item (a file the spec writes in its `$TMPDIR`), commits and finishes
+ *     again, and that lands both its commits. A leaf that ends its turns
+ *     instead is failed on the third (hub work-items.ts `QUIET_TURNS`), as
+ *     any item is: B once did, "done" three times before its item was read.
  * - P: a Python project (pyproject.toml, pytest in its dev group, uv.lock)
  *   declares `uv sync` and `uv run pytest -q`. Its delegate adds a test and
  *   finishes: the report's gate is exactly those two steps, passing, and no
@@ -47,6 +53,10 @@ const FILES: Record<Tag, { path: string; body: string }> = {
   },
   N: { path: "notes.md", body: "A note." },
 };
+/** B's fix of its type error, made after the refusal. */
+const FIX_B = "export const b: number = 2;";
+/** The file in B's `$TMPDIR` the spec writes once it has read B's refused item: B fixes its error then. */
+const GO_B = "probe-gate-go-B";
 /** tsc's words for B's error. */
 const TS_ERROR = "src/b.ts(1,14): error TS2322";
 /** How finish_item answers a failed gate (work-items.ts `gateFailedText`). */
@@ -56,8 +66,19 @@ const PY_GATE = "---\nuv sync\nuv run pytest -q\n---\n";
 /** What a landing of a project that declares no gate says (work-items.ts `NO_CHECKS`). */
 const NO_CHECKS = "merged with no checks: this project declares none";
 
-const steps: Partial<Record<Tag, { finish?: boolean; searched?: boolean }>> =
-  {};
+const steps: Partial<
+  Record<Tag, { finish?: boolean; retried?: boolean; searched?: boolean }>
+> = {};
+
+/** B, refused: waits for the spec's word in its `$TMPDIR`, then fixes its type error and commits. */
+const FIX_COMMAND = [
+  `for _ in $(seq 1 300); do [ -e "$TMPDIR/${GO_B}" ] && break; sleep 1; done`,
+  `printf '%s\\n' '${FIX_B}' > ${FILES.B.path}`,
+  `git add ${FILES.B.path}`,
+  "git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Delegate fix B'",
+  // Spelled apart, so only the command's output carries it whole.
+  'echo DONE-FIX-"B"',
+].join(" && ");
 
 const commitCommand = (tag: Tag) =>
   [
@@ -86,6 +107,26 @@ const respond = (request: Seen): Reply => {
   const step = steps[tag];
   if (!request.all.includes(`DONE-COMMIT-${tag}`)) {
     return tool("Bash", { command: commitCommand(tag), description: "Commit" });
+  }
+  if (
+    tag === "B" &&
+    step.finish &&
+    request.all.includes(NOT_LANDED) &&
+    !request.all.includes("DONE-FIX-B")
+  ) {
+    return tool("Bash", {
+      command: FIX_COMMAND,
+      description: "Fix the type error",
+      timeout: 600_000,
+    });
+  }
+  if (tag === "B" && request.all.includes("DONE-FIX-B") && !step.retried) {
+    step.retried = true;
+    return tool(FINISH, {
+      headline: "Fixed the type error in src/b.ts.",
+      summary:
+        "Fixed the type error in src/b.ts.\n\n`git log --oneline -1` printed: Delegate fix B\n\nNot run: none.",
+    });
   }
   if (!step.finish && request.toolNames.includes(FINISH)) {
     step.finish = true;
@@ -212,14 +253,17 @@ const run = async (kit: Kit) => {
       id
     )[0];
   const delegate = (tag: Tag, cwd: string, parent: string) =>
-    fleet.api<{ workItemId: string; text: string }>("/api/work-items", {
-      parentInstanceId: parent,
-      title: `Commit ${tag}`,
-      prompt: `PROBE-GATE-${tag}: commit a file, then finish.`,
-      harness: "claude",
-      model: "claude-haiku-4-5",
-      cwd,
-    });
+    fleet.api<{ workItemId: string; workspaceId: string; text: string }>(
+      "/api/work-items",
+      {
+        parentInstanceId: parent,
+        title: `Commit ${tag}`,
+        prompt: `PROBE-GATE-${tag}: commit a file, then finish.`,
+        harness: "claude",
+        model: "claude-haiku-4-5",
+        cwd,
+      }
+    );
   const ended = (tag: Tag, id: string) =>
     until(
       `${tag}'s item ended`,
@@ -292,6 +336,20 @@ const run = async (kit: Kit) => {
     "B: its commit is not on main",
     !afterB.includes("Delegate commit B") && afterB[0] === "Delegate commit A",
     afterB.join(" | ")
+  );
+  // B fixes its error now, in the turn its refusal came in, and finishes again.
+  await writeFile(
+    join(home, ".cawco", "tmp", b.workspaceId.slice(0, 8), GO_B),
+    "go\n"
+  );
+  const bDone = await ended("B", b.workItemId);
+  const landedB = await ts.mainLog();
+  check(
+    "B: fixed and finished again in the same turn, it lands both its commits",
+    bDone.state === "done" &&
+      landedB[0] === "Delegate fix B" &&
+      landedB[1] === "Delegate commit B",
+    `${bDone.state} ${bDone.error ?? ""}; ${landedB.join(" | ")}`
   );
 
   // P

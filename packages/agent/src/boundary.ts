@@ -236,6 +236,7 @@ import {
   socketPlace,
   toolDoorOf,
 } from "./tool-door";
+import { linkWorkspaceModules } from "./workspace-modules";
 import { SYSTEM_PATH, workspaceNeeds } from "./workspace-needs";
 import { workspaceRecords } from "./workspace-records";
 import { GIT_MOVE, gitShim, shimPaths } from "./worktree-guard";
@@ -7652,6 +7653,11 @@ const start = async (
 ): Promise<Held> => {
   const gen = randomBytes(4).toString("hex");
   await makeDirs(ref.id);
+  await linkWorkspaceModules(ref).catch((error: unknown) => {
+    console.warn(
+      `[workspace] ${ref.id}: its node_modules could not be linked into the workspaces' cache, so bun copies what its global store cannot hold: ${error instanceof Error ? error.message : String(error)}`
+    );
+  });
   await mkdir(join(stateDir(ref.id), "boundaries"), { recursive: true });
   // Its generation's dir is made here and nowhere else, and only by this
   // start: one already there is another start's, whose files this one
