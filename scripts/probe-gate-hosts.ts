@@ -23,7 +23,7 @@
  * agent's own browser registry and gate run here, driven through the
  * agent's own harness code. The hub's part of a pi
  * relaunch — stop the session at its turn boundary, spawn it again on its
- * conversation — is played here as the hub's `relaunchOntoHook` plays it.
+ * conversation — is played here as the hub's `relaunchAtRest` plays it.
  */
 import { chmod, copyFile, mkdir, readdir, rm, symlink } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
@@ -1027,7 +1027,7 @@ try {
   await until(() => relaunchAsked(adopted) >= 0, 10_000, "pi's relaunch ask");
   const askedAt = relaunchAsked(adopted);
   // The hub at that turn boundary: the session is idle, so it is relaunched
-  // on its conversation, as `relaunchOntoHook` → `resumeSpawn` does.
+  // on its conversation, as `relaunchAtRest` → `resumeSpawn` does.
   const sessionKey = piSession.sessionId as string;
   await piSession.stop();
   const relaunched = watch(PI);

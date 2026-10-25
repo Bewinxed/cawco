@@ -165,6 +165,7 @@ import {
   CLAUDE_CONVERSATION_GONE,
   CLAUDE_PROVIDER,
   CLI_OUTDATED,
+  COMPACT_RELAUNCH,
   COMPACTION_ORIGIN,
   CONFIGURE_BINARY_UPDATES,
   CONTAINERS_ENDED,
@@ -25781,27 +25782,44 @@ export const createServer = (
   const relaunching = new Set<string>();
   const RELAUNCH_SETTLE_MS = 60_000;
 
+  /** What a relaunch at rest is for, as its log lines say it ({@link relaunchAtRest}). */
+  const RELAUNCH_FOR = {
+    boundary: { tag: "boundary", onto: "onto the fail-closed hook" },
+    compact: {
+      tag: "compact",
+      onto: "into a process that never held its compacted history",
+    },
+  } as const;
+
   /**
-   * A session whose CLI runs a boundary hook that fails open, as its machine
-   * says at the attach and at each of its turns' ends ({@link BOUNDARY_RELAUNCH}):
-   * relaunched on its conversation, account and config dir — the at-limit
-   * move's path — so it comes back with the workspace's hook that refuses
-   * instead. Only between turns: one mid-turn, or with a send or an ask
-   * outstanding, is left to its next turn's end, which says so again. A send
-   * that follows the spawn waits behind it on the machine and reaches the new
-   * process.
+   * A session its machine asks to have relaunched at a turn's end: its CLI
+   * runs a boundary hook that fails open ({@link BOUNDARY_RELAUNCH}, said at
+   * the attach and at each of its turns' ends), so it comes back with the
+   * workspace's hook that refuses instead; or its Claude Code process ran a
+   * manual `/compact` ({@link COMPACT_RELAUNCH}), so its next one runs in a
+   * process that never held the history before it. Relaunched on its
+   * conversation, account and config dir — the at-limit move's path. Only
+   * between turns: one mid-turn, or with a send or an ask outstanding, is
+   * left to its next turn's end, which says so again. A send that follows the
+   * spawn waits behind it on the machine and reaches the new process.
    */
-  const relaunchOntoHook = async (
+  const relaunchAtRest = async (
     machineId: string,
-    instanceId: string
+    instanceId: string,
+    why: keyof typeof RELAUNCH_FOR
   ): Promise<void> => {
-    if (relaunching.has(instanceId)) {
+    // A compaction's ask comes only from the process that ran it, and a
+    // launch on its way already refuses a second ({@link inFlightRefusal}):
+    // held for {@link RELAUNCH_SETTLE_MS}, a second `/compact` within it
+    // would run in the process its first was relaunched into, and go on.
+    if (why === "boundary" && relaunching.has(instanceId)) {
       return;
     }
+    const { tag, onto } = RELAUNCH_FOR[why];
     const [row] = db.getInstancesByIds([instanceId]);
     const agent = registry.agent(machineId);
     // One put to sleep at that boundary has no process left to replace: its
-    // next wake launches it onto the hook that refuses.
+    // next wake launches it afresh.
     if (
       !(row?.sessionId && agent && row.machineId === machineId) ||
       row.status === "sleeping"
@@ -25810,17 +25828,17 @@ export const createServer = (
     }
     if (!(await sessionIdle(row))) {
       console.info(
-        `[hub] boundary: ${instanceId} is mid-turn; it is relaunched onto the fail-closed hook at its next turn's end`
+        `[hub] ${tag}: ${instanceId} is mid-turn; it is relaunched ${onto} at its next turn's end`
       );
       return;
     }
     const { sessionId } = row;
-    relaunching.add(instanceId);
-    lifetime.after(RELAUNCH_SETTLE_MS, () => relaunching.delete(instanceId));
+    if (why === "boundary") {
+      relaunching.add(instanceId);
+      lifetime.after(RELAUNCH_SETTLE_MS, () => relaunching.delete(instanceId));
+    }
     resumeSpawn(agent, machineId, { ...row, sessionId }, true);
-    console.info(
-      `[hub] boundary: relaunching ${instanceId} onto the fail-closed hook`
-    );
+    console.info(`[hub] ${tag}: relaunching ${instanceId} ${onto}`);
   };
 
   /**
@@ -34890,17 +34908,23 @@ export const createServer = (
                   }
                   break;
                 }
-                // A session whose boundary hook fails open, at a turn
-                // boundary: relaunched onto the one that refuses when idle.
+                // A session whose boundary hook fails open, or whose Claude
+                // Code process ran a manual /compact, at a turn boundary:
+                // relaunched on its conversation when idle.
                 if (
                   frame.message.type === "system" &&
-                  frame.message.subtype === BOUNDARY_RELAUNCH
+                  (frame.message.subtype === BOUNDARY_RELAUNCH ||
+                    frame.message.subtype === COMPACT_RELAUNCH)
                 ) {
                   const { machineId, instanceId } = message;
-                  relaunchOntoHook(machineId, instanceId).catch(
+                  const why =
+                    frame.message.subtype === BOUNDARY_RELAUNCH
+                      ? "boundary"
+                      : "compact";
+                  relaunchAtRest(machineId, instanceId, why).catch(
                     (error: unknown) =>
                       console.error(
-                        `[hub] boundary: relaunching ${instanceId} failed: ${String(error)}`
+                        `[hub] ${why}: relaunching ${instanceId} failed: ${String(error)}`
                       )
                   );
                   break;
