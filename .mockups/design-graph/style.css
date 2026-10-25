@@ -485,7 +485,7 @@ html[data-layout="desk"] .panel[data-open="false"] .panel-shell:active .tab-glyp
 .tl { --fade-t: 0px; --fade-b: 0px; }
 .tl[data-fade~="top"] { --fade-t: var(--c-edge-fade-len); }
 .tl[data-fade~="foot"] { --fade-b: var(--c-edge-fade-len); }
-.tl[data-fade] { mask-image: linear-gradient(#000 var(--tl-head, 0px), transparent var(--tl-head, 0px), #000 calc(var(--tl-head, 0px) + var(--fade-t)), #000 calc(100% - var(--fade-b)), transparent); }
+.tl[data-fade] { mask-image: linear-gradient(#000 var(--tl-fade-from, 0px), transparent var(--tl-fade-from, 0px), #000 calc(var(--tl-fade-from, 0px) + var(--fade-t)), #000 calc(100% - var(--fade-b)), transparent); }
 .tl-row { display: grid; grid-template-columns: var(--dock-name-w) minmax(0, 1fr); }
 .ruler-row { position: sticky; inset-block-start: 0; z-index: 6; align-items: center; min-block-size: var(--c-pill-h); background: var(--surface-raised); padding-block-end: var(--space-1); }
 .ruler-row .ruler { grid-column: 2; }
@@ -629,7 +629,13 @@ html[data-kinds="ink"] .tail { --tail-fill: var(--surface-fill-strong); --tail-e
 .clip:has(> .ctl-row) { z-index: 5; }
 .clip > .ctl-row { position: relative; background: linear-gradient(var(--c-chosen-wash), var(--c-chosen-wash)), var(--surface-raised); }
 .ctl-row .ctl-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: var(--space-3) var(--space-5); align-items: start; }
-.ctl-row .ctl-head { grid-column: 1 / -1; justify-content: flex-end; min-block-size: 0; margin-block-end: calc(-1 * var(--space-2)); }
+/* The length and the delta share a column; in the row the actions stand beside the row's name (narrow) or at
+   the controls' top corner (wide). */
+.ctl-col { display: flex; flex-direction: column; gap: var(--space-3); min-inline-size: 0; }
+.clip-name:has(> .ctl-head) { grid-template-columns: var(--c-row-lead) minmax(0, 1fr) auto; }
+.clip-name:has(> .ctl-head) > :is(.l1, .facts) { grid-column: 2; }
+.clip-name > .ctl-head { grid-column: 3; grid-row: 1 / span 2; align-self: start; min-block-size: 0; gap: var(--space-1); cursor: auto; }
+.ctl-row > .ctl-head { position: absolute; z-index: 1; inset-block-start: 0; inset-inline-end: 0; min-block-size: 0; gap: var(--space-1); }
 .dock-grid { flex: 1 1 auto; min-block-size: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); column-gap: var(--space-4); }
 .dock[data-insp] .dock-grid { grid-template-columns: minmax(0, 1fr) var(--c-sheet-inspector-w); }
 .dock-head { grid-column: 1 / -1; }
@@ -841,10 +847,8 @@ html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-po
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.var, .region-head, .fact, .fld, .curve-opt) { min-block-size: var(--c-touch-floor); }
 /* A fact cut to its glyph (a narrow facts line gives up its words) still takes a finger: the floor wide, its glyph centred. */
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .fact { min-inline-size: var(--c-touch-floor); justify-content: center; }
-/* The row's open controls stand clear of the lane's 44px bar layer, and their Close keeps its own layer inside
-   the timeline. */
+/* The row's open controls stand clear of the lane's 44px bar layer. */
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .clip > .ctl-row { margin-block-start: calc(var(--c-touch-floor) - var(--c-pill-h)); }
-html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .ctl-head { padding-inline-end: calc((var(--c-touch-floor) - var(--c-btn-h-xs)) / 2); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .var { display: flex; align-items: center; }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .fld { block-size: var(--c-touch-floor); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.dslider, .ctl input[type="range"], .dial input[type="range"]) { min-block-size: var(--c-touch-floor); }
