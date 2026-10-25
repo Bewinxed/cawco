@@ -95,20 +95,42 @@ const TIME = /^(-?[\d.]+)(ms|s)$/;
 const ROOT_SELECTOR = /(^|,)\s*(:root|html)\b/;
 const VAR_ONLY = /^var\(\s*(--[\w-]+)\s*\)$/;
 
-/** Every custom property a rule set on the root (`:root` or `html`), at any depth of media, layers and supports, the first one kept. */
-function rootProperties(rules: CSSRuleList, into: Map<string, string>): void {
+/** A declaration block's custom properties, the first of each name kept. */
+function customProperties(
+  style: CSSStyleDeclaration,
+  into: Map<string, string>
+): void {
+  for (const name of style) {
+    if (name.startsWith("--") && !into.has(name)) {
+      into.set(name, style.getPropertyValue(name).trim());
+    }
+  }
+}
+
+/**
+ * Every custom property a rule set on the root (`:root` or `html`), at any
+ * depth of media, layers and supports, the first one kept. A root rule's
+ * declarations after a rule nested in it (Tailwind writes a token's
+ * `@supports (color: color-mix(…))` fallback inside `:root`) are a nested
+ * declarations rule of their own (CSS Nesting's `CSSNestedDeclarations`),
+ * not its `style`: read through `style` alone, every token after the first
+ * nested rule went unread.
+ */
+function rootProperties(
+  rules: CSSRuleList,
+  into: Map<string, string>,
+  inRoot = false
+): void {
   for (const rule of rules) {
     if (rule instanceof CSSStyleRule) {
-      if (!ROOT_SELECTOR.test(rule.selectorText)) {
-        continue;
+      if (ROOT_SELECTOR.test(rule.selectorText)) {
+        customProperties(rule.style, into);
+        rootProperties(rule.cssRules, into, true);
       }
-      for (const name of rule.style) {
-        if (name.startsWith("--") && !into.has(name)) {
-          into.set(name, rule.style.getPropertyValue(name).trim());
-        }
-      }
+    } else if (inRoot && "style" in rule) {
+      customProperties((rule as CSSRule & { style: CSSStyleDeclaration }).style, into);
     } else if ("cssRules" in rule) {
-      rootProperties((rule as CSSGroupingRule).cssRules, into);
+      rootProperties((rule as CSSGroupingRule).cssRules, into, inRoot);
     }
   }
 }

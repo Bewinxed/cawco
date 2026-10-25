@@ -396,11 +396,11 @@ export interface CanvasState {
 declare global {
   interface Window {
     __cawcoCanvas?: CanvasState;
+    /** What the page last said of its sections for the design graph (`cawco:graph`): the overlay says it again on the pane's hello. Its own name: `__cawcoGraph` is the page's module graph as its preloads arrive (host.ts). */
+    __cawcoDesignGraph?: GraphModel;
     /** The agent's dials as the page last said them (`cawco:dials`): the overlay says them again on the pane's hello. */
     __cawcoDials?: DialsModel;
     __cawcoErrors?: { at: number; error: unknown }[];
-    /** What the page last said of its sections for the design graph (`cawco:graph`): the overlay says it again on the pane's hello. */
-    __cawcoGraph?: GraphModel;
     /** The kept move as the page last said it (`cawco:move`), or null for none: the overlay says it again on the pane's hello. */
     __cawcoMove?: MoveModel | null;
     __cawcoSheetOnPage?: SheetOnPage;
@@ -2310,7 +2310,7 @@ export function boot(options: BootOptions): void {
       return;
     }
     graphSaid = text;
-    window.__cawcoGraph = model;
+    window.__cawcoDesignGraph = model;
     dispatchEvent(new CustomEvent("cawco:graph", { detail: model }));
   }
 

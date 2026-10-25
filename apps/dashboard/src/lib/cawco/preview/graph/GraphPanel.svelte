@@ -357,12 +357,15 @@
     ) {
       return;
     }
-    const head = event.currentTarget as HTMLElement;
+    const { pointerId } = event;
     const y0 = event.clientY;
     const h0 = drawerHeight;
     let moved = false;
-    head.setPointerCapture(event.pointerId);
-    head.onpointermove = (one) => {
+    // Followed on the window, never captured: a press that stays put stays the grabber's own click (a capture takes the click to the head), and a drag past the head is still heard.
+    const move = (one: PointerEvent) => {
+      if (one.pointerId !== pointerId) {
+        return;
+      }
       const dy = one.clientY - y0;
       if (!moved && Math.abs(dy) < 6) {
         return;
@@ -373,10 +376,13 @@
         Math.min(stopHeight("full"), h0 - dy)
       );
     };
-    const done = () => {
-      head.onpointermove = null;
-      head.onpointerup = null;
-      head.onpointercancel = null;
+    const done = (one: PointerEvent) => {
+      if (one.pointerId !== pointerId) {
+        return;
+      }
+      removeEventListener("pointermove", move);
+      removeEventListener("pointerup", done);
+      removeEventListener("pointercancel", done);
       if (moved && dragged !== null) {
         const at = dragged;
         const nearestStop = (["head", "peek", "full"] as const).reduce(
@@ -392,8 +398,9 @@
         }
       }
     };
-    head.onpointerup = done;
-    head.onpointercancel = done;
+    addEventListener("pointermove", move);
+    addEventListener("pointerup", done);
+    addEventListener("pointercancel", done);
   }
   function grabberPress(): void {
     if (!graph.open) {
@@ -802,8 +809,13 @@
             </button>
           </GlassGroup>
         </header>
+        <!-- Clipped to the drawer: folded to its head, what it holds stands inside it, never under the pane's foot. -->
         <div
-          class="flex min-h-0 flex-1 flex-col gap-space-2 px-space-2 pb-space-2"
+          class={[
+            "flex min-h-0 flex-1 flex-col gap-space-2 overflow-hidden pb-space-2",
+            // The timeline lays its own inline room, so its head's hairline runs the drawer's whole width.
+            !(graph.face === "move" && hasMove) && "px-space-2",
+          ]}
           inert={!graph.open}
         >
           {#if graph.face === "move" && hasMove}

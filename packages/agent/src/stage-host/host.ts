@@ -888,9 +888,12 @@ function canvasPage(): string {
   const viewport = VIEWPORT_META.test(html)
     ? ""
     : '<meta name="viewport" content="width=device-width, initial-scale=1" />';
+  // Its encoding said in the page too, first in its head, where a shell declares none (a Vite app with no index.html): with only the header to go by, WebKit drew the probe's canvas page as windows-1252 (its `document.characterSet`), and the overlay's "·" stood as "Â·" in every pin's title.
+  const charset = CHARSET_META.test(html) ? "" : '<meta charset="utf-8" />';
   return html
     .replace(PLACEHOLDER, "")
     .replace(INLINE_SCRIPT, "")
+    .replace(HEAD_TAG, (open) => `${open}${charset}`)
     .replace("</head>", `${viewport}${COLLECTOR}</head>`)
     .replace(
       "</body>",
@@ -1119,6 +1122,10 @@ const CANVAS_ASSETS: Record<string, { body: string | Buffer; type: string }> = {
 
 const BODY = /(<body\b[^>]*>)[\s\S]*(<\/body>)/i;
 const VIEWPORT_META = /<meta\b[^>]*\bname=["']viewport["']/i;
+/** A page's head tag, where its encoding goes first. */
+const HEAD_TAG = /<head\b[^>]*>/i;
+/** A page's own declared encoding: `<meta charset>` or its `http-equiv` form. */
+const CHARSET_META = /<meta\b[^>]*\b(?:charset|http-equiv=["']content-type["'])/i;
 /** `%sveltekit.head%`, `%sveltekit.assets%` … and a project's own (`%cawco.tab-icon%`). */
 const PLACEHOLDER = /%[\w.-]+%/g;
 const INLINE_SCRIPT = /<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/gi;
@@ -1201,7 +1208,8 @@ async function serveCanvas(
       ),
       key
     );
-    res.setHeader("content-type", "text/html");
+    // Written from strings, so UTF-8 whatever the app's shell declares (a Vite app with no index.html declares none): the page and every script it loads without a charset of its own, the overlay's among them, read as written.
+    res.setHeader("content-type", "text/html; charset=utf-8");
     res.setHeader("cache-control", "no-store");
     res.end(html);
   } catch (error) {

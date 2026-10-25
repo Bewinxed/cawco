@@ -125,10 +125,14 @@ import { Database } from "bun:sqlite";
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Locator, Page } from "playwright-core";
+import type { Frame, Locator, Page } from "playwright-core";
 import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
 import { type Pin, writePin } from "../../../packages/core/src/comments";
 import type { MapDoc } from "../../../packages/core/src/doc-maps";
+import {
+  injectOverlay,
+  overlayResponse,
+} from "../../../packages/core/src/preview-proxy";
 import { PAGE_SILENT_MS } from "../../../packages/core/src/preview-reach";
 import type {
   CanvasMap,
@@ -142,19 +146,154 @@ import { previewWords } from "../../../packages/core/src/words/preview";
 import { sheetWords } from "../../../packages/core/src/words/sheet";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import { MACHINE, until } from "../../scratch-fleet";
-import { type Kit, open as openPage, ROOT, type Spec } from "../kit";
+import { type Box, box as boxAt, overlap, inside as within } from "../geom";
+import {
+  type Kit,
+  open as openPage,
+  pressAt,
+  ROOT,
+  readMotion,
+  type Spec,
+} from "../kit";
 import { reachOf } from "../reach";
 import { shaped } from "../words";
 
 const DASHBOARD = join(ROOT, "apps/dashboard");
 /** The artifact's live doc on the dashboard's own origin (artifact-doc.ts `joinArtifact`). */
-const ARTIFACT_SOCKET = /\/ws\/artifact\//;
+/** The artifact's doc, as the dashboard joins it (`/ws/artifact/…`) and as a page's overlay does on its own origin (`/__cawco/artifact/<id>`, artifact-doc.ts `artifactSyncPath`). */
+const ARTIFACT_SOCKET = /\/ws\/artifact\/|\/__cawco\/artifact\/[^/?]+(?:\?|$)/;
 /** More's name while it holds Comments: native's words (PreviewController.swift). */
 const MORE_COUNT = /^More, Comments [1-9]\d* open$/;
-/** The crumb's words: which frame of how many. */
-const FRAME_COUNT = /^Frame \d+ of \d+$/;
 /** A states file of the probe's own, in the stage's git-ignored folder: one story with no doc comment. */
 const UNNAMED_FILE = ".cawco/probe/Unnamed.stories.ts";
+/**
+ * The design graph's states file (G legs), the probe's own beside the
+ * dashboard's: the real routine form holding the owner's own routine, as
+ * the hub holds it ("Daily reply shortlist for X", 06:30 every day, New
+ * York), its hub a stand-in whose create never reaches the hub. Its states
+ * stand in one machine, "Saving it" (the agent's `group`); its move is a
+ * press on Create from Filled, the reason unfolding above the actions.
+ */
+const ROUTINE_FILE = ".cawco/probe/RoutineSave.stories.ts";
+const ROUTINE_STATES = `import { routinesWords } from "@cawco/core/words/routines";
+import RoutineForm from "../../src/lib/cawco/routines/RoutineForm.svelte";
+// The app's global sheet, as its root layout loads it on every page (the probe's stage runs without SvelteKit, so no layout loads it): the page's motion tokens the dock offers come from it.
+import "../../src/app.css";
+
+/** The owner's own routine, as the hub holds it. */
+const daily = {
+  name: "Daily reply shortlist for X",
+  prompt:
+    "Build today's reply shortlist for @CawCoDev. You publish nothing: no posting, replying, liking, following or DMing.",
+  cron: "30 6 * * *",
+  delegateType: "medium",
+};
+
+/** Its runs over the next week, every day at 06:30 on the reader's clock. */
+const runs = () => {
+  const start = new Date();
+  start.setHours(6, 30, 0, 0);
+  return Array.from({ length: 8 }, (_, day) => start.getTime() + day * 86_400_000).filter(
+    (at) => at > Date.now()
+  );
+};
+
+const unanswered = routinesWords.createFailed(
+  "The hub didn't answer (502).",
+  routinesWords.fixTryAgain
+);
+
+export default {
+  title: "Routines/Routine form",
+  component: RoutineForm,
+  args: {
+    projectId: "cawco",
+    draft: daily,
+    focus: false,
+    hub: {
+      types: () =>
+        Promise.resolve([
+          { name: "medium", description: "Everyday code work: a fix, a small feature, a refactor." },
+        ]),
+      preview: (_cron, timeZone) =>
+        Promise.resolve({ nextRuns: runs(), words: \`At 06:30, every day (\${timeZone})\` }),
+      create: () => Promise.reject(new Error("The hub didn't answer (502).")),
+    },
+    oncreated: () => undefined,
+    oncancel: () => undefined,
+  },
+};
+
+/** Filled in and ready to create. */
+export const Filled = { parameters: { viewport: 600 } };
+
+/** Creating: the button keeps its width and its spinner stands over its label. */
+export const Saving = { args: { saving: true }, parameters: { viewport: 600 } };
+
+/** Create pressed and the hub didn't answer: the reason unfolds above the actions, every value kept. */
+export const SaveFailed = {
+  args: { failure: unanswered },
+  parameters: { viewport: 600 },
+  from: "Filled",
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(canvas.getByRole("button", { name: /^Create routine/ }));
+    await new Promise((done) => setTimeout(done, 600));
+  },
+};
+
+/** The hub refused the delegate type: its words, and choose another. */
+export const TypeRefused = {
+  args: {
+    failure: routinesWords.createFailed(
+      "This project can't run the medium delegate type.",
+      routinesWords.fixType
+    ),
+  },
+  parameters: { viewport: 600 },
+};
+`;
+/** The graph legs' canvas: the routine form and the speaker line, the agent's machine, its edge and its dial. */
+const GRAPH_FILES = [ROUTINE_FILE, "src/lib/cawco/turn/Who.stories.ts"];
+const GRAPH_CANVAS: CanvasSpec = {
+  name: "Routine form",
+  group: {
+    [`${ROUTINE_FILE}:Filled`]: "Saving it",
+    [`${ROUTINE_FILE}:Saving`]: "Saving it",
+    [`${ROUTINE_FILE}:SaveFailed`]: "Saving it",
+    [`${ROUTINE_FILE}:TypeRefused`]: `${ROUTINE_FILE}:SaveFailed`,
+  },
+  edges: [
+    {
+      from: `${ROUTINE_FILE}:SaveFailed`,
+      to: `${ROUTINE_FILE}:Saving`,
+      label: "Try again",
+    },
+  ],
+  // Two of the agent's own, each a slider (pin 7: "the agent decides"): the form's field corners and the room between its fields, each a token the form draws with.
+  dials: [
+    {
+      name: "radius",
+      label: "Corner radius",
+      kind: "number",
+      min: 0,
+      max: 16,
+      step: 1,
+      unit: "px",
+      target: { cssVar: "--radius-md" },
+    },
+    {
+      name: "gap",
+      label: "Field gap",
+      kind: "number",
+      min: 4,
+      max: 32,
+      step: 1,
+      unit: "px",
+      target: { cssVar: "--space-3" },
+    },
+  ],
+};
+const GRAPH_ASK = "Judge the routine form's save states";
 const FILES = [
   "src/lib/cawco/StatTile.stories.ts",
   "src/lib/cawco/turn/Who.stories.ts",
@@ -190,13 +329,13 @@ const CANVAS: CanvasSpec = {
     },
   ],
 };
-/** Every arrow or chevron a text could draw: the chrome draws Solar's glyphs or words instead. */
-const ARROWS = /[→›←‹◀▶]/;
 
 interface Stage {
   base: string;
   /** The host's last `errors` word to the daemon (stage-host host.ts `tellErrors`): every section problem it keeps; null before it said one. */
   errors: () => StageError[] | null;
+  /** The last of what the host said, for a leg that says why its page never drew. */
+  heard: () => string;
   port: number;
   stop: () => void;
 }
@@ -228,6 +367,7 @@ export const Two = {
 };
 `
   );
+  writeFileSync(join(DASHBOARD, ROUTINE_FILE), ROUTINE_STATES);
   writeFileSync(
     join(DASHBOARD, ".cawco/stage/host.mjs"),
     await buildStageHost()
@@ -272,6 +412,7 @@ export const Two = {
         ? (JSON.parse(said) as { errors: StageError[] }).errors
         : null;
     },
+    heard: () => words.slice(-1500),
     port,
     stop: () => {
       child.kill("SIGTERM");
@@ -280,8 +421,8 @@ export const Two = {
   };
 }
 
-const canvasPath = () =>
-  `/@cawco/canvas?${FILES.map((file) => `file=${encodeURIComponent(file)}`).join("&")}&spec=${encodeURIComponent(JSON.stringify(CANVAS))}`;
+const canvasPath = (files = FILES, drawing = CANVAS) =>
+  `/@cawco/canvas?${files.map((file) => `file=${encodeURIComponent(file)}`).join("&")}&spec=${encodeURIComponent(JSON.stringify(drawing))}`;
 
 /** Every frame drawn and the page quiet. */
 async function drawn(page: Page): Promise<void> {
@@ -298,913 +439,6 @@ async function drawn(page: Page): Promise<void> {
     { timeout: 60_000 }
   );
   await page.waitForTimeout(1200);
-}
-
-/** Read in the page: colours as drawn (sRGB bytes through a canvas), tokens resolved on a probe element, contrast. */
-const PAINT = () => {
-  const paint = document.createElement("canvas").getContext("2d", {
-    willReadFrequently: true,
-  }) as CanvasRenderingContext2D;
-  const rgb = (color: string): number[] => {
-    paint.clearRect(0, 0, 1, 1);
-    paint.fillStyle = "#000";
-    paint.fillStyle = color;
-    paint.fillRect(0, 0, 1, 1);
-    return [...paint.getImageData(0, 0, 1, 1).data];
-  };
-  const lum = (color: string) => {
-    const [r, g, b] = rgb(color).map((v) => {
-      const c = v / 255;
-      return c <= 0.040_45 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-    });
-    return 0.2126 * (r ?? 0) + 0.7152 * (g ?? 0) + 0.0722 * (b ?? 0);
-  };
-  const w = window as unknown as Record<string, unknown>;
-  w.__rgb = (color: string) => rgb(color).slice(0, 3).join(",");
-  w.__contrast = (a: string, b: string) => {
-    const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
-    return ((hi ?? 0) + 0.05) / ((lo ?? 0) + 0.05);
-  };
-  /** A token's colour as drawn in `host`'s scheme. */
-  w.__token = (name: string, host: Element, prop = "background-color") => {
-    const probe = document.createElement("span");
-    probe.style.setProperty(prop, `var(${name})`);
-    host.append(probe);
-    const said = getComputedStyle(probe).getPropertyValue(prop);
-    probe.remove();
-    return (w.__rgb as (c: string) => string)(said);
-  };
-};
-
-interface PageRead {
-  bandStrip: string;
-  bandStripApart: boolean;
-  bodyFont: string;
-  canvasWell: [string, string];
-  chip: {
-    after: number;
-    h: number;
-    radius: string;
-    edge: number;
-    fill: [string, string];
-  } | null;
-  current: {
-    bg: [string, string];
-    ink: [string, string];
-    ratio: number;
-  } | null;
-  faces: { figtree: boolean; mono: boolean };
-  footEdge: [string, string];
-  hits: { name: string; ok: boolean }[];
-  /** `surface-hover` as drawn: what pressed must not read as. */
-  hover: string;
-  pick: {
-    edge: [string, string];
-    ratio: number;
-    glyph: boolean;
-    h: number;
-  } | null;
-  pressed: [string, string];
-  repeats: string[];
-  ring: {
-    clear: boolean;
-    outline: string;
-    shadow: string;
-    edge: string;
-    ink: [string, string];
-  } | null;
-  row: { bg: [string, string]; ink: [string, string] } | null;
-  sectionFile: {
-    color: string;
-    decoration: string;
-    font: string;
-    muted: string;
-    size: string;
-    text: string;
-    title: string;
-  } | null;
-  steps: { glyphs: number; arrows: boolean } | null;
-  unnamed: { text: string; style: string; font: string; small: string } | null;
-}
-
-/** One page's reading of every finding on the canvas. */
-async function readCanvas(page: Page): Promise<PageRead> {
-  // The mono face loads when code is drawn (a failed section's details), not at rest: asked for here, it must come from the stage.
-  await page.evaluate(() =>
-    document.fonts.load('400 12px "JetBrains Mono Variable"')
-  );
-  // Outline open: the frame in view takes its mark, the outline its current row.
-  await page.evaluate(() => {
-    const root = document.getElementById("cawco-chrome")
-      ?.shadowRoot as ShadowRoot;
-    const outline = [...root.querySelectorAll("button")].find(
-      (one) => one.textContent === "Outline"
-    );
-    outline?.click();
-    dispatchEvent(
-      new CustomEvent("cawco:story-select", { detail: { story: "Spend" } })
-    );
-  });
-  await page.waitForTimeout(600);
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one reading of the page in the page, every finding's boxes and colours at once
-  return page.evaluate(() => {
-    const w = window as unknown as {
-      __rgb: (c: string) => string;
-      __contrast: (a: string, b: string) => number;
-      __token: (name: string, host: Element, prop?: string) => string;
-    };
-    const root = document.getElementById("cawco-chrome")
-      ?.shadowRoot as ShadowRoot;
-    const head = root.querySelector(".head") as HTMLElement;
-    const band = root.querySelector(".band") as HTMLElement;
-    const strip = root.querySelector(".strip") as HTMLElement;
-    const b = band.getBoundingClientRect();
-    const s = strip.getBoundingClientRect();
-    const apart = s.height === 0 || s.top >= b.bottom - 0.5;
-    const hits = [...root.querySelectorAll<HTMLElement>(".tools .ghost")].map(
-      (one) => {
-        const r = one.getBoundingClientRect();
-        const at = root.elementFromPoint(
-          r.left + r.width / 2,
-          r.top + r.height / 2
-        );
-        return { name: one.textContent ?? "", ok: at === one };
-      }
-    );
-    const canvas = document.querySelector(".cawco-canvas") as HTMLElement;
-    const pressed = root.querySelector<HTMLElement>(
-      '.ghost[aria-pressed="true"]'
-    );
-    const row = root.querySelector<HTMLElement>('.row[aria-current="true"]');
-    const label = document.querySelector<HTMLElement>(
-      ".cawco-frame[data-cawco-current] > .cawco-frame-label"
-    );
-    const words = label?.querySelector(".cawco-frame-words") as Element;
-    const selected = document.querySelector<HTMLElement>(
-      ".cawco-frame[data-cawco-selected]"
-    );
-    let ring: PageRead["ring"] = null;
-    if (selected) {
-      const body = selected.querySelector(".cawco-frame-body") as HTMLElement;
-      const style = getComputedStyle(body);
-      // The edge is a 1px box-shadow flush on the body's box.
-      const reach = 1;
-      const r = body.getBoundingClientRect();
-      const top = r.top - reach;
-      const bottom = r.bottom + reach;
-      const l = (
-        selected.querySelector(".cawco-frame-label") as Element
-      ).getBoundingClientRect();
-      const st = (
-        selected.querySelector(".cawco-frame-status") as Element
-      ).getBoundingClientRect();
-      const named = selected.querySelector(".cawco-frame-words") as Element;
-      ring = {
-        clear: l.bottom <= top + 0.01 && st.top >= bottom - 0.01,
-        outline: style.outlineStyle,
-        // Its colour, the lengths taken out; then its lengths alone.
-        shadow: `${w.__rgb(
-          style.boxShadow.replace(/\s*-?[\d.]+px/g, "").trim()
-        )} ${(style.boxShadow.match(/-?[\d.]+px/g) ?? []).join(" ")}`,
-        edge: `${w.__token("--border-control-strong", body, "color")} 0px 0px 0px 1px`,
-        ink: [
-          w.__rgb(getComputedStyle(named).color),
-          w.__token("--selected-ink", named, "color"),
-        ],
-      };
-    }
-    const chips = [...root.querySelectorAll<HTMLElement>(".chip")];
-    const chosen = chips.find((one) => one.ariaPressed === "true");
-    let chip: PageRead["chip"] = null;
-    if (chosen) {
-      const after = getComputedStyle(chosen, "::after");
-      const shadow = getComputedStyle(chosen).boxShadow;
-      // biome-ignore lint/performance/useTopLevelRegex: read in the page, where no module scope reaches
-      const edge = shadow.match(/(rgb|oklch|color|lab)\([^)]*\)/)?.[0] ?? "";
-      chip = {
-        h: chosen.getBoundingClientRect().height,
-        radius: getComputedStyle(chosen).borderTopLeftRadius,
-        after:
-          after.content === "none" ? 0 : Number.parseFloat(after.height) || 0,
-        edge: w.__contrast(edge, getComputedStyle(head).backgroundColor),
-        // The option chip's recessed fill (DESIGN.md, Permission gate: "a recessed fill"), never a toggle's pressed step.
-        fill: [
-          w.__rgb(getComputedStyle(chosen).backgroundColor),
-          w.__token("--surface-recess", chosen),
-        ],
-      };
-    }
-    const select = root.querySelector<HTMLSelectElement>(".pick select");
-    const pick = select
-      ? {
-          edge: [
-            w.__rgb(getComputedStyle(select).borderTopColor),
-            w.__token("--border-button-outline", select, "color"),
-          ] as [string, string],
-          ratio: w.__contrast(
-            getComputedStyle(select).borderTopColor,
-            getComputedStyle(head).backgroundColor
-          ),
-          glyph: !!root.querySelector(".pick svg"),
-          h: select.getBoundingClientRect().height,
-        }
-      : null;
-    const unnamedLabel = document.querySelector<HTMLElement>(
-      ".cawco-frame-label[data-cawco-unnamed]"
-    );
-    const unnamedWords = unnamedLabel?.querySelector(
-      ".cawco-frame-words"
-    ) as HTMLElement | null;
-    const repeats = [
-      ...document.querySelectorAll<HTMLElement>(".cawco-frame-label"),
-    ]
-      .filter((one) => {
-        const said = one.querySelector(".cawco-frame-words")?.textContent;
-        const small = one.querySelector(".cawco-frame-small")?.textContent;
-        return !!said && !!small && small.split(" · ")[0] === said;
-      })
-      .map((one) => one.textContent ?? "");
-    const file = document.querySelector<HTMLElement>(".cawco-section-file");
-    const steps = root.querySelector(".steps");
-    const stepWords = steps?.textContent ?? "";
-    return {
-      bandStrip: `band ${Math.round(b.top)}–${Math.round(b.bottom)}, strip ${Math.round(s.top)}–${Math.round(s.bottom)}`,
-      bandStripApart: apart,
-      bodyFont: getComputedStyle(band).fontFamily,
-      canvasWell: [
-        w.__rgb(getComputedStyle(canvas).backgroundColor),
-        w.__token("--surface-well", canvas),
-      ],
-      chip,
-      current:
-        label && words
-          ? {
-              bg: [
-                w.__rgb(getComputedStyle(label).backgroundColor),
-                w.__token("--selected-bg", label),
-              ],
-              ink: [
-                w.__rgb(getComputedStyle(words).color),
-                w.__token("--selected-ink", label, "color"),
-              ],
-              ratio: w.__contrast(
-                getComputedStyle(words).color,
-                getComputedStyle(label).backgroundColor
-              ),
-            }
-          : null,
-      faces: {
-        figtree: document.fonts.check('500 13px "Figtree Variable"'),
-        mono: document.fonts.check('400 12px "JetBrains Mono Variable"'),
-      },
-      footEdge: [
-        w.__rgb(getComputedStyle(head).borderBottomColor),
-        w.__token("--border-well", head, "color"),
-      ],
-      hits,
-      pick,
-      hover: w.__token("--surface-hover", head),
-      pressed: pressed
-        ? [
-            w.__rgb(getComputedStyle(pressed).backgroundColor),
-            w.__token("--surface-pressed", pressed),
-          ]
-        : ["none", "none"],
-      repeats,
-      ring,
-      row: row
-        ? {
-            bg: [
-              w.__rgb(getComputedStyle(row).backgroundColor),
-              w.__token("--selected-bg", row),
-            ],
-            ink: [
-              w.__rgb(getComputedStyle(row).color),
-              w.__token("--selected-ink", row, "color"),
-            ],
-          }
-        : null,
-      sectionFile: file
-        ? {
-            font: getComputedStyle(file).fontFamily,
-            size: getComputedStyle(file).fontSize,
-            decoration: getComputedStyle(file).textDecorationLine,
-            color: w.__rgb(getComputedStyle(file).color),
-            muted: w.__token("--ink-muted", file, "color"),
-            text: file.textContent ?? "",
-            title:
-              file.parentElement?.querySelector(".cawco-section-title")
-                ?.textContent ?? "",
-          }
-        : null,
-      steps: steps
-        ? {
-            glyphs: steps.querySelectorAll("svg").length,
-            arrows: stepWords.includes("◀") || stepWords.includes("▶"),
-          }
-        : null,
-      unnamed:
-        unnamedLabel && unnamedWords
-          ? {
-              text: unnamedWords.textContent ?? "",
-              style: getComputedStyle(unnamedWords).fontStyle,
-              font: `${getComputedStyle(unnamedWords).fontSize} ${getComputedStyle(unnamedWords).color}`,
-              small:
-                unnamedLabel.querySelector(".cawco-frame-small")?.textContent ??
-                "",
-            }
-          : null,
-    };
-  });
-}
-
-const same = ([a, b]: [string, string]) => a === b;
-
-/** The canvas page at one width and scheme. */
-async function canvasLeg(
-  kit: Kit,
-  stage: Stage,
-  width: number,
-  theme: "light" | "dark"
-): Promise<void> {
-  const phone = width < 640;
-  const page = await kit.page(phone ? "phone" : "desk", {
-    init: [PAINT],
-    theme,
-  });
-  await page.setViewportSize({ width, height: 844 });
-  const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(error.message));
-  await page.goto(`${stage.base}${canvasPath()}`);
-  await drawn(page);
-  await worldLeg(kit, page, `${width} ${theme}`);
-  const read = await readCanvas(page);
-  const leg = `${width} ${theme}`;
-  await reviewLeg(kit, page, leg, phone, theme);
-  kit.check(
-    `1: ${leg}: the strip stands under the band, and Outline and Reset layout take a press at their centres`,
-    read.bandStripApart && read.hits.every((one) => one.ok),
-    `${read.bandStrip}; ${read.hits.map((one) => `${one.name} ${one.ok}`).join(", ")}`
-  );
-  kit.check(
-    `2: ${leg}: the page is surface-well, the head's foot border-well`,
-    same(read.canvasWell) && same(read.footEdge),
-    `well ${read.canvasWell.join(" vs ")}; edge ${read.footEdge.join(" vs ")}`
-  );
-  kit.check(
-    `3a: ${leg}: the frame in view says so by its label row, selected-bg and selected-ink at 4.5:1`,
-    !!read.current &&
-      same(read.current.bg) &&
-      same(read.current.ink) &&
-      read.current.ratio >= 4.5,
-    JSON.stringify(read.current)
-  );
-  kit.check(
-    `3b: ${leg}: the inspector's story wears the selected marks (its label's words in selected-ink, a 1px border-control-strong edge flush on its box), no outline in the focus ring's shape, clear of its label and status`,
-    !!read.ring &&
-      read.ring.clear &&
-      read.ring.outline === "none" &&
-      read.ring.shadow === read.ring.edge &&
-      same(read.ring.ink),
-    JSON.stringify(read.ring)
-  );
-  kit.check(
-    `4: ${leg}: pressed Outline is surface-pressed (a drawn fill, not the hover's), the current row selected-bg with selected-ink`,
-    same(read.pressed) &&
-      read.pressed[0] !== "0,0,0" &&
-      read.pressed[0] !== read.hover &&
-      !!read.row &&
-      same(read.row.bg) &&
-      same(read.row.ink),
-    `pressed ${read.pressed.join(" vs ")}, hover ${read.hover}; row ${JSON.stringify(read.row)}`
-  );
-  if (phone) {
-    kit.check(
-      `5a: ${leg}: the chosen chip is 30px at radius-sm, 44px to a finger, on the option chip's surface-recess, its brand-solid edge 3:1 on the strip`,
-      !!read.chip &&
-        Math.round(read.chip.h) === 30 &&
-        read.chip.radius === "8px" &&
-        read.chip.after >= 44 &&
-        read.chip.edge >= 3 &&
-        same(read.chip.fill),
-      JSON.stringify(read.chip)
-    );
-    kit.check(
-      `5b: ${leg}: the story picker is edged in border-button-outline at 3:1, with its glyph, 44px to a finger`,
-      !!read.pick &&
-        same(read.pick.edge) &&
-        read.pick.ratio >= 3 &&
-        read.pick.glyph &&
-        read.pick.h >= 44,
-      JSON.stringify(read.pick)
-    );
-    kit.check(
-      `6c: ${leg}: the steps lead and end with chevrons, no ◀ ▶`,
-      !!read.steps && read.steps.glyphs >= 1 && !read.steps.arrows,
-      JSON.stringify(read.steps)
-    );
-  }
-  if (!phone) {
-    kit.check(
-      `6a: ${leg}: an unnamed story says "Unnamed" in meta, upright; no label repeats its name under it`,
-      read.unnamed?.text === "Unnamed" &&
-        read.unnamed.style === "normal" &&
-        read.unnamed.font.startsWith("12px") &&
-        read.repeats.length === 0,
-      `${JSON.stringify(read.unnamed)}; repeats ${read.repeats.join(" | ") || "none"}`
-    );
-  }
-  kit.check(
-    `6b: ${leg}: a section is named in words over its file in meta ink, never underlined`,
-    !!read.sectionFile &&
-      read.sectionFile.font.includes("Figtree") &&
-      read.sectionFile.size === "12px" &&
-      read.sectionFile.color === read.sectionFile.muted &&
-      read.sectionFile.decoration === "none" &&
-      read.sectionFile.text.endsWith(".stories.ts") &&
-      read.sectionFile.title.length > 0 &&
-      !read.sectionFile.title.includes("/") &&
-      !read.sectionFile.title.includes(".stories"),
-    JSON.stringify(read.sectionFile)
-  );
-  kit.check(
-    `7: ${leg}: the house faces load in the page`,
-    read.faces.figtree && read.faces.mono,
-    `${JSON.stringify(read.faces)}; band ${read.bodyFont}`
-  );
-  kit.check(
-    `9: ${leg}: no page errors`,
-    errors.length === 0,
-    errors.join(" | ") || "none"
-  );
-  await page.close();
-}
-
-/** The second review's findings on one canvas page: the band's tools, its words, the arrows, the edges, the dials and the move's timeline. */
-async function reviewLeg(
-  kit: Kit,
-  page: Page,
-  leg: string,
-  phone: boolean,
-  theme: "light" | "dark"
-): Promise<void> {
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one reading of the page in the page
-  const read = await page.evaluate((arrows) => {
-    const w = window as unknown as {
-      __rgb: (c: string) => string;
-      __token: (name: string, host: Element, prop?: string) => string;
-    };
-    const ARROW = new RegExp(arrows);
-    const root = document.getElementById("cawco-chrome")
-      ?.shadowRoot as ShadowRoot;
-    const band = root.querySelector(".band") as HTMLElement;
-    const style = getComputedStyle(band);
-    const b = band.getBoundingClientRect();
-    const t = (root.querySelector(".tools") as Element).getBoundingClientRect();
-    const lines =
-      (b.top +
-        Number.parseFloat(style.paddingTop) +
-        b.bottom -
-        Number.parseFloat(style.paddingBottom)) /
-      2;
-    const texts: string[] = [];
-    const walk = (node: Node) => {
-      // Sheets and scripts are not drawn.
-      if (node.nodeName === "STYLE" || node.nodeName === "SCRIPT") {
-        return;
-      }
-      if (
-        node.nodeType === Node.TEXT_NODE &&
-        ARROW.test(node.textContent ?? "")
-      ) {
-        texts.push(node.textContent ?? "");
-      }
-      for (const kid of node.childNodes) {
-        walk(kid);
-      }
-    };
-    walk(root);
-    for (const el of document.querySelectorAll(
-      ".cawco-edges, .dialkit-root, .cawco-section-head, .cawco-frame-label, .cawco-colhead"
-    )) {
-      walk(el);
-    }
-    // What an edge may not cross: every drawn part of a frame (its label, body and status) and the section heads.
-    const obstacles = [
-      ...document.querySelectorAll(
-        ".cawco-frame-label, .cawco-frame-body, .cawco-frame-status, .cawco-section-head"
-      ),
-    ]
-      .map((one) => ({ one, r: one.getBoundingClientRect() }))
-      .filter(({ r }) => r.width > 0 && r.height > 0);
-    const inside = (x: number, y: number) =>
-      obstacles.find(
-        ({ r }) =>
-          x > r.left + 1 && x < r.right - 1 && y > r.top + 1 && y < r.bottom - 1
-      );
-    const crossing: string[] = [];
-    // Each stroke sampled every 2px along its length: a box test cannot tell a lane round a frame from one through it.
-    for (const path of document.querySelectorAll<SVGPathElement>(
-      ".cawco-edges path.cawco-edge"
-    )) {
-      const ctm = path.getScreenCTM();
-      const length = path.getTotalLength();
-      for (let at = 0; ctm && at <= length; at += 2) {
-        const p = path.getPointAtLength(at).matrixTransform(ctm);
-        const hit = inside(p.x, p.y);
-        if (hit) {
-          crossing.push(
-            `${path.dataset.cawcoFrom} edge at ${Math.round(p.x)},${Math.round(p.y)} inside ${hit.one.className}`
-          );
-          break;
-        }
-      }
-    }
-    for (const text of document.querySelectorAll<SVGTextElement>(
-      ".cawco-edges text"
-    )) {
-      const r = text.getBoundingClientRect();
-      const hit = obstacles.find(
-        (o) =>
-          Math.min(r.right, o.r.right) - Math.max(r.left, o.r.left) > 0.5 &&
-          Math.min(r.bottom, o.r.bottom) - Math.max(r.top, o.r.top) > 0.5
-      );
-      if (hit) {
-        crossing.push(`label "${text.textContent}" over ${hit.one.className}`);
-      }
-    }
-    const name = root.querySelector(".name") as HTMLElement;
-    const panel = document.querySelector<HTMLElement>(
-      ".cawco-dock-dials .dialkit-panel-inner"
-    );
-    const dialRoot = document.querySelector<HTMLElement>(
-      ".cawco-dock-dials .dialkit-root"
-    );
-    let heaviest = 0;
-    for (const el of document.querySelectorAll(
-      ".dialkit-root, .dialkit-root *"
-    )) {
-      heaviest = Math.max(heaviest, Number(getComputedStyle(el).fontWeight));
-    }
-    return {
-      centring: `tools centre ${(t.top + t.height / 2).toFixed(1)}, band lines' centre ${lines.toFixed(1)}`,
-      centred: Math.abs(t.top + t.height / 2 - lines) <= 1,
-      crumb:
-        (root.querySelector(".crumb .num") as HTMLElement | null)
-          ?.textContent ?? "",
-      nameShown: getComputedStyle(name).display !== "none",
-      arrows: texts,
-      edges: document.querySelectorAll(".cawco-edges path.cawco-edge").length,
-      crossing,
-      dials:
-        panel && dialRoot
-          ? {
-              ground: [
-                w.__rgb(getComputedStyle(panel).backgroundColor),
-                w.__token("--surface-raised", panel),
-              ],
-              ink: [
-                w.__rgb(getComputedStyle(dialRoot).color),
-                w.__token("--ink-strong", dialRoot, "color"),
-              ],
-              face: getComputedStyle(dialRoot).fontFamily,
-              theme: dialRoot.dataset.theme ?? "",
-              heaviest,
-            }
-          : null,
-    };
-  }, ARROWS.source);
-  kit.check(
-    `N6: ${leg}: Outline and Reset layout stand centred on the band's lines`,
-    read.centred,
-    read.centring
-  );
-  kit.check(
-    `7c: ${leg}: the crumb says only which frame of how many, the band names the canvas where it stands alone`,
-    FRAME_COUNT.test(read.crumb) && read.nameShown,
-    `crumb "${read.crumb}", name shown ${read.nameShown}`
-  );
-  kit.check(
-    `8: ${leg}: no arrow or chevron drawn as text in the chrome, the edges, the section heads, the labels or DialKit`,
-    read.arrows.length === 0,
-    read.arrows.join(" | ") || "none"
-  );
-  kit.check(
-    `N3: ${leg}: no edge's stroke or label crosses any frame's label, body or status or a section head${phone ? " (a phone draws no edge to a frame it doesn't show)" : ", with an edge that skips a row and one across a sheet"}`,
-    read.crossing.length === 0 && (phone || read.edges >= 3),
-    `${read.edges} edges; ${read.crossing.join("; ") || "none crossing"}`
-  );
-  kit.check(
-    `N1: ${leg}: the dials are DialKit in our tokens: surface-raised ground, ink-strong, Figtree, nothing past 500, its theme the page's (${theme})`,
-    !!read.dials &&
-      same(read.dials.ground as [string, string]) &&
-      same(read.dials.ink as [string, string]) &&
-      read.dials.face.includes("Figtree") &&
-      read.dials.heaviest <= 500 &&
-      read.dials.theme === theme,
-    JSON.stringify(read.dials)
-  );
-  await markLeg(kit, page, leg);
-  await roomLeg(kit, page, leg, phone);
-  await schemeLeg(kit, page, leg, theme);
-  await moveLeg(kit, page, leg, phone, theme);
-}
-
-/** Boxes of the chrome that stands over the canvas, and the canvas's own, as drawn. */
-const ROOM = () => {
-  const box = (el: Element | null) => {
-    const r = el?.getBoundingClientRect();
-    return r && r.width > 0 && r.height > 0
-      ? { top: r.top, right: r.right, bottom: r.bottom, left: r.left }
-      : null;
-  };
-  const root = document.getElementById("cawco-chrome")
-    ?.shadowRoot as ShadowRoot;
-  return {
-    canvas: box(document.querySelector(".cawco-canvas")),
-    dials: box(document.getElementById("cawco-dock-dials")),
-    timeline: box(document.getElementById("cawco-dock-timeline")),
-    outline: box(root.querySelector(".outline")),
-    foot: box(root.querySelector(".foot")),
-  };
-};
-type Room = ReturnType<typeof ROOM>;
-const roomWords = (room: Room) =>
-  Object.entries(room)
-    .map(([name, b]) =>
-      b
-        ? `${name} ${Math.round(b.left)}–${Math.round(b.right)} × ${Math.round(b.top)}–${Math.round(b.bottom)}`
-        : `${name} none`
-    )
-    .join("; ");
-
-/** 4b: the frame in view stays marked with the outline shut: the crumb's "Frame N of M" points at it. */
-async function markLeg(kit: Kit, page: Page, leg: string): Promise<void> {
-  await page.evaluate(() => {
-    const root = document.getElementById("cawco-chrome")
-      ?.shadowRoot as ShadowRoot;
-    const outline = [...root.querySelectorAll("button")].find(
-      (one) => one.textContent === "Outline"
-    );
-    if (outline?.getAttribute("aria-pressed") === "true") {
-      outline.click();
-    }
-  });
-  await page.waitForTimeout(300);
-  const read = await page.evaluate(() => {
-    const w = window as unknown as {
-      __rgb: (c: string) => string;
-      __token: (n: string, h: Element, p?: string) => string;
-    };
-    const root = document.getElementById("cawco-chrome")
-      ?.shadowRoot as ShadowRoot;
-    const marked = [
-      ...document.querySelectorAll<HTMLElement>(
-        ".cawco-frame[data-cawco-current]"
-      ),
-    ];
-    const label = marked[0]?.querySelector(".cawco-frame-label") as
-      HTMLElement | undefined;
-    const all = [...document.querySelectorAll<HTMLElement>(".cawco-frame")];
-    return {
-      outlineShut: !!(root.querySelector(".outline") as HTMLElement).hidden,
-      marked: marked.length,
-      fill: label
-        ? [
-            w.__rgb(getComputedStyle(label).backgroundColor),
-            w.__token("--selected-bg", label),
-          ]
-        : null,
-      crumb:
-        (root.querySelector(".crumb .num") as HTMLElement).textContent ?? "",
-      frames: all.length,
-    };
-  });
-  kit.check(
-    `4b: ${leg}: with the outline shut, the frame in view is still marked by its label row (selected-bg), the one the crumb counts`,
-    read.outlineShut &&
-      read.marked === 1 &&
-      !!read.fill &&
-      same(read.fill as [string, string]) &&
-      FRAME_COUNT.test(read.crumb),
-    JSON.stringify(read)
-  );
-}
-
-/** N2's family: the chrome standing over the canvas takes its room; nothing of it stands on another or on the canvas. */
-async function roomLeg(
-  kit: Kit,
-  page: Page,
-  leg: string,
-  phone: boolean
-): Promise<void> {
-  const shut = await page.evaluate(ROOM);
-  const ok = (room: Room) =>
-    !!room.canvas &&
-    !!room.dials &&
-    (phone
-      ? room.canvas.bottom <= room.dials.top + 0.5 &&
-        !!room.foot &&
-        room.dials.bottom <= room.foot.top + 0.5
-      : room.canvas.right <= room.dials.left + 0.5 &&
-        (!room.outline || room.dials.right <= room.outline.left + 0.5));
-  kit.check(
-    `N2b: ${leg}: the dials stand as chrome: ${phone ? "across the floor over the foot, the canvas ending above them" : "at the inline end, the canvas ending left of them"}`,
-    ok(shut),
-    roomWords(shut)
-  );
-  if (!phone) {
-    await page.evaluate(() => {
-      const root = document.getElementById("cawco-chrome")
-        ?.shadowRoot as ShadowRoot;
-      [...root.querySelectorAll("button")]
-        .find((one) => one.textContent === "Outline")
-        ?.click();
-    });
-    await page.waitForTimeout(400);
-    const open = await page.evaluate(ROOM);
-    kit.check(
-      `N2c: ${leg}: with the outline open, the dials stand left of it and the canvas left of both`,
-      ok(open) &&
-        !!open.outline &&
-        !!open.canvas &&
-        open.canvas.right <= open.outline.left + 0.5,
-      roomWords(open)
-    );
-    await page.evaluate(() => {
-      const root = document.getElementById("cawco-chrome")
-        ?.shadowRoot as ShadowRoot;
-      [...root.querySelectorAll("button")]
-        .find((one) => one.textContent === "Outline")
-        ?.click();
-    });
-    await page.waitForTimeout(300);
-  }
-}
-
-/** N1 live: the scheme turned under the page reaches its page-scheme frames and both of DialKit's roots, on one source. */
-async function schemeLeg(
-  kit: Kit,
-  page: Page,
-  leg: string,
-  theme: "light" | "dark"
-): Promise<void> {
-  const other = theme === "dark" ? "light" : "dark";
-  const read = () =>
-    page.evaluate(() => {
-      const w = window as unknown as {
-        __rgb: (c: string) => string;
-        __token: (n: string, h: Element, p?: string) => string;
-      };
-      const body = document.querySelector<HTMLElement>(
-        '.cawco-frame[data-cawco-scheme="page"] .cawco-frame-body'
-      );
-      const dials = document.querySelector<HTMLElement>(
-        ".cawco-dock-dials .dialkit-root"
-      );
-      const panel = document.querySelector<HTMLElement>(
-        ".cawco-dock-dials .dialkit-panel-inner"
-      );
-      return {
-        frame: body?.style.colorScheme ?? "",
-        dials: dials?.dataset.theme ?? "",
-        ground: panel
-          ? [
-              w.__rgb(getComputedStyle(panel).backgroundColor),
-              w.__token("--surface-raised", panel),
-            ]
-          : null,
-      };
-    });
-  await page.emulateMedia({ colorScheme: other });
-  await page.waitForTimeout(500);
-  const turned = await read();
-  await page.emulateMedia({ colorScheme: theme });
-  await page.waitForTimeout(500);
-  const back = await read();
-  kit.check(
-    `N1b: ${leg}: the system's scheme turned to ${other} and back reaches the page-scheme frames and the dials live, the dials' ground the token's in each`,
-    turned.frame === other &&
-      turned.dials === other &&
-      !!turned.ground &&
-      same(turned.ground as [string, string]) &&
-      back.frame === theme &&
-      back.dials === theme,
-    `turned ${JSON.stringify(turned)}; back ${JSON.stringify(back)}`
-  );
-}
-
-/** N2 and N1 on a move's timeline: opened from its edge (desk) or by stepping to its story (phone). */
-async function moveLeg(
-  kit: Kit,
-  page: Page,
-  leg: string,
-  phone: boolean,
-  theme: "light" | "dark"
-): Promise<void> {
-  if (phone) {
-    // The outline's row for the unnamed sheet's One shows it (the canvas's own go); its step ahead plays the move to Two.
-    await page.evaluate(() => {
-      const root = document.getElementById("cawco-chrome")
-        ?.shadowRoot as ShadowRoot;
-      root
-        .querySelector<HTMLButtonElement>('.row[data-key*="|One|rest|"]')
-        ?.click();
-    });
-    await page.waitForFunction(
-      () =>
-        document
-          .querySelector(".cawco-frame[data-cawco-shown]")
-          ?.getAttribute("data-cawco-story") === "One",
-      null,
-      { timeout: 5000 }
-    );
-    await page.evaluate(() => {
-      const root = document.getElementById("cawco-chrome")
-        ?.shadowRoot as ShadowRoot;
-      const ahead = [
-        ...root.querySelectorAll<HTMLButtonElement>(".steps .ghost"),
-      ].find((one) => one.textContent?.includes("Two"));
-      ahead?.click();
-    });
-  } else {
-    await page.evaluate(() => {
-      document
-        .querySelector<SVGElement>('text[data-cawco-move$="|Two"]')
-        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-  }
-  const opened = await page
-    .waitForFunction(
-      () =>
-        (document.querySelector(".cawco-dock-timeline")?.getBoundingClientRect()
-          .height ?? 0) > 0,
-      null,
-      { timeout: 10_000 }
-    )
-    .then(() => true)
-    .catch(() => false);
-  await page.waitForTimeout(800);
-  const read = await page.evaluate(() => {
-    const w = window as unknown as {
-      __rgb: (c: string) => string;
-      __token: (name: string, host: Element, prop?: string) => string;
-    };
-    const dock = document.querySelector(".cawco-dock-timeline") as HTMLElement;
-    const d = dock.getBoundingClientRect();
-    const c = (
-      document.querySelector(".cawco-canvas") as Element
-    ).getBoundingClientRect();
-    const status = document.querySelector<HTMLElement>(
-      '.cawco-frame[data-cawco-story="Two"][data-cawco-interaction="rest"] .cawco-frame-status'
-    );
-    const s = status?.getBoundingClientRect();
-    const ground = dock.querySelector<HTMLElement>(".dialkit-timeline-dock");
-    const root = dock.querySelector<HTMLElement>(".dialkit-root") ?? dock;
-    const dials = document
-      .getElementById("cawco-dock-dials")
-      ?.getBoundingClientRect();
-    const head = document
-      .getElementById("cawco-chrome")
-      ?.shadowRoot?.querySelector(".head")
-      ?.getBoundingClientRect();
-    return {
-      left: Math.round(c.bottom - (head?.bottom ?? 0)),
-      enough: c.bottom - (head?.bottom ?? 0) >= innerHeight * 0.3,
-      stacked: !dials || dials.height === 0 || dials.bottom <= d.top + 0.5,
-      dials: dials
-        ? `${Math.round(dials.top)}–${Math.round(dials.bottom)}`
-        : "none",
-      dock: `${Math.round(d.top)}–${Math.round(d.bottom)}`,
-      canvasBottom: Math.round(c.bottom),
-      status: s ? `${Math.round(s.top)}–${Math.round(s.bottom)}` : "none",
-      clear:
-        !!s &&
-        s.height > 0 &&
-        s.bottom <= d.top + 0.5 &&
-        s.bottom <= c.bottom + 0.5 &&
-        c.bottom <= d.top + 0.5,
-      ground: ground
-        ? [
-            w.__rgb(getComputedStyle(ground).backgroundColor),
-            w.__token("--surface-raised", ground),
-          ]
-        : null,
-      theme: root.dataset.theme ?? "",
-    };
-  });
-  kit.check(
-    `N2: ${leg}: the move's timeline stands above the foot, the canvas ends above it, and the played frame's status line stands clear of it`,
-    opened && read.clear && read.stacked && read.enough,
-    `opened ${opened}; timeline ${read.dock}, dials ${read.dials}, canvas ends ${read.canvasBottom} (${read.left}px under the head), status ${read.status}`
-  );
-  kit.check(
-    `N1: ${leg}: the timeline is DialKit in our tokens on the page's scheme (${theme})`,
-    !!read.ground &&
-      same(read.ground as [string, string]) &&
-      read.theme === theme,
-    JSON.stringify(read)
-  );
 }
 
 interface HeadRead {
@@ -1382,51 +616,11 @@ const EDGES_AT = ({
   );
 };
 
-/** 7 and N7 in the panel: the band says no name the head says; nothing but the well's own edge is drawn at the head/well seam, in the panel or the page's top row. */
+/** N7 in the panel: nothing but the well's own edge is drawn at the head/well seam, in the panel or the page's top row. */
 async function seamLeg(kit: Kit, page: Page, leg: string): Promise<void> {
   const canvasFrame = page
     .frames()
     .find((one) => one.url().includes("/@cawco/canvas"));
-  // N7's cause, framed: the world clear of the page's head in the panel, after load and after Zoom to fit.
-  if (canvasFrame) {
-    const loaded = await canvasFrame.evaluate(WORLD_TOP);
-    keepLoadX(`${leg} in the panel`, loaded.x);
-    await canvasFrame.evaluate(() =>
-      dispatchEvent(
-        new CustomEvent("cawco:canvas-view", { detail: { zoom: "fit" } })
-      )
-    );
-    await page.waitForTimeout(400);
-    const fitted = await canvasFrame.evaluate(WORLD_TOP);
-    kit.check(
-      `N7b: ${leg} in the panel: the world never stands under the page's head, after load and after Zoom to fit`,
-      loaded.clear && fitted.clear,
-      `loaded: ${loaded.said}; fitted: ${fitted.said}`
-    );
-  }
-  const band = canvasFrame
-    ? await canvasFrame.evaluate(() => {
-        const root = document.getElementById("cawco-chrome")
-          ?.shadowRoot as ShadowRoot;
-        const name = root.querySelector(".name") as HTMLElement;
-        return {
-          nameShown: getComputedStyle(name).display !== "none",
-          lines: root.querySelectorAll(".band > div:not(.name, .crumb, .tools)")
-            .length,
-          crumb:
-            (root.querySelector(".crumb .num") as HTMLElement | null)
-              ?.textContent ?? "",
-        };
-      })
-    : null;
-  kit.check(
-    `7d: ${leg}: in the panel the band says neither the name nor the ask the head says, and its crumb counts frames only`,
-    !!band &&
-      !band.nameShown &&
-      band.lines === 0 &&
-      FRAME_COUNT.test(band.crumb),
-    JSON.stringify(band)
-  );
   const well = await page.evaluate(() => {
     const box = (
       document.querySelector(
@@ -3013,6 +2207,16 @@ async function serveDoc(
     });
   });
   return {
+    /** The first artifact's doc as the page has written it: its `state` and its pins' heads. */
+    read: () => {
+      const [first] = docs.values();
+      return first
+        ? {
+            state: first.doc.getMap("state").toJSON() as Record<string, unknown>,
+            pins: first.doc.getMap("pins").toJSON() as Record<string, Partial<Pin>>,
+          }
+        : null;
+    },
     pins: (count: number) => {
       for (const { doc } of docs.values()) {
         doc.transact(() => {
@@ -3485,183 +2689,6 @@ async function sweepLeg(
         .join(" | ")}`
     );
   }
-  await page.close();
-}
-
-/**
- * Where each fresh load put the first section's title, by leg without its
- * scheme, then scheme: the same canvas at the same width loads to the same
- * place in both (the world placed from its layout, never from a moment).
- */
-const LOAD_X = new Map<string, Partial<Record<"light" | "dark", number>>>();
-const SCHEME_IN_LEG = / (light|dark)\b/;
-const keepLoadX = (leg: string, x: number) => {
-  const scheme = SCHEME_IN_LEG.exec(leg)?.[1] as "light" | "dark" | undefined;
-  if (!scheme) {
-    return;
-  }
-  const key = leg.replace(SCHEME_IN_LEG, "");
-  LOAD_X.set(key, { ...LOAD_X.get(key), [scheme]: x });
-};
-
-/** The shown frame's centre against the canvas's, in px (a phone shows its one frame centred). */
-const OFF_CENTRE = () => {
-  const frame = document
-    .querySelector(".cawco-frame[data-cawco-shown]")
-    ?.getBoundingClientRect();
-  const canvas = document
-    .querySelector(".cawco-canvas")
-    ?.getBoundingClientRect();
-  return frame && canvas
-    ? frame.x + frame.width / 2 - (canvas.x + canvas.width / 2)
-    : Number.NaN;
-};
-
-/**
- * N7c's cause: a phone's frame placed from a moment, not its layout. After
- * load, and after a step whose placement a resize interrupts mid-way (as a
- * panel sliding open does while the canvas loads), the shown frame stands
- * centred: the placement never takes its offset from a position in flight.
- */
-async function centredLeg(
-  kit: Kit,
-  stage: Stage,
-  theme: "light" | "dark"
-): Promise<void> {
-  const page = await kit.page("desk", { theme });
-  await page.setViewportSize({ width: 560, height: 844 });
-  await page.goto(`${stage.base}${canvasPath()}`);
-  await drawn(page);
-  const loaded = await page.evaluate(OFF_CENTRE);
-  await page.keyboard.press("j");
-  await page.waitForTimeout(40);
-  await page.setViewportSize({ width: 600, height: 844 });
-  await page.waitForTimeout(40);
-  await page.setViewportSize({ width: 560, height: 844 });
-  await page.waitForTimeout(900);
-  const raced = await page.evaluate(OFF_CENTRE);
-  kit.check(
-    `N7d: 560 desk pointer ${theme}: the shown frame stands centred after load and after a step a resize interrupts`,
-    Math.abs(loaded) <= 0.5 && Math.abs(raced) <= 0.5,
-    `off centre after load ${loaded.toFixed(1)}px, after the interrupted step ${raced.toFixed(1)}px`
-  );
-  await page.close();
-}
-
-/** N7c: every leg's load placement the same in light and dark. */
-function sameLoadPlace(kit: Kit): void {
-  const pairs = [...LOAD_X].filter(
-    ([, at]) => at.light !== undefined && at.dark !== undefined
-  );
-  kit.check(
-    "N7c: a fresh load places the world the same in light and dark, for the same canvas and width, alone and in the panel",
-    pairs.length > 0 &&
-      pairs.every(
-        ([, at]) => Math.abs((at.light ?? 0) - (at.dark ?? Number.NaN)) <= 0.5
-      ),
-    pairs
-      .map(
-        ([leg, at]) =>
-          `${leg}: light ${at.light?.toFixed(1)}, dark ${at.dark?.toFixed(1)}`
-      )
-      .join("; ")
-  );
-}
-
-/** Where the world's first drawn section head stands against the page's head, and what a press at its title's centre meets. */
-const WORLD_TOP = () => {
-  const chrome = document.getElementById("cawco-chrome")?.shadowRoot;
-  const foot =
-    chrome?.querySelector(".head")?.getBoundingClientRect().bottom ?? 0;
-  const gap = Number.parseFloat(
-    getComputedStyle(document.documentElement).getPropertyValue("--space-2")
-  );
-  const head = [
-    ...document.querySelectorAll<HTMLElement>(".cawco-section-head"),
-  ].find((one) => one.getBoundingClientRect().height > 0);
-  const title = head?.firstElementChild as HTMLElement | undefined;
-  const t = title?.getBoundingClientRect();
-  const hit = t
-    ? document.elementFromPoint(t.x + t.width / 2, t.y + t.height / 2)
-    : null;
-  const top = head?.getBoundingClientRect().top ?? 0;
-  return {
-    x: t?.x ?? Number.NaN,
-    clear: !!head && !!title && top >= foot + gap - 0.5 && hit === title,
-    said: `head's foot ${foot.toFixed(1)}, section head top ${top.toFixed(1)} (needs ≥ ${(foot + gap).toFixed(1)}), a press at "${title?.textContent}" meets ${hit === title ? "it" : hit?.id || hit?.className || "nothing"}`,
-  };
-};
-
-/**
- * N7's cause: the world placed under the page's head. After load and after
- * Zoom to fit, the first drawn section head stands space-2 or more under
- * the head's foot, and a press at its title's centre meets the title.
- */
-async function worldLeg(kit: Kit, page: Page, leg: string): Promise<void> {
-  const loaded = await page.evaluate(WORLD_TOP);
-  keepLoadX(leg, loaded.x);
-  await page.evaluate(() =>
-    dispatchEvent(
-      new CustomEvent("cawco:canvas-view", { detail: { zoom: "fit" } })
-    )
-  );
-  await page.waitForTimeout(400);
-  const fitted = await page.evaluate(WORLD_TOP);
-  kit.check(
-    `N7b: ${leg}: the world never stands under the page's head: its first section head clear of the head's foot, after load and after Zoom to fit`,
-    loaded.clear && fitted.clear,
-    `loaded: ${loaded.said}; fitted: ${fitted.said}`
-  );
-}
-
-/**
- * N7: the canvas page as a desk's side panel draws it, under 640px wide so
- * the phone's band and strip stand, with a mouse's fine pointer: every edge
- * drawn on the head's foot (±3px) is read, and the head's own full-width
- * foot is the only one.
- */
-async function footLeg(
-  kit: Kit,
-  stage: Stage,
-  theme: "light" | "dark"
-): Promise<void> {
-  const page = await kit.page("desk", { init: [PAINT], theme });
-  await page.setViewportSize({ width: 560, height: 844 });
-  await page.goto(`${stage.base}${canvasPath()}`);
-  await drawn(page);
-  await worldLeg(kit, page, `560 desk pointer ${theme}`);
-  const foot = await page.evaluate(
-    () =>
-      document
-        .getElementById("cawco-chrome")
-        ?.shadowRoot?.querySelector(".head")
-        ?.getBoundingClientRect().bottom ?? 0
-  );
-  // The head's own shadow aside (it is the head's), every border, outline and shadow on its foot.
-  const edges = (
-    await page.evaluate(EDGES_AT, { at: foot, inside: "*", shadows: true })
-  ).filter((one) => !one.startsWith("div.head shadow"));
-  // And, said only, everything painting a line or a shadow within 10px over the foot: where a line read as on the seam may really stand.
-  const over = (
-    await Promise.all(
-      [4, 7, 10].map((up) =>
-        page.evaluate(EDGES_AT, { at: foot - up, inside: "*", shadows: true })
-      )
-    )
-  ).flat();
-  const strip = await page.evaluate(() => {
-    const root = document.getElementById("cawco-chrome")
-      ?.shadowRoot as ShadowRoot;
-    return getComputedStyle(root.querySelector(".strip") as Element).display;
-  });
-  kit.check(
-    `N7: 560 desk pointer ${theme}: on the foot of the band and strip only the head's own full-width edge is drawn`,
-    strip !== "none" &&
-      edges.length === 1 &&
-      edges[0]?.startsWith("div.head bottom 1px") === true &&
-      edges[0]?.endsWith(" 560px") === true,
-    `strip ${strip}; head foot at ${Math.round(foot)}; ${edges.join("; ") || "nothing"}; within 10px over it: ${[...new Set(over)].join("; ") || "nothing"}`
-  );
   await page.close();
 }
 
@@ -4143,11 +3170,1438 @@ async function countLegs(kit: Kit, bench: string, stage: Stage): Promise<void> {
   }
 }
 
+/* --- The design graph (Projects spec §5.10, "The design graph") ------------ */
+
+/**
+ * The canvas page as the hub serves it into a panel: the overlay's tag in
+ * the page (preview-proxy.ts `injectOverlay`) and the overlay answered for
+ * the bench's origin (`overlayResponse`), so the page and the pane speak as
+ * they do live (`cawco:graph`, `cawco:stage`, `cawco:move`, `cawco:dials`).
+ */
+async function withOverlay(
+  page: Page,
+  stage: Stage,
+  bench: string
+): Promise<void> {
+  const parent = new URL(bench).origin;
+  await page.route(`${stage.base}/__cawco/overlay.js*`, async (route) => {
+    const answer = await overlayResponse([parent], null, null);
+    await route.fulfill({
+      status: 200,
+      headers: {
+        "content-type":
+          answer.headers.get("content-type") ?? "text/javascript",
+        "cache-control": "no-store",
+      },
+      body: await answer.text(),
+    });
+  });
+  await page.route(
+    (url) => url.origin === stage.base && url.pathname === "/@cawco/canvas",
+    async (route) => {
+      const answer = await route.fetch();
+      await route.fulfill({
+        response: answer,
+        body: injectOverlay(await answer.text()),
+      });
+    }
+  );
+}
+
+const GRAPH_PANEL = "[data-graph-panel]";
+/** A time in whole figures, as the playhead's pill says it. */
+const FIGURES = /^\d+$/;
+const nodeAt = (story: string) => `${GRAPH_PANEL} [data-node="${story}"]`;
+/** A state's own words in its node: a press there keeps the state at rest, past its variations' chips. */
+const nodeWordsAt = (story: string) => `${nodeAt(story)} > span:first-child`;
+
+/** The canvas page framed in the bench's pane. */
+const canvasFrameOf = (page: Page): Frame | null =>
+  page
+    .frames()
+    .find(
+      (one) =>
+        one.url().includes("/@cawco/canvas") && !one.url().includes("by=map")
+    ) ?? null;
+
+/** The graph legs' bench: the panel on the routine form's canvas, its page overlaid, its doc served; null, said, when it never loads. */
+async function openGraphBench(
+  kit: Kit,
+  bench: string,
+  stage: Stage,
+  width: number,
+  theme: "light" | "dark"
+): Promise<{
+  doc: Awaited<ReturnType<typeof serveDoc>>;
+  errors: string[];
+  /** How many times the canvas page has loaded in the pane. */
+  loads: () => number;
+  page: Page;
+} | null> {
+  const page = await kit.page(width < 640 ? "phone" : "desk", {
+    theme,
+    scale: 2,
+  });
+  // The canvas page comes to the frame through the probe's route (the overlay in it, as the hub serves it), which Chromium holds to be of no address space it knows, so the page's sockets to the stage on 127.0.0.1 ask Local Network Access first: granted, as the person's browser is for their own hub (microsoft/playwright#37861).
+  if (page.context().browser()?.browserType().name() === "chromium") {
+    await page.context().grantPermissions(["local-network-access"]);
+  }
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  // The bench runs the dashboard with no hub behind it (`/motion/` benches): its own asks of `/api/` answer 503 there, the graph's none.
+  const noHub = `${new URL(bench).origin}/api/`;
+  page.on("console", (message) => {
+    const at = message.location().url;
+    if (message.type() === "error" && !at.startsWith(noHub)) {
+      errors.push(`${message.text().split("\n")[0] ?? ""} (${at})`);
+    }
+  });
+  // Every frame's own errors, the canvas page's among them, kept where the legs read them (`frameErrors`).
+  await page.addInitScript(() => {
+    const kept: string[] = [];
+    (window as unknown as { __probeErrors: string[] }).__probeErrors = kept;
+    addEventListener("error", (event) => {
+      const { message, filename, lineno } = event as ErrorEvent;
+      kept.push(`${message} (${filename}:${lineno})`);
+    });
+    addEventListener("unhandledrejection", (event) => {
+      const { reason } = event as PromiseRejectionEvent;
+      kept.push(
+        `unhandled: ${String((reason as Error | undefined)?.stack ?? reason).slice(0, 400)}`
+      );
+    });
+  });
+  const doc = await serveDoc(page, {}, false);
+  await withOverlay(page, stage, bench);
+  // Each load of the canvas page in the pane: one, unless something reloads it under the leg.
+  let loads = 0;
+  page.on("framenavigated", (one) => {
+    if (one.url().includes("/@cawco/canvas")) {
+      loads += 1;
+    }
+  });
+  // The bench's page holds the app's shell, its sidebar beside the pane on a desk: the window is wide enough for both, so the pane stands whole in it.
+  await page.setViewportSize({
+    width: width < 640 ? width + 40 : width + 300,
+    height: 844,
+  });
+  await page.route(`${stage.base}/__cawco/ping`, (route) =>
+    route.fulfill({
+      status: 204,
+      headers: { "access-control-allow-origin": "*" },
+    })
+  );
+  // A pin's pictures of its marks, kept as the hub keeps them beside the doc's socket (hub artifacts/sync.ts `artifactPictures`): the bench has no hub.
+  await page.route(`${stage.base}/__cawco/artifact/*/pictures`, (route) =>
+    route.fulfill({ status: 200, json: {} })
+  );
+  await page.goto(
+    `${bench}/motion/artifact-head?w=${width}&port=${stage.port}&path=${encodeURIComponent(canvasPath(GRAPH_FILES, GRAPH_CANVAS))}&ask=${encodeURIComponent(GRAPH_ASK)}&name=${encodeURIComponent(GRAPH_CANVAS.name ?? "")}`
+  );
+  const ready = await page
+    .waitForSelector(nodeAt("Filled"), { timeout: 90_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!ready) {
+    kit.check(
+      `G0: ${width} ${theme}: the design graph stands over the canvas in the panel`,
+      false,
+      `${JSON.stringify(
+        await page.evaluate(() => {
+          const frame = document.querySelector<HTMLIFrameElement>(
+            "[data-bench-pane] iframe"
+          );
+          return {
+            frame: frame
+              ? [...frame.attributes].map((one) => `${one.name}=${one.value.slice(0, 80)}`)
+              : null,
+            graph: !!document.querySelector("[data-design-graph-host]"),
+          };
+        })
+      )} | page: ${JSON.stringify(
+        await canvasFrameOf(page)
+          ?.evaluate(() => ({
+            overlay: !!document.querySelector('script[src*="/__cawco/overlay.js"]'),
+            graph: String(
+              JSON.stringify(
+                (window as unknown as { __cawcoDesignGraph?: unknown })
+                  .__cawcoDesignGraph
+              )
+            ).slice(0, 900),
+            text: document.body.innerText.slice(0, 300),
+            errors: String(
+              JSON.stringify(
+                (window as unknown as { __cawcoErrors?: unknown }).__cawcoErrors
+              )
+            ).slice(0, 900),
+            frames: document.querySelectorAll(".cawco-frame").length,
+            booted: !!(window as unknown as { __cawcoCanvas?: unknown })
+              .__cawcoCanvas,
+            thrown: (window as unknown as { __probeErrors?: string[] })
+              .__probeErrors,
+            loads: performance
+              .getEntriesByType("resource")
+              .map((one) => one.name)
+              .filter((one) => one.includes("/@id/"))
+              .slice(-4),
+            canvas: (() => {
+              const r = document
+                .querySelector(".cawco-canvas")
+                ?.getBoundingClientRect();
+              return r ? [r.left, r.top, r.width, r.height].map(Math.round) : null;
+            })(),
+            sections: [
+              ...document.querySelectorAll<HTMLElement>(".cawco-section"),
+            ].map((one) => {
+              const r = one.getBoundingClientRect();
+              return `${[r.left, r.top, r.width, r.height].map(Math.round).join(",")} ${JSON.stringify(one.dataset)}`;
+            }),
+            world: document.querySelector<HTMLElement>(".cawco-world")?.style
+              .transform,
+          }))
+          .catch((error: Error) => error.message)
+      )} | stage: ${JSON.stringify(stage.errors()).slice(0, 900)} ${stage.heard()} | errors: ${errors.join(" | ")}`
+    );
+    await page.close();
+    return null;
+  }
+  await page.waitForTimeout(1500);
+  return { doc, errors, loads: () => loads, page };
+}
+
+/** The design graph's panel as the engine draws it: its boxes, regions, states, words and what spills. */
+interface GraphRead {
+  bands: { box: Box; kept: boolean; text: string }[];
+  /** Each band's name and how many elements in the panel say it: its band's alone (the pick "headers"). */
+  dialogs: number;
+  edges: { from: string; lit: boolean; to: string }[];
+  fonts: { at: string; least: number; meta: number };
+  mode: string | null;
+  namesSaid: Record<string, number>;
+  nodes: { box: Box; kept: boolean; machine: string; peek: boolean; story: string }[];
+  open: string | null;
+  pane: Box | null;
+  panel: Box | null;
+  regions: { box: Box; machine: string }[];
+  /** Text that spills its own box, a box standing out of the pane, the bench scrolling sideways: each by name. */
+  spills: string[];
+  tabs: string[];
+}
+
+async function readGraph(page: Page): Promise<GraphRead> {
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one pass over the panel, each box and word read where it stands
+  return await page.evaluate((selector) => {
+    const boxOf = (el: Element) => {
+      const r = el.getBoundingClientRect();
+      return {
+        left: r.left,
+        top: r.top,
+        right: r.right,
+        bottom: r.bottom,
+        width: r.width,
+        height: r.height,
+      };
+    };
+    const panel = document.querySelector<HTMLElement>(selector);
+    const host = document.querySelector("[data-design-graph-host]");
+    const frame = document.querySelector("[data-bench-pane] iframe[data-ready]");
+    const probe = document.createElement("i");
+    probe.style.font = "var(--type-meta)";
+    document.body.append(probe);
+    const meta = Number.parseFloat(getComputedStyle(probe).fontSize);
+    probe.remove();
+    const regions = [
+      ...(panel?.querySelectorAll<HTMLElement>("[data-machine]") ?? []),
+    ];
+    const bands = regions.flatMap((region) => {
+      const band = region.querySelector<HTMLElement>("[data-band]");
+      return band
+        ? [
+            {
+              text: band.textContent?.trim() ?? "",
+              kept: region.hasAttribute("data-kept"),
+              box: boxOf(band),
+            },
+          ]
+        : [];
+    });
+    const surfaces = [
+      ...(host?.querySelectorAll<HTMLElement>(
+        "[data-graph-panel], [data-graph-dock]"
+      ) ?? []),
+    ];
+    const all = surfaces.flatMap((one) => [
+      one,
+      ...one.querySelectorAll<HTMLElement>("*"),
+    ]);
+    const namesSaid: Record<string, number> = {};
+    for (const band of bands) {
+      namesSaid[band.text] = all.filter((el) =>
+        [...el.childNodes].some(
+          (one) => one.nodeType === 3 && one.textContent?.trim() === band.text
+        )
+      ).length;
+    }
+    let least = Number.POSITIVE_INFINITY;
+    let at = "";
+    const spills: string[] = [];
+    const paneBox = frame ? boxOf(frame) : null;
+    for (const el of all) {
+      const style = getComputedStyle(el);
+      const own = [...el.childNodes].some(
+        (one) => one.nodeType === 3 && one.textContent?.trim()
+      );
+      const shown =
+        style.visibility !== "hidden" &&
+        el.getClientRects().length > 0 &&
+        Number(style.opacity) > 0;
+      if (!shown) {
+        continue;
+      }
+      if (own) {
+        const size = Number.parseFloat(style.fontSize);
+        if (size < least) {
+          least = size;
+          at = `${el.tagName.toLowerCase()} "${el.textContent?.trim().slice(0, 30)}"`;
+        }
+        if (
+          el.scrollWidth > el.clientWidth + 1 &&
+          style.overflowX === "visible" &&
+          el.clientWidth > 0
+        ) {
+          spills.push(
+            `${el.tagName.toLowerCase()} "${el.textContent?.trim().slice(0, 30)}" ${el.scrollWidth}>${el.clientWidth}`
+          );
+        }
+      }
+      const b = boxOf(el);
+      // Clipped away whole by a box of the surface that hides its overflow (a drawer folded to its head): no one sees it.
+      let hidden = false;
+      for (
+        let up = el.parentElement;
+        up && !hidden && host?.contains(up);
+        up = up.parentElement
+      ) {
+        if (getComputedStyle(up).overflow !== "visible") {
+          const c = up.getBoundingClientRect();
+          const box = el.getBoundingClientRect();
+          hidden =
+            box.top >= c.bottom ||
+            box.bottom <= c.top ||
+            box.left >= c.right ||
+            box.right <= c.left;
+        }
+      }
+      if (hidden) {
+        continue;
+      }
+      // A drawn box outside the pane, its own scrollers' content aside (a graph or a timeline runs on past its view).
+      const scrolled = el.closest("[data-design-graph], [data-lanes], [data-inspector]");
+      if (
+        paneBox &&
+        !scrolled &&
+        b.width > 0 &&
+        b.height > 0 &&
+        (b.left < paneBox.left - 0.5 ||
+          b.right > paneBox.right + 0.5 ||
+          b.bottom > paneBox.bottom + 0.5)
+      ) {
+        spills.push(
+          `${el.tagName.toLowerCase()}[${[...el.attributes].map((one) => one.name).filter((one) => one.startsWith("data-")).join(",")}] outside the pane: ${Math.round(b.left)}–${Math.round(b.right)} × ${Math.round(b.top)}–${Math.round(b.bottom)} in ${Math.round(paneBox.left)}–${Math.round(paneBox.right)} × ${Math.round(paneBox.top)}–${Math.round(paneBox.bottom)}`
+        );
+      }
+    }
+    if (document.documentElement.scrollWidth > innerWidth + 1) {
+      spills.push(
+        `the bench scrolls sideways: ${document.documentElement.scrollWidth} > ${innerWidth}`
+      );
+    }
+    return {
+      bands,
+      namesSaid,
+      dialogs: document.querySelectorAll('[role="dialog"]').length,
+      edges: [
+        ...(panel?.querySelectorAll<SVGGElement>("g[data-from]") ?? []),
+      ].map((one) => ({
+        from: one.dataset.from ?? "",
+        to: one.dataset.to ?? "",
+        lit: one.hasAttribute("data-lit"),
+      })),
+      fonts: { least, meta, at },
+      mode: panel?.dataset.graphPanel ?? null,
+      nodes: [
+        ...(panel?.querySelectorAll<HTMLElement>("[data-node]") ?? []),
+      ].map((one) => ({
+        story: one.dataset.node ?? "",
+        machine:
+          one.closest<HTMLElement>("[data-machine]")?.dataset.machine ?? "",
+        box: boxOf(one),
+        kept: one.hasAttribute("data-kept"),
+        peek: one.hasAttribute("data-peek"),
+      })),
+      open: panel?.dataset.open ?? null,
+      panel: panel ? boxOf(panel) : null,
+      pane: paneBox,
+      regions: regions.map((one) => ({
+        machine: one.dataset.machine ?? "",
+        box: boxOf(one),
+      })),
+      spills,
+      tabs: [
+        ...(panel?.querySelectorAll('[aria-label="Components"] [role="tab"]') ??
+          []),
+      ].map((one) => one.textContent?.trim() ?? ""),
+    };
+  }, GRAPH_PANEL);
+}
+
+/** What the canvas page stands: each frame on its stage, whether it is staged, its washes. */
+async function readStage(page: Page): Promise<{
+  on: { interaction: string; story: string }[];
+  seen: number;
+  staged: boolean;
+  washes: { kind: string }[];
+}> {
+  const frame = canvasFrameOf(page);
+  if (!frame) {
+    return { staged: false, on: [], seen: 0, washes: [] };
+  }
+  return await frame.evaluate(() => {
+    const on = [
+      ...document.querySelectorAll<HTMLElement>(
+        ".cawco-frame[data-cawco-on-stage]"
+      ),
+    ].map((el) => ({
+      story: el.dataset.cawcoStory ?? "",
+      interaction: el.dataset.cawcoInteraction ?? "",
+    }));
+    const view = document.querySelector(".cawco-canvas")?.getBoundingClientRect();
+    // Frames a reader would see: drawn, in the canvas's view, and not faded out.
+    const seen = [...document.querySelectorAll<HTMLElement>(".cawco-frame")].filter(
+      (el) => {
+        const r = el.getBoundingClientRect();
+        return (
+          !!view &&
+          Number(getComputedStyle(el).opacity) > 0 &&
+          r.right > view.left &&
+          r.left < view.right &&
+          r.bottom > view.top &&
+          r.top < view.bottom
+        );
+      }
+    ).length;
+    return {
+      staged: document.documentElement.hasAttribute("data-cawco-staged"),
+      on,
+      seen,
+      washes: [...document.querySelectorAll<HTMLElement>(".cawco-wash")].map(
+        (el) => ({ kind: el.dataset.kind ?? "" })
+      ),
+    };
+  });
+}
+
+/** Waits until the stage stands `story` at rest, or `ms` pass: what it stands then. */
+async function stageStands(page: Page, story: string, ms = 15_000) {
+  const end = Date.now() + ms;
+  let read = await readStage(page);
+  while (
+    Date.now() < end &&
+    !read.on.some((one) => one.story === story && one.interaction === "rest")
+  ) {
+    // biome-ignore lint/performance/noAwaitInLoops: polling the page's own stage until it answers the ask
+    await page.waitForTimeout(150);
+    read = await readStage(page);
+  }
+  return read;
+}
+
+/** The asks the dock made of the page's move since the last call, in order (`cawco:move-ask`, heard in the canvas page). */
+async function asksSince(page: Page): Promise<string[]> {
+  const frame = canvasFrameOf(page);
+  return frame
+    ? await frame.evaluate(() => {
+        const w = window as unknown as { __asks?: string[] };
+        if (!w.__asks) {
+          w.__asks = [];
+          addEventListener("cawco:move-ask", (event) =>
+            w.__asks?.push(
+              String((event as CustomEvent<{ op?: string }>).detail?.op)
+            )
+          );
+        }
+        return w.__asks.splice(0);
+      })
+    : [];
+}
+
+/** Every error thrown in any of the bench's frames, the canvas page's among them, as `openGraphBench` keeps them. */
+async function thrownIn(page: Page): Promise<string[]> {
+  const all = await Promise.all(
+    page.frames().map((frame) =>
+      frame
+        .evaluate(
+          () =>
+            (window as unknown as { __probeErrors?: string[] }).__probeErrors ??
+            []
+        )
+        .catch(() => [] as string[])
+    )
+  );
+  return all.flat();
+}
+
+/**
+ * The pane's mode set as a person sets it: its segment in the head where
+ * the head has room for the three, else the mode's one button (or More)
+ * and its item.
+ */
+async function commentMode(
+  page: Page,
+  mode: "Comment" | "Interact"
+): Promise<void> {
+  const head = "[data-bench-pane] [data-slot=side-head]";
+  const segment = page
+    .locator(`${head} [role="tab"]`, { hasText: mode })
+    .filter({ visible: true });
+  if ((await segment.count()) > 0) {
+    await segment.first().click();
+    return;
+  }
+  const compact = page
+    .locator(`${head} button[aria-label^="Mode: "]`)
+    .filter({ visible: true });
+  await ((await compact.count()) > 0
+    ? compact.first()
+    : page.locator(`${head} [data-slot=more]`)
+  ).click();
+  await page.getByRole("menuitemradio", { name: mode }).click();
+}
+
+/** Pins 11, 13 and 14 on the dock as it stands: its head one row with a hairline its whole width under it, the playhead's pill saying the time. */
+async function dockHeadLeg(
+  kit: Kit,
+  page: Page,
+  leg: string,
+  when: string
+): Promise<void> {
+    // Pin 11 and 14: the dock's head is one row, a hairline the dock's whole width under it; pin 13: the playhead's head a pill saying the time.
+    const head = await page.evaluate(() => {
+      const el = document.querySelector<HTMLElement>("[data-dock-head]");
+      const surface = el?.closest<HTMLElement>(
+        '[data-graph-dock], [data-graph-panel="drawer"]'
+      );
+      const knob = document.querySelector<HTMLElement>("[data-playhead-knob]");
+      if (!(el && surface && knob)) {
+        return null;
+      }
+      const r = el.getBoundingClientRect();
+      const s = surface.getBoundingClientRect();
+      const kids = [...el.children].map((one) => one.getBoundingClientRect());
+      const k = knob.getBoundingClientRect();
+      const ks = getComputedStyle(knob);
+      return {
+        // How far the furthest of its children stands off the head's middle: one row is all of them on it.
+        off: Math.max(
+          0,
+          ...kids.map((one) =>
+            Math.abs(one.top + one.height / 2 - (r.top + r.height / 2))
+          )
+        ),
+        inside: kids.every(
+          (one) => one.left >= r.left - 0.5 && one.right <= r.right + 0.5
+        ),
+        height: Math.round(r.height),
+        hairline: getComputedStyle(el).borderBottomWidth,
+        across: Math.round(r.width - s.width + 2),
+        pill: Number.parseFloat(ks.borderTopLeftRadius) >= k.height / 2,
+        says: knob.textContent?.trim(),
+        ink: ks.backgroundColor,
+      };
+    });
+    const rowH = await page.evaluate(() =>
+      Number.parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue("--c-row-h")
+      )
+    );
+    kit.check(
+      `G29 (pins 11, 14): ${leg}, ${when}: the dock's head is one row of the row's height, everything in it inside it, a 1px hairline the dock's whole width under it`,
+      !!head &&
+        head.off <= 2 &&
+        head.inside &&
+        head.height <= rowH + 1 &&
+        head.hairline === "1px" &&
+        Math.abs(head.across) <= 2,
+      JSON.stringify({ head, rowH })
+    );
+    kit.check(
+      `G30 (pin 13): ${leg}, ${when}: the playhead's head is a pill saying the time the page stands, in figures`,
+      !!head && head.pill && FIGURES.test(head.says ?? ""),
+      JSON.stringify(head)
+    );
+  }
+
+/** A clip bar's box and the clip's duration figure, in the dock. */
+const barOf = async (page: Page, id: number) => ({
+  box: await boxAt(page, `[data-bar="${id}"]`),
+  figure: await page
+    .locator(`[data-clip="${id}"] [data-fact="duration"]`)
+    .first()
+    .textContent()
+    .then((one) => Number.parseInt(one ?? "", 10))
+    .catch(() => Number.NaN),
+  adHoc:
+    (await page.locator(`[data-clip="${id}"] [data-ad-hoc="duration"]`).count()) >
+    0,
+});
+
+/**
+ * G: the design graph on the bench at a pane `width`, in `theme`, each of
+ * the owner's picks as he picked it (§5.10): headers, washes, the dock and
+ * its clips' controls in the row, snap, replay, segments, a spring at any
+ * value, pins, the panel's edges, Show and Hide as one object; nothing
+ * spills at 390, 680 and 1440; no page error.
+ */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one walk of the graph's flow, each pick checked where the person meets it
+async function graphLeg(
+  kit: Kit,
+  bench: string,
+  stage: Stage,
+  width: number,
+  theme: "light" | "dark"
+): Promise<void> {
+  const opened = await openGraphBench(kit, bench, stage, width, theme);
+  if (!opened) {
+    return;
+  }
+  const { page, errors, doc, loads } = opened;
+  const engine = page.context().browser()?.browserType().name() ?? "chromium";
+  const leg = `${engine} ${width} ${theme}`;
+  const desk = width >= 896;
+  const finger = width < 640;
+  let read = await readGraph(page);
+  kit.check(
+    `G1: ${leg}: the graph stands as ${desk ? "a panel at the page's inline end" : "a drawer across the page's foot"}, inside the pane`,
+    read.mode === (desk ? "desk" : "drawer") &&
+      !!read.panel &&
+      !!read.pane &&
+      within(read.panel, read.pane, 1),
+    JSON.stringify({
+      mode: read.mode,
+      panel: read.panel,
+      pane: read.pane,
+      layout: await page.evaluate(() => {
+        const out: string[] = [`viewport ${innerWidth}`];
+        let el: Element | null = document.querySelector(
+          "[data-bench-pane] iframe"
+        );
+        while (el && el !== document.body) {
+          const r = el.getBoundingClientRect();
+          out.push(
+            `${el.tagName.toLowerCase()}${(el as HTMLElement).dataset.slot ? `[${(el as HTMLElement).dataset.slot}]` : ""} ${Math.round(r.left)}+${Math.round(r.width)}`
+          );
+          el = el.parentElement;
+        }
+        return out.join(" < ");
+      }),
+    })
+  );
+  kit.check(
+    `G2: ${leg}: a tab per component under review, each named in words`,
+    read.tabs.length === 2 && read.tabs.every((one) => one.length > 0),
+    read.tabs.join(" | ")
+  );
+  kit.check(
+    `G3 (headers): ${leg}: the machine is named by its slab's header, and said nowhere else in the graph`,
+    read.bands.map((one) => one.text).join("|") === "Saving it" &&
+      Object.values(read.namesSaid).every((count) => count === 1),
+    JSON.stringify({ bands: read.bands.map((one) => one.text), said: read.namesSaid })
+  );
+  let staged = await stageStands(page, "Filled");
+  kit.check(
+    `G4: ${leg}: the page stands the kept state alone (Filled), every other frame mounted out of sight`,
+    staged.staged &&
+      staged.on.length >= 1 &&
+      staged.on.every((one) => one.story === "Filled") &&
+      staged.seen === staged.on.length,
+    JSON.stringify(staged)
+  );
+  const placed = read.nodes.every((node) => {
+    const region = read.regions.find((one) => one.machine === node.machine);
+    return !!region && within(node.box, region.box, 1);
+  });
+  const apart = read.nodes.every((a, at) =>
+    read.nodes.slice(at + 1).every((b) => overlap(a.box, b.box) <= 0.5)
+  );
+  kit.check(
+    `G5: ${leg}: every state stands inside its slab, none on another`,
+    placed && apart && read.nodes.some((one) => one.kept && one.story === "Filled"),
+    JSON.stringify(read.nodes.map((one) => [one.story, one.machine, one.kept]))
+  );
+  const tryAgain = read.edges.find(
+    (one) => one.from === "SaveFailed" && one.to === "Saving"
+  );
+  kit.check(
+    `G6: ${leg}: the move and the agent's edge are drawn between the states`,
+    !!tryAgain &&
+      read.edges.some((one) => one.from === "Filled" && one.to === "SaveFailed"),
+    JSON.stringify(read.edges)
+  );
+  // Dials (pin 7): every dial the agent put up stands as its own slider; one moved draws on the page's frames at once.
+  const sliders = page.locator(`${GRAPH_PANEL} [data-dials] input[type="range"]`);
+  const sliderNames = await sliders.evaluateAll((all) =>
+    all.map((one) => one.getAttribute("aria-label") ?? "")
+  );
+  if (sliderNames.length > 0) {
+    await sliders.first().fill("12");
+    await page.waitForTimeout(400);
+  }
+  const dialed = await canvasFrameOf(page)
+    ?.evaluate(() => {
+      const body = document.querySelector<HTMLElement>(
+        ".cawco-frame[data-cawco-on-stage] .cawco-frame-body"
+      );
+      if (!body) {
+        return null;
+      }
+      return {
+        token: getComputedStyle(body).getPropertyValue("--radius-md").trim(),
+        drawn: [...body.querySelectorAll("*")].filter(
+          (one) => getComputedStyle(one).borderTopLeftRadius === "12px"
+        ).length,
+      };
+    })
+    .catch(() => null);
+  kit.check(
+    `G28 (dials): ${leg}: the agent's two dials stand as two sliders, and Corner radius at 12 draws on the kept frame at once`,
+    sliderNames.join("|") === "Corner radius|Field gap" &&
+      dialed?.token === "12px" &&
+      dialed.drawn > 0,
+    JSON.stringify({ sliderNames, dialed })
+  );
+  // Washes: a hover previews a state that differs from the kept one, and the page marks what came in.
+  if (!finger) {
+    await page.hover(nodeWordsAt("SaveFailed"));
+    staged = await stageStands(page, "SaveFailed");
+    // The washes are drawn once the stage has laid the previewed frames out (runtime.ts `wash`, a frame later).
+    const previewed = await until(
+      "the preview's washes",
+      () => readStage(page),
+      (now) => now.washes.length > 0,
+      3000
+    ).catch(() => readStage(page));
+    read = await readGraph(page);
+    kit.check(
+      `G7 (washes): ${leg}: a hover on Save failed previews it on the page, a wash behind what came in, Filled still kept`,
+      previewed.on.some((one) => one.story === "SaveFailed") &&
+        previewed.washes.some((one) => one.kind === "add") &&
+        !!read.nodes.find((one) => one.story === "SaveFailed")?.peek &&
+        !!read.nodes.find((one) => one.story === "Filled")?.kept,
+      JSON.stringify({ on: previewed.on, washes: previewed.washes })
+    );
+    await page.mouse.move(2, 2);
+    staged = await stageStands(page, "Filled");
+    await page.waitForTimeout(300);
+    const back = await readStage(page);
+    kit.check(
+      `G8 (washes): ${leg}: leaving it, the page stands the kept state again and its washes go`,
+      back.on.every((one) => one.story === "Filled") && back.washes.length === 0,
+      JSON.stringify(back)
+    );
+  }
+  // A press keeps Save failed: the move into it plays, and the dock stands.
+  // The state's own words as its node says them: the pin's path names it so.
+  const stateWords =
+    (await page.locator(nodeWordsAt("SaveFailed")).textContent())?.trim() ??
+    "";
+  await page.locator(nodeWordsAt("SaveFailed")).click();
+  staged = await stageStands(page, "SaveFailed");
+  // Read on the graph's face, before a drawer turns to its timeline.
+  read = await readGraph(page);
+  const keptNode = read.nodes.find((one) => one.story === "SaveFailed");
+  const litEdges = read.edges;
+  if (!desk) {
+    await page
+      .locator(`${GRAPH_PANEL} [role="tab"]`, { hasText: "Timeline" })
+      .click({ timeout: 15_000 })
+      .catch(() => undefined);
+  }
+  const docked = await page
+    .waitForSelector("[data-move-dock] [data-bar]", { timeout: 20_000 })
+    .then(() => true)
+    .catch(() => false);
+  kit.check(
+    `G9: ${leg}: a press keeps Save failed: the page stands it, its node the selected one, the move into it drawn strong, and the dock its clips`,
+    docked &&
+      staged.on.some((one) => one.story === "SaveFailed") &&
+      !!keptNode?.kept &&
+      litEdges.some((one) => one.to === "SaveFailed" && one.lit),
+    JSON.stringify({
+      docked,
+      on: staged.on,
+      kept: keptNode?.kept,
+      edges: litEdges,
+      dock: await page.evaluate(
+        () =>
+          document
+            .querySelector("[data-move-dock]")
+            ?.textContent?.slice(0, 300) ?? null
+      ),
+      move: await canvasFrameOf(page)
+        ?.evaluate(() =>
+          String(JSON.stringify((window as unknown as { __cawcoMove?: unknown }).__cawcoMove)).slice(0, 600)
+        )
+        .catch((error: Error) => error.message),
+    })
+  );
+  if (docked) {
+    await dockHeadLeg(kit, page, leg, "before an edit");
+  }
+  if (!docked) {
+    const thrown = [...errors, ...(await thrownIn(page))];
+    kit.check(
+      `G21: ${leg}: no page error`,
+      thrown.length === 0,
+      thrown.join(" | ")
+    );
+    await page.close();
+    return;
+  }
+  // Clip controls open in the row (the seam's default), never a dialog.
+  await asksSince(page);
+  await page.locator('[data-bar="0"]').click();
+  await page.waitForSelector("[data-clip-controls]", { timeout: 5000 }).catch(() => undefined);
+  const placement = await page.evaluate(() => {
+    const controls = document.querySelector<HTMLElement>("[data-clip-controls]");
+    return {
+      placement: controls?.dataset.placement ?? null,
+      inRow: !!controls?.closest('[data-clip="0"]'),
+      dialogs: document.querySelectorAll('[role="dialog"]').length,
+    };
+  });
+  kit.check(
+    `G10 (controls): ${leg}: a clip's controls open in its row, and nothing opens as a dialog`,
+    placement.placement === "row" && placement.inRow && placement.dialogs === 0,
+    JSON.stringify(placement)
+  );
+  // A spring at any value: response and bounce off every token.
+  await page.locator('[data-clip-controls] [data-curve="spring"]').click();
+  const springOpen = await page
+    .waitForSelector('[data-clip-controls] input[data-field="bounce"]', {
+      timeout: 5000,
+    })
+    .then(() => true)
+    .catch(() => false);
+  if (!springOpen) {
+    kit.check(
+      `G11 (springs): ${leg}: Spring opens its fields in the clip's controls`,
+      false,
+      `${loads()} loads; controls ${await page.locator("[data-clip-controls]").count()}; ${await page.evaluate(() => document.querySelector("[data-clip-controls]")?.textContent?.slice(0, 300) ?? "none")}`
+    );
+    await page.close();
+    return;
+  }
+  await page.waitForSelector("[data-clip-controls] [data-spring]", { timeout: 5000 }).catch(() => undefined);
+  for (const [field, value] of [
+    ["duration", "437"],
+    ["bounce", "0.37"],
+  ] as const) {
+    const input = page.locator(`[data-clip-controls] input[data-field="${field}"]`);
+    // biome-ignore lint/performance/noAwaitInLoops: one field, then the next
+    await input.fill(value);
+    await input.press("Enter");
+    await page.waitForTimeout(300);
+  }
+  await page.waitForTimeout(900);
+  const sprung = await page.evaluate(() => ({
+    duration: (document.querySelector('[data-clip-controls] input[data-field="duration"]') as HTMLInputElement | null)?.value,
+    bounce: (document.querySelector('[data-clip-controls] input[data-field="bounce"]') as HTMLInputElement | null)?.value,
+    fields: [...document.querySelectorAll<HTMLInputElement>("[data-clip-controls] [data-spring] input[data-field]")].map((one) => one.dataset.field),
+  }));
+  const tunedSpring = (doc.read()?.state.tuned as { value?: { spring?: { bounce: number; response: number } | null; durationToken?: string | null }[] } | undefined)?.value?.find((one) => one.spring);
+  kit.check(
+    "G11 (springs): " +
+      `${leg}: a spring takes values off every token (437 ms, 0.37 bounce), its mass, stiffness, damping and velocity stand as figures, and tuned carries it as ad hoc`,
+    sprung.duration === "437" &&
+      sprung.bounce === "0.37" &&
+      ["mass", "stiffness", "damping", "velocity"].every((one) => sprung.fields.includes(one)) &&
+      tunedSpring?.spring?.response === 437 &&
+      tunedSpring.spring.bounce === 0.37 &&
+      tunedSpring.durationToken === null,
+    JSON.stringify({ sprung, tuned: doc.read()?.state.tuned })
+  );
+  const commits = await asksSince(page);
+  kit.check(
+    `G12 (replay): ${leg}: each value committed plays the move once from the start`,
+    commits.filter((one) => one === "play").length >= 2,
+    commits.join(",")
+  );
+  await page.locator("[data-close-controls]").first().click();
+  // Snap: the bar's end let go near one of the page's duration tokens lands on it; ⌥ frees it, and its chip turns dashed for the agent to name.
+  const bar1 = await barOf(page, 0);
+  const said = await canvasFrameOf(page)?.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __cawcoMove?: {
+            clips: { duration: number; id: number; start: number }[];
+            tokens: { durations: { ms: number; name: string }[] };
+          };
+        }
+      ).__cawcoMove
+  );
+  const barBox = bar1.box;
+  if (barBox && said && !finger) {
+    const y = barBox.top + barBox.height / 2;
+    const perMs = barBox.width / bar1.figure;
+    const lane = await boxAt(page, '[data-lane="0"]');
+    // A token past the bar's end, clear of every other clip's edges by more than the detent, inside the lane.
+    const edges = said.clips
+      .filter((one) => one.id !== 0)
+      .flatMap((one) => [one.start, one.start + one.duration]);
+    const token = said.tokens.durations.find(
+      (one) =>
+        one.ms > bar1.figure + 20 &&
+        edges.every((edge) => Math.abs(edge - one.ms) * perMs > 12) &&
+        !!lane &&
+        barBox.left + one.ms * perMs < lane.right - 4
+    );
+    await asksSince(page);
+    await page.mouse.move(barBox.right - 2, y);
+    await page.mouse.down();
+    // Let go 3px short of the token's length: inside the detent's reach.
+    const to = barBox.left + (token?.ms ?? bar1.figure) * perMs - 1;
+    await page.mouse.move(to, y, { steps: 6 });
+    await page.mouse.up();
+    await page.waitForTimeout(500);
+    const snapped = await barOf(page, 0);
+    const dropAsks = await asksSince(page);
+    kit.check(
+      `G13 (snap): ${leg}: the bar's end let go near the page's ${token?.name ?? "(no token in reach)"} lands on it, its token's chip beside the figure, and the drop replays the move`,
+      !!token &&
+        snapped.figure === token.ms &&
+        !snapped.adHoc &&
+        dropAsks.includes("play"),
+      JSON.stringify({
+        before: bar1.figure,
+        token,
+        after: snapped.figure,
+        adHoc: snapped.adHoc,
+        asks: dropAsks,
+        tokens: said.tokens.durations.length,
+      })
+    );
+    const box2 = snapped.box ?? barBox;
+    // Let go a few px past it, where no token stands: held free by ⌥, it stays there.
+    const lengths = new Set(said.tokens.durations.map((one) => one.ms));
+    // Free, a length lands on the 10ms (clip-words.ts `tens`).
+    const freeAt = (px: number) =>
+      Math.round((snapped.figure + px / perMs) / 10) * 10;
+    const past =
+      Array.from({ length: 20 }, (_, at) => 7 + 2 * at).find(
+        (px) => freeAt(px) !== snapped.figure && !lengths.has(freeAt(px))
+      ) ?? 7;
+    await page.mouse.move(box2.right - 2, y);
+    await page.keyboard.down("Alt");
+    await page.mouse.down();
+    await page.mouse.move(box2.right - 2 + past, y, { steps: 5 });
+    await page.mouse.up();
+    await page.keyboard.up("Alt");
+    await page.waitForTimeout(500);
+    const freed = await barOf(page, 0);
+    kit.check(
+      `G14 (snap): ${leg}: with ⌥ held the length is free, off every token, and its chip is the dashed ad-hoc one`,
+      freed.adHoc &&
+        freed.figure !== snapped.figure &&
+        !lengths.has(freed.figure),
+      JSON.stringify({ from: snapped.figure, by: past, freed })
+    );
+    // A key's nudge stays still: no replay.
+    await asksSince(page);
+    await page.locator('[data-bar="0"]').focus();
+    await page.keyboard.press("ArrowRight");
+    await page.waitForTimeout(400);
+    const nudged = await asksSince(page);
+    kit.check(
+      `G15 (replay): ${leg}: a key's nudge moves the clip and does not replay the move`,
+      !nudged.includes("play"),
+      nudged.join(",") || "no ask"
+    );
+  }
+  // Segments: Original | Edited once the move has edits; under Original an edited bar is an outline.
+  const compare = page.locator('[data-move-dock] [aria-label="Compare"] [role="tab"]', { hasText: "Original" });
+  const hasCompare = (await compare.count()) > 0;
+  if (hasCompare) {
+    await asksSince(page);
+    await compare.click();
+    await page.waitForTimeout(500);
+  }
+  const outlined = await page.evaluate(() => ({
+    view: document.querySelector<HTMLElement>("[data-move-dock]")?.dataset.view,
+    outline: document.querySelectorAll("[data-bar][data-outline]").length,
+  }));
+  const viewAsks = await asksSince(page);
+  kit.check(
+    `G16 (segments): ${leg}: once edited, Original | Edited stands in the dock's head; Original plays the agent's timing and draws the edited bar as an outline`,
+    hasCompare && outlined.view === "original" && outlined.outline >= 1 && viewAsks.includes("play"),
+    JSON.stringify({ hasCompare, outlined, viewAsks })
+  );
+  if (hasCompare) {
+    await page.locator('[data-move-dock] [aria-label="Compare"] [role="tab"]', { hasText: "Edited" }).click();
+  }
+  await dockHeadLeg(kit, page, leg, "with its edits");
+  // Pins: a pin placed while Save failed is kept records its path, said under its words.
+  const frame = canvasFrameOf(page);
+  if (frame) {
+    await page.keyboard.press("Escape");
+    await commentMode(page, "Comment");
+    // The overlay's comment layer takes the press over the page (app-comment-mode's `commenting`).
+    await until(
+      "the page's Comment mode on",
+      () =>
+        frame.evaluate(
+          () =>
+            document
+              .querySelector("cawco-overlay")
+              ?.shadowRoot?.querySelector(".layer")
+              ?.classList.contains("comment") ?? false
+        ),
+      Boolean,
+      5000
+    ).catch(() => false);
+    const outer = await page
+      .locator("[data-bench-pane] iframe[data-ready]")
+      .boundingBox();
+    // The middle of the page's view: the kept frame stands there, wherever its move left the view.
+    const inner = await frame
+      .evaluate(() => {
+        const canvas = document
+          .querySelector(".cawco-canvas")
+          ?.getBoundingClientRect();
+        if (!canvas) {
+          return null;
+        }
+        const x = canvas.x + canvas.width / 2;
+        const y = canvas.y + canvas.height / 2;
+        // Under the comment layer, which takes the press over the whole page.
+        const under = document
+          .elementsFromPoint(x, y)
+          .some((one) => one.closest(".cawco-frame[data-cawco-on-stage]"));
+        return under ? { x, y } : null;
+      })
+      .catch(() => null);
+    const view = await frame.evaluate(() => {
+      const r = (el: Element | null) => {
+        const b = el?.getBoundingClientRect();
+        return b ? [b.x, b.y, b.width, b.height].map(Math.round).join(",") : "none";
+      };
+      return `world ${document.querySelector<HTMLElement>(".cawco-world")?.style.transform}; canvas ${r(document.querySelector(".cawco-canvas"))}; on ${[...document.querySelectorAll(".cawco-frame[data-cawco-on-stage]")].map(r).join(" | ")}; label ${r(document.querySelector(".cawco-frame[data-cawco-on-stage] .cawco-frame-body label"))}; vars ${getComputedStyle(document.documentElement).getPropertyValue("--cawco-stage-bottom")} ${getComputedStyle(document.documentElement).getPropertyValue("--cawco-stage-end")}`;
+    });
+    const pressed =
+      outer && inner
+        ? await pressAt(
+            frame,
+            { x: outer.x + inner.x, y: outer.y + inner.y },
+            { how: finger ? "tap" : "click" }
+          )
+            .then(() => "pressed")
+            .catch((error: Error) => error.message.slice(0, 200))
+        : "no point";
+    const composer = page.locator('[data-slot="pin-composer"]');
+    const composed = await composer
+      .waitFor({ timeout: 5000 })
+      .then(() => true)
+      .catch(() => false);
+    // What the composer names the pin by, before any words: the pin's title is these.
+    const named = composed ? ((await composer.textContent())?.trim() ?? "") : "";
+    if (composed) {
+      await composer
+        .getByRole("combobox")
+        .fill("The reason reads well here; keep it above the actions.");
+      // Sent as a person sends one: Enter in the field.
+      await composer.getByRole("combobox").press("Enter");
+    }
+    const after = await page
+      .evaluate(
+        () =>
+          document
+            .querySelector('[data-slot="pin-composer"]')
+            ?.textContent?.slice(0, 200) ?? "composer gone"
+      )
+      .catch(() => "unread");
+    const joined = await frame
+      .evaluate(
+        () =>
+          !!(window as unknown as { cawcoArtifact?: { doc?: unknown } })
+            .cawcoArtifact?.doc
+      )
+      .catch(() => false);
+    const pinned = await until(
+      "the pin in the doc",
+      () => Object.values(doc.read()?.pins ?? {}),
+      (pins) => pins.length > 0,
+      8000
+    ).catch(() => Object.values(doc.read()?.pins ?? {}));
+    // The pin opened again from its mark on the page: its card says the state it was left on.
+    // Back in Interact, as a person reading their pin is: the comment layer no longer over the page's marks.
+    await page.keyboard.press("Escape");
+    await commentMode(page, "Interact");
+    await page.waitForTimeout(300);
+    const mark = await frame
+      .evaluate(() => {
+        const r = document
+          .querySelector("[data-cawco-pins] [data-pin]:not([data-pin='new'])")
+          ?.getBoundingClientRect();
+        return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null;
+      })
+      .catch(() => null);
+    const card = page.locator('[data-slot="pin-state"]').first();
+    const atMark = mark
+      ? await frame
+          .evaluate(
+            ({ x, y }) =>
+              document
+                .elementsFromPoint(x, y)
+                .slice(0, 3)
+                .map(
+                  (one) =>
+                    `${one.tagName.toLowerCase()}${one.getAttribute("data-pin") ? `[data-pin=${one.getAttribute("data-pin")}]` : ""}`
+                ),
+            mark
+          )
+          .catch(() => [])
+      : [];
+    if (outer && mark) {
+      await pressAt(
+        frame,
+        { x: outer.x + mark.x, y: outer.y + mark.y },
+        { how: finger ? "tap" : "click" }
+      ).catch(() => undefined);
+      await card.waitFor({ timeout: 4000 }).catch(() => undefined);
+    }
+    const cardsOpen = await page
+      .locator('[data-slot="pin-card"]')
+      .count()
+      .catch(() => 0);
+    const cardSays = await card
+      .textContent({ timeout: 2500 })
+      .catch(() => null);
+    // The path as the graph says it: the machine's header, then the state's own words in its node.
+    const path = `Saving it › ${stateWords}`;
+    kit.check(
+      `G17 (pins): ${leg}: a pin placed while Save failed is kept records the graph's path to it, its card says so under the words, and its own words reach the doc as the page wrote them (UTF-8)`,
+      pinned.length === 1 &&
+        pinned[0]?.state === path &&
+        cardSays === `Left on ${path}` &&
+        !!pinned[0]?.title &&
+        named.startsWith(pinned[0].title),
+      JSON.stringify({
+        pressed,
+        atMark,
+        cardsOpen,
+        view,
+        named: named.slice(0, 60),
+        charset: await frame.evaluate(() => document.characterSet),
+        composed,
+        after,
+        joined,
+        path,
+        said: cardSays,
+        pins: pinned.map((one) => ({ state: one.state, title: one.title })),
+      })
+    );
+    await page.keyboard.press("Escape");
+    await commentMode(page, "Interact");
+  }
+  // The panel's edges (desk): the width edge widens it, the corner restores it, the handle lit while held.
+  if (desk) {
+    read = await readGraph(page);
+    const before = read.panel;
+    const band = await boxAt(page, '[data-sash="width"]');
+    if (before && band) {
+      const y = band.top + band.height / 2;
+      const from = band.left + band.width / 2;
+      await page.mouse.move(from, y);
+      await page.waitForTimeout(200);
+      const reached = await page.evaluate(() => document.querySelector('[data-resize-handle="bl"]')?.hasAttribute("data-reached"));
+      await page.mouse.down();
+      await page.mouse.move(band.left - 60, y, { steps: 6 });
+      const held = await page.evaluate(() => document.querySelector('[data-resize-handle="bl"]')?.hasAttribute("data-held"));
+      await page.mouse.up();
+      await page.waitForTimeout(400);
+      const after = (await readGraph(page)).panel;
+      kit.check(
+        `G18 (edges): ${leg}: pointed at, the width edge's handle reaches; held, it sweeps; a drag of the edge widens the panel by the drag`,
+        !!reached &&
+          !!held &&
+          !!after &&
+          Math.abs(after.width - before.width - (from - (band.left - 60))) <= 1,
+        JSON.stringify({ reached, held, before: before.width, after: after?.width })
+      );
+      await page.locator('[data-sash="corner"]').dblclick();
+      await page.waitForTimeout(400);
+      const restored = (await readGraph(page)).panel;
+      kit.check(
+        `G19 (edges): ${leg}: a double-press on the corner puts the panel back to its own width`,
+        !!restored && Math.abs(restored.width - before.width) <= 1,
+        JSON.stringify({ before: before.width, restored: restored?.width })
+      );
+    }
+    // Hide folds the panel's shell into its tab, read on the clock (the DevTools Animation domain on Chromium).
+    const panelBefore = (await readGraph(page)).panel;
+    const fold = await readMotion(
+      page,
+      () => page.locator(`${GRAPH_PANEL} [data-hide-graph]`).click(),
+      "[data-show-graph]",
+      {
+        fractions: [0, 0.5, 1],
+        own: true,
+        read: async () =>
+          await page.evaluate(() => {
+            const r = document.querySelector("[data-show-graph]")?.getBoundingClientRect();
+            return r ? Math.round(r.width) : 0;
+          }),
+      }
+    ).catch((error: Error) => ({ at: [], by: "clock" as const, runs: [], error: error.message }));
+    await page.waitForTimeout(600);
+    const tab = await boxAt(page, "[data-show-graph]");
+    const tucked = await page.evaluate(() =>
+      Number.parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue(
+          "--c-tucked-tab"
+        )
+      )
+    );
+    const widths = fold.at.map((one) => one.value);
+    /** Every run of the fold on one clock: one delay, one end, one curve. */
+    const clocks = (runs: typeof fold.runs) =>
+      new Set(runs.map((one) => `${one.delay}|${one.end}|${one.easing}`));
+    kit.check(
+      `G20 (show and hide): ${leg}: Hide folds the panel's one box into its tab on one clock (every run one delay, end and curve; its width at 0, past half-way at 0.5, the tab's at the end), read on ${fold.by === "clock" ? "the DevTools Animation domain" : "the page's held clock"}`,
+      fold.runs.length > 0 &&
+        clocks(fold.runs).size === 1 &&
+        widths.length === 3 &&
+        (widths[0] ?? 0) > (widths[1] ?? 0) &&
+        (widths[1] ?? 0) > (widths[2] ?? 0) &&
+        !!tab &&
+        Math.abs(tab.width - tucked) <= 1 &&
+        !!panelBefore,
+      JSON.stringify({
+        widths,
+        clocks: [...clocks(fold.runs)],
+        runs: fold.runs.map((one) => one.name),
+        tab,
+        error: "error" in fold ? fold.error : null,
+      })
+    );
+    const grow = await readMotion(
+      page,
+      () => page.locator("[data-show-graph]").click(),
+      "[data-show-graph]",
+      {
+        fractions: [0, 0.5, 1],
+        own: true,
+        read: async () =>
+          await page.evaluate(() => {
+            const r = document
+              .querySelector("[data-show-graph]")
+              ?.getBoundingClientRect();
+            return r ? Math.round(r.width) : 0;
+          }),
+      }
+    ).catch((error: Error) => ({
+      at: [],
+      by: "clock" as const,
+      runs: [],
+      error: error.message,
+    }));
+    await page.waitForTimeout(600);
+    const reopened = await readGraph(page);
+    const grown = grow.at.map((one) => one.value);
+    kit.check(
+      `G20b (show and hide): ${leg}: Show grows the panel back out of its tab on one clock, to its own width`,
+      grow.runs.length > 0 &&
+        clocks(grow.runs).size === 1 &&
+        (grown[0] ?? 0) < (grown[1] ?? 0) &&
+        (grown[1] ?? 0) < (grown[2] ?? 0) &&
+        reopened.open === "true" &&
+        !!reopened.panel &&
+        !!panelBefore &&
+        Math.abs(reopened.panel.width - panelBefore.width) <= 1,
+      JSON.stringify({
+        grown,
+        clocks: [...clocks(grow.runs)],
+        open: reopened.open,
+        panel: reopened.panel?.width,
+        error: "error" in grow ? grow.error : null,
+      })
+    );
+  }
+  if (!desk) {
+    // The drawer's stops: the grabber steps it from peek to full on one clock; its head dragged down folds it to its head; the grabber opens it again.
+    const peekH = (await readGraph(page)).panel?.height ?? 0;
+    const heightNow = async () =>
+      await page.evaluate(
+        (selector) =>
+          Math.round(
+            document.querySelector(selector)?.getBoundingClientRect().height ??
+              0
+          ),
+        GRAPH_PANEL
+      );
+    const rise = await readMotion(
+      page,
+      () => page.locator(`${GRAPH_PANEL} [data-grabber]`).click(),
+      GRAPH_PANEL,
+      { fractions: [0, 0.5, 1], own: true, read: heightNow }
+    ).catch((error: Error) => ({
+      at: [],
+      by: "clock" as const,
+      runs: [],
+      error: error.message,
+    }));
+    await page.waitForTimeout(500);
+    const fullH = await heightNow();
+    const rose = rise.at.map((one) => one.value);
+    kit.check(
+      `G26 (drawer): ${leg}: the grabber steps the drawer from peek to full, its height rising on one run`,
+      fullH > peekH + 1 &&
+        rise.runs.length === 1 &&
+        (rose[0] ?? 0) < (rose[1] ?? 0) &&
+        (rose[1] ?? 0) < (rose[2] ?? 0),
+      JSON.stringify({
+        peekH,
+        fullH,
+        rose,
+        runs: rise.runs.map((one) => `${one.name} ${one.end} ${one.easing}`),
+        error: "error" in rise ? rise.error : null,
+      })
+    );
+    const head = await boxAt(page, `${GRAPH_PANEL} > header`);
+    if (head) {
+      const x = head.left + 12;
+      const y = head.top + head.height / 2;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x, y + fullH, { steps: 8 });
+      await page.mouse.up();
+      await page.waitForTimeout(600);
+    }
+    const folded = await readGraph(page);
+    await page.locator(`${GRAPH_PANEL} [data-grabber]`).click();
+    // Once its height has run to its stop (--dur-panel; a loaded engine draws late).
+    const back = await until(
+      "the drawer at its stop again",
+      () => readGraph(page),
+      (now) => (now.panel?.height ?? 0) > (head?.height ?? 0) + 1,
+      3000
+    ).catch(() => readGraph(page));
+    kit.check(
+      `G27 (drawer): ${leg}: its head dragged down folds the drawer to its head, and the grabber opens it again`,
+      folded.open === "false" &&
+        !!folded.panel &&
+        !!head &&
+        Math.abs(folded.panel.height - head.height) <= 2 &&
+        back.open === "true" &&
+        (back.panel?.height ?? 0) > head.height + 1,
+      JSON.stringify({
+        folded: [folded.open, folded.panel?.height],
+        head: head?.height,
+        back: [back.open, back.panel?.height],
+      })
+    );
+  }
+  read = await readGraph(page);
+  kit.check(
+    `G22: ${leg}: no text in the graph or the dock is set under the meta size`,
+    read.fonts.least >= read.fonts.meta - 0.01,
+    JSON.stringify(read.fonts)
+  );
+  kit.check(
+    `G23 (overflow sweep): ${leg}: nothing spills: 0`,
+    read.spills.length === 0,
+    `${read.spills.length}: ${read.spills.join("; ")}`
+  );
+  kit.check(
+    `G25: ${leg}: the canvas page loaded once in the pane, the whole leg through`,
+    loads() === 1,
+    `${loads()} loads`
+  );
+  const thrown = [...errors, ...(await thrownIn(page))];
+  kit.check(
+    `G24: ${leg}: no page error, in the pane or the canvas page`,
+    thrown.length === 0,
+    thrown.join(" | ") || "none"
+  );
+  await page.close();
+}
+
+/** G at 390, 680 and 1440, light; and 1440 dark. */
+async function graphLegs(kit: Kit, bench: string, stage: Stage): Promise<void> {
+  // `CANVAS_GRAPH=<width>[,<theme>]` runs one leg alone, as a change is made.
+  const [onlyWidth, onlyTheme] = (process.env.CANVAS_GRAPH ?? "").split(",");
+  const legs: [number, "light" | "dark"][] = [
+    [1440, "light"],
+    [680, "light"],
+    [390, "light"],
+    [1440, "dark"],
+  ];
+  // The stage's first compile of the routine form's graph (the dashboard's form kit, its words, its icons), outside the legs' clock.
+  const warm = await kit.page("desk", { theme: "light" });
+  // What the page asked the stage for and has no answer to yet, by address: a module that never comes is named.
+  const pending = new Set<string>();
+  warm.on("request", (request) => pending.add(request.url()));
+  warm.on("requestfinished", (request) => pending.delete(request.url()));
+  warm.on("requestfailed", (request) =>
+    pending.add(`${request.url()} failed: ${request.failure()?.errorText}`)
+  );
+  const since = performance.now();
+  // As the stage's own render: every section drawn and every move played, so every module the legs reach is fetched and optimized before them (a dependency Vite finds later reloads the page under a leg).
+  await warm.goto(
+    `${stage.base}${canvasPath(GRAPH_FILES, GRAPH_CANVAS)}&by=stage`
+  );
+  const warmed = await warm
+    .waitForFunction(
+      () =>
+        (window as unknown as { __cawcoCanvas?: { swept?: boolean } })
+          .__cawcoCanvas?.swept === true &&
+        document.querySelectorAll(
+          '.cawco-section[data-cawco-file$="RoutineSave.stories.ts"] .cawco-frame'
+        ).length >= 4,
+      null,
+      { timeout: 120_000 }
+    )
+    .then(() => true)
+    .catch(() => false);
+  kit.check(
+    "G: the stage draws every section of the graph's canvas and plays its moves",
+    warmed,
+    `${Math.round(performance.now() - since)}ms: waiting on ${[...pending].join(", ") || "nothing"}; ${await warm.evaluate(() => `${document.querySelectorAll(".cawco-frame").length} frames; ${document.body.innerText.slice(0, 400)}; ${JSON.stringify((window as unknown as { __cawcoCanvas?: { report?: { page?: unknown } } }).__cawcoCanvas?.report?.page)}`)} ${stage.heard()}`
+  );
+  await warm.close();
+  if (!warmed) {
+    return;
+  }
+  for (const [width, theme] of legs) {
+    if ((onlyWidth && Number(onlyWidth) !== width) || (onlyTheme && onlyTheme !== theme)) {
+      continue;
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: one page at a time
+    await graphLeg(kit, bench, stage, width, theme);
+  }
+}
+
 /** The legs `CANVAS_DESIGN` runs alone on the bench by their name. */
 const ALONE: Record<
   string,
   (kit: Kit, bench: string, stage: Stage) => Promise<void>
-> = { sweep: sweeps, desk: deskLeg, count: countLegs, bounce: bounces };
+> = {
+  sweep: sweeps,
+  desk: deskLeg,
+  count: countLegs,
+  bounce: bounces,
+  graph: graphLegs,
+};
 
 const spec: Spec = {
   name: "canvas-design",
@@ -4184,16 +4638,8 @@ const spec: Spec = {
         await alone(kit, await kit.bench(), stage);
         return;
       }
-      for (const theme of only === "head" ? [] : (["light", "dark"] as const)) {
-        for (const width of [390, 523, 1024]) {
-          // biome-ignore lint/performance/noAwaitInLoops: one page at a time
-          await canvasLeg(kit, stage, width, theme);
-        }
-        await footLeg(kit, stage, theme);
-        await centredLeg(kit, stage, theme);
-      }
       const bench = await kit.bench();
-      for (const theme of only === "page" ? [] : (["light", "dark"] as const)) {
+      for (const theme of ["light", "dark"] as const) {
         const stood: [number, Set<string> | null][] = [];
         for (const width of [330, 390, 523, 720]) {
           // biome-ignore lint/performance/noAwaitInLoops: one page at a time
@@ -4228,13 +4674,11 @@ const spec: Spec = {
         await switchLeg(kit, bench, stage, theme);
         await artifactSwitchLeg(kit, bench, stage, theme);
       }
-      if (only !== "page") {
-        await backLeg(kit, bench, stage);
-        await sweeps(kit, bench, stage);
-        await deskLeg(kit, bench, stage);
-        await bounces(kit, bench, stage);
-      }
-      sameLoadPlace(kit);
+      await graphLegs(kit, bench, stage);
+      await backLeg(kit, bench, stage);
+      await sweeps(kit, bench, stage);
+      await deskLeg(kit, bench, stage);
+      await bounces(kit, bench, stage);
     } finally {
       stage.stop();
     }

@@ -4335,6 +4335,19 @@
       },
       "$description": "An edge's stroke on a graph canvas: a component canvas's map, from one card to the next (DESIGN.md Artifact panel, canvas and ink)."
     },
+    "c-graph-edge-lit": {
+      "$type": "dimension",
+      "$value": {
+        "value": 3,
+        "unit": "px"
+      },
+      "$description": "The design graph's chosen edge, the move into the kept state: twice an edge's stroke, so the path reads from the rest at a glance (Projects spec §5.10, \"The design graph\"; mockup round 29).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc(2 * {size.c-graph-edge})"
+        }
+      }
+    },
     "c-map-node-w": {
       "$type": "dimension",
       "$value": {

@@ -320,6 +320,7 @@ export type TokenSize =
   | "size.c-canvas-skeleton-w"
   | "size.c-canvas-skeleton-h"
   | "size.c-graph-edge"
+  | "size.c-graph-edge-lit"
   | "size.c-map-node-w"
   | "size.c-graph-panel-w"
   | "size.c-graph-node-w"

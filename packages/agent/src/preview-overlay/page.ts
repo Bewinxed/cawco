@@ -2751,11 +2751,11 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       // And a component canvas's design graph, its kept move and its dials, said before the pane listened.
       const said = window as {
         __cawcoDials?: object;
-        __cawcoGraph?: object;
+        __cawcoDesignGraph?: object;
         __cawcoMove?: object | null;
       };
-      if (said.__cawcoGraph) {
-        post("cawco:graph", { graph: said.__cawcoGraph });
+      if (said.__cawcoDesignGraph) {
+        post("cawco:graph", { graph: said.__cawcoDesignGraph });
       }
       if (said.__cawcoMove !== undefined) {
         post("cawco:move", { move: said.__cawcoMove });

@@ -136,7 +136,8 @@ export class DesignGraph {
   model = $state.raw<GraphModel | null>(null);
   /** The tab: the states file whose graph and kept state stand. */
   file = $state<string | null>(null);
-  kept = $state<Record<string, StagePoint>>({});
+  /** Each states file's kept state; replaced whole on each change, so what goes to the page is plain values its `postMessage` can clone. */
+  kept = $state.raw<Record<string, StagePoint>>({});
   /** What a hover or a held press previews on the page, over the kept state. */
   peek = $state.raw<StagePoint | null>(null);
   /** The panel shown, or folded into its tab. */

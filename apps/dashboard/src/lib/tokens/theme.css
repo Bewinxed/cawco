@@ -334,6 +334,7 @@
   --spacing-c-canvas-skeleton-w: var(--c-canvas-skeleton-w);
   --spacing-c-canvas-skeleton-h: var(--c-canvas-skeleton-h);
   --spacing-c-graph-edge: var(--c-graph-edge);
+  --spacing-c-graph-edge-lit: var(--c-graph-edge-lit);
   --spacing-c-map-node-w: var(--c-map-node-w);
   --spacing-c-graph-panel-w: var(--c-graph-panel-w);
   --spacing-c-graph-node-w: var(--c-graph-node-w);

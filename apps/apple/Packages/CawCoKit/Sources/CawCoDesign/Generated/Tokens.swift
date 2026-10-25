@@ -594,6 +594,8 @@ public enum Size {
     public static let cCanvasSkeletonH: Double = 96
     /// An edge's stroke on a graph canvas: a component canvas's map, from one card to the next (DESIGN.md Artifact panel, canvas and ink).
     public static let cGraphEdge: Double = 1.5
+    /// The design graph's chosen edge, the move into the kept state: twice an edge's stroke, so the path reads from the rest at a glance (Projects spec §5.10, "The design graph"; mockup round 29).
+    public static let cGraphEdgeLit: Double = 3
     /// A component on a canvas's map: its name, file and counts over its frames at 16:10, live when chosen; the widest that keeps five across a desk pane at the map's fit (DESIGN.md Artifact panel, canvas and ink).
     public static let cMapNodeW: Double = 264
     /// The design graph's panel beside a component under review on a desk (Projects spec §5.10, "The design graph"; mockup round 28): two 168px states side by side in a machine's region with its padding, and the panel's own. A pane narrower than twice it holds the graph as a drawer at its foot instead.

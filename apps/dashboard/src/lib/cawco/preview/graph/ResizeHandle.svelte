@@ -41,11 +41,22 @@
   const reached = $derived(
     handle.a !== null || handle.b !== null || handle.held
   );
+  /**
+   * Its gap from the edge and its stroke, as the engine resolves them: both
+   * tokens are written from others (a share of the panel's radius, the
+   * grip's stroke), so they are measured on a box of their size, not read
+   * as text.
+   */
+  let gap = $state(0);
+  let stroke = $state(0);
+  const measure = (node: HTMLElement) => {
+    const box = node.getBoundingClientRect();
+    gap = box.width;
+    stroke = box.height;
+  };
   /** The geometry (round 28's measure of iPadOS 26's corner handle, kept by round 29): concentric with the panel's radius, its gap from the edge 0.122 of it, its body 65.6° of the quarter at rest. */
   const R = $derived(numberOf("--radius-panel"));
-  const inset = $derived(
-    1 + numberOf("--c-handle-arc-gap") + numberOf("--c-handle-stroke") / 2
-  );
+  const inset = $derived(1 + gap + stroke / 2);
   const r = $derived(R - inset);
   const quarter = $derived((Math.PI / 2) * r);
   const rest = $derived(quarter * (65.6 / 90));
@@ -83,6 +94,11 @@
   const clock = $derived(CLOCK[phase]);
 </script>
 
+<span
+  {@attach measure}
+  aria-hidden="true"
+  class="invisible absolute h-c-handle-stroke w-c-handle-arc-gap"
+></span>
 <!-- The shape is drawn for the bottom-leading corner; the top-trailing is the same turned over. -->
 <svg
   aria-hidden="true"

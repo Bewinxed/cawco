@@ -129,6 +129,8 @@ html.cawco-embed .cawco-stand-in-body { max-inline-size: 100%; }
 /** A token's value as CSS writes it: a time (`280ms`, `0.28s`) or a length in px. */
 const TIME = /^(-?[\d.]+)(ms|s)$/;
 const PX = /^(-?[\d.]+)px$/;
+const COMMENT = /\/\*[\s\S]*?\*\//g;
+const DECLARATION = /(--[\w-]+)\s*:\s*([^;]+);/g;
 
 /**
  * Sets the page's sheet: the house faces, CawCo's tokens scoped to the
@@ -145,9 +147,10 @@ export function dressPage(options: { faces: string; tokens: string }): {
   page.textContent = `${options.faces}\n${options.tokens.replaceAll(":root", ".cawco-canvas-page")}\n${PAGE_CSS}`;
   document.head.append(page);
   const values = new Map<string, string>();
-  for (const [, name, value] of options.tokens.matchAll(
-    /(--[\w-]+)\s*:\s*([^;]+);/g
-  )) {
+  // Read with the sheet's comments out: a token's note names others as words ("--reveal-dur: 400ms. */"), which would swallow the declaration after it.
+  for (const [, name, value] of options.tokens
+    .replaceAll(COMMENT, "")
+    .matchAll(DECLARATION)) {
     if (name && value && !values.has(name)) {
       values.set(name, value.trim());
     }

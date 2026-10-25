@@ -352,8 +352,10 @@
     data-stacked={stacked || undefined}
     data-view={graph.view}
   >
+    <!-- The head is one row (pin 11): the move's name, cut to fit, then Original | Edited, the count and Reset once it has edits, then play, loop and the time; a hairline the dock's whole width under it (pin 14). A narrow dock leaves the time to the playhead's pill and the count to the rows' changed figures. -->
     <header
-      class="flex min-h-c-row-h flex-none flex-wrap items-center gap-x-space-2 gap-y-space-1 px-space-2"
+      class="flex min-h-c-row-h min-w-0 flex-none items-center gap-space-2 border-b border-border-hairline px-space-2"
+      data-dock-head
     >
       <h3
         class="m-0 min-w-0 flex-1 truncate type-label text-ink-strong"
@@ -362,69 +364,70 @@
         {words.move(move.from, move.to)}
       </h3>
       {#if graph.changed.size > 0}
-        <div class="flex flex-none items-center gap-space-2">
-          <Tabs
-            onValueChange={(view) =>
-              graph.setView(view === "original" ? "original" : "edited")}
-            size="compact"
-            value={graph.view}
-          >
-            <TabsList aria-label={words.compare}>
-              <TabItem label={words.original} value="original" />
-              <TabItem label={words.edited} value="edited" />
-            </TabsList>
-          </Tabs>
+        <Tabs
+          class="flex-none"
+          onValueChange={(view) =>
+            graph.setView(view === "original" ? "original" : "edited")}
+          size="compact"
+          value={graph.view}
+        >
+          <TabsList aria-label={words.compare}>
+            <TabItem label={words.original} value="original" />
+            <TabItem label={words.edited} value="edited" />
+          </TabsList>
+        </Tabs>
+        {#if !stacked}
           <span
-            class="rounded-xs bg-surface-recess px-space-1 type-meta text-ink-row tabular-nums"
+            class="flex-none rounded-xs bg-surface-recess px-space-1 type-meta whitespace-nowrap text-ink-row tabular-nums"
             data-edits
           >
             {words.edits(graph.changed.size)}
           </span>
-          <button
-            class={GHOST}
-            data-reset-all
-            onclick={() => graph.resetAll()}
-            title={words.resetTip}
-            type="button">{words.reset}</button
-          >
-        </div>
+        {/if}
+        <button
+          class={GHOST}
+          data-reset-all
+          onclick={() => graph.resetAll()}
+          title={words.resetTip}
+          type="button">{words.reset}</button
+        >
       {/if}
-      <div class="ms-auto flex flex-none items-center gap-space-2">
-        <GlassGroup>
-          <button
-            aria-label={graph.playing ? words.pause : words.play}
-            class={SYMBOL}
-            data-play
-            onclick={() => (graph.playing ? graph.stop() : graph.play())}
-            title={graph.playing ? words.pause : words.play}
-            type="button"
-          >
-            {#if graph.playing}<IconPause />{:else}<IconPlay />{/if}
-          </button>
-          <button
-            aria-label={words.loop}
-            aria-pressed={graph.looping}
-            class={SYMBOL}
-            data-loop
-            onclick={() => {
-              graph.looping = !graph.looping;
-              if (graph.looping && !graph.playing) {
-                graph.play();
-              }
-            }}
-            title={words.loop}
-            type="button"><IconRepeat /></button
-          >
-        </GlassGroup>
+      <GlassGroup class="flex-none">
+        <button
+          aria-label={graph.playing ? words.pause : words.play}
+          class={SYMBOL}
+          data-play
+          onclick={() => (graph.playing ? graph.stop() : graph.play())}
+          title={graph.playing ? words.pause : words.play}
+          type="button"
+        >
+          {#if graph.playing}<IconPause />{:else}<IconPlay />{/if}
+        </button>
+        <button
+          aria-label={words.loop}
+          aria-pressed={graph.looping}
+          class={SYMBOL}
+          data-loop
+          onclick={() => {
+            graph.looping = !graph.looping;
+            if (graph.looping && !graph.playing) {
+              graph.play();
+            }
+          }}
+          title={words.loop}
+          type="button"><IconRepeat /></button
+        >
+      </GlassGroup>
+      {#if !stacked}
         <output
           aria-label={words.readout(readout, Math.round(graph.length))}
-          class="text-end type-code text-ink-muted tabular-nums"
+          class="flex-none text-end type-code whitespace-nowrap text-ink-muted tabular-nums"
           data-readout
           ><b class="font-normal text-ink-strong">{readout}</b> / {Math.round(
             graph.length
           )}<span class="type-meta"> ms</span></output
         >
-      </div>
+      {/if}
     </header>
 
     {#if move.error}
@@ -485,11 +488,15 @@
                   >{mark}</span
                 >
               {/each}
-              <span
-                class="absolute bottom-0 left-(--x) h-space-2 w-px bg-ink-strong"
+              <!-- The playhead's head (pin 13): a pill saying the moment the page stands, over the ruler's marks, its line down through the lanes; ink, never coral (DESIGN.md, The Coral Is Where You Act Rule), as a tooltip is (The Ink Stays Ink Rule). Held inside the ruler at its ends. -->
+              <output
+                aria-label={words.readout(readout, Math.round(graph.length))}
+                aria-hidden={!stacked || undefined}
+                class="pointer-events-none absolute inset-y-0 left-(--x) z-1 grid -translate-x-1/2 place-items-center rounded-pill bg-ink-solid px-space-1 type-code text-on-ink tabular-nums"
                 data-playhead-knob
-                style:--x={`${xOf(Math.min(time, end))}px`}
-              ></span>
+                style:--x={`${Math.max(numberOf("--space-4"), Math.min(laneW - numberOf("--space-4"), xOf(Math.min(time, end))))}px`}
+                >{readout}</output
+              >
             </div>
             {#each move.clips as clip (clip.id)}
               {@const timing = drawn[clip.id]}
