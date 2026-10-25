@@ -103,8 +103,20 @@
     }
   });
   const signIn = $derived(connectSignIns.of(held?.requestId ?? ""));
+  /**
+   * The hub signed in from this card, by whichever of its two words reached
+   * this tab first: the server read signed in (the fleet's MCP list), or the
+   * call answered connected (the transcript). Each comes by its own road, and
+   * waiting on the first alone lost the beat whenever the answer won.
+   */
+  const done = $derived(
+    signIn.stage === "done" ||
+      (signIn.stage === "waiting" && answer?.outcome === "connected")
+  );
+  /** The sign-in still out: Connect pressed, no word from the hub yet. */
+  const signingIn = $derived(signIn.stage === "waiting" && !done);
   /** The hub signed in from this card: its beat holds before the record. */
-  const landing = $derived(!!(answer && held && signIn.stage === "done"));
+  const landing = $derived(!!(answer && held && done));
   /** The card that stands now, if any: the record takes its place after. */
   const card = $derived(ask ?? (landing || (message && !answer) ? held : null));
   const connect = $derived(card?.connectAsk ?? null);
@@ -119,6 +131,10 @@
     if (!landing) {
       untrack(() => connectSignIns.forget(id));
       return;
+    }
+    // Landed by the call's answer: the sign-in is done here too.
+    if (signIn.stage === "waiting") {
+      untrack(() => connectSignIns.landed(id));
     }
     const hold = setTimeout(() => connectSignIns.forget(id), dur("--dur-hold"));
     return () => clearTimeout(hold);
@@ -168,7 +184,7 @@
       !(card && connect && reachable) ||
       declining ||
       signIn.stage === "waiting" ||
-      signIn.stage === "done"
+      done
     ) {
       return;
     }
@@ -176,7 +192,7 @@
   }
 
   function notNow(): void {
-    if (!(card && reachable) || declining || signIn.stage === "done") {
+    if (!(card && reachable) || declining || done) {
       return;
     }
     connectSignIns.forget(card.requestId);
@@ -258,10 +274,12 @@
     if (!connect) {
       return "";
     }
-    if (signIn.stage === "done") {
-      return server?.auth?.as
-        ? askWords.connectedAs(server.auth.as)
-        : askWords.connected;
+    if (done) {
+      // As whom: the call's answer says it when it came first.
+      const as =
+        (answer?.outcome === "connected" ? answer.as : null) ??
+        server?.auth?.as;
+      return as ? askWords.connectedAs(as) : askWords.connected;
     }
     if (failed) {
       return configureWords.tryAgain;
@@ -271,7 +289,7 @@
       : askWords.connect(connect.server);
   });
   const connectIcon = $derived.by(() => {
-    if (signIn.stage === "done") {
+    if (done) {
       return IconTick;
     }
     return failed ? IconRefresh : IconKey;
@@ -381,7 +399,7 @@
             {askWords.connectReach(connect.server)}
           </p>
         {/if}
-        {#if signIn.stage === "waiting"}
+        {#if signingIn}
           <p
             data-slot="wait"
             class="m-0 text-size-meta text-ink-muted"
@@ -390,7 +408,7 @@
           >
             {askWords.connectWaiting(connect.server)}
           </p>
-        {:else if !reachable && signIn.stage !== "done"}
+        {:else if !reachable && !done}
           <p
             data-slot="wait"
             class="m-0 text-size-meta text-ink-muted"
@@ -429,7 +447,7 @@
             icon={connectIcon}
             label={connectLabel}
             onclick={pressConnect}
-            pending={signIn.stage === "waiting"}
+            pending={signingIn}
             pendingLabel={askWords.signingIn(connect.server)}
             size="sm"
             variant="secondary"
@@ -439,7 +457,7 @@
             fit="prompt"
             width="shrink"
             data-connect-decline
-            disabled={!reachable || signIn.stage === "done"}
+            disabled={!reachable || done}
             label={askWords.notNow}
             onclick={notNow}
             pending={declining}
