@@ -204,6 +204,7 @@ import { closeWorkspaceBrowsers, ensureGateToken } from "./browser/gate";
 import { colimaHome } from "./browser/media-forwarding";
 import { runtimeSockets } from "./browser/runtime";
 import { bunNodeShim } from "./bun-node-shim";
+import { browserExecutable } from "./capabilities";
 import { cloneInPlace } from "./clone";
 import { reportDamaged } from "./damaged-records";
 import { closeGithubDoor, githubDoorOf, openGithubDoor } from "./github-door";
@@ -1454,6 +1455,55 @@ const writeGitShim = async (id: string, path: string): Promise<void> => {
   ]);
 };
 
+/** The Chromium a workspace's commands launch by name, in its read-only bin ({@link writeChromiumShim}). */
+const CHROMIUM_SHIM = "cawco-chromium";
+
+/** Workspace `id`'s {@link CHROMIUM_SHIM}, which `IMPECCABLE_BROWSER` names ({@link commandEnv}). */
+const chromiumShimOf = (id: string): string =>
+  join(gitHelperDirOf(id), CHROMIUM_SHIM);
+
+/**
+ * The machine's Chromium (capabilities.ts `browserExecutable`: Chrome or
+ * Chromium on PATH, else Playwright's newest) with `--no-sandbox`, as
+ * {@link CHROMIUM_SHIM}, on both OSes. Chromium's own sandbox cannot start
+ * inside the boundary: on Linux the boundary's bwrap runs with
+ * `--disable-userns`, so `unshare -Ur` there says "No space left on
+ * device" and Chromium's namespace sandbox has none to make, and its setuid
+ * helper lies on a nosuid mount (Brave: "The SUID sandbox helper binary was
+ * found, but is not configured correctly … Aborted"; Playwright's Chromium:
+ * "No usable sandbox!"); macOS's Seatbelt does not nest (core
+ * boundary-nesting.ts). That is the rule capabilities.ts
+ * `chromiumSandboxed` keeps for the daemon's own browsers, and the probe
+ * kit's Chromium launches with `--no-sandbox` for it (kit.ts `browser`).
+ * The boundary still holds the browser.
+ *
+ * A tool that launches a Chromium of its own finds this one by name:
+ * impeccable's URL scans (`impeccable detect --viewport WxH <url>`) take
+ * `IMPECCABLE_BROWSER` before any browser on the machine ("point
+ * IMPECCABLE_BROWSER at a Chromium-based browser executable", its error
+ * when it finds none). Playwright's own launches pass `--no-sandbox`
+ * already (its `chromiumSandbox` defaults to false), and its WebKit builds
+ * carry no sandbox of their own.
+ */
+const writeChromiumShim = async (id: string): Promise<void> => {
+  const bin = gitHelperDirOf(id);
+  await mkdir(bin, { recursive: true });
+  const chromium = browserExecutable();
+  await writeWhole(
+    chromiumShimOf(id),
+    chromium
+      ? `#!/bin/sh
+# CawCo workspace ${id}: the machine's Chromium, without its own sandbox inside the boundary's.
+exec ${shellQuote(chromium)} --no-sandbox "$@"
+`
+      : `#!/bin/sh
+echo "${CHROMIUM_SHIM}: no Chrome or Chromium on this machine, nor Playwright's (bunx playwright install chromium)" >&2
+exit 1
+`,
+    0o755
+  );
+};
+
 const writeShims = async (id: string, runtime: string): Promise<void> => {
   const bin = gitHelperDirOf(id);
   await mkdir(bin, { recursive: true });
@@ -1691,6 +1741,7 @@ const armHookNow = async (
   await writeUpstreamRule(id);
   await writeWhole(gitSystemConfigOf(id), gitSystemConfig(id), 0o644);
   await writeGitShim(id, held.path);
+  await writeChromiumShim(id);
   // The copy of gh's token an earlier build's executor kept beside the
   // workspace: nothing reads it now, and a token is kept nowhere it is not used.
   await rm(join(stateDir(id), "gh-token"), { force: true });
@@ -6827,7 +6878,8 @@ const ready = (
  * with it, and a workspace reaches the network through that proxy alone),
  * its scratch dir as `TMPDIR` (by its short name on macOS, `workspaceTmpDir`)
  * and no `CLAUDE_CODE_TMPDIR`, the empty git template, git's own system config
- * ({@link gitSystemConfigOf}), the tool and git doors (hub-git.ts
+ * ({@link gitSystemConfigOf}), impeccable's browser ({@link writeChromiumShim}),
+ * the tool and git doors (hub-git.ts
  * `gitDoorEnv`), and `CAWCO_WORKSPACE`, by which a script tells that it runs
  * inside one; never a key agent's socket ({@link AGENT_SOCKET_ENV}).
  *
@@ -6860,6 +6912,7 @@ const commandEnv = (id: string, clone: string): string[] => [
     GIT_TEMPLATE_DIR: gitTemplateOf(id),
     GH_CONFIG_DIR: guardedGhConfigOf(id),
     GIT_CONFIG_SYSTEM: gitSystemConfigOf(id),
+    IMPECCABLE_BROWSER: chromiumShimOf(id),
     CAWCO_TOOL_SOCKET: toolDoorOf(id),
     CAWCO_WORKSPACE: id,
     ...doorEnv(id, clone),
@@ -7208,6 +7261,7 @@ export const executorUnsandboxed = async (
 }> => {
   await writeGuardedGhConfig(ref.id);
   await writeWhole(gitSystemConfigOf(ref.id), gitSystemConfig(ref.id), 0o644);
+  await writeChromiumShim(ref.id);
   const execAt = join(stateDir(ref.id), "exec");
   const hookAt = join(stateDir(ref.id), "hook");
   return {
