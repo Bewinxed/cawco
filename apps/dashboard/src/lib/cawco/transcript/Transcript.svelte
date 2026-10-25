@@ -2757,11 +2757,35 @@
   /**
    * Until when a landing's place is held (performance.now()): the rows
    * around a place read back to go on measuring after the list is drawn,
-   * and each measurement above it moves it, frames apart.
+   * and each measurement above it moves it, frames apart. Held for a time
+   * alone, it could be let go while those rows were still coming in. A
+   * page handed over in front puts virtua's buffer at none, and the buffer
+   * steps back up a frame and a task at a time, eight steps. On WebKit at
+   * 390 under load, frames came 220–340ms apart (transcript-holds' reload
+   * legs, traced): the list was drawn with the buffer at 250 of its 400px,
+   * and the place was put back at +257ms and again at +971ms, as the buffer
+   * filled, after 130px of rows had come in above it. In another run a page
+   * in front landed 1227ms after the list was drawn, and its eight steps ran
+   * on past the 1.5s hold. virtua on an iPhone keeps a size change made
+   * while it scrolls aside rather than correcting for it at once (0.53.4
+   * core: `p() && 0 !== I ? b += t : S += t`). So a landing's place is held
+   * while the buffer is not whole, and `FILLED_HOLD_MS` past that.
    */
   let holdUntil = 0;
   /** How long a landing's place is held once the list is drawn, ms: our own call. */
   const LANDING_HOLD_MS = 1500;
+  /**
+   * How long a landing's place is still held once the rows around it are
+   * all mounted: the last of them measuring, and virtua's own scroll
+   * settling (its 150ms), ms. Our own call.
+   */
+  const FILLED_HOLD_MS = 500;
+  /** A landing's place held on while the rows around it are still coming in (`holdUntil`). */
+  function holdWhileFilling(now: number): void {
+    if (now < holdUntil && !unseen && buffer < viewHeight * BUFFER_SCREENS) {
+      holdUntil = Math.max(holdUntil, now + FILLED_HOLD_MS);
+    }
+  }
   function holdPlace(): void {
     cancelAnimationFrame(keepFrame);
     keepFrame = 0;
@@ -2796,7 +2820,9 @@
           frames += 1;
           keptPlace = place;
         }
-        if ((put && frames < KEEP_FRAMES) || performance.now() < holdUntil) {
+        const now = performance.now();
+        holdWhileFilling(now);
+        if ((put && frames < KEEP_FRAMES) || now < holdUntil) {
           step();
         }
       });
