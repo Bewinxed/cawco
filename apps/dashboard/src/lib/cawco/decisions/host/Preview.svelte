@@ -6,9 +6,10 @@
   card's whole width (`fills`: its card's options stand one to a row), a
   screen's 16:10 of it, and lays itself out to it; naming its own layout
   width it stands at that width where its well holds it, else scaled down
-  to the well's width (`embed-scale`), never under `--c-media-scale-min`
-  (the house's least words at 10px), past which it scrolls sideways at
-  that scale. Open full size brings it to the front of the session's panel,
+  to the well's width (`embed-scale`), never so far that its own least
+  words (as its overlay tells them, core `EMBED_WORDS`) stand under
+  `--c-media-words-floor`, past which it scrolls sideways at that scale.
+  Open full size brings it to the front of the session's panel,
   as Canvas's Open to draw does. A page stands at its own address on this
   page's origin (`/__cawco/page/<id>/`), as wide as its `width` says (the
   well's width where it says none) and as tall as its content up to the
@@ -50,6 +51,7 @@
     CANVAS_EMBED_FETCHED,
     CANVAS_EMBED_SIZE,
     canvasEmbedUrl,
+    EMBED_WORDS,
     type EmbedShape,
     storiesKey,
   } from "@cawco/core/stage";
@@ -145,17 +147,19 @@
   let stage = $state<HTMLDivElement>();
   /** The stage's width, px, as layout has it. */
   let room = $state(0);
-  /** The least it is scaled to, `--c-media-scale-min`: the house's least words at 10px. */
-  let least = 1;
+  /** The least a scaled design's words stand at, px: `--c-media-words-floor`. */
+  let wordsFloor = 0;
+  /** The least font size the design's shown words are set at, px, as its overlay tells it (core `EMBED_WORDS`); null until it has. */
+  let words = $state<number | null>(null);
   $effect(() => {
     const well = stage;
     if (!well) {
       return;
     }
-    least =
+    wordsFloor =
       Number.parseFloat(
-        getComputedStyle(well).getPropertyValue("--c-media-scale-min")
-      ) || 1;
+        getComputedStyle(well).getPropertyValue("--c-media-words-floor")
+      ) || 0;
     const read = () => {
       room = Number.parseFloat(getComputedStyle(well).width) || 0;
     };
@@ -166,14 +170,20 @@
   });
   /**
    * A page-sized design's scale: 1 where its well holds its own layout
-   * width (`width`), else down to the well's room, never under
-   * `--c-media-scale-min` (its words at 10px), past which it scrolls
-   * sideways in its well at that scale. With no width of its own it takes
-   * the card's whole width and lays itself out to it, at 1.
+   * width (`width`), else down to the well's room, never so far that its
+   * own least words (`words`) stand under `--c-media-words-floor`, past
+   * which it scrolls sideways in its well at that scale; a design whose
+   * words are already at the floor is never scaled. Until its words are
+   * told it stands at 1. With no width of its own it takes the card's whole
+   * width and lays itself out to it, at 1.
    */
   const scale = $derived(
-    pageSized && picture !== undefined && room > 0 && picture > room + 0.5
-      ? Math.max(least, room / picture)
+    pageSized &&
+      picture !== undefined &&
+      words !== null &&
+      room > 0 &&
+      picture > room + 0.5
+      ? Math.min(1, Math.max(wordsFloor / words, room / picture))
       : 1
   );
   const scaled = $derived(scale < 1 && picture !== undefined);
@@ -228,10 +238,20 @@
     const heard = (event: MessageEvent) => {
       const said = event.data as {
         height?: unknown;
+        least?: unknown;
         type?: unknown;
         width?: unknown;
       } | null;
       if (event.source !== frame?.contentWindow) {
+        return;
+      }
+      // A page-sized design's least words: how far it may be scaled.
+      if (
+        said?.type === EMBED_WORDS &&
+        typeof said.least === "number" &&
+        said.least > 0
+      ) {
+        words = said.least;
         return;
       }
       // Its graph arrived: the next canvas fetches while this one evaluates and draws.
@@ -491,6 +511,7 @@
         data-more-above={more.above || undefined}
         data-more-below={more.below || undefined}
         data-slot="embed"
+        data-words={words ?? undefined}
         onload={sized}
         src={`/__cawco/page/${id}/`}
         style:--fade="var(--c-edge-fade-len)"
@@ -569,6 +590,7 @@
               data-drawn={drawn || undefined}
               data-shape={shape}
               data-slot="embed"
+              data-words={words ?? undefined}
               onload={() => {
                 drawn = true;
               }}

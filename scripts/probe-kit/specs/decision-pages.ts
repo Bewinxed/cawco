@@ -5408,11 +5408,13 @@ async function folderLeg(
   }
 }
 
-/** (t)'s timeline: a page-sized design that lays itself out to its frame, its least words 12px (the house's meta). */
-const TIMELINE_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Timeline</title>
+/** (t)'s timeline: a page-sized design that lays itself out to its frame, its least words its labels' `labelPx`. */
+const timelineHtml = (
+  labelPx: number
+) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Timeline</title>
 <style>body{margin:0;font:14px system-ui;padding:16px}h1{font-size:18px;margin:0 0 12px}
 .row{display:grid;grid-template-columns:120px 1fr;gap:8px;align-items:center;margin-block:6px}
-.row span{font-size:12px}.bar{block-size:14px;background:#7aa;border-radius:3px}</style></head>
+.row span{font-size:${labelPx}px}.bar{block-size:14px;background:#7aa;border-radius:3px}</style></head>
 <body><h1 id="folder-mark">${FOLDER_MARK}</h1>${[
   "Plan",
   "Build",
@@ -5439,15 +5441,19 @@ plain = Option("plain", "Plain", "Quiet bars.", true, [shown], "Reads flat besid
 bold = Option("bold", "Bold", "Loud bars.", false, [], "Tires the eye over a day.")
 shown = Preview("${folder}", "The timeline as it stands")`;
 
-/** (t)'s second page: the same timeline naming its own layout width, 1440px. */
+/** (t)'s second page: the same timeline naming its own layout width, 1440px, and one whose labels are already 10px. */
 const DESIGN_W = 1440;
 const sizedProgram = (
-  folder: string
+  folder: string,
+  fine: string
 ) => `root = Decisions("Plan the wide release", [wide])
-wide = Decision("wide", "Which wide timeline ships?", [plain, bold], "The folder shows the plain one.")
+wide = Decision("wide", "Which wide timeline ships?", [plain, small], "The folder shows the plain one.")
 plain = Option("plain", "Plain", "Quiet bars.", true, [shown], "Reads flat beside the dashboard.")
-bold = Option("bold", "Bold", "Loud bars.", false, [], "Tires the eye over a day.")
-shown = Preview("${folder}", "The timeline at its own width", [], ${DESIGN_W})`;
+small = Option("small", "Small print", "Every label at 10px.", false, [fineShown], "Nothing to spare.")
+shown = Preview("${folder}", "The timeline at its own width", [], ${DESIGN_W})
+fineShown = Preview("${fine}", "The small-print timeline at its own width", [], ${DESIGN_W})`;
+/** `--c-media-words-floor`. */
+const WORDS_FLOOR = 10;
 
 /** (t)'s windows: the owner's own, a laptop's, a 1080p and a 1440p display's. */
 const WIDTH_WINDOWS = [
@@ -5458,8 +5464,6 @@ const WIDTH_WINDOWS = [
 ] as const;
 /** `--c-decision-page-max`. */
 const PAGE_MAX = 1348;
-/** `--c-media-scale-min`. */
-const SCALE_MIN = 0.8334;
 
 /** The page's column, its cards and the timeline's frame and well, read from the engine. */
 const widthRead = (folder: string) => {
@@ -5508,6 +5512,7 @@ const widthRead = (folder: string) => {
     wide: stage?.hasAttribute("data-wide") ?? false,
     fills: well?.hasAttribute("data-fills") ?? false,
     scale: scaler?.dataset.scale ? Number(scaler.dataset.scale) : 1,
+    words: frame?.dataset.words ? Number(frame.dataset.words) : null,
     drawn: frame?.hasAttribute("data-drawn") ?? false,
     src: frame?.src ?? "",
     tallest: innerHeight * 0.8,
@@ -5590,35 +5595,53 @@ async function plainChecks(
   );
 }
 
-/** (t)'s second page at one window: the timeline naming 1440px at it, or scaled to its well with its words at 10px or more; no overflow. */
+/**
+ * (t)'s second page at one window: each timeline naming 1440px at it, or
+ * scaled to its well no further than stands its own least words (as its
+ * overlay told them, read again in its document here) at 10px; the
+ * small-print one, whose labels are already 10px, never scaled; no overflow.
+ */
 async function wideChecks(
   kit: Kit,
   page: Page,
   leg: string,
-  folder: string,
+  timelines: { folder: string; labelPx: number }[],
   src: string
 ): Promise<void> {
-  await openDrawn(page, src, folder);
-  const wide = await page.evaluate(widthRead, folder);
-  const handle = await page
-    .locator(`iframe[data-cawco-artifact="${folder}"]`)
-    .elementHandle();
-  const inner = await handle?.contentFrame();
-  const least = inner ? await leastWords(inner) : 0;
-  const want =
-    DESIGN_W <= wide.stage + 0.5
-      ? 1
-      : Math.max(SCALE_MIN, wide.stage / DESIGN_W);
-  const shown = DESIGN_W * wide.scale;
-  kit.check(
-    `${leg}: the timeline naming ${DESIGN_W}px lays out at it (${wide.frameLayout?.w}px) and stands at scale ${wide.scale.toFixed(3)} (want ${want.toFixed(3)}) in its ${Math.round(wide.stage)}px well, ${Math.round(wide.frame?.w ?? 0)}×${Math.round(wide.frame?.h ?? 0)}px on screen, its least words ${(least * wide.scale).toFixed(2)}px (≥10), ${wide.wide ? "scrolling sideways past the floor" : "whole in its well"}`,
-    wide.frameLayout?.w === DESIGN_W &&
-      Math.abs(wide.scale - want) <= 0.002 &&
-      Math.abs((wide.frame?.w ?? 0) - shown) <= 1 &&
-      least * wide.scale >= 10 - 0.01 &&
-      wide.wide === shown > wide.stage + 0.5,
-    JSON.stringify({ wide, least })
-  );
+  await openDrawn(page, src, timelines[0]?.folder ?? "");
+  for (const { folder, labelPx } of timelines) {
+    const told = await page
+      .waitForSelector(
+        `iframe[data-cawco-artifact="${folder}"][data-drawn][data-words]`,
+        { timeout: 30_000 }
+      )
+      .then(() => true)
+      .catch(() => false);
+    await settle(page, 300);
+    const wide = await page.evaluate(widthRead, folder);
+    const handle = await page
+      .locator(`iframe[data-cawco-artifact="${folder}"]`)
+      .elementHandle();
+    const inner = await handle?.contentFrame();
+    const least = inner ? await leastWords(inner) : 0;
+    const want =
+      DESIGN_W <= wide.stage + 0.5
+        ? 1
+        : Math.min(1, Math.max(WORDS_FLOOR / least, wide.stage / DESIGN_W));
+    const shown = DESIGN_W * wide.scale;
+    kit.check(
+      `${leg}: the ${labelPx}px-label timeline naming ${DESIGN_W}px lays out at it (${wide.frameLayout?.w}px), its overlay told its least words ${wide.words}px (its document's ${least}px), and stands at scale ${wide.scale.toFixed(3)} (want ${want.toFixed(3)}) in its ${Math.round(wide.stage)}px well, ${Math.round(wide.frame?.w ?? 0)}×${Math.round(wide.frame?.h ?? 0)}px on screen, its least words ${(least * wide.scale).toFixed(2)}px (≥${WORDS_FLOOR}), ${wide.wide ? "scrolling sideways past the floor" : "whole in its well"}`,
+      told &&
+        wide.words === least &&
+        least === labelPx &&
+        wide.frameLayout?.w === DESIGN_W &&
+        Math.abs(wide.scale - want) <= 0.002 &&
+        Math.abs((wide.frame?.w ?? 0) - shown) <= 1 &&
+        least * wide.scale >= WORDS_FLOOR - 0.01 &&
+        wide.wide === shown > wide.stage + 0.5,
+      JSON.stringify({ wide, least })
+    );
+  }
   const sweep = await overflowIn(page.mainFrame());
   kit.check(
     `${leg}: the wide page's overflow sweep finds nothing past the window's width`,
@@ -5707,9 +5730,11 @@ async function openFullCheck({
  * - the timeline naming no width stands its card's options one to a row,
  *   its frame the card's body less its well's insets wide and a screen's
  *   16:10 of that tall (up to the media cap), its document loaded;
- * - the timeline naming its 1440px stands at it where its well holds it,
- *   else scaled to the well (never under `--c-media-scale-min`, its least
- *   words at 10px or more), scrolling sideways only past that floor;
+ * - a timeline naming its 1440px stands at it where its well holds it,
+ *   else scaled to the well no further than stands its own least words
+ *   (12px labels, as its overlay tells them) at `--c-media-words-floor`,
+ *   scrolling sideways only past that floor; one whose labels are already
+ *   10px is never scaled;
  * - Open full size brings it to the front of the session's panel, its
  *   frame there holding the timeline;
  * - the overflow sweep finds nothing, and no console error.
@@ -5720,17 +5745,22 @@ async function widthLeg(
   const { desk, fleet, kit, writer } = on;
   const make = <T>(body: object) =>
     fleet.api<T>(`/api/instances/${writer}/artifacts`, body);
-  const dir = join(fleet.sandbox, "timeline");
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "index.html"), TIMELINE_HTML);
-  const folder = await make<{ id: string }>({
-    kind: "preview",
-    does: "try",
-    ask: "Try the timeline",
-    name: "timeline",
-    dir,
-    machine: MACHINE,
-  });
+  /** A folder's preview of a timeline whose labels are `labelPx`. */
+  const timeline = (name: string, labelPx: number) => {
+    const dir = join(fleet.sandbox, name);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "index.html"), timelineHtml(labelPx));
+    return make<{ id: string }>({
+      kind: "preview",
+      does: "try",
+      ask: "Try the timeline",
+      name,
+      dir,
+      machine: MACHINE,
+    });
+  };
+  const folder = await timeline("timeline", 12);
+  const fine = await timeline("timeline-fine", 10);
   /** A page published from `program`, its address once it stands at the panel's front. */
   const publishAt = async (name: string, program: string, card: string) => {
     let refusal = "";
@@ -5773,9 +5803,13 @@ async function widthLeg(
   );
   const sized = await publishAt(
     "timeline-wide",
-    sizedProgram(folder.id),
+    sizedProgram(folder.id, fine.id),
     "wide"
   );
+  const timelines = [
+    { folder: folder.id, labelPx: 12 },
+    { folder: fine.id, labelPx: 10 },
+  ];
   for (const engine of ["chromium", "webkit"] as const) {
     for (const { w, h } of WIDTH_WINDOWS) {
       const leg = `(t) ${engine} ${w}×${h}`;
@@ -5798,7 +5832,7 @@ async function widthLeg(
       });
       await page.setViewportSize({ width: w, height: h });
       await plainChecks(kit, page, leg, folder.id, plain.src);
-      await wideChecks(kit, page, leg, folder.id, sized.src);
+      await wideChecks(kit, page, leg, timelines, sized.src);
       if (w === 1440) {
         await openFullCheck({ ...on, page, leg, errors, plain });
       }

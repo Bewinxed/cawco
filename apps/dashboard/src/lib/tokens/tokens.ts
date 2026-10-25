@@ -522,6 +522,7 @@ export type TokenSize =
   | "size.c-decision-meter-w"
   | "size.c-decision-option-min"
   | "size.c-media-max-h"
+  | "size.c-media-words-floor"
   | "size.c-artifact-card-min"
   | "size.c-work-tabs-roomy-w"
   | "size.c-work-tabs-squeeze"

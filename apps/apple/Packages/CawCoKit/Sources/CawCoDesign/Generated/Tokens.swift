@@ -974,8 +974,8 @@ public enum Size {
     public static let cDecisionOptionMin: Double = 190
     /// The tallest a decision card's media well draws its piece: a canvas, a frame and a diagram each fit to it (a diagram never under its words' 10px floor).
     public static let cMediaMaxH: Double = 675.2
-    /// The least a decision card's Preview of a page-sized design (a page, a dev server's or a folder's preview, a sheet) is scaled to fit its card: the house's least words, meta's 12px, standing at 10px (10 / 12, rounded up). Past it the design stays at this scale and scrolls sideways in its well.
-    public static let cMediaScaleMin: Double = 0.8334
+    /// The least a scaled design's words stand at: a decision card's Preview of a page-sized design (a page, a dev server's or a folder's preview, a sheet) wider than its card scales down no further than stands the least words the design itself sets (its overlay tells them) at this size. Past it the design scrolls sideways in its well at that scale.
+    public static let cMediaWordsFloor: Double = 10
     /// The artifact masonry's least card width: a thumbnail that still reads beside a dozen-character name.
     public static let cArtifactCardMin: Double = 148
     /// The rail width at and above which the Working/Finished header needs no squeeze: measured, the narrowest rail at which both labels stand whole beside three-digit counts at rest.

@@ -33,6 +33,7 @@ import type {
   PageAnchor,
   PinnedElement,
 } from "@cawco/core/comments";
+import { EMBED_WORDS } from "@cawco/core/stage";
 import {
   contentBox,
   type FrameElement,
@@ -306,6 +307,73 @@ export function answerEmbedder(deps: EmbeddedDeps): void {
     });
   }
   window.parent.postMessage({ type: EMBEDDED }, "*");
+  tellWords(deps.own);
+}
+
+/** The most text nodes read for the least words: a page past them is read at its first. Our call. */
+const WORDS_READ_MOST = 4000;
+
+/** The least font size, CSS px, any shown word of this page is set at (the overlay's own left out); null with none shown. */
+function leastWords(own: (node: Node) => boolean): number | null {
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  let least = Number.POSITIVE_INFINITY;
+  let read = 0;
+  for (
+    let node = walker.nextNode();
+    node && read < WORDS_READ_MOST;
+    node = walker.nextNode()
+  ) {
+    const holder = node.parentElement;
+    if (!(holder && node.textContent?.trim()) || own(node)) {
+      continue;
+    }
+    read += 1;
+    if (holder.checkVisibility?.({ visibilityProperty: true }) === false) {
+      continue;
+    }
+    const size = Number.parseFloat(getComputedStyle(holder).fontSize);
+    if (size > 0 && size < least) {
+      least = size;
+    }
+  }
+  return Number.isFinite(least) ? least : null;
+}
+
+/**
+ * Tells the page holding this one the least font size its shown words are
+ * set at (core `EMBED_WORDS`), to any parent: a number, and nothing else.
+ * Said once the page has loaded and its faces with it, and again, once per
+ * frame at most, whenever its layout's size changes it.
+ */
+function tellWords(own: (node: Node) => boolean): void {
+  let told: number | null = null;
+  let pending = 0;
+  const tell = () => {
+    pending = 0;
+    if (!document.body) {
+      return;
+    }
+    const least = leastWords(own);
+    if (least !== null && least !== told) {
+      told = least;
+      window.parent.postMessage({ type: EMBED_WORDS, least }, "*");
+    }
+  };
+  const soon = () => {
+    if (!pending) {
+      pending = requestAnimationFrame(tell);
+    }
+  };
+  const start = () => {
+    tell();
+    document.fonts?.ready.then(soon);
+    new ResizeObserver(soon).observe(document.documentElement);
+  };
+  if (document.readyState === "complete") {
+    start();
+  } else {
+    addEventListener("load", start, { once: true });
+  }
 }
 
 /** What the page's overlay gives the bridge (page.ts). */

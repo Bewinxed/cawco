@@ -128,8 +128,8 @@
  *    none, runs none. On the stage's own port (as the daemon draws), and on
  *    the dashboard's own stage, the same.
  * 16. An embed asks no origin for what it doesn't serve: a page of the
- *    dashboard's three connect asks (transcripts with their tool rows over
- *    the real composer), on the dashboard's own stage, in Chromium and
+ *    dashboard's three hub readers (the real composer, the routine form,
+ *    Needs you), on the dashboard's own stage, in Chromium and
  *    WebKit: every canvas draws, no frame requests `/api/*`, and nothing
  *    logs a console error, answers 400 or more or fails.
  *
@@ -2256,30 +2256,42 @@ async function oneYjsOnDashboard(kit: Kit): Promise<void> {
   }
 }
 
-/** The dashboard's connect asks: transcripts whose tool rows (ToolGroup) name each MCP server's site, over the real composer. */
+/**
+ * The dashboard's surfaces that read the hub where they run in the app: the
+ * real composer, the routine form (`POST /api/routines`) and the Needs you
+ * card, each under its stories' stand-in hub. (The connect asks' three
+ * states files this leg drew went with their cutover, 36d97303a.)
+ */
 const CONNECT = [
-  "src/lib/cawco/transcript/ConnectAsk.stories.ts",
-  "src/lib/cawco/transcript/ConnectCard.stories.ts",
-  "src/lib/cawco/transcript/ConnectStrip.stories.ts",
+  "src/lib/cawco/canvas/CanvasStages.stories.ts",
+  "src/lib/cawco/routines/RoutineForm.stories.ts",
+  "src/lib/cawco/home/NeedsCard.stories.ts",
 ] as const;
-const CONNECT_IDS = CONNECT.map((_, i) => idOf(`connect-${i}`));
-const CONNECT_PAGE = "connect";
+/** The stories each Preview names, in `CONNECT`'s order: every one is drawn. */
+const CONNECT_STORIES = [
+  ["Composer"],
+  ["Filled", "FailedSave"],
+  ["Issue", "Budget"],
+] as const;
+const CONNECT_IDS = CONNECT.map((_, i) => idOf(`hubless-${i}`));
+const CONNECT_PAGE = "hub-readers";
 const CONNECT_PROGRAM = [
-  `root = Decisions("The connect ask", [ask])`,
-  `ask = Decision("ask", "How should the agent ask for a sign-in?", [a, b, c], "Each is drawn by the dashboard's own components.")`,
-  `a = Option("ask", "On the composer", "The ask grows out of it.", true, [pa], "It covers the composer.")`,
-  `b = Option("card", "In the transcript", "A card where the agent asked.", false, [pb], "It can scroll away.")`,
-  `c = Option("strip", "A strip", "One line on the composer.", false, [pc], "Little room for why.")`,
-  `pa = Preview("${CONNECT_IDS[0]}", "On the composer", ["Asking", "Connected"])`,
-  `pb = Preview("${CONNECT_IDS[1]}", "In the transcript", ["Asking", "Connected"])`,
-  `pc = Preview("${CONNECT_IDS[2]}", "A strip", ["Asking", "Connected"])`,
+  `root = Decisions("The hub's readers", [ask])`,
+  `ask = Decision("ask", "Which surface leads the release notes?", [a, b, c], "Each is drawn by the dashboard's own components.")`,
+  `a = Option("composer", "The composer", "Where every turn starts.", true, [pa], "Seen all day.")`,
+  `b = Option("routine", "The routine form", "Work that runs by itself.", false, [pb], "Used once a week.")`,
+  `c = Option("needs", "The waiting card", "What waits on the person.", false, [pc], "Empty on a quiet day.")`,
+  ...["The composer", "The routine form", "The waiting card"].map(
+    (caption, i) =>
+      `p${"abc"[i]} = Preview("${CONNECT_IDS[i]}", "${caption}", ${JSON.stringify(CONNECT_STORIES[i])})`
+  ),
 ].join("\n");
 const API_PATH = /^\/api(?:\/|$)/;
 
 /**
  * 16. An embed asks no origin for what it doesn't serve: a decision page
- * of the dashboard's three connect asks (each a transcript with its tool
- * rows over the real composer, under the stories' stand-in hub), on the
+ * of three of the dashboard's hub readers (the real composer, the routine
+ * form, Needs you, under their stories' stand-in hub), on the
  * dashboard's own stage, in Chromium and WebKit: every canvas draws, no
  * frame requests `/api/*` of any origin (an embed's origin is a stage, which
  * serves components, not the hub's API), and the page and its frames log
@@ -2329,8 +2341,12 @@ async function hublessOnDashboard(kit: Kit): Promise<void> {
           embeds.length === CONNECT.length &&
           embeds.every(
             (one) =>
-              one.frames.length === 2 &&
-              one.frames.every((f) => f.state === "drawn")
+              one.frames.length ===
+                (CONNECT_STORIES[
+                  CONNECT.findIndex((file) =>
+                    file.endsWith(`/${one.file}.stories.ts`)
+                  )
+                ]?.length ?? -1) && one.frames.every((f) => f.state === "drawn")
           ),
         undrawn.join("\n    ")
       );

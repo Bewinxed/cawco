@@ -6076,10 +6076,13 @@
         }
       }
     },
-    "c-media-scale-min": {
-      "$type": "number",
-      "$value": 0.8334,
-      "$description": "The least a decision card's Preview of a page-sized design (a page, a dev server's or a folder's preview, a sheet) is scaled to fit its card: the house's least words, meta's 12px, standing at 10px (10 / 12, rounded up). Past it the design stays at this scale and scrolls sideways in its well."
+    "c-media-words-floor": {
+      "$type": "dimension",
+      "$value": {
+        "value": 10,
+        "unit": "px"
+      },
+      "$description": "The least a scaled design's words stand at: a decision card's Preview of a page-sized design (a page, a dev server's or a folder's preview, a sheet) wider than its card scales down no further than stands the least words the design itself sets (its overlay tells them) at this size. Past it the design scrolls sideways in its well at that scale."
     },
     "c-artifact-card-min": {
       "$type": "dimension",

@@ -483,6 +483,7 @@
   --spacing-c-decision-meter-w: var(--c-decision-meter-w);
   --spacing-c-decision-option-min: var(--c-decision-option-min);
   --spacing-c-media-max-h: var(--c-media-max-h);
+  --spacing-c-media-words-floor: var(--c-media-words-floor);
   --spacing-c-artifact-card-min: var(--c-artifact-card-min);
   --spacing-c-work-tabs-roomy-w: var(--c-work-tabs-roomy-w);
   --spacing-c-work-tabs-squeeze: var(--c-work-tabs-squeeze);
