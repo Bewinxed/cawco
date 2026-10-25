@@ -202,6 +202,7 @@ import { sheetWords } from "../../../packages/core/src/words/sheet";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { buttonNames, type Kit, open, ROOT, type Spec } from "../kit";
+import { passInto } from "../preview-pass";
 
 const STORY = "src/Card.stories.js";
 /** Legs 5b and 5c: a states file a canvas is made on, then taken away and written again. */
@@ -1926,6 +1927,7 @@ const run = async (kit: Kit) => {
       })
     ).json()) as { port?: number };
     const page = await kit.page("desk");
+    await passInto(page.context(), fleet, `http://127.0.0.1:${port ?? 0}`);
     await page.goto(
       `http://127.0.0.1:${port ?? 0}/@cawco/canvas?file=${encodeURIComponent(LATER)}`,
       { waitUntil: "domcontentloaded" }
@@ -2042,6 +2044,7 @@ const run = async (kit: Kit) => {
       })
     ).json()) as { port?: number };
     const page = await kit.page("desk");
+    await passInto(page.context(), fleet, `http://127.0.0.1:${port ?? 0}`);
     await page.goto(
       `http://127.0.0.1:${port ?? 0}/@cawco/canvas?file=${encodeURIComponent(STORY)}`,
       { waitUntil: "domcontentloaded" }

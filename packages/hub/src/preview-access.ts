@@ -1,8 +1,9 @@
 /**
- * Host mode's lock: a preview name serves nothing without proof that the
- * request comes from the owner's dashboard or app (the names may be public,
- * behind a tunnel). The proof is the hub's own, and nothing else signs the
- * person in:
+ * The previews' lock: a preview origin, a host-mode name or an origin's own
+ * port, serves nothing without proof that the request comes from the owner's
+ * dashboard or app (host mode's names may be public, behind a tunnel; a port
+ * is open to whoever reaches the hub's machine). The proof is the hub's own,
+ * and nothing else signs the person in:
  *
  * - **Ticket.** A client the hub already trusts (the dashboard through its
  *   relay, the app with its credential) asks for one
@@ -11,20 +12,25 @@
  *   Tickets minted before this hub process started are refused, since the
  *   record of spent ones is the process's. A ticket only ever opens the
  *   entry: no page, embed or program the hub serves carries one.
- * - **Entry.** `<origin>/__cawco/enter?ticket=…`, on any name a session,
+ * - **Entry.** `<origin>/__cawco/enter?ticket=…`, on any origin a session,
  *   project or embed holds, spends the ticket and sets the pass, then sends
  *   the client on to `next` (a path on the same origin) when it names one.
- * - **Pass.** One cookie per browser, {@link PREVIEW_PASS_COOKIE}: a random
- *   256-bit token, set on the domain every name stands under
- *   (`Domain=<pattern's parent>`), so every preview, embedded preview, frame
- *   and asset under it carries the one pass. The hub keeps its sha256 alone
+ * - **Pass.** One cookie per browser, a random 256-bit token. On host mode's
+ *   names {@link PREVIEW_PASS_COOKIE}, set on the domain every name stands
+ *   under (`Domain=<pattern's parent>`); on an origin's own port, on that
+ *   host alone, which every port of it carries (RFC 6265 §8.5):
+ *   {@link PREVIEW_PASS_COOKIE} reached over https, else
+ *   {@link PREVIEW_PORT_PASS_COOKIE}, since no browser keeps a `Secure`
+ *   cookie from plain http. So every preview, embedded preview, frame and
+ *   asset there carries the one pass. The hub keeps its sha256 alone
  *   (`preview_passes`), with the device it was given to: a pass stands for
  *   {@link PASS_MS} from its entry, absolute, unless its device is unpaired
  *   or the person revokes it (`DELETE /api/preview-pass`), which locks every
  *   frame at its next request. Every request to a name needs a live one,
  *   WebSocket upgrades too, but the dashboard's ping and the entry itself.
  * - **Nothing told.** Without a pass, a name no session holds answers a
- *   stranger exactly as a held one does (preview.ts `atTheLock`), so the
+ *   stranger exactly as a held one does, and a port's origin is the locked
+ *   page as well (preview.ts `atTheLock`), so the
  *   lock tells nobody which ports or sessions exist; only the person's live
  *   pass learns that a name is closed.
  * - **A session's pass.** A session's `artifact_browse` gets a ticket of its
@@ -38,6 +44,10 @@
  *   lapses with its ticket's end, absolute, and goes with its session
  *   (preview-passes.ts `revoke`). A request on a name outside its scope is
  *   answered as one with no pass, so it learns nothing of other names.
+ *
+ * The port's cookie over plain http carries no `Secure` and no prefix, the
+ * one difference: a token on plain http is read by anyone on the path, as
+ * the dashboard's own cookie on that host is.
  *
  * The cookie, after OWASP's Session Management cheat sheet
  * (cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html):
@@ -75,6 +85,7 @@ import {
   PREVIEW_ENTER_PATH,
   PREVIEW_LOCKED_MESSAGE,
   PREVIEW_PASS_COOKIE,
+  PREVIEW_PORT_PASS_COOKIE,
   type PreviewTicket,
 } from "@cawco/core";
 import type { PreviewPassesDb, PreviewPassRow } from "./db/preview-passes";
@@ -171,7 +182,7 @@ const signed = (kind: TicketKind, body: BaseBody): string => {
   return `${encoded}.${mac(kind, encoded)}`;
 };
 
-/** A ticket into host mode's previews for paired device `deviceId` (null: a trusted hub's caller). */
+/** A ticket into the previews for paired device `deviceId` (null: a trusted hub's caller). */
 export const mintTicket = (deviceId: string | null): PreviewTicket => {
   const minted = Date.now();
   const expiresAt = minted + TICKET_MS;
@@ -247,24 +258,42 @@ const spendTicket = (
     : { session: body as SessionTicketBody };
 };
 
-/** Host mode's lock, as its listener holds it: the domain its pass is set on, where passes are kept, and which sessions still run. */
+/** The lock, as a listener holds it: where its pass is set, where passes are kept, and which sessions still run. */
 export interface PassLock {
-  /** The domain every name of the pattern stands under (core `hostModeDomain`). */
-  domain: string;
+  /**
+   * Host mode's names: the domain every name of the pattern stands under
+   * (core `hostModeDomain`). Null on an origin's own port, whose pass is set
+   * on the host it was reached at alone.
+   */
+  domain: string | null;
   passes: PreviewPassesDb;
   /** Whether session `instanceId` still runs: a session's ticket opens nothing once it ended. */
   sessionLive: (instanceId: string) => boolean;
 }
 
-/** The prefix of each session's own pass cookie: one of the dashboard's names (core `DASHBOARD_COOKIE`). */
+/** The prefix of each session's own pass cookie, `Secure` or over plain http: among the dashboard's names (core `DASHBOARD_COOKIE`). */
 const SESSION_PASS_PREFIX = "__Secure-cawco-session-pass-";
+const PORT_SESSION_PASS_PREFIX = "cawco-preview-session-pass-";
 
 /**
  * Session `instanceId`'s own pass cookie: one name per session, so sessions
- * sharing a project's browser (one cookie jar) each keep their own pass.
+ * sharing a project's browser (one cookie jar) each keep their own pass;
+ * `secure` false on a port reached over plain http.
  */
-export const sessionPassCookie = (instanceId: string): string =>
-  `${SESSION_PASS_PREFIX}${instanceId}`;
+export const sessionPassCookie = (instanceId: string, secure = true): string =>
+  `${secure ? SESSION_PASS_PREFIX : PORT_SESSION_PASS_PREFIX}${instanceId}`;
+
+/** The person's pass cookie, `Secure` or over plain http. */
+const personPassCookie = (secure: boolean): string =>
+  secure ? PREVIEW_PASS_COOKIE : PREVIEW_PORT_PASS_COOKIE;
+
+/** Whether `name` is one of the person's pass cookies. */
+const isPersonPass = (name: string): boolean =>
+  name === PREVIEW_PASS_COOKIE || name === PREVIEW_PORT_PASS_COOKIE;
+
+/** Whether a pass set in answer to `request` is `Secure`: always on host mode's names, on a port when it was reached over https. */
+const secureFor = (request: Request, lock: PassLock): boolean =>
+  lock.domain !== null || new URL(request.url).protocol === "https:";
 
 /** The sha256 of each token `request` presents under a cookie name `named` takes. */
 const tokensUnder = (
@@ -290,7 +319,7 @@ const tokensUnder = (
 
 /** The sha256 of each of the person's pass tokens `request` presents (a browser may hold an older one beside it). */
 export const presentedPasses = (request: Request): string[] =>
-  tokensUnder(request, (name) => name === PREVIEW_PASS_COOKIE);
+  tokensUnder(request, isPersonPass);
 
 /** When each pass's last use was written, by its id. */
 const touched = new Map<string, number>();
@@ -317,7 +346,9 @@ export const passOf = (
   const presented = tokensUnder(
     request,
     (name) =>
-      name === PREVIEW_PASS_COOKIE || name.startsWith(SESSION_PASS_PREFIX)
+      isPersonPass(name) ||
+      name.startsWith(SESSION_PASS_PREFIX) ||
+      name.startsWith(PORT_SESSION_PASS_PREFIX)
   );
   for (const hash of presented) {
     const row = lock.passes.live(hash, new Date(now));
@@ -374,11 +405,12 @@ export const lockedResponse = (): Response =>
 const passFor = (
   request: Request,
   spending: { deviceId: string | null } | { session: SessionTicketBody },
-  now: number
+  now: number,
+  secure: boolean
 ) => {
   if ("session" in spending) {
     const { a: instanceId, s: scope, e: expiresAt } = spending.session;
-    const cookie = sessionPassCookie(instanceId);
+    const cookie = sessionPassCookie(instanceId, secure);
     return {
       cookie,
       expiresAt,
@@ -386,16 +418,17 @@ const passFor = (
       replacing: tokensUnder(request, (name) => name === cookie)[0] ?? null,
     };
   }
+  const cookie = personPassCookie(secure);
   return {
-    cookie: PREVIEW_PASS_COOKIE,
+    cookie,
     expiresAt: now + PASS_MS,
     held: { deviceId: spending.deviceId, instanceId: null, scope: null },
-    replacing: presentedPasses(request)[0] ?? null,
+    replacing: tokensUnder(request, (name) => name === cookie)[0] ?? null,
   };
 };
 
 /**
- * `GET /__cawco/enter?ticket=…[&next=<path>]` on a held name (origin
+ * `GET /__cawco/enter?ticket=…[&next=<path>]` on a held name or port (origin
  * `key`): a new pass, the one the browser presented under the same cookie
  * gone, and a redirect to `next`, or a bare 204 when it names none (the
  * dashboard's own entry, made beside its frames); else the locked page and
@@ -419,7 +452,8 @@ export const enter = (
   if ("session" in spending && !lock.sessionLive(spending.session.a)) {
     return { response: lockedResponse(), refused: "ended" };
   }
-  const pass = passFor(request, spending, now);
+  const secure = secureFor(request, lock);
+  const pass = passFor(request, spending, now, secure);
   const token = randomBytes(32).toString("base64url");
   const given = lock.passes.open(
     {
@@ -438,7 +472,7 @@ export const enter = (
   const next = url.searchParams.get("next");
   const maxAge = Math.ceil((pass.expiresAt - now) / 1000);
   const headers = {
-    "set-cookie": `${pass.cookie}=${token}; Domain=${lock.domain}; Path=/; Max-Age=${maxAge}; Secure; HttpOnly; SameSite=Lax`,
+    "set-cookie": `${pass.cookie}=${token}; ${lock.domain === null ? "" : `Domain=${lock.domain}; `}Path=/; Max-Age=${maxAge}; ${secure ? "Secure; " : ""}HttpOnly; SameSite=Lax`,
     "cache-control": "no-store",
   };
   return {

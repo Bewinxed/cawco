@@ -147,11 +147,10 @@ public enum PreviewOwner: Sendable, Equatable {
 }
 
 /// Where a session's previews load (`HubConnection.previewRoute`): the
-/// origin, and whether it is host mode's, locked to the hub's pass and
+/// origin, host mode's name or a port, locked to the hub's pass and
 /// entered with a ticket (`HubConnection.previewLoad`).
 public struct PreviewRoute: Sendable, Equatable {
     public let origin: URL
-    public let byHost: Bool
 }
 
 public extension HubConnection {
@@ -207,9 +206,9 @@ public extension HubConnection {
     /// `previewRoute`). Reached under host mode's domain (the origin's host
     /// less its first label): the whole origin the hub named
     /// (`scheme://name[:port]`), as given, its scheme how those names are
-    /// served, entered with a ticket. Reached any other way (a tailnet name,
-    /// a LAN address): the session's preview port on the hub's host, on the
-    /// hub's scheme, with no ticket.
+    /// served. Reached any other way (a tailnet name, a LAN address): the
+    /// session's preview port on the hub's host, on the hub's scheme. Either
+    /// is entered with a ticket (`previewLoad`).
     func previewRoute(_ frame: PreviewFrame) -> PreviewRoute? {
         previewRoute(port: frame.port, origin: frame.origin, tailnet: frame.tailnet)
     }
@@ -229,21 +228,21 @@ public extension HubConnection {
                 parts.path = "/"
                 parts.query = nil
                 parts.fragment = nil
-                return parts.url.map { PreviewRoute(origin: $0, byHost: true) }
+                return parts.url.map { PreviewRoute(origin: $0) }
             }
         }
         if let tailnet, let reached = address?.host()?.lowercased(),
            tailnet.hosts.contains(reached.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))),
            var parts = URLComponents(string: tailnet.origin) {
             parts.path = "/"
-            return parts.url.map { PreviewRoute(origin: $0, byHost: false) }
+            return parts.url.map { PreviewRoute(origin: $0) }
         }
         guard let address, var parts = URLComponents(url: address, resolvingAgainstBaseURL: false), let port else { return nil }
         parts.path = "/"
         parts.query = nil
         parts.fragment = nil
         parts.port = Int(port)
-        return parts.url.map { PreviewRoute(origin: $0, byHost: false) }
+        return parts.url.map { PreviewRoute(origin: $0) }
     }
 
     /// Where `owner`'s pages are served, asked of the hub (`POST
@@ -270,13 +269,12 @@ public extension HubConnection {
     }
 
     /// What a web view loads to show `place`, a page on `owner`'s preview
-    /// origin. Port mode: `place` itself. Host mode: every preview
-    /// name is locked to the hub's pass (hub preview-access.ts), and each web
-    /// view keeps its own cookies, so each load asks the hub for a ticket
-    /// (single-use, 60 s) and opens the origin's entry, which sets the pass
-    /// and sends the view on to `place`.
-    func previewLoad(_ place: URL, for owner: PreviewOwner, byHost: Bool) async throws -> URL {
-        guard byHost else { return place }
+    /// origin. Every preview origin, host mode's name or a port, is locked
+    /// to the hub's pass (hub preview-access.ts), and each web view keeps its
+    /// own cookies, so each load asks the hub for a ticket (single-use, 60 s)
+    /// and opens the origin's entry, which sets the pass and sends the view
+    /// on to `place`.
+    func previewLoad(_ place: URL, for owner: PreviewOwner) async throws -> URL {
         guard let client else { throw TaskRefusal(message: "No hub is connected.") }
         let output = try await client.postApiPreviewTicket()
         guard case let .ok(answer) = output else { throw await TaskRefusal.reading(output) }

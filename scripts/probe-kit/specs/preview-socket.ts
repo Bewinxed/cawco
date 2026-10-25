@@ -59,6 +59,7 @@ import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { cloudflareTo, scratchCertificate } from "../cloudflare-front";
 import { type Kit, ROOT, type Spec } from "../kit";
 import { PASS_DOMAIN, PASS_HOSTS, storeHostMode } from "../pass-legs";
+import { passedFetch, passInto, previewPass } from "../preview-pass";
 
 const CREATE = "mcp__cawco__artifact_create";
 const COMMAND = /PROBE-CALL:(\d+)/g;
@@ -341,7 +342,10 @@ const probe = async (kit: Kit) => {
   const portFront = cloudflareTo(`127.0.0.1:${sessionPort}`);
 
   // 1. Port mode, straight.
+  // Every preview port is behind the lock: the person's pass on its host, as
+  // the dashboard's frame holds it, which the front's port shares.
   const straight = await kit.page("desk");
+  await passInto(straight.context(), fleet, portOrigin);
   await straight.goto(`${portOrigin}/`, { waitUntil: "domcontentloaded" });
   const one = await echoes(straight, "1:hello");
   kit.check(
@@ -353,6 +357,7 @@ const probe = async (kit: Kit) => {
 
   // 2. Port mode, behind Cloudflare.
   const tab = await kit.page("desk");
+  await passInto(tab.context(), fleet, portOrigin);
   await tab.goto(`http://127.0.0.1:${portFront.port}/`, {
     waitUntil: "domcontentloaded",
   });
@@ -388,8 +393,12 @@ const probe = async (kit: Kit) => {
   await tab.context().close();
 
   // 5. A refused upgrade names its reason.
+  const portPass = await previewPass(fleet, portOrigin);
   const refusedSocket = await new Promise<string>((done) => {
-    const ws = new WebSocket(`${portOrigin.replace("http", "ws")}/refuse`);
+    // Bun's own option: the pass rides the upgrade as a browser's cookie would.
+    const ws = new WebSocket(`${portOrigin.replace("http", "ws")}/refuse`, {
+      headers: { cookie: portPass },
+    } as unknown as string[]);
     // The relay takes the browser's socket before it opens the app's, so it
     // opens, then closes once the app refuses.
     ws.onclose = (event) => done(`closed ${event.code}`);
@@ -578,7 +587,7 @@ const probe = async (kit: Kit) => {
       "/__OPEN-IN-EDITOR?file=/etc/hostname",
       "/app/__open-in-editor.x?file=/etc/hostname",
     ].map(async (path) => {
-      const answer = await fetch(`${viteOrigin}${path}`);
+      const answer = await passedFetch(fleet, `${viteOrigin}${path}`);
       return {
         path,
         status: answer.status,
@@ -602,6 +611,7 @@ const probe = async (kit: Kit) => {
   );
 
   const viewed = await kit.page("desk");
+  await passInto(viewed.context(), fleet, viteOrigin);
   await viewed.goto(`${viteOrigin}/`, { waitUntil: "domcontentloaded" });
   await until(
     "the preview's hot channel",
@@ -612,7 +622,7 @@ const probe = async (kit: Kit) => {
   const loaded = await vitePage(viewed);
   await hotSend(viewed, "probe:ping", "preview");
   const previewPong = await pongOf(viewed, "preview");
-  const fs = await fetch(`${viteOrigin}/@fs${viteDir}/main.js`);
+  const fs = await passedFetch(fleet, `${viteOrigin}/@fs${viteDir}/main.js`);
   await Bun.write(join(viteDir, "main.js"), viteModule("v2"));
   const updated = await until(
     "the edit in place",
@@ -632,10 +642,12 @@ const probe = async (kit: Kit) => {
   );
 
   await hotSend(viewed, MACHINE_EVENT, "{}");
+  const vitePass = await previewPass(fleet, viteOrigin);
   const bytes = await new Promise<string>((done) => {
-    const ws = new WebSocket(`${viteOrigin.replace("http", "ws")}/`, [
-      "vite-hmr",
-    ]);
+    const ws = new WebSocket(`${viteOrigin.replace("http", "ws")}/`, {
+      protocols: ["vite-hmr"],
+      headers: { cookie: vitePass },
+    } as unknown as string[]);
     ws.onopen = () => {
       ws.send(
         new TextEncoder().encode(

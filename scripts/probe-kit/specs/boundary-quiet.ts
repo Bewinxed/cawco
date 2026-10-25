@@ -83,6 +83,7 @@ import {
   startedSince,
 } from "../agent-records";
 import type { Kit, Spec } from "../kit";
+import { passedFetch } from "../preview-pass";
 
 const IDLE = 20;
 /** The idle workspaces given an older form before the first restart. */
@@ -413,7 +414,9 @@ const serving = async (
       );
       const { port } = (await address.json()) as { port?: number };
       const read = await readWithin(5000, async (signal) => {
-        const response = await fetch(`http://127.0.0.1:${port}/`, { signal });
+        const response = await passedFetch(fleet, `http://127.0.0.1:${port}/`, {
+          signal,
+        });
         return { status: response.status, body: await response.text() };
       });
       switch (read.kind) {

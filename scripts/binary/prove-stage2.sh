@@ -1536,7 +1536,7 @@ session_env_on() {
 # environment, and the hub's preview port for that session answers with the page.
 export SSH_PREVIEW_PORT=5197
 ssh_preview() {
-  local c=$1 name=$2 user=$3 home=$5 id="sshadd-$2-1" vars port
+  local c=$1 name=$2 user=$3 home=$5 id="sshadd-$2-1" vars port pass
   on_exit "as_added $c $user systemctl --user stop cawco-proof-preview.service > /dev/null 2>&1"
   as_added "$c" "$user" systemd-run --user --quiet --unit=cawco-proof-preview socat \
     "TCP-LISTEN:$SSH_PREVIEW_PORT,bind=127.0.0.1,fork,reuseaddr" "SYSTEM:sh /shared/preview-answer.sh"
@@ -1552,8 +1552,10 @@ ssh_preview() {
   echo "the session's artifact_create answered: $(cat "$rigdir/ssh-preview-$name.open")"
   wait_until 60 'port=$(run_script "$hubc" /shared/stage2-preview-port.ts http://127.0.0.1:3456 "$id" 2> "$rigdir/ssh-preview-$name.err")' \
     || { echo "ASSERTION FAILED: the hub opened no preview port for $id: $(cat "$rigdir/ssh-preview-$name.err")"; return 1; }
-  wait_until 60 '[[ "$(as_user "$hubc" curl -sS --max-time 10 "http://127.0.0.1:$port/" 2>&1 || true)" == *"preview of $name"* ]]' || {
-    echo "ASSERTION FAILED: the hub's preview port $port for $id answered: $(as_user "$hubc" curl -sS --max-time 10 "http://127.0.0.1:$port/" 2>&1 | head -c 400)"
+  # The port is behind the lock: read with the person's pass, entered there as the dashboard enters it.
+  pass=$(ws_port_enter "$port") || { echo "ASSERTION FAILED: the hub's preview port $port for $id set no pass"; return 1; }
+  wait_until 60 '[[ "$(as_user "$hubc" curl -sS --max-time 10 -H "Cookie: $pass" "http://127.0.0.1:$port/" 2>&1 || true)" == *"preview of $name"* ]]' || {
+    echo "ASSERTION FAILED: the hub's preview port $port for $id answered: $(as_user "$hubc" curl -sS --max-time 10 -H "Cookie: $pass" "http://127.0.0.1:$port/" 2>&1 | head -c 400)"
     added_agent_journal "$c" "$user" | grep -iE "preview|bridge|401" | tail -n 10
     return 1
   }
@@ -2587,8 +2589,40 @@ ws_preview_close() {
   ws_exec_as_session "/home/cawco/.local/bin/cawco tool artifact_delete '{\"id\":\"$id\"}'"
 }
 ws_preview_port() { run_script "$hubc" /shared/stage2-preview-port.ts http://127.0.0.1:3456 "$(cat "$rigdir/ws-delegate")"; }
-# What the preview answers, through the hub's preview listener, the joined machine's agent and its bridge.
-ws_preview_says() { as_user "$hubc" curl -sS --max-time 10 "http://127.0.0.1:$(cat "$rigdir/ws-preview-port")/" 2>&1 || true; }
+# Enters preview port $1 as the dashboard does: a ticket from the hub's API (POST /api/preview-ticket), spent at
+# /__cawco/enter on the port, whose 302 sets the person's pass on the hub machine's loopback host, which every
+# preview port of it carries (preview-access.ts). Prints the pass cookie (`name=value`).
+ws_port_enter() {
+  local port=$1 ticket headers
+  ticket=$(ws_post "/api/preview-ticket" '{}' | sed '$d' | json 'd => d.ticket')
+  [[ -n $ticket ]] || { echo "no ticket from the hub" >&2; return 1; }
+  headers=$(as_user "$hubc" curl -sS --max-time 10 -D - -o /dev/null "http://127.0.0.1:$port/__cawco/enter?ticket=$ticket&next=/" | tr -d '\r')
+  [[ $(head -1 <<< "$headers") == *" 302"* ]] || { echo "the entry answered: $headers" >&2; return 1; }
+  grep -i '^set-cookie: cawco-preview-pass=' <<< "$headers" | sed 's/^[^:]*: *//; s/;.*//'
+}
+# The rig's pass on the preview ports, entered once at the preview's port and kept in $rigdir/ws-port-pass.
+ws_port_pass() {
+  [[ -s "$rigdir/ws-port-pass" ]] || ws_port_enter "$(cat "$rigdir/ws-preview-port")" > "$rigdir/ws-port-pass" || { rm -f "$rigdir/ws-port-pass"; return 1; }
+  cat "$rigdir/ws-port-pass"
+}
+# What the preview answers by its port with the person's pass, through the hub's preview listener, the joined machine's
+# agent and its bridge. A locked answer drops the kept pass, so the next read enters again.
+ws_preview_says() {
+  local pass answer
+  pass=$(ws_port_pass) || { echo "no pass for the preview's port"; return 0; }
+  answer=$(as_user "$hubc" curl -sS --max-time 10 -H "Cookie: $pass" "http://127.0.0.1:$(cat "$rigdir/ws-preview-port")/" 2>&1 || true)
+  [[ "$answer" != *cawco-preview-locked* ]] || rm -f "$rigdir/ws-port-pass"
+  echo "$answer"
+}
+# Every one of $2 requests (8 if not given) to preview port $1 without a pass gets the lock's 401 page, each a
+# connection of its own: a port is open to whoever reaches the hub's machine, so it takes the pass as a name does.
+ws_port_locked() {
+  local port=$1 times=${2:-8} answer i
+  for ((i = 0; i < times; i++)); do
+    answer=$(as_user "$hubc" curl -sS --max-time 10 -w '\nHTTP %{http_code}' "http://127.0.0.1:$port/" 2>&1 || true)
+    [[ "$answer" == *"HTTP 401" && "$answer" == *cawco-preview-locked* ]] || { echo "ASSERTION FAILED: request $((i + 1)) of $times to preview port $port without a pass got: $answer"; return 1; }
+  done
+}
 # Host mode, the owner's: one listener on the preview range's first port routes each request by its Host, a name of
 # the fleet's pattern (preview.ts sessionOfHost), behind the lock (preview-access.ts). Set as Settings › Previews and
 # Caw's admin_previews_write set it (PUT /api/preview-settings), localtest.me names (every one is 127.0.0.1 in public
@@ -2821,6 +2855,8 @@ workspace_across_update() {
   wait_until 60 'ws_preview_port > "$rigdir/ws-preview-port" 2> "$rigdir/ws-preview-port.err"' || { cat "$rigdir/ws-preview-port.err"; return 1; }
   echo "the preview is served on the hub's port $(cat "$rigdir/ws-preview-port")"
   wait_until 60 '[[ "$(ws_preview_says)" == *"served '"$old_ns"'"* ]]' || { echo "the preview answered: $(ws_preview_says)"; ws_listener_why "$old_inner"; return 1; }
+  # Its port takes the pass: without one, every request gets the lock's page.
+  ws_port_locked "$(cat "$rigdir/ws-preview-port")" || return 1
   # The delegate's work item is live going into the update.
   ws_item_live || { echo "ASSERTION FAILED: before the update the work item is $(ws_item_says)"; return 1; }
   echo "before the update the work item is $(ws_item_says)"
@@ -2914,6 +2950,10 @@ workspace_across_update() {
   echo "in host mode the preview is served at $(cat "$rigdir/ws-preview-host")"
   ws_preview_locked "$(cat "$rigdir/ws-preview-host")" || return 1
   ws_preview_locked "$(ws_session_host)" || return 1
+  # And its own port, which host mode keeps listening beside the names, takes the pass too.
+  answer=$(cat "$rigdir/ws-preview-host")
+  answer=${answer#p-}
+  ws_port_locked "${answer%%.*}" || return 1
   ws_preview_enter "$(cat "$rigdir/ws-preview-host")" > "$rigdir/ws-preview-pass"
   [[ "$(cat "$rigdir/ws-preview-pass")" == __Secure-cawco-pass=* ]] || { echo "the entry set no pass: '$(cat "$rigdir/ws-preview-pass")'"; return 1; }
   wait_until 60 '[[ "$(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")" == *"served '"$old_ns"'"*"HTTP 200" ]]' || { echo "host mode answered: $(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")"; return 1; }
@@ -2968,6 +3008,7 @@ workspace_across_update() {
   wait_until 60 'ws_preview_port > "$rigdir/ws-preview-port" 2> "$rigdir/ws-preview-port.err"' || { cat "$rigdir/ws-preview-port.err"; return 1; }
   echo "back in port mode the preview is served on the hub's port $(cat "$rigdir/ws-preview-port")"
   wait_until 60 '[[ "$(ws_preview_says)" == *"served '"$(ns_of "$new_inner")"'"* ]]' || { echo "the preview answered: $(ws_preview_says)"; ws_listener_why "$new_inner"; return 1; }
+  ws_port_locked "$(cat "$rigdir/ws-preview-port")" || return 1
   # The current one is untouched: the same generation, running the sandbox it started with.
   [[ "$(ws_gen)" == "$new" ]]
   ws_same_sandbox "$new" "$new_inner"
@@ -3055,7 +3096,7 @@ workspace_archive_ends_all() {
   [[ -z "$(ws_served_pid)" ]] || { echo "ASSERTION FAILED: a served listener $(ws_served_pid) runs after the archive"; return 1; }
   wait_until 60 '[[ -z "$(child_pids "$joinerc" "boundary-'"$id"'-'"$gen"'")" ]] && ! as_user "$joinerc" test -e "$(ws_state)"'
 }
-export -f ws_state ws_json ws_gen ws_decisions ws_decisions_said ws_kept_listening ws_exec ws_session_env ws_exec_as_session ws_place ws_same_sandbox ns_of ws_listener_start ws_listener_pid ws_exec_reach ws_listener_why ws_served_script ws_served_pid ws_preview_open ws_preview_artifact ws_preview_close ws_preview_port ws_preview_says ws_preview_mode ws_preview_host ws_session_host ws_preview_locked ws_preview_by_host ws_preview_enter ws_tree ws_ancestry ws_descends ws_post json_string ws_item ws_item_says ws_item_live ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered ws_hook_calls_clean ws_hook_calls_after ws_judge_answers_after_update workspace_opens workspace_across_update workspace_updated_serving workspace_archive_ends_all
+export -f ws_state ws_json ws_gen ws_decisions ws_decisions_said ws_kept_listening ws_exec ws_session_env ws_exec_as_session ws_place ws_same_sandbox ns_of ws_listener_start ws_listener_pid ws_exec_reach ws_listener_why ws_served_script ws_served_pid ws_preview_open ws_preview_artifact ws_preview_close ws_preview_port ws_port_enter ws_port_pass ws_preview_says ws_port_locked ws_preview_mode ws_preview_host ws_session_host ws_preview_locked ws_preview_by_host ws_preview_enter ws_tree ws_ancestry ws_descends ws_post json_string ws_item ws_item_says ws_item_live ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered ws_hook_calls_clean ws_hook_calls_after ws_judge_answers_after_update workspace_opens workspace_across_update workspace_updated_serving workspace_archive_ends_all
 export WS_LISTENER_PORT WS_SERVED_PORT WS_SERVED_ANSWER
 rig_workspace() {
   # Check names are written out in full: the rig's check list (rig_checks) reads them from

@@ -178,7 +178,8 @@ const under = (hostname: string, domain: string): boolean => {
  * port answers HTTPS alone there; a client that reached the hub's own port
  * over plain http (the app) loads it too. Reached any other way (a LAN
  * address, `.local`, localhost): that host and scheme on the session's own
- * port, with no ticket. Null when the hub named nothing this client can load.
+ * port. Every route is behind the browser's pass, entered with a ticket.
+ * Null when the hub named nothing this client can load.
  */
 export const previewRoute = (
   address: { origin?: string; port?: number; tailnet?: TailnetOrigin },
@@ -204,9 +205,10 @@ export const previewRoute = (
 export const PREVIEW_PING_PATH = "/__cawco/ping";
 
 /**
- * Host mode's way in (hub preview-access.ts). Every request to a host-mode
- * preview name needs the browser's pass ({@link PREVIEW_PASS_COOKIE}), but
- * for {@link PREVIEW_PING_PATH} and this path. A client the hub already
+ * The way into a preview (hub preview-access.ts). Every request to a
+ * preview origin, a host-mode name or an origin's own port, needs the
+ * browser's pass ({@link PREVIEW_PASS_COOKIE}, {@link PREVIEW_PORT_PASS_COOKIE}),
+ * but for {@link PREVIEW_PING_PATH} and this path. A client the hub already
  * trusts (the dashboard through its relay, the app with its credential) asks
  * the hub for a ticket (`POST /api/preview-ticket`, a {@link PreviewTicket})
  * and opens `<origin>/__cawco/enter?ticket=…` ({@link previewEnterUrl}) on
@@ -215,7 +217,7 @@ export const PREVIEW_PING_PATH = "/__cawco/ping";
  */
 export const PREVIEW_ENTER_PATH = "/__cawco/enter";
 
-/** What a host-mode preview name answers without a pass: the page says so to its parent as this, so the frame's host enters again. */
+/** What a preview origin answers without a pass: the page says so to its parent as this, so the frame's host enters again. */
 export const PREVIEW_LOCKED_MESSAGE = "cawco:locked";
 
 /**
@@ -226,14 +228,23 @@ export const PREVIEW_LOCKED_MESSAGE = "cawco:locked";
  */
 export const PREVIEW_PASS_COOKIE = "__Secure-cawco-pass";
 
-/** A ticket into host mode's previews for the device or browser that asked: single-use, and spent by `expiresAt` (ms epoch). */
+/**
+ * The same pass on a preview origin's own port reached over plain http (a
+ * LAN address, localhost), where no browser keeps a `Secure` cookie: set on
+ * that host alone, which every port of it carries (RFC 6265 §8.5), so one
+ * entry opens every preview port the host serves. Over https a port takes
+ * {@link PREVIEW_PASS_COOKIE}, on its host alone.
+ */
+export const PREVIEW_PORT_PASS_COOKIE = "cawco-preview-pass";
+
+/** A ticket into the previews for the device or browser that asked: single-use, and spent by `expiresAt` (ms epoch). */
 export interface PreviewTicket {
   expiresAt: number;
   ticket: string;
 }
 
 /**
- * Where a client spends `ticket` on a host-mode preview `origin`: sent on to
+ * Where a client spends `ticket` on a preview `origin`: sent on to
  * `place` (a path there) when it names one, else answered with the pass
  * alone.
  */
@@ -249,8 +260,9 @@ export const previewEnterUrl = (
  * `__Host-`- or `__Secure-`-prefixed where the scheme allows. A preview
  * listener shares the dashboard's host in port mode, and cookies are not
  * isolated by port (RFC 6265 §8.5), so it strips these from what the
- * previewed app is sent and drops any the app tries to set; host mode's pass
- * ({@link PREVIEW_PASS_COOKIE}) is one of them.
+ * previewed app is sent and drops any the app tries to set; the preview
+ * passes ({@link PREVIEW_PASS_COOKIE}, {@link PREVIEW_PORT_PASS_COOKIE}) are
+ * among them.
  */
 export const DASHBOARD_COOKIE = /^(?:__Host-|__Secure-)?cawco-/;
 
@@ -406,6 +418,12 @@ export interface InstancesFrame {
   noticesDamaged?: import("./index").DamagedHubRecord | null;
   /** The notice ids a person acknowledged, on any tab or device (hub notices.ts). */
   noticesSeen: string[];
+  /**
+   * The fleet's preview mode (Settings › Previews): a switch moves every
+   * preview origin, so a decision page loaded before it loads again, its
+   * embeds at their new origins.
+   */
+  previewSettings: PreviewSettings;
   previews?: PreviewFrame[];
   protocol: number;
   pulses: Record<string, SessionPulse>;
@@ -423,6 +441,8 @@ export interface InstancesDeltaFrame {
   /** Present when it moved: the damaged notices record, or null once it is reset. */
   noticesDamaged?: import("./index").DamagedHubRecord | null;
   noticesSeen?: string[];
+  /** Present when it moved: the fleet's preview mode ({@link InstancesFrame.previewSettings}). */
+  previewSettings?: PreviewSettings;
   previews?: PreviewFrame[];
   removed: string[];
   removedAgents?: string[];

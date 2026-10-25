@@ -1123,15 +1123,11 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         placeHeadItems()
         pageLoaded = false
         paintCover(animated: false)
-        byHost = route.byHost
         owner = PreviewOwner.of(frame)
         reentered = false
         enter(hub.previewStart(frame) ?? origin)
     }
 
-    /// Host mode's route: the preview's origin is locked to the hub's pass, which
-    /// this web view's own store holds only once it has entered.
-    private var byHost = false
     /// Whose origin the current show loads from: the project's for a project's page, else the session's.
     private var owner: PreviewOwner?
     /// The page the current show opens at.
@@ -1143,16 +1139,17 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// The navigation cancelled to enter again: WebKit's word that it was interrupted is not a failure.
     private var reentering = false
 
-    /// Loads `place` on the preview's origin: straight (port mode), or
-    /// through the entry with a new ticket (host mode, `previewLoad`). The
-    /// origin names the session: nothing else rides with the load.
+    /// Loads `place` on the preview's origin through the entry with a new
+    /// ticket (`previewLoad`): the origin is locked to the hub's pass, which
+    /// this web view's own store holds only once it has entered. The origin
+    /// names the session: nothing else rides with the load.
     private func enter(_ place: URL) {
         start = place
         entering?.cancel()
         entering = Task { [weak self] in
             guard let self else { return }
             do {
-                let url = try await hub.previewLoad(place, for: owner ?? .instance(instanceId), byHost: byHost)
+                let url = try await hub.previewLoad(place, for: owner ?? .instance(instanceId))
                 guard !Task.isCancelled else { return }
                 #if DEBUG
                 web.load(URLRequest(url: PreviewProbe.loading(url)))
@@ -1167,7 +1164,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         }
     }
 
-    /// Host mode: the origin turned the page's pass away (401: it lapsed,
+    /// The origin turned the page's pass away (401: it lapsed,
     /// hub preview-access.ts), so the preview enters again where it was, once
     /// in a row. Every other answer is the page's own.
     func webView(_: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
@@ -1178,7 +1175,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             PreviewProbe.say("preview answered \(status) for \(navigationResponse.response.url?.absoluteString ?? "?")")
         }
         #endif
-        guard byHost, navigationResponse.isForMainFrame, status == 401, !reentered,
+        guard navigationResponse.isForMainFrame, status == 401, !reentered,
               let at = navigationResponse.response.url ?? start else { return decisionHandler(.allow) }
         reentered = true
         reentering = true
@@ -1450,7 +1447,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         // The artifact's own tab: its page's overlay answered there, for this artifact.
         if ownTab { PreviewProbe.say("artifact tab ready \(artifactId ?? "-") revision=\(revision ?? "-")") }
         PreviewMeter.ready(web)
-        if byHost { PreviewProbe.lapse(web) }
+        PreviewProbe.lapse(web)
         if PreviewProbe.menuRemove != nil, !menuAtLaunch {
             menuAtLaunch = true
             openMenu()

@@ -43,6 +43,7 @@ import type { Page } from "playwright-core";
 import { GRAPH_PLACES_MIGRATION_WHEN } from "../../../packages/hub/src/db/drop-graph-places";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
+import { passInto } from "../preview-pass";
 
 const respond = (request: Seen): Reply => ({
   everyMs: 5,
@@ -275,9 +276,9 @@ const run = async (kit: Kit) => {
     {}
   );
   const tab = await kit.page("desk", { theme: "light" });
-  await tab.goto(
-    `http://${new URL(fleet.base).hostname}:${port}/__cawco/page/${pricing.id}/`
-  );
+  const pageOrigin = `http://${new URL(fleet.base).hostname}:${port}`;
+  await passInto(tab.context(), fleet, pageOrigin);
+  await tab.goto(`${pageOrigin}/__cawco/page/${pricing.id}/`);
   await tab.waitForSelector("#decision-shape header h2");
   const goneHead = await cardHead(tab, "shape");
   kit.check(

@@ -11,16 +11,12 @@
    * it through; turned away, it enters once and loads again
    * (preview/pass.ts).
    */
-  import {
-    decisionsWords,
-    hostModeDomain,
-    PREVIEW_LOCKED_MESSAGE,
-    previewWords,
-  } from "@cawco/core";
+  import { decisionsWords, PREVIEW_LOCKED_MESSAGE } from "@cawco/core";
   import { untrack } from "svelte";
+  import { cawco } from "#lib/cawco/client.svelte.js";
   import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import { pageSource } from "#lib/cawco/preview/page-source.js";
-  import { enterPreviews } from "#lib/cawco/preview/pass.js";
+  import { enterPreviews, turnedAwayWords } from "#lib/cawco/preview/pass.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
@@ -78,11 +74,35 @@
     }
   }
 
-  // Where its project's pages are served, asked once per project and page.
+  /**
+   * Each switch of the fleet's preview mode the page heard (Settings ›
+   * Previews): every origin moved, the page's embeds named in it as it was
+   * served among them, so it is asked where it stands and loads again.
+   */
+  let modeMoves = $state(0);
+  let modeSeen: string | null = null;
+  $effect(() => {
+    const settings = cawco.previewSettings;
+    if (!settings) {
+      return;
+    }
+    const mode = settings.mode === "host" ? settings.pattern : settings.mode;
+    if (modeSeen !== null && modeSeen !== mode) {
+      untrack(() => {
+        modeMoves += 1;
+      });
+    }
+    modeSeen = mode;
+  });
+
+  // Where its project's pages are served, asked once per project and page,
+  // and again after a Retry or a switch of the preview mode.
   $effect(() => {
     const project = projectId;
     // biome-ignore lint/complexity/noVoid: read so a Retry runs the effect again
     void tries;
+    // biome-ignore lint/complexity/noVoid: read so a mode switch runs the effect again
+    void modeMoves;
     const wanted = untrack(() => place);
     let live = true;
     problem = null;
@@ -158,10 +178,7 @@
       } else if (type === PREVIEW_LOCKED_MESSAGE && src) {
         turnedAway += 1;
         if (turnedAway > 1) {
-          problem = previewWords.passTurnedAway(
-            hostModeDomain(origin),
-            location.protocol === "https:"
-          );
+          problem = turnedAwayWords(origin);
           return;
         }
         enter(origin);

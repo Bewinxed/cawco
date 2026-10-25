@@ -4,7 +4,6 @@
     browserWords,
     commentWords,
     commonWords,
-    hostModeDomain,
     machineLabel,
     PREVIEW_LOCKED_MESSAGE,
     type PreviewDown,
@@ -169,7 +168,7 @@
   import PinPeek from "./PinPeek.svelte";
   import PlacePick from "./PlacePick.svelte";
   import { paneFleet } from "./pane-fleet";
-  import { enterPreviews } from "./pass";
+  import { enterPreviews, turnedAwayWords } from "./pass";
   import SheetInspector from "./SheetInspector.svelte";
   import { isSetupPage } from "./setup-page";
   import { SheetInspector as Inspector } from "./sheet-inspector.svelte";
@@ -660,16 +659,13 @@
    */
   async function turnedAway() {
     const origin = paneOrigin;
-    if (!(byHost && origin)) {
+    if (!origin) {
       return;
     }
     refusedEntries += 1;
     if (refusedEntries > 1) {
       failure = {
-        message: previewWords.passTurnedAway(
-          hostModeDomain(origin),
-          location.protocol === "https:"
-        ),
+        message: turnedAwayWords(origin),
         again: "reload",
       };
       return;

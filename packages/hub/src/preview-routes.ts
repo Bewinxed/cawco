@@ -107,20 +107,15 @@ export const previewRoutes = (deps: {
       .get(PREVIEW_NAMES_PATH, hidden, (): PreviewNames => ({
         names: deps.listeners.names() ?? deps.portNames(),
       }))
-      // A ticket into host mode's previews (preview-access.ts), bound to
-      // the device that asks: the dashboard spends it once per browser, the
-      // app once per web view's load. Only a client this API already trusts
-      // gets one (core browser-gate.ts refuses a page of any other origin, a
-      // preview's above all).
-      .post("/api/preview-ticket", ({ request }) => {
-        if (deps.listeners.settings().mode !== "host") {
-          return new Response(
-            "Previews are reached by port on this hub, so they take no ticket.",
-            { status: 409 }
-          );
-        }
-        return mintTicket(deps.deviceOf(request));
-      })
+      // A ticket into the previews, a host-mode name or an origin's own port
+      // (preview-access.ts), bound to the device that asks: the dashboard
+      // spends it once per browser and host, the app once per web view's
+      // load. Only a client this API already trusts gets one (core
+      // browser-gate.ts refuses a page of any other origin, a preview's above
+      // all).
+      .post("/api/preview-ticket", ({ request }) =>
+        mintTicket(deps.deviceOf(request))
+      )
       // The person's own sign-out of previews: every pass of the device that
       // asks, or (a trusted hub's browser, which has no device) the pass its
       // relay presents. Every frame of theirs is locked at its next request.

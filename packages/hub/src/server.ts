@@ -13775,7 +13775,8 @@ export const createServer = (
       }
     },
     // A canvas no person's screen shows, drawn headless by the hub machine's
-    // daemon on the canvas's own origin, which answers there on loopback.
+    // daemon on the canvas's own origin, which answers there on loopback,
+    // entered with the session's own ticket as every port is locked.
     screen: async (artifact, sync) => {
       const machineId = await ownMachineId;
       if (!registry.agent(machineId)) {
@@ -13790,7 +13791,11 @@ export const createServer = (
       const open = {
         canvas: { id: artifact.id, name: artifact.name, sync },
         token,
-        url: `${previewListeners.local(owner)}/__cawco/canvas/${artifact.id}/`,
+        url: previewEnterUrl(
+          previewListeners.local(owner),
+          mintSessionTicket(owner, [owner]).ticket,
+          `/__cawco/canvas/${artifact.id}/`
+        ),
       };
       const asked = await callAgent(
         machineId,
@@ -14149,10 +14154,10 @@ export const createServer = (
    * (`artifact_browse`), and the origins it needs: a page or a canvas at
    * its own address on the origin that serves it, a component or a
    * preview on an embed origin of its own (as a decision page's Preview
-   * shows it), and a decision page's embeds besides. In host mode, a
-   * one-time entry on that name, which sets the session's own pass on those
-   * origins alone (preview-access.ts); in port mode, its own port on the
-   * host the hub's links name, which takes no pass.
+   * shows it), and a decision page's embeds besides: a one-time entry on
+   * that origin (host mode's name, else its own port on the host the hub's
+   * links name), which sets the session's own pass on those origins alone
+   * (preview-access.ts).
    */
   const browseAt = (instance: InstanceRow, row: ArtifactRow): Browsed => {
     const { key, address, path } = browsedOrigin(row);
@@ -14166,21 +14171,20 @@ export const createServer = (
         ? [embedKey(id)]
         : []
     );
-    if (address.origin) {
-      const entry = mintSessionTicket(instance.id, [key, ...embeds]);
-      return {
-        url: previewEnterUrl(address.origin, entry.ticket, path),
-        expiresAt: new Date(entry.expiresAt).toISOString(),
-      };
-    }
-    const route = previewRoute(address, new URL(dashboardUrl(registry)));
-    if (!route) {
+    const origin =
+      address.origin ??
+      previewRoute(address, new URL(dashboardUrl(registry)))?.origin;
+    if (!origin) {
       throw new ArtifactRefusal(
         503,
         `${row.name}'s preview origin has no address this hub can name.`
       );
     }
-    return { url: `${route.origin}${path}`, expiresAt: null };
+    const entry = mintSessionTicket(instance.id, [key, ...embeds]);
+    return {
+      url: previewEnterUrl(origin, entry.ticket, path),
+      expiresAt: new Date(entry.expiresAt).toISOString(),
+    };
   };
 
   /**
@@ -18816,8 +18820,11 @@ export const createServer = (
    * What an artifact's own tab shows: its artifact, whatever its session's
    * panel shows. The panel's own target while the panel shows it (so a new
    * open there reloads the tab too); else the artifact as it stands, at a
-   * revision of its own that moves with each of its revisions. Null once it
-   * is gone.
+   * revision of its own that moves with each of its revisions and with the
+   * fleet's preview mode, whose switch moves every origin: a decision page's
+   * embeds are named in the page as it was served, so the tab loads it again
+   * (the panel's own target moves then too, `republish`). Null once it is
+   * gone.
    */
   const tabTarget = (
     instanceId: string,
@@ -18828,12 +18835,13 @@ export const createServer = (
       return shown;
     }
     const row = db.artifacts.get(artifactId);
+    const mode = previewListeners.settings();
     return row
       ? {
           artifact: shownArtifact(row),
           machineId: row.machineId ?? "",
           source: row.source,
-          revision: `${row.id}:${row.revision}`,
+          revision: `${row.id}:${row.revision}:${mode.mode === "host" ? mode.pattern : mode.mode}`,
         }
       : null;
   };
@@ -18929,6 +18937,9 @@ export const createServer = (
     // Every former id, whole: a session folded into its continuation leaves
     // a tab on its id for the session it is now.
     formerIds: db.formerIds(),
+    // The fleet's preview mode: a switch moves every origin, so a decision
+    // page a dashboard loaded on its own (PageFrame) loads again.
+    previewSettings: previewListeners.settings(),
     // `hubBuild` lets a client tell a hub that is
     // behind from a machine that is. `protocol` is the wire this hub speaks:
     // a page built for an older one reloads itself on its first frame.
@@ -19032,6 +19043,7 @@ export const createServer = (
         "formerIds",
         "noticesSeen",
         "noticesDamaged",
+        "previewSettings",
       ] as const
     ).map((key) => [key, JSON.stringify(publishedExtras[key])])
   );
@@ -19170,6 +19182,7 @@ export const createServer = (
       "formerIds",
       "noticesSeen",
       "noticesDamaged",
+      "previewSettings",
     ] as const) {
       const serialised = JSON.stringify(extras[key]);
       if (publishedMetadata.get(key) !== serialised) {
@@ -28221,6 +28234,11 @@ export const createServer = (
               previewTargets.set(instanceId, moved);
               publishPreview(instanceId, "open", moved);
             }
+            // The board's publish carries the mode (`previewSettings`, which
+            // a dashboard's Decisions page follows) and refreshes every
+            // artifact's tab, whose revision names the mode (`tabTarget`):
+            // each frame of a page or a machine's preview loads again at its
+            // new origin, its listener opened there.
             publishInstances("");
           },
         })

@@ -171,8 +171,7 @@ enum CanvasProbe {
         guard joined, let web = composer.canvasRoom?.web, let canvas = binding.canvas else {
             return check("enter: Draw opens a canvas whose page joins its doc", false, "note \(composer.probeCanvasNote ?? "none")")
         }
-        check("enter: Draw opens a canvas whose page joins its doc", true, "origin \(web.page.origin.absoluteString) byHost \(web.page.byHost)")
-        guard web.page.byHost else { return }
+        check("enter: Draw opens a canvas whose page joins its doc", true, "origin \(web.page.origin.absoluteString)")
 
         let joins = await takePass(web, spoil: false)
         let back = await until(20) { web.readies > joins && web.connected }
@@ -182,7 +181,7 @@ enum CanvasProbe {
             let export = try await host.hub.exportCanvas(canvas.id, name: canvas.name)
             let session = binding.sessionId
             let fresh = CanvasWeb(page: export.page, instanceId: session) { place in
-                try await host.hub.previewLoad(place, for: .instance(session), byHost: export.page.byHost)
+                try await host.hub.previewLoad(place, for: .instance(session))
             }
             fresh.web.frame = CGRect(x: 0, y: 0, width: 320, height: 400)
             composer.window?.insertSubview(fresh.web, at: 0)
@@ -196,7 +195,7 @@ enum CanvasProbe {
             }
             check("export: its page is the canvas's, and a web view of its own enters it and joins",
                   export.page == web.page && ready,
-                  "export origin \(export.page.origin.absoluteString) byHost \(export.page.byHost), the same page \(export.page == web.page), joined \(ready)")
+                  "export origin \(export.page.origin.absoluteString), the same page \(export.page == web.page), joined \(ready)")
             fresh.close()
             fresh.web.removeFromSuperview()
         } catch {

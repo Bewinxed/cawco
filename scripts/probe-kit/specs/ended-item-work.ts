@@ -61,6 +61,7 @@ import { noticeLine } from "../../../packages/core/src/words/notices";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
+import { passedFetch } from "../preview-pass";
 
 const THRESHOLD_GIB = 0.25;
 const FINISH = "mcp__cawco__finish_item";
@@ -288,7 +289,9 @@ const serving = async (
       );
       const { port } = (await address.json()) as { port?: number };
       const read = await readWithin(5000, async (signal) => {
-        const response = await fetch(`http://127.0.0.1:${port}/`, { signal });
+        const response = await passedFetch(fleet, `http://127.0.0.1:${port}/`, {
+          signal,
+        });
         return { status: response.status, body: await response.text() };
       });
       if (read.kind === "answered") {

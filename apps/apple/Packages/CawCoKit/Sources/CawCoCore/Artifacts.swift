@@ -9,10 +9,8 @@ public struct CanvasPage: Sendable, Equatable {
     public let id: String
     public let name: String
     /// Its session's preview origin (`HubConnection.previewRoute`): a port of the hub's host, or host mode's whole origin of its own.
+    /// Locked to the hub's pass either way, so a web view enters it with a ticket (`HubConnection.previewLoad`).
     public let origin: URL
-    /// Host mode's route: its origin is locked to the hub's pass, so a web
-    /// view enters it with a ticket (`HubConnection.previewLoad`).
-    public let byHost: Bool
 
     /// The canvas's own page, `/__cawco/canvas/<id>/`: one closing slash,
     /// which the directory hint writes (a path ending in one gets a second,
@@ -62,7 +60,7 @@ public extension HubConnection {
         guard case let .ok(answer) = output else { throw await TaskRefusal.reading(output) }
         let made = try answer.body.json
         let route = try listener(port: made.port, origin: made.origin, tailnet: made.tailnet)
-        return CanvasPage(id: made.id, name: made.name, origin: route.origin, byHost: route.byHost)
+        return CanvasPage(id: made.id, name: made.name, origin: route.origin)
     }
 
     /// A canvas's export (`GET /api/artifacts/:id/export`). Read raw rather
@@ -96,7 +94,7 @@ public extension HubConnection {
             return .init(hosts: hosts, origin: origin)
         }
         let route = try listener(port: body["port"] as? Double, origin: body["origin"] as? String, tailnet: onTailnet)
-        let page = CanvasPage(id: id, name: name, origin: route.origin, byHost: route.byHost)
+        let page = CanvasPage(id: id, name: name, origin: route.origin)
         return CanvasExport(file: text, drawn: drawn, outline: outline, png: png, page: page)
     }
 

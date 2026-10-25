@@ -683,7 +683,7 @@ final class DecisionPageFrame: UIView, WKScriptMessageHandler, WKNavigationDeleg
                 }
                 route = found
                 guard let place else { return }
-                web.load(URLRequest(url: try await hub.previewLoad(place, for: .project(projectId), byHost: found.byHost)))
+                web.load(URLRequest(url: try await hub.previewLoad(place, for: .project(projectId))))
             } catch {
                 fail(error.localizedDescription)
             }
