@@ -65,11 +65,18 @@ const POSE = {
   expired: "expired",
   nomatch: "nomatch",
   failed: "failed",
-  // Remove device changes Paired's card in place; Caw stays as he was.
-  removed: "approved",
+  // Remove device: the device let go, calm.
+  removed: "removed",
 };
 /** Every drawing of Caw the page shows. */
 const DRAWINGS = [...new Set(Object.values(POSE))];
+/**
+ * By night Caw is his night still: the same drawing on the house's paper
+ * rim (`--paper`, the Caw panel and Decisions list previews' night stills),
+ * so his black body stands off the dark page.
+ */
+const night = matchMedia("(prefers-color-scheme: dark)");
+const cawSrc = (pose) => `./caw/${pose}${night.matches ? "-night" : ""}.png`;
 
 const TITLE = {
   code: "Scan with the CawCo app",
@@ -266,7 +273,7 @@ function readTokens() {
   }
   for (const n of [
     "qr-dim-opacity",
-    "qr-ping-scale",
+    "qr-ping-reach",
     "qr-ping-opacity",
     "qr-squeeze",
     "qr-pulse-scale",
@@ -711,15 +718,21 @@ function setHeight(S, h) {
   S.cardWrap.style.height = `${h}px`;
 }
 
-/** r4's ping: one ring leaves the card's edge once a breath, growing to qr-ping-scale as it fades from qr-ping-opacity. */
+/**
+ * r4's ping: one ring leaves the card's edge once a breath, fading from
+ * qr-ping-opacity as it grows qr-ping-reach past the edge on every side (a
+ * scale per axis from the card's size), so its top stays under the title.
+ */
 function startPing(S, after = 0) {
   stopPing(S);
   const now = performance.timeOrigin + performance.now();
   const at = Math.ceil((now + after) / D.breath) * D.breath;
+  const reach = 2 * V["qr-ping-reach"];
+  const grow = `scale(${(1 + reach / S.cardW).toFixed(4)}, ${(1 + reach / S.height).toFixed(4)})`;
   S.pingRun = S.ping.animate(
     [
       { opacity: V["qr-ping-opacity"], transform: "none" },
-      { opacity: 0, transform: `scale(${V["qr-ping-scale"]})` },
+      { opacity: 0, transform: grow },
     ],
     {
       duration: D.breath,
@@ -1105,7 +1118,8 @@ function rest(S, m, { still = false, keepPing = false, ping = true } = {}) {
   }
 
   S.title.put(TITLE[kind === "outcome" ? m : kind]);
-  S.caw.src = `./caw/${POSE[m.split("-")[0]]}.png`;
+  S.pose = POSE[m.split("-")[0]];
+  S.caw.src = cawSrc(S.pose);
   if (up && ping && !keepPing) {
     startPing(S);
   }
@@ -1828,7 +1842,7 @@ async function start() {
   root.style.setProperty("--breath-phase", `${-((performance.timeOrigin + performance.now()) % (2 * D.breath))}ms`);
   await document.fonts.ready;
   await Promise.all(
-    [...DRAWINGS, "badge", "badge-shut"].map((p) => {
+    [...DRAWINGS, ...DRAWINGS.map((p) => `${p}-night`), "badge", "badge-shut"].map((p) => {
       const img = new Image();
       img.src = `./caw/${p}.png`;
       return img.decode().catch(() => undefined);
@@ -1845,9 +1859,11 @@ async function start() {
     S.stage.style.setProperty("--stage-h", `${S.stage.offsetHeight + 24}px`);
   }
   fitFrames();
-  // The frames' room is the window's width: refit as it changes. (A ResizeObserver on the frames
-  // saw its own refit change their height, a loop WebKit reports as an error.)
-  addEventListener("resize", fitFrames);
+  // The frames' room is the window's width: refit as it changes, read off the page's bar, as wide
+  // as the window and sized by nothing the refit moves. (Observed, the frames saw their own refit
+  // change their height, a loop WebKit reports as an error; the window's resize event, on the
+  // proof's WebKit, once left a jump from 1440 to 390 unfitted.)
+  new ResizeObserver(fitFrames).observe(document.querySelector(".bar"));
   // The dots' canvases follow the screen's pixel density (a zoom, another screen).
   const watchDensity = () =>
     matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`).addEventListener(
@@ -1862,6 +1878,12 @@ async function start() {
       { once: true }
     );
   watchDensity();
+  // Day and night follow the system as it turns.
+  night.addEventListener("change", () => {
+    for (const S of stages) {
+      S.caw.src = cawSrc(S.pose);
+    }
+  });
 
   const list = document.querySelector('[data-slot="moments"]');
   for (const [m, label] of MOMENTS) {

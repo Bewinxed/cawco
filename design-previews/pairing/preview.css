@@ -37,7 +37,8 @@
 
 @layer base {
   :root {
-    color-scheme: light;
+    /* Day and night, as the reader's system asks (the tokens are light-dark()). */
+    color-scheme: light dark;
     background: var(--surface-page);
     color: var(--ink-strong);
     font: var(--type-body);
@@ -203,7 +204,10 @@
     --qr-paper: oklch(99.3% 0.004 85);
     --qr-ink: oklch(29.5% 0.01 70);
     --qr-dim-opacity: 0.3;
-    --qr-ping-scale: 1.1;
+    /* How far the ping's ring grows past the card's edge, the same on
+       every side: under the title's gap (--space-4), so it never meets
+       the title. */
+    --qr-ping-reach: var(--space-3);
     --qr-ping-opacity: 0.7;
     --qr-squeeze: 0.84;
     --qr-pulse-scale: 1.04;
