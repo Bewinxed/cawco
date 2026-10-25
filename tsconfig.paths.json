@@ -39,6 +39,14 @@
       "type-fest": ["./node_modules/type-fest"],
       // remark-parse, remark-stringify.
       "vfile": ["./node_modules/vfile"],
+      // @earendil-works/pi-coding-agent (the agent's pi harness).
+      "@earendil-works/pi-agent-core": [
+        "./node_modules/@earendil-works/pi-agent-core"
+      ],
+      "@earendil-works/pi-codemode": [
+        "./node_modules/@earendil-works/pi-codemode"
+      ],
+      "@earendil-works/pi-tui": ["./node_modules/@earendil-works/pi-tui"],
       // vaul-svelte (huntabyte/vaul-svelte#130), as the dashboard's
       // vite.config.ts `resolve.dedupe` does for the bundle.
       "bits-ui": ["./apps/dashboard/node_modules/bits-ui"]
