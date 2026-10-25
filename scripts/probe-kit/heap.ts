@@ -18,6 +18,8 @@ const DETACHED_PREFIX = /^Detached /;
 const OPENING_TAG = /^<([a-z][\w-]*)[\s\S]*$/;
 /** A probe's own mark on an element (`data-probe="…"`), said beside the element in a path. */
 const PROBE_TAG = /data-probe="([^"]*)"/;
+/** A probe's mark on an element that sits in a pane put away (`data-probe-away`), said as `[away]` in a path. */
+const AWAY_TAG = /\sdata-probe-away(?:=|\s|>|$)/;
 /** A script URL's scheme and host, left off a closure's source position. */
 const ORIGIN = /^.*?\/\/[^/]+/;
 const WHITESPACE = /\s+/g;
@@ -251,8 +253,9 @@ class Snapshot {
       ];
     const name = full.slice(0, 80).replace(WHITESPACE, " ");
     const tag = PROBE_TAG.exec(full)?.[1];
+    const away = AWAY_TAG.test(full) ? " [away]" : "";
     const at = this.#where.get(i);
-    return `${type} ${name}${tag ? ` [${tag}]` : ""}${at ? ` @${at}` : ""}`;
+    return `${type} ${name}${tag ? ` [${tag}]` : ""}${away}${at ? ` @${at}` : ""}`;
   }
 
   /** The retainer of `node` nearest the root, and the edge it holds it by; null where none holds it. */
