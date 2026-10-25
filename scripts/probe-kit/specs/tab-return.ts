@@ -84,6 +84,7 @@ import { join } from "node:path";
 import type { CDPSession, Frame, Locator, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type MainTask, type MainThread, SCROLLER, traceMain } from "../frames";
+import { type Heap, heapOf } from "../heap";
 import { type Kit, open, ROOT, type Spec } from "../kit";
 import { machineQuiet, quietLeg } from "../quiet";
 import {
@@ -1849,6 +1850,180 @@ function checkPage(kit: Kit, back: Back): void {
   }
 }
 
+/** The detached kinds the leg holds at zero growth (audit 0d8f70d1: +192 div, +113 svg, +1688 text per 30 switches). */
+const DETACHED_KINDS = ["SVGSVGElement", "div", "Text"] as const;
+/** A step of a retaining path that is a DOM node. */
+const DOM_STEP = /^native (<|SVG\w*Element|Text|Comment|DocumentFragment)/;
+/** A context's heap id in a retaining path's step. */
+const SCOPE_ID = /@\d+\b/g;
+/** Quiet sessions the detached leg opens beside the scene's five, so the pane holds the audit's dozen tabs. */
+const QUIET_TABS = 7;
+/** Busy turns let run through the thirty switches (`TURN_MS` each: about their 39 s). */
+const STREAM_TURNS = 12;
+/** How many switches the detached leg makes between its two readings: the audit's thirty. */
+const SWITCHES = 30;
+/** How long each switch is left to land before the next: live-perf's memory leg's. */
+const SWITCH_REST_MS = 1300;
+
+/**
+ * What holds each detached node of `DETACHED_KINDS` in `heap` that `before`
+ * did not have, grouped by its path down to the first DOM node on it (the
+ * detached subtree's top, which holds the rest), scope ids dropped.
+ */
+function holders(before: Heap, heap: Heap): string[] {
+  const lines: string[] = [];
+  for (const kind of DETACHED_KINDS) {
+    const had = new Set(before.detachedOf(kind).map(before.idOf));
+    const held = heap.detachedOf(kind).filter((at) => !had.has(heap.idOf(at)));
+    lines.push(
+      `## ${kind}: ${heap.detachedOf(kind).length} detached, ${held.length} of them not detached before`
+    );
+    const seen = new Map<string, { n: number; path: string[] }>();
+    for (const at of held) {
+      const path = heap.pathTo(at);
+      const top = path.findIndex((step) => DOM_STEP.test(step));
+      const key = path
+        .slice(0, top === -1 ? path.length : top + 1)
+        .join("\n")
+        .replace(SCOPE_ID, "@");
+      const one = seen.get(key) ?? { n: 0, path };
+      one.n += 1;
+      seen.set(key, one);
+    }
+    for (const { n, path } of [...seen.values()].sort((a, b) => b.n - a.n)) {
+      lines.push(`  ${n} held so:`, ...path.map((step) => `    ${step}`), "");
+    }
+  }
+  return lines;
+}
+
+/**
+ * Detached nodes (TAB_RETURN_LEGS=detached): the scene's five tabs and
+ * `QUIET_TABS` more in one pane, each shown once, so each pane has built
+ * what it builds on its first visit; the heap read after a collection
+ * (heap.ts); thirty pointer presses round the tabs while the busy session
+ * streams `STREAM_TURNS` turns; read again. Asserted: no growth in detached
+ * `<svg>`, `<div>` and text nodes. Then every pane is shown once more, the
+ * busy one left in front, and read a third time (noted): what a pane put
+ * away still holds is let go once it is laid out again. What holds each
+ * node the later readings find that the first did not, root to node, is
+ * written to `detached.txt`, each transcript's list named in the path by
+ * its index (`data-probe`).
+ */
+async function detachedLeg(
+  kit: Kit,
+  base: string,
+  tabs: string[],
+  stream: () => Promise<void>
+): Promise<void> {
+  /** A person's press on the tab: the pointer onto it, then the click. */
+  const press = (on: Page, id: string) =>
+    on
+      .locator(`[data-session-tab="${id}"]`)
+      .filter({ visible: true })
+      .first()
+      .click();
+  const page = await kit.page("desk");
+  await page.addInitScript(
+    ([held, active]) => {
+      localStorage.setItem(
+        "cawco-workspace",
+        JSON.stringify({
+          v: 1,
+          root: { t: "l", id: "pone", tabs: held, active, opened: null },
+          focusedLeaf: "pone",
+        })
+      );
+    },
+    [tabs, tabs[0]] as const
+  );
+  await open(
+    page,
+    `${base}/session/${tabs[0]}`,
+    `${SCROLLER} [data-row]`,
+    120_000
+  );
+  for (const id of [...tabs.slice(1), tabs[0] as string]) {
+    await away(page, id);
+    await page.waitForTimeout(3000);
+  }
+  // Each transcript's list marked, so a path through it says which it is.
+  await page.evaluate(() => {
+    for (const [i, el] of document
+      .querySelectorAll('[data-slot="listing"]')
+      .entries()) {
+      el.setAttribute(
+        "data-probe",
+        `list ${i}, ${el.querySelectorAll("[data-item]").length} items`
+      );
+    }
+  });
+  const cdp = await page.context().newCDPSession(page);
+  const before = await heapOf(cdp);
+  // The busy session streams through the switches, as the owner's fleet does.
+  const streaming = stream();
+  for (let i = 0; i < SWITCHES; i += 1) {
+    await press(page, tabs[(i + 1) % tabs.length] as string);
+    await page.waitForTimeout(SWITCH_REST_MS);
+  }
+  await press(page, tabs[0] as string);
+  await streaming;
+  await page.waitForTimeout(SWITCH_REST_MS);
+  const after = await heapOf(cdp);
+  // Every pane shown once more, each laid out again, the busy one last and
+  // left in front; then read a third time.
+  for (const id of [...tabs.slice(2), tabs[0], tabs[1]] as string[]) {
+    await press(page, id);
+    await page.waitForTimeout(SWITCH_REST_MS);
+  }
+  await page.waitForTimeout(3000);
+  const shownAgain = await heapOf(cdp);
+  // Where each transcript's list stands: its pane, and whether it is drawn.
+  const listings = await page.evaluate(() =>
+    [...document.querySelectorAll('[data-slot="listing"]')].map((el) => ({
+      marked: el.getAttribute("data-probe"),
+      drawn: el.checkVisibility(),
+      items: el.querySelectorAll("[data-item]").length,
+    }))
+  );
+  await writeFile(
+    join(kit.out, "detached.txt"),
+    `${[
+      `# After ${SWITCHES} switches`,
+      ...holders(before, after),
+      "# Once every pane is shown again, the busy one left in front",
+      ...holders(before, shownAgain),
+      `# The transcripts' lists (tabs in order: ${tabs.join(", ")}; the busy one second)`,
+      ...listings.map((one) => `  ${JSON.stringify(one)}`),
+    ].join("\n")}\n`
+  );
+  kit.note(
+    `detached once every pane is shown again: ${JSON.stringify(Object.fromEntries(DETACHED_KINDS.map((kind) => [kind, shownAgain.detached[kind] ?? 0])))}; lists ${JSON.stringify(listings)}`
+  );
+  const counts = (heap: Heap) =>
+    Object.fromEntries(
+      DETACHED_KINDS.map((kind) => [kind, heap.detached[kind] ?? 0])
+    );
+  const was = counts(before);
+  const now = counts(after);
+  await writeFile(
+    join(kit.out, "detached.json"),
+    `${JSON.stringify({ before: before.detached, after: after.detached, shownAgain: shownAgain.detached }, null, 2)}\n`
+  );
+  kit.note(
+    `detached: before ${JSON.stringify(before.detached)}, after ${SWITCHES} switches ${JSON.stringify(after.detached)} (held only for the driver: ${before.heldForDriver} → ${after.heldForDriver}); what holds each is in ${join(kit.out, "detached.txt")}`
+  );
+  for (const kind of DETACHED_KINDS) {
+    kit.check(
+      `detached: ${SWITCHES} switches round ${tabs.length} tabs leave no more detached ${kind} after a collection`,
+      (now[kind] ?? 0) <= (was[kind] ?? 0),
+      `${was[kind]} → ${now[kind]}`
+    );
+  }
+  await cdp.detach();
+  await page.close();
+}
+
 const run = async (kit: Kit) => {
   machineQuiet();
   const folder = join(kit.out, "heavy");
@@ -1906,6 +2081,26 @@ const run = async (kit: Kit) => {
     30 * 60_000
   );
   scene.hold();
+  // TAB_RETURN_LEGS=detached: the detached-node leg alone; with
+  // TAB_RETURN_DEV=1 on the dev server, so each holder's closure is said at
+  // its source file and line.
+  if (process.env.TAB_RETURN_LEGS === "detached") {
+    const quiet: string[] = [];
+    for (let i = 0; i < QUIET_TABS; i += 1) {
+      const id = await fleet.spawn("claude", `Quiet ${i + 1}`);
+      await fleet.send(id, `${scene.mark(`quiet-${i}`)}: hello.`);
+      quiet.push(id);
+    }
+    await detachedLeg(
+      kit,
+      process.env.TAB_RETURN_DEV === "1"
+        ? await fleet.devDashboard()
+        : await fleet.dashboard(),
+      [front, busy, previewed, ...lights, ...quiet],
+      () => scene.release(STREAM_TURNS)
+    );
+    return;
+  }
   const base = await fleet.dashboard();
   /**
    * The dashboard at the desk on `tabs`, `shown` in front once each tab
