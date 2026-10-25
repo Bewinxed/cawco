@@ -705,8 +705,10 @@ function landedAll({ input, machines }: Ctx): Notice | null {
   }
   const v = shownVersion(stateOf(asked[0] as UpdateMachine).availableVersion);
   return {
-    // What landed is said here, so it is not announced again (notice 6).
-    acks: landingIds(asked),
+    // This install of this build on these machines, never the landings: it
+    // shows no notes, so each landing stays notice 6, notes and all, until
+    // its ✕ once this one goes.
+    acks: [`running:${v}:${asked.map((m) => m.machineId).join(",")}`],
     kind: 3,
     title: `CawCo ${v} is running on ${plural(asked.length, "machine")}`,
     failed: false,

@@ -341,13 +341,15 @@ public struct Notice: Identifiable, Equatable, Sendable {
                               machines: inSet, acks: [id])
             }
         }
-        // 3. Everything this device asked for has landed.
+        // 3. Everything this device asked for has landed. It acknowledges this
+        // install, never the landings: it shows no notes, so each landing stays
+        // notice 6, notes and all, until its ✕ once this one goes (model.ts `landedAll`).
         let asked = live.filter { commanded.contains($0.id) }
         if !asked.isEmpty, asked.allSatisfy({ doneOn($0.state) }) {
             let v = displayVersion(asked[0].state.availableVersion)
-            let acks = landingIds(asked)
-            return update(acks.first ?? "landed-all:\(v)", title: "CawCo \(v) is running on \(plural(asked.count, "machine"))",
-                          caw: .done, machines: asked, acks: acks, landedAll: true)
+            let id = "running:\(v):\(asked.map(\.id).joined(separator: ","))"
+            return update(id, title: "CawCo \(v) is running on \(plural(asked.count, "machine"))",
+                          caw: .done, machines: asked, acks: [id], landedAll: true)
         }
         // 4. Auto-update is off and a build waits for a person.
         let waiting = live.filter { $0.state.phase == "available" }

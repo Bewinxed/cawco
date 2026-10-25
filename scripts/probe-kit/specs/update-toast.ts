@@ -45,6 +45,8 @@
  *    notes in Caw's panel, a reload keeps them, and Configure › Updates
  *    viewed keeps them. Their ✕ takes them away, and a reload does not bring
  *    them back.
+ * h. An install started from Configure › Updates finishes: "running on N
+ *    machines" goes by itself, and the panel then holds the landing's notes.
  */
 
 import type { Page, WebSocketRoute } from "playwright-core";
@@ -237,35 +239,47 @@ const landingOf = (n: number) => ({
 });
 
 /**
- * A build landed on the fleet's machine, as its agent says it: the state's
- * `landed` with the build's notes (core binary-updates.ts `BinaryUpdateLanding`).
- * A source agent's beats carry no update state, so this one stands.
+ * The fleet's machine reports `state` as its agent reports it (`PUT
+ * /api/binary-updates/machines/:id/state`). A source agent's beats carry no
+ * update state, so this one stands until the next.
  */
-const land = async (fleet: KitFleet, n: number): Promise<void> => {
-  const { version, notes } = landingOf(n);
-  const at = Date.now();
+const report = async (
+  fleet: KitFleet,
+  state: Record<string, unknown>
+): Promise<void> => {
   const response = await fetch(
     `${fleet.base}/api/binary-updates/machines/${MACHINE}/state`,
     {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        phase: "installed",
         channel: "nightly",
         hostsHub: true,
-        installedVersion: version,
-        availableVersion: version,
-        notes,
-        landed: { at, outcome: "installed", version, notes },
-        updatedAt: at,
+        updatedAt: Date.now(),
+        ...state,
       }),
     }
   );
   if (!response.ok) {
     throw new Error(
-      `the landing was not put: ${response.status} ${await response.text()}`
+      `the state was not put: ${response.status} ${await response.text()}`
     );
   }
+};
+
+/**
+ * A build landed on the fleet's machine, as its agent says it: the state's
+ * `landed` with the build's notes (core binary-updates.ts `BinaryUpdateLanding`).
+ */
+const land = (fleet: KitFleet, n: number): Promise<void> => {
+  const { version, notes } = landingOf(n);
+  return report(fleet, {
+    phase: "installed",
+    installedVersion: version,
+    availableVersion: version,
+    notes,
+    landed: { at: Date.now(), outcome: "installed", version, notes },
+  });
 };
 
 /**
@@ -441,6 +455,74 @@ const landsClosed = async ({
   await page.close();
 };
 
+/** How long "running on N machines" stands before it goes by itself (update-notice.svelte.ts `DONE_MS`). */
+const DONE_MS = 6000;
+
+/**
+ * h. An install started from Configure › Updates finishes: the machine's row
+ * offers the build (`available`), its Install now is pressed (the hub's
+ * answer stood in by the page's own route, so no source agent is asked to
+ * install), the machine installs it and reports the landing. "Running on N
+ * machines" says it and goes by itself, and the panel then holds the
+ * landing's notes.
+ */
+const installedHere = async ({
+  base,
+  check,
+  fleet,
+  fresh,
+  noErrors,
+}: Leg): Promise<void> => {
+  landings += 1;
+  const n = landings;
+  const { version, notes } = landingOf(n);
+  const before = `0.1.99-nightly.${8000 + n}+probe`;
+  await report(fleet, {
+    phase: "available",
+    installedVersion: before,
+    availableVersion: version,
+    notes,
+  });
+  const { page, update } = await fresh();
+  let asked = 0;
+  await page.route("**/api/agents/*/update", (route) => {
+    asked += 1;
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true }),
+    });
+  });
+  await open(page, `${base}/config/updates`, READY);
+  // The machine row's one act while it offers a build: its Install now (UpdateCell, the kit's outline).
+  await page
+    .locator('table [data-slot="button"][data-variant="outline"]')
+    .first()
+    .click({ timeout: ROW_MS });
+  await until(
+    "the install asked of the hub",
+    () => asked,
+    (count) => count > 0,
+    ROW_MS
+  );
+  await report(fleet, {
+    phase: "installing",
+    installedVersion: before,
+    availableVersion: version,
+    notes,
+  });
+  await page.waitForTimeout(QUIET_MS);
+  await land(fleet, n);
+  await page.waitForTimeout(DONE_MS + QUIET_MS);
+  const after = await readNotes(page);
+  check(
+    "h: an install started from Configure › Updates finishes, and once \"running on N machines\" has gone Caw's panel holds the landing's notes",
+    asked > 0 && holdsNotes(after, n),
+    { asked, after }
+  );
+  noErrors("h", update);
+  await page.close();
+};
+
 const leg = async (
   kit: Kit,
   fleet: KitFleet,
@@ -595,6 +677,7 @@ const leg = async (
   const given: Leg = { base, check, fleet, fresh, noErrors, toastUp };
   await landsOpen(given);
   await landsClosed(given);
+  await installedHere(given);
 
   // d and e. No input for the away clock, after Update when idle or no choice.
   await fleet.api("/api/person/away-clock", { awayAfterMs: AWAY_AFTER_MIN_MS });
