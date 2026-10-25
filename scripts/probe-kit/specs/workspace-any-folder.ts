@@ -6,12 +6,14 @@
  * workspaces: it runs on the host, outside every boundary.
  *
  * - a. A folder that is no repository (`site/`): its delegate edits
- *   `site.conf` and runs a check that reads that file at its fixed path
- *   (an `nginx -t`-style `check.sh`), which reads its edit while the folder
- *   on the host still holds the old text; it finishes, the project's
- *   checks (gate.md: the same `check.sh`) pass on its edit, and the edit is
- *   in the folder. Its workspace is a folder's, made at the folder's own
- *   path on Linux.
+ *   `site.conf` and runs a check that reads that file (an `nginx -t`-style
+ *   `check.sh`), which reads its edit while the folder on the host still
+ *   holds the old text; it finishes, the project's checks (gate.md: the same
+ *   `check.sh`) pass on its edit, and the edit is in the folder. Its
+ *   workspace is a folder's. On Linux it is made at the folder's own path
+ *   and the check reads the file at that fixed path; on macOS it is a clone
+ *   of its own (`~/.worktrees/site-<id8>`), and the check reads the file in
+ *   the copy it runs in.
  * - b. A conflict: a delegate writes `notes.txt` in another folder, the
  *   person writes it meanwhile, and finish_item comes back with both
  *   versions; nothing is written, the item still runs (its delegate holds
@@ -36,7 +38,12 @@
  *   workspace's own entered into the view: its file tool's write is read by
  *   its shell at the folder's path while the folder lacks it, and it lands;
  *   once the workspace retired, a handoff continues the same session in the
- *   workspace made again.
+ *   workspace made again. On macOS the server is the machine's, the
+ *   session's directory the copy.
+ *
+ * Every delegate's commands name its folder where it works on it: the
+ * folder's own path on Linux, its copy's on macOS ({@link copyAt}); what the
+ * person's folder holds is always read at the folder's own path.
  *
  *   bun scripts/probe-kit/run.ts workspace-any-folder
  */
@@ -79,8 +86,31 @@ const CODE_MODE = "execute";
 const OC_FILE = "oc.txt";
 const OC_TEXT = "from opencode";
 
+const linux = process.platform === "linux";
+
 /** Where each tag's folder is, filled once the fleet's sandbox is known. */
 const folders: Partial<Record<Tag, string>> = {};
+
+/** The fleet, for {@link copyAt}'s read of a workspace's row as a delegate's turn is answered. */
+let fleetOf: KitFleet | undefined;
+
+/**
+ * Where `tag`'s delegate works on its folder: on Linux the folder itself,
+ * its view at the folder's real path (agent layer.ts); on macOS its copy's
+ * own path, read off the workspace of its item (`Folder <tag>`, the latest).
+ */
+const copyAt = (tag: Tag): string => {
+  const folder = folders[tag] as string;
+  if (linux) {
+    return folder;
+  }
+  const [row] =
+    fleetOf?.query<{ path: string }>(
+      "SELECT w.path FROM work_items i JOIN workspaces w ON w.id = i.workspace_id WHERE i.title = ? ORDER BY i.rowid DESC LIMIT 1",
+      `Folder ${tag}`
+    ) ?? [];
+  return row?.path ?? folder;
+};
 /**
  * f's OpenCode server as its command answered: the workspace its plugin is
  * told (`CAWCO_VIEW_WORKSPACE`), its mount namespace, and the namespace of
@@ -151,7 +181,7 @@ const steps: Partial<
 > = {};
 
 const commandOf = (tag: Tag): string => {
-  const at = folders[tag] as string;
+  const at = copyAt(tag);
   switch (tag) {
     case "A":
       return `sed -i.bak 's/listen 80;/listen 8080;/' ${at}/site.conf && rm ${at}/site.conf.bak && sh ${at}/check.sh && echo DONE-A`;
@@ -194,7 +224,9 @@ const noteHost = (tag: Tag): void => {
   if (tag === "F") {
     const file = join(at, OC_FILE);
     hostAt.F = existsSync(file) ? readFileSync(file, "utf8") : "absent";
-    noteViewServer();
+    if (linux) {
+      noteViewServer();
+    }
     return;
   }
   if (tag === "B") {
@@ -239,7 +271,7 @@ const openCodeTurn = (
   request: Seen,
   step: NonNullable<(typeof steps)["F"]>
 ): Reply => {
-  const at = folders.F as string;
+  const at = copyAt("F");
   if (request.all.includes(F_AGAIN)) {
     if (!request.all.includes("AGAIN-F")) {
       return tool("shell", {
@@ -341,6 +373,7 @@ interface ItemRow {
 const run = async (kit: Kit) => {
   const { check } = kit;
   const fleet = await kit.fleet(respond);
+  fleetOf = fleet;
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");
@@ -349,7 +382,6 @@ const run = async (kit: Kit) => {
   fleet.launch("agent");
   await fleet.agentUp();
   await fleet.accountSignedIn();
-  const linux = process.platform === "linux";
 
   const home = fleet.env.HOME as string;
   await writeFile(
@@ -399,21 +431,20 @@ const run = async (kit: Kit) => {
   folders.A = site;
   await mkdir(site, { recursive: true });
   await writeFile(join(site, "site.conf"), "listen 80;\n");
-  // An `nginx -t`-style check: it reads its config at a fixed path.
+  // An `nginx -t`-style check: it reads its config at a fixed path on Linux,
+  // where the view is at the folder's own path; on macOS, in the copy it
+  // runs in (the delegate's shell and the gate both run at the copy's root).
   await writeFile(
     join(site, "check.sh"),
-    `grep -q 'listen 8080;' ${join(site, "site.conf")} && echo CONF-OK || { echo CONF-BAD; exit 1; }\n`
+    `grep -q 'listen 8080;' ${linux ? join(site, "site.conf") : "site.conf"} && echo CONF-OK || { echo CONF-BAD; exit 1; }\n`
   );
+  const gateStep = linux ? `sh ${join(site, "check.sh")}` : "sh check.sh";
   const anchorProject = await fleet.api<{ id: string }>("/api/projects", {
     name: "Folders",
     machineId: MACHINE,
     cwd: anchor,
   });
-  await declareGate(
-    fleet.base,
-    anchorProject.id,
-    `---\nsh ${join(site, "check.sh")}\n---\n`
-  );
+  await declareGate(fleet.base, anchorProject.id, `---\n${gateStep}\n---\n`);
   const parent = await fleet.spawn("claude", "Parent folders", anchor, {
     projectId: anchorProject.id,
   });
@@ -433,7 +464,7 @@ const run = async (kit: Kit) => {
     JSON.stringify(aWorkspace)
   );
   check(
-    "a: the check reads the delegate's edit at its fixed path, while the folder on the host still holds the old text",
+    `a: the check reads the delegate's edit ${linux ? "at its fixed path" : "in its copy"}, while the folder on the host still holds the old text`,
     aSaid.includes("CONF-OK") && hostAt.A === "listen 80;\n",
     `host then: ${JSON.stringify(hostAt.A)} | ${aSaid.slice(-400)}`
   );
@@ -441,7 +472,7 @@ const run = async (kit: Kit) => {
   check(
     "a: it lands through the folder's checks, and the edit is in the folder",
     aRow.state === "done" &&
-      aResult.includes(`sh ${join(site, "check.sh")}: pass (exit 0`) &&
+      aResult.includes(`${gateStep}: pass (exit 0`) &&
       aResult.includes(
         `Landed: 1 path of this workspace's changes are in ${site}`
       ) &&
@@ -509,11 +540,7 @@ const openCodeLeg = async (
   ocSeen.home = fleet.home;
   await mkdir(folder, { recursive: true });
   await writeFile(join(folder, "README"), "OpenCode.\n");
-  const credential =
-    (await Bun.file(`/proc/${await fleet.sessionPid(parent)}/environ`).text())
-      .split("\0")
-      .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
-      ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? "";
+  const credential = await fleet.sessionCredential(parent);
   const started = await fleet.api<{
     instanceId: string;
     workItemId: string;
@@ -549,12 +576,17 @@ const openCodeLeg = async (
         one.all.includes("DONE-F") &&
         !one.all.includes(F_AGAIN)
     )?.all ?? "";
+  // A view's own server is Linux's alone: on macOS the copy is a folder of
+  // its own, which the machine's server works in.
   const inView =
-    ocSeen.server?.workspace === started.workspaceId &&
-    ocSeen.view !== undefined &&
-    ocSeen.server.mnt === ocSeen.view;
+    !linux ||
+    (ocSeen.server?.workspace === started.workspaceId &&
+      ocSeen.view !== undefined &&
+      ocSeen.server.mnt === ocSeen.view);
   check(
-    "g: an OpenCode delegate in a folder runs in a server of its workspace's own entered into the view: its file tool's write is read by its shell at the folder's path while the folder on the host lacks it",
+    linux
+      ? "g: an OpenCode delegate in a folder runs in a server of its workspace's own entered into the view: its file tool's write is read by its shell at the folder's path while the folder on the host lacks it"
+      : "g: an OpenCode delegate in a folder works in its copy: its file tool's write is read by its shell there while the folder on the host lacks it",
     said.includes(OC_TEXT) && hostAt.F === "absent" && inView,
     `host then: ${JSON.stringify(hostAt.F)}; server ${JSON.stringify(ocSeen.server)}, view ${ocSeen.view ?? "unread"} (workspace ${started.workspaceId}); ${said.slice(-400)}`
   );
