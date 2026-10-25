@@ -1,0 +1,72 @@
+[
+  {
+    "card": "Clip kinds",
+    "option": "In their own hue",
+    "width": 1440,
+    "file": "1440-kinds-hue.jpg",
+    "caption": "The timeline at a desk: each clip's glyph, length and bar in its kind's own hue."
+  },
+  {
+    "card": "Clip kinds",
+    "option": "In ink only",
+    "width": 1440,
+    "file": "1440-kinds-ink.jpg",
+    "caption": "The timeline in ink only: the glyph alone names each kind, the bars one neutral fill."
+  },
+  {
+    "card": "Clip controls",
+    "option": "In the row",
+    "width": 1440,
+    "file": "1440-controls-row.jpg",
+    "caption": "The reason line's controls open inside its own row, across the timeline, its spring marked ad hoc."
+  },
+  {
+    "card": "Clip controls",
+    "option": "In an inspector",
+    "width": 1440,
+    "file": "1440-controls-inspector.jpg",
+    "caption": "The reason line's controls in an inspector beside the timeline, headed by the clip's line."
+  },
+  {
+    "card": "Resize handle",
+    "option": "The corner arc",
+    "width": 1440,
+    "file": "1440-handle.jpg",
+    "caption": "Pointing at the panel's leading edge: the corner arc runs up it past the pointer, thickened in the strong ink."
+  },
+  {
+    "card": "Clip kinds",
+    "option": "In their own hue",
+    "width": 390,
+    "file": "390-kinds-hue.jpg",
+    "caption": "The phone's timeline: each clip's glyph, length and bar in its kind's own hue."
+  },
+  {
+    "card": "Clip kinds",
+    "option": "In ink only",
+    "width": 390,
+    "file": "390-kinds-ink.jpg",
+    "caption": "The phone's timeline in ink only: the glyph alone names each kind, the bars one neutral fill."
+  },
+  {
+    "card": "Clip controls",
+    "option": "In the row",
+    "width": 390,
+    "file": "390-controls-row.jpg",
+    "caption": "The reason line's controls open inside its own row, under its facts; the timeline scrolls on past them."
+  },
+  {
+    "card": "Clip controls",
+    "option": "In an inspector",
+    "width": 390,
+    "file": "390-controls-inspector.jpg",
+    "caption": "On a phone the inspector takes the timeline's place, Back leading its head."
+  },
+  {
+    "card": "Resize handle",
+    "option": "The corner arc",
+    "width": 390,
+    "file": "390-handle.jpg",
+    "caption": "On a phone the panel is the drawer: its grabber on the top edge resizes it, and the arc has no corner to stand in."
+  }
+]

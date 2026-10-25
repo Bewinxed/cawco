@@ -1,7 +1,7 @@
 <body>
   <!-- The pages under review: one per component, drawn by app.js. Below the line where they all fit, the tabs
-       show one; from there they stand in one row (all-components-design.md). Over them, the round's one open
-       choice for the owner (round 29): how a clip's kind is dressed. -->
+       show one; from there they stand in one row (all-components-design.md). Over them, the round's two open
+       choices for the owner (round 29): how a clip's kind is dressed, and where a clip's controls open. -->
   <main class="page" id="page">
     <div class="review-bar" role="group" aria-labelledby="kindsLabel">
       <span class="review-label" id="kindsLabel">Clip kinds</span>
@@ -9,26 +9,34 @@
       <!-- The six kind hues are the mockup's own, not the house's: picking hue is picking them too. -->
       <p class="review-note" id="kindsNote">Own hue uses six proposed colours, one per kind. Picking it adds them to the design tokens.</p>
     </div>
+    <!-- The round's other open choice: where a clip's controls open (the owner's note on the popover). -->
+    <div class="review-bar" role="group" aria-labelledby="ctlLabel">
+      <span class="review-label" id="ctlLabel">Clip controls</span>
+      <div class="t-tabs" id="ctlChoice" role="tablist" aria-labelledby="ctlLabel"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" type="button" data-ctl="row" aria-selected="true" title="In the row"><span class="t-label">In the row</span></button><button class="t-tab" role="tab" type="button" data-ctl="inspector" aria-selected="false" title="In an inspector"><span class="t-label">In an inspector</span></button></div>
+    </div>
     <div class="pages" id="pages"></div>
   </main>
 
   <!-- The tool. At a desk its two surfaces stand apart (the panel at the side, the dock at the foot) and this
-       wrapper draws nothing; on a phone, a portrait tablet or a short window it is one drawer or side sheet,
-       its head naming the kept state and switching between the two faces. -->
+       wrapper draws nothing; on a phone, a portrait tablet or a short window it is one drawer or side sheet.
+       Its head has no title (a tool opened by its name, DESIGN.md's Title Bars Follow Liquid Glass Rule): the
+       two faces' switch in the centre and Hide trailing, each a glass group; the kept state is drawn in the
+       graph, not said in a bar. -->
   <div class="tools" id="tools" data-face="graph" data-stop="peek">
     <header class="sheet-head" id="sheetHead">
-      <span class="edge-pill edge-pill-top" aria-hidden="true"></span>
-      <button class="sheet-title" id="sheetTitle" type="button"><span class="sheet-title-text"><b>Design graph</b> · <span id="sheetState"></span></span></button>
-      <div class="t-tabs faces" id="faces" role="tablist" aria-label="Show"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" data-face="graph" title="Graph"><span class="t-label">Graph</span></button><button class="t-tab" role="tab" data-face="move" title="Timeline"><span class="t-label">Timeline</span></button></div>
-      <button class="icon-btn hide-btn" id="sheetHide" type="button" aria-label="Hide graph"></button>
+      <button class="edge-pill edge-pill-top grabber" id="grabber" type="button" aria-label="Drawer"></button>
+      <div class="glass faces-group"><div class="t-tabs faces" id="faces" role="tablist" aria-label="Show"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" data-face="graph" title="Graph"><span class="t-label">Graph</span></button><button class="t-tab" role="tab" data-face="move" title="Timeline"><span class="t-label">Timeline</span></button></div></div>
+      <div class="glass sheet-end"><button class="icon-btn hide-btn" id="sheetHide" type="button" aria-label="Hide graph"></button></div>
     </header>
 
     <aside class="tool panel" id="panel" data-open="true" aria-label="Design graph">
       <!-- The panel's surface (round 29, section D): its fill, edge and shadow. Hide folds this one box into
            the 36px tab tucked at the screen's trailing edge, and then it is the tab: a press on it is Show. -->
       <button class="panel-shell" id="shell" type="button" tabindex="-1" aria-hidden="true" aria-label="Show graph" data-tip="Show graph (H)"><span class="tab-glyph" data-icon="graph"></span></button>
+      <!-- The panel's bar: no title and no ground, three floating glass groups at most (the components' switch,
+           what acts on the view, Hide), their items bare symbols. -->
       <div class="toolbar">
-        <div class="t-tabs" id="tabs" role="tablist" aria-label="Components"><span class="t-tabs-pill" aria-hidden="true"></span></div>
+        <div class="glass tabs-group"><div class="t-tabs" id="tabs" role="tablist" aria-label="Components"><span class="t-tabs-pill" aria-hidden="true"></span></div></div>
         <div class="bar-end" id="barEnd"></div>
       </div>
       <!-- One section per component: its name, its own zoom and Outline, its graph and its dials. -->
@@ -48,7 +56,8 @@
       <div class="sash sash-d" id="sashD" aria-hidden="true" data-edge="d"></div>
       <div class="sash sash-dc" id="sashDC" role="separator" aria-orientation="horizontal" aria-label="Resize the timeline" tabindex="0" data-edge="d"></div>
       <svg class="arc" id="arcD" data-corner="tr" aria-hidden="true" focusable="false"><defs><linearGradient id="arcD-a" gradientUnits="userSpaceOnUse"></linearGradient><linearGradient id="arcD-b" gradientUnits="userSpaceOnUse"></linearGradient></defs><g transform="scale(-1 -1)"><path class="arc-leg" data-leg="a" stroke="url(#arcD-a)"/><path class="arc-body"/><path class="arc-leg" data-leg="b" stroke="url(#arcD-b)"/></g></svg>
-      <div class="dock-body" id="dockBody"></div>
+      <!-- Its head and timeline (dockBody), and the inspector beside them when a clip's controls open there. -->
+      <div class="dock-grid"><div class="dock-body" id="dockBody"></div><div class="insp" id="insp"></div></div>
     </section>
   </div>
   <!-- The side sheet's way back once folded: the same tucked tab, at the screen's trailing edge. -->

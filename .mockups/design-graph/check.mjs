@@ -5,7 +5,7 @@
 //   node .mockups/design-graph/check.mjs        (CHROME=<path> to point at another Chromium)
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 const here = dirname(fileURLToPath(import.meta.url));
 const pw = await import(join(here, "../../node_modules/playwright-core/index.mjs"));
 const CHROME = process.env.CHROME || process.env.HOME + "/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome";
@@ -60,7 +60,7 @@ function install() {
     return out;
   };
   // Text that spills its box (a scroll width past its client width) where nothing clips it on purpose.
-  K.spills = (root) => [...root.querySelectorAll("*")].filter((e) => { const cs = getComputedStyle(e); if (cs.display === "none" || cs.textOverflow === "ellipsis" || e.closest("svg, .tok, .t-text-soft, .doors, .pop-box")) return false; return e.scrollWidth > e.clientWidth + 1 && cs.overflowX !== "visible" && !["auto", "scroll"].includes(cs.overflowX); }).map((e) => e.className + ":" + e.scrollWidth + ">" + e.clientWidth);
+  K.spills = (root) => [...root.querySelectorAll("*")].filter((e) => { const cs = getComputedStyle(e); if (cs.display === "none" || cs.textOverflow === "ellipsis" || e.closest("svg, .tok, .t-text-soft, .doors")) return false; return e.scrollWidth > e.clientWidth + 1 && cs.overflowX !== "visible" && !["auto", "scroll"].includes(cs.overflowX); }).map((e) => e.className + ":" + e.scrollWidth + ">" + e.clientWidth);
 }
 
 // The Animation domain in Chromium: every animation started after `arm()` is collected; seek pauses them all
@@ -187,52 +187,48 @@ async function deskMotion(browser, scheme) {
   ok(V, "double-press on the corner restores the default width", w2.w === 448 && !w2.inline, JSON.stringify(w2));
   await page.mouse.move(700, 300); await page.waitForTimeout(300);
 
-  // C. The popover grows out of the pressed fact and folds back into it.
+  // C. A clip's controls open in its row (the review bar's first answer) or in the dock's inspector (its
+  // second): never a dialog over the page.
   const src = await ev(() => { const f = document.querySelector('.clip[data-key="label"] .fact-dur'); return __k.box(f); });
-  await C.freeze();
-  await page.mouse.click(src.x + src.w / 2, src.y + src.h / 2); await frame(page);
-  const openSteps = [];
-  for (const f of [0, 0.5, 1]) { await C.seek(f, (a) => /^(top|left|right|bottom|border-.*radius|box-shadow|opacity)$/.test(a.name)); openSteps.push(await ev(() => ({ box: __k.box(document.querySelector(".pop-box")), pop: __k.box(document.querySelector(".pop")), body: +getComputedStyle(document.querySelector(".pop-body")).opacity, srcHidden: getComputedStyle(document.querySelector('.clip[data-key="label"] .fact-dur')).visibility === "hidden", src: __k.box(document.querySelector('.clip[data-key="label"] .fact-dur')) }))); }
-  const insetAnim = C.list().find((a) => a.name === "top");
-  ok(V, "popover open: its box starts as the pressed fact's rect (" + [openSteps[0].box.x, openSteps[0].box.y, openSteps[0].box.w, openSteps[0].box.h].map(r1) + " vs " + [openSteps[0].src.x, openSteps[0].src.y, openSteps[0].src.w, openSteps[0].src.h].map(r1) + ")", boxNear(openSteps[0].box, openSteps[0].src, 1), "");
-  ok(V, "popover open: over --dur-pop (" + (insetAnim && insetAnim.source.duration) + "ms) on the drawer curve, ½ between, at 1 its own 296px box", !!insetAnim && insetAnim.source.duration === 260 && openSteps[1].box.w > openSteps[0].box.w + 20 && openSteps[1].box.w < openSteps[2].box.w - 5 && boxNear(openSteps[2].box, openSteps[2].pop, 1) && near(openSteps[2].pop.w, 296, 1), JSON.stringify(openSteps.map((s) => [r1(s.box.x), r1(s.box.y), r1(s.box.w), r1(s.box.h)])) + " easing " + (insetAnim && insetAnim.source.easing));
-  ok(V, "popover open: the source hidden while it flies; contents fade in after 80ms (0 at 0, whole at 1)", openSteps[0].srcHidden && openSteps[0].body === 0 && openSteps[2].body === 1, JSON.stringify(openSteps.map((s) => s.body)));
-  const placeP = openSteps[2];
-  ok(V, "popover: above the row, start-aligned on the pressed fact, --space-1 off it", near(placeP.pop.x, placeP.src.x, 1) && near(placeP.src.y - (placeP.pop.y + placeP.pop.h), 4, 1), JSON.stringify({ pop: placeP.pop, src: placeP.src }));
-  await C.thaw(); await page.waitForTimeout(350);
-  // Its contents: a slider with token detents, the curve's segmented control and its editor.
-  const contents = await ev(() => ({ ticks: document.querySelectorAll(".pop .dtick").length, on: document.querySelector(".pop .dname[data-on]")?.textContent, segs: [...document.querySelectorAll('.pop #curveList [role="radio"]')].map((t) => t.textContent), group: document.querySelector(".pop #curveList")?.getAttribute("role"), chosen: document.querySelector('.pop #curveList [aria-checked="true"]')?.dataset.curve, editor: !!document.querySelector(".pop .ceditor .curve"), knobs: document.querySelectorAll(".pop .ceditor .knob").length }));
-  ok(V, "popover holds the duration slider (a detent per --dur-* token, on 'fade'), the curve as a list past four segments (a radio group: 4 house curves, Spring, Custom) and the large curve with its handles", contents.ticks >= 14 && contents.on === "fade" && contents.segs.length === 6 && contents.group === "radiogroup" && contents.chosen === "--ease-crossfade" && contents.editor && contents.knobs === 2, JSON.stringify(contents));
+  await page.mouse.click(src.x + src.w / 2, src.y + src.h / 2); await page.waitForTimeout(350);
+  const inRow = await ev(() => { const c = document.querySelector(".ctl"); return c && { inRow: c.parentElement.matches('.clip[data-key="label"]'), role: c.getAttribute("role"), dialogs: document.querySelectorAll('[role="dialog"]').length, wash: c.parentElement.hasAttribute("data-chosen"), span: getComputedStyle(c).gridColumnStart + "/" + getComputedStyle(c).gridColumnEnd }; });
+  ok(V, "controls in the row: the clip's own row holds them across both columns, inside its chosen wash; no dialog", !!inRow && inRow.inRow && inRow.role === "region" && inRow.dialogs === 0 && inRow.wash && inRow.span === "1/-1", JSON.stringify(inRow));
+  // Its contents: a slider with token detents, the curve's list and its editor.
+  const contents = await ev(() => ({ ticks: document.querySelectorAll(".ctl .dtick").length, on: document.querySelector(".ctl .dname[data-on]")?.textContent, segs: [...document.querySelectorAll('.ctl #curveList [role="radio"]')].map((t) => t.textContent), group: document.querySelector(".ctl #curveList")?.getAttribute("role"), chosen: document.querySelector('.ctl #curveList [aria-checked="true"]')?.dataset.curve, editor: !!document.querySelector(".ctl .ceditor .curve"), knobs: document.querySelectorAll(".ctl .ceditor .knob").length }));
+  ok(V, "the controls hold the duration slider (a detent per --dur-* token, on 'fade'), the curve as a list past four segments (a radio group: 4 house curves, Spring, Custom) and the large curve with its handles", contents.ticks >= 14 && contents.on === "fade" && contents.segs.length === 6 && contents.group === "radiogroup" && contents.chosen === "--ease-crossfade" && contents.editor && contents.knobs === 2, JSON.stringify(contents));
   // A detent: the thumb snaps to --dur-pop within 6px; the row's badge says "pop"; the stage replays.
-  const sl = await ev(() => { const s = document.querySelector(".pop .dslider"), b = s.getBoundingClientRect(), max = +s.dataset.max; return { x: b.left + (263 / max) * b.width, y: b.top + 10 }; });
+  const sl = await ev(() => { const s = document.querySelector(".ctl .dslider"), b = s.getBoundingClientRect(), max = +s.dataset.max; return { x: b.left + (263 / max) * b.width, y: b.top + 10 }; });
   await page.mouse.move(sl.x, sl.y); await page.mouse.down(); await page.mouse.up(); await page.waitForTimeout(400);
-  const snapped = await ev(() => ({ dur: document.querySelector('.clip[data-key="label"] .fact-dur .fig').textContent, badge: document.querySelector('.clip[data-key="label"] .tok').hasAttribute("data-on") ? document.querySelector('.clip[data-key="label"] .tok code').textContent : null }));
-  ok(V, "the slider snaps a value 3ms off --dur-pop onto it; the row reads 260 ms with the 'pop' badge", snapped.dur.startsWith("260") && snapped.badge === "pop", JSON.stringify(snapped));
+  const snapped = await ev(() => ({ dur: document.querySelector('.clip[data-key="label"] .fact-dur .fig').textContent, badge: document.querySelector('.clip[data-key="label"] .tok').hasAttribute("data-on") ? document.querySelector('.clip[data-key="label"] .tok .badge').textContent : null, still: !!document.querySelector('.clip[data-key="label"] > .ctl') }));
+  ok(V, "the slider snaps a value 3ms off --dur-pop onto it; the row reads 260 ms with the 'pop' badge, the controls still in it", snapped.dur.startsWith("260") && snapped.badge === "pop" && snapped.still, JSON.stringify(snapped));
   // Off a detent the badge leaves (reflow pop): it folds over --dur-exit.
-  const sl2 = await ev(() => { const s = document.querySelector(".pop .dslider"), b = s.getBoundingClientRect(), max = +s.dataset.max; return { x: b.left + (300 / max) * b.width, y: b.top + 10 }; });
+  const sl2 = await ev(() => { const s = document.querySelector(".ctl .dslider"), b = s.getBoundingClientRect(), max = +s.dataset.max; return { x: b.left + (300 / max) * b.width, y: b.top + 10 }; });
   await C.freeze();
   await page.mouse.move(sl2.x, sl2.y); await page.mouse.down(); await page.mouse.up(); await frame(page);
   const tokGo = C.list().filter((a) => a.name === "grid-template-columns");
   await C.seek(0);
   ok(V, "off a detent the badge leaves, its track folding over --dur-exit", tokGo.length >= 1 && tokGo.some((a) => a.source.duration === 160), tokGo.map((a) => a.source.duration).join(","));
   await C.thaw(); await page.waitForTimeout(400);
-  // Spring and Custom.
-  await page.click('.pop #curveList [data-curve="spring"]'); await page.waitForTimeout(300);
-  const spring = await ev(() => ({ word: document.querySelector('.clip[data-key="label"] .fact-curve .word').textContent, label: document.querySelector(".pop .pop-sec .pop-label span").textContent, bounce: !!document.querySelector('.pop input[data-f="bounce"]') }));
-  ok(V, "Spring: the row's curve reads 'spring … · 0 bounce', the length is its Response, a Bounce slider", /^spring .*0 bounce$/.test(spring.word) && spring.label === "Response" && spring.bounce, JSON.stringify(spring));
-  await page.click('.pop #curveList [data-curve="custom"]'); await page.waitForTimeout(300);
-  const custom = await ev(() => ({ word: document.querySelector('.clip[data-key="label"] .fact-curve .word').textContent, bez: document.querySelector('.pop input[data-f="bez"]')?.value }));
+  // Spring: every parameter a figure that takes any value; then Custom.
+  await page.click('.ctl #curveList [data-curve="spring"]'); await page.waitForTimeout(300);
+  const spring = await ev(() => ({ word: document.querySelector('.clip[data-key="label"] .fact-curve .word').textContent, label: document.querySelector(".ctl .ctl-len .ctl-label span").textContent, fields: [...document.querySelectorAll(".ctl .ctl-spring input:not([type=range])")].map((i) => i.dataset.f), slider: !!document.querySelector('.ctl input[type="range"][data-f="bounce"]') }));
+  ok(V, "Spring: the row's curve reads 'spring … · 0 bounce', the length is its Response, Bounce a slider and a figure, then mass, stiffness, damping and velocity", /^spring .*0 bounce$/.test(spring.word) && spring.label === "Response" && spring.slider && spring.fields.join() === "bounce,mass,stiffness,damping,velocity", JSON.stringify(spring));
+  const bIn = page.locator('.ctl input[data-f="bounce"]:not([type=range])'); await bIn.click(); await bIn.fill("0.37"); await bIn.press("Enter"); await page.waitForTimeout(300);
+  const off = await ev(() => document.querySelector('.clip[data-key="label"] .fact-curve .word').textContent);
+  ok(V, "the bounce figure takes 0.37, off the slider's steps", /0\.37 bounce$/.test(off), off);
+  await page.click('.ctl #curveList [data-curve="custom"]'); await page.waitForTimeout(300);
+  const custom = await ev(() => ({ word: document.querySelector('.clip[data-key="label"] .fact-curve .word').textContent, bez: document.querySelector('.ctl input[data-f="bez"]')?.value }));
   ok(V, "Custom: the curve's numbers, editable", custom.word === "custom" && /,/.test(custom.bez || ""), JSON.stringify(custom));
-  // Close: Esc folds the box back into its source.
-  await C.freeze();
-  await page.keyboard.press("Escape"); await frame(page);
-  const closeSteps = [];
-  // Its end is read a hair before 1: at 1 the fold's transitionend removes the box, as it should.
-  for (const f of [0, 0.5, 0.999]) { await C.seek(f, (a) => /^(top|left|right|bottom|border-.*radius|box-shadow|opacity)$/.test(a.name)); closeSteps.push(await ev(() => { const b = document.querySelector(".pop-box"); return b ? { box: __k.box(b), src: __k.box(document.querySelector('.clip[data-key="label"] .fact-dur')) } : null; })); }
-  const closeAnim = C.list().find((a) => a.name === "top");
-  ok(V, "popover close (Esc): over --dur-exit (" + (closeAnim && closeAnim.source.duration) + "ms) the box folds back, at its end the source's rect", !!closeAnim && closeAnim.source.duration === 160 && !!closeSteps[2] && boxNear(closeSteps[2].box, closeSteps[2].src, 1.5) && closeSteps[1].box.w < closeSteps[0].box.w, JSON.stringify(closeSteps.map((s) => s && [r1(s.box.x), r1(s.box.y), r1(s.box.w), r1(s.box.h)])) + " src " + JSON.stringify(closeSteps[2] && closeSteps[2].src));
-  await C.thaw(); await page.waitForTimeout(300);
-  ok(V, "popover gone after its fold; the source shown again", await ev(() => !document.querySelector(".pop") && !document.querySelector("[data-flying]")));
+  // The inspector: the same controls beside the timeline, the clip's line its head.
+  await page.click('#ctlChoice [data-ctl="inspector"]'); await page.waitForTimeout(350);
+  const insp = await ev(() => { const c = document.querySelector(".ctl"), i = document.getElementById("insp"), t = document.getElementById("tl"); return c && { inInsp: c.parentElement === i, dialogs: document.querySelectorAll('[role="dialog"]').length, beside: i.getBoundingClientRect().left >= t.getBoundingClientRect().right, w: Math.round(i.getBoundingClientRect().width), head: c.querySelector(".ctl-head p")?.textContent }; });
+  ok(V, "controls in an inspector: a 296px column beside the timeline, headed by the clip's line; no dialog", !!insp && insp.inInsp && insp.dialogs === 0 && insp.beside && insp.w === 296 && /^Button label/.test(insp.head || ""), JSON.stringify(insp));
+  await page.click('#ctlChoice [data-ctl="row"]'); await page.waitForTimeout(300);
+  // Close: Esc closes them at once, the timeline whole again.
+  await page.keyboard.press("Escape"); await page.waitForTimeout(200);
+  ok(V, "Esc closes the controls; the inspector's column goes", await ev(() => !document.querySelector(".ctl") && !document.getElementById("dock").hasAttribute("data-insp")));
+  // Leave the move as the agent wrote it for what follows.
+  await ev(() => document.getElementById("resetAll")?.click()); await page.waitForTimeout(300);
 
   // D. Hide folds the panel into the tucked tab; Show grows it back.
   const panelBox = await ev(() => __k.box(document.getElementById("panel")));
@@ -332,7 +328,7 @@ async function reviewFixes(browser, engine) {
     const rest = await bare(ICONS);
     const clear = (x) => /rgba\(0, 0, 0, 0\)|transparent/.test(x.fill) && !x.edge && x.shadow === "none";
     ok(V, "every icon control stands bare at rest: no fill, no edge, no shadow (" + rest.map((x) => x.id).join(", ") + ")", rest.length >= 6 && rest.every(clear), JSON.stringify(rest.filter((x) => !clear(x))));
-    ok(V, "their hit areas keep their size (zoom 24px, Outline and Hide 30px, play and loop 30px)", rest.filter((x) => x.w > 0 && !/^Zoom, /.test(x.id)).every((x) => x.w >= 24 && x.h >= 24) && rest.filter((x) => ["outlineBtn", "hide", "play", "loop"].includes(x.id)).every((x) => x.w === 30 && x.h === 30), JSON.stringify(rest.map((x) => [x.id, x.w, x.h])));
+    ok(V, "their hit areas keep their size (a glass group's items 28px, its pad 4px round them; play and loop 30px)", rest.filter((x) => x.w > 0 && !/^Zoom, /.test(x.id)).every((x) => x.w >= 24 && x.h >= 24) && rest.filter((x) => ["outlineBtn", "hide"].includes(x.id)).every((x) => x.w === 28 && x.h === 28) && rest.filter((x) => ["play", "loop"].includes(x.id)).every((x) => x.w === 30 && x.h === 30), JSON.stringify(rest.map((x) => [x.id, x.w, x.h])));
     const hovered = [];
     for (const sel of ["#outlineBtn", "#hide", "#play", "#loop", '.toolbar [data-z="in"]']) { await page.hover(sel); await page.waitForTimeout(200); hovered.push(...(await bare(sel))); }
     ok(V, "under the pointer the glyph takes the strong ink and no box comes", hovered.every(clear), JSON.stringify(hovered.filter((x) => !clear(x))));
@@ -456,13 +452,13 @@ async function reviewFixes(browser, engine) {
     await page.close();
   }
   // Third review, #1: every pressable thing at 390 and 320 takes a press over 44 × 44 by elementFromPoint,
-  // centre to each edge, on the graph face, the timeline face and in the popover; no neighbour's layer steals.
+  // centre to each edge, on the graph face, the timeline face and in the clip's controls; no neighbour's layer steals.
   for (const [w, h] of [[390, 844], [320, 700]]) {
     const V = w + "-" + engine + "-hits";
     const { page, ev } = await openPage(browser, w, h);
     const sweepAll = (where) => ev((where) => {
       const vis = (el) => { for (let e = el; e && e !== document.documentElement; e = e.parentElement) { const cs = getComputedStyle(e); if (cs.display === "none" || cs.visibility === "hidden" || +cs.opacity === 0 || e.hidden) return false; } const r = el.getBoundingClientRect(); if (!(r.width > 0 && r.height > 0 && r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth)) return false; const g = el.closest(".graph"); if (!g) return true; const v = g.getBoundingClientRect(); return r.top >= v.top - 0.5 && r.bottom <= v.bottom + 0.5 && r.left >= v.left - 0.5 && r.right <= v.right + 0.5; };
-      const sel = where === "pop" ? ".pop button, .pop .fld, .pop .dslider" : ".review-bar .t-tab, #tabs .t-tab, #faces .t-tab, #sheetTitle, #sheetHide, .gsec[data-current] .door[data-on], .zoom-fit, .toolbar .icon-btn, .gsec[data-current] .region-head, .gsec[data-current] .var, .gsec[data-current] .node, .dock-head .tbtn, .dock-head .ghost-btn, #compare .t-tab, .clip .fact, .clip .bar";
+      const sel = where === "ctl" ? ".ctl button, .ctl .fld, .ctl .dslider" : ".review-bar .t-tab, #tabs .t-tab, #faces .t-tab, #sheetHide, .gsec[data-current] .door[data-on], .zoom-fit, .toolbar .icon-btn, .gsec[data-current] .region-head, .gsec[data-current] .var, .gsec[data-current] .node, .dock-head .tbtn, .dock-head .ghost-btn, #compare .t-tab, .clip .fact, .clip .bar";
       // A node's own text and chips are the node's; a chip is measured on its own.
       return [...document.querySelectorAll(sel)].filter(vis).map((el) => ({ el: (el.id || (el.className.baseVal ?? el.className).split(" ")[0]) + "|" + (el.getAttribute("aria-label") || el.textContent).trim().slice(0, 14), ...__k.hitSpan(el) })).filter((x) => x.covered || x.w < 43.5 || x.h < 43.5).map((x) => where + ":" + x.el + " " + x.w + "×" + x.h + (x.covered ? " covered" : "") + (x.by ? " by " + x.by : ""));
     }, where);
@@ -471,9 +467,9 @@ async function reviewFixes(browser, engine) {
     const tl = await sweepAll("timeline");
     const f = await ev(() => __k.box(document.querySelector('.clip[data-key="reveal"] .fact-dur')));
     await page.mouse.click(f.x + f.w / 2, f.y + f.h / 2); await page.waitForTimeout(500);
-    const pop = await sweepAll("pop");
+    const pop = await sweepAll("ctl");
     // The Duration field's wrapper takes the press and hands it to its input, anywhere on its 44px box.
-    const fb = await ev(() => { const l = document.querySelector('.pop .fld:has(input[data-f="dur"])'), b = l.getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height, r: parseFloat(getComputedStyle(l).borderTopLeftRadius) }; });
+    const fb = await ev(() => { const l = document.querySelector('.ctl .fld:has(input[data-f="dur"])'), b = l.getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height, r: parseFloat(getComputedStyle(l).borderTopLeftRadius) }; });
     const field = { w: Math.round(fb.w), h: Math.round(fb.h), points: [] };
     // Its four edges' middles and two points just inside its rounded corners, each a real press.
     for (const [px_, py_] of [[fb.x + 2, fb.y + fb.h / 2], [fb.x + fb.w - 2, fb.y + fb.h / 2], [fb.x + fb.w / 2, fb.y + 2], [fb.x + fb.w / 2, fb.y + fb.h - 2], [fb.x + fb.r, fb.y + fb.r / 2], [fb.x + fb.w - fb.r, fb.y + fb.h - fb.r / 2]]) {
@@ -482,7 +478,7 @@ async function reviewFixes(browser, engine) {
       field.points.push(await ev(() => document.activeElement && document.activeElement.dataset.f === "dur"));
     }
     field.corner = field.focused = field.points.every(Boolean);
-    ok(V, "graph face, timeline face and popover: every pressable thing takes a press over 44 × 44 (slab names, chips, states, doors, facts, bars, tabs, Hide, play, loop, fields)", graph.length === 0 && tl.length === 0 && pop.length === 0, graph.concat(tl, pop).join(", "));
+    ok(V, "graph face, timeline face and the clip's controls: every pressable thing takes a press over 44 × 44 (slab names, chips, states, doors, facts, bars, tabs, Hide, play, loop, fields)", graph.length === 0 && tl.length === 0 && pop.length === 0, graph.concat(tl, pop).join(", "));
     ok(V, "the Duration field is a " + field.w + "×" + field.h + " press: its wrapper takes a press at each edge and inside its corners and hands it to its input", field.w >= 44 && field.h >= 44 && field.corner && field.focused, JSON.stringify(field));
     await page.close();
   }
@@ -547,7 +543,8 @@ async function reviewFixes(browser, engine) {
     const { page, errors, ev } = await openPage(browser, 390, 844);
     const small = () => ev(() => {
       const sel = "button, [role=button], [role=tab], [role=slider], [role=separator], input, .door[data-on], .fact, .var, .node, .bar, .region-head, .edge .hit";
-      return [...document.querySelectorAll(sel)].filter((el) => { if (!__k.vis(el)) return false; const b = el.getBoundingClientRect(); return b.width > 0 && b.bottom > 0 && b.top < innerHeight && b.right > 0 && b.left < innerWidth; }).map((el) => {
+      // A control that takes no pointer (the drawer's grabber: the head behind it takes the press) is a key's alone.
+      return [...document.querySelectorAll(sel)].filter((el) => { if (!__k.vis(el) || getComputedStyle(el).pointerEvents === "none") return false; const b = el.getBoundingClientRect(); return b.width > 0 && b.bottom > 0 && b.top < innerHeight && b.right > 0 && b.left < innerWidth; }).map((el) => {
         const b = (el.closest(".fld") || el).getBoundingClientRect(), pb = getComputedStyle(el, "::before"), hit = el.querySelector(":scope > .bar-hit");
         let w = b.width, h = b.height;
         if (pb.content !== "none" && pb.position === "absolute") { w = Math.max(w, parseFloat(pb.width) || 0); h = Math.max(h, parseFloat(pb.height) || 0); }
@@ -560,7 +557,7 @@ async function reviewFixes(browser, engine) {
     // Second review, #2: the real hit area, read by elementFromPoint from each control's centre to each edge,
     // is 44 × 44 for every tab, title, door, zoom figure, Outline, play and loop at 390.
     const sweep = async (face) => ev((face) => {
-      const sel = ".review-bar .t-tab, #tabs .t-tab, #faces .t-tab, #sheetTitle, #sheetHide, .gsec[data-current] .door[data-on], .zoom-fit, .toolbar .icon-btn, .dock-head .tbtn, .dock-head .ghost-btn, #compare .t-tab";
+      const sel = ".review-bar .t-tab, #tabs .t-tab, #faces .t-tab, #sheetHide, .gsec[data-current] .door[data-on], .zoom-fit, .toolbar .icon-btn, .dock-head .tbtn, .dock-head .ghost-btn, #compare .t-tab";
       return [...document.querySelectorAll(sel)].filter((el) => __k.vis(el)).map((el) => ({ el: el.id || (el.getAttribute("aria-label") || el.textContent).trim().slice(0, 18), ...__k.hitSpan(el) })).filter((x) => x.covered || x.w < 43.5 || x.h < 43.5).map((x) => face + ":" + x.el + " " + x.w + "×" + x.h + (x.covered ? " covered" : ""));
     }, face);
     const hitsGraph = await sweep("graph");
@@ -576,8 +573,8 @@ async function reviewFixes(browser, engine) {
     ok(V, "timeline face: every pressable target is at least 44 × 44 (facts, bars, play, loop)", tlFace.length === 0, JSON.stringify(tlFace.slice(0, 12)));
     const f = await ev(() => __k.box(document.querySelector('.clip[data-key="reveal"] .fact-dur')));
     await page.mouse.click(f.x + f.w / 2, f.y + f.h / 2); await page.waitForTimeout(500);
-    const popFace = await ev(() => { const p = document.querySelector(".pop"); return [...p.querySelectorAll("button, [role=slider], input, .fld, .knob")].filter((el) => __k.vis(el)).map((el) => { const b = (el.closest(".fld") || el).getBoundingClientRect(), pb = getComputedStyle(el, "::before"), hit = el.classList.contains("knob") ? p.querySelector('.knob-hit[data-for="' + el.dataset.h + '"]').getBoundingClientRect() : null; let w = b.width, h = b.height; if (pb.content !== "none" && pb.position === "absolute") { w = Math.max(w, parseFloat(pb.width) || 0); h = Math.max(h, parseFloat(pb.height) || 0); } if (hit) { w = Math.max(w, hit.width); h = Math.max(h, hit.height); } return { el: (el.className.baseVal ?? el.className) + "|" + (el.getAttribute("aria-label") || el.textContent).slice(0, 16), w: Math.round(w), h: Math.round(h) }; }).filter((x) => x.w < 43.5 || x.h < 43.5); });
-    ok(V, "popover: every control's target at least 44 × 44 (slider, fields, segments, the curve's handles)", popFace.length === 0, JSON.stringify(popFace));
+    const popFace = await ev(() => { const p = document.querySelector(".ctl"); return [...p.querySelectorAll("button, [role=slider], input, .fld, .knob")].filter((el) => __k.vis(el)).map((el) => { const b = (el.closest(".fld") || el).getBoundingClientRect(), pb = getComputedStyle(el, "::before"), hit = el.classList.contains("knob") ? p.querySelector('.knob-hit[data-for="' + el.dataset.h + '"]').getBoundingClientRect() : null; let w = b.width, h = b.height; if (pb.content !== "none" && pb.position === "absolute") { w = Math.max(w, parseFloat(pb.width) || 0); h = Math.max(h, parseFloat(pb.height) || 0); } if (hit) { w = Math.max(w, hit.width); h = Math.max(h, hit.height); } return { el: (el.className.baseVal ?? el.className) + "|" + (el.getAttribute("aria-label") || el.textContent).slice(0, 16), w: Math.round(w), h: Math.round(h) }; }).filter((x) => x.w < 43.5 || x.h < 43.5); });
+    ok(V, "the clip's controls: every target at least 44 × 44 (slider, fields, segments, the curve's handles)", popFace.length === 0, JSON.stringify(popFace));
     await page.keyboard.press("Escape"); await page.waitForTimeout(300);
     const hb = await ev(() => { const b = document.getElementById("sheetHide"); return { vis: __k.vis(b), label: b.getAttribute("aria-label"), stop: document.getElementById("tools").dataset.stop, h: document.getElementById("tools").getBoundingClientRect().height }; });
     await page.click("#sheetHide"); await page.waitForTimeout(500);
@@ -637,19 +634,19 @@ async function boxes(browser, w, h, engine) {
   ok(V, "no text spills its box; each facts line holds on one line", res.spills.length === 0 && res.facts.length === 0, res.spills.concat(res.facts).join(", "));
   ok(V, "the panel's content stands inside the panel", res.panelOut.length === 0, res.panelOut.join(", "));
   if (w === 390) {
-    // The phone: the drawer, its Timeline face, and the popover widened to the viewport less 24px.
+    // The phone: the drawer, its Timeline face, and the clip's controls in its row, inside the dock.
     await page.click('#faces [data-face="move"]'); await page.waitForTimeout(400);
     const tl = await ev(() => ({ rows: document.querySelectorAll(".clip").length, dock: __k.box(document.getElementById("dock")), overlaps: __k.overlaps(document, ".dock-head > *, .clip .l1, .clip .fact, .clip .lead"), facts: [...document.querySelectorAll(".clip .facts")].filter((f) => f.scrollWidth > f.clientWidth + 1).map((f) => f.closest(".clip").dataset.key) }));
     ok(V, "Timeline face: rows shown, nothing overlaps, each facts line on one line", tl.rows === 3 && tl.dock.w > 300 && tl.overlaps.length === 0 && tl.facts.length === 0, JSON.stringify(tl));
     const f = await ev(() => __k.box(document.querySelector('.clip[data-key="reveal"] .fact-dur')));
     await page.mouse.click(f.x + f.w / 2, f.y + f.h / 2); await page.waitForTimeout(500);
-    const pp = await ev(() => { const p = document.querySelector(".pop"); return p ? { box: __k.box(p), vw: innerWidth, vh: innerHeight, over: __k.overlaps(p, ".pop-head p, .pop-label, .dslider, .fld, #curveList, .ceditor, .curve-side") } : null; });
-    ok(V, "phone popover: the viewport less 24px, inside the screen, its parts overlap nothing", !!pp && near(pp.box.w, 390 - 24, 0.5) && pp.box.x >= 11.5 && pp.box.y >= 11.5 && pp.box.y + pp.box.h <= pp.vh - 11.5 && pp.over.length === 0, JSON.stringify(pp));
+    const pp = await ev(() => { const p = document.querySelector(".ctl"), d = document.getElementById("dock").getBoundingClientRect(); return p ? { box: __k.box(p), inRow: p.parentElement.matches('.clip[data-key="reveal"]'), inside: p.getBoundingClientRect().left >= d.left && p.getBoundingClientRect().right <= d.right, over: __k.overlaps(p, ".ctl-label, .dslider, .fld, #curveList, .ceditor, .curve-side, .spring-grid"), spills: __k.spills(p), dialogs: document.querySelectorAll('[role="dialog"]').length } : null; });
+    ok(V, "phone: the controls stand in the clip's row, inside the dock, their parts overlap nothing; no dialog", !!pp && pp.inRow && pp.inside && pp.over.length === 0 && pp.spills.length === 0 && pp.dialogs === 0, JSON.stringify(pp));
   } else {
     const f = await ev(() => __k.box(document.querySelector('.clip[data-key="reveal"] .fact-delta')));
     await page.mouse.click(f.x + f.w / 2, f.y + f.h / 2); await page.waitForTimeout(500);
-    const pp = await ev(() => { const p = document.querySelector(".pop"); return p ? { box: __k.box(p), over: __k.overlaps(p, ".pop-head p, .pop-label, .dslider, .fld, #curveList, .ceditor, .curve-side, .arrow"), spills: __k.spills(p) } : null; });
-    ok(V, "desk popover: 296px, inside the screen, its parts overlap nothing", !!pp && near(pp.box.w, 296, 0.5) && pp.box.y >= 0 && pp.over.length === 0 && pp.spills.length === 0, JSON.stringify(pp));
+    const pp = await ev(() => { const p = document.querySelector(".ctl"); return p ? { box: __k.box(p), inRow: p.parentElement.matches('.clip[data-key="reveal"]'), over: __k.overlaps(p, ".ctl-label, .dslider, .fld, #curveList, .ceditor, .curve-side, .spring-grid, .arrow"), spills: __k.spills(p), dialogs: document.querySelectorAll('[role="dialog"]').length } : null; });
+    ok(V, "desk: the controls stand in the clip's row, its parts overlap nothing; no dialog", !!pp && pp.inRow && pp.box.y >= 0 && pp.over.length === 0 && pp.spills.length === 0 && pp.dialogs === 0, JSON.stringify(pp));
   }
   ok(V, "no console errors", errors.length === 0, errors.join(" | "));
   await page.close();
@@ -669,8 +666,8 @@ async function reducedMotion(browser) {
   await page.mouse.move(700, 300); await page.waitForTimeout(300);
   const f = await ev(() => __k.box(document.querySelector('.clip[data-key="label"] .fact-dur')));
   await page.mouse.click(f.x + f.w / 2, f.y + f.h / 2); await frame(page);
-  const pop = await ev(() => ({ box: __k.box(document.querySelector(".pop-box")), pop: __k.box(document.querySelector(".pop")), anims: __k.anims(".pop, .pop *").map((a) => a.transitionProperty) }));
-  ok(V, "the popover fades in place: its box its own from the first frame, opacity alone animating", boxNear(pop.box, pop.pop, 0.5) && pop.anims.length > 0 && pop.anims.every((p) => p === "opacity"), JSON.stringify(pop.anims));
+  const pop = await ev(() => ({ open: !!document.querySelector(".ctl"), moves: __k.anims(".ctl, .ctl *").map((a) => a.transitionProperty).filter((p) => !/^(opacity|color|background-color)$/.test(p)) }));
+  ok(V, "the clip's controls open in place: nothing of them moves", pop.open && pop.moves.length === 0, JSON.stringify(pop));
   await page.keyboard.press("Escape"); await page.waitForTimeout(400);
   await page.click("#hide"); await frame(page);
   const hd = await ev(() => ({ anims: document.getAnimations().filter((a) => a.effect.target && a.effect.target.closest && a.effect.target.closest("#panel")).map((a) => (a.transitionProperty || "waapi") + ":" + JSON.stringify(a.effect.getKeyframes().map((k) => Object.keys(k).filter((x) => !["offset", "easing", "composite", "computedOffset"].includes(x)))) ) }));
@@ -699,12 +696,6 @@ async function webkitMotion() {
   const full = await ev(() => document.getElementById("panel").offsetHeight - 32);
   ok(V, "arc sweep scrubbed: the run reaches the whole edge, in coral", sweep[1].a > sweep[0].a + 20 && sweep[2].a >= full - 1 && sweep[2].c === (await ev(() => __k.color("--brand-solid"))), JSON.stringify(sweep.map((s) => r1(s.a))) + " edge " + full);
   await ev(() => { for (const a of __k.anims("#arcP")) a.play(); }); await page.mouse.up(); await page.mouse.move(700, 300); await page.waitForTimeout(400);
-  const src = await ev(() => __k.box(document.querySelector('.clip[data-key="label"] .fact-dur')));
-  await page.mouse.click(src.x + src.w / 2, src.y + src.h / 2); await page.waitForTimeout(10);
-  const op = []; for (const f of [0, 0.5, 1]) { await ev((f) => __k.seek(".pop-box, .pop-body", f), f); op.push(await ev(() => ({ box: __k.box(document.querySelector(".pop-box")), pop: __k.box(document.querySelector(".pop")) }))); }
-  ok(V, "popover scrubbed: its box starts at the fact's rect, ends at its own", boxNear(op[0].box, src, 1.5) && boxNear(op[2].box, op[2].pop, 1) && op[1].box.w > op[0].box.w, JSON.stringify(op.map((s) => [r1(s.box.x), r1(s.box.y), r1(s.box.w), r1(s.box.h)])));
-  await ev(() => { for (const a of document.getAnimations()) a.play(); }); await page.waitForTimeout(300);
-  await page.keyboard.press("Escape"); await page.waitForTimeout(300);
   const pb = await ev(() => __k.box(document.getElementById("panel")));
   await page.click("#hide"); await page.waitForTimeout(10);
   const hd = []; for (const f of [0, 0.5, 1]) { await ev((f) => __k.seek("#shell", f), f); hd.push(await ev(() => __k.box(document.getElementById("shell")))); }
@@ -714,32 +705,48 @@ async function webkitMotion() {
   await browser.close();
 }
 
-// ---- Captures for a reviewer (a Sonnet item reads them; nothing here compares pixels) ----
+// ---- Captures for the decision page: each answer of each open card, and the resize handle, at the desk's
+// 1440 and the phone's 390, with captures/manifest.json (card, option, width, file, caption). A Sonnet item
+// reads them; nothing here compares pixels. ----
 async function captures(browser) {
   const dir = join(here, "captures");
   mkdirSync(dir, { recursive: true });
   for (const f of readdirSync(dir)) rmSync(join(dir, f));
-  const shot = async (page, name) => page.screenshot({ path: join(dir, name + ".jpg"), type: "jpeg", quality: 88 });
-  for (const scheme of ["light", "dark"]) {
-    const { page } = await openPage(browser, 1440, 900, scheme);
-    await shot(page, "1440-" + scheme + "-rest");
-    const sw = await page.evaluate(() => __k.box(document.getElementById("sashW")));
-    await page.mouse.move(sw.x + sw.w / 2, sw.y + sw.h / 2 - 100); await page.waitForTimeout(300); await shot(page, "1440-" + scheme + "-arc-reach");
-    await page.mouse.down(); await page.mouse.move(sw.x - 20, sw.y + sw.h / 2 - 100, { steps: 3 }); await page.waitForTimeout(400); await shot(page, "1440-" + scheme + "-arc-sweep");
-    await page.mouse.up(); await page.mouse.move(700, 300); await page.waitForTimeout(300);
-    const f = await page.evaluate(() => __k.box(document.querySelector('.clip[data-key="reveal"] .fact-dur')));
-    await page.mouse.click(f.x + f.w / 2, f.y + f.h / 2); await page.waitForTimeout(500); await shot(page, "1440-" + scheme + "-popover");
-    await page.keyboard.press("Escape"); await page.waitForTimeout(300);
-    await page.click('#kinds [data-kinds="ink"]'); await page.waitForTimeout(300); await shot(page, "1440-" + scheme + "-ink-only");
-    await page.click('#kinds [data-kinds="hue"]'); await page.click("#hide"); await page.waitForTimeout(500); await shot(page, "1440-" + scheme + "-hidden");
+  const manifest = [];
+  const shot = async (page, card, option, width, file, caption) => { await page.screenshot({ path: join(dir, file), type: "jpeg", quality: 88 }); manifest.push({ card, option, width, file, caption }); };
+  const pick = (page, id, attr, v) => page.evaluate(([id, attr, v]) => document.querySelector("#" + id + ' [data-' + attr + '="' + v + '"]').click(), [id, attr, v]);
+  const openReveal = async (page) => { await page.evaluate(() => document.querySelector('.clip[data-key="reveal"] .fact-dur').click()); await page.waitForTimeout(500); };
+  for (const [w, h] of [[1440, 900], [390, 844]]) {
+    const { page } = await openPage(browser, w, h);
+    const phone = w === 390;
+    if (phone) { await page.click('#faces [data-face="move"]'); await page.waitForTimeout(400); }
+    // Clip kinds: the timeline at rest, its rows in each dress.
+    await shot(page, "Clip kinds", "In their own hue", w, w + "-kinds-hue.jpg", phone ? "The phone's timeline: each clip's glyph, length and bar in its kind's own hue." : "The timeline at a desk: each clip's glyph, length and bar in its kind's own hue.");
+    await pick(page, "kinds", "kinds", "ink"); await page.waitForTimeout(300);
+    await shot(page, "Clip kinds", "In ink only", w, w + "-kinds-ink.jpg", phone ? "The phone's timeline in ink only: the glyph alone names each kind, the bars one neutral fill." : "The timeline in ink only: the glyph alone names each kind, the bars one neutral fill.");
+    await pick(page, "kinds", "kinds", "hue"); await page.waitForTimeout(200);
+    // Clip controls: the reason line's spring (the agent's ad hoc 340 ms, 0.15 bounce) opened each way.
+    await pick(page, "ctlChoice", "ctl", "row"); await openReveal(page);
+    await shot(page, "Clip controls", "In the row", w, w + "-controls-row.jpg", phone ? "The reason line's controls open inside its own row, under its facts; the timeline scrolls on past them." : "The reason line's controls open inside its own row, across the timeline, its spring marked ad hoc.");
+    await page.keyboard.press("Escape"); await page.waitForTimeout(200);
+    await pick(page, "ctlChoice", "ctl", "inspector"); await openReveal(page);
+    await shot(page, "Clip controls", "In an inspector", w, w + "-controls-inspector.jpg", phone ? "On a phone the inspector takes the timeline's place, Back leading its head." : "The reason line's controls in an inspector beside the timeline, headed by the clip's line.");
+    await page.keyboard.press("Escape"); await page.waitForTimeout(200);
+    await pick(page, "ctlChoice", "ctl", "row"); await page.waitForTimeout(200);
+    // The resize handle (section A): the corner arc reaching along the edge the pointer is on; on a phone,
+    // the drawer's grabber, its own resize.
+    if (phone) {
+      await page.click('#faces [data-face="graph"]'); await page.waitForTimeout(400);
+      await shot(page, "Resize handle", "The corner arc", w, w + "-handle.jpg", "On a phone the panel is the drawer: its grabber on the top edge resizes it, and the arc has no corner to stand in.");
+    } else {
+      const sw = await page.evaluate(() => __k.box(document.getElementById("sashW")));
+      await page.mouse.move(sw.x + sw.w / 2, sw.y + sw.h / 2 - 100); await page.waitForTimeout(400);
+      await shot(page, "Resize handle", "The corner arc", w, w + "-handle.jpg", "Pointing at the panel's leading edge: the corner arc runs up it past the pointer, thickened in the strong ink.");
+      await page.mouse.move(700, 300); await page.waitForTimeout(300);
+    }
     await page.close();
   }
-  const { page } = await openPage(browser, 390, 844);
-  await shot(page, "390-graph");
-  await page.click('#faces [data-face="move"]'); await page.waitForTimeout(400); await shot(page, "390-timeline");
-  const f = await page.evaluate(() => __k.box(document.querySelector('.clip[data-key="reveal"] .fact-dur')));
-  await page.mouse.click(f.x + f.w / 2, f.y + f.h / 2); await page.waitForTimeout(500); await shot(page, "390-popover");
-  await page.close();
+  writeFileSync(join(dir, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
   console.log("NOTE captures for review: " + readdirSync(dir).join(", "));
 }
 

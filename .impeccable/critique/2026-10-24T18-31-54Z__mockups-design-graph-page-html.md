@@ -19,7 +19,7 @@ Target: .mockups/design-graph/page.html (round 29, after the eight review fixes)
 | # | Heuristic | Score | Key Issue |
 |---|-----------|-------|-----------|
 | 1 | Visibility of System Status | 3 | Playback shows on three clocks at once (playhead, edge dash, stage); a held drag reads in coral; the empty foot band says nothing. |
-| 2 | Match System / Real World | 3 | Motion vocabulary (ease-out, spring, response, bounce) matches Figma/Rive; "Clip kinds" is a review word, not product copy. |
+| 2 | Match System / Real World | 3 | Motion vocabulary (ease-out, spring, response, bounce) is the motion field's common vocabulary; "Clip kinds" is a review word, not product copy. |
 | 3 | User Control and Freedom | 3 | ⌘Z, Reset per clip and all, Esc folds the popover back; Starts/anchor editing left the popover (drag only). |
 | 4 | Consistency and Standards | 3 | One handle grammar, one edge grammar, bare glyphs everywhere now; the 6-segment curve control is the one control unlike the kit's 2-4 segment ones. |
 | 5 | Error Prevention | 3 | Detents snap a near miss onto a token; free values still allowed; no destructive acts. |
