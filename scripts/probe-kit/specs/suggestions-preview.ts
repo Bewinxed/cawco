@@ -476,59 +476,89 @@ async function fadeInk(page: Page): Promise<{ foot: number; body: number }> {
 /**
  * The looks review's findings (cockpit-483f82d8): every direction's
  * suggestions stand on the composer's own edges, and every placeholder
- * stands at the size of the row it holds the place of. Read at three and at
- * loading, light, at each where the directions share.
+ * stands at the size of the row it holds the place of, and the whole set of
+ * placeholders at the size and shape of the set it stands for (the drafts'
+ * reason lines and provenance footer, the tray's chip row with the keyboard
+ * up). Read at three and at loading, light, at each where.
  */
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one leg serialized per state, its readings inside it
 async function looksLeg(kit: Kit, page: Page, base: string, engine: string) {
   const edgeBad: string[] = [];
   const edgeSaid: string[] = [];
   const boneBad: string[] = [];
+  const setBad: string[] = [];
+  const setSaid: string[] = [];
   let bones = 0;
+  /** The set a direction's placeholders stand in for, whole. */
+  const SET: Record<string, string> = {
+    drafts: '[data-slot="stage"] .stack',
+    ledger: '[data-slot="stage"] [aria-labelledby="ledger-kicker"]',
+    tray: '[data-slot="stage"] .tray',
+  };
   for (const direction of ["today", "drafts", "ledger", "tray"]) {
-    for (const where of ["thread", "board", "phone"]) {
+    const wheres = ["thread", "board", "phone"];
+    if (direction === "drafts" || direction === "tray") {
+      wheres.push("keyboard");
+    }
+    for (const where of wheres) {
       // biome-ignore lint/performance/noAwaitInLoops: one state on the page at a time
       await go(
         page,
         base,
         `?__state=direction:${direction},where:${where},data:three,theme:light`
       );
-      const real = await page.evaluate((d) => {
-        const stage = document.querySelector('[data-slot="stage"]');
-        const box = stage
-          ?.querySelector('[data-slot="foot"] [data-slot="composer"]')
-          ?.getBoundingClientRect();
-        const units = [
-          ...(stage?.querySelectorAll<HTMLElement>(
+      const real = await page.evaluate(
+        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one function serialized into the page, its readings inside it
+        ([d, setAt]) => {
+          const stage = document.querySelector('[data-slot="stage"]');
+          const box = stage
+            ?.querySelector('[data-slot="foot"] [data-slot="composer"]')
+            ?.getBoundingClientRect();
+          const units = [
+            ...(stage?.querySelectorAll<HTMLElement>(
+              '[data-slot="suggestion"]'
+            ) ?? []),
+          ].map((el) => el.getBoundingClientRect());
+          // The real row as it stands for a one-line suggestion (and a
+          // one-line reason where the reason shows): a copy of the first,
+          // its words cut to one, measured and taken out again.
+          const first = stage?.querySelector<HTMLElement>(
             '[data-slot="suggestion"]'
-          ) ?? []),
-        ].map((el) => el.getBoundingClientRect());
-        // The real row as it stands for a one-line suggestion (and a
-        // one-line reason where the reason shows): a copy of the first,
-        // its words cut to one, measured and taken out again.
-        const first = stage?.querySelector<HTMLElement>(
-          '[data-slot="suggestion"]'
-        );
-        const unit = d === "drafts" ? first : first?.closest("li");
-        let oneLine = 0;
-        if (unit?.parentElement) {
-          const copy = unit.cloneNode(true) as HTMLElement;
-          for (const words of copy.querySelectorAll(
+          );
+          const unit =
+            d === "drafts"
+              ? first?.closest(".item")
+              : (first?.closest("li") ?? first);
+          let oneLine = 0;
+          if (unit?.parentElement) {
+            const copy = unit.cloneNode(true) as HTMLElement;
+            for (const words of copy.querySelectorAll(
+              '[data-slot="suggestion-text"], [data-slot="suggestion-reason"]'
+            )) {
+              words.textContent = "Word";
+            }
+            unit.parentElement.append(copy);
+            oneLine = copy.getBoundingClientRect().height;
+            copy.remove();
+          }
+          // The whole set with every suggestion and reason cut to one line,
+          // in place (the next state is a fresh page).
+          for (const words of stage?.querySelectorAll(
             '[data-slot="suggestion-text"], [data-slot="suggestion-reason"]'
-          )) {
+          ) ?? []) {
             words.textContent = "Word";
           }
-          unit.parentElement.append(copy);
-          oneLine = copy.getBoundingClientRect().height;
-          copy.remove();
-        }
-        return {
-          box: box ? { l: box.left, r: box.right } : null,
-          start: Math.min(...units.map((u) => u.left)),
-          end: Math.max(...units.map((u) => u.right)),
-          oneLine,
-        };
-      }, direction);
+          const whole = setAt ? document.querySelector(setAt) : null;
+          return {
+            setH: whole ? whole.getBoundingClientRect().height : -1,
+            box: box ? { l: box.left, r: box.right } : null,
+            start: Math.min(...units.map((u) => u.left)),
+            end: Math.max(...units.map((u) => u.right)),
+            oneLine,
+          };
+        },
+        [direction, SET[direction] ?? ""] as const
+      );
       // Every set ends on the composer's inline end; a full-width set (all
       // but the drafts' right-aligned stack) starts on its start too. The
       // tray's rows stand inside the composer's 1px edge.
@@ -538,11 +568,14 @@ async function looksLeg(kit: Kit, page: Page, base: string, engine: string) {
         real.box !== null &&
         near(real.end, real.box.r - 0) &&
         (direction === "drafts" || near(real.start, real.box.l));
-      edgeSaid.push(
-        `${direction}@${where} ${Math.round(real.start)}–${Math.round(real.end)}/${Math.round(real.box?.l ?? 0)}–${Math.round(real.box?.r ?? 0)}`
-      );
-      if (!ok) {
-        edgeBad.push(edgeSaid.at(-1) ?? "");
+      // With the keyboard up the drafts stand down and the tray's chip row
+      // scrolls past the composer by design: no edges to read there.
+      const said = `${direction}@${where} ${Math.round(real.start)}–${Math.round(real.end)}/${Math.round(real.box?.l ?? 0)}–${Math.round(real.box?.r ?? 0)}`;
+      if (where !== "keyboard") {
+        edgeSaid.push(said);
+      }
+      if (!ok && where !== "keyboard") {
+        edgeBad.push(said);
       }
       if (direction === "today") {
         continue;
@@ -552,10 +585,20 @@ async function looksLeg(kit: Kit, page: Page, base: string, engine: string) {
         base,
         `?__state=direction:${direction},where:${where},data:loading,theme:light`
       );
+      const loadingSet = await page.evaluate((setAt) => {
+        const whole = setAt ? document.querySelector(setAt) : null;
+        return whole ? whole.getBoundingClientRect().height : -1;
+      }, SET[direction] ?? "");
+      setSaid.push(
+        `${direction}@${where} ${loadingSet.toFixed(1)}/${real.setH.toFixed(1)}`
+      );
+      if (Math.abs(loadingSet - real.setH) > 0.5) {
+        setBad.push(setSaid.at(-1) ?? "");
+      }
       const held = await page.evaluate(() =>
         [
           ...document.querySelectorAll<HTMLElement>(
-            '[data-slot="stage"] .ghost, [data-slot="stage"] li.bones'
+            '[data-slot="stage"] .placeholder, [data-slot="stage"] li.bones, [data-slot="stage"] .chip-bones'
           ),
         ].map((el) => {
           const r = el.getBoundingClientRect();
@@ -577,7 +620,11 @@ async function looksLeg(kit: Kit, page: Page, base: string, engine: string) {
             );
           return {
             h: r.height,
-            fits: inside && Boolean(room && r.right <= room.right + 0.5),
+            // A chip row scrolls sideways by design: its chips run past it.
+            fits:
+              inside &&
+              (el.classList.contains("chip-bones") ||
+                Boolean(room && r.right <= room.right + 0.5)),
           };
         })
       );
@@ -600,6 +647,11 @@ async function looksLeg(kit: Kit, page: Page, base: string, engine: string) {
     `${engine}: every placeholder stands at the size of the row it holds the place of, a one-line suggestion (its reason line where the reason shows), every bar drawn inside it (${bones} placeholders)`,
     boneBad.length === 0 && bones > 0,
     [...new Set(boneBad)].slice(0, 6).join(" | ")
+  );
+  kit.check(
+    `${engine}: every set of placeholders stands at the height of the set it stands for, its rows cut to one line (the drafts' reason lines and footer, the tray's chip row with the keyboard up), loading/loaded px: ${setSaid.join("; ")}`,
+    setBad.length === 0 && setSaid.length > 0,
+    setBad.join(" | ")
   );
 }
 

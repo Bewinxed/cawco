@@ -108,6 +108,7 @@ variables in `app/preview.css`:
 | `--drafts-press-scale` | 0.985 | press |
 | `--drafts-dim` | 0.5 | the stack once words are in the box |
 | `--drafts-ghost-1/2/3` | 60% / 78% / 52% | loading outlines |
+| `--drafts-ghost-reason` / `--drafts-ghost-provenance` | 70% / 30ch | loading's reason bar under each outline, and the provenance line's bar (own call: its 30 characters) |
 | `--drafts-ghost-edge-low/high` | ink at 20% / 40% | loading pulse |
 | `--ledger-text-size` | 15px | the suggestion |
 | `--ledger-kicker-size` / `--ledger-kicker-track` | 11px / 0.08em | the kicker |

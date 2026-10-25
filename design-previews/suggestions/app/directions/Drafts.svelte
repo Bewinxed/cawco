@@ -24,6 +24,7 @@
   import { morph } from "../../../../apps/dashboard/src/lib/cawco/motion/morph.svelte.js";
   import { popOut } from "../../../../apps/dashboard/src/lib/cawco/motion/pop.svelte.js";
   import { IN_THE_BOX, oneClock, putIn, typedOf } from "../clock.js";
+  import { Skeleton } from "../../../../apps/dashboard/src/lib/components/ui/skeleton/index.js";
   import Composer from "../Composer.svelte";
   import Surround from "../Surround.svelte";
 
@@ -35,6 +36,8 @@
     draws: {
       items: Item[];
       loading: boolean;
+      /** Whether the set carries its reasons: the placeholders draw a reason bar if so. */
+      reasons: boolean;
       expanded: boolean;
       held: "hover" | "focus" | "pressed" | null;
       phase: string;
@@ -130,9 +133,17 @@
       {@attach morph()}
     >
       {#if draws.loading}
+        <!-- Each placeholder stands as a draft does: its bubble's outline, its
+             reason's bar under it, and the provenance line's bar closing the set. -->
         {#each ["var(--drafts-ghost-1)", "var(--drafts-ghost-2)", "var(--drafts-ghost-3)"] as width (width)}
-          <span class="ghost" data-slot="skeleton" style:inline-size={width}></span>
+          <div class="item placeholder" style:inline-size={width}>
+            <span class="ghost" data-slot="skeleton"></span>
+            {#if draws.reasons}
+              <Skeleton class="ghost-bar" line="meta" radius="line" style="inline-size: var(--drafts-ghost-reason)" />
+            {/if}
+          </div>
         {/each}
+        <Skeleton class="ghost-bar" line="meta" radius="line" style="inline-size: var(--drafts-ghost-provenance)" />
       {:else}
         {#each shown as item, i (`${i}:${item.text}`)}
           <div class="item" data-draft data-taken={(holding && taken === i) || undefined}>
@@ -292,15 +303,33 @@
   }
 
   /* Loading: three empty outlines, their edge pulsing 20% to 40%; no bars inside. */
-  /* At a one-line bubble's size: its line, its padding and its 1px edge. */
+  /* At a one-line bubble's size: its line, its padding, its 1px edge and its touch floor. */
+  .placeholder {
+    align-items: stretch;
+
+    & > :global(.ghost-bar) {
+      align-self: end;
+    }
+  }
+
   .ghost {
     display: block;
-    box-sizing: content-box;
-    block-size: 1lh;
     padding-block: var(--drafts-pad-block);
     font: var(--type-prose);
     border: 1px solid var(--drafts-ghost-edge-low);
     border-radius: var(--well-r) var(--well-r) var(--radius-hair) var(--well-r);
+
+    /* Its one empty line, as the bubble's words stand in it. */
+    &::before {
+      content: "";
+      display: block;
+      block-size: 1lh;
+    }
+
+    /* Under a finger, the bubble's own touch floor. */
+    [data-touch] & {
+      min-block-size: var(--c-touch-floor);
+    }
 
     @media (prefers-reduced-motion: no-preference) {
       animation: drafts-pulse var(--dur-skeleton-pulse) ease-in-out infinite alternate;

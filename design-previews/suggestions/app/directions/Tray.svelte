@@ -68,7 +68,7 @@
   );
   /** The box holds words (or the keyboard is up): the tray is its chip row, unless reopened. */
   const chips = $derived(
-    (value !== "" || keyboard) && !reopened && !draws.loading && !carrying
+    (value !== "" || keyboard) && !reopened && !carrying
   );
   const shown = $derived(expanded ? draws.items : draws.items.slice(0, 4));
   const more = $derived(draws.items.length - shown.length);
@@ -151,6 +151,15 @@
             class="chip-row kit-edge-fade"
             role="group"
           >
+            {#if draws.loading}
+              <!-- Loading with the keyboard up: the chip row's own chips, each
+                   holding a bar where its words will stand. -->
+              {#each [0, 1, 2] as slot (slot)}
+                <span aria-hidden="true" class={chipVariants({ class: "chip chip-bones" })}
+                  ><span class="bone chip-bar" data-slot="skeleton"></span></span
+                >
+              {/each}
+            {:else}
             {#each draws.items as item, i (`${i}:${item.text}`)}
               <button
                 class={chipVariants({ class: "chip" })}
@@ -159,6 +168,7 @@
                 type="button"
               ><span class="chip-text" data-slot="suggestion-text">{item.text}</span></button>
             {/each}
+            {/if}
           </div>
         {:else}
           <div class="head">
@@ -284,18 +294,16 @@
     flex: none;
     position: relative;
     block-size: 1px;
-    overflow: hidden;
+    overflow: clip visible;
     background: var(--border-hairline);
-
-    [data-loading] & {
-      block-size: var(--tray-line);
-    }
   }
 
-  /* Loading: an indeterminate line runs along the divider. */
+  /* Loading: an indeterminate line runs along the divider, drawn at its
+     2px over the hairline's foot so the tray keeps its loaded height. */
   .running {
     position: absolute;
-    inset-block: 0;
+    inset-block-end: 0;
+    block-size: var(--tray-line);
     inline-size: 30%;
     background: var(--ink-muted);
 
@@ -483,6 +491,16 @@
     to {
       opacity: var(--skeleton-pulse-floor);
     }
+  }
+
+  /* A placeholder chip: the chip at its widest, as his long words stand. */
+  .chip-row :global(.chip-bones) {
+    inline-size: var(--tray-chip-max);
+  }
+
+  .chip-bar {
+    inline-size: 100%;
+    font: inherit;
   }
 
   .chip-text {

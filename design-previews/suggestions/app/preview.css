@@ -30,6 +30,8 @@
     --drafts-ghost-1: 60%;
     --drafts-ghost-2: 78%;
     --drafts-ghost-3: 52%;
+    --drafts-ghost-reason: 70%;
+    --drafts-ghost-provenance: 30ch;
     --drafts-ghost-edge-low: color-mix(in oklch, var(--ink-strong) 20%, transparent);
     --drafts-ghost-edge-high: color-mix(in oklch, var(--ink-strong) 40%, transparent);
 
