@@ -62,8 +62,12 @@ const layerOf = (fleet: CopyFleet, id: string): LayerRecord | undefined => {
 };
 
 /** Whether workspace `ws` is a Linux view of its folder. */
-export const isView = (fleet: CopyFleet, ws: CopyRef): boolean =>
-  layerOf(fleet, ws.id)?.form === "overlay";
+export const isView = (fleet: CopyFleet, ws: CopyRef): boolean => {
+  const layer = layerOf(fleet, ws.id);
+  // Gone with its workspace: every workspace a fleet makes on Linux is a
+  // view (agent layer.ts `makeLayer`), elsewhere a copy of its own.
+  return layer ? layer.form === "overlay" : process.platform === "linux";
+};
 
 const within = (path: string, root: string): boolean =>
   path === root || path.startsWith(`${root}/`);
@@ -159,12 +163,42 @@ export const copyWritePath = (
  * made there, and nothing of the person's), a copy's own folder elsewhere.
  */
 export const ownWritesOf = (fleet: CopyFleet, ws: CopyRef): string => {
+  if (!isView(fleet, ws)) {
+    return ws.path;
+  }
   const layer = layerOf(fleet, ws.id);
-  const mount =
-    layer?.form === "overlay"
-      ? layer.mounts?.find((each) => each.at === layer.folder)
-      : undefined;
-  return mount?.upper ?? ws.path;
+  // Its record gone with it: where the agent keeps the folder's own overlay
+  // (layer.ts `makeLayer`, the folder's mount first), which is gone too.
+  return (
+    layer?.mounts?.find((each) => each.at === layer.folder)?.upper ??
+    join(stateDirOf(fleet, ws.id), "layer", "mounts", "0", "upper")
+  );
+};
+
+/**
+ * Each of `paths` (inside workspace `ws`'s copy, at the paths its delegate
+ * reads them) with every link followed as the copy has them (`readlink
+ * -f`, run in the copy: a link relative to its own folder resolves in the
+ * view, never in the person's folder beneath it); "" for one that does not
+ * resolve.
+ */
+export const realpathsInCopy = async (
+  fleet: CopyFleet,
+  ws: CopyRef,
+  paths: readonly string[]
+): Promise<string[]> => {
+  if (paths.length === 0) {
+    return [];
+  }
+  const ran = await inCopy(fleet, ws, [
+    "/bin/sh",
+    "-c",
+    'for p; do readlink -f -- "$p" || echo; done',
+    "sh",
+    ...paths,
+  ]);
+  const lines = ran.stdout.split("\n");
+  return paths.map((_, at) => lines[at] ?? "");
 };
 
 /**
