@@ -187,7 +187,7 @@ const spec: Spec = {
     };
     await writeRule("off");
     await openGitDoor(ref);
-    const door = gitDoorEnv(id, clone);
+    const door = await gitDoorEnv(id, clone);
     /** A guarded workspace's command environment: the door's helper first on PATH, its config words, its ssh. */
     const doorEnv = (extra: Record<string, string> = {}) => ({
       ...process.env,

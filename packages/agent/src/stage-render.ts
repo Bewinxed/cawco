@@ -182,7 +182,7 @@ export async function renderCanvas(
   port: number,
   ask: RenderAsk,
   /** Chromium's own sandbox: the daemon's rule ({@link chromiumSandboxed}) unless the caller knows its own. */
-  sandbox = chromiumSandboxed()
+  sandbox?: boolean
 ): Promise<Rendered> {
   const executable = browserExecutable();
   if (!executable) {
@@ -195,7 +195,7 @@ export async function renderCanvas(
   const { chromium } = await import("playwright-core");
   const browser = await chromium.launch({
     executablePath: executable,
-    chromiumSandbox: sandbox,
+    chromiumSandbox: sandbox ?? (await chromiumSandboxed()),
     headless: true,
     args: ["--disable-gpu"],
   });

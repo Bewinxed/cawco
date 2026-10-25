@@ -224,7 +224,7 @@ try {
       `origin/${base}`
     );
     await openGitDoor({ id, path });
-    const door = gitDoorEnv(id, path);
+    const door = await gitDoorEnv(id, path);
     const socket = door.CAWCO_GIT_SOCKET as string;
     const oldLayout = join(
       homedir(),

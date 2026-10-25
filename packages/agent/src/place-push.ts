@@ -91,7 +91,7 @@ export const placePush = async (
       `[place-push] ${root} had no origin: the hub's remote of project ${projectId} is its origin now`
     );
   }
-  useHubCredentialHelper(root);
+  await useHubCredentialHelper(root);
   await gitUntil(deadline, hubGitEnv(origin || hubRepo(projectId)))(
     root,
     "push",

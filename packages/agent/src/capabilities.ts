@@ -27,7 +27,7 @@ import { probeStarted } from "./probe-count";
 import { installAdvice, resolveBin } from "./tools";
 import { packageInstall, workspaceNeeds } from "./workspace-needs";
 
-let sandboxable: boolean | undefined;
+let sandboxable: Promise<boolean> | undefined;
 
 /**
  * Whether a Chromium this process launches runs its own sandbox: always,
@@ -39,11 +39,16 @@ let sandboxable: boolean | undefined;
  * capabilities, and macOS's Seatbelt does not nest (core
  * boundary-nesting.ts). Read once per process.
  */
-export const chromiumSandboxed = (): boolean => {
-  sandboxable ??=
+export const chromiumSandboxed = (): Promise<boolean> => {
+  // A failed ask is asked again next time, as the synchronous one was.
+  sandboxable ??= (
     platform() === "darwin"
-      ? nestedSeatbeltRefusal() === undefined
-      : nestedBwrapLabel() === undefined;
+      ? nestedSeatbeltRefusal().then((refusal) => refusal === undefined)
+      : Promise.resolve(nestedBwrapLabel() === undefined)
+  ).catch((error: unknown) => {
+    sandboxable = undefined;
+    throw error;
+  });
   return sandboxable;
 };
 

@@ -111,7 +111,7 @@ export async function openCanvasScreen(options: {
   const { chromium } = await import("playwright-core");
   const browser = await chromium.launch({
     executablePath: executable,
-    chromiumSandbox: chromiumSandboxed(),
+    chromiumSandbox: await chromiumSandboxed(),
     headless: true,
     args: ["--disable-gpu"],
   });

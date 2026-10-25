@@ -102,6 +102,48 @@ export const safeGitArgv = (args: readonly string[]): string[] => [
   ...args,
 ];
 
+/** What one {@link readSafeGit} run said: its exit status and its words. */
+export interface SafeGitRead {
+  readonly exitCode: number;
+  readonly stderr: string;
+  readonly stdout: string;
+}
+
+/**
+ * `git <args>` as {@link safeGitArgv} runs it, awaited: never a synchronous
+ * spawn, which holds the calling thread's event loop for as long as git runs
+ * (and under Bun has unbalanced that loop's keep-alive count, after which it
+ * stopped polling I/O: oven-sh/bun#40508). Its stdout is read unless it is
+ * ignored; its stderr only when piped (otherwise inherited, as a spawn's is,
+ * or ignored), and said as "" when not read.
+ */
+export const readSafeGit = async (
+  args: readonly string[],
+  options: {
+    readonly cwd?: string;
+    readonly env: Record<string, string | undefined>;
+    readonly stdout?: "pipe" | "ignore";
+    readonly stderr?: "pipe" | "ignore" | "inherit";
+  }
+): Promise<SafeGitRead> => {
+  const child = Bun.spawn(safeGitArgv(args), {
+    ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+    env: options.env,
+    stdout: options.stdout ?? "pipe",
+    stderr: options.stderr ?? "inherit",
+  });
+  const text = (stream: unknown): Promise<string> =>
+    stream instanceof ReadableStream
+      ? new Response(stream).text()
+      : Promise.resolve("");
+  const [stdout, stderr, exitCode] = await Promise.all([
+    text(child.stdout),
+    text(child.stderr),
+    child.exited,
+  ]);
+  return { exitCode, stdout, stderr };
+};
+
 /**
  * The keys a repository's own config may hold for git to run there: what
  * `git clone`, `git init`, a branch and its upstream, and a commit's author
@@ -144,24 +186,14 @@ export const repositoryConfigProblem = async (
     if (!(await Bun.file(file).exists())) {
       continue;
     }
-    const listed = Bun.spawnSync(
-      [
-        "git",
-        ...SAFE_GIT_FLAGS,
-        "config",
-        "--file",
-        file,
-        "--no-includes",
-        "--name-only",
-        "--list",
-      ],
+    const listed = await readSafeGit(
+      ["config", "--file", file, "--no-includes", "--name-only", "--list"],
       { env: { ...process.env, ...SAFE_GIT_ENV }, stderr: "pipe" }
     );
     if (listed.exitCode !== 0) {
-      return `git could not read ${file}: ${listed.stderr.toString().trim()}`;
+      return `git could not read ${file}: ${listed.stderr.trim()}`;
     }
     const key = listed.stdout
-      .toString()
       .split("\n")
       .filter(Boolean)
       .find(
