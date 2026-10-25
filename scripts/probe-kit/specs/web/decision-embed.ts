@@ -136,11 +136,14 @@
  *    view strip (fixtures/decision-pages/project-head.oui, its Previews
  *    naming the canvases it was published with), each canvas one of the
  *    project page's states files on the dashboard's own stage, at 1440
- *    light and 390 dark, in Chromium and WebKit: every Preview draws every
- *    story it names, each frame drawn with words or a drawing at its own
- *    width; nothing inside a frame stands past its frame's edges; the page
- *    never scrolls sideways; and nothing logs a console error, answers 400
- *    or more or fails.
+ *    light and 390 dark, the whole page in Chromium and each card on a page
+ *    of its own in WebKit (whose web process grows without bound past some
+ *    20 `backdrop-filter` layers, bugs.webkit.org 328065: the page holds
+ *    38): every Preview, scrolled to, stands drawn and faded in and holds
+ *    its box for 1 s; it draws every story it names, each frame drawn with
+ *    words or a drawing at its own width; nothing inside a frame stands
+ *    past its frame's edges; the page never scrolls sideways; and nothing
+ *    logs a console error, answers 400 or more or fails.
  *
  *   bun scripts/probe-kit/run.ts web decision-embed
  *   bun scripts/probe-kit/run.ts web decision-embed --leg one-yjs   # 15 alone
@@ -152,6 +155,7 @@
 import { cpSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { readWithin } from "../../../../packages/core/src/bounded";
 import { buildDecisionPage } from "../../../../packages/hub/src/decision-page";
 import { checkProgram } from "../../../../packages/hub/src/decision-program";
 import {
@@ -2383,24 +2387,55 @@ const PROJECT_HEAD_PROGRAM = readFileSync(
   join(ROOT, "scripts/probe-kit/fixtures/decision-pages/project-head.oui"),
   "utf8"
 );
+const ROOT_LINE = /^root = Decisions\("([^"]*)", \[([^\]]*)\]\)$/m;
+/**
+ * The page's cards, each as a page of its own: the program with its root
+ * holding that card alone (the host draws only what its root reaches).
+ * WebKit reads them one at a time: WebKitGTK and WPE 2.54 grow the web
+ * process without bound once some 20 elements with `backdrop-filter`
+ * stand in it (bugs.webkit.org 328065, "With 10–14 such elements the same
+ * page uses ~170–200 MB", 22 and more "always several GB"), and every
+ * embed of a page draws in one web process. The whole page holds 38 glass
+ * layers across its Previews (the bar's glass, the head's and the strip's
+ * capsules, the phone's views bar); with them it grew past 4 GB in 20 s
+ * and to 102 GB in 16 minutes on obelisk, and eight phone frames with
+ * `backdrop-filter` off settled at 1.45 GB. Chromium draws each embed in a
+ * process of its own and reads the whole page.
+ */
+const PROJECT_HEAD_CARDS = (() => {
+  const [line, title, cards] = PROJECT_HEAD_PROGRAM.match(ROOT_LINE) ?? [];
+  return (cards ?? "")
+    .split(",")
+    .map((card) => card.trim())
+    .filter(Boolean)
+    .map((card) => ({
+      card,
+      program: PROJECT_HEAD_PROGRAM.replace(
+        line ?? "",
+        `root = Decisions("${title}", [${card}])`
+      ),
+    }));
+})();
 const PROJECT_DIR = "src/lib/cawco/project";
 const PROJECT_HEAD_CANVASES: Record<string, string> = {
-  "0df559ee-02d2-44e7-a671-8a3f85325ed7": "ProjectTopSeatRow",
-  "3e119ce1-32b9-4145-a73a-7eb1eaf6ddd5": "ProjectTopSeatBar",
-  "c46c8204-6257-4565-9b90-cbef08b149c9": "MarkHuesTeal",
-  "ef5daf7a-dcde-40c7-80ca-a1e9344c0ba8": "MarkHuesCrimson",
-  "f5d0e54b-3fa4-4291-912b-14565e5c4c69": "MarkHuesDarkRed",
-  "f934164c-703b-499f-8030-5831841d8d20": "ProjectTopAskChat",
-  "820f59cb-9a92-4b1b-bc8f-5b8c645514ca": "ProjectTopAskSparkles",
-  "b6499294-d34a-4dd7-8114-ed2158c9275d": "ProjectTopCountDot",
-  "19890354-e7a4-480f-8e64-094f48e69e6e": "ProjectTopCountPlain",
-  "42669c34-e632-4a8e-b387-a1150e40f67e": "ProjectTopStripCapsule",
-  "598abc8b-352f-4c8e-9da2-299c4e1199d0": "ProjectTopStripLoose",
+  "45110313-7d24-4ea8-b4b6-d7a425767964": "ProjectTopSeat",
+  "f07ec57c-61a8-4e97-be2b-8ab0d9adfd1c": "MarkHues",
+  "60840189-b596-40dc-91b3-2326d67e94d6": "ProjectTopAsk",
+  "3a71c4b0-aca8-4f45-bfe6-8307edffc99d": "ProjectTopCount",
+  "a86c8c49-99ec-45b4-99e8-80bc484dc7ed": "ProjectTopStrip",
 };
 /** Every Preview the program names: one embed each. */
-const PROJECT_HEAD_PREVIEWS = [
-  ...PROJECT_HEAD_PROGRAM.matchAll(/= Preview\("/g),
-].length;
+const PROJECT_HEAD_PREVIEWS =
+  PROJECT_HEAD_PROGRAM.split("= Preview(").length - 1;
+const STORIES_NAME = /([A-Za-z]+)\.stories/;
+/** How long a read in a page may take before the page counts as stalled. */
+const STALL_MS = 15_000;
+
+/** A read of a page within {@link STALL_MS}: a page that stops drawing frames answers `stalled`, so its check fails and never holds the run. */
+async function within<T>(read: () => Promise<T>, stalled: T): Promise<T> {
+  const bounded = await readWithin(STALL_MS, read);
+  return bounded.kind === "answered" ? bounded.value : stalled;
+}
 
 /** What stands past its frame's edges inside each rest frame of an embed, read in the embed (the strip's ruler, out of sight by design, aside). */
 function frameSpills(): string[] {
@@ -2432,6 +2467,52 @@ function frameSpills(): string[] {
   });
 }
 
+/** Whether each embed stands loaded, faded in and as tall as its picture, read in the page: the ones still waiting, named. */
+function embedsWaiting(selector: string): string[] {
+  return [...document.querySelectorAll<HTMLElement>(selector)]
+    .filter(
+      (el) =>
+        !(
+          el.hasAttribute("data-drawn") &&
+          el.getBoundingClientRect().height > 0 &&
+          getComputedStyle(el).opacity === "1"
+        )
+    )
+    .map(
+      (el) =>
+        // biome-ignore lint/performance/useTopLevelRegex: runs in the page, which sees none of this module's scope
+        `${el.getAttribute("src")?.match(/([A-Za-z]+)\.stories/)?.[1]}: ${Math.round(el.getBoundingClientRect().height)}px tall, opacity ${getComputedStyle(el).opacity}`
+    );
+}
+
+/** Each embed's box, read every frame for 1 s: the ones that moved, named. */
+function boxesMoved(selector: string): Promise<string[]> {
+  return new Promise((done) => {
+    const boxes = () =>
+      [...document.querySelectorAll(selector)].map((el) => {
+        const box = el.getBoundingClientRect();
+        // biome-ignore lint/performance/useTopLevelRegex: runs in the page, which sees none of this module's scope
+        return `${el.getAttribute("src")?.match(/([A-Za-z]+)\.stories/)?.[1]} ${Math.round(box.width * 10) / 10}x${Math.round(box.height * 10) / 10}`;
+      });
+    const first = boxes();
+    const seen = new Set<string>();
+    const until = performance.now() + 1000;
+    const look = () => {
+      for (const [i, one] of boxes().entries()) {
+        if (one !== first[i]) {
+          seen.add(`${first[i]} became ${one}`);
+        }
+      }
+      if (performance.now() < until) {
+        requestAnimationFrame(look);
+      } else {
+        done([...seen]);
+      }
+    };
+    requestAnimationFrame(look);
+  });
+}
+
 async function projectHeadPage(kit: Kit): Promise<void> {
   let refusal = "";
   try {
@@ -2444,8 +2525,18 @@ async function projectHeadPage(kit: Kit): Promise<void> {
     refusal === "",
     refusal
   );
+  kit.check(
+    `the ${PROJECT_HEAD_PAGE} program's root holds its ${PROJECT_HEAD_CARDS.length} cards, each a page of its own for WebKit (${PROJECT_HEAD_CARDS.map((one) => one.card).join(", ")})`,
+    PROJECT_HEAD_CARDS.length === 5
+  );
   const stage = await startDecisionStage(
-    new Map([[PROJECT_HEAD_PAGE, PROJECT_HEAD_PROGRAM]]),
+    new Map([
+      [PROJECT_HEAD_PAGE, PROJECT_HEAD_PROGRAM],
+      ...PROJECT_HEAD_CARDS.map(
+        ({ card, program }) =>
+          [`${PROJECT_HEAD_PAGE}-${card}`, program] as const
+      ),
+    ]),
     Object.fromEntries(
       Object.entries(PROJECT_HEAD_CANVASES).map(([id, name]) => [
         id,
@@ -2455,96 +2546,66 @@ async function projectHeadPage(kit: Kit): Promise<void> {
     { root: APP, kit: true }
   );
   try {
-    for (const engine of ["chromium", "webkit"] as const) {
-      for (const [view, theme] of [
-        ["desk", "light"],
-        ["phone", "dark"],
-      ] as const) {
-        const leg = `${engine} ${view === "desk" ? "1440px light" : "390px dark"}, ${PROJECT_HEAD_PAGE}`;
+    const legs = [
+      ...(["desk", "phone"] as const).map((view) => ({
+        engine: "chromium" as const,
+        view,
+        name: PROJECT_HEAD_PAGE,
+      })),
+      ...(["desk", "phone"] as const).flatMap((view) =>
+        PROJECT_HEAD_CARDS.map(({ card }) => ({
+          engine: "webkit" as const,
+          view,
+          name: `${PROJECT_HEAD_PAGE}-${card}`,
+        }))
+      ),
+    ];
+    for (const { engine, view, name } of legs) {
+      {
+        const theme = view === "desk" ? "light" : "dark";
+        const leg = `${engine} ${view === "desk" ? "1440px light" : "390px dark"}, ${name}`;
         const page = await kit.page(view, {
           engine,
           theme,
           init: [CAWCO_BRIDGE],
         });
         const faults = faultsOf(page);
-        await page.goto(stage.pageUrl(PROJECT_HEAD_PAGE, theme), {
+        await page.goto(stage.pageUrl(name, theme), {
           waitUntil: "load",
         });
+        const previews = name === PROJECT_HEAD_PAGE ? PROJECT_HEAD_PREVIEWS : 1;
         await page.waitForFunction(
           ({ n, selector }) => document.querySelectorAll(selector).length === n,
-          { n: PROJECT_HEAD_PREVIEWS, selector: EMBED_FRAME },
+          { n: previews, selector: EMBED_FRAME },
           { timeout: 60_000 }
         );
         // Each embed reached as the person scrolls to it, and read once its
-        // fade has landed in view: WebKit leaves a fade that began out of
-        // view running past the kit's 10 s wait.
-        const waited: string[] = [];
+        // fade has landed in view.
         for (const handle of await page.$$(EMBED_FRAME)) {
           await handle.evaluate((el) => el.scrollIntoView({ block: "center" }));
-          const landed = await handle
-            .evaluate(
-              (el, ms) =>
-                new Promise<boolean>((done) => {
-                  const until = performance.now() + ms;
-                  const look = () => {
-                    if (
-                      el.hasAttribute("data-drawn") &&
-                      el.getBoundingClientRect().height > 0 &&
-                      getComputedStyle(el).opacity === "1"
-                    ) {
-                      done(true);
-                    } else if (performance.now() > until) {
-                      done(false);
-                    } else {
-                      requestAnimationFrame(look);
-                    }
-                  };
-                  look();
-                }),
-              STAGE_WAIT_MS
+          await page
+            .waitForFunction(
+              (el) =>
+                el.hasAttribute("data-drawn") &&
+                el.getBoundingClientRect().height > 0 &&
+                getComputedStyle(el).opacity === "1",
+              handle,
+              { timeout: STAGE_WAIT_MS }
             )
-            .catch(() => false);
-          if (!landed) {
-            waited.push(
-              await handle.evaluate(
-                (el) =>
-                  `${el.getAttribute("src")?.match(/([A-Za-z]+)\.stories/)?.[1]}: ${Math.round(el.getBoundingClientRect().height)}px tall, opacity ${getComputedStyle(el).opacity}, ${el.hasAttribute("data-drawn") ? "loaded" : "not loaded"}`
-              )
-            );
-          }
+            .catch(() => undefined);
         }
-        kit.check(
-          `${leg}: each Preview, scrolled to, stands drawn and faded in (${waited.length} still waiting)`,
-          waited.length === 0,
-          waited.join("\n    ")
+        const waiting = await within(
+          () => page.evaluate(embedsWaiting, EMBED_FRAME),
+          ["the page answered nothing in 15 s"]
         );
-        // Once drawn, each picture holds its box: read every frame for 1 s.
-        const moved = await page.evaluate(
-          (selector) =>
-            new Promise<string[]>((done) => {
-              const boxes = () =>
-                [...document.querySelectorAll(selector)].map((el) => {
-                  const box = el.getBoundingClientRect();
-                  return `${el.getAttribute("src")?.match(/([A-Za-z]+)\.stories/)?.[1]} ${Math.round(box.width * 10) / 10}x${Math.round(box.height * 10) / 10}`;
-                });
-              const first = boxes();
-              const seen = new Set<string>();
-              const until = performance.now() + 1000;
-              const look = () => {
-                for (const [i, one] of boxes().entries()) {
-                  if (one !== first[i]) {
-                    seen.add(`${first[i]} became ${one}`);
-                  }
-                }
-                if (performance.now() < until) {
-                  requestAnimationFrame(look);
-                } else {
-                  done([...seen]);
-                }
-              };
-              requestAnimationFrame(look);
-            }),
-          EMBED_FRAME
+        kit.check(
+          `${leg}: each Preview, scrolled to, stands drawn and faded in (${waiting.length} still waiting)`,
+          waiting.length === 0,
+          waiting.join("\n    ")
+        );
+        const moved = await within(
+          () => page.evaluate(boxesMoved, EMBED_FRAME),
+          ["the page drew no frame in 15 s"]
         );
         kit.check(
           `${leg}: once drawn, every picture holds its box for 1 s (${moved.length} moved)`,
@@ -2555,8 +2616,8 @@ async function projectHeadPage(kit: Kit): Promise<void> {
         await settle(page, 2000);
         const drew = embeds.flatMap(embedDrawFaults);
         kit.check(
-          `${leg}: its ${PROJECT_HEAD_PREVIEWS} Previews each draw every story they name (${embeds.map((one) => `${one.file} ${one.frames.map((f) => `${f.story} ${f.state} ${f.w}px`).join(" ")}`).join(", ")})`,
-          embeds.length === PROJECT_HEAD_PREVIEWS &&
+          `${leg}: its ${previews} Preview${previews === 1 ? "" : "s"} each draw every story they name (${embeds.map((one) => `${one.file.match(STORIES_NAME)?.[1] ?? one.file} ${one.frames.map((f) => `${f.story} ${f.state} ${f.w}px`).join(" ")}`).join(", ")})`,
+          embeds.length === previews &&
             undrawn.length === 0 &&
             drew.length === 0 &&
             embeds.every(

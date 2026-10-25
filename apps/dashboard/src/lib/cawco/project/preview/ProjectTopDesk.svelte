@@ -55,6 +55,8 @@
 
   const IconAsk = $derived(ASK_GLYPHS[askGlyph]);
   const SEAT = 48;
+  /** The head dissolved into the bar (its prop, read where the glass's `head` snippet shadows it). */
+  const inBar = $derived(head === "bar");
   let current = $state("board");
   /** The filter's find, standing still: no words asked. */
   const find = { finding: false, problem: null, ids: null } as TaskFind;
@@ -89,7 +91,7 @@
     <IconAsk />
     <span class="in-form-compact:hidden">Ask Caw for a view</span>
   </Button>
-  {#if head === "bar"}
+  {#if inBar}
     <Button
       aria-label="Spin off"
       press="pressable"
@@ -127,7 +129,7 @@
       data-slot="strip"
       class="flex min-w-0 shrink grow basis-0 items-center gap-space-3 self-stretch pe-space-3 ps-space-7"
     >
-      {#if head === "bar"}
+      {#if inBar}
         <span
           data-slot="bar-title"
           class="min-w-0 max-w-48 flex-none overflow-hidden text-ellipsis whitespace-nowrap type-label text-ink-strong"
@@ -189,7 +191,7 @@
     </BarGlass>
   </div>
 
-  {#if head === "row"}
+  {#if !inBar}
     <!-- One row: the name truncates first, the place is a bare OS-mark item,
          then Caw's seat and one capsule of bare symbols. Nothing coral. -->
     <header

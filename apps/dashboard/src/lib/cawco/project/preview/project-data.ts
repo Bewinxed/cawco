@@ -7,7 +7,7 @@
  * and Canvas, since one task hangs under another), no task waiting on you,
  * and the running sessions whose folders land on the first identity hue.
  */
-import { IconChatAdd, IconSparkles } from "#lib/icons.js";
+import { IconChatAdd, IconPlus, IconSparkles } from "#lib/icons.js";
 import type { BarView } from "../ViewBar.svelte";
 
 export const PROJECT = {
@@ -24,10 +24,11 @@ export const VIEWS: BarView[] = [
   { value: "canvas", label: "Canvas", draft: false, count: 0 },
 ];
 
-/** The two Ask Caw glyphs on the table. */
+/** The Ask Caw glyphs on the table, and the phone foot bar's plus as it stands. */
 export const ASK_GLYPHS = {
   "chat-add": IconChatAdd,
   sparkles: IconSparkles,
+  plus: IconPlus,
 } as const;
 export type AskGlyph = keyof typeof ASK_GLYPHS;
 
