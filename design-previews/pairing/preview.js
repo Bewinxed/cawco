@@ -14,15 +14,26 @@
  *              letters leave, and the card becomes the device
  *   approved   the device leaves; the ending arrives, its check drawn last
  *   removed    (Remove device) Paired's card changes in place
- *   denied     the device's strokes burst out and fall out of the frame
- *   expired,   the line under the code leaves, then the dots burst out
- *   nomatch,   from the head and fall out of the frame; the head squeezes
- *   failed     and shakes, face shut; the card folds to the ending, its
- *              glyph drawn last; Expired's letters fly into its verdict
- *              and are struck
  *
- * Each ending (report a8f73fdb §3) is a verdict (a status glyph and one
- * sentence), the device's record, what it means, and the acts, one coral.
+ * The failures (report 0b7eb35b, "the well keeps what the hub gave"): the
+ * thing the hub gave stays in place and wears the failure, the one way
+ * forward on it; nothing is replaced by a sentence.
+ *
+ *   expired    the code dims and stays, the head squeezes shut and goes,
+ *              a strike draws across the letters, the clock and the line
+ *              take the readout, New code arrives where the head was
+ *   nomatch    (wrong code scanned) the live code stays as it is, ping and
+ *              all; its paper's edge and the ring take the fail ink, the ✕
+ *              and the line take the readout
+ *   denied     the phone's drawing dims and a bare ✕ lands on its screen;
+ *              its facts stay, "asked" turns to "denied", Approve leaves
+ *              and Deny's box becomes New code
+ *   failed-down (the hub didn't answer) the cloud stops where it stands,
+ *              the head squeezes shut and goes, the ✕ and the line take
+ *              the readout, Retry arrives where the head was
+ *
+ * Paired and Removed are a ledger (report a8f73fdb §3): a verdict (a status
+ * glyph and one sentence), the device's record, what it means, the acts.
  *
  * The card's edge while the hub works is cruip's animated gradient border.
  * Each other change is a transitions.dev recipe on the house's tokens: the
@@ -35,8 +46,8 @@
  * every part's Web Animation is issued from where the part was drawn, its
  * last keyframe the resting style itself (fill both); the dots, drawn on a
  * canvas, each get a track read from one such run. Nothing waits on a
- * timer; the only timers are the hub's data (the record landing, a place
- * lookup) and the clock's seconds.
+ * timer; the only timers are the hub's data (the record landing) and the
+ * clock's seconds.
  */
 import { QR } from "./lib/qr.js";
 import { TextMorph, TextSwap } from "./lib/swap.js";
@@ -50,8 +61,6 @@ const LOGO_AT = (QR.side - QR.logo) / 2;
 const MIDDLE = QR.side / 2;
 /** How far a scattered dot starts from its module, in modules (r4's SCATTER). */
 const SCATTER = 6;
-/** How far a bursting dot flies out from the head, as a share of its way from it (r4's BURST). */
-const BURST = 0.6;
 /** A dot's radius, in modules (r4's). */
 const DOT_R = 0.42;
 
@@ -85,16 +94,53 @@ const TITLE = {
   removed: "Removed",
   denied: "Denied",
   expired: "The code expired",
-  nomatch: "Wrong code",
-  failed: "Pairing is off",
+  nomatch: "Wrong code scanned",
   "failed-down": "The hub didn't answer",
 };
 
-/** The line under the code: words while asking and in the last minute, none while waiting. */
-const READOUT = {
-  asking: "Getting a code…",
-  lastminute: "Expires in 0:42",
+/** The preview's switches: Denied's New code quiet or coral (the owner's pick), and which of Wrong code scanned's two lines its reason picks. */
+const VARIANTS = {
+  denied: {
+    moment: "denied",
+    options: [
+      ["quiet", "Denied: quiet New code"],
+      ["coral", "Denied: coral New code"],
+    ],
+  },
+  nomatch: {
+    moment: "nomatch",
+    options: [
+      ["spent", "Wrong code: a spent code of this hub"],
+      ["foreign", "Wrong code: not this hub's"],
+    ],
+  },
 };
+const variant = { denied: "quiet", nomatch: "spent" };
+
+/** The line under the code: what each code moment says (none while waiting). */
+function readoutOf(m) {
+  return (
+    {
+      asking: "Getting a code…",
+      lastminute: "Expires in 0:42",
+      expired: "No one scanned it in ten minutes.",
+      nomatch:
+        variant.nomatch === "spent" ? "That code expired. Scan this one." : "Not a code from this hub. Scan this one.",
+      "failed-down": "No code was made (502).",
+    }[m] ?? ""
+  );
+}
+/** The line's mark: the live dot while asking, the clock on Expired, the ✕ on Wrong code and hub down. */
+function markOf(m) {
+  return { asking: "live", expired: "clock", nomatch: "close", "failed-down": "close" }[m] ?? "";
+}
+/** The way forward on a code that is gone, at the code's centre. */
+const WELL_ACT = {
+  expired: { label: "New code", act: "again" },
+  "failed-down": { label: "Retry", act: "again" },
+};
+/** The card's ring: done on Paired, the fail ink on every fault; else the hairline. */
+const RING = { approved: "done", nomatch: "fail", denied: "fail", "failed-down": "fail" };
 
 /**
  * The owner's real phone, as the hub and his tailnet record it, nothing
@@ -113,12 +159,10 @@ const RECORD = [
 ];
 
 /**
- * Each ending in report a8f73fdb §3's shape (its note 2): the glyph, its
- * tone, the verdict (`{code}` is Expired's struck code), the record (null
- * where none), what it means (null where none), the acts (one coral). Every
- * word on the screen is the copy report 24b5859f wrote, verbatim.
- * "removed" is Paired after Remove device (§3 A), "failed-down" Failed's
- * second sample cause.
+ * Paired and Removed in report a8f73fdb §3's shape (its note 2): the glyph,
+ * the verdict, the record, what it means (null where none), the acts (one
+ * coral), in report 24b5859f's words. "removed" is Paired after Remove
+ * device (§3 A).
  */
 const NEW_CODE = { label: "New code", tone: "primary", act: "again" };
 const OUTCOME = {
@@ -141,49 +185,6 @@ const OUTCOME = {
     record: RECORD,
     means: null,
     acts: [NEW_CODE],
-  },
-  denied: {
-    glyph: "close",
-    tone: "fail",
-    said: `${DEVICE.name} was denied.`,
-    record: RECORD,
-    means: "That code no longer works.",
-    acts: [NEW_CODE],
-  },
-  expired: {
-    glyph: "clock",
-    tone: "",
-    said: "No one scanned {code} in five minutes.",
-    record: null,
-    means: null,
-    acts: [NEW_CODE],
-  },
-  nomatch: {
-    glyph: "close",
-    tone: "fail",
-    said: "A phone scanned a code that isn't this one.",
-    record: null,
-    means: "It was an old code, or one from another hub.",
-    acts: [NEW_CODE],
-  },
-  failed: {
-    glyph: "close",
-    tone: "fail",
-    said: "Turn it on in Configure › Devices to get a code.",
-    record: null,
-    means: null,
-    acts: [
-      { label: "Retry", tone: "ghost", act: "again" },
-      { label: "Open Devices", tone: "primary", act: "devices" },
-    ],
-  },
-  "failed-down": {
-    glyph: "close",
-    tone: "fail",
-    said: "No code was made (502).",
-    record: null,
-    means: null,
-    acts: [{ label: "Retry", tone: "primary", act: "again" }],
   },
 };
 
@@ -223,9 +224,8 @@ const MOMENTS = [
   ["removed", "Removed", "approved"],
   ["denied", "Denied", "checking-public"],
   ["expired", "Expired", "lastminute"],
-  ["nomatch", "Scan matches nothing", "waiting"],
-  ["failed", "Failed · pairing off", "asking"],
-  ["failed-down", "Failed · hub silent", "asking"],
+  ["nomatch", "Wrong code scanned", "waiting"],
+  ["failed-down", "Hub didn't answer", "asking"],
 ];
 const FROM = Object.fromEntries(MOMENTS.map(([m, , from]) => [m, from]));
 
@@ -280,6 +280,7 @@ function readTokens() {
   V.shake = Number.parseFloat(token("--shake-distance"));
   V.overshoot = Number.parseFloat(token("--shake-overshoot"));
   V.lift = token("--space-1");
+  V.gap = token("--space-2");
   V.reveal = token("--space-8");
 }
 
@@ -291,17 +292,13 @@ const settings = { hub: "auto", ticks: true };
 const stages = [];
 let last = "waiting";
 
+/** Which object a moment's card holds: the code (and the cloud before it), the device, or Paired's ledger. */
 function kindOf(m) {
-  if (m === "asking" || m === "waiting" || m === "lastminute") {
-    return "code";
+  if (m.startsWith("checking") || m === "denied") {
+    return "device";
   }
-  return m.startsWith("checking") ? "device" : "outcome";
+  return m === "approved" || m === "removed" ? "outcome" : "code";
 }
-/** The card's ring at an ending (report a8f73fdb note 5): done, fail, or the hairline. */
-function outcomeOf(m) {
-  return OUTCOME[m]?.tone ?? "";
-}
-const isDead = (m) => m === "expired" || m === "nomatch" || m.startsWith("failed");
 
 /* ------------------------------------------------------ the dots' paths */
 
@@ -450,13 +447,21 @@ function build(viewport) {
     dotsDrawn: null,
     eyes: [],
     badge: $(".badge"),
+    wellAct: $(".well-act"),
     letters: $(".letters"),
+    cross: $(".letters .cross"),
     tiles: [],
     glyphs: [],
     readout: $(".readout"),
+    slot: $(".readout .slot"),
     live: $(".readout .live"),
+    rClose: $(".readout .g-close"),
+    rClock: $(".readout .g-clock"),
+    /** The mark the line shows now: live, clock, close or none. */
+    markNow: "",
     words: new TextSwap($(".readout .words")),
     wire: $(".wire"),
+    wireMark: $(".wire .wire-mark"),
     strokes: [],
     facts: $(".facts"),
     actions: $(".actions"),
@@ -465,15 +470,13 @@ function build(viewport) {
     addr: $(".facts .addr"),
     second: $(".facts .second"),
     ago: $(".ago"),
+    verb: new TextSwap($(".meta .verb")),
     deny: $('[data-act="deny"]'),
+    denyText: new TextMorph($('[data-act="deny"]')),
     approve: $('[data-act="approve"]'),
     mark: $(".mark"),
     said: $(".said"),
     lead: new TextSwap($(".said .lead")),
-    spent: $(".said .spent"),
-    letters2: [],
-    strike: $(".said .strike"),
-    tail: $(".said .tail"),
     record: $(".record"),
     means: $(".means"),
     acts: $(".acts"),
@@ -545,18 +548,12 @@ function build(viewport) {
     glyph.className = "glyph";
     glyph.textContent = letter;
     tile.append(glyph);
-    S.letters.append(tile);
+    S.cross.before(tile);
     S.tiles.push(tile);
     S.glyphs.push(glyph);
-    // Expired's verdict holds the same six letters, struck.
-    const l = document.createElement("span");
-    l.className = "l";
-    l.textContent = letter;
-    S.strike.before(l);
-    S.letters2.push(l);
   }
 
-  // The wireframe: one inline svg per stroke, each cut to its own ink, so each can burst alone.
+  // The wireframe: one inline svg per stroke, each cut to its own ink, so each dims alone.
   for (const d of STROKES) {
     const svg = document.createElementNS(SVG, "svg");
     svg.setAttribute("viewBox", "0 0 96 96");
@@ -568,7 +565,7 @@ function build(viewport) {
     const path = document.createElementNS(SVG, "path");
     path.setAttribute("d", d);
     svg.append(path);
-    S.wire.append(svg);
+    S.wireMark.before(svg);
     const b = path.getBBox();
     const bleed = 1.5;
     const pct = (v) => `${((v / 96) * 100).toFixed(3)}%`;
@@ -587,18 +584,19 @@ function build(viewport) {
     S.strokes.push(svg);
   }
 
-  S.approve.addEventListener("click", () => playStages([S], "approved"));
-  S.deny.addEventListener("click", () => playStages([S], "denied"));
-  // An ending's acts: New code and Retry play the code again, Remove device plays the removal;
-  // Open Devices has no page yet, so it plays nothing.
+  // Every act plays the flow on: Deny and Approve answer the phone, New code and Retry play the code
+  // again, Remove device plays the removal; Open Devices has no page yet, so it plays nothing.
   const act = (event) => {
-    const to = { again: "asking", remove: "removed" }[event.currentTarget.dataset.act];
+    const to = { deny: "denied", approve: "approved", again: "asking", remove: "removed" }[
+      event.currentTarget.dataset.act
+    ];
     if (to) {
       playStages([S], to);
     }
   };
-  S.ghost.addEventListener("click", act);
-  S.primaryEl.addEventListener("click", act);
+  for (const button of [S.deny, S.approve, S.ghost, S.primaryEl, S.wellAct]) {
+    button.addEventListener("click", act);
+  }
 
   // The band's lap pauses once its strength has reached 0.
   S.card.addEventListener("transitionend", (event) => {
@@ -639,12 +637,6 @@ function fillDevice(S, network, { recordIn }) {
   S.approve.disabled = !recordIn;
 }
 
-/** An ending's verdict split at Expired's code: the words before it, and after. */
-function verdictOf(out) {
-  const [lead, tail = ""] = out.said.split("{code}");
-  return { lead, tail, code: out.said.includes("{code}") };
-}
-
 /** Puts ending `m`'s words in the card (note 2's shape): glyph, verdict, record, means, acts. */
 function fillOutcome(S, m) {
   const out = OUTCOME[m];
@@ -653,10 +645,7 @@ function fillOutcome(S, m) {
   }
   S.mark.dataset.glyph = out.glyph;
   S.mark.dataset.tone = out.tone;
-  const v = verdictOf(out);
-  S.lead.put(v.lead);
-  S.spent.hidden = !v.code;
-  S.tail.textContent = v.tail;
+  S.lead.put(out.said);
   S.record.hidden = !out.record;
   S.record.replaceChildren(
     ...(out.record ?? []).map(({ text, mono }) => {
@@ -702,10 +691,13 @@ function heightFor(S, m) {
     return S.heights.code;
   }
   if (kind === "device") {
-    return S.heights.device[m.split("-")[1]];
+    return S.heights.device[netOf(S, m)];
   }
   return S.heights.outcome[m];
 }
+
+/** The network case a device moment shows: Checking's own; Denied keeps the one it answered. */
+const netOf = (S, m) => (m.startsWith("checking") ? m.split("-")[1] : S.network);
 
 /** The card's height; the "Card resize" recipe's transition (in the CSS) carries it. */
 function setHeight(S, h) {
@@ -883,15 +875,9 @@ function playDots(S, tracks, id = "dots") {
   drawSoon();
 }
 
-/** r4's cloud: each dot drifting between its two scattered places once a breath, on its own beat; its clock a loop. */
-function startDrift(S) {
-  stopDrift(S);
-  const clock = S.dotsCanvas.animate([{ opacity: 1 }, { opacity: 1 }], {
-    duration: D.breath,
-    iterations: Number.POSITIVE_INFINITY,
-  });
-  clock.id = "drift";
-  const tracks = DOTS.map((dot) =>
+/** r4's cloud: each dot drifting between its two scattered places once a breath, on its own beat. */
+const driftTracks = () =>
+  DOTS.map((dot) =>
     track(
       { delay: -dot.r * D.breath, duration: D.breath, iterations: Number.POSITIVE_INFINITY, alternate: true },
       {
@@ -900,8 +886,32 @@ function startDrift(S) {
       }
     )
   );
-  S.dotRun = { clock, tracks, loop: true };
+
+/** The cloud drifting, its clock a loop from `from` ms on it (the time a stopped cloud stood at, so it goes on from there). */
+function startDrift(S, from = 0) {
+  stopDrift(S);
+  const clock = S.dotsCanvas.animate([{ opacity: 1 }, { opacity: 1 }], {
+    duration: D.breath,
+    iterations: Number.POSITIVE_INFINITY,
+  });
+  clock.id = "drift";
+  clock.currentTime = from;
+  S.dotRun = { clock, tracks: driftTracks(), loop: true };
   drawSoon();
+}
+
+/** The cloud stopped where it stands: its tracks read at one held time, drawn once and never moved. */
+function holdDots(S) {
+  const run = S.dotRun;
+  if (!run) {
+    return null;
+  }
+  return {
+    clock: { currentTime: Number(run.clock.currentTime ?? 0), playState: "finished" },
+    tracks: run.tracks,
+    loop: false,
+    held: true,
+  };
 }
 
 function stopDrift(S) {
@@ -1016,8 +1026,7 @@ function tick(S, m) {
     );
   }
   if (kindOf(m) === "device") {
-    let ago = 8;
-    S.ago.textContent = `${ago}s`;
+    let ago = m === "denied" ? 0 : 8;
     S.timers.push(
       setInterval(() => {
         ago += 1;
@@ -1034,12 +1043,12 @@ function tick(S, m) {
  * into this state.
  */
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one resting state per moment, set field by field in the card's order
-function rest(S, m, { still = false, keepPing = false, ping = true } = {}) {
+function rest(S, m, { still = false, keepPing = false, ping = true, driftFrom = 0 } = {}) {
   for (const held of S.runs) {
     held.cancel();
   }
   S.runs = [];
-  for (const ghost of S.scenes.outcome.querySelectorAll(".leaving")) {
+  for (const ghost of S.stage.querySelectorAll(".leaving")) {
     ghost.remove();
   }
   clearTimers(S);
@@ -1054,9 +1063,12 @@ function rest(S, m, { still = false, keepPing = false, ping = true } = {}) {
     scene.inert = name !== kind;
   }
 
-  // The code: a cloud while asking, locked on its modules once it is up.
+  // The code: a cloud while asking (held still when the hub didn't answer), locked on its modules once it is
+  // up, still live on a wrong scan, dimmed in place once expired.
   const asking = m === "asking";
-  const up = m === "waiting" || m === "lastminute";
+  const live = m === "waiting" || m === "lastminute" || m === "nomatch";
+  const shown = live || m === "expired";
+  const cloud = asking || m === "failed-down";
   // A play's dot clock went with the runs above; the cloud's loop stays while asking.
   if (S.dotRun && !S.dotRun.loop) {
     S.dotRun = null;
@@ -1064,28 +1076,55 @@ function rest(S, m, { still = false, keepPing = false, ping = true } = {}) {
   }
   if (asking) {
     if (!S.dotRun) {
-      startDrift(S);
+      startDrift(S, driftFrom);
     }
   } else {
     stopDrift(S);
   }
-  S.code.style.opacity = asking ? String(V["qr-dim-opacity"]) : up ? "1" : "0";
+  const dim = String(V["qr-dim-opacity"]);
+  S.code.style.opacity = live ? "1" : shown || cloud ? dim : "0";
   for (const eye of S.eyes) {
-    eye.style.opacity = up ? "1" : "0";
+    eye.style.opacity = shown ? "1" : "0";
   }
   for (const glyph of S.glyphs) {
-    glyph.style.opacity = up ? "1" : "0";
+    glyph.style.opacity = shown ? "1" : "0";
   }
   S.letters.style.opacity = kind === "code" ? "1" : "0";
+  S.cross.style.opacity = m === "expired" ? "1" : "0";
   S.badge.src = "./caw/badge.png";
-  S.live.style.opacity = asking ? "1" : "0";
-  S.words.put(READOUT[m] ?? "");
+  S.badge.style.opacity = m === "expired" || m === "failed-down" ? "0" : "1";
+  const way = WELL_ACT[m];
+  if (way) {
+    S.wellAct.textContent = way.label;
+    S.wellAct.dataset.act = way.act;
+  }
+  S.wellAct.toggleAttribute("data-on", Boolean(way));
+  S.wellAct.inert = !way;
+  S.well.toggleAttribute("data-fault", m === "nomatch");
+  S.words.put(readoutOf(m));
+  setMark(S, markOf(m));
   S.cardWrap.toggleAttribute("data-warm", m === "lastminute");
 
-  // The device.
+  // The device, and Denied's drawing wearing the refusal.
   if (kind === "device") {
-    fillDevice(S, m.split("-")[1], { recordIn: true });
+    fillDevice(S, netOf(S, m), { recordIn: true });
   }
+  const denied = m === "denied";
+  for (const svg of S.strokes) {
+    svg.style.opacity = denied ? "0.5" : "1";
+  }
+  S.wireMark.style.opacity = denied ? "1" : "0";
+  S.approve.hidden = denied;
+  S.denyText.put(denied ? "New code" : "Deny");
+  S.deny.dataset.act = denied ? "again" : "deny";
+  if (denied && variant.denied === "coral") {
+    S.deny.dataset.tone = "primary";
+  } else {
+    delete S.deny.dataset.tone;
+  }
+  S.verb.put(denied ? "denied" : "asked");
+  // How long ago the phone asked, or since it was refused: the seconds restart on Denied.
+  S.ago.textContent = denied ? "0s" : "8s";
   fillOutcome(S, m);
 
   // The edge and the height.
@@ -1102,9 +1141,8 @@ function rest(S, m, { still = false, keepPing = false, ping = true } = {}) {
   } else if (still) {
     card.classList.remove("lap");
   }
-  const outcome = outcomeOf(m);
-  if (outcome) {
-    card.dataset.outcome = outcome;
+  if (RING[m]) {
+    card.dataset.outcome = RING[m];
   } else {
     delete card.dataset.outcome;
   }
@@ -1114,13 +1152,73 @@ function rest(S, m, { still = false, keepPing = false, ping = true } = {}) {
     card.style.transition = "";
   }
 
-  S.title.put(TITLE[kind === "outcome" ? m : kind]);
+  S.title.put(TITLE[m] ?? TITLE[kind]);
   S.pose = POSE[m.split("-")[0]];
   S.caw.src = cawSrc(S.pose);
-  if (up && ping && !keepPing) {
+  if (live && ping && !keepPing) {
     startPing(S);
   }
   tick(S, m);
+}
+
+/** The line's mark slot: as wide as the mark it shows (the live dot 6px, a glyph 20px), none where it shows none. */
+const SLOT = { live: "6px", close: "20px", clock: "20px", "": "0px" };
+const slotGap = (mark) => (mark ? V.gap : "0px");
+const markEl = (S, mark) => ({ live: S.live, close: S.rClose, clock: S.rClock })[mark];
+
+/** Puts the line's mark at rest. */
+function setMark(S, mark) {
+  S.markNow = mark;
+  S.slot.dataset.mark = mark;
+  for (const k of ["live", "close", "clock"]) {
+    markEl(S, k).style.opacity = k === mark ? "1" : "0";
+  }
+  S.slot.style.inlineSize = SLOT[mark];
+  S.slot.style.marginInlineEnd = slotGap(mark);
+}
+
+/**
+ * The line's mark changes (transitions.dev "Icon swap" on DESIGN's status
+ * glyph: out to 0.92 with a 2px blur, the new one in from it, over
+ * --dur-control, the new one with the new words at `at`), its slot easing to
+ * the new mark's width over the words' own swap.
+ */
+function markSwap(S, from, to, at) {
+  if (from === to) {
+    return;
+  }
+  const swap = { duration: D.control, easing: E.out };
+  if (from) {
+    part(
+      S,
+      markEl(S, from),
+      [
+        { opacity: 1, transform: "none", filter: "blur(0px)" },
+        { opacity: 0, transform: "scale(0.92)", filter: "blur(2px)" },
+      ],
+      swap
+    );
+  }
+  if (to) {
+    part(
+      S,
+      markEl(S, to),
+      [
+        { opacity: 0, transform: "scale(0.92)", filter: "blur(2px)" },
+        { opacity: 1, transform: "none", filter: "blur(0px)" },
+      ],
+      { ...swap, delay: at, id: "glyph" }
+    );
+  }
+  part(
+    S,
+    S.slot,
+    [
+      { inlineSize: SLOT[from], marginInlineEnd: slotGap(from) },
+      { inlineSize: SLOT[to], marginInlineEnd: slotGap(to) },
+    ],
+    { duration: D.exit * 2, easing: E.crossfade }
+  );
 }
 
 /* --------------------------------------------------------- parts */
@@ -1163,65 +1261,6 @@ const leave = (S, el, delay = 0) =>
 /** A part arriving in place: a fade over --dur-pop. */
 const arrive = (S, el, delay = 0, id = "part") =>
   part(S, el, [{ opacity: 0 }, { opacity: 1 }], { duration: D.pop, easing: E.out, delay, id });
-
-/** The least a bursting part travels sideways, px: so none rises and falls on one spot and hangs at the top. */
-const BURST_SIDE = 6;
-
-/**
- * r4's burst: out from `centre` by BURST of the way, then down past `floor`,
- * over --dur-settle, a little late by its own random number. Its rise and
- * fall are a thrown thing's: up on the glide-out curve (the first 35%), down
- * on its mirror, glide-in, so it slows into the top of its arc and speeds out
- * of it; and it keeps travelling sideways the whole way (on ease-out), so
- * it never hangs at the top. Positions are in the part's own units, `px`
- * the screen px a unit is drawn at; `from` is where it is drawn now. The
- * path, in those units: x from `x0` to `x1`, y from `y0` up to `y1` and
- * down to `y2`.
- */
-function burstPath({ home, from, centre, floor, r, px = 1, delay = 0 }) {
-  const out = {
-    x: from.x + (home.x + from.x - centre.x) * BURST,
-    y: from.y + (home.y + from.y - centre.y) * BURST,
-  };
-  let side = out.x - from.x;
-  if (Math.abs(side) * px < BURST_SIDE) {
-    side = (r < 0.5 ? -BURST_SIDE : BURST_SIDE) / px;
-  }
-  return {
-    timing: { duration: D.settle, delay: delay + r * D.ghost },
-    x0: from.x,
-    x1: from.x + side * 1.25,
-    y0: from.y,
-    y1: out.y,
-    y2: Math.max(out.y, floor - home.y),
-  };
-}
-
-/** A burst on an element (a finder eye, a stroke): its sideways travel on `translate`, its rise and fall on `transform`. */
-function burst(S, el, path) {
-  const b = burstPath(path);
-  part(S, el, [{ translate: `${b.x0.toFixed(3)}px 0px` }, { translate: `${b.x1.toFixed(3)}px 0px` }], {
-    ...b.timing,
-    easing: E.out,
-  });
-  return part(
-    S,
-    el,
-    [
-      { transform: `translateY(${b.y0.toFixed(3)}px)`, easing: E["glide-out"] },
-      { transform: `translateY(${b.y1.toFixed(3)}px)`, offset: 0.35, easing: E["glide-in"] },
-      { transform: `translateY(${b.y2.toFixed(3)}px)` },
-    ],
-    { ...b.timing, easing: "linear" }
-  );
-}
-
-/** The same burst as a dot's track, in modules. */
-const burstTrack = (b) =>
-  track(b.timing, {
-    x: { ease: curveOf(E.out), frames: [kf(0, b.x0), kf(1, b.x1)] },
-    y: { ease: curveOf("linear"), frames: [kf(0, b.y0, E["glide-out"]), kf(0.35, b.y1, E["glide-in"]), kf(1, b.y2)] },
-  });
 
 /** r4's head when the code dies: its face shut, it squeezes, then shakes once. */
 function squeeze(S) {
@@ -1303,13 +1342,10 @@ function glyphIn(S, glyph, at) {
   });
 }
 
-/** An ending's rows arrive in place at `at` (a fade over --dur-pop), the glyph drawn as they land. Expired's letters fly in by their own job. */
+/** An ending's rows arrive in place at `at` (a fade over --dur-pop), the glyph drawn as they land. */
 function arriveEnding(S, m, at) {
   const out = OUTCOME[m];
   arrive(S, S.leadEl, at, "arrive");
-  if (verdictOf(out).tail) {
-    arrive(S, S.tail, at);
-  }
   if (out.record) {
     arrive(S, S.record, at);
   }
@@ -1320,46 +1356,78 @@ function arriveEnding(S, m, at) {
   glyphIn(S, out.glyph, at);
 }
 
-/**
- * Expired's code is the one object on both sides of the ending: its six
- * letters fly from their tiles into the verdict's struck code (a FLIP, each
- * letter from its tile's glyph box, at its size, to its place, over
- * --dur-panel on the drawer curve) while the card folds, then the strike
- * draws left to right over --dur-morph. Until they fly, the letters stand
- * in their tiles.
- */
-function lettersJob(S, at) {
-  const moves = [];
-  return {
-    lay: () => undefined,
-    measure: () => {
-      S.letters2.forEach((l, i) => {
-        const g = offsetIn(S.glyphs[i], S.card);
-        const n = offsetIn(l, S.card);
-        moves.push({
-          x: g.x + g.w / 2 - (n.x + n.w / 2),
-          y: g.y + g.h / 2 - (n.y + n.h / 2),
-          s: g.w / n.w,
-        });
-      });
-    },
-    start: () => [
-      ...S.letters2.map((l, i) => {
-        const { x, y, s } = moves[i];
-        const run = l.animate(
-          [{ transform: `translate(${x.toFixed(3)}px, ${y.toFixed(3)}px) scale(${s.toFixed(4)})` }, { transform: "none" }],
-          { duration: D.panel, easing: E.drawer, delay: at, fill: "both" }
-        );
-        run.id = "flip";
-        return run;
-      }),
-      S.strike.animate([{ transform: "scaleX(0)" }, { transform: "none" }], {
-        duration: D.morph,
-        easing: E.out,
-        delay: at + D.panel,
-        fill: "both",
-      }),
+/** The head's squeeze and shake (r4's, face shut), then its fade over --dur-exit; returns when it has gone. */
+function headShuts(S) {
+  squeeze(S);
+  const shut = D.panel + D.ghost * 2 + D.stagger * 2;
+  part(S, S.badge, [{ opacity: 1 }, { opacity: 0 }], { duration: D.exit, easing: E.out, delay: shut });
+  return shut;
+}
+
+/** The way forward arrives at the code's centre, where the head was (a fade from 0.92 over --dur-pop), at `at`. */
+const wayIn = (S, at) =>
+  part(
+    S,
+    S.wellAct,
+    [
+      { opacity: 0, scale: "0.92" },
+      { opacity: 1, scale: "1" },
     ],
+    { duration: D.pop, easing: E.out, delay: at, id: "way" }
+  );
+
+/**
+ * Denied: Approve leaves where it stood (Text states swap's exit) while
+ * Deny's box, its words morphing to New code (Text morph), slides and
+ * widens into the row's place for one button (a FLIP over --dur-panel on
+ * ease-out): trailing on the desk, the whole row on the phone.
+ */
+function denyJob(S) {
+  const before = { x: S.deny.offsetLeft, w: S.deny.offsetWidth };
+  const at = offsetIn(S.approve, S.scenes.device);
+  const ghost = S.approve.cloneNode(true);
+  ghost.classList.add("leaving");
+  ghost.inert = true;
+  ghost.setAttribute("aria-hidden", "true");
+  Object.assign(ghost.style, {
+    insetInlineStart: `${at.x}px`,
+    insetBlockStart: `${at.y}px`,
+    inlineSize: `${at.w}px`,
+    blockSize: `${at.h}px`,
+  });
+  const after = { x: 0, w: 0 };
+  return {
+    lay: () => S.scenes.device.append(ghost),
+    measure: () => {
+      after.x = S.deny.offsetLeft;
+      after.w = S.deny.offsetWidth;
+    },
+    start: () => {
+      const gone = ghost.animate(
+        [
+          { opacity: 1, transform: "none", filter: "blur(0px)" },
+          { opacity: 0, transform: `translateY(-${V.lift})`, filter: "blur(2px)" },
+        ],
+        { duration: D.exit, easing: E.crossfade, fill: "both" }
+      );
+      gone.finished.then(
+        () => ghost.remove(),
+        () => undefined
+      );
+      const runs = [gone];
+      if (Math.abs(before.x - after.x) > 0.5 || Math.abs(before.w - after.w) > 0.5) {
+        runs.push(
+          S.deny.animate(
+            [
+              { transform: `translateX(${(before.x - after.x).toFixed(3)}px)`, width: `${before.w}px` },
+              { transform: "none", width: `${after.w}px` },
+            ],
+            { duration: D.panel, easing: E.out, fill: "both" }
+          )
+        );
+      }
+      return runs;
+    },
   };
 }
 
@@ -1467,53 +1535,51 @@ function landRecord(S) {
  */
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one branch per moment, read in the storyboard's order
 function plan(S, m) {
-  const was = { moment: S.moment, height: S.height };
+  const was = { moment: S.moment, height: S.height, mark: S.markNow };
   const kindWas = kindOf(was.moment);
   const kind = kindOf(m);
   const flat = reduced.matches;
-  const dead = isDead(m);
-  const keepPing = m === "lastminute" && was.moment === "waiting";
+  // A live code keeps its ping into the last minute and through a wrong scan.
+  const keepPing = (m === "lastminute" || m === "nomatch") && was.moment === "waiting";
   // Where each dot is drawn as the moment starts: its drift's place in the cloud, else its module.
   const at = was.moment === "asking" ? driftAt(S) : null;
   /** Where a dot is, in modules from its module, as the moment starts. */
   const fromOf = (i) => at?.[i] ?? { x: 0, y: 0 };
-  // The card's foot, in the code's modules: what a falling dot passes to be out of the frame.
-  const floor = (was.height - S.well.offsetTop) / S.m + 1;
-  // A dead code's burst waits for the words under it to leave (--dur-exit), so no dot falls through them.
-  const burstAt = dead ? D.exit : 0;
-  // When the parts leaving have all left the frame: the card folds to the next words then.
-  const gone = burstAt + D.settle + D.ghost;
+  // The hub didn't answer: the cloud stops where it stands. Retry: it drifts on from there.
+  const held = m === "failed-down" && was.moment === "asking" ? holdDots(S) : null;
+  const driftFrom = m === "asking" && S.dotRun?.held ? S.dotRun.clock.currentTime : 0;
 
-  // The card resizes when what it held has gone: at the swallow's end, once the burst is out of the frame;
-  // Remove device's card folds once what leaves it has gone.
+  // The card resizes at the swallow's end; Remove device's card folds once what leaves it has gone. The
+  // failures keep their object's card, so its height.
   let resizeAt = 0;
   if (kindWas === "code" && kind === "device") {
     resizeAt = D.panel + D.pop;
-  } else if (dead || m === "denied") {
-    resizeAt = gone;
   } else if (m === "removed") {
     resizeAt = D.exit;
   }
   const morph = { morph: D.morph, resize: D.pop, easing: E.out };
   const swap = { duration: D.exit, easing: E.crossfade, lift: V.lift };
-  const titleAt = dead || m === "denied" ? 0 : kind === "device" ? D.panel + D.pop : 0;
-  const jobs = [
-    S.title.prepare(TITLE[kind === "outcome" ? m : kind], { ...morph, delay: flat ? 0 : titleAt }),
-  ];
-  if (m === "waiting" || m === "lastminute") {
-    jobs.push(S.words.prepare(READOUT[m] ?? "", { ...swap, delay: 0 }));
+  const titleAt = kindWas === "code" && kind === "device" ? D.panel + D.pop : 0;
+  const jobs = [S.title.prepare(TITLE[m] ?? TITLE[kind], { ...morph, delay: flat ? 0 : titleAt })];
+  // The line under the code swaps in place from one code moment to the next.
+  const inWell = kind === "code" && kindWas === "code";
+  if (inWell) {
+    jobs.push(S.words.prepare(readoutOf(m), { ...swap, delay: 0 }));
   }
   if (m === "removed" && was.moment === "approved") {
     jobs.push(
-      S.lead.prepare(verdictOf(OUTCOME.removed).lead, { ...swap, delay: 0 }),
+      S.lead.prepare(OUTCOME.removed.said, { ...swap, delay: 0 }),
       S.primary.prepare(OUTCOME.removed.acts[0].label, { ...morph, delay: 0 })
     );
     if (!flat) {
       jobs.push(removeJob(S));
     }
   }
-  if (m === "expired" && !flat) {
-    jobs.push(lettersJob(S, gone));
+  if (m === "denied" && was.moment.startsWith("checking")) {
+    jobs.push(S.denyText.prepare("New code", { ...morph, delay: 0 }), S.verb.prepare("denied", { ...swap, delay: 0 }));
+    if (!flat) {
+      jobs.push(denyJob(S));
+    }
   }
 
   const write = () => {
@@ -1521,34 +1587,35 @@ function plan(S, m) {
     if (!keepPing) {
       finishPing(S);
     }
-    rest(S, m, { keepPing });
+    rest(S, m, { keepPing, driftFrom });
     const { card } = S;
     if (m === "waiting") {
       card.style.setProperty("--band-dur", "var(--dur-exit)");
     }
-    if (kind === "device") {
+    if (m.startsWith("checking")) {
       // The band runs while the hub's record is on its way.
       card.setAttribute("data-busy", "");
       card.classList.add("lap");
-      fillDevice(S, m.split("-")[1], { recordIn: false });
+      fillDevice(S, netOf(S, m), { recordIn: false });
       setHeight(S, heightFor(S, m));
       if (settings.hub === "auto") {
         S.timers.push(setTimeout(() => landRecord(S), 700));
       }
     }
+    if (held) {
+      S.dotRun = held;
+      S.dotsDrawn = null;
+      drawSoon();
+    }
     if (flat) {
       return;
     }
-    // What leaves by burst or swallow keeps its drawing while it goes.
-    if (kindWas === "code" && kind !== "code") {
+    // What leaves by the swallow keeps its drawing while it goes.
+    if (kindWas === "code" && kind === "device") {
       const wasUp = was.moment !== "asking";
       S.code.style.opacity = wasUp ? "1" : String(V["qr-dim-opacity"]);
-      for (const el of S.eyes) {
+      for (const el of [...S.eyes, ...S.glyphs]) {
         el.style.opacity = wasUp ? "1" : "0";
-      }
-      // Expired's letters are drawn by the verdict's copies, standing in the tiles until they fly.
-      for (const el of S.glyphs) {
-        el.style.opacity = wasUp && m !== "expired" ? "1" : "0";
       }
       S.letters.style.opacity = "1";
     }
@@ -1572,7 +1639,11 @@ function plan(S, m) {
       }
       return;
     }
-    if (m === "asking") {
+    // The line's mark trades places with the words, the new one landing with them.
+    if (inWell) {
+      markSwap(S, was.mark, markOf(m), D.exit);
+    }
+    if (m === "asking" && kindWas !== "code") {
       // The places open: the ending leaves, the card resizes, then the cloud and the head come in, the empty boxes with them.
       part(S, S.scenes[kindWas], [{ opacity: 1 }, { opacity: 0 }], { duration: D.exit, easing: E.out });
       part(S, S.code, [{ opacity: 0 }, { opacity: V["qr-dim-opacity"] }], {
@@ -1583,6 +1654,27 @@ function plan(S, m) {
       arrive(S, S.badge, D.exit);
       arrive(S, S.letters, D.exit);
       arrive(S, S.readout, D.exit + D.panel);
+    } else if (m === "asking") {
+      // In the same well (New code on Expired, Retry when the hub didn't answer): the way forward leaves, the
+      // head comes back; an expired code's dim dots lift into the cloud, its strike and letters leave.
+      part(
+        S,
+        S.wellAct,
+        [
+          { opacity: 1, scale: "1" },
+          { opacity: 0, scale: "0.92" },
+        ],
+        { duration: D.exit, easing: E.out }
+      );
+      arrive(S, S.badge, D.exit);
+      if (was.moment === "expired") {
+        // Once New code has left the code's centre, so no dot moves under it.
+        liftIntoCloud(S, D.exit);
+        part(S, S.cross, [{ opacity: 1 }, { opacity: 0 }], { duration: D.exit, easing: E.out });
+        for (const el of [...S.glyphs, ...S.eyes]) {
+          part(S, el, [{ opacity: 1 }, { opacity: 0 }], { duration: D.exit, easing: E.out });
+        }
+      }
     } else if (m === "waiting") {
       // r4's arrive, one continuous settle: every dot from where the cloud has it straight onto its module.
       playDots(
@@ -1623,9 +1715,8 @@ function plan(S, m) {
           { duration: D.pop, easing: E.out, delay: i * beat }
         );
       });
-      leave(S, S.live);
       startPing(S, D.settle + D.stagger * 2);
-    } else if (kind === "device") {
+    } else if (m.startsWith("checking")) {
       // The scan: the dots pour into the head, inner first (r4's swallow); the letters and the line leave;
       // the head gulps as the paper fades with the last of the pour; then, on the frame the pour ends, the
       // card becomes the device (Card resize, Panel reveal). Every piece goes on the crossfade curve: on
@@ -1703,67 +1794,72 @@ function plan(S, m) {
     } else if (m === "removed") {
       // Everything is in the jobs: removeJob, the verdict's swap, the coral's morph, the title's.
     } else if (m === "denied") {
-      // The device's strokes burst out from its middle and fall out of the frame; its words leave.
-      const units = S.wire.offsetWidth / 96;
-      const wireTop = S.wire.offsetTop + S.scenes.device.offsetTop;
-      const strokeFloor = (was.height - wireTop) / units + 4;
-      const rs = seeded("denied");
-      S.strokes.forEach((svg) => {
-        const home = { x: Number(svg.dataset.cx), y: Number(svg.dataset.cy) };
-        burst(S, svg, {
-          home: { x: home.x * units, y: home.y * units },
-          from: { x: 0, y: 0 },
-          centre: { x: 48 * units, y: 48 * units },
-          floor: strokeFloor * units,
-          r: rs(),
-        });
-      });
-      leave(S, S.facts);
-      leave(S, S.actions);
-      part(S, S.scenes.device, [{ opacity: 1 }, { opacity: 0 }], { duration: D.control, easing: E.out, delay: gone });
-      arriveEnding(S, m, gone);
-    } else if (dead) {
-      // The words under the code leave; then r4's burst: every dot out from the head, then down out of the frame.
-      // The head squeezes and shakes, face shut, from the first frame.
-      playDots(
+      // The drawing dims; the bare ✕ lands on its screen last (Icon swap). The ring takes the fail ink by its
+      // own transition; Approve's exit, New code's morph and "denied" are the jobs.
+      for (const svg of S.strokes) {
+        part(S, svg, [{ opacity: 1 }, { opacity: 0.5 }], { duration: D.settle, easing: E.out });
+      }
+      part(
         S,
-        DOTS.map((dot, i) =>
-          burstTrack(
-            burstPath({
-              home: { x: dot.x + 0.5, y: dot.y + 0.5 },
-              from: fromOf(i),
-              centre: { x: MIDDLE, y: MIDDLE },
-              floor,
-              r: dot.r,
-              px: S.m,
-              delay: burstAt,
-            })
-          )
-        )
+        S.wireMark,
+        [
+          { opacity: 0, transform: "scale(0.92)", filter: "blur(2px)" },
+          { opacity: 1, transform: "none", filter: "blur(0px)" },
+        ],
+        { duration: D.control, easing: E.out, delay: D.settle - D.control, id: "glyph" }
       );
-      for (const eye of S.eyes) {
-        burst(S, eye, {
-          home: { x: Number(eye.dataset.cx), y: Number(eye.dataset.cy) },
-          from: { x: 0, y: 0 },
-          centre: { x: MIDDLE, y: MIDDLE },
-          floor,
-          r: 0.5,
-          px: S.m,
-          delay: burstAt,
-        });
-      }
-      squeeze(S);
-      // Expired's tiles stay, their letters the verdict's copies; the other codes' letters leave with the line.
-      if (m !== "expired") {
-        leave(S, S.letters);
-      }
-      leave(S, S.readout);
-      part(S, S.scenes.code, [{ opacity: 1 }, { opacity: 0 }], { duration: D.control, easing: E.out, delay: gone });
-      arriveEnding(S, m, gone);
+    } else if (m === "expired") {
+      // The code dims where it stands; the head squeezes shut and goes; the strike draws across the letters;
+      // New code arrives where the head was.
+      part(S, S.code, [{ opacity: 1 }, { opacity: V["qr-dim-opacity"] }], { duration: D.settle, easing: E.out });
+      const gone = headShuts(S);
+      part(S, S.cross, [{ transform: "scaleX(0)" }, { transform: "none" }], {
+        duration: D.morph,
+        easing: E.out,
+        delay: D.exit,
+      });
+      wayIn(S, gone);
+    } else if (m === "failed-down") {
+      // The cloud stood still in write; the head squeezes shut and goes; Retry arrives where it was.
+      wayIn(S, headShuts(S));
     }
+    // Wrong code scanned: the live code is untouched; the line, its ✕, the paper's edge and the ring change.
   };
 
   return { jobs: jobs.filter(Boolean), write, animate };
+}
+
+/**
+ * An expired code's dim dots lift into the cloud (from `after`, over
+ * --dur-settle on ease-out, each a little late by its own number) to where
+ * the cloud's drift has them at its start, and the drift goes on from there.
+ */
+function liftIntoCloud(S, after) {
+  stopDrift(S);
+  const drift = driftTracks();
+  playDots(
+    S,
+    DOTS.map((dot, i) => {
+      const to = trackAt(drift[i], 0);
+      return track(
+        { delay: after + dot.r * D.stagger * 2, duration: D.settle },
+        {
+          x: { ease: curveOf(E.out), frames: [kf(0, 0), kf(1, to.x)] },
+          y: { ease: curveOf(E.out), frames: [kf(0, 0), kf(1, to.y)] },
+        }
+      );
+    }),
+    "lift"
+  );
+  const run = S.dotRun;
+  run.clock.finished.then(
+    () => {
+      if (S.dotRun === run) {
+        startDrift(S, 0);
+      }
+    },
+    () => undefined
+  );
 }
 
 /** Plays `m` on `list`'s stages: their reads, then their writes, then their animations, in one frame. */
@@ -1786,11 +1882,22 @@ function playStages(list, m) {
 
 /* ------------------------------------------------------- controls */
 
+/** Picks a variant; the moment it belongs to plays again when it is the one shown. */
+function setVariant(name, value) {
+  variant[name] = value;
+  for (const b of document.querySelectorAll(`[data-variant="${name}"]`)) {
+    b.setAttribute("aria-pressed", String(b.dataset.value === value));
+  }
+  if (last === VARIANTS[name].moment) {
+    play(last);
+  }
+}
+
 /** Puts both stages in the moment `m` plays from, at once (the preview's own step, no part of the design's motion). */
 function snap(m) {
   for (const S of stages) {
     // The from-state's ping starts only where the moment keeps it.
-    rest(S, FROM[m], { still: true, ping: m === "lastminute" });
+    rest(S, FROM[m], { still: true, ping: m === "lastminute" || m === "nomatch" });
   }
   for (const b of document.querySelectorAll("[data-moment]")) {
     b.setAttribute("aria-pressed", String(b.dataset.moment === m));
@@ -1891,6 +1998,19 @@ async function start() {
     list.append(b);
   }
   document.querySelector('[data-slot="replay"]').addEventListener("click", () => play(last));
+  for (const [name, { options }] of Object.entries(VARIANTS)) {
+    const seg = document.querySelector(`[data-slot="variant-${name}"]`);
+    for (const [value, label] of options) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.dataset.variant = name;
+      b.dataset.value = value;
+      b.textContent = label;
+      b.setAttribute("aria-pressed", String(variant[name] === value));
+      b.addEventListener("click", () => setVariant(name, value));
+      seg.append(b);
+    }
+  }
   play("waiting");
   document.documentElement.dataset.ready = "";
 }
@@ -1912,7 +2032,9 @@ window.preview = {
     const S = stages.find((s) => s.layout === layout);
     const r = DOT_R * S.m;
     return {
-      live: Boolean(S.dotRun && !S.dotRun.loop),
+      // A play's clock moves them; the cloud's loop, or a cloud held still, does not.
+      live: Boolean(S.dotRun && !S.dotRun.loop && !S.dotRun.held),
+      loop: Boolean(S.dotRun?.loop),
       m: S.m,
       r,
       dots: dotsNow(S).map((p, i) => ({
@@ -1937,6 +2059,10 @@ window.preview = {
     for (const S of stages) {
       landRecord(S);
     }
+  },
+  /** Picks a preview variant (Denied's New code: quiet or coral; Wrong code's line: spent or foreign). */
+  variant(name, value) {
+    setVariant(name, value);
   },
 };
 

@@ -31,9 +31,15 @@
           Replay
         </button>
       </fieldset>
+      <fieldset class="row">
+        <legend class="label">Variants</legend>
+        <div class="seg" data-slot="variant-denied"></div>
+        <div class="seg" data-slot="variant-nomatch"></div>
+      </fieldset>
       <p class="note">
         Approve, Deny, Remove device, New code and Retry in the cards play the
-        flow on from where it stands. Open Devices has no page yet.
+        flow on from where it stands. Open Devices has no page yet. The code is
+        for this hub, obelisk-of-light; its six letters are a sample.
       </p>
     </header>
 
@@ -73,21 +79,40 @@
                   <svg aria-hidden="true" class="eyes"></svg>
                 </div>
                 <img alt="" class="badge" src="./caw/badge.png" />
+                <button class="btn well-act" data-tone="primary" type="button">
+                  New code
+                </button>
               </div>
-              <div class="letters"></div>
+              <div class="letters"><span aria-hidden="true" class="cross"></span></div>
               <p class="readout">
-                <span aria-hidden="true" class="live"></span
+                <span aria-hidden="true" class="slot"
+                  ><span class="live"></span
+                  ><svg class="g g-close" viewBox="0 0 24 24">
+                    <path d="M8.96967 8.96967C9.26256 8.67678 9.73744 8.67678 10.0303 8.96967L12 10.9394L13.9697 8.96969C14.2626 8.6768 14.7374 8.6768 15.0303 8.96969C15.3232 9.26258 15.3232 9.73746 15.0303 10.0304L13.0607 12L15.0303 13.9696C15.3232 14.2625 15.3232 14.7374 15.0303 15.0303C14.7374 15.3232 14.2625 15.3232 13.9696 15.0303L12 13.0607L10.0304 15.0303C9.73746 15.3232 9.26258 15.3232 8.96969 15.0303C8.6768 14.7374 8.6768 14.2626 8.96969 13.9697L10.9394 12L8.96967 10.0303C8.67678 9.73744 8.67678 9.26256 8.96967 8.96967Z" fill="currentColor" /></svg
+                  ><svg class="g g-clock" viewBox="0 0 24 24">
+                    <path
+                      clip-rule="evenodd"
+                      d="M12 7.25C12.4142 7.25 12.75 7.58579 12.75 8V11.6893L15.0303 13.9697C15.3232 14.2626 15.3232 14.7374 15.0303 15.0303C14.7374 15.3232 14.2626 15.3232 13.9697 15.0303L11.4697 12.5303C11.329 12.3897 11.25 12.1989 11.25 12V8C11.25 7.58579 11.5858 7.25 12 7.25Z"
+                      fill="currentColor"
+                      fill-rule="evenodd"
+                    /></svg></span
                 ><span class="words">Getting a code…</span>
               </p>
             </div>
             <div class="scene scene-device">
-              <div aria-label="iPhone" class="wire" role="img"></div>
+              <div aria-label="iPhone" class="wire" role="img">
+                <svg aria-hidden="true" class="g wire-mark" viewBox="0 0 24 24">
+                  <path d="M8.96967 8.96967C9.26256 8.67678 9.73744 8.67678 10.0303 8.96967L12 10.9394L13.9697 8.96969C14.2626 8.6768 14.7374 8.6768 15.0303 8.96969C15.3232 9.26258 15.3232 9.73746 15.0303 10.0304L13.0607 12L15.0303 13.9696C15.3232 14.2625 15.3232 14.7374 15.0303 15.0303C14.7374 15.3232 14.2625 15.3232 13.9696 15.0303L12 13.0607L10.0304 15.0303C9.73746 15.3232 9.26258 15.3232 8.96969 15.0303C8.6768 14.7374 8.6768 14.2626 8.96969 13.9697L10.9394 12L8.96967 10.0303C8.67678 9.73744 8.67678 9.26256 8.96967 8.96967Z" fill="currentColor" />
+                </svg>
+              </div>
               <div class="facts">
                 <p class="name"></p>
                 <p class="kind"></p>
                 <p class="addr"></p>
                 <p class="second alias"></p>
-                <p class="meta">asked <span class="ago">8s</span> ago</p>
+                <p class="meta">
+                  <span class="verb">asked</span> <span class="ago">8s</span> ago
+                </p>
               </div>
               <div class="actions">
                 <button class="btn" data-act="deny" type="button">Deny</button>
@@ -121,21 +146,8 @@
                     fill="currentColor"
                   />
                 </svg>
-                <svg class="g g-clock" viewBox="0 0 24 24">
-                  <path
-                    clip-rule="evenodd"
-                    d="M12 7.25C12.4142 7.25 12.75 7.58579 12.75 8V11.6893L15.0303 13.9697C15.3232 14.2626 15.3232 14.7374 15.0303 15.0303C14.7374 15.3232 14.2626 15.3232 13.9697 15.0303L11.4697 12.5303C11.329 12.3897 11.25 12.1989 11.25 12V8C11.25 7.58579 11.5858 7.25 12 7.25Z"
-                    fill="currentColor"
-                    fill-rule="evenodd"
-                  />
-                </svg>
               </span>
-              <p class="said">
-                <span class="w lead"></span>
-                <span class="spent" hidden
-                  ><span class="strike"></span></span
-                ><span class="w tail"></span>
-              </p>
+              <p class="said"><span class="w lead"></span></p>
               <p class="record"></p>
               <p class="means"></p>
               <div class="acts">

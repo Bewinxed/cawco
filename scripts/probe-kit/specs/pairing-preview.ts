@@ -12,23 +12,23 @@
  *   time of the dots' clock, a Web Animation the held clock seeks like any
  *   other run; the decode reads the pixels that drawing made.
  * - Every moment's motion on a held clock, sought every 2.5% of its length:
- *   each part moves one way (the burst's rise before its fall is said, not
- *   failed), nothing stands still mid-way, every part rests where the
- *   clock's end drew it, and every run ends once let go.
+ *   each part moves one way, nothing stands still mid-way, every part rests
+ *   where the clock's end drew it, and every run ends once let go.
  * - The arrival: no dot's disc meets the head's square at any read.
  * - No moving part (a dot, a finder eye, a stroke) meets a shown word, and
  *   every word the card shows or brings in stands whole inside it.
  * - The device card: its drawing centred on the card's axis (within 1px),
  *   its facts on one start edge (within 1px) at `text-align: start`.
- * - The endings (report a8f73fdb note 8): every text row at `text-align:
+ * - Paired and Removed (report a8f73fdb note 8): every text row at `text-align:
  *   start`, the verdict, record and means on one start edge, one coral act,
  *   the record never broken inside a part at 390, and the status glyph
  *   starting on the arrival's frame, not drawn at ½ of it, drawn at its end.
- * - A tile stands over the code (its z-index, an opaque box): a dot falling
- *   behind one meets no word there.
+ * - The failures (report 0b7eb35b), each variant, both layouts: what
+ *   persists (the code, the device or the stopped cloud), the ring's ink,
+ *   one coral at most where the design puts it, every glyph bare, and the
+ *   card's height (the code card's, or the device card's on Denied).
  * - The scan's exit, held and sought every 1/60s: no piece jumps, nothing
  *   stands still mid-way, and the device starts on the frame it ends.
- * - Expired's verdict: the gap before the struck code at least a space.
  * - The ping's ring, its lap held and sought every 2.5%: never meets the
  *   title's box.
  * - Caw centred on the card's axis; his box never meets the card's; each
@@ -60,7 +60,7 @@ const QUARTERS = [0, 0.25, 0.5, 0.75, 1];
 const STEPS = 40;
 const FINE = Array.from({ length: STEPS + 1 }, (_, i) => i / STEPS);
 /** The text the QR carries (design-previews/pairing/lib/qr.js). */
-const PAYLOAD = "cawco://pair/JWKHDQ@bewin-desk";
+const PAYLOAD = "cawco://pair/JWKHDQ@obelisk-of-light";
 
 const require = createRequire(import.meta.url);
 prepareZXingModule({
@@ -86,24 +86,24 @@ const MOMENTS = [
   "denied",
   "expired",
   "nomatch",
-  "failed",
   "failed-down",
 ] as const;
-/** The endings (report a8f73fdb §3), and Paired after Remove device. */
-const ENDINGS = [
-  "approved",
-  "removed",
-  "denied",
-  "expired",
-  "nomatch",
-  "failed",
-  "failed-down",
+/** Paired and Removed, the two ledgers (report a8f73fdb §3). */
+const ENDINGS = ["approved", "removed"] as const;
+/** The failures (report 0b7eb35b), with the preview's variants: each keeps its object and wears the failure. */
+const FAILURES = [
+  { m: "expired", variant: null },
+  { m: "nomatch", variant: ["nomatch", "spent"] },
+  { m: "nomatch", variant: ["nomatch", "foreign"] },
+  { m: "denied", variant: ["denied", "quiet"] },
+  { m: "denied", variant: ["denied", "coral"] },
+  { m: "failed-down", variant: null },
 ] as const;
 /** `PAIRING_LEGS=motion,end`: those legs alone (every leg by default). */
 const LEGS = new Set(
   (
     process.env.PAIRING_LEGS ??
-    "qr,motion,handoff,ping,device,end,poses,frames,cost"
+    "qr,motion,handoff,ping,device,end,failures,poses,frames,cost"
   ).split(",")
 );
 type Moment = (typeof MOMENTS)[number];
@@ -121,6 +121,8 @@ interface Rect {
   y: number;
 }
 interface Part {
+  /** A dot the cloud's loop drifts now: its rest is a loop, so no end to meet. */
+  drift?: boolean;
   h: number;
   inWords: boolean;
   opacity: number;
@@ -207,7 +209,7 @@ function readParts(): Read {
   const { preview } = window as unknown as { preview: Preview };
   const dotsDrawn = new Map<
     string,
-    { k: number; rect: DOMRect; dots: DrawnDot[] }
+    { k: number; rect: DOMRect; dots: DrawnDot[]; live: boolean }
   >();
   for (const stage of document.querySelectorAll<HTMLElement>(".stage")) {
     const layout = stage.dataset.layout ?? "";
@@ -220,6 +222,7 @@ function readParts(): Read {
       k: rect.width / canvas.offsetWidth,
       rect,
       dots: drawn.dots,
+      live: drawn.live,
     });
     if (drawn.live) {
       seenEls.set(`${layout}:dots`, canvas);
@@ -237,6 +240,7 @@ function readParts(): Read {
           h: 0,
           top: rect.top + (d.cy - d.r) * k,
           inWords: false,
+          drift: drawn.loop,
         };
       }
     }
@@ -247,7 +251,7 @@ function readParts(): Read {
     const m = new DOMMatrixReadOnly(
       cs.transform === "none" ? undefined : cs.transform
     );
-    // The `translate` property (a burst's sideways travel) moves the part too.
+    // The `translate` property moves the part too.
     const [shiftX = 0, shiftY = 0] =
       cs.translate === "none"
         ? []
@@ -263,7 +267,9 @@ function readParts(): Read {
       h: el.classList.contains("card-wrap") ? r.height : 0,
       top: r.top,
       // A text change's own spans and what leaves an ending in place are taken away once they land, invisible.
-      inWords: Boolean(el.closest(".title, .words, .said, .btn, .leaving")),
+      inWords: Boolean(
+        el.closest(".title, .words, .verb, .said, .btn, .leaving")
+      ),
     };
   }
   const box = (el: Element | null): Rect | null => {
@@ -313,7 +319,7 @@ function readParts(): Read {
     return o;
   };
   const WORDS =
-    ".title, .card .said .w, .card .said .l, .card .record .part, .card .means, .card .btn, .card .facts p, .card .readout .words, .card .glyph";
+    ".title, .card .said .w, .card .well-act, .card .record .part, .card .means, .card .btn, .card .facts p, .card .readout .words, .card .glyph";
   /** Whether an element's own background is opaque. */
   const opaque = (el: Element) => {
     const bg = getComputedStyle(el).backgroundColor;
@@ -374,6 +380,8 @@ function readParts(): Read {
         const { k = 1, rect } = drawnDots ?? {};
         return {
           o: d.o,
+          // Off its module or changed in size: a dot resting on its module moves nothing.
+          moved: Math.abs(d.tx) > 0.01 || Math.abs(d.ty) > 0.01 || d.s !== 1,
           box: {
             x: (rect?.left ?? 0) + (d.cx - d.r) * k,
             y: (rect?.top ?? 0) + (d.cy - d.r) * k,
@@ -384,9 +392,12 @@ function readParts(): Read {
       });
       const canvasShown = shown(canvas);
       const flying = [
-        ...discs.flatMap(({ o, box: disc }) => {
+        ...discs.flatMap(({ o, moved, box: disc }) => {
           const at =
-            canvasShown * o > 0.02 && disc.w > 0 ? clipped(disc, canvas) : null;
+            // Only dots a play's clock moves are moving parts: a code at rest, or a cloud held still, moves nothing.
+            drawnDots?.live && moved && canvasShown * o > 0.02 && disc.w > 0
+              ? clipped(disc, canvas)
+              : null;
           return at ? [{ ...at, what: "dot" }] : [];
         }),
         ...[...stage.querySelectorAll(".code .eye, .wire svg")].flatMap(
@@ -557,6 +568,7 @@ interface Preview {
   dotsOf: (layout: string) => {
     dots: DrawnDot[];
     live: boolean;
+    loop: boolean;
     m: number;
     r: number;
   };
@@ -566,6 +578,7 @@ interface Preview {
   play: (m: string) => Promise<void>;
   snap: (m: string) => void;
   stillClock: (on: boolean) => void;
+  variant: (name: string, value: string) => void;
 }
 const playIn = (page: Page, m: Moment) =>
   page.evaluate(async (moment) => {
@@ -605,7 +618,6 @@ async function motionLeg(kit: Kit, page: Page, engine: Engine, m: Moment) {
   const pct = (i: number) => `${((i / STEPS) * 100).toFixed(1)}%`;
   const keys = new Set(seen.flatMap((s) => Object.keys(s.parts)));
   const turns: string[] = [];
-  const bursts: string[] = [];
   const shakes: string[] = [];
   const stills: string[] = [];
   for (const key of keys) {
@@ -617,21 +629,12 @@ async function motionLeg(kit: Kit, page: Page, engine: Engine, m: Moment) {
       const back = reversals(q, EPS[prop]);
       if (back.length) {
         const said = `${at0.what} ${prop} ${q.map((v) => v.toFixed(2)).join("→")}`;
-        // r4's burst: a dot, eye or stroke flies out from the head, then falls, so its y turns once.
-        const burst =
-          (at0.what.includes("dot") ||
-            at0.what.includes("eye") ||
-            at0.what === "svg") &&
-          prop === "ty" &&
-          back.length === 1;
         // r4's head as a code dies: it squeezes and shakes once, out and back, and ends as it began.
         const shake =
           at0.what === "img.badge" &&
           (prop === "tx" || prop === "sx") &&
           Math.abs((q.at(-1) ?? 0) - (q[0] ?? 0)) <= EPS[prop];
-        if (burst) {
-          bursts.push(said);
-        } else if (shake) {
+        if (shake) {
           shakes.push(said);
         } else {
           turns.push(said);
@@ -654,6 +657,10 @@ async function motionLeg(kit: Kit, page: Page, engine: Engine, m: Moment) {
   const jumps: string[] = [];
   for (const [key, p] of Object.entries(end.parts)) {
     const now = resting.parts[key];
+    if (now?.drift) {
+      // Handed on to the cloud's loop (Asking): it drifts on from where the clock's end left it.
+      continue;
+    }
     if (now) {
       for (const prop of ["opacity", "tx", "ty", "sx", "h"] as const) {
         if (Math.abs(now[prop] - p[prop]) > EPS[prop] * 2) {
@@ -671,11 +678,6 @@ async function motionLeg(kit: Kit, page: Page, engine: Engine, m: Moment) {
     turns.length === 0,
     turns.slice(0, 6).join("; ")
   );
-  if (bursts.length) {
-    kit.note(
-      `${tag}: ${bursts.length} parts rise out from the head before they fall (r4's burst), their y turning once`
-    );
-  }
   if (shakes.length) {
     kit.note(
       `${tag}: the head squeezes and shakes once (r4's), out and back to where it began (${shakes.join("; ")})`
@@ -891,7 +893,7 @@ async function deviceLeg(kit: Kit, page: Page, engine: Engine) {
  * animations and the arrival's start on one frame, and on the arrival's
  * clock it is not yet drawn at ½ and drawn at 1.
  */
-/** The moment whose drawing of Caw a moment shows: the network cases are Checking's, the two causes Failed's. */
+/** The moment whose drawing of Caw a moment shows: the network cases are Checking's; the hub didn't answer is Failed's. */
 function poseOf(m: Moment): string {
   if (m.startsWith("checking")) {
     return "checking";
@@ -900,42 +902,6 @@ function poseOf(m: Moment): string {
     return "failed";
   }
   return m;
-}
-
-/** Expired's verdict: the gap before the struck code, against a space in the verdict's own face, per layout. */
-async function spentGap(kit: Kit, page: Page, engine: Engine) {
-  const gaps = await page.evaluate(() =>
-    [...document.querySelectorAll<HTMLElement>(".stage")].map((stage) => {
-      const said = stage.querySelector(".scene-outcome .said") as HTMLElement;
-      const lead = said.querySelector(".lead") as HTMLElement;
-      const spent = said.querySelector(".spent") as HTMLElement;
-      const range = document.createRange();
-      range.selectNodeContents(lead);
-      const end = [...range.getClientRects()].at(-1);
-      const code = spent.getBoundingClientRect();
-      const probe = document.createElement("span");
-      probe.style.whiteSpace = "pre";
-      probe.textContent = " ";
-      said.append(probe);
-      const space = probe.getBoundingClientRect().width;
-      probe.remove();
-      return {
-        layout: stage.dataset.layout ?? "",
-        gap: end ? code.left - end.right : Number.NaN,
-        space,
-        // The code on the lead's last line (they overlap down the page), not opening a line of its own.
-        sameLine: end
-          ? Math.min(end.bottom, code.bottom) - Math.max(end.top, code.top) > 0
-          : false,
-      };
-    })
-  );
-  for (const g of gaps) {
-    kit.check(
-      `${engine} expired: ${g.layout} the gap before the struck code is at least a space (${g.gap.toFixed(2)}px against a space's ${g.space.toFixed(2)}px${g.sameLine ? "" : ", the code opening a line"})`,
-      !g.sameLine || g.gap >= g.space - 0.25
-    );
-  }
 }
 
 async function endLeg(kit: Kit, page: Page, engine: Engine) {
@@ -1016,9 +982,6 @@ async function endLeg(kit: Kit, page: Page, engine: Engine) {
             .join("; ")
         );
       }
-    }
-    if (m === "expired") {
-      await spentGap(kit, page, engine);
     }
     if (m === "removed") {
       continue;
@@ -1106,6 +1069,317 @@ async function endLeg(kit: Kit, page: Page, engine: Engine) {
       JSON.stringify(glyph)
     );
   }
+}
+
+/** One failure as the engine draws it, per layout (`readFailure`). */
+interface FailureRead {
+  badge: number;
+  band: number;
+  bare: number;
+  code: number;
+  coral: number;
+  cross: { o: number; spans: boolean };
+  device: {
+    approve: boolean;
+    deny: string;
+    facts: string[];
+    mark: number;
+    markOff: number;
+    strokes: number[];
+    verb: string;
+  };
+  dots: { n: number; off: number };
+  edge: { ink: string; fail: string };
+  eyes: number[];
+  glyphs: number[];
+  height: { card: number; code: number; device: number };
+  layout: string;
+  line: { mark: string; words: string };
+  ping: string;
+  ring: { ink: string; fail: string; hairline: string };
+  way: { label: string; o: number; off: number };
+}
+
+/** Everything a failure keeps and wears, read from the engine, per layout. Runs in the page. */
+function readFailure(): FailureRead[] {
+  const w = window as unknown as {
+    preview: Preview & {
+      stages: {
+        heights: { code: number; device: Record<string, number> };
+        layout: string;
+        network: string;
+        pingRun: Animation | null;
+      }[];
+    };
+  };
+  const ink = (value: string) => {
+    const probe = document.createElement("span");
+    probe.style.color = value;
+    document.body.append(probe);
+    const out = getComputedStyle(probe).color;
+    probe.remove();
+    return out;
+  };
+  const shown = (el: Element | null): number => {
+    let o = 1;
+    for (let up: Element | null = el; up; up = up.parentElement) {
+      const style = getComputedStyle(up);
+      if (style.display === "none" || style.visibility === "hidden") {
+        return 0;
+      }
+      o *= Number(style.opacity);
+      if (up.classList.contains("stage")) {
+        break;
+      }
+    }
+    return o;
+  };
+  const centre = (el: Element) => {
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  };
+  return [...document.querySelectorAll<HTMLElement>(".stage")].map((stage) => {
+    const layout = stage.dataset.layout ?? "";
+    const S = w.preview.stages.find((x) => x.layout === layout);
+    const $ = (sel: string) => stage.querySelector(sel) as HTMLElement;
+    const card = $(".card");
+    const well = $(".well");
+    const way = $(".well-act");
+    const drawn = w.preview.dotsOf(layout);
+    const letters = $(".letters").getBoundingClientRect();
+    const cross = $(".letters .cross").getBoundingClientRect();
+    const glyphs = [...stage.querySelectorAll(".tile .glyph")];
+    const first = glyphs[0]?.getBoundingClientRect();
+    const lastGlyph = glyphs.at(-1)?.getBoundingClientRect();
+    // The one mark the line shows: drawn whole, every other one not drawn at all.
+    const marks = (["live", "close", "clock"] as const).map((k) => ({
+      k,
+      o: shown($(k === "live" ? ".readout .live" : `.readout .g-${k}`)),
+    }));
+    const whole = marks.filter((x) => x.o > 0.98);
+    const markOn =
+      whole.length === 1 && marks.every((x) => x.o > 0.98 || x.o < 0.02)
+        ? whole[0]?.k
+        : undefined;
+    const wire = $(".wire");
+    const mark = $(".wire .wire-mark");
+    const wc = centre(wire);
+    const mc = centre(mark);
+    const wellC = centre(well);
+    const wayC = centre(way);
+    return {
+      layout,
+      code: shown($(".code")),
+      dots: {
+        n: drawn.dots.length,
+        off: drawn.dots.filter(
+          (d) => Math.abs(d.tx) > 0.5 || Math.abs(d.ty) > 0.5 || d.o < 0.99
+        ).length,
+      },
+      eyes: [...stage.querySelectorAll(".code .eye")].map(shown),
+      glyphs: glyphs.map(shown),
+      cross: {
+        o: shown($(".letters .cross")),
+        spans: Boolean(
+          first &&
+          lastGlyph &&
+          cross.left <= first.left + 0.5 &&
+          cross.right >= lastGlyph.right - 0.5 &&
+          cross.width <= letters.width + 0.5
+        ),
+      },
+      badge: shown($(".well .badge")),
+      way: {
+        label: (way.textContent ?? "").trim(),
+        o: shown(way),
+        off: Math.hypot(wayC.x - wellC.x, wayC.y - wellC.y),
+      },
+      line: {
+        mark: markOn ?? "",
+        words: ($(".readout .words").textContent ?? "").trim(),
+      },
+      ring: {
+        ink: getComputedStyle(card).getPropertyValue("--ring").trim(),
+        fail: ink("var(--status-fail-ink)"),
+        hairline: ink("var(--border-hairline)"),
+      },
+      edge: {
+        ink: getComputedStyle(well, "::before").boxShadow,
+        fail: ink("var(--status-fail-ink)"),
+      },
+      band: Number.parseFloat(
+        getComputedStyle(card).getPropertyValue("--band")
+      ),
+      ping: S?.pingRun?.playState ?? "none",
+      coral: [...stage.querySelectorAll('[data-tone="primary"]')].filter(
+        (el) => shown(el) > 0.02 && el.getBoundingClientRect().width > 0
+      ).length,
+      bare: stage.querySelectorAll(
+        "svg.g circle, svg.g rect, svg.g ellipse, .mark svg circle"
+      ).length,
+      device: {
+        strokes: [...stage.querySelectorAll(".wire svg:not(.wire-mark)")].map(
+          shown
+        ),
+        mark: shown(mark),
+        markOff: Math.hypot(mc.x - wc.x, mc.y - wc.y),
+        facts: [...stage.querySelectorAll(".facts p")]
+          .filter((p) => shown(p) > 0.98)
+          .map((p) => (p.textContent ?? "").replace(/\s+/g, " ").trim()),
+        verb: ($(".meta .verb").textContent ?? "").trim(),
+        approve: shown($('[data-act="approve"]')) > 0.02,
+        deny: ($(".actions .btn").textContent ?? "").trim(),
+      },
+      height: {
+        card: card.getBoundingClientRect().height,
+        code: S?.heights.code ?? Number.NaN,
+        device: S?.heights.device[S.network] ?? Number.NaN,
+      },
+    };
+  });
+}
+
+/**
+ * The failures (report 0b7eb35b, "the well keeps what the hub gave"), each
+ * at rest and read from the engine on both layouts: what persists (the
+ * code, the device or the cloud), the ring's ink, one coral at most, every
+ * glyph bare, and the card's height (the code card's on the three code
+ * moments, the device card's on Denied). The hub didn't answer's cloud is
+ * read twice, 300ms apart, to show it stopped.
+ */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one case a branch, each said as it is read
+async function failuresLeg(kit: Kit, page: Page, engine: Engine) {
+  for (const c of FAILURES) {
+    const name = c.variant ? `${c.m} (${c.variant[1]})` : c.m;
+    if (c.variant) {
+      // biome-ignore lint/performance/noAwaitInLoops: one case at a time
+      await page.evaluate(
+        ([n, v]) =>
+          (window as unknown as { preview: Preview }).preview.variant(n, v),
+        c.variant as readonly [string, string]
+      );
+    }
+    await playIn(page, c.m);
+    await settled(page);
+    const reads = await page.evaluate(readFailure);
+    const before =
+      c.m === "failed-down"
+        ? await page.evaluate(() => {
+            const p = (window as unknown as { preview: Preview }).preview;
+            return ["desk", "phone"].map((l) =>
+              p
+                .dotsOf(l)
+                .dots.map((d) => `${d.cx.toFixed(2)},${d.cy.toFixed(2)}`)
+                .join(" ")
+            );
+          })
+        : null;
+    const later =
+      c.m === "failed-down"
+        ? await page.evaluate(async () => {
+            await new Promise((done) => setTimeout(done, 300));
+            const p = (window as unknown as { preview: Preview }).preview;
+            return ["desk", "phone"].map((l) =>
+              p
+                .dotsOf(l)
+                .dots.map((d) => `${d.cx.toFixed(2)},${d.cy.toFixed(2)}`)
+                .join(" ")
+            );
+          })
+        : null;
+    for (const [i, r] of reads.entries()) {
+      const tag = `${engine} ${name}: ${r.layout}`;
+      const near = (a: number, b: number, by = 0.02) => Math.abs(a - b) <= by;
+      const all = (xs: number[], v: number) => xs.every((x) => near(x, v));
+      let persists = false;
+      let said = "";
+      if (c.m === "expired") {
+        persists =
+          near(r.code, 0.3) &&
+          r.dots.off === 0 &&
+          all(r.eyes, 0.3) &&
+          all(r.glyphs, 1) &&
+          near(r.cross.o, 1) &&
+          r.cross.spans &&
+          near(r.badge, 0) &&
+          r.line.mark === "clock" &&
+          r.way.label === "New code" &&
+          near(r.way.o, 1) &&
+          r.way.off <= 1;
+        said = `the code dimmed to ${r.code.toFixed(2)} with its ${r.dots.n} dots on their modules (${r.dots.off} off) and ${r.eyes.length} eyes; the six letters drawn and struck across; the head gone; the clock on the line ("${r.line.words}"); ${r.way.label} at the code's centre (${r.way.off.toFixed(2)}px off)`;
+      } else if (c.m === "nomatch") {
+        persists =
+          near(r.code, 1) &&
+          r.dots.off === 0 &&
+          all(r.eyes, 1) &&
+          all(r.glyphs, 1) &&
+          near(r.badge, 1) &&
+          r.ping === "running" &&
+          r.line.mark === "close" &&
+          r.edge.ink.includes(r.edge.fail) &&
+          near(r.way.o, 0);
+        said = `the live code at full ink, its ${r.dots.n} dots on their modules (${r.dots.off} off), eyes, letters and head drawn, the ping ${r.ping}; the paper's edge in the fail ink; the ✕ on the line ("${r.line.words}"); no button`;
+      } else if (c.m === "denied") {
+        persists =
+          all(r.device.strokes, 0.5) &&
+          near(r.device.mark, 1) &&
+          r.device.markOff <= 1 &&
+          r.device.facts.length >= 3 &&
+          r.device.facts[0] === "iPhone" &&
+          r.device.verb === "denied" &&
+          !r.device.approve &&
+          r.device.deny === "New code";
+        said = `the phone's ${r.device.strokes.length} strokes at ${r.device.strokes[0]?.toFixed(2)} with the ✕ at its screen's centre (${r.device.markOff.toFixed(2)}px off); its facts kept (${r.device.facts.join(" | ")}); Approve gone, "${r.device.deny}" in Deny's place`;
+      } else {
+        const stopped = Boolean(
+          before && later && before[i] === later[i] && r.dots.off > 0
+        );
+        persists =
+          near(r.code, 0.3) &&
+          stopped &&
+          all(r.glyphs, 0) &&
+          near(r.badge, 0) &&
+          r.line.mark === "close" &&
+          near(r.band, 0) &&
+          r.way.label === "Retry" &&
+          near(r.way.o, 1) &&
+          r.way.off <= 1;
+        said = `the cloud held where it stood (${r.dots.off} of ${r.dots.n} dots off their modules, unmoved over 300ms: ${stopped}) at ${r.code.toFixed(2)}; the band at ${r.band}; the head gone; the ✕ on the line ("${r.line.words}"); ${r.way.label} at the code's centre (${r.way.off.toFixed(2)}px off)`;
+      }
+      kit.check(`${tag} what persists: ${said}`, persists, JSON.stringify(r));
+      const faulty = c.m !== "expired";
+      kit.check(
+        `${tag} the ring is ${faulty ? "the fail ink" : "the hairline"} (${r.ring.ink})`,
+        r.ring.ink === (faulty ? r.ring.fail : r.ring.hairline),
+        JSON.stringify(r.ring)
+      );
+      // New code on Expired, Retry when the hub didn't answer, coral on Denied only by the switch; no button on a wrong scan.
+      let corals = 1;
+      if (c.m === "nomatch") {
+        corals = 0;
+      } else if (c.m === "denied") {
+        corals = c.variant?.[1] === "coral" ? 1 : 0;
+      }
+      kit.check(
+        `${tag} ${corals} coral at most where the design puts it (${r.coral})`,
+        r.coral === corals && r.coral <= 1
+      );
+      kit.check(
+        `${tag} every glyph bare, no disc or box (${r.bare} found)`,
+        r.bare === 0
+      );
+      const want = c.m === "denied" ? r.height.device : r.height.code;
+      kit.check(
+        `${tag} the card stands at ${c.m === "denied" ? "the device card's" : "the code card's"} height (${r.height.card.toFixed(1)} against ${want.toFixed(1)})`,
+        near(r.height.card, want, 0.5)
+      );
+    }
+  }
+  await page.evaluate(() => {
+    const p = (window as unknown as { preview: Preview }).preview;
+    p.variant("denied", "quiet");
+    p.variant("nomatch", "spent");
+  });
 }
 
 /** Each moment's Caw is a drawing of its own: the three network cases are one moment, Checking. */
@@ -1807,56 +2081,64 @@ interface Capture {
   frame: string;
   moment: string;
   scheme: string;
+  variant: string;
   width: number;
 }
 
-/** Moment `m` played and held still, its Desk and Phone frames each shot alone. */
+/** Each variant's words for the manifest. */
+const VARIANT_SAID: Record<string, string> = {
+  spent: "its line for a spent code of this hub",
+  foreign: "its line for a code not from this hub",
+  quiet: "New code in the quiet outline",
+  coral: "New code in coral",
+};
+
+/** A failure played (in its variant) and held still, its Desk and Phone frames each shot alone, by day. */
 async function shoot(
   page: Page,
   {
     out,
-    m,
+    c,
     width,
-    scheme,
     labels,
   }: {
+    c: (typeof FAILURES)[number];
     labels: Record<string, string>;
-    m: Moment;
     out: string;
-    scheme: "light" | "dark";
     width: number;
   }
 ): Promise<Capture[]> {
-  await playIn(page, m);
-  await settled(page);
-  // A device asking is shot as it rests once the hub's record has landed: Deny and Approve live.
-  if (m.startsWith("checking")) {
-    await page.evaluate(() =>
-      (window as unknown as { preview: Preview }).preview.landRecord()
+  if (c.variant) {
+    await page.evaluate(
+      ([n, value]) =>
+        (window as unknown as { preview: Preview }).preview.variant(n, value),
+      c.variant as readonly [string, string]
     );
-    await settled(page);
   }
+  await playIn(page, c.m);
+  await settled(page);
   await page.evaluate(() => {
     for (const run of document.getAnimations()) {
       run.pause();
     }
   });
-  const when = scheme === "light" ? "day" : "night";
+  const v = c.variant?.[1] ?? "";
   const shot: Capture[] = [];
   for (const frame of ["desk", "phone"] as const) {
     const name = frame === "desk" ? "Desk" : "Phone";
-    const file = `${m}-${frame}-${width}-${when}.png`;
+    const file = `${c.m}${v ? `-${v}` : ""}-${frame}-${width}-day.png`;
     // biome-ignore lint/performance/noAwaitInLoops: one frame at a time
     await page
       .locator(`.frame:has(.viewport[data-layout="${frame}"])`)
       .screenshot({ path: join(out, file) });
     shot.push({
       file,
-      moment: m,
+      moment: c.m,
+      variant: v,
       frame: name,
       width,
-      scheme: when,
-      caption: `${labels[m] ?? m}, the ${name} frame, in a window ${width}px wide, by ${when}`,
+      scheme: "day",
+      caption: `${labels[c.m] ?? c.m}${v ? `, ${VARIANT_SAID[v]}` : ""}, the ${name} frame, in a window ${width}px wide, by day`,
     });
   }
   await page.evaluate(() => {
@@ -1868,18 +2150,20 @@ async function shoot(
 }
 
 /**
- * The designer's captures (`PAIRING_LEGS=captures`, off by default): every
- * moment at rest, the Desk and the Phone frame each shot alone, in a window
- * 390 and 1440 wide, by day and by night, at DPR 1, into
- * design-previews/pairing/captures/ with a manifest.json. Every run is held
- * where it stands for the shot (a ping, the cloud's drift). Pictures for a
- * person to read, never compared with anything.
+ * The designer's captures (`PAIRING_LEGS=captures`, off by default): the
+ * four failures at rest (Wrong code scanned with each of its two lines,
+ * Denied with its quiet and its coral New code), the Desk and the Phone
+ * frame each shot alone, in a window 390 and 1440 wide, by day, at DPR 1,
+ * into design-previews/pairing/captures/ with a manifest.json. Every run is
+ * held where it stands for the shot (the ping). Pictures for a person to
+ * read, never compared with anything.
  */
 async function capturesLeg(kit: Kit, url: string, engine: Engine) {
   const out = join(DIR, "captures");
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
   const { page, errors } = await openPreview(kit, url, engine, "phone");
+  await page.emulateMedia({ colorScheme: "light" });
   const labels = await page.evaluate(() =>
     Object.fromEntries(
       [...document.querySelectorAll<HTMLElement>("[data-moment]")].map((b) => [
@@ -1889,18 +2173,14 @@ async function capturesLeg(kit: Kit, url: string, engine: Engine) {
     )
   );
   const manifest: Capture[] = [];
-  for (const scheme of ["light", "dark"] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one scheme at a time
-    await page.emulateMedia({ colorScheme: scheme });
-    for (const width of [390, 1440]) {
-      // biome-ignore lint/performance/noAwaitInLoops: one window width at a time
-      await page.setViewportSize({ width, height: 1000 });
-      await page.waitForFunction((w) => window.innerWidth === w, width);
-      for (const m of MOMENTS) {
-        // biome-ignore lint/performance/noAwaitInLoops: one moment at a time
-        const shot = await shoot(page, { out, m, width, scheme, labels });
-        manifest.push(...shot);
-      }
+  for (const width of [390, 1440]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one window width at a time
+    await page.setViewportSize({ width, height: 1000 });
+    await page.waitForFunction((w) => window.innerWidth === w, width);
+    for (const c of FAILURES) {
+      // biome-ignore lint/performance/noAwaitInLoops: one case at a time
+      const shot = await shoot(page, { out, c, width, labels });
+      manifest.push(...shot);
     }
   }
   writeFileSync(
@@ -1908,8 +2188,8 @@ async function capturesLeg(kit: Kit, url: string, engine: Engine) {
     `${JSON.stringify(manifest, null, 2)}\n`
   );
   kit.check(
-    `${engine}: ${manifest.length} captures written to design-previews/pairing/captures/ (${MOMENTS.length} moments × Desk and Phone × 390 and 1440 × day and night, DPR 1) with their manifest`,
-    manifest.length === MOMENTS.length * 8 && errors.length === 0,
+    `${engine}: ${manifest.length} captures written to design-previews/pairing/captures/ (${FAILURES.length} failure cases × Desk and Phone × 390 and 1440, by day, DPR 1) with their manifest`,
+    manifest.length === FAILURES.length * 4 && errors.length === 0,
     errors.slice(0, 4).join(" | ")
   );
 }
@@ -1936,6 +2216,9 @@ async function runLegs(kit: Kit, page: Page, url: string, engine: Engine) {
   }
   if (LEGS.has("end")) {
     await endLeg(kit, page, engine);
+  }
+  if (LEGS.has("failures")) {
+    await failuresLeg(kit, page, engine);
   }
   if (LEGS.has("poses")) {
     await posesLeg(kit, page, engine);
