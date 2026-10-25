@@ -33,7 +33,7 @@ import {
   ensureBoundary,
   whileSandboxDown,
 } from "./boundary";
-import { copyPathSync, inCopySync, viewRunning } from "./layer";
+import { copyPathSync, inCopySync, markPersonsOwn, viewRunning } from "./layer";
 import { type DenyPaths, denyPathspecs, shimPaths } from "./worktree-guard";
 
 /** The most a command may write, stdout and stderr together, in bytes. */
@@ -449,6 +449,16 @@ export async function runHubCommand(
   // An absent workspace crosses the wire as null.
   if ((workspace ?? undefined) !== undefined && !isWorkspaceRef(workspace)) {
     throw new Error("runCommand's workspace must be { id, path }.");
+  }
+  // In a repository's Linux view, the person's files made in the folder
+  // since it began are theirs before anything reads its status
+  // (layer.ts `markPersonsOwn`).
+  if (isWorkspaceRef(workspace)) {
+    await markPersonsOwn(workspace).catch((error: unknown) =>
+      console.warn(
+        `[workspace] ${workspace.id}: ${error instanceof Error ? error.message : String(error)}`
+      )
+    );
   }
   if (named?.moves !== undefined) {
     if (!isWorkspaceRef(workspace)) {
