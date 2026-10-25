@@ -19,6 +19,7 @@
  */
 import { mountCard } from "./live-card/card.js";
 import { PARTS } from "./parts.js";
+import { mountStateSwitcher } from "./state-switcher.js";
 
 /* ---- The sizes. A's are main's tokens; B's and C's are the report's
    (aba6492c), which main has no tokens for. ---- */
@@ -91,7 +92,9 @@ const RULES = {
   c: "A new comment is written in a 280px card next to its spot. Every thread opens in a panel on the right, as tall as the page area, 400px to start, dragged anywhere from 300px to half the pane, in place of the Comments list. On a phone it is a drawer at the bottom.",
 };
 
-/* ---- What is shown, kept through a reload. ---- */
+/* ---- What is shown: the option, the comment and the screen are the
+   switcher's (the address names them, so they are kept through a reload); C's panel
+   as last dragged is kept here. ---- */
 const KEY = "cawco:comment-sizing";
 const saved = (() => {
   try {
@@ -101,30 +104,65 @@ const saved = (() => {
   }
 })();
 const params = new URLSearchParams(location.search);
-const pick = (value, allowed, fallback) =>
-  allowed.includes(value) ? value : fallback;
 const CASES = ["long", "closed", "short", "new"];
+const switcher = mountStateSwitcher({
+  // The desk's 1440 at its real size, with the stage's padding (--space-6, 21px).
+  width: 1482,
+  axes: true,
+  label: "Comment sizing states",
+  groups: [
+    {
+      key: "option",
+      label: "Option",
+      states: [
+        { value: "a", label: "A · Beside the comment" },
+        { value: "b", label: "B · Small card, long ones in Comments" },
+        { value: "c", label: "C · A panel on the right" },
+      ],
+    },
+    {
+      key: "case",
+      label: "Comment",
+      states: [
+        { value: "long", label: "Your long reply, Comments open" },
+        { value: "closed", label: "Your long reply, Comments closed" },
+        { value: "short", label: "A short exchange" },
+        { value: "new", label: "Writing a new one" },
+      ],
+    },
+    {
+      key: "screen",
+      label: "Screen",
+      initial: "window",
+      states: [
+        { value: "desk", label: "Desk, 1440" },
+        { value: "window", label: "Your window, 1037" },
+        { value: "phone", label: "Phone, 390" },
+      ],
+    },
+  ],
+  onchange: (next, previous) => {
+    state.option = next.option;
+    state.case = next.case;
+    state.screen = next.screen;
+    if (next.case !== previous.case) {
+      listOpen = LIST_DEFAULT[state.case];
+    }
+    state.open = true;
+    render({ play: "open" });
+  },
+});
 const state = {
-  option: pick(params.get("option") ?? saved.option, ["a", "b", "c"], "a"),
-  case: pick(params.get("case") ?? saved.case, CASES, "long"),
-  screen: pick(
-    params.get("screen") ?? saved.screen,
-    Object.keys(SCREENS),
-    "window"
-  ),
+  option: switcher.state.option,
+  case: switcher.state.case,
+  screen: switcher.state.screen,
   /** The thread stands open: closed by its Close, opened by its pill or its row. */
-  open: params.has("case") ? true : (saved.open ?? true),
+  open: true,
   /** C's panel as it was last dragged. */
   panelW: Number(params.get("panel")) || saved.panelW || THREAD_W,
 };
 const save = () => {
-  localStorage.setItem(KEY, JSON.stringify(state));
-  const query = new URLSearchParams({
-    option: state.option,
-    case: state.case,
-    screen: state.screen,
-  });
-  history.replaceState(null, "", `?${query}`);
+  localStorage.setItem(KEY, JSON.stringify({ panelW: state.panelW }));
 };
 
 /* ---- Markup. ---- */
@@ -154,9 +192,6 @@ const threadParts = (beside) => {
 /* ---- What the state means. ---- */
 const LIST_DEFAULT = { long: true, closed: false, short: true, new: true };
 let listOpen = LIST_DEFAULT[state.case];
-if (typeof saved.list === "boolean" && !params.has("case")) {
-  listOpen = saved.list;
-}
 
 const layoutOf = () => {
   const screen = SCREENS[state.screen];
@@ -946,40 +981,11 @@ function readout() {
   els.readout.textContent = text;
 }
 
-/* ---- The switches. ---- */
+/* ---- The switcher follows what the frame moved itself (Comments
+   pressed opens or shuts the list), and the option's rule. ---- */
 function syncSwitches() {
-  for (const [slot, value] of [
-    ["option", state.option],
-    ["case", state.case],
-    ["screen", state.screen],
-  ]) {
-    for (const button of document.querySelectorAll(
-      `[data-slot="${slot}"] button`
-    )) {
-      button.setAttribute(
-        "aria-pressed",
-        String(button.dataset.value === value)
-      );
-    }
-  }
+  switcher.set({ option: state.option, case: state.case, screen: state.screen });
   els.rule.textContent = RULES[state.option];
-}
-for (const slot of ["option", "case", "screen"]) {
-  for (const button of document.querySelectorAll(
-    `[data-slot="${slot}"] button`
-  )) {
-    button.addEventListener("click", () => {
-      state[slot] = button.dataset.value;
-      if (slot === "case") {
-        listOpen = LIST_DEFAULT[state.case];
-        state.open = true;
-      }
-      if (slot === "option") {
-        state.open = true;
-      }
-      render({ play: "open" });
-    });
-  }
 }
 document.querySelector('[data-slot="replay"]').addEventListener("click", () => {
   state.open = true;

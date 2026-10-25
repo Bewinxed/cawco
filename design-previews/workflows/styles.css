@@ -335,25 +335,6 @@
     }
   }
 
-  /* The option and job switches: the kit's segmented groove and its lifted thumb. */
-  .pv-switches {
-    position: sticky;
-    inset-block-start: 0;
-    z-index: 5;
-    display: block flex;
-    flex-wrap: wrap;
-    gap: var(--space-3) var(--space-5);
-    align-items: center;
-    padding-block: var(--space-3);
-    background: var(--surface-page);
-    border-block-end: 1px solid var(--border-hairline);
-  }
-
-  .pv-switch-label {
-    color: var(--ink-muted);
-    font: var(--type-meta);
-  }
-
   .pv-option-head {
     display: block grid;
     gap: var(--space-4) var(--space-7);

@@ -49,6 +49,9 @@ What it is made of:
   sizes, the page lifted clear of a drawer, and the house motion for what is
   not the card (`morph`'s width tween for a hand-off, `railIn` and
   `railOut`, `unfold` for a row opening). It copies none of the card's
-  placement or motion. What is shown is kept through a reload.
-- `preview.css` draws only what stands round the parts: the switches, the
+  placement or motion. What is shown is kept through a reload: the
+  option, the comment and the screen are the shared state switcher's
+  (`state-switcher.js`, a copy of `design-previews/state-switcher.js`),
+  named in the address.
+- `preview.css` draws only what stands round the parts: the bar, the
   frame, the pane's head, the decision page, each option's holders.

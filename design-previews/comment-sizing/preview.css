@@ -21,8 +21,8 @@
     margin: 0;
     min-block-size: 100dvh;
   }
-  /* The preview's own controls: the switches, Play, the page's pins. */
-  :where(.seg button, .replay, .page-pin):focus-visible {
+  /* The preview's own controls: Play, the page's pins. */
+  :where(.replay, .page-pin):focus-visible {
     outline: var(--focus-ring-width) solid var(--focus-ring);
     outline-offset: 2px;
   }
@@ -30,7 +30,7 @@
     border-radius: var(--radius-pill);
   }
 
-  /* ---- The switches. ---- */
+  /* ---- The bar: the title, the option's rule, Play. ---- */
   .bar {
     display: block grid;
     gap: var(--space-3);
@@ -49,16 +49,6 @@
       align-items: center;
       gap: var(--space-2) var(--space-3);
       min-inline-size: 0;
-      margin: 0;
-      padding: 0;
-      border: 0;
-    }
-    .label {
-      float: inline-start;
-      min-inline-size: 5.5rem;
-      padding: 0;
-      color: var(--ink-muted);
-      font: var(--type-label);
     }
     .rule {
       max-inline-size: 72ch;
@@ -66,55 +56,6 @@
       color: var(--ink-muted);
       font: var(--type-meta);
       text-wrap: pretty;
-    }
-  }
-  .seg {
-    display: inline flex;
-    flex-wrap: wrap;
-    gap: var(--space-row);
-    min-inline-size: 0;
-    padding: var(--c-segmented-pad, 2px);
-    border-radius: var(--radius-md);
-    background: var(--surface-recess-deep);
-    button {
-      min-block-size: var(--c-btn-h-sm);
-      padding-inline: var(--space-3);
-      border: 0;
-      border-radius: var(--radius-well);
-      background: transparent;
-      color: var(--ink-muted);
-      font: var(--type-label);
-      text-align: start;
-      cursor: pointer;
-      transition:
-        background-color var(--dur-control) var(--ease-out),
-        color var(--dur-control) var(--ease-out);
-      @media (hover: hover) and (pointer: fine) {
-        &:hover {
-          color: var(--ink-strong);
-        }
-      }
-      &[aria-pressed="true"] {
-        background: var(--surface-lift);
-        color: var(--ink-strong);
-        box-shadow: var(--shadow-knob);
-      }
-    }
-  }
-  .seg .short {
-    display: none;
-  }
-  @media (width <= 480px) {
-    .bar .label {
-      float: none;
-      display: block flow;
-      margin-block-end: var(--space-1);
-    }
-    .seg .long {
-      display: none;
-    }
-    .seg .short {
-      display: inline;
     }
   }
   .note {
@@ -182,6 +123,15 @@
       var(--shadow-hairline);
     transform: scale(var(--s));
     transform-origin: 0 0;
+  }
+  /* Where the switcher stands above the stage (under its 1482px stage and
+     232px list), the stage takes the window's whole width, out past the
+     switcher page's padding, so a screen as wide as the window stands at
+     its real size. */
+  @container state-page (width < 1714px) {
+    .stage {
+      margin-inline: calc(50% - 50vw);
+    }
   }
   @media (width <= 480px) {
     .stage {

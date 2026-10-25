@@ -1,9 +1,13 @@
 /**
- * The switch page: one switch per pick the owner makes, Today, the width and
- * what the frame shows, written into the frame's hash (frame.js draws it).
+ * The switch page: one group of the shared state switcher
+ * (state-switcher.js) per pick the owner makes, Today, the width and what
+ * the frame shows, written into the frame's hash (frame.js draws it).
  * Picking an option brings it into view (SHOWS: the state, the width or what
- * stands open that the option needs). The choice is kept through a reload.
+ * stands open that the option needs). The choice is the address's, so it is
+ * kept through a reload.
  */
+import { mountStateSwitcher } from "./state-switcher.js";
+
 const SIZES = { 1440: [1440, 900], 1037: [1037, 760], 390: [390, 844] };
 
 const SWITCHES = [
@@ -135,8 +139,31 @@ const DEFAULTS = {
   ask: "a",
 };
 
-const STORE = "project-options:choice:3";
-let choice = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(STORE) ?? "{}") };
+const switcher = mountStateSwitcher({
+  // The frame scales to the stage: the desk's 1440 drawn at 0.8.
+  width: 1160,
+  axes: true,
+  label: "Project page options",
+  groups: SWITCHES.map((one) => ({
+    key: one.key,
+    label: one.name,
+    initial: DEFAULTS[one.key],
+    states: one.options.map(([value, label]) => ({ value, label })),
+  })),
+  resolve: (next, key) => {
+    const shown = { ...next, ...(SHOWS[key] ?? {}) };
+    // A desk-only pick moves a phone frame to the desk.
+    if (["D", "place", "fold", "S", "narrow"].includes(key) && shown.w === "390") {
+      shown.w = "1440";
+    }
+    return shown;
+  },
+  onchange: (next) => {
+    choice = next;
+    draw();
+  },
+});
+let choice = switcher.state;
 
 function notes() {
   const lines = [];
@@ -173,19 +200,6 @@ function notes() {
 }
 
 function draw() {
-  localStorage.setItem(STORE, JSON.stringify(choice));
-  const box = document.querySelector("[data-switches]");
-  box.innerHTML = SWITCHES.map(
-    (one) => `<div class="po-switch" role="radiogroup" aria-label="${one.name}">
-      <span>${one.name}</span>
-      <div>${one.options
-        .map(
-          ([value, label]) =>
-            `<button type="button" role="radio" data-key="${one.key}" data-value="${value}" aria-checked="${choice[one.key] === value}">${label}</button>`
-        )
-        .join("")}</div>
-    </div>`
-  ).join("");
   const said = notes();
   document.querySelector("[data-notes]").innerHTML = said.length
     ? `<ul>${said.map((line) => `<li>${line}</li>`).join("")}</ul>`
@@ -202,18 +216,5 @@ function draw() {
   frame.contentWindow?.location.replace(`frame.html#${hash}`);
 }
 
-document.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-key]");
-  if (!button) {
-    return;
-  }
-  const { key, value } = button.dataset;
-  choice = { ...choice, [key]: value, ...(SHOWS[key] ?? {}) };
-  // A desk-only pick moves a phone frame to the desk.
-  if (["D", "place", "fold", "S", "narrow"].includes(key) && choice.w === "390") {
-    choice.w = "1440";
-  }
-  draw();
-});
 window.addEventListener("resize", draw);
 draw();

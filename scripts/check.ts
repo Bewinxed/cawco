@@ -573,6 +573,10 @@ const gated: Gated[] = [
     "packages/core/src/",
   ]),
   bun("scripts/page-imports-check.ts", DASH),
+  bun("scripts/preview-switcher-check.ts", [
+    "design-previews/",
+    "apps/dashboard/src/lib/cawco/address/flow/",
+  ]),
   bun("scripts/probe-words-check.ts", [
     "apps/",
     ...PKG,

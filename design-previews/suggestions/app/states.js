@@ -1,9 +1,10 @@
 /**
  * The preview's state machine: its switcher's groups in order (Direction,
- * Where, Data, Theme), each a key of `?__state=` and each entry a value
- * (`?__state=direction:ledger,where:thread,data:three,theme:light`). A
- * group left out, or naming an entry its direction hasn't, takes the
- * direction's first. Every direction has its own Where and Data entries:
+ * Where, Data, Theme), each an axis of the shared switcher
+ * (../../state-switcher.js) and each entry a value
+ * (`direction:ledger,where:thread,data:three,theme:light`). A group left
+ * out, or naming an entry its direction hasn't, takes the direction's
+ * first (the switcher makes the state whole). Every direction has its own Where and Data entries:
  * its Data entries are its own "States needed" list from the designer's
  * report (Today's, the stopped state builder's states.ts), and a state a
  * direction hasn't is hidden from the switcher.
@@ -201,31 +202,7 @@ export const groupsOf = (direction) => {
   ];
 };
 
-/** `?__state=` read: each group's named entry where its direction has it, else the first. */
-export function readState(raw) {
-  const named = new Map(
-    (raw ?? "").split(",").map((pair) => pair.split(":"))
-  );
-  const direction =
-    DIRECTIONS.find((d) => d.value === named.get("direction")) ??
-    DIRECTIONS[0];
-  const pick = (list, want) =>
-    list.find((value) => value === want) ?? list[0];
-  return {
-    direction: direction.value,
-    where: pick(direction.where, named.get("where")),
-    data: pick(
-      direction.data.map((each) => each.value),
-      named.get("data")
-    ),
-    theme: pick(
-      THEMES.map((each) => each.value),
-      named.get("theme")
-    ),
-  };
-}
-
-/** The state written back as `?__state=`, every group named. */
+/** The state as one key, every group named: the stage's `data-state`. */
 export const writeState = (state) =>
   ["direction", "where", "data", "theme"]
     .map((key) => `${key}:${state[key]}`)

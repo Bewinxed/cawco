@@ -22,6 +22,9 @@
  * 5. Poses, at 1440, 680 and 390, Day and Night: each Caw pose's drawing,
  *    carried through its img's object-fit, stands at least 1px inside the
  *    image as drawn (`readPoseFrames`).
+ * 6. The state switcher is the shared one (state-switcher.ts): the system
+ *    font, a vertical list with arrowed headings at 1440, a select at 390,
+ *    H hiding it.
  *
  *   bun scripts/probe-kit/run.ts caw-panel-preview
  *   bun scripts/probe-kit/run.ts caw-panel-preview --only motion   (boxes, docking, motion, round, poses: one part)
@@ -40,6 +43,7 @@ import {
   stillWithin,
   type View,
 } from "../kit";
+import { checkSwitcher, pickState } from "../state-switcher";
 
 const DIR = join(ROOT, "design-previews/caw-panel");
 
@@ -70,11 +74,9 @@ type Device = "desk" | "phone";
 const STATES = ["rest", "needs", "docked", "cant", "scrolled", "fresh"];
 const CAUSES = ["machine", "budget", "thread", "hub"];
 
-/** Picks a switch's option as a person does: a press on its label. */
+/** Picks a switch's state as a person does, in the shared state switcher. */
 async function pick(page: Page, name: string, value: string) {
-  await page
-    .locator(`label:has(> input[name="${name}"][value="${value}"])`)
-    .click();
+  await pickState(page, name, value);
   await settled(page);
 }
 
@@ -84,7 +86,7 @@ async function pick(page: Page, name: string, value: string) {
  * counts as running, and a wait for stillness would never end).
  */
 const choose = (page: Page, name: string, value: string) =>
-  page.locator(`label:has(> input[name="${name}"][value="${value}"])`).click();
+  pickState(page, name, value);
 
 async function settled(page: Page) {
   const moving = await stillWithin(page, ".stage", { ms: 4000 });
@@ -1585,6 +1587,16 @@ const spec: Spec = {
         await page.evaluate(installShown);
         await page.evaluate(installPainted);
         await settled(page);
+        if (size === "1440" && runs("switcher")) {
+          await checkSwitcher(
+            kit,
+            page,
+            process.env.PROBE_ENGINE ?? "chromium",
+            {
+              axes: true,
+            }
+          );
+        }
         if (runs("poses")) {
           await poseFrames(kit, page, size);
         }

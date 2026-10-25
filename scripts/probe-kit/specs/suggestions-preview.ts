@@ -1,16 +1,17 @@
 /**
  * The suggestions preview (design-previews/suggestions/, built by its
  * app/build.ts): a state machine, one state at a time at its production
- * width beside its switcher, every state a link (`?__state=…`). Served as a
- * folder and read on Chromium and WebKit at a desk (1440 × 900). The spec
- * walks every state the switcher offers, as its links name them: each
+ * width beside the shared state switcher (design-previews/state-switcher.js),
+ * every state a link (`?__state=…`). Served as a folder and read on
+ * Chromium and WebKit at a desk (1440 × 900). The spec walks every state
+ * the switcher offers, as its buttons name them: each
  * direction (Today, Unsent drafts, The ledger, The tray), each of its
  * Where entries, each of its Data entries, light and dark.
  *
  * 1. Every state renders the owner's own starters at its width: the stage
  *    names the state, the frame stands at the Where's width (380, 725 or
- *    390), the theme is the state's, the switcher's groups are links with
- *    one chosen each, the state draws as many of his suggestions as it
+ *    390), the theme is the state's, the switcher's groups each have one
+ *    state pressed, the state draws as many of his suggestions as it
  *    should (none, one, three, four of seven with "3 more", seven), and
  *    every sentence and reason drawn is one the hub wrote for him
  *    (app/starters.tsv): nothing made up. A loading state draws its
@@ -19,6 +20,9 @@
  * 2. The overflow sweep (journeys/scan.ts: nothing spills, no control
  *    covers text) totals zero over every state.
  * 3. No console or page error.
+ * 3a. The switcher is the shared one (state-switcher.ts): the system font,
+ *    a vertical list with arrowed headings at the desk, a select at 390,
+ *    and H hides it.
  * 4. The press moments, each held on the clock (the DevTools Animation
  *    domain on Chromium, the page's own held clock on WebKit) and sought
  *    through: the drafts' travel into the box, the ledger's pencil→check,
@@ -38,6 +42,7 @@ import { capture, contrast, px, type Rgb } from "../ink";
 import { scan } from "../journeys/scan";
 import type { Engine, Kit, Spec } from "../kit";
 import { ROOT, readMotion } from "../kit";
+import { checkSwitcher } from "../state-switcher";
 
 const DIR = join(ROOT, "design-previews", "suggestions");
 const WIDTH: Record<string, number> = {
@@ -156,21 +161,15 @@ async function go(page: Page, base: string, href: string): Promise<void> {
   await settle(page);
 }
 
-/** The switcher's links for one group, as the page draws them. */
-async function links(
-  page: Page,
-  group: string
-): Promise<{ value: string; href: string }[]> {
+/** The switcher's states for one group, as the page draws them. */
+async function links(page: Page, group: string): Promise<{ value: string }[]> {
   return await page.evaluate(
     (g) =>
       [
-        ...document.querySelectorAll<HTMLAnchorElement>(
-          `[data-group="${g}"] a[data-entry]`
+        ...document.querySelectorAll<HTMLButtonElement>(
+          `nav.state-switcher [data-group="${g}"] button[data-state]`
         ),
-      ].map((a) => ({
-        value: a.dataset.entry ?? "",
-        href: a.getAttribute("href") ?? "",
-      })),
+      ].map((b) => ({ value: b.dataset.state ?? "" })),
     group
   );
 }
@@ -355,11 +354,11 @@ function readStage(his: { texts: string[]; reasons: string[] }): StateRead {
     dark: document.documentElement.classList.contains("dark"),
     groups: [
       ...document.querySelectorAll<HTMLElement>(
-        '[data-slot="switcher"] [data-group]'
+        "nav.state-switcher [data-group]"
       ),
     ].map((group) => {
-      const all = group.querySelectorAll("a[href^='?__state=']").length;
-      const on = group.querySelectorAll("a[aria-current='page']").length;
+      const all = group.querySelectorAll("button[data-state]").length;
+      const on = group.querySelectorAll("button[aria-pressed='true']").length;
       return `${group.dataset.group}:${all}:${on}`;
     }),
     items: items.length,
@@ -588,10 +587,14 @@ const spec: Spec = {
         const trayBox = new Map<string, Record<string, Box | null>>();
         for (const direction of await links(page, "direction")) {
           // biome-ignore lint/performance/noAwaitInLoops: one direction's states at a time, as the switcher offers them
-          await go(page, base, direction.href);
+          await go(page, base, `?__state=direction:${direction.value}`);
           for (const where of await links(page, "where")) {
             // biome-ignore lint/performance/noAwaitInLoops: one place at a time
-            await go(page, base, where.href);
+            await go(
+              page,
+              base,
+              `?__state=direction:${direction.value},where:${where.value}`
+            );
             for (const data of await links(page, "data")) {
               for (const theme of ["light", "dark"]) {
                 const key = `direction:${direction.value},where:${where.value},data:${data.value},theme:${theme}`;
@@ -690,7 +693,7 @@ const spec: Spec = {
           }
         }
         kit.check(
-          `${engine}: every direction × where × data × theme renders the owner's starters at its width, each switcher group a set of links with one chosen (${states} states)`,
+          `${engine}: every direction × where × data × theme renders the owner's starters at its width, each switcher group one pressed (${states} states)`,
           bad.length === 0 && states > 0,
           bad.slice(0, 4).join(" | ")
         );
@@ -797,6 +800,8 @@ const spec: Spec = {
           spills === 0
         );
         house.report();
+        await go(page, base, "");
+        await checkSwitcher(kit, page, engine, { axes: true });
         for (const press of PRESSES) {
           // biome-ignore lint/performance/noAwaitInLoops: one press at a time under one mouse
           await pressLeg(kit, page, base, engine, press);

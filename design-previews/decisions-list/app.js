@@ -10,7 +10,8 @@ import {
   reveal,
   toggleFold,
 } from "./motion.js";
-import { chips, desk, esc, ic, phone, seg } from "./parts.js";
+import { desk, esc, ic, phone } from "./parts.js";
+import { mountStateSwitcher } from "./state-switcher.js";
 
 const STATES = [
   { value: "open2", label: "Needs you, 2" },
@@ -29,7 +30,39 @@ const STATES = [
 /** The states that are a page opened from its row. */
 const OPENED = { replaced: "address-setup", removed: "caw-pairing-picks" };
 
-const state = { state: "open2", page: null, canvas: null };
+/** The shared state switcher: the list's states and the scheme, two axes named in the address. */
+const switcher = mountStateSwitcher({
+  // The desk frame scales to the stage, the phone's 390 under it.
+  width: 1160,
+  axes: true,
+  label: "Decisions list states",
+  groups: [
+    { key: "state", label: "State", states: STATES },
+    {
+      key: "theme",
+      label: "Theme",
+      states: [
+        { value: "light", label: "Day" },
+        { value: "dark", label: "Night" },
+      ],
+    },
+  ],
+  onchange: (next, previous) => {
+    if (next.theme !== previous.theme) {
+      paintTheme(next.theme);
+    }
+    // A state picked, or picked again: the stage stands in it afresh.
+    if (next.state !== previous.state || next.theme === previous.theme) {
+      standIn(next.state);
+    }
+  },
+});
+
+const state = { state: switcher.state.state, page: null, canvas: null };
+
+function paintTheme(theme) {
+  document.documentElement.classList.toggle("dark", theme === "dark");
+}
 
 /** The live query typed into a frame's field, or null. */
 let query = null;
@@ -69,10 +102,6 @@ const purpose = () => `<section class="pv-section pv-col" aria-labelledby="for">
   <div class="pv-grid">${FACTS.map((f) => `<article class="pv-card"><span class="fig num">${f.fig}</span><h3>${f.title}</h3><p>${f.body}</p></article>`).join("")}</div>
   <ul class="pv-jobs" style="margin-block-start:var(--space-group)">${JOBS.map(([j, w, why]) => `<li><span class="j">${j}</span><span class="w">${w}</span><span class="why">${why}</span></li>`).join("")}</ul>
 </section>`;
-
-const switches = () => `<div class="pv-switches">
-  <div class="pv-switch"><span class="pv-switch-label"><strong>State</strong> · every state the list and its pages reach; inside the frames every row opens its page</span>${chips(STATES, state.state, "State")}</div>
-</div>`;
 
 const fit = (html, w) =>
   `<div class="fit" style="--frame-w:${w}">${html}</div>`;
@@ -166,25 +195,6 @@ const critique = () => `<section class="pv-section pv-col" aria-labelledby="crit
 </section>`;
 
 /* ------------------------------------------------------------ the wiring */
-
-function placeThumb(group) {
-  const thumb = group.querySelector(".seg-thumb");
-  const on = group.querySelector('[aria-pressed="true"]');
-  if (!(thumb && on)) {
-    return;
-  }
-  thumb.style.setProperty("--thumb-x", `${on.offsetLeft}px`);
-  thumb.style.setProperty("--thumb-w", `${on.offsetWidth}px`);
-}
-
-function placeAll(root) {
-  for (const group of root.querySelectorAll(".seg")) {
-    group.removeAttribute("data-ready");
-    placeThumb(group);
-    group.getBoundingClientRect();
-    requestAnimationFrame(() => group.setAttribute("data-ready", ""));
-  }
-}
 
 /** A frame drawn at its own width, scaled to the width it is given; the box takes its scaled height. */
 const fits = new Set();
@@ -281,10 +291,9 @@ function drawAll() {
   }
 }
 
+/** The switcher follows a state the page moved to itself. */
 function pressChip(value) {
-  for (const item of document.querySelectorAll('[data-seg="State"] .opt')) {
-    item.setAttribute("aria-pressed", String(item.dataset.value === value));
-  }
+  switcher.set({ state: value });
 }
 
 /** Puts the stage in a state, without motion, clearing what was done. */
@@ -547,24 +556,6 @@ function onFrameClick(event, frame) {
 
 function onClick(event) {
   const target = event.target;
-  const opt = target.closest('[data-seg="State"] .opt');
-  if (opt) {
-    standIn(opt.dataset.value);
-    return;
-  }
-  const item = target.closest(".seg-item");
-  if (item) {
-    const group = item.closest(".seg");
-    for (const each of group.querySelectorAll(".seg-item")) {
-      each.setAttribute("aria-pressed", String(each === item));
-    }
-    placeThumb(group);
-    document.documentElement.classList.toggle(
-      "dark",
-      item.dataset.value === "dark"
-    );
-    return;
-  }
   const play = target.closest("[data-play]");
   if (play) {
     PLAYS[play.dataset.play]?.();
@@ -619,28 +610,21 @@ function page() {
       <div><p class="pv-mark"><span class="wordmark">Caw&amp;Co</span><span>· design preview</span></p>
       <h1 class="pv-title">Decisions, as a list made from what it is for</h1>
       <p class="pv-quote">“check what is the user's purpose form the list, how to make it sueful, show what matters, do a user journey using /interface-craft ux critique, allow discovery, etc... i don't want u to make the list only to find out it's just as useless, or link to stale or removed artifacts”</p>
-      <p class="pv-lede">The project's Decisions tab as one list grouped by where each page stands, with a search over every card, drawn at Desk 1440 and Phone 390 on the project's real pages, with the designer's answers to its critiques (report 068af135). Every state is below, and every row opens its page.</p></div>
-      ${seg(
-        [
-          { value: "light", label: "Day" },
-          { value: "dark", label: "Night" },
-        ],
-        "light",
-        "Theme"
-      )}
+      <p class="pv-lede">The project's Decisions tab as one list grouped by where each page stands, with a search over every card, drawn at Desk 1440 and Phone 390 on the project's real pages, with the designer's answers to its critiques (report 068af135). Every state is in the switcher, and every row opens its page.</p></div>
     </header>
     ${purpose()}
     <section class="pv-section" aria-labelledby="list-h">
       <div class="pv-col"><h2 class="pv-h2" id="list-h">${ic("decisions")}The list</h2>
       <p class="pv-sub">Needs you is what waits on you, and its count is the badge on the tab. Not now is what you set aside. Sent is with the agents. Decided holds the record and its tasks. Closed is folded: pages replaced, withdrawn or dropped, each saying who closed it. Every row's figure is the date that put it in its group.</p>
-      ${switches()}</div>
+      </div>
       <div id="stage"></div>
     </section>
     ${motionPanel()}
     ${settled()}
     ${critique()}`;
+  paintTheme(switcher.state.theme);
+  state.page = OPENED[state.state] ?? null;
   renderStage();
-  placeAll(root);
   root.addEventListener("click", onClick);
   root.addEventListener("input", onInput);
   root.addEventListener("contextmenu", onContextMenu);
@@ -649,13 +633,7 @@ function page() {
   root.addEventListener("pointercancel", cancelHold);
   root.addEventListener("pointermove", cancelHold);
   document.addEventListener("keydown", onKey);
-  window.addEventListener("resize", () => {
-    for (const group of root.querySelectorAll(".seg")) {
-      placeThumb(group);
-    }
-  });
   document.fonts.ready.then(() => {
-    placeAll(root);
     for (const box of fits) {
       fitOne(box);
     }

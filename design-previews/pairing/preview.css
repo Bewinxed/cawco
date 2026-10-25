@@ -159,39 +159,6 @@
       opacity: 0.72;
     }
   }
-
-  /* A segmented control: the groove and its chosen segment. */
-  .seg {
-    display: inline flex;
-    flex-wrap: wrap;
-    gap: var(--space-row);
-    padding: var(--c-segmented-pad);
-    border-radius: var(--radius-md);
-    background: var(--surface-recess-deep);
-    button {
-      min-block-size: var(--c-btn-h-sm);
-      padding-inline: var(--space-3);
-      border: 0;
-      border-radius: var(--radius-well);
-      background: transparent;
-      color: var(--ink-muted);
-      font: var(--type-label);
-      white-space: nowrap;
-      transition:
-        background-color var(--dur-control) var(--ease-out),
-        color var(--dur-control) var(--ease-out);
-      @media (hover: hover) and (pointer: fine) {
-        &:hover {
-          color: var(--ink-strong);
-        }
-      }
-      &[aria-pressed="true"] {
-        background: var(--surface-lift);
-        color: var(--ink-strong);
-        box-shadow: var(--shadow-knob);
-      }
-    }
-  }
 }
 
 
@@ -230,17 +197,6 @@
       align-items: center;
       gap: var(--space-2) var(--space-3);
       min-inline-size: 0;
-      margin: 0;
-      padding: 0;
-      border: 0;
-    }
-    .label {
-      /* A floated legend is laid out as the fieldset's first flex item. */
-      float: inline-start;
-      padding: 0;
-      min-inline-size: 4.5rem;
-      color: var(--ink-muted);
-      font: var(--type-label);
     }
     .note {
       color: var(--ink-muted);

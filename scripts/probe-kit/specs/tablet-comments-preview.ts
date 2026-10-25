@@ -23,6 +23,9 @@
  * 5. No console or page error.
  * 6. Every pin's words, entry by entry, are the export's (pins.json, read
  *    from the hub), and every file an entry names is drawn.
+ * 7. The state switcher is the shared one (state-switcher.ts): the system
+ *    font, a vertical list with arrowed headings at 1440, a select at 744,
+ *    H hiding it.
  *
  * Each option, width and state is captured into the run's folder with a
  * manifest (option, width, state, file, caption), which the preview's
@@ -38,6 +41,7 @@ import { HouseRules } from "../house-rules";
 import { scan } from "../journeys/scan";
 import type { Engine, Kit, Spec } from "../kit";
 import { ROOT, readMotion } from "../kit";
+import { checkSwitcher } from "../state-switcher";
 
 const DIR = join(ROOT, "design-previews", "tablet-comments");
 const OPTIONS = ["a", "b"] as const;
@@ -127,7 +131,12 @@ async function load(
   };
   page.on("pageerror", hear);
   page.on("console", told);
-  await page.goto(`${base}?${new URLSearchParams(query)}`);
+  // The option and the width are the switcher's `__state`; what stands open the page's own.
+  const { option, width, ...own } = query;
+  const address = new URLSearchParams(own).toString();
+  await page.goto(
+    `${base}?__state=option:${option},width:${width}${address ? `&${address}` : ""}`
+  );
   try {
     await page.waitForFunction(
       (was) =>
@@ -874,6 +883,17 @@ const spec: Spec = {
             errors.push(String(error));
             kit.note(`page error: ${error.stack ?? String(error)}`);
           });
+          if (width === WIDTHS[0]) {
+            await load(page, base, {
+              option: "a",
+              width: "820",
+              state: "list",
+            });
+            await checkSwitcher(kit, page, engine, {
+              axes: true,
+              narrow: width,
+            });
+          }
           await page.setViewportSize({ width, height: SCREENS[width] + 400 });
           for (const option of OPTIONS) {
             for (const shows of ["list", "thread"] as const) {

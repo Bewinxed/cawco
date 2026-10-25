@@ -3,25 +3,24 @@
    * The design preview's one page: the word address's tray at its real
    * size, three times over, all driven by one flow: Needs you at Caw's
    * panel width (380), Configure › Devices with the tray floating over its
-   * button, and a 390 phone with the tray as its bottom sheet. Above them,
-   * the two real forks (the network, and certificates already on when
-   * cawco joins) and every moment and failure to jump to, held still. The
-   * trays' own buttons move the flow on as the person would; a waiting
-   * state moves on by itself, as the hub would. Where it stands is kept
-   * across a reload.
+   * button, and a 390 phone with the tray as its bottom sheet. Beside
+   * them, in the shared state switcher, the two real forks (the network,
+   * and certificates already on when cawco joins), day or night, and every
+   * moment and failure to jump to, held still. The trays' own buttons move
+   * the flow on as the person would; a waiting state moves on by itself,
+   * as the hub would, and the switcher's address follows it. Where it
+   * stands is kept across a reload.
    *
    * `window.preview` is the probe's handle (scripts/probe-kit/specs/
    * address-preview.ts): jump to a moment, hold the hub still and move it
    * one sighting at a time.
    */
   import { onDestroy, onMount } from "svelte";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import {
-    TabItem,
-    Tabs,
-    TabsList,
-  } from "#lib/components/ui/fluid-tabs/index.js";
   import { theme } from "#lib/theme.svelte.js";
+  import {
+    type Axes,
+    mountStateSwitcher,
+  } from "../../../../../../../design-previews/state-switcher.js";
   import type { Network } from "../tray.svelte";
   import DeskNeeds from "./DeskNeeds.svelte";
   import DeskSettings from "./DeskSettings.svelte";
@@ -49,15 +48,126 @@
   }
   onDestroy(() => flow.dispose());
 
-  let needs = $state<{ park: () => void } | null>(null);
-  let settings = $state<{ park: () => void } | null>(null);
-  let phone = $state<{ park: () => void } | null>(null);
-
   const NETWORK_NAMES: Record<Network, string> = {
     tailscale: "Tailscale",
     headscale: "Headscale",
     netbird: "NetBird",
   };
+
+  /** Where the flow stands, as the switcher's axes name it. */
+  const axesOf = (): Axes => ({
+    network: flow.network,
+    theme: theme.resolved === "dark" ? "night" : "day",
+    certs: flow.certsAtJoin ? "on" : "off",
+    moment: flow.moment,
+  });
+
+  /**
+   * The shared state switcher (design-previews/state-switcher.js): the two
+   * real forks, day or night, and every step and failure to jump to, one
+   * axis. The page's own stage is #preview, which it moves into its stage.
+   */
+  const switcher = mountStateSwitcher({
+    // Needs you (380), Configure › Devices and the phone (390) side by
+    // side, as a 1440 window draws them.
+    width: 1392,
+    axes: true,
+    label: "Word address states",
+    stage: [document.getElementById("preview") as HTMLElement],
+    groups: (state) => [
+      {
+        key: "network",
+        label: "Network",
+        states: Object.entries(NETWORK_NAMES).map(([value, label]) => ({
+          value,
+          label,
+        })),
+      },
+      {
+        key: "theme",
+        label: "Day or night",
+        states: [
+          { value: "day", label: "Day" },
+          { value: "night", label: "Night" },
+        ],
+      },
+      ...(state.network === "tailscale"
+        ? [
+            {
+              key: "certs",
+              label: "Certificates when cawco joins",
+              states: [
+                { value: "off", label: "Off" },
+                { value: "on", label: "Already on" },
+              ],
+            },
+          ]
+        : []),
+      {
+        key: "steps",
+        axis: "moment",
+        label: "Steps",
+        states: MOMENTS.map((moment) => ({
+          value: moment.id,
+          label: moment.label,
+        })),
+      },
+      {
+        key: "failures",
+        axis: "moment",
+        label: "Failures",
+        states: CAUSES.map((cause) => ({
+          value: `failed:${cause.id}`,
+          label: cause.label,
+        })),
+      },
+    ],
+    onchange: (next, previous) => {
+      if (next.theme !== previous.theme) {
+        theme.set(next.theme === "night" ? "dark" : "light");
+      }
+      if (next.network !== previous.network) {
+        flow.switchNetwork(next.network as Network, flow.moment);
+        return;
+      }
+      if (next.certs !== previous.certs && next.certs !== undefined) {
+        flow.certsAtJoin = next.certs === "on";
+        flow.jump(flow.moment);
+        return;
+      }
+      // A moment picked, or picked again: the flow stands in it afresh.
+      if (next.moment !== previous.moment || next.theme === previous.theme) {
+        flow.jump(next.moment as MomentId);
+      }
+    },
+  });
+  // An address that names a state opens on it; else (or where the kept
+  // flow already stands there) the page stands where it was kept.
+  const named = switcher.state;
+  const kept = axesOf();
+  if (
+    switcher.named &&
+    (named.network !== kept.network ||
+      named.moment !== kept.moment ||
+      (named.certs !== undefined && named.certs !== kept.certs))
+  ) {
+    if (named.certs !== undefined) {
+      flow.certsAtJoin = named.certs === "on";
+    }
+    flow.network = named.network as Network;
+    flow.jump(named.moment as MomentId);
+  }
+  if (switcher.named && named.theme !== kept.theme) {
+    theme.set(named.theme === "night" ? "dark" : "light");
+  }
+  // The flow moves on by itself, as the hub would: the switcher follows it.
+  $effect(() => {
+    switcher.set(axesOf());
+  });
+
+  let needs = $state<{ park: () => void } | null>(null);
+  let settings = $state<{ park: () => void } | null>(null);
+  let phone = $state<{ park: () => void } | null>(null);
 
   $effect(() => {
     flow.keep();
@@ -130,89 +240,6 @@
         by itself, as the hub would, and where it stands is kept across a
         reload.
       </p>
-    </div>
-    <div class="flex flex-wrap items-end gap-x-space-6 gap-y-space-3">
-      <div class="grid gap-space-1">
-        <span class="type-meta text-ink-muted" id="flow-network">Network</span>
-        <Tabs
-          onValueChange={(next) =>
-            flow.switchNetwork(next as Network, flow.moment)}
-          size="compact"
-          value={flow.network}
-        >
-          <TabsList aria-labelledby="flow-network">
-            {#each Object.entries(NETWORK_NAMES) as [id, name] (id)}
-              <TabItem data-network={id} label={name} value={id} />
-            {/each}
-          </TabsList>
-        </Tabs>
-      </div>
-      <div class="grid gap-space-1">
-        <span class="type-meta text-ink-muted" id="flow-theme"
-          >Day or night</span
-        >
-        <Tabs
-          onValueChange={(next) =>
-            theme.set(next === "night" ? "dark" : "light")}
-          size="compact"
-          value={theme.resolved === "dark" ? "night" : "day"}
-        >
-          <TabsList aria-labelledby="flow-theme">
-            <TabItem data-theme-pick="day" label="Day" value="day" />
-            <TabItem data-theme-pick="night" label="Night" value="night" />
-          </TabsList>
-        </Tabs>
-      </div>
-      {#if flow.network === "tailscale"}
-        <div class="grid gap-space-1">
-          <span class="type-meta text-ink-muted" id="flow-certs"
-            >Certificates when cawco joins</span
-          >
-          <Tabs
-            onValueChange={(next) => {
-              flow.certsAtJoin = next === "on";
-              flow.jump(flow.moment);
-            }}
-            size="compact"
-            value={flow.certsAtJoin ? "on" : "off"}
-          >
-            <TabsList aria-labelledby="flow-certs">
-              <TabItem data-certs="off" label="Off" value="off" />
-              <TabItem data-certs="on" label="Already on" value="on" />
-            </TabsList>
-          </Tabs>
-        </div>
-      {/if}
-    </div>
-    <div class="grid gap-space-2">
-      <div class="flex flex-wrap items-center gap-space-1" data-slot="moments">
-        <span class="me-space-2 type-meta text-ink-muted">Steps</span>
-        {#each MOMENTS as moment (moment.id)}
-          <Button
-            aria-pressed={flow.moment === moment.id}
-            data-moment-button={moment.id}
-            label={moment.label}
-            onclick={() => flow.jump(moment.id)}
-            size="xs"
-            variant={flow.moment === moment.id ? "secondary" : "ghost"}
-          />
-        {/each}
-      </div>
-      <div class="flex flex-wrap items-center gap-space-1" data-slot="failures">
-        <span class="me-space-2 type-meta text-ink-muted">Failures</span>
-        {#each CAUSES as cause (cause.id)}
-          <Button
-            aria-pressed={flow.moment === `failed:${cause.id}`}
-            data-moment-button="failed:{cause.id}"
-            label={cause.label}
-            onclick={() => flow.jump(`failed:${cause.id}`)}
-            size="xs"
-            variant={flow.moment === `failed:${cause.id}`
-              ? "secondary"
-              : "ghost"}
-          />
-        {/each}
-      </div>
     </div>
   </header>
 

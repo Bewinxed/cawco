@@ -23,6 +23,7 @@
  * --ease-drawer, its trailing edge and top held).
  */
 import { PARTS } from "./parts.js";
+import { mountStateSwitcher } from "./state-switcher.js";
 
 const EXPORT = await (await fetch("./pins.json")).json();
 const PINS = EXPORT.pins;
@@ -37,18 +38,50 @@ const motionOk = () => !reduced.matches;
 /** Each width's screen: a tablet, its height the screen's less the top bar. */
 const SCREENS = { 744: 1133, 820: 1180, 1024: 1366 };
 const TOP_BAR = 44;
-const OPTIONS = ["a", "b"];
 
 const RULES = {
   a: "A strip of one-line rows beside the page, 200px. A row pressed stands open and its thread hangs from it as a HangCard: flush with the row's end, reaching over the page to two fifths of it, 280px at least. Another row pressed moves the card to it.",
   b: "Nothing docked: the page keeps its whole width. Comments, in the head's trailing glass group, hangs the list from that group as the glass's card does, three tenths of the page wide (280 to 380px). A row pressed changes the card in place to its thread, two fifths of the page wide; Back changes it back.",
 };
 
-/* ── Reading the address ──────────────────────────────────────────── */
+/* ── Reading the address: the option and the width are the switcher's
+   (named in the address), what stands open the preview's own (`state`, `pin`). ── */
+const switcher = mountStateSwitcher({
+  // The widest tablet.
+  width: 1024,
+  axes: true,
+  label: "Tablet comments states",
+  groups: [
+    {
+      key: "option",
+      label: "Option",
+      states: [
+        { value: "a", label: "A · A strip, the thread hangs from its row" },
+        { value: "b", label: "B · The list hangs from Comments" },
+      ],
+    },
+    {
+      key: "width",
+      label: "Width",
+      initial: "820",
+      states: [
+        { value: "744", label: "744, iPad mini" },
+        { value: "820", label: "820, iPad Air" },
+        { value: "1024", label: "1024, iPad Pro" },
+      ],
+    },
+  ],
+  onchange: (next) => {
+    state.option = next.option;
+    state.width = Number(next.width);
+    state.shows = "list";
+    build();
+  },
+});
 const ask = new URLSearchParams(location.search);
 const state = {
-  option: OPTIONS.includes(ask.get("option")) ? ask.get("option") : "a",
-  width: SCREENS[ask.get("width")] ? Number(ask.get("width")) : 820,
+  option: switcher.state.option,
+  width: Number(switcher.state.width),
   /** What stands: the list (A's strip, B's hung card), a thread, or (B) nothing. */
   shows: ["list", "thread", "none"].includes(ask.get("state"))
     ? ask.get("state")
@@ -56,13 +89,14 @@ const state = {
   pin: Number(ask.get("pin")) || PINS[0].number,
 };
 const write = () => {
-  const next = new URLSearchParams({
-    option: state.option,
-    width: String(state.width),
-    state: state.shows,
-    ...(state.shows === "thread" ? { pin: String(state.pin) } : {}),
-  });
-  history.replaceState(null, "", `?${next}`);
+  const url = new URL(location.href);
+  url.searchParams.set("state", state.shows);
+  if (state.shows === "thread") {
+    url.searchParams.set("pin", String(state.pin));
+  } else {
+    url.searchParams.delete("pin");
+  }
+  history.replaceState(history.state, "", url);
 };
 
 /* ── Parts ────────────────────────────────────────────────────────── */
@@ -653,14 +687,6 @@ function build() {
   fit.style.setProperty("--frame-h", `${height}px`);
   scale();
   document.querySelector('[data-slot="rule"]').textContent = RULES[option];
-  for (const [slot, value] of [
-    ["option", option],
-    ["width", String(width)],
-  ]) {
-    for (const b of document.querySelectorAll(`[data-slot="${slot}"] button`)) {
-      b.setAttribute("aria-pressed", String(b.dataset.value === value));
-    }
-  }
 
   const pane = document.createElement("section");
   pane.className = "pane";
@@ -1070,19 +1096,7 @@ function scale() {
   frame.style.setProperty("--s", String(s));
 }
 
-/* ── The switches and keys ────────────────────────────────────────── */
-for (const [slot, key] of [
-  ["option", "option"],
-  ["width", "width"],
-]) {
-  for (const b of document.querySelectorAll(`[data-slot="${slot}"] button`)) {
-    b.addEventListener("click", () => {
-      state[key] = key === "width" ? Number(b.dataset.value) : b.dataset.value;
-      state.shows = "list";
-      build();
-    });
-  }
-}
+/* ── The keys ─────────────────────────────────────────────────────── */
 addEventListener("keydown", (event) => {
   if (event.key !== "Escape" || !built?.hang || built.hang.closing) {
     return;

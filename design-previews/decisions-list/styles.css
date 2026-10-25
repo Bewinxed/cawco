@@ -314,35 +314,10 @@
     }
   }
 
-  .pv-switches {
-    display: block grid;
-    gap: var(--space-4);
-    padding: var(--space-5);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-  }
-
-  .pv-switch {
-    display: block grid;
-    gap: var(--space-2);
-    min-inline-size: 0;
-  }
-
   .pv-picks {
     display: block grid;
     gap: var(--space-4) var(--space-6);
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
-  }
-
-  .pv-switch-label {
-    color: var(--ink-muted);
-    font: var(--type-meta);
-
-    strong {
-      color: var(--ink-strong);
-      font-weight: 500;
-    }
   }
 
   .pv-stage-cap {
@@ -473,86 +448,7 @@
 
 /* ------------------------------------------------------------------- kit */
 @layer kit {
-  .seg {
-    position: relative;
-    display: inline flex;
-    flex-wrap: nowrap;
-    max-inline-size: 100%;
-    padding: 3px;
-    border-radius: var(--radius-md);
-    background: var(--surface-recess-deep);
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .seg-thumb {
-    position: absolute;
-    inset-block: 3px;
-    inset-inline-start: 0;
-    inline-size: var(--thumb-w, 0);
-    border-radius: var(--radius-well);
-    background: var(--surface-lift);
-    box-shadow: var(--shadow-raised);
-    translate: var(--thumb-x, 0) 0;
-    pointer-events: none;
-
-    @media (prefers-reduced-motion: no-preference) {
-      .seg[data-ready] & {
-        transition:
-          translate 260ms var(--ease-in-out),
-          inline-size 260ms var(--ease-in-out);
-      }
-    }
-  }
-
-  .seg-item {
-    position: relative;
-    z-index: 1;
-    display: inline flex;
-    flex: none;
-    gap: var(--space-1);
-    align-items: center;
-    block-size: var(--c-btn-h-sm);
-    padding-inline: var(--space-3);
-    border-radius: var(--radius-well);
-    color: var(--ink-muted);
-    font: var(--type-label);
-    line-height: 1;
-    white-space: nowrap;
-    transition: color var(--dur-control) var(--ease-out);
-
-    &[aria-pressed="true"] {
-      color: var(--ink-strong);
-    }
-
-    &:active {
-      background: var(--surface-pressed);
-    }
-
-    @media (hover: hover) {
-      &:hover {
-        color: var(--ink-strong);
-      }
-    }
-
-    @media (pointer: coarse) {
-      block-size: var(--c-btn-h);
-    }
-
-    .tag {
-      color: var(--ink-muted);
-      font: var(--type-meta);
-    }
-  }
-
   /* The option chip (ui/chip `option`): picked, the coral edge on the recess. */
-  .chipset {
-    display: block flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-  }
-
-  .opt,
   .dopt {
     display: inline flex;
     gap: var(--space-2);

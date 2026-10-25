@@ -101,86 +101,6 @@ button {
   text-wrap: pretty;
 }
 
-.switches {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-4) var(--space-6);
-  align-items: end;
-}
-
-.switch {
-  display: grid;
-  gap: var(--space-1);
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.switch[hidden] {
-  display: none;
-}
-
-.switch legend {
-  padding: 0 0 var(--space-1);
-  font: var(--type-meta);
-  color: var(--ink-muted);
-}
-
-.switch .rec {
-  color: var(--ink-subtle);
-}
-
-/* A segmented control: the groove, a lifted thumb under the choice. */
-.seg {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
-  padding: 2px;
-  border-radius: var(--radius-md);
-  background: var(--surface-recess-deep);
-}
-
-.seg label {
-  position: relative;
-  display: grid;
-  place-items: center;
-  min-height: var(--c-btn-h-sm);
-  padding: 0 var(--space-3);
-  border-radius: calc(var(--radius-md) - 2px);
-  font: var(--type-label);
-  color: var(--ink-muted);
-  cursor: pointer;
-  user-select: none;
-  transition:
-    background-color var(--dur-control) var(--ease-out),
-    color var(--dur-control) var(--ease-out),
-    box-shadow var(--dur-control) var(--ease-out);
-}
-
-.seg input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.seg label:has(input:checked) {
-  background: var(--surface-lift);
-  color: var(--ink-strong);
-  box-shadow: var(--shadow-tile);
-}
-
-.seg label:has(input:focus-visible) {
-  outline: var(--focus-ring-width) solid var(--focus-ring);
-  outline-offset: 1px;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .seg label:not(:has(input:checked)):hover {
-    color: var(--ink-strong);
-  }
-}
-
 .moments {
   margin: 0;
   padding: 0;
@@ -239,15 +159,10 @@ button {
 }
 
 /* Narrower than both frames side by side: one at a time, by the Show switch, each fitted to the width (panel.js sets --fit). */
-.show-switch {
-  display: none;
-}
-
 @media (width < 900px) {
-  .show-switch {
-    display: grid;
-  }
+  /* The frame takes the window's whole width, out past the switcher page's padding. */
   .stage {
+    margin-inline: calc(50% - 50vw);
     padding-inline: 0;
   }
   .stage[data-show="desk"] .frame-phone,

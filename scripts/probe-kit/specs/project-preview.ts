@@ -10,6 +10,9 @@
  *   PROJECT_PREVIEW_ENGINES=chromium bun scripts/probe-kit/run.ts project-preview
  *
  * Asserted:
+ * - the state switcher is the shared one (state-switcher.ts): the system
+ *   font, a vertical list with arrowed headings at 1440, a select at 390,
+ *   H hiding it;
  * - boxes: the page never scrolls sideways; inside the head, the bar, the
  *   view bar, every card, the pane's rows and the empty and failed blocks,
  *   no part spills out of its parent or covers a sibling;
@@ -102,6 +105,7 @@ import {
   type Spec,
   type View,
 } from "../kit";
+import { checkSwitcher } from "../state-switcher";
 
 const FOLDER = normalize(
   join(import.meta.dir, "..", "..", "..", "design-previews", "project")
@@ -2924,6 +2928,9 @@ const boxes = async (kit: Kit, origin: string): Promise<void> => {
       await page.goto(`${origin}/index.html`);
       await page.waitForFunction(() => document.fonts.status === "loaded");
       await checkShell(kit, page, `${engine} ${size}`);
+      if (size === "desk") {
+        await checkSwitcher(kit, page, `${engine}`, { axes: true });
+      }
       for (const [state, layout] of LEGS(size)) {
         await openFrame(page, origin, state, layout);
         await checkState(

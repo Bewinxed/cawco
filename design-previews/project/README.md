@@ -2,7 +2,8 @@
 
 One static page (`index.html`) holding the project page itself (`frame.html`)
 at Desk 1440 and Phone 390, live, on the dashboard's built tokens
-(`tokens.css`) and the house faces. A switch picks the state (at rest,
+(`tokens.css`) and the house faces. The shared state switcher
+(`state-switcher.js`) picks the state (at rest,
 waiting on you, the task pane open, an empty project, a read failure, Caw's
 first thread), the phone's board (one grouped list, or the desk's columns
 sideways) and the scheme. Under 1100px it shows one frame at a time.

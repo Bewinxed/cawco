@@ -58,7 +58,7 @@ What it is made of:
   `--dur-morph` in, the box tweening on `--ease-drawer`, trailing edge and
   top held). The two runs carry ids (`hang`, `morph`) so the probe can read
   the clock by them.
-- `preview.css`: the switches, the frame, the pane and well, and, marked,
+- `preview.css`: the bar, the frame, the pane and well, and, marked,
   what each option asks of the parts that they don't do today (the compact
   rows, the open row's foot, B's thread bar).
 - `captures/`: each option at each width, the list open and comment 1's

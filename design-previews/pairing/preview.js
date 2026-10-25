@@ -39,6 +39,7 @@
  * lookup) and the clock's seconds.
  */
 import { QR } from "./lib/qr.js";
+import { mountStateSwitcher } from "./state-switcher.js";
 import { TextMorph, TextSwap } from "./lib/swap.js";
 
 /* ---------------------------------------------------------------- data */
@@ -1783,9 +1784,7 @@ function snap(m) {
     // The from-state's ping starts only where the moment keeps it.
     rest(S, FROM[m], { still: true, ping: m === "lastminute" });
   }
-  for (const b of document.querySelectorAll("[data-moment]")) {
-    b.setAttribute("aria-pressed", String(b.dataset.moment === m));
-  }
+  switcher?.set(m);
 }
 
 /** Plays `m` on both stages: every part of both issued in one frame. */
@@ -1822,6 +1821,16 @@ function fitFrames() {
     fit.style.blockSize = `${viewport.offsetHeight * scale}px`;
   }
 }
+
+/** The shared state switcher: every moment to play into, one state, named in the address. */
+const switcher = mountStateSwitcher({
+  // The desk frame (544) and the phone's (390) side by side, with the frames' gap and padding.
+  width: 1040,
+  initial: "waiting",
+  label: "Pairing moments",
+  groups: [{ key: "moments", label: "Play into", states: MOMENTS.map(([value, label]) => ({ value, label })) }],
+  onchange: (m) => play(m),
+});
 
 async function start() {
   readTokens();
@@ -1863,18 +1872,8 @@ async function start() {
     );
   watchDensity();
 
-  const list = document.querySelector('[data-slot="moments"]');
-  for (const [m, label] of MOMENTS) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.dataset.moment = m;
-    b.textContent = label;
-    b.setAttribute("aria-pressed", "false");
-    b.addEventListener("click", () => play(m));
-    list.append(b);
-  }
   document.querySelector('[data-slot="replay"]').addEventListener("click", () => play(last));
-  play("waiting");
+  play(switcher.state);
   document.documentElement.dataset.ready = "";
 }
 

@@ -13,7 +13,8 @@ bun design-previews/project-options/capture/capture.ts            # remake parts
 bun design-previews/project-options/capture/shots.ts              # remake captures/ and its manifest.json
 ```
 
-- `index.html`, `index.js`: the switches over one frame: width, Today, his
+- `index.html`, `index.js`: the switches (the shared state switcher,
+  `state-switcher.js`) beside one frame: width, Today, his
   board's state, what is open beside it, the view, and one per pick: H1 or
   H2′, the bar's fold step 2 (A or B), D, P, T1 folded or open, C, K's fork,
   the jump strip with or without the id, the pane's placement (B or A), his

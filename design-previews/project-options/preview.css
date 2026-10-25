@@ -2,7 +2,7 @@
    layout (the Shell's rail, the page's column, the body beside the pane or
    Caw's column; a phone's scroller under its two bars), the scroll edge
    effect every bar, dock and pinned head uses, and the switch page
-   (index.html). The parts themselves are house.css's. */
+   (index.html, beside the shared state switcher). The parts themselves are house.css's. */
 
 /* ---- The frame ---- */
 html,
@@ -297,40 +297,6 @@ body {
   margin: 0;
   max-inline-size: var(--c-measure);
   color: var(--ink-muted);
-}
-.po-switches {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3) var(--space-5);
-}
-.po-switch {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-inline-size: 0;
-}
-.po-switch > span {
-  font: var(--type-meta);
-  color: var(--ink-muted);
-}
-.po-switch > div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-}
-.po-switch button {
-  min-block-size: var(--c-btn-h-sm);
-  padding: 0 var(--space-3);
-  border: var(--border-width) solid var(--border-control);
-  border-radius: var(--radius-sm);
-  background: var(--surface-raised);
-  color: var(--ink-strong);
-  font: var(--type-label);
-  cursor: pointer;
-}
-.po-switch button[aria-checked="true"] {
-  border-color: var(--brand-solid);
-  background: var(--surface-recess);
 }
 .po-notes {
   max-inline-size: var(--c-measure);

@@ -18,12 +18,13 @@ import { C, C_GROWN, C_START, inspectorFor } from "./opt-c.js";
 import { D } from "./opt-d.js";
 import { badge, btn, chip, glyph, ic, seg, viewStrip } from "./parts.js";
 import { PLAN, shapeView } from "./shape.js";
+import { mountStateSwitcher } from "./state-switcher.js";
 
 const OPTIONS = { A, B, C, D };
 const JOBS = [
   { value: "create", label: "Create" },
   { value: "edit", label: "Edit" },
-  { value: "run", label: "Run and see runs", short: "Run" },
+  { value: "run", label: "Run and see runs" },
   { value: "evaluate", label: "Evaluate" },
   { value: "delete", label: "Delete" },
 ];
@@ -83,10 +84,50 @@ const TODAY = {
   new: () => badge("New", "", "plus"),
 };
 
-const state = { option: "B", job: "create" };
+/** The shared state switcher: the option, the job and the scheme, three axes named in the address. */
+const switcher = mountStateSwitcher({
+  // The desk frame scales to the stage, the phone's 390 beside or under it.
+  width: 1160,
+  axes: true,
+  label: "Workflows states",
+  groups: [
+    {
+      key: "option",
+      label: "Option",
+      initial: "B",
+      states: Object.values(OPTIONS).map((o) => ({
+        value: o.key,
+        label: `${o.key} · ${o.name}${o.recommended ? " · recommended" : ""}`,
+      })),
+    },
+    { key: "job", label: "Job", states: JOBS },
+    {
+      key: "theme",
+      label: "Theme",
+      states: [
+        { value: "light", label: "Day" },
+        { value: "dark", label: "Night" },
+      ],
+    },
+  ],
+  onchange: (next, previous) => {
+    if (next.theme !== previous.theme) {
+      paintTheme(next.theme);
+    }
+    // An option or job picked, or picked again: the stage is drawn afresh.
+    if (next.theme === previous.theme) {
+      state.option = next.option;
+      state.job = next.job;
+      fadeIn(renderOption());
+    }
+  },
+});
 
-/** Each option's name as the phone's switch says it, so all four fit at 390. */
-const SHORT = { A: "Brief", B: "Ledger", C: "Canvas", D: "Keep" };
+const state = { option: switcher.state.option, job: switcher.state.job };
+
+function paintTheme(theme) {
+  document.documentElement.classList.toggle("dark", theme === "dark");
+}
 
 /* ------------------------------------------------- where it lives */
 
@@ -199,24 +240,6 @@ const facts = () => `<section class="pv-section pv-col" aria-labelledby="facts">
 </section>`;
 
 /* ---------------------------------------------------------- options */
-
-const switches = () => `<div class="pv-switches">
-  <div class="pv-col" style="display:flex;flex-wrap:wrap;gap:var(--space-3) var(--space-5);align-items:center;inline-size:100%;padding:0">
-  <span class="pv-switch-label">Option</span>
-  ${seg(
-    Object.values(OPTIONS).map((o) => ({
-      value: o.key,
-      label: `${o.key} · ${o.name}`,
-      short: `${o.key} · ${SHORT[o.key]}`,
-      tag: o.recommended ? "recommended" : "",
-    })),
-    state.option,
-    "Option"
-  )}
-  <span class="pv-switch-label">Job</span>
-  ${seg(JOBS, state.job, "Job")}
-  </div>
-</div>`;
 
 const optionHead = (o) => `<div class="pv-option-head">
   <div>
@@ -353,16 +376,6 @@ function renderOption() {
   return el;
 }
 
-function choose(name, value) {
-  if (name === "Option") {
-    state.option = value;
-  } else {
-    state.job = value;
-  }
-  const el = renderOption();
-  fadeIn(el);
-}
-
 function playIn(el, id) {
   const plays = {
     "a-redraw": () => el.playA?.(),
@@ -410,6 +423,7 @@ function runMotion(id) {
   let el = document.querySelector("#stage");
   if (m && state.job !== m.job) {
     state.job = m.job;
+    switcher.set({ job: m.job });
     el = renderOption();
     el.scrollIntoView({
       behavior: motionOk() ? "smooth" : "auto",
@@ -434,15 +448,6 @@ function onClick(event) {
       item.setAttribute("aria-pressed", String(item === segItem));
     }
     placeThumb(group);
-    if (name === "Option" || name === "Job") {
-      choose(name, segItem.dataset.value);
-    }
-    if (name === "Theme") {
-      document.documentElement.classList.toggle(
-        "dark",
-        segItem.dataset.value === "dark"
-      );
-    }
     return;
   }
   const play = event.target.closest("[data-play]");
@@ -476,23 +481,15 @@ function page() {
       <div><p class="pv-mark"><span class="wordmark">Caw&amp;Co</span><span>· design preview</span></p>
       <h1 class="pv-title">Workflows: four ways to make one</h1>
       <p class="pv-lede">“A Workflows feature where you create, edit, design and visualise, delete, run and see the runs of, and evaluate workflows. Routines are not part of it. It runs on the delegation tree.” Each option is drawn at Desk 1440 and Phone 390, for every one of those jobs, on one workflow made of his own work: the Cawco project’s routine “Daily reply shortlist for X”, through x-use, as five steps.</p></div>
-      ${seg(
-        [
-          { value: "light", label: "Day", icon: "sun" },
-          { value: "dark", label: "Night", icon: "moon" },
-        ],
-        document.documentElement.classList.contains("dark") ? "dark" : "light",
-        "Theme"
-      )}
     </header>
     ${lives()}
     ${facts()}
     <section class="pv-section" aria-labelledby="options-h">
       <div class="pv-col"><h2 class="pv-h2" id="options-h">${ic("workflow")}The four options</h2>
       <p class="pv-sub">All four share the Workflows tab, the run drawn as its delegation tree, the Start sheet, Checks and Runs. They differ in the thing he writes and the picture he edits. Shared legend: ${glyph("done", "sm")} done, ${glyph("running", "sm")} working, ${glyph("needs", "sm")} needs you, ${glyph("failed", "sm")} failed, ${glyph("planned", "sm")} planned, ${glyph("unplanned", "sm")} not in the plan. ${chip("Call")} steps run through an approved action, never a model.</p></div>
-      ${switches()}
       <div id="option"></div>
     </section>`;
+  paintTheme(switcher.state.theme);
   placeAll(root);
   renderOption();
   root.addEventListener("click", onClick);

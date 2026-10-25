@@ -39,24 +39,6 @@ const CHIP_GLYPH = { page: "decisions", canvas: "canvas", session: "session" };
 export const chip = (title, { kind = "page", target = title } = {}) =>
   `<a class="ichip" href="#" data-chip data-kind="${kind}" data-target="${esc(target)}">${ic(CHIP_GLYPH[kind])}<span data-slot="label">${esc(title)}</span></a>`;
 
-/** The kit's segmented groove and lifted thumb: Day and Night. */
-export const seg = (items, chosen, name, id = name) =>
-  `<div class="seg" role="group" aria-label="${esc(name)}" data-seg="${esc(id)}"><span class="seg-thumb" aria-hidden="true"></span>${items
-    .map(
-      (item) =>
-        `<button type="button" class="seg-item" data-value="${item.value}" aria-pressed="${item.value === chosen}"><span>${item.label}</span>${item.tag ? `<span class="tag">${item.tag}</span>` : ""}</button>`
-    )
-    .join("")}</div>`;
-
-/** A set of option chips, one pressed, wrapping: the eleven states. */
-export const chips = (items, chosen, name) =>
-  `<div class="chipset" role="group" aria-label="${esc(name)}" data-seg="${esc(name)}">${items
-    .map(
-      (item) =>
-        `<button type="button" class="opt" data-value="${item.value}" aria-pressed="${item.value === chosen}">${item.label}</button>`
-    )
-    .join("")}</div>`;
-
 /* ----------------------------------------------------------- the desk */
 
 const tux = `<svg class="ic sm" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M1.8 14.6a2.4 1.25 0 0 1 4.8 0 2.4 1.25 0 0 1-4.8 0ZM9.4 14.6a2.4 1.25 0 0 1 4.8 0 2.4 1.25 0 0 1-4.8 0ZM2.57 7.13a3.1 1.35 82 0 1 .86 6.14 3.1 1.35 82 0 1-.86-6.14ZM13.43 7.13a3.1 1.35 98 0 1-.86 6.14 3.1 1.35 98 0 1 .86-6.14ZM3.1 9.9a4.9 5.1 0 0 1 9.8 0 4.9 5.1 0 0 1-9.8 0ZM4.7 4.1a3.3 3.4 0 0 1 6.6 0 3.3 3.4 0 0 1-6.6 0ZM5.55 3.9a.9 1.1 0 0 0 1.8 0 .9 1.1 0 0 0-1.8 0ZM8.65 3.9a.9 1.1 0 0 0 1.8 0 .9 1.1 0 0 0-1.8 0ZM8 5.6 6.6 7h2.8Z"/></svg>`;

@@ -1,11 +1,12 @@
 /*
  * Caw's panel, the design preview: one panel drawn twice (Desk, Phone),
- * driven by the switches above them. Every motion is a Web Animation with
+ * driven by the shared state switcher (state-switcher.js) beside them. Every motion is a Web Animation with
  * an `id` (the plan's §5 moment it is), on the house's curves and
  * durations read from tokens.css, started from where it is drawn, and a
  * cross-fade over --dur-fade under reduced motion.
  */
 
+import { mountStateSwitcher } from "./state-switcher.js";
 import { THREAD_ID, TURNS } from "./thread.js";
 
 const root = document.documentElement;
@@ -1941,8 +1942,7 @@ function paintMoments() {
       }
       if (next) {
         S.state = next;
-        document.querySelector(`input[name="state"][value="${next}"]`).checked =
-          true;
+        switcher.set({ state: next });
         paintMoments();
         drawArcs();
       }
@@ -1955,7 +1955,6 @@ function setState(next) {
   const prev = S.state;
   if (next === "fresh" && prev !== "fresh") {
     S.state = next;
-    document.querySelector('input[name="state"][value="fresh"]').checked = true;
     for (const p of panels) {
       p.reopen();
       p.newThread();
@@ -1988,7 +1987,8 @@ function setState(next) {
 }
 
 function paintAfterState() {
-  document.querySelector('[data-control="cause"]').hidden = S.state !== "cant";
+  // Why he can't start is a group of its own only while he can't.
+  switcher.refresh();
   paintMoments();
   drawArcs();
 }
@@ -2003,6 +2003,86 @@ function fitDevices() {
     d.style.setProperty("--fit", String(fit));
   }
 }
+
+/** Narrower than both frames side by side: one at a time, by the Show switch. */
+const ONE_FRAME = matchMedia("(width < 900px)");
+
+/** Each switch's state as the page starts. */
+const FIRST = {
+  state: "rest",
+  cause: "machine",
+  block: "A",
+  theme: "light",
+  motion: "full",
+  show: "desk",
+};
+
+/** The switcher's groups: Why he can't start only while he can't, Show only where one frame stands at a time. */
+const groupsOf = (state) => [
+  {
+    key: "state",
+    label: "State",
+    states: [
+      { value: "rest", label: "At rest" },
+      { value: "needs", label: "Needs you" },
+      { value: "docked", label: "Docked" },
+      { value: "cant", label: "Can’t start" },
+      { value: "scrolled", label: "Scrolled" },
+      { value: "fresh", label: "New thread" },
+    ],
+  },
+  ...(state.state === "cant"
+    ? [
+        {
+          key: "cause",
+          label: "Why he can’t start",
+          initial: FIRST.cause,
+          states: [
+            { value: "machine", label: "No machine" },
+            { value: "budget", label: "Budget" },
+            { value: "thread", label: "Thread won’t read" },
+            { value: "hub", label: "Hub updating" },
+          ],
+        },
+      ]
+    : []),
+  {
+    key: "block",
+    label: "Fork · where the block stands on a full thread",
+    states: [
+      { value: "A", label: "A · pinned above the composer · recommended" },
+      { value: "B", label: "B · the panel’s centre" },
+    ],
+  },
+  {
+    key: "theme",
+    label: "Scheme",
+    states: [
+      { value: "light", label: "Day" },
+      { value: "dark", label: "Night" },
+    ],
+  },
+  {
+    key: "motion",
+    label: "Motion",
+    states: [
+      { value: "full", label: "Full" },
+      { value: "reduced", label: "Reduced" },
+    ],
+  },
+  ...(ONE_FRAME.matches
+    ? [
+        {
+          key: "show",
+          label: "Show",
+          states: [
+            { value: "desk", label: "Desk" },
+            { value: "phone", label: "Phone" },
+          ],
+        },
+      ]
+    : []),
+];
 
 /** What each switch does to both panels. */
 const SWITCHES = {
@@ -2039,6 +2119,23 @@ const SWITCHES = {
   },
 };
 
+const switcher = mountStateSwitcher({
+  // Desk (460) and Phone (390) side by side, with the stage's gap and padding.
+  width: 960,
+  axes: true,
+  label: "Caw’s panel states",
+  groups: groupsOf,
+  onchange: (next, previous) => {
+    // The state last: the switches it reads stand first.
+    for (const key of ["theme", "motion", "show", "block", "cause", "state"]) {
+      if (next[key] !== previous[key]) {
+        SWITCHES[key](next[key]);
+      }
+    }
+  },
+});
+ONE_FRAME.addEventListener("change", () => switcher.refresh());
+
 function init() {
   const deskHost = document.querySelector(".desk [data-panel-host]");
   const phoneHost = document.querySelector(".phone [data-panel-host]");
@@ -2058,19 +2155,23 @@ function init() {
     });
   }
 
-  document.querySelector(".controls").addEventListener("change", (event) => {
-    const input = event.target;
-    if (input instanceof HTMLInputElement) {
-      SWITCHES[input.name]?.(input.value);
-    }
-  });
-
   addEventListener("resize", fitDevices);
   fitDevices();
   for (const p of panels) {
     p.render();
   }
-  paintAfterState();
+  // The page opens on the state its address names: each switch away from where the page starts, the state last.
+  const start = switcher.state;
+  for (const key of ["theme", "motion", "show", "block", "cause"]) {
+    if (start[key] !== undefined && start[key] !== FIRST[key]) {
+      SWITCHES[key](start[key]);
+    }
+  }
+  if (start.state === "rest") {
+    paintAfterState();
+  } else {
+    setState(start.state);
+  }
 }
 
 // The probe and the owner's console reach the same handles.

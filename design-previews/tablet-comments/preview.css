@@ -1,7 +1,7 @@
 /* The tablet comments preview: the preview pane at a tablet's width, made
    of the real components' markup (parts.js) on the dashboard's own
    stylesheet (house.css, captured by capture/capture.ts). This file draws
-   only what stands round the parts (the switches, the frame, the pane, its
+   only what stands round the parts (the bar, the frame, the pane, its
    well and the page in it) and, marked as such, what each option asks of
    the parts that they don't do today: the rail's compact dress, a row
    standing open as its card's anchor, the thread's bar in B. Its layer
@@ -22,12 +22,12 @@
     margin: 0;
     min-block-size: 100dvh;
   }
-  :where(.seg button, .page-pin):focus-visible {
+  :where(.page-pin):focus-visible {
     outline: var(--focus-ring-width) solid var(--focus-ring);
     outline-offset: 2px;
   }
 
-  /* ---- The switches. ---- */
+  /* ---- The bar: the title and the option's rule. ---- */
   .bar {
     display: block grid;
     gap: var(--space-3);
@@ -40,23 +40,6 @@
       letter-spacing: var(--track-title);
       text-wrap: balance;
     }
-    .row {
-      display: block flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: var(--space-2) var(--space-3);
-      min-inline-size: 0;
-      margin: 0;
-      padding: 0;
-      border: 0;
-    }
-    .label {
-      float: inline-start;
-      min-inline-size: 4.5rem;
-      padding: 0;
-      color: var(--ink-muted);
-      font: var(--type-label);
-    }
     .rule {
       max-inline-size: 72ch;
       margin: 0;
@@ -65,42 +48,17 @@
       text-wrap: pretty;
     }
   }
-  .seg {
-    display: inline flex;
-    flex-wrap: wrap;
-    gap: var(--space-row);
-    min-inline-size: 0;
-    padding: var(--c-segmented-pad);
-    border-radius: var(--radius-md);
-    background: var(--surface-recess-deep);
-    button {
-      min-block-size: var(--c-btn-h-sm);
-      padding-inline: var(--space-3);
-      border: 0;
-      border-radius: var(--radius-well);
-      background: transparent;
-      color: var(--ink-muted);
-      font: var(--type-label);
-      text-align: start;
-      cursor: pointer;
-      transition:
-        background-color var(--dur-control) var(--ease-out),
-        color var(--dur-control) var(--ease-out);
-      @media (hover: hover) and (pointer: fine) {
-        &:hover {
-          color: var(--ink-strong);
-        }
-      }
-      &[aria-pressed="true"] {
-        background: var(--surface-lift);
-        color: var(--ink-strong);
-        box-shadow: var(--shadow-knob);
-      }
-    }
-  }
-
   /* ---- The stage: the pane at its real width, scaled only when the
      window is narrower than it. ---- */
+  /* Where the switcher stands above the stage (under its 1024px stage and
+     232px list), the stage takes the window's whole width, out past the
+     switcher page's padding, so a tablet as wide as the window stands at
+     its real width. */
+  @container state-page (width < 1256px) {
+    .stage {
+      margin-inline: calc(50% - 50vw);
+    }
+  }
   .stage {
     display: block grid;
     justify-items: center;

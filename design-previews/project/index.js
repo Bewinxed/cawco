@@ -1,9 +1,11 @@
 /*
- * The preview page: each switch posts the state, the phone fork or the
- * scheme to both frames, and each frame is scaled to the width it has (the
- * page inside stays at its own width, 1440 or 390, so its layout is the real
- * one).
+ * The preview page: the shared state switcher (state-switcher.js) posts the
+ * state, the phone fork or the scheme to both frames, and each frame is
+ * scaled to the width it has (the page inside stays at its own width, 1440
+ * or 390, so its layout is the real one).
  */
+
+import { mountStateSwitcher } from "./state-switcher.js";
 
 const $ = (selector, scope = document) => scope.querySelector(selector);
 const $$ = (selector, scope = document) => [
@@ -23,25 +25,94 @@ const HINTS = {
 
 const frames = () => $$(".screen iframe");
 
-const pick = (name) => $(`input[name="${name}"]:checked`)?.value;
-
 const post = (message) => {
   for (const frame of frames()) {
     frame.contentWindow?.postMessage(message, "*");
   }
 };
 
-const placeThumb = (fieldset) => {
-  const thumb = $(".seg-thumb", fieldset);
-  const chosen = $("label:has(input:checked)", fieldset);
-  if (!(thumb && chosen)) {
-    return;
-  }
-  thumb.style.translate = `${chosen.offsetLeft - 3}px ${chosen.offsetTop - 3}px`;
-  thumb.style.width = `${chosen.offsetWidth}px`;
-};
-
 const ONE = matchMedia("(width < 1100px)");
+
+/** The switcher's groups: Frame only where one frame stands at a time. */
+const groupsOf = () => [
+  {
+    key: "state",
+    label: "State",
+    states: [
+      { value: "rest", label: "At rest" },
+      { value: "waiting", label: "Waiting on you" },
+      { value: "open", label: "Task open" },
+      { value: "empty", label: "Empty project" },
+      { value: "fault", label: "Read failure" },
+      { value: "first", label: "Caw's first thread" },
+    ],
+  },
+  {
+    key: "layout",
+    label: "Phone board",
+    states: [
+      { value: "list", label: "One grouped list · recommended" },
+      { value: "columns", label: "Desk columns sideways" },
+    ],
+  },
+  {
+    key: "scheme",
+    label: "Scheme",
+    states: [
+      { value: "light", label: "Day" },
+      { value: "dark", label: "Night" },
+    ],
+  },
+  ...(ONE.matches
+    ? [
+        {
+          key: "frame",
+          label: "Frame",
+          initial: "phone",
+          states: [
+            { value: "desk", label: "Desk" },
+            { value: "phone", label: "Phone" },
+          ],
+        },
+      ]
+    : []),
+];
+
+const switcher = mountStateSwitcher({
+  // The desk frame scales to the stage; the phone's 390 beside or under it.
+  width: 1160,
+  axes: true,
+  label: "Project page states",
+  groups: groupsOf,
+  onchange: (next, previous) => {
+    if (next.scheme !== previous.scheme) {
+      paintScheme(next.scheme);
+      post({ scheme: next.scheme });
+    }
+    if (next.layout !== previous.layout) {
+      post({ layout: next.layout });
+    }
+    if (next.frame !== previous.frame) {
+      showFrame(next.frame);
+    }
+    if (next.state !== previous.state) {
+      send();
+    }
+  },
+});
+const pick = (name) => switcher.state[name];
+
+function paintScheme(scheme) {
+  document.documentElement.classList.toggle("dark", scheme === "dark");
+  document.documentElement.classList.toggle("light", scheme !== "dark");
+}
+
+function showFrame(frame) {
+  for (const figure of $$(".frame")) {
+    figure.toggleAttribute("data-shown", figure.dataset.frame === (frame ?? "phone"));
+  }
+  fit();
+}
 
 const fit = () => {
   for (const screen of $$(".screen")) {
@@ -52,9 +123,6 @@ const fit = () => {
     const scale = ONE.matches && desk ? 1 : Math.min(1, room / width);
     screen.style.setProperty("--s", String(scale));
   }
-  for (const fieldset of $$(".seg")) {
-    placeThumb(fieldset);
-  }
 };
 
 const send = () => {
@@ -63,35 +131,12 @@ const send = () => {
   post({ scheme: pick("scheme"), layout: pick("layout"), state });
 };
 
-document.addEventListener("change", (event) => {
-  const input = event.target;
-  if (!(input instanceof HTMLInputElement)) {
-    return;
-  }
-  placeThumb(input.closest(".seg"));
-  if (input.name === "scheme") {
-    document.documentElement.classList.toggle("dark", input.value === "dark");
-    document.documentElement.classList.toggle("light", input.value !== "dark");
-    post({ scheme: input.value });
-    return;
-  }
-  if (input.name === "layout") {
-    post({ layout: input.value });
-    return;
-  }
-  if (input.name === "frame") {
-    for (const figure of $$(".frame")) {
-      figure.toggleAttribute("data-shown", figure.dataset.frame === input.value);
-    }
-    fit();
-    return;
-  }
-  send();
-});
-
 $('[data-act="replay"]').addEventListener("click", send);
 
-ONE.addEventListener("change", fit);
+ONE.addEventListener("change", () => {
+  switcher.refresh();
+  showFrame(switcher.state.frame);
+});
 
 let fitting = 0;
 new ResizeObserver(() => {
@@ -109,6 +154,7 @@ for (const frame of frames()) {
   });
 }
 
+paintScheme(pick("scheme"));
+showFrame(pick("frame"));
 document.fonts.ready.then(fit);
-fit();
-$('[data-slot="hint"]').textContent = HINTS.rest;
+$('[data-slot="hint"]').textContent = HINTS[pick("state")] ?? "";

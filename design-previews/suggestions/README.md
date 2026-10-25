@@ -6,9 +6,9 @@ how they look), "this is criticism of the design language of it, and
 crticicism fo the design system".
 
 One static page, one state on screen at a time at its production width,
-beside a grouped switcher drawn in a look of its own (monospace on near
-black, a yellow mark on the chosen entry), so it is never taken for the
-product. Every state is a link, `?__state=…`; the switcher moves between
+beside the shared state switcher (`design-previews/state-switcher.js`, the
+state-machine skill's switcher: one dark neutral surface in the system
+font), so it is never taken for the product. Every state is a link, `?__state=…`; the switcher moves between
 them without a reload, and the browser's back goes back. A loading state
 holds still until the switcher moves.
 
@@ -129,11 +129,9 @@ variables in `app/preview.css`:
 | `--tray-chip-max` | 16rem | a chip's widest before its words clip (own call) |
 | `--tray-bone-ink` | ink at 14% (22% dark) | loading rows on the tint (own call: the house skeleton's fill vanished on the tint at night) |
 
-The switcher's own look (`--sm-*`) is the preview's, not the product's.
-
 ## Files
 
-- `app/`: the page's source. `Preview.svelte` (the switcher and the stage),
+- `app/`: the page's source. `main.js` (the shared switcher and its groups), `Preview.svelte` (the stage),
   `states.js` (groups and keys), `starters.js` and `starters.tsv` (his
   words), `directions/` (Today, Drafts, Ledger, Tray), `Composer.svelte`,
   `Surround.svelte`, `CawStill.svelte`, `clock.js`, `edges.js`, `preview.css`, `build.ts` (the dashboard's

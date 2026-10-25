@@ -25,6 +25,9 @@
  *   stands Caw on his block's axis;
  * - each motion, on a held clock sought to 0, ½ and 1, moves its value
  *   continuously (½ strictly between the ends) and lands where 1 stood;
+ * - the state switcher is the shared one (state-switcher.ts): the system
+ *   font, a vertical list with arrowed headings at 1440, a select at 390,
+ *   H hiding it;
  * - no console error and no page error.
  *
  *   bun scripts/probe-kit/run.ts web decisions-list-preview
@@ -36,6 +39,7 @@ import { decisionsWords } from "../../../../packages/core/src/words/decisions";
 import { scan } from "../../journeys/scan";
 import type { Engine, Kit, Spec, View } from "../../kit";
 import { kitsOwnMessage, ROOT, readMotion, stillWithin } from "../../kit";
+import { checkSwitcher, pickState } from "../../state-switcher";
 
 const DIR = realpathSync(join(ROOT, "design-previews", "decisions-list"));
 const PAGES = 25;
@@ -127,32 +131,22 @@ const readValue = (page: Page, probe: string, prop: Motion["prop"]) =>
     [probe, prop] as const
   );
 
+/** A state picked in the shared switcher (its group's key is the group's name, lower-cased), then the page still. */
 async function press(page: Page, group: string, value: string): Promise<void> {
-  await page
-    .locator(`[data-seg="${group}"] [data-value="${value}"]`)
-    .first()
-    .click();
+  await pickState(page, group.toLowerCase(), value);
   await stillWithin(page, "body", { ms: 3000 });
 }
 
-/** The switch's state, read off the engine: one pressed, and a segment's thumb under it. */
+/** The switch's state, read off the engine: one state of its group pressed in the switcher. */
 const switchState = (page: Page, group: string) =>
   page.evaluate((name) => {
-    const set = document.querySelector(`[data-seg="${name}"]`);
+    const set = document.querySelector(
+      `nav.state-switcher [data-group="${name.toLowerCase()}"]`
+    );
     const pressed = [...(set?.querySelectorAll('[aria-pressed="true"]') ?? [])];
-    const thumb = set?.querySelector(".seg-thumb")?.getBoundingClientRect();
-    const on = pressed[0]?.getBoundingClientRect();
-    let off = 0;
-    if (thumb && on) {
-      off = Math.max(
-        Math.abs(thumb.left - on.left),
-        Math.abs(thumb.width - on.width)
-      );
-    }
     return {
       count: pressed.length,
-      value: (pressed[0] as HTMLElement | undefined)?.dataset.value ?? "",
-      off,
+      value: (pressed[0] as HTMLElement | undefined)?.dataset.state ?? "",
     };
   }, group);
 
@@ -1051,6 +1045,9 @@ async function onePage(
   await page.waitForSelector("#stage [data-frame]");
   await page.evaluate(() => document.fonts.ready);
 
+  if (view === "desk") {
+    await checkSwitcher(kit, page, engine, { axes: true });
+  }
   await everyState(kit, page, tag);
   await everyRowOpens(kit, page, tag);
   await waysForward(kit, page, tag);

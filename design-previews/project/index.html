@@ -6,7 +6,7 @@
     <title>The project page · preview</title>
     <link rel="stylesheet" href="tokens.css" />
     <link rel="stylesheet" href="index.css" />
-    <script src="index.js" defer></script>
+    <script src="index.js" type="module"></script>
   </head>
   <body>
     <header class="intro">
@@ -18,42 +18,6 @@
     </header>
 
     <div class="controls">
-      <fieldset class="seg" data-control="state">
-        <legend>State</legend>
-        <div class="seg-track">
-          <span class="seg-thumb" aria-hidden="true"></span>
-          <label><input type="radio" name="state" value="rest" checked /><span>At rest</span></label>
-          <label><input type="radio" name="state" value="waiting" /><span>Waiting on you</span></label>
-          <label><input type="radio" name="state" value="open" /><span>Task open</span></label>
-          <label><input type="radio" name="state" value="empty" /><span>Empty project</span></label>
-          <label><input type="radio" name="state" value="fault" /><span>Read failure</span></label>
-          <label><input type="radio" name="state" value="first" /><span>Caw's first thread</span></label>
-        </div>
-      </fieldset>
-      <fieldset class="seg" data-control="layout">
-        <legend>Phone board</legend>
-        <div class="seg-track">
-          <span class="seg-thumb" aria-hidden="true"></span>
-          <label><input type="radio" name="layout" value="list" checked /><span>One grouped list · recommended</span></label>
-          <label><input type="radio" name="layout" value="columns" /><span>Desk columns sideways</span></label>
-        </div>
-      </fieldset>
-      <fieldset class="seg" data-control="scheme">
-        <legend>Scheme</legend>
-        <div class="seg-track">
-          <span class="seg-thumb" aria-hidden="true"></span>
-          <label><input type="radio" name="scheme" value="light" checked /><span>Day</span></label>
-          <label><input type="radio" name="scheme" value="dark" /><span>Night</span></label>
-        </div>
-      </fieldset>
-      <fieldset class="seg frame-pick" data-control="frame">
-        <legend>Frame</legend>
-        <div class="seg-track">
-          <span class="seg-thumb" aria-hidden="true"></span>
-          <label><input type="radio" name="frame" value="desk" /><span>Desk</span></label>
-          <label><input type="radio" name="frame" value="phone" checked /><span>Phone</span></label>
-        </div>
-      </fieldset>
       <button class="replay" type="button" data-act="replay">Replay the state</button>
     </div>
     <p class="hint" data-slot="hint" aria-live="polite"></p>

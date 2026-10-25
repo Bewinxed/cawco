@@ -21,6 +21,9 @@
  * - the work outlives its surface: ×, Esc and a press beside it park the
  *   tray in its row with the work's live line, a reload keeps where it
  *   stands, and only Stop ends it;
+ * - the state switcher is the shared one (state-switcher.ts): the system
+ *   font, a vertical list with arrowed headings at 1680, a select at 390,
+ *   H hiding it;
  * - no console error.
  *
  *   bun scripts/probe-kit/run.ts address-preview
@@ -28,6 +31,7 @@
 import { join, normalize } from "node:path";
 import type { Page } from "playwright-core";
 import { type Engine, type Kit, ROOT, readMotion, type Spec } from "../kit";
+import { checkSwitcher } from "../state-switcher";
 
 const DIR = join(ROOT, "design-previews", "address");
 const HALVES = [0, 0.5, 1];
@@ -1445,6 +1449,8 @@ const spec: Spec = {
       for (const engine of engines) {
         // biome-ignore lint/performance/noAwaitInLoops: one engine's browser at a time
         const { page, errors } = await openPreview(kit, url, engine);
+        // The list stands beside the three frames' 1392 from 1672 (232 + 1392 + 48).
+        await checkSwitcher(kit, page, engine, { axes: true, desk: 1680 });
         await widthLegs(kit, page, engine);
         await restLegs(kit, page, engine, "light");
         await restLegs(kit, page, engine, "dark");

@@ -43,6 +43,9 @@
  *    inside its box (an element holding words whose content is wider or
  *    taller than its box while it hides the rest, an ellipsis or a clamp).
  * 9. No console or page error, the switch page's included.
+ * 10. The switch page's switcher is the shared one (state-switcher.ts): the
+ *    system font, a vertical list with arrowed headings at 1440, a select
+ *    at 390, H hiding it.
  *
  *   bun scripts/probe-kit/run.ts project-options-preview
  *   PROJECT_OPTIONS_ENGINES=chromium bun scripts/probe-kit/run.ts project-options-preview
@@ -58,6 +61,7 @@ import { HouseRules } from "../house-rules";
 import { scan } from "../journeys/scan";
 import type { Engine, Kit, Spec, View } from "../kit";
 import { ROOT } from "../kit";
+import { checkSwitcher } from "../state-switcher";
 
 const DIR = join(ROOT, "design-previews", "project-options");
 const WIDTH_VIEW: Record<string, View> = {
@@ -791,7 +795,8 @@ const spec: Spec = {
         const index = await kit.page("desk", { engine, scale: 1 });
         watch(index);
         await index.goto(base);
-        await index.waitForSelector("[data-switches] button");
+        await index.waitForSelector("nav.state-switcher button");
+        await checkSwitcher(kit, index, engine, { axes: true });
         await index.close();
 
         kit.check(

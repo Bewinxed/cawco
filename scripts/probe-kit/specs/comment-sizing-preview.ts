@@ -50,6 +50,9 @@
  *    or is drawn past a part's edge, every option, comment and screen; the
  *    overflow sweep totals zero at 1440, 1037 × 760 and 390.
  * 8. No console error.
+ * 9. The state switcher is the shared one (state-switcher.ts): the system
+ *    font, a vertical list with arrowed headings at 1800, a select at 390,
+ *    H hiding it.
  *
  *   bun scripts/probe-kit/run.ts comment-sizing-preview
  */
@@ -68,6 +71,7 @@ import {
   stillOf,
   twoFrames,
 } from "../pin-hang";
+import { checkSwitcher } from "../state-switcher";
 
 const DIR = join(ROOT, "design-previews", "comment-sizing");
 /** A number written without its leading zero (a token's `.32`), as an engine serialises it with one (`0.32`). */
@@ -174,7 +178,9 @@ async function load(
   const before = await page
     .evaluate(() => Number(document.documentElement.dataset.ready ?? 0))
     .catch(() => 0);
-  await page.goto(`${base}?option=${option}&case=${which}&screen=${screen}`);
+  await page.goto(
+    `${base}?__state=option:${option},case:${which},screen:${screen}`
+  );
   await page.waitForFunction(
     (was) => Number(document.documentElement.dataset.ready ?? 0) > 0 || was < 0,
     before
@@ -1181,12 +1187,12 @@ async function reloadLeg(
 ): Promise<void> {
   await load(page, base, "b", "long", "window");
   const before = await page.evaluate(readFrame);
-  await page.goto(base);
+  await page.reload();
   await page.waitForSelector("html[data-ready]");
   await landed(page);
   const after = await page.evaluate(readFrame);
   kit.check(
-    `${engine}: a thread B handed to Comments is still there after a reload, with no address to say so (${before.stands} at ${before.side}px, then ${after.stands} at ${after.side}px)`,
+    `${engine}: a thread B handed to Comments is still there after a reload, its address (the switcher's __state) saying so (${before.stands} at ${before.side}px, then ${after.stands} at ${after.side}px)`,
     before.stands === "rail" &&
       after.stands === "rail" &&
       before.side === after.side
@@ -1274,6 +1280,10 @@ const spec: Spec = {
           if (screen === "window") {
             await motionLeg(kit, page, base, engine);
             await reloadLeg(kit, page, base, engine);
+          }
+          if (screen === "desk") {
+            // The list stands beside the desk's 1440 from 1762 (232 + 1482 + 48).
+            await checkSwitcher(kit, page, engine, { axes: true, desk: 1800 });
           }
           if (screen !== "phone") {
             await dragLeg(kit, page, base, engine, screen);

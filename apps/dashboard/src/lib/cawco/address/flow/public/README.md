@@ -3,9 +3,10 @@
 The word-address flow (design e791c712, §4) as one static page: the tray at
 its real size in Caw's Needs you (380, the row growing into it), floating over
 Configure › Devices (380, from Set up), and as a 390 phone's bottom sheet, all
-three driven by one flow. Above them, the two real forks (the network:
+three driven by one flow. Beside them, in the shared state switcher
+(`design-previews/state-switcher.js`), the two real forks (the network:
 Tailscale, Headscale, NetBird; certificates already on when cawco joins, or
-off) and every step and failure to jump to. The trays' own buttons move the
+off), Day or Night, and every step and failure to jump to. The trays' own buttons move the
 flow on; a waiting state moves on by itself a few seconds later, as the hub
 would. Where it stands, and which trays are parked, is kept across a reload.
 

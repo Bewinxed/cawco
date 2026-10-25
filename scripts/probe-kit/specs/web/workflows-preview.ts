@@ -6,9 +6,12 @@
  * - nothing spills and no control covers text (journeys/scan.ts), read down
  *   the whole page for every option and every job, and the page never
  *   scrolls sideways;
- * - each switch shows its state: the chosen segment is pressed, the thumb
- *   stands under it, and the stage draws that option and job; Night turns
+ * - each switch shows its state: the chosen state is pressed in the shared
+ *   state switcher, and the stage draws that option and job; Night turns
  *   the page's ground dark;
+ * - the switcher is the shared one (state-switcher.ts): the system font, a
+ *   vertical list with arrowed headings at 1440, a select at 390, H hiding
+ *   it;
  * - each named motion, on a held clock sought to 0, ½ and 1, moves its
  *   value continuously (½ strictly between the ends) and plays to its end;
  * - no console error, no page error and no request answered 400 or worse;
@@ -18,7 +21,8 @@
  *   the Solar glyph, no circle, square or box around it);
  * - at most one coral control in each drawn screen, by Day and by Night: the
  *   one act the person takes next;
- * - every switch's choices stand whole inside it, at 1440 and at 390;
+ * - the switcher, as shown, stands whole inside the screen, at 1440 and at
+ *   390;
  * - a create screen says nothing of a saved version (no “saved 2m ago”, no
  *   Save as v4): it is a workflow not made yet.
  *
@@ -31,6 +35,7 @@ import { HouseRules } from "../../house-rules";
 import { scan } from "../../journeys/scan";
 import type { Engine, Kit, Spec, View } from "../../kit";
 import { kitsOwnMessage, ROOT, readMotion, stillWithin } from "../../kit";
+import { checkSwitcher, pickState } from "../../state-switcher";
 
 const DIR = realpathSync(join(ROOT, "design-previews", "workflows"));
 const OPTIONS = ["A", "B", "C", "D"] as const;
@@ -146,32 +151,22 @@ const readValue = (page: Page, probe: string, prop: Motion["prop"]) =>
     [probe, prop] as const
   );
 
-/** Presses a segment and waits for the page to stand still. */
+/** Picks a state in the shared switcher (its group's key is the name, lower-cased) and waits for the page to stand still. */
 async function pick(page: Page, group: string, value: string): Promise<void> {
-  await page
-    .locator(`[data-seg="${group}"] [data-value="${value}"]`)
-    .first()
-    .click();
+  await pickState(page, group.toLowerCase(), value);
   await stillWithin(page, "body", { ms: 3000 });
 }
 
-/** The switch's state, read off the engine. */
+/** The switch's state, read off the engine: one state of its group pressed in the switcher. */
 const switchState = (page: Page, group: string) =>
   page.evaluate((name) => {
-    const seg = document.querySelector(`[data-seg="${name}"]`);
-    const pressed = [...(seg?.querySelectorAll('[aria-pressed="true"]') ?? [])];
-    const thumb = seg?.querySelector(".seg-thumb")?.getBoundingClientRect();
-    const on = pressed[0]?.getBoundingClientRect();
+    const set = document.querySelector(
+      `nav.state-switcher [data-group="${name.toLowerCase()}"]`
+    );
+    const pressed = [...(set?.querySelectorAll('[aria-pressed="true"]') ?? [])];
     return {
       count: pressed.length,
-      value: (pressed[0] as HTMLElement | undefined)?.dataset.value ?? "",
-      off:
-        thumb && on
-          ? Math.max(
-              Math.abs(thumb.left - on.left),
-              Math.abs(thumb.width - on.width)
-            )
-          : 99,
+      value: (pressed[0] as HTMLElement | undefined)?.dataset.state ?? "",
     };
   }, group);
 
@@ -352,29 +347,24 @@ function corals(): { count: number; frame: string; what: string[] }[] {
   });
 }
 
-/** Every switch's choices whole inside it, and every switch inside the screen. */
+/** The switcher, as shown (its list, or its selects), whole inside the screen. */
 function switchesWhole(): string[] {
   const found: string[] = [];
   const width = document.documentElement.clientWidth;
-  for (const name of ["Option", "Job", "Theme"]) {
-    const seg = document.querySelector(`[data-seg="${name}"]`);
-    if (!seg) {
-      found.push(`no ${name} switch`);
-      continue;
-    }
-    const outer = seg.getBoundingClientRect();
-    if (outer.left < -0.5 || outer.right > width + 0.5) {
+  const shown = [
+    ...document.querySelectorAll<HTMLElement>(
+      "nav.state-switcher, .state-switcher-select"
+    ),
+  ].filter((el) => el.getClientRects().length > 0);
+  if (shown.length === 0) {
+    found.push("no switcher shown");
+  }
+  for (const el of shown) {
+    const box = el.getBoundingClientRect();
+    if (box.left < -0.5 || box.right > width + 0.5) {
       found.push(
-        `${name} stands past the screen (${Math.round(outer.left)}..${Math.round(outer.right)} of ${width})`
+        `${el.className} stands past the screen (${Math.round(box.left)}..${Math.round(box.right)} of ${width})`
       );
-    }
-    for (const item of seg.querySelectorAll(".seg-item")) {
-      const box = item.getBoundingClientRect();
-      if (box.left < outer.left - 0.5 || box.right > outer.right + 0.5) {
-        found.push(
-          `${name} cuts “${(item.textContent ?? "").trim()}” (${Math.round(box.left)}..${Math.round(box.right)} in ${Math.round(outer.left)}..${Math.round(outer.right)})`
-        );
-      }
     }
   }
   return found;
@@ -426,6 +416,9 @@ async function onePage(
     return `${answer.status} ${answer.headers.get("content-type")}`;
   });
   kit.check(`${tag}: the tab icon loads`, icon.startsWith("200 image/"), icon);
+  if (view === "desk") {
+    await checkSwitcher(kit, page, engine, { axes: true });
+  }
   const cut = await page.evaluate(switchesWhole);
   kit.check(
     `${tag}: every switch's choices stand whole`,
@@ -468,13 +461,11 @@ async function onePage(
         };
       });
       kit.check(
-        `${tag} ${option} ${job}: both switches show it (pressed, thumb under it) and the stage draws it`,
+        `${tag} ${option} ${job}: both switches show it (pressed in the switcher) and the stage draws it`,
         opt.count === 1 &&
           opt.value === option &&
-          opt.off < 1 &&
           jb.count === 1 &&
           jb.value === job &&
-          jb.off < 1 &&
           drawn.option === option &&
           drawn.job === job &&
           drawn.frames >= 2,
@@ -533,24 +524,12 @@ async function onePage(
   house.report();
   await pick(page, "Theme", "light");
 
-  // The switch's own glide, and the stage arriving.
+  // The stage arriving: the switcher itself switches at once.
   await pick(page, "Option", "A");
   await pick(page, "Job", "create");
-  const glide = await readMotion(
-    page,
-    () => page.locator('[data-seg="Job"] [data-value="evaluate"]').click(),
-    '[data-seg="Job"]',
-    {
-      fractions: [0, 0.5, 1],
-      read: () => readValue(page, '[data-seg="Job"] .seg-thumb', "left"),
-    }
-  );
-  await motionCheck(kit, page, `${tag} switch glide`, glide, () =>
-    readValue(page, '[data-seg="Job"] .seg-thumb', "left")
-  );
   const swap = await readMotion(
     page,
-    () => page.locator('[data-seg="Option"] [data-value="B"]').click(),
+    () => pickState(page, "option", "B"),
     "#option",
     {
       fractions: [0, 0.5, 1],

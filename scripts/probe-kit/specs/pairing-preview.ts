@@ -31,6 +31,9 @@
  * - The frames: whole and visible at 390, 1110 and 1440 (inside the window
  *   and every box above them, the page never scrolling sideways).
  * - Chromium at 1×: no frame takes the main thread over 16.7ms.
+ * - The state switcher is the shared one (state-switcher.ts): the system
+ *   font, a vertical list with arrowed headings at the desk, a select at
+ *   390, H hiding it.
  * - No console error.
  *
  *   bun scripts/probe-kit/run.ts pairing-preview
@@ -45,6 +48,7 @@ import { prepareZXingModule, readBarcodes } from "zxing-wasm/reader";
 import { traceMain } from "../frames";
 import { HouseRules } from "../house-rules";
 import { type Engine, type Kit, ROOT, readMotion, type Spec } from "../kit";
+import { checkSwitcher } from "../state-switcher";
 
 const DIR = join(ROOT, "design-previews", "pairing");
 const QUARTERS = [0, 0.25, 0.5, 0.75, 1];
@@ -1269,6 +1273,7 @@ const spec: Spec = {
       for (const engine of engines) {
         // biome-ignore lint/performance/noAwaitInLoops: one engine's browser at a time
         const { page, errors } = await openPreview(kit, url, engine);
+        await checkSwitcher(kit, page, engine, { axes: false });
         await runLegs(kit, page, url, engine);
         kit.check(
           `${engine}: no console error`,
