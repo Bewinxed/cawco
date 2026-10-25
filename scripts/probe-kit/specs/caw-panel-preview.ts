@@ -19,9 +19,12 @@
  *    at the run's start, middle and end of scroll. With reduced motion a
  *    dock lands at once and a flight is a fade in place.
  * 4. No console error and no page error in any of it.
+ * 5. Poses, at 1440, 680 and 390, Day and Night: each Caw pose's drawing,
+ *    carried through its img's object-fit, stands at least 1px inside the
+ *    image as drawn (`readPoseFrames`).
  *
  *   bun scripts/probe-kit/run.ts caw-panel-preview
- *   bun scripts/probe-kit/run.ts caw-panel-preview --only motion   (boxes, docking, motion: one part)
+ *   bun scripts/probe-kit/run.ts caw-panel-preview --only motion   (boxes, docking, motion, round, poses: one part)
  *   bun scripts/probe-kit/run.ts caw-panel-preview --only motion --moments menu-in,menu-out
  *   PROBE_ENGINE=webkit bun scripts/probe-kit/run.ts caw-panel-preview
  */
@@ -407,7 +410,8 @@ async function boxesEverywhere(
 }
 
 async function showDevice(page: Page, view: string, device: Device) {
-  if (view === "390") {
+  // Under 900px the Show switch brings out one frame at a time.
+  if (view !== "1440") {
     const now = await page.evaluate(
       () => (document.querySelector(".stage") as HTMLElement).dataset.show
     );
@@ -1147,6 +1151,139 @@ async function nightRims(kit: Kit, page: Page) {
   );
 }
 
+/**
+ * Each Caw pose drawn in a panel (the hero, his peek over the composer, a new
+ * thread's), as the engine lays it out: the drawing's own bounds (its pixels'
+ * alpha above 0), carried through the img's object-fit into page pixels,
+ * stand at least a pixel inside the image as drawn in its box. A figure or a
+ * prop that runs to the image's edge is cut there. The capsule's head is a
+ * head by design and is left out.
+ */
+async function readPoseFrames(
+  device: Device
+): Promise<{ src: string; clear: number[] }[]> {
+  const { panel, shown } = (
+    globalThis as unknown as { shownIn: (d: Device) => Shown }
+  ).shownIn(device);
+  const poses = [
+    ...panel.querySelectorAll<HTMLImageElement>(
+      ".hero img[data-slot], .peek .caw img, .fresh .caw img"
+    ),
+  ].filter((img) => shown(img));
+  const out: { src: string; clear: number[] }[] = [];
+  for (const img of poses) {
+    // biome-ignore lint/performance/noAwaitInLoops: one pose's pixels at a time
+    await img.decode();
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    const g = c.getContext("2d") as CanvasRenderingContext2D;
+    g.drawImage(img, 0, 0);
+    const d = g.getImageData(0, 0, w, h).data;
+    let [x0, y0, x1, y1] = [w, h, 0, 0];
+    for (let i = 0; i < w * h; i += 1) {
+      if ((d[i * 4 + 3] ?? 0) > 0) {
+        const x = i % w;
+        const y = (i - x) / w;
+        x0 = Math.min(x0, x);
+        y0 = Math.min(y0, y);
+        x1 = Math.max(x1, x + 1);
+        y1 = Math.max(y1, y + 1);
+      }
+    }
+    const box = img.getBoundingClientRect();
+    // The frame's own zoom: a frame fitted to a narrow window is scaled.
+    const zoom = box.width / img.offsetWidth;
+    const fit = getComputedStyle(img).objectFit;
+    const sx = box.width / w;
+    const sy = box.height / h;
+    const s = { contain: Math.min(sx, sy), cover: Math.max(sx, sy) }[
+      fit as "contain" | "cover"
+    ];
+    const [kx, ky] = s === undefined ? [sx, sy] : [s, s];
+    // object-position stays at its centre in the preview.
+    const left = box.left + (box.width - w * kx) / 2;
+    const top = box.top + (box.height - h * ky) / 2;
+    // The image as drawn: its content box, cut to the element's box.
+    const drawn = {
+      left: Math.max(box.left, left),
+      top: Math.max(box.top, top),
+      right: Math.min(box.right, left + w * kx),
+      bottom: Math.min(box.bottom, top + h * ky),
+    };
+    const figure = {
+      left: left + x0 * kx,
+      top: top + y0 * ky,
+      right: left + x1 * kx,
+      bottom: top + y1 * ky,
+    };
+    out.push({
+      src: img.src.split("/").pop() ?? img.src,
+      clear: [
+        figure.left - drawn.left,
+        figure.top - drawn.top,
+        drawn.right - figure.right,
+        drawn.bottom - figure.bottom,
+      ].map((v) => Math.round((v / zoom) * 100) / 100),
+    });
+  }
+  return out;
+}
+
+/** One case's poses: each one's least clearance kept in `seen`, each under a pixel a problem. */
+async function posesAt(
+  page: Page,
+  where: string,
+  device: Device,
+  seen: Map<string, number>
+): Promise<string[]> {
+  const problems: string[] = [];
+  for (const pose of await page.evaluate(readPoseFrames, device)) {
+    const least = Math.min(...pose.clear);
+    const key = `${device} ${pose.src}`;
+    seen.set(key, Math.min(least, seen.get(key) ?? least));
+    if (least < 1) {
+      problems.push(
+        `${where}: ${pose.src} clear by [left, top, right, bottom] ${JSON.stringify(pose.clear)}px`
+      );
+    }
+  }
+  return problems;
+}
+
+/** Every Caw pose, Day and Night, in every state and cause on both blocks: his figure and props stand inside the image's box. */
+async function poseFrames(kit: Kit, page: Page, view: string) {
+  const all = cases(["desk", "phone"]).filter((c) => c.arcs === "A");
+  const problems: string[] = [];
+  const seen = new Map<string, number>();
+  for (const theme of ["light", "dark"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one theme, then the other
+    await pick(page, "theme", theme);
+    let was: Case | null = null;
+    for (const at of all) {
+      // biome-ignore lint/performance/noAwaitInLoops: one case at a time, each read on the page as the last left it
+      await arrive(page, view, at, was);
+      was = at;
+      const where = `${view} ${theme} ${at.device} ${at.state}${at.cause ? `/${at.cause}` : ""}${at.block ? ` block ${at.block}` : ""}`;
+      problems.push(...(await posesAt(page, where, at.device, seen)));
+    }
+  }
+  await pick(page, "theme", "light");
+  await pick(page, "block", "A");
+  await pick(page, "state", "rest");
+  kit.note(
+    `${view}: each pose's least clearance inside its image, px: ${JSON.stringify(Object.fromEntries(seen))}`
+  );
+  kit.check(
+    `${view}: every Caw pose, Day and Night (${seen.size} pose-frames), has his figure and props inside the image's box, at least 1px clear of each edge`,
+    problems.length === 0 &&
+      [...seen.keys()].some((k) => k.includes("hero-machine-night")),
+    problems.slice(0, 12).join("\n      ")
+  );
+}
+
 /** Under 900px: the frame the Show switch brings out draws its large title, and the hidden one animates nothing. */
 async function hiddenFrames(kit: Kit, page: Page, warnings: string[]) {
   await pick(page, "show", "phone");
@@ -1189,6 +1326,44 @@ async function hiddenFrames(kit: Kit, page: Page, warnings: string[]) {
   );
 }
 
+/** At 1440 and 390: the boxes, docking, the review's round and motion, each where it runs. */
+async function readSize(
+  kit: Kit,
+  page: Page,
+  size: string,
+  warnings: string[]
+) {
+  if (size === "390" && runs("round")) {
+    await hiddenFrames(kit, page, warnings);
+  }
+  if (runs("boxes")) {
+    await boxesEverywhere(kit, page, size, ["desk", "phone"]);
+  }
+  if (size !== "1440") {
+    if (runs("docking")) {
+      await showDevice(page, size, "phone");
+      await docking(kit, page, "phone", size);
+    }
+    return;
+  }
+  if (runs("docking")) {
+    await docking(kit, page, "desk", size);
+    await docking(kit, page, "phone", size);
+  }
+  if (runs("round")) {
+    await expandedStack(kit, page);
+    await causeKeepsTail(kit, page);
+    await dockFootAndWheel(kit, page, size);
+    await scrim(kit, page, size);
+    await nightRims(kit, page);
+  }
+  if (runs("motion")) {
+    await scrollLinked(kit, page);
+    await moments(kit, page);
+    await reduced(kit, page);
+  }
+}
+
 const spec: Spec = {
   name: "caw-panel-preview",
   run: async (kit) => {
@@ -1197,6 +1372,7 @@ const spec: Spec = {
     try {
       for (const [view, size] of [
         ["desk", "1440"],
+        ["narrowDesk", "680"],
         ["phone", "390"],
       ] as [View, string][]) {
         // biome-ignore lint/performance/noAwaitInLoops: one size at a time, each its own page
@@ -1218,32 +1394,12 @@ const spec: Spec = {
         await page.evaluate(installShown);
         await page.evaluate(installPainted);
         await settled(page);
-        if (size === "390" && runs("round")) {
-          await hiddenFrames(kit, page, warnings);
+        if (runs("poses")) {
+          await poseFrames(kit, page, size);
         }
-        if (runs("boxes")) {
-          await boxesEverywhere(kit, page, size, ["desk", "phone"]);
-        }
-        if (size === "1440") {
-          if (runs("docking")) {
-            await docking(kit, page, "desk", size);
-            await docking(kit, page, "phone", size);
-          }
-          if (runs("round")) {
-            await expandedStack(kit, page);
-            await causeKeepsTail(kit, page);
-            await dockFootAndWheel(kit, page, size);
-            await scrim(kit, page, size);
-            await nightRims(kit, page);
-          }
-          if (runs("motion")) {
-            await scrollLinked(kit, page);
-            await moments(kit, page);
-            await reduced(kit, page);
-          }
-        } else if (runs("docking")) {
-          await showDevice(page, size, "phone");
-          await docking(kit, page, "phone", size);
+        // 680 is read for the poses alone.
+        if (size !== "680") {
+          await readSize(kit, page, size, warnings);
         }
         kit.check(
           `${size}: no console error and no page error`,
