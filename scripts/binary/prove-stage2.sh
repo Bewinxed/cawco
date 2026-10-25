@@ -2411,11 +2411,15 @@ pins_refused() {
   use_feed next
   learn
   install_now_request "$hid"
-  wait_until 400 '[[ "$(phase $hid)" == failed && -n "$(field $hid error)" ]]'
-  echo "its error: $(field $hid error)"
+  # The failed state's error, read once in the same answer that says failed: the command stands, so the agent tries
+  # the build again by itself 10 s on (the proof's pace for the first retry delay), and its next attempt clears the
+  # error while it runs. A second read could land in that attempt.
+  local error
+  wait_until 400 'error=$(hub_api /api/binary-updates/machines | json "d => { const m = d.machines[\"$hid\"]; return m?.phase === \"failed\" ? m.error : undefined }") && [[ -n $error ]]'
+  echo "its error: $error"
   as_user "$hubc" cat /home/cawco/bun-calls.log
   # One sentence, naming the tool, the build and bun, and bun's own words.
-  [[ "$(field $hid error)" == "OpenCode $PIN, which $NEXT runs, did not go on with bun: error: GET https://registry.npmjs.org/@opencode%2fcli - 503" ]]
+  [[ "$error" == "OpenCode $PIN, which $NEXT runs, did not go on with bun: error: GET https://registry.npmjs.org/@opencode%2fcli - 503" ]]
   as_user "$hubc" grep -q "^bun install -g --trust @opencode/cli@$PIN swaps=" /home/cawco/bun-calls.log
   # Nothing was applied: the build before runs on, its agent never restarted, and OpenCode is where it was.
   [[ "$(build_version $hid)" == $BASE ]]
