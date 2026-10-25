@@ -932,6 +932,8 @@ export interface HandoffActions {
       owns?: string[];
       /** What it may spend before the hub stops it. */
       budget?: WorkBudget;
+      /** The decision pages it builds from, as written (`<page>` or `<page>#<card>`); the hub resolves them. */
+      buildsFrom?: string[];
     }
   ): Promise<DelegateResult>;
   /**

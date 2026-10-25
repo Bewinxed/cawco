@@ -54,6 +54,7 @@ import type {
   NeutralOrigin,
   PermissionMode,
   PlanStep,
+  PlanWait,
   RunsOnCapability,
   SendPayload,
   SendRefusal,
@@ -71,6 +72,7 @@ import type {
   WorkspaceWorkEnd,
 } from "@cawco/core";
 import {
+  artifactLink,
   byPerson,
   CODE_MODE_TOOL,
   CONTROL_CLONE_HOLDING,
@@ -86,12 +88,14 @@ import {
   CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_MIGRATE,
   CONTROL_WORKSPACE_WORK_END,
+  decisionLink,
   handoffMarker,
   holdingWords,
   INPUTS_LIMIT_BYTES,
   isWorkspaceNeedsRefusal,
   machineCalled,
   OUTPUTS_DIR,
+  pinLink,
   sessionLink,
   sizeWords,
   todoLink,
@@ -128,6 +132,7 @@ import {
   stageCloneId,
 } from "@cawco/core/workspace-policy";
 import { gateStepFor, readTargetMap, type TargetMap } from "./app-targets";
+import type { PageOwed } from "./artifacts/service";
 import { briefingFor } from "./briefings";
 import type {
   DbShape,
@@ -695,6 +700,12 @@ export interface WorkItemRequest {
   /** What it may spend before the hub stops it; the project's default fills what this leaves out. */
   budget?: WorkBudget;
   /**
+   * The decision pages it builds from, resolved (artifacts/service.ts
+   * `buildsFrom`): its landing on main is held while one waits on the
+   * person's picks ({@link holdForPicks}).
+   */
+  buildsFrom?: PlanWait[];
+  /**
    * A person started it himself (work_items.by_person): set by the
    * dispatcher for an attempt he started from the dashboard.
    */
@@ -959,6 +970,12 @@ export interface WorkItemDeps {
   ) => string | undefined;
   /** Whether `machineId`'s agent is connected now: the Apple build gate runs only on one that is. */
   readonly online: (machineId: string) => boolean;
+  /**
+   * What the person still owes on the decision pages an item builds from
+   * (artifacts/service.ts `owedOn`): each card it names with no pick or an
+   * open pin, by page; empty once its landing may go ({@link holdForPicks}).
+   */
+  readonly owedOn: (from: readonly PlanWait[]) => PageOwed[];
   /** Tells every dashboard an item moved: its parent's delegate tray follows it. */
   /**
    * Why an attempt at one of the project's tasks may not start now: its spend
@@ -1610,6 +1627,9 @@ export const outputsFolder = (item: Pick<WorkItemRow, "id" | "taskId">) =>
 
 export const landingBranch = (item: Pick<WorkItemRow, "id" | "taskId">) =>
   `cawco/${landingKey(item)}`;
+
+/** What a build held for the person's picks says it waits for: its chip's words and its report's first line (`holdForPicks`). */
+export const HELD_FOR_PICKS = "held for your picks";
 
 /** How an item lands, as its session is told. */
 const landingOf = (item: WorkItemRow): WorkspaceLanding => ({
@@ -2312,6 +2332,7 @@ export const createWorkItems = ({
   machinePaused,
   modelRefusal,
   online,
+  owedOn,
   stalled,
   send,
   sendWakes,
@@ -2386,13 +2407,25 @@ export const createWorkItems = ({
   };
   /** Items whose landing this hub process is running now: a resume leaves them to that run. */
   const finishing = new Set<string>();
+  /** Items whose hold for picks is pushing their branch now: no release starts their landing meanwhile ({@link holdForPicks}). */
+  const holding = new Set<string>();
+  /**
+   * The decision pages some held item builds from ({@link holdForPicks}),
+   * read from the rows when first asked after an item's landing moved
+   * ({@link update}): what a page's change is checked against, at every
+   * change to any artifact, without a read of the rows.
+   */
+  let heldPages: Set<string> | null = null;
   /**
    * Whether `item`'s landing holds its reopeners' sends: one that runs, not
-   * one completing, which waits on its own delegates and may be written to
-   * meanwhile ({@link completeIfDrained}).
+   * one completing, which waits on its own delegates, nor one held for the
+   * person's picks; either may be written to meanwhile
+   * ({@link completeIfDrained}, {@link holdForPicks}).
    */
   const landingHolds = (item: WorkItemRow): boolean =>
-    !!item.landingSince && item.landingPhase !== "completing";
+    !!item.landingSince &&
+    item.landingPhase !== "completing" &&
+    item.landingPhase !== "held";
   /**
    * The {@link finishingFor} hold on `item` ends if nothing keeps it: not
    * its landing, and not its session's last turn (`lastTurnAt`, stored),
@@ -2568,6 +2601,9 @@ export const createWorkItems = ({
     // A landing that stops leaves no phase of it behind.
     const change =
       asked.landingSince === null ? { ...asked, landingPhase: null } : asked;
+    if ("landingPhase" in change || "state" in change) {
+      heldPages = null;
+    }
     if (change.state && !LIVE.has(change.state)) {
       disarmWait(id);
       woken.delete(id);
@@ -2676,6 +2712,7 @@ export const createWorkItems = ({
     instanceId: item.instanceId,
     title: item.title,
     state: item.state,
+    buildsFrom: item.buildsFrom ?? [],
     machinePaused: LIVE.has(item.state)
       ? (pausedWorkspace(item.workspaceId) ?? null)
       : null,
@@ -2744,6 +2781,7 @@ export const createWorkItems = ({
       instanceId: request.queuedAs.instanceId,
       title: queued.title,
       state: "starting",
+      buildsFrom: request.buildsFrom ?? [],
       machinePaused: null,
       stalled: null,
       queued: {
@@ -5256,6 +5294,10 @@ export const createWorkItems = ({
       title: request.title.trim(),
       type: previous.type,
       ...placing(request, parent),
+      // Work on what it built goes on building from the same pages.
+      ...(request.buildsFrom?.length
+        ? {}
+        : { buildsFrom: previous.buildsFrom }),
       harness: previous.harness,
       model: previous.model,
       effort: previous.effort,
@@ -5949,11 +5991,20 @@ export const createWorkItems = ({
       await placeTaken(machineId, place.id);
     }
     // In its scratch dir before its session starts ({@link spawnIn}).
+    // Commits carried from a build go on building from its pages.
+    const carried =
+      source && !request.buildsFrom?.length
+        ? (db.workItemsIn(source.id).find((one) => one.buildsFrom?.length)
+            ?.buildsFrom ?? undefined)
+        : undefined;
     return spawnIn(
       workspace,
       settings,
       parent,
-      await briefedFrom(request, workspace),
+      await briefedFrom(
+        carried ? { ...request, buildsFrom: carried } : request,
+        workspace
+      ),
       inputs,
       { instanceId, placement }
     );
@@ -6067,6 +6118,7 @@ export const createWorkItems = ({
       outputs: request.outputs?.length ? request.outputs : null,
       group: request.group?.trim() || null,
       owns: request.owns?.length ? request.owns : null,
+      buildsFrom: request.buildsFrom?.length ? request.buildsFrom : null,
       budget: budgetFrom(request.budget, project?.budget),
     };
   };
@@ -6319,13 +6371,184 @@ export const createWorkItems = ({
     );
     landingWait(now.id, null);
     const landing = update(now.id, { landingPhase: null }) ?? now;
+    const { submission } = now;
+    holdForPicks(landing, submission)
+      .then((held) => {
+        if (held === undefined) {
+          landStored(db.workItem(now.id) ?? landing, submission);
+        }
+      })
+      .catch((error: unknown) =>
+        console.error(
+          `[work-items] ${now.id}: whether its pages hold it was not read: ${error instanceof Error ? error.message : String(error)}`
+        )
+      );
+  };
+
+  /** What an item held for the person's picks waits on, as its chip says it. */
+  const heldWords = (owed: readonly PageOwed[]): string =>
+    `${HELD_FOR_PICKS}: ${owed
+      .map((page) =>
+        [page.title, ...page.cards.map((card) => card.question)].join(" · ")
+      )
+      .join("; ")}`;
+
+  /** The same as its report says it: each page, card and open pin by its link. */
+  const heldLines = (owed: readonly PageOwed[]): string =>
+    owed
+      .map((page) =>
+        [
+          `- ${artifactLink(page.artifactId, page.title)}`,
+          ...page.cards.map((card) => {
+            const waits = [
+              ...(card.unpicked ? ["no pick yet"] : []),
+              ...(card.pins.length > 0
+                ? [
+                    `open pin: ${card.pins.map((pin) => pinLink(page.artifactId, pin, `pin on “${card.question}”`)).join(", ")}`,
+                  ]
+                : []),
+            ];
+            return `  - ${decisionLink(page.artifactId, card.id, card.question)}: ${waits.join("; ")}`;
+          }),
+        ].join("\n")
+      )
+      .join("\n");
+
+  /**
+   * THE DECISION HOLD: an item that lands on main and builds from decision
+   * pages (`buildsFrom`) lands only once the person has picked every card
+   * it names (each card of a page it names whole) and none of those cards
+   * has an open pin, whoever delegated it, on every harness. While one
+   * waits, its `finish_item` is stored (phase `held`), its commits are
+   * pushed as they are to its own branch (`cawco/<item>`), and its parent
+   * is told "held for your picks" with each page, card and pin by its link;
+   * nothing fails. The person's marks on those pages release it
+   * ({@link releaseHeld}): the merge checks run then, on top of main, and it
+   * lands and reports as any item does. Answers what `finish_item` answers
+   * while held; nothing when it may land now (nothing waits, or it has
+   * nothing to push).
+   */
+  const holdForPicks = async (
+    item: WorkItemRow,
+    request: WorkItemSubmission
+  ): Promise<string | undefined> => {
+    if (item.lands !== "main" || !item.buildsFrom?.length) {
+      return;
+    }
+    const owed = owedOn(item.buildsFrom);
+    const [workspace] = db.workspacesNamed(item.workspaceId);
+    const [row] = db.getInstancesByIds([item.instanceId]);
+    if (owed.length === 0 || !workspace || workspace.host || !row) {
+      return;
+    }
+    // The commit an earlier hold of this item pushed, which this push replaces.
+    const last = lastBranchPush(item) ?? item.submission?.heldPush;
+    const { heldPush: _, ...submission } = request;
+    const held =
+      update(item.id, {
+        submission,
+        landingSince: new Date(),
+        landingPhase: "held",
+      }) ?? item;
+    landingWait(item.id, heldWords(owed));
+    const branch = landingBranch(item);
+    holding.add(item.id);
+    const pushed = await pushBranch(workspace.base, branch, {
+      last,
+      run: runIn(workspace, held),
+      turn: turnOf(held),
+      queue: landings,
+      skip: item.outputs ?? [],
+      stopped: landingStopped(held),
+      ...(item.projectId ? { repo: item.projectId } : {}),
+    }).finally(() => holding.delete(item.id));
+    let line: string;
+    switch (pushed.kind) {
+      case "stopped": {
+        const now = db.workItem(item.id) ?? item;
+        landingWait(item.id, null);
+        return `${now.title} is ${now.state} now; nothing was pushed or landed.`;
+      }
+      case "nothing":
+      case "no-remote":
+        // Nothing to push is nothing to land: its landing says so.
+        landingWait(item.id, null);
+        update(item.id, { landingPhase: null });
+        return;
+      case "dirty":
+        landingWait(item.id, null);
+        update(item.id, { landingSince: null, submission: null });
+        return dirtyText(pushed.files, branch);
+      case "refused":
+        line = refusedLine(
+          pushed,
+          { head: "Not pushed", target: `branch ${branch}` },
+          workspace,
+          machineName(workspace.machineId)
+        );
+        break;
+      case "pushed":
+        update(item.id, {
+          submission: { ...submission, heldPush: pushed.sha },
+        });
+        line = `Pushed to branch ${branch} at ${pushed.sha.slice(0, 9)} on origin; ${workspace.base} is untouched.`;
+        break;
+    }
+    // The person may have picked while it pushed.
+    const still = owedOn(item.buildsFrom);
+    if (still.length === 0) {
+      releaseHeld(item);
+      return `${line} The person's picks came in meanwhile, so it lands on ${workspace.base} now; the merge checks run on top of it and your parent has the report. End your turn.`;
+    }
+    landingWait(item.id, heldWords(still));
+    console.log(
+      `[work-items] ${item.id}: held for the person's picks on ${still.map((page) => page.artifactId.slice(0, 8)).join(", ")}`
+    );
+    report(
+      row,
+      `Not landed on ${workspace.base} yet: ${HELD_FOR_PICKS}. ${line}\nIt lands on ${workspace.base} by itself once these are picked and their pins resolved, the merge checks running then on top of ${workspace.base}:\n${heldLines(still)}\n\n${submission.summary}`,
+      false,
+      true,
+      `${submission.headline} Not landed yet: ${HELD_FOR_PICKS}.`
+    );
+    return `Not landed yet: a decision page this item builds from still waits on the person's picks. ${line} It lands on ${workspace.base} by itself once they pick; the merge checks run then, on top of ${workspace.base}, and your parent has the report. A finish_item meanwhile replaces this one. End your turn.`;
+  };
+
+  /**
+   * A held item ({@link holdForPicks}) whose pages owe nothing now lands on
+   * its stored submission ({@link landStored}); while one still waits, its
+   * chip says what. Asked at every change to a page it builds from
+   * (`picksMoved`), and at its machine's register after a hub restart.
+   */
+  const releaseHeld = (item: WorkItemRow): void => {
+    const now = db.workItem(item.id) ?? item;
+    if (!(
+      LIVE.has(now.state) &&
+      now.landingPhase === "held" &&
+      now.submission &&
+      !finishing.has(now.id) &&
+      !holding.has(now.id)
+    )) {
+      return;
+    }
+    const owed = owedOn(now.buildsFrom ?? []);
+    if (owed.length > 0) {
+      landingWait(now.id, heldWords(owed));
+      return;
+    }
+    console.log(
+      `[work-items] ${now.id}: the picks it was held for are in; it lands now`
+    );
+    landingWait(now.id, null);
+    const landing = update(now.id, { landingPhase: null }) ?? now;
     landStored(landing, now.submission);
   };
 
   /**
-   * A `finish_item` that lands, stored first: it runs now, or, while work
-   * the item delegated is still live, it completes once all of that has
-   * ended ({@link completeIfDrained}). Answers what the tool returns.
+   * A `finish_item` that lands, stored first: it runs now; while work the
+   * item delegated is still live, it completes once all of that has ended
+   * ({@link completeIfDrained}); while a page it builds from waits on the
+   * person, it is held ({@link holdForPicks}). Answers what the tool returns.
    */
   const landOrComplete = async (
     item: WorkItemRow,
@@ -6343,6 +6566,10 @@ export const createWorkItems = ({
         `[work-items] ${item.id}: finish_item stored; it lands once ${group.length} item(s) it delegated have ended`
       );
       return completingText(group);
+    }
+    const held = await holdForPicks(item, request);
+    if (held !== undefined) {
+      return held;
     }
     update(item.id, { submission: request, landingSince: new Date() });
     return (await settleLanding(item, request)).text;
@@ -9229,8 +9456,10 @@ export const createWorkItems = ({
      */
     async finishItem(
       instanceId: string,
-      request: WorkItemSubmission
+      asked: WorkItemSubmission
     ): Promise<string> {
+      // Its held push is the hub's to record, never the session's to say.
+      const { heldPush: _, ...request } = asked;
       const open = await finishable(instanceId);
       if (typeof open === "string") {
         return open;
@@ -9371,6 +9600,12 @@ export const createWorkItems = ({
           completeIfDrained(item);
           continue;
         }
+        // Held: it lands once the picks are in, which may have happened
+        // while the hub was away; its chip says what it waits for again.
+        if (item.landingPhase === "held") {
+          releaseHeld(item);
+          continue;
+        }
         // Its gate goes on from the step it was on: what passed is kept
         // on its row ({@link gateOnce}).
         const kept = [...passesOf(item.id).values()].flat().length;
@@ -9380,6 +9615,35 @@ export const createWorkItems = ({
         landStored(item, submission);
       }
       releaseLastTurns(machineId);
+    },
+
+    /**
+     * Artifact `artifactId`'s doc changed (a pick, a pin, a resolve): each
+     * item held for the person's picks on it lands if its pages owe nothing
+     * now ({@link releaseHeld}).
+     */
+    picksMoved(artifactId: string): void {
+      if (!heldPages) {
+        heldPages = new Set(
+          db
+            .liveWorkItems()
+            .filter((item) => item.landingPhase === "held")
+            .flatMap((item) =>
+              (item.buildsFrom ?? []).map((wait) => wait.artifactId)
+            )
+        );
+      }
+      if (!heldPages.has(artifactId)) {
+        return;
+      }
+      for (const item of db.liveWorkItems()) {
+        if (
+          item.landingPhase === "held" &&
+          item.buildsFrom?.some((wait) => wait.artifactId === artifactId)
+        ) {
+          releaseHeld(item);
+        }
+      }
     },
 
     /**

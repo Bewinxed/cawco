@@ -2847,6 +2847,12 @@
                       "type": "string"
                     }
                   },
+                  "buildsFrom": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "budget": {
                     "type": "object",
                     "properties": {
@@ -3234,6 +3240,12 @@
                     ]
                   },
                   "owns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "buildsFrom": {
                     "type": "array",
                     "items": {
                       "type": "string"
@@ -35307,6 +35319,13 @@
             "description": "What an attempt may spend before the hub stops it; null: the project's default.",
             "$ref": "#/components/schemas/WorkBudget"
           },
+          "buildsFrom": {
+            "description": "The decision pages its attempts build from (`builds_from`), each `<artifact id>` or `<artifact id>#<card>`.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "checks": {
             "type": "array",
             "items": {
@@ -35570,6 +35589,7 @@
           "archivedAt",
           "attempts",
           "blockedBy",
+          "buildsFrom",
           "checks",
           "closeReason",
           "comments",
@@ -50900,6 +50920,13 @@
         "description": "One delegate's work item as its parent's delegate tray reads it: the hub's\n`work_items` row cut to what a chip and its panel say, pushed as a\n`work_item` frame on every change and read back over\n`GET /api/work-items?parent=`. Times are epoch ms. A `delegate` call that\nwaits for files a live item owns is one too, `starting` with `queued` set,\nunder the ids its item takes when it starts.",
         "type": "object",
         "properties": {
+          "buildsFrom": {
+            "description": "The decision pages it builds from, each whole or one card of it (as a\nplan step's wait names one): its landing on main is held while one of\nthem waits on the person's picks. Empty when it names none.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanWait"
+            }
+          },
           "checkQueue": {
             "description": "While its landing waits between `finish_item` and its outcome (the\nmerge checks' shared machine slot, a machine's pause, its turn to land):\n\"queued for the Mac's build slot behind …\", and since when (epoch ms);\nnull otherwise. Named for the checks it once was: shipped iOS builds\ndecode it under this key.",
             "type": "object",
@@ -51038,6 +51065,7 @@
           }
         },
         "required": [
+          "buildsFrom",
           "createdAt",
           "dismissReason",
           "dismissedAt",

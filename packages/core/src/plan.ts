@@ -63,6 +63,18 @@ export interface PlanWait {
   card?: string;
 }
 
+/** A wait as one string, as a task file keeps a build's pages (`builds_from`): `<artifact>` or `<artifact>#<card>`. */
+export const planWaitRef = (wait: PlanWait): string =>
+  wait.card ? `${wait.artifactId}#${wait.card}` : wait.artifactId;
+
+/** {@link planWaitRef} read back. */
+export const planWaitOf = (ref: string): PlanWait => {
+  const at = ref.indexOf("#");
+  return at < 0
+    ? { artifactId: ref }
+    : { artifactId: ref.slice(0, at), card: ref.slice(at + 1) };
+};
+
 /** One step of a session's plan: an ACP plan entry, with an id and a nesting depth. */
 export interface PlanStep {
   /** The person's comments on it, oldest first; kept by id across the session's writes. */

@@ -46,6 +46,8 @@ The page is a **page** artifact whose source is a program in OpenUI Lang over Ca
    Done when every card is sorted, and every note has its answer in your reply.
 7. **Ask again in place.** Call `artifact_update` with the `id` and `statements`: only the statements that change, merged by name (LIBRARY.md, Edit Mode); a new round's question is a new `ask` in the same call. Revise each card a note reopened, under its own id, so it answers the note: a better question, the option the note asked about, the fact in its `why`, a cost the note found. Add the cards the answers unlocked, and remove from the root the cards whose choice is made and built, with the canvases of the options that lost (`artifact_delete`). Keep the ids of decisions that stay; a removed one's pick is kept. Done when the answer names your change, every reopened card answers its note, and the page holds only open cards and cards decided this round.
 
+8. **Link the build to its page.** Work that builds what the page decides names it in `buildsFrom`: `delegate({ …, buildsFrom: ["<name>"] })`, or `"<name>#<card>"` for the cards it rests on alone; a task carries it as `builds_from` (`task_create`, `task_update`) and every attempt at it inherits it. The hub lands that work on main only once every named card is picked and has no open pin: until then its commits wait on `cawco/<item>`, and its report says "held for your picks" with the cards still open. The person's last pick lands it, after the merge checks run on top of main. Done when every build of this page's choices names the page.
+
 ## Before you show it
 
 Each row refuses the page until it is fixed.

@@ -49,6 +49,7 @@ import type {
   OnCap,
   OpenCodeGoLimits,
   PermissionMode,
+  PlanWait,
   PresenceClient,
   RoutineMadeEvent,
   RuleMatchKind,
@@ -1265,13 +1266,17 @@ export type WorkItemState =
  * - `completing`: its `finish_item` stored while work it delegated is still
  *   live; it lands once every item it delegated, queued ones included, has
  *   ended (work-items.ts `completeIfDrained`).
+ * - `held`: its `finish_item` stored and its commits pushed to its own
+ *   branch while a decision page it builds from ({@link workItems}
+ *   `buildsFrom`) still waits on the person's picks; it lands on main once
+ *   they are in (work-items.ts `releaseHeld`).
  * - `gating`: its landing gate runs on its tree (at finish_item, or on top
  *   of its base); each step that passed is kept ({@link GatePass}), so a
  *   gate a restart cut runs from the step it was on.
  * - `turn`: in its turn to land, rebased again, the steps the rebase moved
  *   run again, then the push.
  */
-export type LandingPhase = "completing" | "gating" | "turn";
+export type LandingPhase = "completing" | "held" | "gating" | "turn";
 
 /**
  * What a live work item's session cannot be started again without, found
@@ -1328,6 +1333,12 @@ export interface WorkItemSubmission {
   findings?: { title: string; detail: string }[];
   /** The outcome in one or two sentences, shown whole wherever a report is glanced at. */
   headline: string;
+  /**
+   * The hub's alone, never the session's: the commit it pushed to the
+   * item's own branch as it held this submission for the person's picks
+   * (work-items.ts `holdForPicks`), which the next hold's push may replace.
+   */
+  heldPush?: string;
   /**
    * Ship the work once it lands on main: the project's declared ship command
    * (gate.md `Ship:`, ship.ts) runs on the hub's machine with these end-user
@@ -1410,6 +1421,15 @@ export const workItems = sqliteTable(
      * finishes; one missing sends it back to its session. Null: none.
      */
     outputs: text("outputs", { mode: "json" }).$type<string[]>(),
+    /**
+     * The decision pages it builds from (`delegate`'s and a task's
+     * `buildsFrom`): each a page, or one card of it, as a plan step's wait
+     * names one (core {@link PlanWait}). While any of them has a card with no
+     * pick, or an open pin on a named card, its landing on main is held
+     * (work-items.ts `holdForPicks`). Null: none.
+     * A follow-up in its workspace that names none takes its pages.
+     */
+    buildsFrom: text("builds_from", { mode: "json" }).$type<PlanWait[]>(),
     /**
      * What its session handed in on its task (`task_result`): its words,
      * what to check, and its artifacts. A later call replaces it. Null:

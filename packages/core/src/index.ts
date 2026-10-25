@@ -1,5 +1,6 @@
 import { CAWCO_MCP_DEFAULT_PORT, type FleetSyncReport } from "./fleet";
 import type { MachineHarnessReport } from "./harness";
+import type { PlanWait } from "./plan";
 import type { LastErrorKind } from "./relaunch";
 import type { ToolStatus } from "./tools";
 
@@ -1386,6 +1387,12 @@ export interface KeepAlive {
  * under the ids its item takes when it starts.
  */
 export interface WorkItemSummary {
+  /**
+   * The decision pages it builds from, each whole or one card of it (as a
+   * plan step's wait names one): its landing on main is held while one of
+   * them waits on the person's picks. Empty when it names none.
+   */
+  buildsFrom: PlanWait[];
   /**
    * While its landing waits between `finish_item` and its outcome (the
    * merge checks' shared machine slot, a machine's pause, its turn to land):

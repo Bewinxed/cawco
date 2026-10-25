@@ -91,6 +91,7 @@ import {
   type LandsMode,
   machinesCalled,
   POST_OUTPUT_RULE,
+  planWaitOf,
   sessionLink,
   taskLink,
   todoLink,
@@ -394,13 +395,19 @@ const checksSection = (task: TaskView): string =>
     ? `## Checks\n\nThe task lists these commands. Run each one and quote its real output in your finish_item summary, cut to the lines that show the result; list any you could not run inside your boundary under "Not run:", with why.\n\n${task.checks.map(checkLine).join("\n")}`
     : "## Checks\n\nThe task lists no commands. Prove the work with the commands that show it (build, lint, typecheck, the specs it touches), and quote their real output in your finish_item summary.";
 
-/** What of a task an attempt's work item carries as it is: outputs, group, owned files, budget. */
+/** What of a task an attempt's work item carries as it is: outputs, group, owned files, the pages it builds from, budget. */
 const taskLimits = (
   task: TaskView
-): Pick<WorkItemRequest, "budget" | "group" | "outputs" | "owns"> => ({
+): Pick<
+  WorkItemRequest,
+  "budget" | "buildsFrom" | "group" | "outputs" | "owns"
+> => ({
   ...(task.outputs.length > 0 ? { outputs: task.outputs } : {}),
   ...(task.group ? { group: task.group } : {}),
   ...(task.owns.length > 0 ? { owns: task.owns } : {}),
+  ...(task.buildsFrom.length > 0
+    ? { buildsFrom: task.buildsFrom.map(planWaitOf) }
+    : {}),
   ...(task.budget ? { budget: task.budget } : {}),
 });
 

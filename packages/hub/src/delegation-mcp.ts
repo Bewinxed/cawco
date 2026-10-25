@@ -3,6 +3,7 @@ import { unwatchFile, watchFile } from "node:fs";
 import {
   type Envelope,
   type InstanceRow,
+  type PlanWait,
   parseConnectionTool,
   type SendPayload,
 } from "@cawco/core";
@@ -251,6 +252,8 @@ export function createDelegationMcp(options: {
   projectFromSession?: (actor: InstanceRow) => Promise<AcceptResult>;
   /** The whole id of the artifact a session names by its name, handle or id (artifacts/service.ts `named`). */
   artifactNamed?: (instanceId: string, asked: string) => string;
+  /** The decision pages a session names for a build, resolved and checked (artifacts/service.ts `buildsFrom`). */
+  buildsFrom?: (instanceId: string, written: readonly string[]) => PlanWait[];
   /** `todo_write`'s session scope: the caller's own steps and spec (plans.ts). */
   writePlan?: TaskToolContext["writePlan"];
   /** `delegate_list`: the calling session's own delegation tree (delegation-tree.ts). */
@@ -597,6 +600,9 @@ export function createDelegationMcp(options: {
         startAttempt: options.startAttempt,
         artifactNamed: options.artifactNamed
           ? (asked) => options.artifactNamed?.(actor.id, asked) ?? asked
+          : undefined,
+        buildsFrom: options.buildsFrom
+          ? (written) => options.buildsFrom?.(actor.id, written) ?? []
           : undefined,
         retryAttempt: options.retryAttempt,
         tasks: options.tasks,

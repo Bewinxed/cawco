@@ -51,6 +51,7 @@
     IconSuccess,
     IconWarningTriangle,
   } from "#lib/icons.js";
+  import ArtifactReference from "../ArtifactReference.svelte";
   import { stopWords } from "../accounts/switch.svelte";
   import {
     cawco,
@@ -1851,6 +1852,19 @@
                 </a>
               {/if}
             </div>
+            <!-- The decision pages it builds from, each as its chip: its
+                 landing on main waits on the picks there. -->
+            {#if item.work?.buildsFrom.length}
+              <p
+                data-slot="builds-from"
+                class="mb-space-2 flex min-w-0 flex-wrap items-baseline gap-space-1 text-size-meta text-ink-muted"
+              >
+                <span class="flex-none">Builds from</span>
+                {#each [...new Set(item.work.buildsFrom.map((wait) => wait.artifactId))] as page (page)}
+                  <ArtifactReference id={page} label="Decision page" />
+                {/each}
+              </p>
+            {/if}
             <DelegateTail
               instanceId={item.instanceId}
               note={noteOf(openChip)}
