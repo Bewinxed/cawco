@@ -5304,6 +5304,11 @@ export const createServer = (
     // A turn that called finish_item ends with its process: what waited out
     // that turn is the next process's to read.
     if (!outlived) {
+      // And its transcript's tail says so: a process killed or crashed
+      // mid-turn sent no `result`, and the tail went on saying busy over a
+      // session doing nothing (a page read then drew Stop). One that outlived
+      // its agent may still be in its turn, which its adoption says.
+      transcripts.processGone(instanceId);
       workItems.turnOver(instanceId);
     }
     // A lead's turn ends with its process: its thread is no longer working.
