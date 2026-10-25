@@ -19,10 +19,10 @@
   import { Input } from "#lib/components/ui/input/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import {
-    IconDot,
     IconExternal,
     IconLock,
-    IconMinusCircle,
+    IconNeutral,
+    IconNotYet,
     IconPhone,
     IconSuccess,
   } from "#lib/icons.js";
@@ -191,14 +191,16 @@
               {:else if mark.kind === "wait"}
                 <LiveDot />
               {:else if mark.kind === "no"}
-                <IconMinusCircle
+                <IconNeutral
                   aria-label="No"
                   class="size-icon-md text-ink-muted"
                 />
               {:else}
-                <IconDot
+                <IconNotYet
+                  aria-hidden="false"
                   aria-label="Not yet"
-                  class="size-icon-sm text-ink-muted"
+                  class="size-icon-md text-ink-subtle"
+                  role="img"
                 />
               {/if}
             {/key}

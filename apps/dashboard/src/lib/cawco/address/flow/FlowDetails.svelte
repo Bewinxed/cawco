@@ -14,7 +14,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import CopyButton from "#lib/components/ui/copy-button/copy-button.svelte";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
-  import { IconDot, IconMinusCircle, IconSuccess } from "#lib/icons.js";
+  import { IconNeutral, IconNotYet, IconSuccess } from "#lib/icons.js";
   import Words from "../Words.svelte";
   import { hasClipboard } from "./FlowObject.svelte";
   import type { AddressFlow } from "./flow.svelte";
@@ -63,17 +63,14 @@
                   class="size-icon-md text-status-done-ink"
                 />
               {:else if fact.mark === "no"}
-                <IconMinusCircle
+                <IconNeutral
                   aria-label="No"
                   class="size-icon-md text-ink-muted"
                 />
               {:else if fact.mark === "wait"}
                 <LiveDot />
               {:else}
-                <IconDot
-                  aria-hidden="true"
-                  class="size-icon-sm text-ink-muted"
-                />
+                <IconNotYet class="size-icon-md text-ink-subtle" />
               {/if}
             </span>
             <span class="mark-text min-w-0 text-ink-strong"

@@ -10,7 +10,7 @@
    * closes. A machine it adds has its row in this list once it checks in.
    */
   import {
-    IconAddCircleLine as Add,
+    IconAddLinear as Add,
     IconSuccess as Check,
     IconChevronDown as Down,
     IconServerSquare as Server,

@@ -17,7 +17,7 @@
   import { accessWords } from "@cawco/core/connect-ask";
   import type { ConnectAnswer } from "@cawco/core/frames";
   import { askWords } from "@cawco/core/words/asks";
-  import { IconChevronRight, IconKey, IconMinusCircle } from "#lib/icons.js";
+  import { IconChevronRight, IconKey, IconNeutral } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
 
   let { answer }: { answer: ConnectAnswer } = $props();
@@ -65,7 +65,7 @@
         data-slot="glyph"
         class="col-start-1 row-start-1 grid place-items-center text-ink-muted data-[connect=connected]:text-status-done-glyph data-[connect=expired]:text-status-attn-glyph"
         data-connect={kind}
-        >{#if kind === "declined"}<IconMinusCircle
+        >{#if kind === "declined"}<IconNeutral
             class="size-icon-md block"
           />{:else}<IconKey class="size-icon-md block" />{/if}</span
       >

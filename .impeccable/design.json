@@ -2673,7 +2673,7 @@
       },
       {
         "name": "The Solar Duotone Rule",
-        "body": "Every product icon is Solar's bold-duotone cut, imported through `$lib/icons.ts`: one face for the whole product. The duotone's second layer is the same `currentColor` at 50% opacity. A status glyph keeps its hue (`status-*-glyph`) at that 0.5 and holds 3:1 or more as a whole on the surfaces it sits on, so a row's state reads in colour at a glance (9ca3b2154). Chevrons and arrows (`alt-arrow-*`, `arrow-*`) use Solar's linear cut because they are glyphs, not marks. Close, Minus, Plus and Tick are local glyphs drawn to Solar's 24px grid with a 1.5 linear stroke and round caps, because Solar has no bare version.",
+        "body": "Every product icon is Solar's bold-duotone cut, imported through `$lib/icons.ts`: one face for the whole product. The duotone's second layer is the same `currentColor` at 50% opacity. A status glyph keeps its hue (`status-*-glyph`) at that 0.5 and holds 3:1 or more as a whole on the surfaces it sits on, so a row's state reads in colour at a glance (9ca3b2154). Chevrons and arrows (`alt-arrow-*`, `arrow-*`) use Solar's linear cut because they are glyphs, not marks. Close, Plus and Tick are local glyphs drawn to Solar's 24px grid with a 1.5 linear stroke and round caps, and Minus is Solar's bare minus-linear. An icon is the glyph alone: no circle, square or box round a Solar glyph; where Solar ships only a contained cut, a container-less glyph is drawn in Solar's style.",
         "section": "components"
       },
       {

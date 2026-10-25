@@ -10,8 +10,8 @@
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import {
     IconChevronDown,
-    IconDot,
-    IconMinusCircle,
+    IconNeutral,
+    IconNotYet,
     IconSuccess,
   } from "#lib/icons.js";
   import type { AddressTray, Fact } from "./tray.svelte";
@@ -121,17 +121,14 @@
                     class="size-icon-md text-status-done-ink"
                   />
                 {:else if fact.mark === "no"}
-                  <IconMinusCircle
+                  <IconNeutral
                     aria-label="No"
                     class="size-icon-md text-ink-muted"
                   />
                 {:else if fact.mark === "wait"}
                   <LiveDot />
                 {:else}
-                  <IconDot
-                    aria-hidden="true"
-                    class="size-icon-sm text-ink-muted"
-                  />
+                  <IconNotYet class="size-icon-md text-ink-subtle" />
                 {/if}
               </span>
               <span class="mark-text min-w-0 text-ink-strong"

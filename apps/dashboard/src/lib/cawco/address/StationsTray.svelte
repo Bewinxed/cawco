@@ -17,10 +17,10 @@
     IconChevronDown,
     IconChevronRight,
     IconClose,
-    IconDot,
     IconError,
     IconExternal,
-    IconMinusCircle,
+    IconNeutral,
+    IconNotYet,
     IconSuccess,
   } from "#lib/icons.js";
   import AddressList from "./AddressList.svelte";
@@ -360,7 +360,7 @@
                           class="size-icon-md text-status-fail-ink"
                         />
                       {:else if state === "skipped"}
-                        <IconMinusCircle
+                        <IconNeutral
                           aria-label="Not done"
                           class="size-icon-md text-ink-muted"
                         />
@@ -546,7 +546,7 @@
                   class="mark-cell grid size-icon-md place-items-center"
                   data-box
                 >
-                  <IconDot aria-hidden="true" class="size-icon-sm" />
+                  <IconNotYet class="size-icon-md text-ink-subtle" />
                 </span>
                 <span class="col-start-2 col-end-4 min-w-0"
                   >Then {ahead.map((one) => NAMES[one]).join(" · ")}</span

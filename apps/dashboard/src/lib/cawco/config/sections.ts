@@ -42,7 +42,10 @@ export type SectionSlug = ConfigSlug;
 /**
  * The component for each Solar name a section is drawn with. A name the
  * definition gains that is not here throws as this module loads, so every
- * page says so at once rather than one rail row drawing nothing.
+ * page says so at once rather than one rail row drawing nothing. A contained
+ * cut's name (`code-square`, `plug-circle`, `square-top-down`) is the key the
+ * native app shares; the web draws its bare glyph (DESIGN.md, The Solar
+ * Duotone Rule).
  */
 const GLYPHS: Record<string, Component> = {
   "shield-check-bold-duotone": IconRules,

@@ -77,7 +77,11 @@ export interface ToolFamily {
   one: string;
 }
 
-/** This client's component for each Solar glyph the core module names. */
+/**
+ * This client's component for each Solar glyph the core module names. A
+ * contained cut's name is the key the native app shares; the web draws its
+ * bare glyph (DESIGN.md, The Solar Duotone Rule).
+ */
 const GLYPHS: Record<string, Component> = {
   "code-square-bold-duotone": IconToolTerminal,
   "document-text-bold-duotone": IconToolRead,

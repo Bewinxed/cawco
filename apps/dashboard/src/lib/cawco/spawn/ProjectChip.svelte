@@ -6,7 +6,7 @@
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   /** Project chip + popover (§1.4, §2.7): pick, clear, or create a project. */
   import {
-    IconAddCircle as Add,
+    IconAdd as Add,
     IconSuccess as Check,
     IconCloseTab as Clear,
     IconChevronDown as Down,

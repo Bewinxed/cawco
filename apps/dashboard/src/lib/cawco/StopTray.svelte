@@ -55,7 +55,7 @@
     IconNeedsYou as Attention,
     IconCloudCross as Away,
     IconError as Failed,
-    IconPauseCircle as Pause,
+    IconPause as Pause,
     IconRenew as Working,
   } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";

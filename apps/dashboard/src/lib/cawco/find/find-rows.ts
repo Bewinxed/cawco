@@ -23,7 +23,7 @@ import {
   IconListCheck as Decision,
   IconError as Failed,
   IconFileCode as File,
-  IconPauseCircle as Idle,
+  IconPause as Idle,
   IconServerAlt as Machine,
   IconNeedsYou as NeedsYou,
   IconArtifactPage as Page,
