@@ -49,6 +49,15 @@ const TAPER = 0.022;
 const SAMPLES = 48;
 /** Keyframes the drop's fold is sampled at, off the outline's own height. */
 const DROP_STEPS = 12;
+/**
+ * The most one drawn frame moves a morph's clock, ms: three frames at 60 Hz.
+ * A longer wait between frames is the browser holding them, not the morph's
+ * time. iOS Safari holds them while an on-screen keyboard rises after a
+ * focus: 27.2 drew none from 840 to 1210ms of a lift and 27.0 none from 792
+ * to 1169ms (probe-kit ios-safari-motion, queued-edit, 2026-10-23 and
+ * 2026-10-25), and a morph on the wall's clock was seen only landed. Our call.
+ */
+const FRAME_STEP_MS = 50;
 
 /** The composer's sizes, read once before anything is written. */
 export interface ShapeSize {
@@ -134,12 +143,6 @@ export class GrownShape {
   /** The sides' inset by height, grown, and the reach it was worked out for. */
   #sides: { ext: number; at: number[]; inset: number[] } | null = null;
   #frame = 0;
-  /**
-   * Whether the morph running now has drawn a frame past its start. A morph
-   * whose frames the browser held (iOS Safari draws none while an
-   * on-screen keyboard rises) has not, and can start over unseen.
-   */
-  moved = false;
   #done: (() => void) | null = null;
   /** What the drop waits on after the next morph lands, besides it. */
   #after: Promise<void> | null = null;
@@ -577,12 +580,20 @@ export class GrownShape {
    * the drawer curve; with `base`, its foot glides to that height on the
    * same curve (a field growing or shrinking under it as it folds). Turns
    * back from wherever it is drawn. With reduced motion it lands at once.
+   *
+   * Its clock is its drawn frames ({@link FRAME_STEP_MS}): a frame the
+   * browser held is not time the morph spent, so a morph whose frames were
+   * held is seen whole once they come. `cue` runs once the morph has drawn
+   * `cue.ms` of its own time (at once with reduced motion, and at its
+   * landing if it is shorter): what comes up inside the shape after it
+   * comes up on frames a person sees too.
    */
   morphTo(
     open: number,
     ext: number,
     ms: number,
-    base = this.#size.base
+    base = this.#size.base,
+    cue?: { ms: number; run: () => void }
   ): Promise<void> {
     cancelAnimationFrame(this.#frame);
     this.#done?.();
@@ -597,10 +608,17 @@ export class GrownShape {
     const fromOpen = this.open;
     const fromExt = this.ext;
     const fromBase = this.#size.base;
-    this.moved = false;
+    let cued = !cue;
+    const cueAt = (elapsed: number) => {
+      if (!cued && cue && elapsed >= cue.ms) {
+        cued = true;
+        cue.run();
+      }
+    };
     return new Promise((done) => {
       this.#done = done;
       const land = () => {
+        cueAt(Number.POSITIVE_INFINITY);
         this.#done = null;
         const after = this.#after;
         this.#after = null;
@@ -624,11 +642,13 @@ export class GrownShape {
         land();
         return;
       }
-      let start: number | null = null;
+      let last: number | null = null;
+      let elapsed = 0;
       const frame = (now: number) => {
-        start ??= now;
-        const t = Math.min(1, (now - start) / ms);
-        this.moved ||= t > 0;
+        elapsed += last === null ? 0 : Math.min(now - last, FRAME_STEP_MS);
+        last = now;
+        const t = Math.min(1, elapsed / ms);
+        cueAt(elapsed);
         this.open = lerp(fromOpen, open, t);
         this.ext = lerp(fromExt, ext, easeDrawer(t));
         this.#size.base = lerp(fromBase, base, easeDrawer(t));

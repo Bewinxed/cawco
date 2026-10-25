@@ -871,6 +871,7 @@ async function idleLeg(live: Live, quiet: string) {
     pressure: { before: pressedBefore, after: pressedAfter },
     busyShare: round(meter.busyShare, 3),
     floorShare: round(floor.busyShare, 3),
+    meterGrainMs: meter.grainMs,
     traceCpuShare: round(ownCpu, 3),
     messagesPerSecond: round((total / IDLE_MS) * 1000),
     messages,
@@ -886,7 +887,7 @@ async function idleLeg(live: Live, quiet: string) {
     mutated: state.mutated,
   };
   kit.note(
-    `idle on ${live.titleOf(quiet)} (the machine as the minute began: ${quietWords(pressedBefore)}; as it ended: ${quietWords(pressedAfter)}): busy ${round(meter.busyShare * 100)}% (blank page ${round(floor.busyShare * 100)}%), its own CPU by the trace ${round(ownCpu * 100)}%; ${round((total / IDLE_MS) * 1000)} messages a second: ${messages
+    `idle on ${live.titleOf(quiet)} (the machine as the minute began: ${quietWords(pressedBefore)}; as it ended: ${quietWords(pressedAfter)}): busy ${round(meter.busyShare * 100)}% (blank page ${round(floor.busyShare * 100)}%; the meter's clock steps ${round(meter.grainMs, 3)}ms, no task under that seen), its own CPU by the trace ${round(ownCpu * 100)}%; ${round((total / IDLE_MS) * 1000)} messages a second: ${messages
       .sort((a, b) => b.msEach * b.count - a.msEach * a.count)
       .slice(0, 6)
       .map(

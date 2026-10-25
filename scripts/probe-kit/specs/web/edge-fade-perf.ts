@@ -44,12 +44,13 @@
  *  - the main thread's CPU over the scroll, by its thread clock, is within
  *    `CPU_SHARE` of the legs without the fade, in the same run.
  * The frames over budget, and what ran in them, are noted, each leg with the
- * one-minute load (`/proc/loadavg`) through it: on a loaded host they are the
+ * one-minute load (`os.loadavg`) through it: on a loaded host they are the
  * host's as much as the page's. Every number is written to `numbers.json`
  * in the spec's out folder.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time
-import { readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
+import { loadavg } from "node:os";
 import { join } from "node:path";
 import type { CDPSession, Page } from "playwright-core";
 import { MACHINE } from "../../../scratch-fleet";
@@ -167,9 +168,8 @@ interface Leg {
   style: { elements: number; ms: number; n: number };
 }
 
-/** The one-minute load. */
-const load1 = async (): Promise<number> =>
-  Number.parseFloat((await readFile("/proc/loadavg", "utf8")).split(" ")[0]);
+/** The one-minute load (`os.loadavg`: Linux's /proc/loadavg, macOS's vm.loadavg). */
+const load1 = (): Promise<number> => Promise.resolve(loadavg()[0] ?? 0);
 
 /** The page's drawn frames while `__fade.on`: each `requestAnimationFrame`'s timestamp. */
 function frameClock(): void {

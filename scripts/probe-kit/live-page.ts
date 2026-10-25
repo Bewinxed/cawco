@@ -772,20 +772,40 @@ export function rest(ms: number): Promise<void> {
  * (a MessageChannel message, which no timer clamp delays), so the thread
  * never sleeps and the page's tasks and frames run between ours; the time
  * between one of ours ending and the next starting, past half a
- * millisecond, is the page's. It is wall time: the machine's other turns
- * land in it too, so it is read beside the same meter on a blank page
- * (its floor) and the machine's load. The gaps are binned by length (under
- * 4 ms, 4–16, 16–50, 50 and over). `requestIdleCallback`'s deadlines
- * overlap and promise time a task can still take, so they are not used.
+ * millisecond or the page clock's grain, whichever is longer, is the
+ * page's. The grain is read first (`grainMs`, the least step
+ * `performance.now()` takes): WebKit's clock steps whole milliseconds
+ * (Playwright's WebKit on the Mac, 2026-10-25: 1 ms, Chromium's 0.1), so a
+ * hop of microseconds that straddles a step reads a full millisecond, and
+ * with a half-millisecond floor every step was counted: a blank page read
+ * 99.8% busy. Past the grain a gap is the page's work, a gap within it
+ * unknown, so the meter sees no task shorter than its grain. It is wall
+ * time: the machine's other turns land in it too, so it is read beside the
+ * same meter on a blank page (its floor) and the machine's load. The gaps
+ * are binned by length (under 4 ms, 4–16, 16–50, 50 and over).
+ * `requestIdleCallback`'s deadlines overlap and promise time a task can
+ * still take, so they are not used.
  */
 export function busyMeter(ms: number): Promise<{
   bins: [number, number][];
   busyMs: number;
   busyShare: number;
+  grainMs: number;
   wallMs: number;
 }> {
-  const GAP_MS = 0.5;
   const EDGES = [4, 16, 50, Number.POSITIVE_INFINITY];
+  // The clock's grain: the least of its first steps, read by spinning on it.
+  let grainMs = Number.POSITIVE_INFINITY;
+  let seen = performance.now();
+  for (let steps = 0; steps < 20;) {
+    const now = performance.now();
+    if (now !== seen) {
+      grainMs = Math.min(grainMs, now - seen);
+      seen = now;
+      steps += 1;
+    }
+  }
+  const GAP_MS = Math.max(0.5, grainMs);
   return new Promise((resolve) => {
     const start = performance.now();
     const bins: [number, number][] = EDGES.map(() => [0, 0]);
@@ -808,6 +828,7 @@ export function busyMeter(ms: number): Promise<{
         resolve({
           busyMs: busy,
           busyShare: busy / (now - start),
+          grainMs,
           wallMs: now - start,
           bins,
         });
