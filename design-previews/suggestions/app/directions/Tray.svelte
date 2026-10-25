@@ -23,10 +23,10 @@
   } from "../../../../apps/dashboard/src/lib/cawco/motion/curves.svelte.js";
   import { morph } from "../../../../apps/dashboard/src/lib/cawco/motion/morph.svelte.js";
   import { chipVariants } from "../../../../apps/dashboard/src/lib/components/ui/chip/index.js";
-  import { Skeleton } from "../../../../apps/dashboard/src/lib/components/ui/skeleton/index.js";
   import { IconChevronDown } from "../../../../apps/dashboard/src/lib/icons.js";
   import { IN_THE_BOX, oneClock, putIn, typedOf } from "../clock.js";
   import Composer from "../Composer.svelte";
+  import Surround from "../Surround.svelte";
 
   type Item = { text: string; reason?: string };
   let {
@@ -131,95 +131,99 @@
   });
 </script>
 
-{#snippet sentWell()}
-  <div class="sent" data-slot="sent">{first}</div>
+{#snippet set()}
+  {#if draws.phase === "sent"}
+    <div class="sent" data-slot="sent">{first}</div>
+  {/if}
+{/snippet}
+
+{#snippet foot()}
+  <div class="box">
+  <Composer bind:field bind:value focused={keyboard}>
+    {#if tray}
+      <div class="tray" data-loading={draws.loading || undefined}>
+        <div class="divider">
+          {#if draws.loading}<span class="running" data-slot="skeleton"></span>{/if}
+        </div>
+        {#if chips}
+          <div class="head" data-slot="tray-count"><span>{label}{count}</span></div>
+          <div
+            aria-label="{label}{count}"
+            bind:this={chipRow}
+            class="chip-row kit-edge-fade"
+            role="group"
+          >
+            {#each draws.items as item, i (`${i}:${item.text}`)}
+              <button
+                class={chipVariants({ class: "chip" })}
+                data-slot="suggestion"
+                onclick={() => take(item.text)}
+                type="button"
+              ><span class="chip-text" data-slot="suggestion-text">{item.text}</span></button>
+            {/each}
+          </div>
+        {:else}
+          <div class="head">
+            <span id="tray-label">{label}{count}</span>
+            <button
+              aria-expanded={!shut}
+              aria-label={shut ? "Open" : "Close"}
+              class="chevron"
+              data-shut={shut || undefined}
+              onclick={() => (shut = !shut)}
+              type="button"
+            ><IconChevronDown aria-hidden="true" class="glyph" /></button>
+          </div>
+          {#if !shut}
+            <ul aria-labelledby="tray-label" class="rows" {@attach morph()}>
+              {#if draws.loading}
+                {#each ["var(--tray-bone-1)", "var(--tray-bone-2)", "var(--tray-bone-3)"] as width (width)}
+                  <li class="row bones">
+                    <span class="bone" data-slot="skeleton" style:inline-size={width}></span>
+                  </li>
+                {/each}
+              {:else}
+                {#each shown as item, i (`${i}:${item.text}`)}
+                  <li>
+                    <button
+                      aria-describedby={item.reason ? `tray-reason-${i}` : undefined}
+                      class="row"
+                      data-held={i === 0 ? draws.held : undefined}
+                      data-slot="suggestion"
+                      onclick={(event) => press(i, event.currentTarget)}
+                      type="button"
+                    >
+                      <span class="text" data-slot="suggestion-text">{item.text}</span>
+                      {#if item.reason}
+                        <span class="reason" data-slot="suggestion-reason" id="tray-reason-{i}"
+                          >{item.reason}</span
+                        >
+                      {/if}
+                    </button>
+                  </li>
+                {/each}
+                {#if more > 0}
+                  <li>
+                    <button class="row more" onclick={() => (expanded = true)} type="button"
+                      ><span class="text">{more} more</span></button
+                    >
+                  </li>
+                {/if}
+              {/if}
+            </ul>
+          {/if}
+        {/if}
+      </div>
+    {/if}
+  </Composer>
+  </div>
 {/snippet}
 
 <div class="tray-direction" data-direction="tray" data-touch={draws.touch || undefined} data-where={where}>
-  <div class="column">
-    {#if draws.phase === "sent"}
-      <div class="thread">{@render sentWell()}</div>
-    {:else if where !== "board"}
-      <div class="room"></div>
-    {/if}
-    <Composer bind:field bind:value focused={keyboard}>
-      {#if tray}
-        <div class="tray" data-loading={draws.loading || undefined}>
-          <div class="divider">
-            {#if draws.loading}<span class="running" data-slot="skeleton"></span>{/if}
-          </div>
-          {#if chips}
-            <div
-              aria-label="{label}{count}"
-              bind:this={chipRow}
-              class="chip-row kit-edge-fade"
-              role="group"
-            >
-              {#each draws.items as item, i (`${i}:${item.text}`)}
-                <button
-                  class={chipVariants({ class: "chip" })}
-                  data-slot="suggestion"
-                  onclick={() => take(item.text)}
-                  type="button"
-                ><span class="chip-text" data-slot="suggestion-text">{item.text}</span></button>
-              {/each}
-            </div>
-          {:else}
-            <div class="head">
-              <span id="tray-label">{label}{count}</span>
-              <button
-                aria-expanded={!shut}
-                aria-label={shut ? "Open" : "Close"}
-                class="chevron"
-                data-shut={shut || undefined}
-                onclick={() => (shut = !shut)}
-                type="button"
-              ><IconChevronDown aria-hidden="true" class="glyph" /></button>
-            </div>
-            {#if !shut}
-              <ul aria-labelledby="tray-label" class="rows" {@attach morph()}>
-                {#if draws.loading}
-                  {#each ["var(--tray-bone-1)", "var(--tray-bone-2)", "var(--tray-bone-3)"] as width (width)}
-                    <li class="row bones">
-                      <Skeleton line="body" radius="line" style="inline-size: {width}" />
-                    </li>
-                  {/each}
-                {:else}
-                  {#each shown as item, i (`${i}:${item.text}`)}
-                    <li>
-                      <button
-                        aria-describedby={item.reason ? `tray-reason-${i}` : undefined}
-                        class="row"
-                        data-held={i === 0 ? draws.held : undefined}
-                        data-slot="suggestion"
-                        onclick={(event) => press(i, event.currentTarget)}
-                        type="button"
-                      >
-                        <span class="text" data-slot="suggestion-text">{item.text}</span>
-                        {#if item.reason}
-                          <span class="reason" data-slot="suggestion-reason" id="tray-reason-{i}"
-                            >{item.reason}</span
-                          >
-                        {/if}
-                      </button>
-                    </li>
-                  {/each}
-                  {#if more > 0}
-                    <li>
-                      <button class="row more" onclick={() => (expanded = true)} type="button"
-                        ><span class="text">{more} more</span></button
-                      >
-                    </li>
-                  {/if}
-                {/if}
-              </ul>
-            {/if}
-          {/if}
-        </div>
-      {/if}
-    </Composer>
-    {#if where === "board"}<div class="room"></div>{/if}
-  </div>
+  <!-- The report's own arrangement in Today's surroundings: the suggestions
+       live in the composer's own frame, the frame centred at 560px on the
+       board, and the tray grows upward from the composer at the foot. -->
+  <Surround anchor="end" {foot} {set} {where} />
   <p aria-live="polite" class="sr-only">{said}</p>
 </div>
 
@@ -231,30 +235,15 @@
     min-block-size: 0;
   }
 
-  .column {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    gap: var(--space-4);
-    inline-size: 100%;
-    min-block-size: 0;
-
+  .box {
     [data-where="board"] & {
       max-inline-size: var(--board-column);
       margin-inline: auto;
     }
   }
 
-  .room {
-    flex: 1 1 auto;
-  }
-
-  .thread {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    justify-content: end;
-    align-items: end;
+  .sent {
+    align-self: end;
   }
 
   /* The reader's sent message, as the thread draws its well. */
@@ -406,6 +395,12 @@
     color: var(--ink-muted);
   }
 
+  /* Held under the hand by day, the muted reason goes strong on the pressed
+     fill, as the house press tint does (muted ink there is 3.93:1). */
+  :global(:root:not(.dark)) .row:is(:active, [data-held="pressed"]) .reason {
+    color: var(--ink-strong);
+  }
+
   /* A desk shows the reason on hover or focus; a finger always. */
   .reason {
     display: none;
@@ -433,6 +428,26 @@
   .chip-row :global(.chip) {
     flex: none;
     max-inline-size: var(--tray-chip-max);
+  }
+
+  /* Loading rows: text-shaped bars on the tray's tint, the preview's own ink so they read at night. */
+  .bone {
+    display: block;
+    block-size: 1lh;
+    max-inline-size: 100%;
+    border-radius: var(--radius-hair);
+    background: var(--tray-bone-ink);
+    font: var(--type-body);
+
+    @media (prefers-reduced-motion: no-preference) {
+      animation: tray-bone var(--dur-skeleton-pulse) ease-in-out infinite alternate;
+    }
+  }
+
+  @keyframes tray-bone {
+    to {
+      opacity: var(--skeleton-pulse-floor);
+    }
   }
 
   .chip-text {

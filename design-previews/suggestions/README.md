@@ -18,6 +18,23 @@ python3 -m http.server -d design-previews/suggestions 8080    # any static serve
 bun scripts/probe-kit/run.ts suggestions-preview               # the proof (Chromium + WebKit)
 ```
 
+## The surroundings
+
+Every direction stands in Today's surroundings exactly (`app/Surround.svelte`):
+Caw at 80 and the heading on the left edge ("What’s next for Cawco?" in his
+thread and on the phone, "Nothing on the board yet" on the empty board), the
+direction's set under them, and the composer at the foot, where it stays.
+What a set holds past its room scrolls above the composer under the house's
+40px edge fade. A direction differs only where the designer's report says
+so, and the switcher's note says it in one line:
+
+- drafts: the stack stands right-aligned on the composer, in a centred 560px
+  column on the board, and hides while the keyboard is up ("stack hides when
+  the keyboard is up").
+- ledger: on the board the rows stand at the 560px reading width.
+- tray: the suggestions live in the composer's own frame, centred at 560px
+  on the board, and grow upward from it.
+
 ## The switcher: groups and keys
 
 `?__state=direction:<d>,where:<w>,data:<s>,theme:<t>`; a group left out, or
@@ -106,6 +123,7 @@ variables in `app/preview.css`:
 | `--tray-line` | 2px | loading's line on the divider |
 | `--tray-bone-1/2/3` | 72% / 88% / 58% | loading rows (own call: the ledger's) |
 | `--tray-chip-max` | 16rem | a chip's widest before its words clip (own call) |
+| `--tray-bone-ink` | ink at 14% (22% dark) | loading rows on the tint (own call: the house skeleton's fill vanished on the tint at night) |
 
 The switcher's own look (`--sm-*`) is the preview's, not the product's.
 
@@ -114,11 +132,10 @@ The switcher's own look (`--sm-*`) is the preview's, not the product's.
 - `app/`: the page's source. `Preview.svelte` (the switcher and the stage),
   `states.js` (groups and keys), `starters.js` and `starters.tsv` (his
   words), `directions/` (Today, Drafts, Ledger, Tray), `Composer.svelte`,
-  `CawStill.svelte`, `clock.js`, `preview.css`, `build.ts` (the dashboard's
+  `Surround.svelte`, `CawStill.svelte`, `clock.js`, `preview.css`, `build.ts` (the dashboard's
   Vite and plugins). Every direction is the dashboard's own primitives and
   tokens (Suggestions, the kit's chips, Skeleton, Solar glyphs, the motion
   helpers); nothing goes into the product until the owner picks.
 - `index.html`, `assets/`: what `app/build.ts` writes. Generated.
-- `caw/`: Caw's stills by day and by night on the paper rim;
-  `caw-ready-night-mark.png` is the night still with its rim grown to a
-  device pixel at 28px (`python3 -I design-previews/suggestions/app/night-mark.py`).
+- `caw/`: Caw's stills by day and by night on the paper rim, the same still
+  at 80 in the hero and at 28 in the head.

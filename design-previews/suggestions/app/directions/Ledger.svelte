@@ -27,11 +27,12 @@
   import { Skeleton } from "../../../../apps/dashboard/src/lib/components/ui/skeleton/index.js";
   import {
     IconPen,
-    IconRenew,
+    IconRefresh,
     IconTick,
   } from "../../../../apps/dashboard/src/lib/icons.js";
   import { IN_THE_BOX, oneClock, putIn, typedOf } from "../clock.js";
   import Composer from "../Composer.svelte";
+  import Surround from "../Surround.svelte";
 
   type Item = { text: string; reason?: string };
   let {
@@ -127,81 +128,87 @@
   }
 </script>
 
+{#snippet set()}
+  {#if draws.items.length > 0 || draws.loading}
+    <div
+      aria-labelledby="ledger-kicker"
+      class="set"
+      data-faded={typing || undefined}
+      role="group"
+      {@attach morph()}
+    >
+      <div class="kicker">
+        <span id="ledger-kicker"
+          >{writing ? "Caw is writing suggestions" : `Caw suggests · ${draws.items.length}`}</span
+        >
+        <button aria-label="Refresh" class="refresh" type="button">
+          <IconRefresh aria-hidden="true" class="glyph" />
+        </button>
+      </div>
+      <ul class="rows">
+        {#if writing}
+          {#each (draws.loading ? [0, 1, 2] : shown.map((_, i) => i)) as slot (slot)}
+            <li class="row bones">
+              <Skeleton class="bone" line="body" radius="line" style="inline-size: {BONES[slot % 3]}" />
+              <Skeleton class="bone" line="meta" radius="line" style="inline-size: var(--ledger-bone-reason)" />
+            </li>
+          {/each}
+        {:else}
+          {#each shown as item, i (`${i}:${item.text}`)}
+            <li>
+              <button
+                aria-describedby={item.reason ? `ledger-reason-${i}` : undefined}
+                class="row"
+                data-held={i === 0 ? draws.held : undefined}
+                data-slot="suggestion"
+                onclick={(event) => press(i, event.currentTarget)}
+                type="button"
+              >
+                <span class="words">
+                  <span class="text" data-slot="suggestion-text">{item.text}</span>
+                  {#if item.reason}
+                    <span class="reason" data-slot="suggestion-reason" id="ledger-reason-{i}"
+                      >{item.reason}</span
+                    >
+                  {/if}
+                </span>
+                <span aria-hidden="true" class="mark">
+                  <span class="pencil" data-hidden={checked === i || undefined} data-pencil
+                    ><IconPen class="glyph" /></span
+                  >
+                  <span class="check" data-check data-shown={checked === i || undefined}
+                    ><IconTick class="glyph" /></span
+                  >
+                </span>
+              </button>
+            </li>
+          {/each}
+          {#if more > 0}
+            <li>
+              <button class="row more" onclick={() => (expanded = true)} type="button">
+                <span class="text">{more} more</span>
+              </button>
+            </li>
+          {/if}
+        {/if}
+      </ul>
+    </div>
+  {/if}
+{/snippet}
+
+{#snippet foot()}
+  <Composer bind:field bind:value focused={where === "keyboard"} />
+{/snippet}
+
 <div
   class="ledger"
   data-direction="ledger"
   data-touch={draws.touch || undefined}
   data-where={where}
 >
-  <div class="column">
-    {#if draws.items.length > 0 || draws.loading}
-      <div
-        aria-labelledby="ledger-kicker"
-        class="set"
-        data-faded={typing || undefined}
-        role="group"
-        {@attach morph()}
-      >
-        <div class="kicker">
-          <span id="ledger-kicker"
-            >{writing ? "Caw is writing suggestions" : `Caw suggests · ${draws.items.length}`}</span
-          >
-          <button aria-label="Refresh" class="refresh" data-pressed={draws.phase === "refresh" || undefined} type="button">
-            <IconRenew aria-hidden="true" class="glyph" />
-          </button>
-        </div>
-        <ul class="rows">
-          {#if writing}
-            {#each (draws.loading ? [0, 1, 2] : shown.map((_, i) => i)) as slot (slot)}
-              <li class="row bones">
-                <Skeleton class="bone" line="body" radius="line" style="inline-size: {BONES[slot % 3]}" />
-                <Skeleton class="bone" line="meta" radius="line" style="inline-size: var(--ledger-bone-reason)" />
-              </li>
-            {/each}
-          {:else}
-            {#each shown as item, i (`${i}:${item.text}`)}
-              <li>
-                <button
-                  aria-describedby={item.reason ? `ledger-reason-${i}` : undefined}
-                  class="row"
-                  data-held={i === 0 ? draws.held : undefined}
-                  data-slot="suggestion"
-                  onclick={(event) => press(i, event.currentTarget)}
-                  type="button"
-                >
-                  <span class="words">
-                    <span class="text" data-slot="suggestion-text">{item.text}</span>
-                    {#if item.reason}
-                      <span class="reason" data-slot="suggestion-reason" id="ledger-reason-{i}"
-                        >{item.reason}</span
-                      >
-                    {/if}
-                  </span>
-                  <span aria-hidden="true" class="mark">
-                    <span class="pencil" data-hidden={checked === i || undefined} data-pencil
-                      ><IconPen class="glyph" /></span
-                    >
-                    <span class="check" data-check data-shown={checked === i || undefined}
-                      ><IconTick class="glyph" /></span
-                    >
-                  </span>
-                </button>
-              </li>
-            {/each}
-            {#if more > 0}
-              <li>
-                <button class="row more" onclick={() => (expanded = true)} type="button">
-                  <span class="text">{more} more</span>
-                </button>
-              </li>
-            {/if}
-          {/if}
-        </ul>
-      </div>
-    {/if}
-    <div class="room"></div>
-    <Composer bind:field bind:value />
-  </div>
+  <!-- The report's own arrangement in Today's surroundings: on the board the
+       rows stand at the 560px reading width. -->
+  <Surround {foot} {set} {where} />
   <p aria-live="polite" class="sr-only">{said}</p>
 </div>
 
@@ -213,26 +220,12 @@
     min-block-size: 0;
   }
 
-  .column {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    gap: var(--space-4);
-    inline-size: 100%;
-    min-block-size: 0;
+  .set {
+    transition: opacity var(--dur-fade) var(--ease-out);
 
     [data-where="board"] & {
       max-inline-size: var(--board-column);
-      margin-inline: auto;
     }
-  }
-
-  .room {
-    flex: 1 1 auto;
-  }
-
-  .set {
-    transition: opacity var(--dur-fade) var(--ease-out);
 
     &[data-faded] {
       opacity: 0;
@@ -265,10 +258,6 @@
     background: transparent;
     color: var(--ink-muted);
     cursor: pointer;
-
-    &[data-pressed] {
-      background: var(--surface-pressed);
-    }
 
     &:focus-visible {
       outline: var(--focus-ring-width) solid var(--focus-ring);

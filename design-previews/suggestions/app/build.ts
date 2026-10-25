@@ -41,6 +41,16 @@ const { CSS_TARGET } = await import(
 
 // Every package the build reads resolves as the dashboard's own build reads it.
 process.chdir(DASHBOARD);
+// The dashboard's tsconfig extends the one `svelte-kit sync` writes; a fresh
+// checkout has none, and the TypeScript transform refuses without it.
+const sync = Bun.spawnSync([join(DASHBOARD, "node_modules/.bin/svelte-kit"), "sync"], {
+  cwd: DASHBOARD,
+  stdout: "inherit",
+  stderr: "inherit",
+});
+if (sync.exitCode !== 0) {
+  throw new Error(`svelte-kit sync exited ${sync.exitCode}`);
+}
 await writeHouseFaces();
 await rm(join(OUT, "assets"), { recursive: true, force: true });
 await rm(join(OUT, "index.html"), { force: true });

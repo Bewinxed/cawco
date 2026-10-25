@@ -55,6 +55,7 @@ export const DIRECTIONS = [
   {
     value: "today",
     label: "Today",
+    note: "",
     where: ["thread", "board", "phone"],
     data: [
       entry("three", "Three"),
@@ -68,6 +69,7 @@ export const DIRECTIONS = [
   {
     value: "drafts",
     label: "Unsent drafts",
+    note: "Report: the stack stands right-aligned on the composer, in a centred 560px column on the board, and hides while the keyboard is up.",
     where: ["thread", "board", "phone", "keyboard"],
     data: [
       common.loading,
@@ -97,6 +99,7 @@ export const DIRECTIONS = [
   {
     value: "ledger",
     label: "The ledger",
+    note: "Report: on the board the rows stand at the 560px reading width.",
     where: ["thread", "board", "phone"],
     data: [
       common.loading,
@@ -127,6 +130,7 @@ export const DIRECTIONS = [
   {
     value: "tray",
     label: "The tray",
+    note: "Report: the suggestions live in the composer's own frame, centred at 560px on the board, and grow upward from it.",
     where: ["thread", "board", "phone", "keyboard"],
     data: [
       common.loading,
@@ -171,6 +175,10 @@ export const THEMES = [
 ];
 
 /** The switcher's groups for a direction, in order, every entry it has. */
+/** The one line saying where a direction's report changes Today's surroundings; none for Today. */
+export const noteOf = (direction) =>
+  DIRECTIONS.find((each) => each.value === direction)?.note ?? "";
+
 export const groupsOf = (direction) => {
   const d = DIRECTIONS.find((each) => each.value === direction) ?? DIRECTIONS[0];
   return [

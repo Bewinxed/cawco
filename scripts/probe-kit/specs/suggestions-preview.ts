@@ -173,17 +173,42 @@ async function links(
   );
 }
 
+interface Box {
+  b: number;
+  l: number;
+  r: number;
+  t: number;
+}
+
 interface StateRead {
+  /** The surroundings, each box relative to the frame: Caw, the heading, the composer's box. */
+  around: {
+    caw: Box | null;
+    heading: Box | null;
+    box: Box | null;
+    words: string;
+  };
+  /** The set runs past its room. */
+  clipped: boolean;
   dark: boolean;
+  /** The scroller fades both edges at the house 40px. */
+  faded: boolean;
+  /** The composer stands whole inside the frame. */
+  footInside: boolean;
   groups: string[];
   items: number;
   key: string;
+  /** Small text (reasons, kicker, meta) under 4.5:1 on its ground. */
+  low: string[];
+  /** The lowest ratio read. */
+  lowest: number;
   placeholders: number;
   strangers: string[];
   width: number;
 }
 
 /** What the state draws, read in the page. */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one function serialized into the page, its helpers inside it
 function readStage(his: { texts: string[]; reasons: string[] }): StateRead {
   const stage = document.querySelector<HTMLElement>('[data-slot="stage"]');
   const frame = stage?.querySelector<HTMLElement>(".frame");
@@ -207,7 +232,100 @@ function readStage(his: { texts: string[]; reasons: string[] }): StateRead {
       strangers.push(text);
     }
   }
+  const frameBox = frame?.getBoundingClientRect();
+  const rel = (el: Element | null | undefined): Box | null => {
+    if (!(el && frameBox)) {
+      return null;
+    }
+    const r = el.getBoundingClientRect();
+    return {
+      l: Math.round(r.left - frameBox.left),
+      t: Math.round(r.top - frameBox.top),
+      r: Math.round(r.right - frameBox.left),
+      b: Math.round(r.bottom - frameBox.top),
+    };
+  };
+  const box = stage?.querySelector('[data-slot="foot"] [data-slot="composer"]');
+  const boxRect = box?.getBoundingClientRect();
+  const scroller = stage?.querySelector<HTMLElement>('[data-slot="scroll"]');
+  const clipped = Boolean(
+    scroller && scroller.scrollHeight > scroller.clientHeight + 1
+  );
+  // Small text against its ground: the first opaque fill behind it.
+  const canvas = document.createElement("canvas");
+  canvas.width = 1;
+  canvas.height = 1;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const rgba = (color: string) => {
+    if (!ctx) {
+      return [0, 0, 0, 0];
+    }
+    ctx.clearRect(0, 0, 1, 1);
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, 1, 1);
+    return [...ctx.getImageData(0, 0, 1, 1).data];
+  };
+  const lum = (color: string) => {
+    const c = rgba(color)
+      .slice(0, 3)
+      .map((v) => {
+        const x = v / 255;
+        return x <= 0.040_45 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+      });
+    return 0.2126 * (c[0] ?? 0) + 0.7152 * (c[1] ?? 0) + 0.0722 * (c[2] ?? 0);
+  };
+  const ground = (el: Element | null): string => {
+    for (let up = el; up; up = up.parentElement) {
+      const fill = getComputedStyle(up).backgroundColor;
+      if ((rgba(fill)[3] ?? 0) > 250) {
+        return fill;
+      }
+    }
+    return getComputedStyle(document.documentElement).backgroundColor;
+  };
+  const low: string[] = [];
+  let lowest = 99;
+  for (const el of stage?.querySelectorAll<HTMLElement>(
+    '[data-slot="suggestion-reason"], [data-slot="heading"], .kicker > span, .provenance, [data-slot="tray-count"] span, .head > span, .state-note'
+  ) ?? []) {
+    if (!drawn(el) || Number(getComputedStyle(el).opacity) < 1) {
+      continue;
+    }
+    const a = lum(getComputedStyle(el).color);
+    const b = lum(ground(el));
+    const ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    lowest = Math.min(lowest, ratio);
+    if (ratio < 4.5) {
+      low.push(`"${el.textContent?.trim().slice(0, 24)}" ${ratio.toFixed(2)}`);
+    }
+  }
   return {
+    around: {
+      caw: rel(
+        [...(stage?.querySelectorAll('[data-slot="hero"] img') ?? [])].find(
+          drawn
+        )
+      ),
+      heading: rel(stage?.querySelector('[data-slot="heading"]')),
+      box: rel(box),
+      words:
+        stage?.querySelector('[data-slot="heading"]')?.textContent?.trim() ??
+        "",
+    },
+    clipped,
+    faded: Boolean(
+      scroller?.classList.contains("kit-edge-fade-block") &&
+      getComputedStyle(scroller).getPropertyValue("--fade-len").trim() ===
+        "40px"
+    ),
+    footInside: Boolean(
+      boxRect &&
+      frameBox &&
+      boxRect.top >= frameBox.top - 1 &&
+      boxRect.bottom <= frameBox.bottom + 1
+    ),
+    low,
+    lowest,
     key: stage?.dataset.state ?? "",
     width: Math.round(frame?.getBoundingClientRect().width ?? 0),
     dark: document.documentElement.classList.contains("dark"),
@@ -350,6 +468,14 @@ const spec: Spec = {
         const bad: string[] = [];
         const strangers = new Set<string>();
         const stillBad: string[] = [];
+        /** The surroundings each direction draws at three, by where. */
+        const around = new Map<string, Map<string, StateRead["around"]>>();
+        const clipBad: string[] = [];
+        let clippedStates = 0;
+        const lowText: string[] = [];
+        let lowest = 99;
+        /** The tray's box with seven collapsed and expanded, by where. */
+        const trayBox = new Map<string, Record<string, Box | null>>();
         for (const direction of await links(page, "direction")) {
           // biome-ignore lint/performance/noAwaitInLoops: one direction's states at a time, as the switcher offers them
           await go(page, base, direction.href);
@@ -384,6 +510,33 @@ const spec: Spec = {
                 for (const one of read.strangers) {
                   strangers.add(one);
                 }
+                if (data.value === "three" && theme === "light") {
+                  const at = around.get(where.value) ?? new Map();
+                  at.set(direction.value, read.around);
+                  around.set(where.value, at);
+                }
+                if (read.clipped) {
+                  clippedStates += 1;
+                }
+                if ((read.clipped && !read.faded) || !read.footInside) {
+                  clipBad.push(
+                    `${key}: clipped ${read.clipped}, faded ${read.faded}, composer inside ${read.footInside}`
+                  );
+                }
+                lowest = Math.min(lowest, read.lowest);
+                lowText.push(...read.low.map((one) => `${key} ${one}`));
+                // With the keyboard up the tray is its chip row: no rows grow there.
+                if (
+                  direction.value === "tray" &&
+                  theme === "light" &&
+                  where.value !== "keyboard" &&
+                  data.value.startsWith("seven-")
+                ) {
+                  trayBox.set(where.value, {
+                    ...trayBox.get(where.value),
+                    [data.value]: read.around.box,
+                  });
+                }
                 const findings = await page.evaluate(scan);
                 spills += findings.length;
                 if (findings.length > 0) {
@@ -416,6 +569,84 @@ const spec: Spec = {
           `${engine}: every direction × where × data × theme renders the owner's starters at its width, each switcher group a set of links with one chosen (${states} states)`,
           bad.length === 0 && states > 0,
           bad.slice(0, 4).join(" | ")
+        );
+        // The surroundings, alike in every direction at each where: Caw, the
+        // heading and the composer's box. The tray's box holds its tray (the
+        // report's own change): its foot and sides are the others' at the
+        // thread and on the phone, and on the board it stands centred at 560.
+        const aroundBad: string[] = [];
+        const same = (a: Box | null, b: Box | null) =>
+          Boolean(
+            a && b && a.l === b.l && a.t === b.t && a.r === b.r && a.b === b.b
+          );
+        for (const [where, by] of around) {
+          const entries = [...by.entries()];
+          const [firstName, first] = entries[0] ?? [];
+          for (const [name, one] of entries) {
+            if (!(
+              same(one.caw, first?.caw ?? null) &&
+              same(one.heading, first?.heading ?? null) &&
+              one.words === first?.words
+            )) {
+              aroundBad.push(
+                `${where} ${name}: Caw or heading differs from ${firstName}`
+              );
+            }
+          }
+          const boxes = entries.filter(([name]) => name !== "tray");
+          for (const [name, one] of boxes) {
+            if (!same(one.box, boxes[0]?.[1].box ?? null)) {
+              aroundBad.push(
+                `${where} ${name}: composer box ${JSON.stringify(one.box)} against ${JSON.stringify(boxes[0]?.[1].box)}`
+              );
+            }
+          }
+          const tray = by.get("tray")?.box;
+          const other = boxes[0]?.[1].box;
+          if (
+            tray &&
+            other &&
+            where !== "board" &&
+            (tray.b !== other.b || tray.l !== other.l || tray.r !== other.r)
+          ) {
+            aroundBad.push(
+              `${where} tray: box ${JSON.stringify(tray)} against ${JSON.stringify(other)}`
+            );
+          }
+        }
+        kit.check(
+          `${engine}: the surroundings (Caw, the heading, the composer's box) are alike across the directions at each where (${[...around.entries()].map(([w, by]) => `${w}: ${[...by.keys()].join(", ")}`).join("; ")})`,
+          aroundBad.length === 0 && around.size === 4,
+          aroundBad.slice(0, 4).join(" | ")
+        );
+        kit.check(
+          `${engine}: wherever a set runs past its room it scrolls above the composer under the house 40px edge fade, and the composer stands whole in every state (${clippedStates} states scroll)`,
+          clipBad.length === 0,
+          clipBad.slice(0, 4).join(" | ")
+        );
+        kit.check(
+          `${engine}: every reason, heading and meta line holds 4.5:1 on its ground, light and dark (lowest ${lowest.toFixed(2)}:1)`,
+          lowText.length === 0,
+          lowText.slice(0, 4).join(" | ")
+        );
+        const growth = [...trayBox.entries()].map(([where, two]) => {
+          const shut = two["seven-collapsed"];
+          const open = two["seven-expanded"];
+          return {
+            where,
+            ok: Boolean(
+              shut && open && Math.abs(shut.b - open.b) <= 1 && open.t < shut.t
+            ),
+            said: `${where} ${shut?.t}→${open?.t} top, ${shut?.b}→${open?.b} foot`,
+          };
+        });
+        kit.check(
+          `${engine}: the tray's seven grow upward from the composer, its foot staying (${growth.map((g) => g.said).join("; ")})`,
+          growth.length > 0 && growth.every((g) => g.ok),
+          growth
+            .filter((g) => !g.ok)
+            .map((g) => g.said)
+            .join(" | ")
         );
         kit.check(
           `${engine}: every sentence and reason drawn is one the hub wrote for him (none made up)`,

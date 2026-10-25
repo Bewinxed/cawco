@@ -60,11 +60,13 @@
     --tray-bone-2: 88%;
     --tray-bone-3: 58%;
     --tray-chip-max: 16rem;
+    --tray-bone-ink: color-mix(in oklch, var(--ink-strong) 14%, transparent);
   }
 
   :root.dark {
     --tray-tint: color-mix(in oklch, var(--ink-strong) 6%, transparent);
     --tray-hover-fill: color-mix(in oklch, var(--ink-strong) 10%, transparent);
+    --tray-bone-ink: color-mix(in oklch, var(--ink-strong) 22%, transparent);
   }
 
   /* The flip: nothing eases from the old theme's colour. */
@@ -155,6 +157,12 @@
     }
   }
 
+  .note {
+    margin: 0;
+    color: var(--sm-mark);
+    overflow-wrap: anywhere;
+  }
+
   .key {
     margin: 0;
     color: var(--sm-muted);
@@ -195,7 +203,7 @@
 
   /* The empty board: the page's recessed field at the starters' measure. */
   .frame[data-frame="board"] {
-    min-block-size: var(--c-caw-panel-h);
+    block-size: var(--c-caw-panel-h);
     background: var(--surface-recess);
     box-shadow: inset 0 0 0 1px var(--border-hairline);
   }
@@ -229,20 +237,19 @@
     }
   }
 
-  /* What the frame holds scrolls inside it, as Caw's panel does. */
+  /* The frame's body: its surroundings (Surround) fill it, the composer at
+     its foot, what the set holds past the room scrolling above it. */
   .body {
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
     min-block-size: 0;
     padding: var(--space-6) var(--space-4) var(--space-4);
-    overflow-y: auto;
-    overscroll-behavior: contain;
+    overflow: hidden;
     background: var(--surface-recess);
 
     [data-frame="board"] > & {
       padding: var(--space-7);
-      overflow: visible;
     }
   }
 

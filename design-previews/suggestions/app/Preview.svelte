@@ -15,7 +15,14 @@
   them (starters.js), and the designer's own copy.
 -->
 <script lang="ts">
-  import { drawsOf, groupsOf, readState, WHERE, writeState } from "./states.js";
+  import {
+    drawsOf,
+    groupsOf,
+    noteOf,
+    readState,
+    WHERE,
+    writeState,
+  } from "./states.js";
   import CawStill from "./CawStill.svelte";
   import Drafts from "./directions/Drafts.svelte";
   import Ledger from "./directions/Ledger.svelte";
@@ -83,6 +90,9 @@
       </ul>
     </section>
   {/each}
+  {#if noteOf(state.direction)}
+    <p class="note" data-slot="note">{noteOf(state.direction)}</p>
+  {/if}
   <p class="key" data-slot="state-key">?__state={key}</p>
 </nav>
 

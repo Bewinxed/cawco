@@ -24,6 +24,7 @@
   import { popOut } from "../../../../apps/dashboard/src/lib/cawco/motion/pop.svelte.js";
   import { IN_THE_BOX, oneClock, putIn, typedOf } from "../clock.js";
   import Composer from "../Composer.svelte";
+  import Surround from "../Surround.svelte";
 
   type Item = { text: string; reason?: string };
   let {
@@ -116,55 +117,61 @@
   }
 </script>
 
-<div class="drafts" data-direction="drafts" data-touch={draws.touch || undefined} data-where={where}>
-  <div class="column">
-    <div class="room">
-      {#if standing}
-        <div
-          aria-labelledby="drafts-provenance"
-          bind:this={stack}
-          class="stack"
-          data-dimmed={holding || undefined}
-          role="group"
-          out:popOut
-          {@attach morph()}
-        >
-          {#if draws.loading}
-            {#each ["var(--drafts-ghost-1)", "var(--drafts-ghost-2)", "var(--drafts-ghost-3)"] as width (width)}
-              <span class="ghost" data-slot="skeleton" style:inline-size={width}></span>
-            {/each}
-          {:else}
-            {#each shown as item, i (`${i}:${item.text}`)}
-              <div class="item" data-draft data-taken={(holding && taken === i) || undefined}>
-                <button
-                  aria-describedby={item.reason ? `draft-reason-${i}` : undefined}
-                  class="draft"
-                  data-held={i === 0 ? draws.held : undefined}
-                  data-slot="suggestion"
-                  onclick={(event) => press(i, event.currentTarget)}
-                  type="button"
-                ><span data-slot="suggestion-text">{item.text}</span></button>
-                {#if item.reason}
-                  <span class="reason" data-slot="suggestion-reason" id="draft-reason-{i}"
-                    >{item.reason}</span
-                  >
-                {/if}
-              </div>
-            {/each}
-            {#if more > 0}
-              <button class="more" data-more onclick={() => (expanded = true)} type="button"
-                >{more} more</button
+{#snippet set()}
+  {#if standing}
+    <div
+      aria-labelledby="drafts-provenance"
+      bind:this={stack}
+      class="stack"
+      data-dimmed={holding || undefined}
+      role="group"
+      out:popOut
+      {@attach morph()}
+    >
+      {#if draws.loading}
+        {#each ["var(--drafts-ghost-1)", "var(--drafts-ghost-2)", "var(--drafts-ghost-3)"] as width (width)}
+          <span class="ghost" data-slot="skeleton" style:inline-size={width}></span>
+        {/each}
+      {:else}
+        {#each shown as item, i (`${i}:${item.text}`)}
+          <div class="item" data-draft data-taken={(holding && taken === i) || undefined}>
+            <button
+              aria-describedby={item.reason ? `draft-reason-${i}` : undefined}
+              class="draft"
+              data-held={i === 0 ? draws.held : undefined}
+              data-slot="suggestion"
+              onclick={(event) => press(i, event.currentTarget)}
+              type="button"
+            ><span data-slot="suggestion-text">{item.text}</span></button>
+            {#if item.reason}
+              <span class="reason" data-slot="suggestion-reason" id="draft-reason-{i}"
+                >{item.reason}</span
               >
             {/if}
-            <p class="provenance" data-provenance id="drafts-provenance">
-              written from this project · 1h
-            </p>
-          {/if}
-        </div>
+          </div>
+        {/each}
+        {#if more > 0}
+          <button class="more" data-more onclick={() => (expanded = true)} type="button"
+            >{more} more</button
+          >
+        {/if}
+        <p class="provenance" data-provenance id="drafts-provenance">
+          written from this project · 1h
+        </p>
       {/if}
     </div>
-    <Composer bind:field bind:value focused={keyboard} />
-  </div>
+  {/if}
+{/snippet}
+
+{#snippet foot()}
+  <Composer bind:field bind:value focused={keyboard} />
+{/snippet}
+
+<div class="drafts" data-direction="drafts" data-touch={draws.touch || undefined} data-where={where}>
+  <!-- The report's own arrangement in Today's surroundings: the stack stands
+       right-aligned on the composer (a centred 560px column on the board),
+       and hides while the keyboard is up. -->
+  <Surround anchor="end" {foot} {set} {where} />
   <p aria-live="polite" class="sr-only">{said}</p>
 </div>
 
@@ -176,35 +183,18 @@
     min-block-size: 0;
   }
 
-  .column {
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    gap: var(--space-3);
-    min-block-size: 0;
-    inline-size: 100%;
-
-    [data-where="board"] & {
-      max-inline-size: var(--board-column);
-      margin-inline: auto;
-    }
-  }
-
-  /* The stack stands on the composer: the room above it fills, the stack at its foot. */
-  .room {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    justify-content: end;
-    min-block-size: 0;
-  }
-
   .stack {
     display: flex;
     flex-direction: column;
     align-items: end;
     gap: var(--drafts-gap);
     transition: opacity var(--dur-control) var(--ease-out);
+
+    [data-where="board"] & {
+      inline-size: 100%;
+      max-inline-size: var(--board-column);
+      margin-inline: auto;
+    }
 
     &[data-dimmed] {
       opacity: var(--drafts-dim);
