@@ -39,10 +39,17 @@
  *
  *   bun scripts/probe-kit/run.ts workspace-install
  */
-import { lstat, readdir, realpath, writeFile } from "node:fs/promises";
+import { lstatSync } from "node:fs";
+import { readdir, realpath, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { inCopyExists, isView, ownWritesOf } from "../copy";
+import {
+  copyPath,
+  inCopyExists,
+  isView,
+  ownWritesOf,
+  realpathsInCopy,
+} from "../copy";
 import type { Kit, Spec } from "../kit";
 
 type Tag = "A" | "B" | "PA" | "PB";
@@ -150,7 +157,7 @@ interface Linked {
 interface Leg {
   /** The manager's part of the workspaces' cache, counted with each clone's `node_modules`. */
   cache: string;
-  linked: (clone: string) => Promise<Linked>;
+  linked: (fleet: Fleet, self: Delegated) => Promise<Linked>;
   name: string;
   tags: readonly [Tag, Tag];
 }
@@ -178,51 +185,80 @@ const unique = async (paths: readonly string[]): Promise<number> => {
   );
 };
 
-/** Whether `at` is a link whose target, followed whole, lies under `into`. */
-const linksInto = async (at: string, into: string): Promise<boolean> =>
-  (await lstat(at)).isSymbolicLink() &&
-  (await realpath(at).catch(() => "")).startsWith(`${into}/`);
+/**
+ * How many of `rels` (paths of `self`'s copy) are links, read where the
+ * copy keeps them, whose target followed whole in the copy lies under
+ * `into`: a link relative to its own folder (pnpm's) resolves as the copy
+ * has it, never in the person's folder a Linux view is of (../copy.ts).
+ */
+const linkedInto = async (
+  fleet: Fleet,
+  self: Delegated,
+  rels: readonly string[],
+  into: string
+): Promise<number> => {
+  const links = rels.filter((rel) => {
+    const at = copyPath(fleet, self, rel);
+    return at !== undefined && lstatSync(at).isSymbolicLink();
+  });
+  const real = await realpathsInCopy(
+    fleet,
+    self,
+    links.map((rel) => join(self.path, rel))
+  );
+  return real.filter((path) => path.startsWith(`${into}/`)).length;
+};
 
-/** bun: how `clone`'s isolated store entries stand, links into `into` (`node_modules/.bun`). */
+/** The names in folder `rel` of `self`'s copy, read where the copy keeps it. */
+const namesIn = async (
+  fleet: Fleet,
+  self: Delegated,
+  rel: string
+): Promise<string[]> => {
+  const at = copyPath(fleet, self, rel);
+  return at ? await readdir(at).catch(() => [] as string[]) : [];
+};
+
+/** bun: how a copy's isolated store entries stand, links into `into` (`node_modules/.bun`). */
 const bunStoreOf =
   (into: string) =>
-  async (clone: string): Promise<Linked> => {
-    const store = join(clone, "node_modules", ".bun");
-    const names = (await readdir(store).catch(() => [] as string[])).filter(
+  async (fleet: Fleet, self: Delegated): Promise<Linked> => {
+    const store = join("node_modules", ".bun");
+    const names = (await namesIn(fleet, self, store)).filter(
       (name) => name !== "node_modules"
-    );
-    const linked = await Promise.all(
-      names.map((name) => linksInto(join(store, name), into))
     );
     return {
       entries: names.length,
-      linked: linked.filter(Boolean).length,
+      linked: await linkedInto(
+        fleet,
+        self,
+        names.map((name) => join(store, name)),
+        into
+      ),
       into,
     };
   };
 
-/** pnpm: how `clone`'s packages stand, each in `node_modules` (a scope's within it), links into `into`. */
+/** pnpm: how a copy's packages stand, each in `node_modules` (a scope's within it), links into `into`. */
 const pnpmPackagesOf =
   (into: string) =>
-  async (clone: string): Promise<Linked> => {
-    const modules = join(clone, "node_modules");
-    const top = (await readdir(modules).catch(() => [] as string[])).filter(
+  async (fleet: Fleet, self: Delegated): Promise<Linked> => {
+    const top = (await namesIn(fleet, self, "node_modules")).filter(
       (name) => !name.startsWith(".")
     );
     const scoped = await Promise.all(
       top.map(async (name) =>
         name.startsWith("@")
-          ? (await readdir(join(modules, name))).map((inner) =>
-              join(modules, name, inner)
+          ? (await namesIn(fleet, self, join("node_modules", name))).map(
+              (inner) => join("node_modules", name, inner)
             )
-          : [join(modules, name)]
+          : [join("node_modules", name)]
       )
     );
     const packages = scoped.flat();
-    const linked = await Promise.all(packages.map((at) => linksInto(at, into)));
     return {
       entries: packages.length,
-      linked: linked.filter(Boolean).length,
+      linked: await linkedInto(fleet, self, packages, into),
       into,
     };
   };
@@ -341,7 +377,7 @@ const installed = async (
   );
   // What the delegate installed is its own write: in a Linux view's upper,
   // its copy's folder elsewhere (../copy.ts).
-  const store = await leg.linked(ownWritesOf(fleet, self));
+  const store = await leg.linked(fleet, self);
   kit.check(
     `${tag}: its ${leg.name} packages are links into the workspaces' cache`,
     store.entries > 0 && store.linked / store.entries >= 0.9,

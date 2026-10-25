@@ -631,7 +631,9 @@ const repoLegs = async (
   { delegate, ended, env, git }: Legs
 ): Promise<{ parent: string; repo: string; project: string }> => {
   const { check } = kit;
-  const repo = join(fleet.sandbox, "repo");
+  // A folder of its own: the scratch fleet's `repo` is a clone of a bare
+  // `origin.git` in the sandbox, a local-path origin no boundary writes.
+  const repo = join(fleet.sandbox, "checkout");
   folders.C1 = repo;
   folders.C2 = repo;
   await mkdir(repo, { recursive: true });
@@ -777,7 +779,7 @@ const worktreeLeg = async (
   from: { parent: string; repo: string; project: string }
 ): Promise<void> => {
   const { check } = kit;
-  const wt = join(fleet.sandbox, "repo-wt");
+  const wt = join(fleet.sandbox, "checkout-wt");
   folders.E = wt;
   await git(from.repo, "worktree", "add", "-q", "-b", "feature-wt", wt);
   const common = join(from.repo, ".git");
