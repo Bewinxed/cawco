@@ -13,22 +13,23 @@
  * and WebKit one session makes a folder preview and a decision page, then a
  * third artifact last, so its panel shows neither of the two. At the desk,
  * each of the two is opened in a browser context of its own (nothing cached,
- * nothing stored), then reloaded once its frame's page has drawn; read in
- * the page, from its navigation's start to the artifact's frame entering the
+ * nothing stored), then reloaded as soon as its frame mounts; read in the
+ * page, from its navigation's start to the artifact's frame entering the
  * document:
  *
  * 1. the folder preview's first visit mounts the frame within
  *    FIRST_BUDGET_MS and its reload within RELOAD_BUDGET_MS, and the frame
  *    reads the folder's own page;
- * 2. the decision page's likewise, and the frame draws the page.
+ * 2. the decision page's likewise, and the frame draws the page; on the
+ *    run's first decision page, the hub answers a read polled all along
+ *    within HUB_STALL_MS each.
  *
- * The reload waits for the frame's page because a hub run from source (this
- * fleet's) builds the decision host in its own process on the first request
- * for it (core decision-host.ts `bundle`): Svelte's compiler, Tailwind and
- * the house faces' subsetting held its event loop 1-1.4 s in chunks of up to
- * 900 ms (sampled with bun:jsc), and a reload landing then waited on every
- * read. The released binary serves the host prebuilt (`standalone`), so the
- * person's hub never builds it.
+ * A hub run from source (this fleet's) builds the decision host on the
+ * first request for it (core decision-host.ts `bundle`). On the hub's own
+ * thread, Svelte's compiler, Tailwind and the house faces' subsetting held
+ * its event loop in blocks of up to 900 ms (sampled with bun:jsc), and a
+ * reload landing then took 1.2 s; the build now runs on a thread of its
+ * own. The released binary serves the host prebuilt (`standalone`).
  *
  * Then the hub's show of a decision page (`POST …/artifacts/<id>/show`, the
  * panel's Show and artifact_show), made with the session's panel on another
@@ -37,7 +38,9 @@
  * 3. with no view open it answers that none is showing the session, within
  *    SHOWN_WAIT_MS and OPEN_BUDGET_MS more: the show's own work (the open,
  *    the publish) costs at most that; with the session's page open in a
- *    browser it answers opened within VIEWED_BUDGET_MS.
+ *    browser it answers opened within VIEWED_BUDGET_MS; the hub's journal
+ *    names the bare show's shown wait, its artifact and its time (a step
+ *    over SLOW_SHOW_STEP_MS), and nothing of the viewed one.
  *
  *   bun scripts/probe-kit/run.ts artifact-tab-cold
  */
@@ -45,7 +48,10 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import { SHOWN_WAIT_MS } from "../../../packages/hub/src/artifacts/service";
+import {
+  SHOWN_WAIT_MS,
+  SLOW_SHOW_STEP_MS,
+} from "../../../packages/hub/src/artifacts/service";
 import { type Reply, until } from "../../scratch-fleet";
 import { type Engine, type Kit, open, type Spec } from "../kit";
 
@@ -67,6 +73,13 @@ const OPEN_BUDGET_MS = 300;
 
 /** A show answered by an open view of its session. Our call: it read 95-209 ms. */
 const VIEWED_BUDGET_MS = 1000;
+
+/**
+ * The longest a read of the hub may wait while the first decision page
+ * loads. Our call, from the brief's "about 100 ms": a read on an idle hub
+ * answers in under 10 ms; the build on the hub's thread held reads 123-900 ms.
+ */
+const HUB_STALL_MS = 100;
 
 /** What the decision page's frame draws once its host has loaded. */
 const QUESTION = "Which word reads right?";
@@ -194,8 +207,9 @@ const run = async (kit: Kit) => {
   };
 
   /**
-   * One artifact's tab in a fresh context: its first visit, then, once
-   * `drawn` says the frame's page has drawn, a reload.
+   * One artifact's tab in a fresh context: its first visit, a reload as soon
+   * as its frame mounts, and whether `drawn` then says the frame's page has
+   * drawn. The hub's slowest answer to a read polled all along beside it.
    */
   const visit = async (
     engine: Engine,
@@ -203,17 +217,29 @@ const run = async (kit: Kit) => {
     drawn: (tab: Page) => Promise<boolean>
   ) => {
     const tab = await kit.page("desk", { engine, init: [recordFrame] });
+    const watching = new AbortController();
+    let slowest = 0;
+    const poll = (async () => {
+      while (!watching.signal.aborted) {
+        const started = performance.now();
+        await fleet.api(`/api/artifacts/${id}`);
+        slowest = Math.max(slowest, performance.now() - started);
+        await Bun.sleep(10);
+      }
+    })();
     await tab.goto(`${base}/artifact/${id}`, { waitUntil: "commit" });
     const first = await frameAt(tab);
+    await tab.reload({ waitUntil: "commit" });
+    const reload = await frameAt(tab);
     const page = await until(
       "the frame's page drawn",
       () => drawn(tab),
       (now) => now,
       30_000
     ).catch(() => false);
-    await tab.reload({ waitUntil: "commit" });
-    const reload = await frameAt(tab);
-    return { tab, first, page, reload };
+    watching.abort();
+    await poll;
+    return { tab, first, page, reload, slowest: Math.round(slowest) };
   };
   const timely = (first: number | null, reload: number | null) =>
     first !== null &&
@@ -231,6 +257,7 @@ const run = async (kit: Kit) => {
       .catch(() => false);
 
   const engines: Engine[] = ["chromium", "webkit"];
+  let firstPage = true;
   for (const engine of engines) {
     const { folder, page } = await made(engine);
     const cold = await visit(engine, folder.id, folderDrawn);
@@ -247,6 +274,14 @@ const run = async (kit: Kit) => {
       timely(decision.first, decision.reload) && decision.page,
       JSON.stringify(decision, ["first", "reload", "page"])
     );
+    if (firstPage) {
+      firstPage = false;
+      kit.check(
+        `${engine}: 2: while the run's first decision page loads (the hub building its host), the hub answers every read within ${HUB_STALL_MS} ms (slowest ${decision.slowest} ms)`,
+        decision.slowest < HUB_STALL_MS,
+        JSON.stringify({ slowest: decision.slowest })
+      );
+    }
     await decision.tab.context().close();
   }
 
@@ -271,7 +306,11 @@ const run = async (kit: Kit) => {
       `${at}/${shownPage.id}/show`,
       {}
     );
-    return { ms: Math.round(performance.now() - started), answer };
+    return {
+      id: shownPage.id,
+      ms: Math.round(performance.now() - started),
+      answer,
+    };
   };
   const bare = await showPage("show-bare");
   const viewer = await kit.page("desk");
@@ -284,6 +323,20 @@ const run = async (kit: Kit) => {
       viewed.answer.opened &&
       viewed.ms < VIEWED_BUDGET_MS,
     JSON.stringify({ bare, viewed })
+  );
+  // The bare show's wait outlasted SLOW_SHOW_STEP_MS: the journal names it.
+  const steps = (await fleet.logs("hub"))
+    .split("\n")
+    .filter((line) => line.includes("its show's"));
+  const journal = steps.filter(
+    (line) =>
+      line.includes(`${bare.id} (page`) && line.includes("shown wait took")
+  );
+  kit.check(
+    `3: the hub's journal names the bare show's slow step: its shown wait, the artifact and the time (over ${SLOW_SHOW_STEP_MS} ms), and no step of the viewed show`,
+    journal.length > 0 &&
+      !steps.some((line) => line.includes(`${viewed.id} (page`)),
+    JSON.stringify(journal)
   );
 };
 

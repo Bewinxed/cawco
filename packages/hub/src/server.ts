@@ -526,6 +526,7 @@ import {
   type PageFrom,
   SHOWN_WAIT_MS,
   type StageAt,
+  timedShowStep,
 } from "./artifacts/service";
 import {
   artifactPicture,
@@ -12130,8 +12131,8 @@ export const createServer = (
     if (!("page" in source)) {
       // Its machine's listener under its artifact's own key, started now so
       // a refusal is the open's; one already serving this source stands.
-      const reached = await reachPreview(
-        keepEmbedTarget(artifact, source, machineId)
+      const reached = await timedShowStep("reach", artifact, instanceId, () =>
+        reachPreview(keepEmbedTarget(artifact, source, machineId))
       );
       if (!reached.ok) {
         return {
@@ -12143,7 +12144,10 @@ export const createServer = (
     }
     previewTargets.set(instanceId, target);
     db.artifacts.show(instanceId, artifact.id);
-    return { ok: true, frame: publishPreview(instanceId, "open", target) };
+    const frame = await timedShowStep("publish", artifact, instanceId, () =>
+      publishPreview(instanceId, "open", target)
+    );
+    return { ok: true, frame };
   };
 
   /**

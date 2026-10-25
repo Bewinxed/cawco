@@ -340,48 +340,86 @@ export async function decisionHostAssets(
 ): Promise<[string, string][]> {
   await rm(outdir, { recursive: true, force: true });
   await mkdir(outdir, { recursive: true });
+  const files = await buildHostFiles();
+  await Promise.all(
+    [...files].map(([name, file]) => Bun.write(join(outdir, name), file))
+  );
+  return filesUnder(outdir, "decision");
+}
+
+const LEADING_SLASHES = /^\/+/;
+
+/** The host's files and DialKit's, the faces and the icon, by name: what a source checkout serves (decision-host-worker.ts builds them). */
+export async function buildHostFiles(): Promise<Map<string, Blob>> {
   const [files, dials, faces, icon] = await Promise.all([
     buildDecisionHost(),
     dialFiles(),
     faceFiles(),
     iconFiles(),
   ]);
-  await Promise.all([
-    ...[...files, ...faces, ...icon].map(([name, file]) =>
-      Bun.write(join(outdir, name), file)
-    ),
-    ...[...dials].map(([name, text]) => Bun.write(join(outdir, name), text)),
+  return new Map<string, Blob>([
+    ...files,
+    ...faces,
+    ...icon,
+    ...[...dials].map(([name, text]) => [name, new Blob([text])] as const),
   ]);
-  return filesUnder(outdir, "decision");
 }
 
-const LEADING_SLASHES = /^\/+/;
+/** One built file as the build's thread hands it over: its bytes moved, not copied. */
+export interface HostFile {
+  bytes: ArrayBuffer;
+  name: string;
+  type: string;
+}
+
+/** What the build's thread answers: every file, or why the build failed. */
+export type HostBuilt = { files: HostFile[] } | { error: string };
+
+const WORKER_URL = new URL("./decision-host-worker.ts", import.meta.url);
 
 let built: Promise<Map<string, Blob>> | undefined;
 
-/** The host's files and DialKit's by name, built once per process; a failure clears the slot so the next request retries. */
+/**
+ * The host's files by name, built once per process on a thread of its own,
+ * so the hub's event loop serves every other request while it runs: on the
+ * hub's own thread Svelte's compiler, Tailwind and the faces' woff2
+ * subsetting held it in blocks of up to 900 ms (sampled with bun:jsc), and
+ * every read the hub answered waited behind them. A failure clears the slot
+ * so the next request retries.
+ */
 const bundle = (): Promise<Map<string, Blob>> => {
-  built ??= Promise.all([
-    buildDecisionHost(),
-    dialFiles(),
-    faceFiles(),
-    iconFiles(),
-  ])
-    .then(
-      ([files, dials, faces, icon]) =>
-        new Map<string, Blob>([
-          ...files,
-          ...faces,
-          ...icon,
-          ...[...dials].map(
-            ([name, text]) => [name, new Blob([text])] as const
-          ),
-        ])
-    )
-    .catch((error: unknown) => {
-      built = undefined;
-      throw error;
-    });
+  built ??= new Promise<Map<string, Blob>>((done, fail) => {
+    const worker = new Worker(WORKER_URL);
+    const end = () => worker.terminate();
+    worker.onmessage = (event: MessageEvent<HostBuilt>) => {
+      end();
+      const answer = event.data;
+      if ("error" in answer) {
+        fail(new Error(answer.error));
+        return;
+      }
+      done(
+        new Map(
+          answer.files.map(({ name, bytes, type }) => [
+            name,
+            new Blob([bytes], { type }),
+          ])
+        )
+      );
+    };
+    worker.onerror = (event) => {
+      end();
+      fail(
+        new Error(
+          `The decision host's build thread failed: ${event.message || "no reason given"}`
+        )
+      );
+    };
+    worker.postMessage(null);
+  }).catch((error: unknown) => {
+    built = undefined;
+    throw error;
+  });
   return built;
 };
 

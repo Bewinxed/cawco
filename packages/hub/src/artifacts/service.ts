@@ -1266,8 +1266,43 @@ const marksNamed = (pins: Pin[], strokes: number): string =>
 export type MarksOutcome = { ok: true } | { ok: false; reason: string };
 
 /** Artifact `row` as the journal names it: its id, kind and name. */
-const labelOf = (row: ArtifactRow): string =>
+const labelOf = (row: Pick<ArtifactRow, "id" | "kind" | "name">): string =>
   `${row.id} (${row.kind} "${row.name}")`;
+
+/**
+ * A step of a show that takes longer than this is said in the journal. Our
+ * call: on a scratch fleet the open read 1-83 ms and the publish 0-3 ms, and
+ * a live show spent 8.9 s outside its wait for a view, which the journal
+ * named nowhere.
+ */
+export const SLOW_SHOW_STEP_MS = 300;
+
+/** One step of a show: its open, its machine's listener reached, its frame published, or its wait for a view. */
+export type ShowStep = "open" | "reach" | "publish" | "shown wait";
+
+/**
+ * Runs step `step` of a show of `artifact` in session `panel`'s panel, and
+ * says it in the journal when it took longer than {@link SLOW_SHOW_STEP_MS},
+ * with the step, the artifact and the time.
+ */
+export const timedShowStep = async <T>(
+  step: ShowStep,
+  artifact: Pick<ArtifactRow, "id" | "kind" | "name">,
+  panel: string | null,
+  run: () => T | Promise<T>
+): Promise<T> => {
+  const started = performance.now();
+  try {
+    return await run();
+  } finally {
+    const ms = Math.round(performance.now() - started);
+    if (ms > SLOW_SHOW_STEP_MS) {
+      console.warn(
+        artifactToolWords.showStepSlow(labelOf(artifact), step, ms, panel)
+      );
+    }
+  }
+};
 
 /** The person's marks on artifact `row` found no session holding it: the journal says they stay owed. */
 const sayNoHolder = (row: ArtifactRow, owed: number) => {
@@ -3367,7 +3402,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     | { opened: true; started: true }
     | { opened: false; started: boolean; why: string }
   > => {
-    const published = await deps.open(row, panel);
+    const published = await timedShowStep("open", row, panel, () =>
+      deps.open(row, panel)
+    );
     if (!published.ok) {
       return { opened: false, why: published.error, started: false };
     }
@@ -3376,7 +3413,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (owns && meta.get(HANDED) === true) {
       docs.transact(row.id, "hub", () => meta.delete(HANDED));
     }
-    const shown = await shownBy(row.id, published.revision);
+    const shown = await timedShowStep("shown wait", row, panel, () =>
+      shownBy(row.id, published.revision)
+    );
     let ack: ShownAck;
     switch (shown.kind) {
       case "answered":

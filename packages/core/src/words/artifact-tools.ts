@@ -84,6 +84,9 @@ export const artifactToolWords = {
     `${changes} choice change(s) since the last Send${note ? ", with a note" : ""}`,
   /** A page Send refused, in its log line. */
   sendRefused: (why: string) => `refused, ${why}`,
+  /** The hub's log: one step of a show (open, reach, publish, shown wait) that took longer than it should, for which panel. */
+  showStepSlow: (id: string, step: string, ms: number, panel: string | null) =>
+    `[artifacts] ${id}: its show's ${step} took ${ms} ms, ${panel ? `for session ${panel}'s panel` : "with no session holding it"}`,
   /** The hub's log: the person's marks on an artifact no session holds. */
   marksUnheld: (id: string) =>
     `[artifacts] ${id}: the person's marks found no session holding it, and stay owed`,
