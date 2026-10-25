@@ -37,6 +37,7 @@
  * chooses in its own task (TabsList), finds their previews already let go.
  */
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
+import { rebuildScheduler } from "./scheduler.svelte";
 
 /**
  * How long a pane stays warm once the reach has left its tab (the pointer
@@ -82,6 +83,28 @@ export function afterPaint(then: () => void): () => void {
 }
 
 /** Calls off `leafId`'s reach still waiting for its frame. */
+/** Each reached pane's catch-up waiting for the reach's frame to paint. */
+const catching = new Set<string>();
+
+/**
+ * A pane put away does not rebuild while it is away (scheduler.svelte.ts
+ * `reachOnly`): its rows catch up once its tab is reached for, in a task of
+ * their own once the reach's frame has painted, as the warm does. In the
+ * reach's own task, behind the pointer's events and the strip's hover
+ * handlers, the catch-up of a busy tab away for ten seconds made it a 30ms
+ * task of CPU, 10ms before (tab-return 1a).
+ */
+function catchUp(paneId: string): void {
+  if (catching.has(paneId)) {
+    return;
+  }
+  catching.add(paneId);
+  afterPaint(() => {
+    catching.delete(paneId);
+    rebuildScheduler.prepare(paneId);
+  });
+}
+
 function callOff(leafId: string): void {
   reaching.get(leafId)?.cancel();
   reaching.delete(leafId);
@@ -131,7 +154,11 @@ export const warm = {
       }
     }
     for (const id of paneIds) {
-      besidePanes.add(id);
+      if (!besidePanes.has(id)) {
+        besidePanes.add(id);
+        // Its rows catch up ahead of the arrow key that may choose it.
+        catchUp(id);
+      }
     }
   },
 
@@ -141,6 +168,7 @@ export const warm = {
    * once the frame in hand has painted ({@link afterPaint}).
    */
   reach(leafId: string, paneId: string): void {
+    catchUp(paneId);
     clearTimeout(unreaching.get(paneId));
     unreaching.delete(paneId);
     reachedPanes.add(paneId);
