@@ -266,6 +266,21 @@ export async function opencodeCatalog(
     client.model.list(scope),
     client.model.default(scope),
   ]);
+  return catalogRows(listed, fallback, provider);
+}
+
+/** The server's answers to `GET /api/model` and `GET /api/model/default`. */
+export type ModelListed = Awaited<ReturnType<OpencodeClient["model"]["list"]>>;
+export type ModelDefault = Awaited<
+  ReturnType<OpencodeClient["model"]["default"]>
+>;
+
+/** {@link opencodeCatalog}'s rows from the server's two answers, however they were asked. */
+export function catalogRows(
+  listed: ModelListed,
+  fallback: ModelDefault,
+  provider?: string
+): ModelInfo[] {
   const models = listed.data
     .filter(
       (model) =>

@@ -419,13 +419,11 @@ export interface Harness {
   machine?(method: string, args: unknown[]): Promise<unknown> | undefined;
   /**
    * Every provider the harness's own catalog names, by id and name: the
-   * providers an account can be for through it; undefined while it has not
-   * been read (OpenCode's, before its server has run here), which the hub
-   * keeps its last list for. Absent from a harness with no catalog of
-   * providers of its own.
+   * providers an account can be for through it. Absent from a harness with
+   * no catalog of providers of its own.
    */
   // biome-ignore lint/style/useConsistentMethodSignatures: matches the other adapter methods
-  providerList?(): Promise<{ id: string; name: string }[] | undefined>;
+  providerList?(): Promise<{ id: string; name: string }[]>;
   /**
    * The session's messages, oldest first, over the {@link TranscriptSpan}
    * asked for (`chain` when none). `tail` keeps only the newest.

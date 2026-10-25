@@ -747,10 +747,10 @@ const readHarness = (
   readPart(`the ${adapter.kind} harness's report`, () => adapter.detect());
 
 /**
- * OpenCode's report and the providers it can sign in to are what its
- * servers last said of themselves, kept in files written while one runs
- * (opencode.ts `OPENCODE_REPORTED_FILES`), since no read starts a server.
- * Each file is looked at by its stat, as pi's are ({@link PI_FILE_LOOK_MS}),
+ * OpenCode's report and the providers it can sign in to are what it last
+ * said of itself, kept in files (opencode.ts `OPENCODE_REPORTED_FILES`)
+ * that a running server, a one-shot read or an account server's start
+ * writes. Each file is looked at by its stat, as pi's are ({@link PI_FILE_LOOK_MS}),
  * and when one moves both are read again and sent on `socket`, the report
  * kept with `keep`. Answers the watch's stop.
  */
@@ -2155,8 +2155,8 @@ const attach = (
     // just moved: Claude's always (its `detect` starts nothing), and any
     // other whose last report was refused, which an install pressed in the
     // dashboard is there to clear. An OpenCode that runs is read again when
-    // what its server last said of itself moves (`reportOpencodeSoon`). A
-    // burst is read once, a second on.
+    // what it last said of itself moves (`watchOpencodeReport`). A burst is
+    // read once, a second on.
     let toolsSoon: ReturnType<typeof setTimeout> | undefined;
     const reportTools = async (): Promise<void> => {
       const again = harnesses().filter(
