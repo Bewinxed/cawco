@@ -7,6 +7,12 @@ design; it never redraws him.
 
 His personality, how he acts, and how new animations are made: [PERSONALITY.md](PERSONALITY.md).
 
+His rig, for the owner to judge (2026-10-25): his open-eyed still cut at its pivots into one
+layered vector drawing (`rig/caw-rig.svg`, made by `scripts/rig.py`), posed by numbers and kept
+alive on the web by `apps/dashboard/src/lib/cawco/caw-rig/` (preview: `design-previews/caw-rig/`).
+How it moves and what it cannot do yet: [MOTION.md](MOTION.md). Until it is picked, the contract
+below stands.
+
 **Changes to Caw happen in the `.riv` files, never by redrawing him in code** (Swift, Svelte or
 anything else). Apps load the file for the status they show and set its `Caw` view model, and
 that is all they do with him.
