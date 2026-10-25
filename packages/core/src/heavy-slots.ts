@@ -59,7 +59,7 @@ import {
   unlinkSync,
   writeSync,
 } from "node:fs";
-import { cpus, totalmem } from "node:os";
+import { cpus, getPriority, setPriority, totalmem } from "node:os";
 import { join } from "node:path";
 import { openLockFile, tryLock, unlock } from "./flock";
 import { workspaceCacheDir } from "./paths";
@@ -74,6 +74,65 @@ export const HEAVY_SLOTS_DIR = join(workspaceCacheDir(), "heavy-slots");
  * caller's environment").
  */
 export const HEAVY_SLOT_ENV = "CAWCO_HEAVY_SLOT";
+
+/**
+ * The nice a heavy run and everything it starts run at. Sessions and their
+ * commands share sessiond's `children` cgroup, which has no cpu controller
+ * of its own (its subtree_control reads "pids"), so inside it the scheduler
+ * weighs tasks by nice alone: a nice-10 task weighs 110 against a nice-0
+ * task's 1024 (kernel/sched/core.c `sched_prio_to_weight`; "nice levels were
+ * changed to be multiplicative",
+ * https://docs.kernel.org/scheduler/sched-nice-design.html), so the person's
+ * own sessions and apps win the CPU from builds. Its disk reads and writes
+ * go in the idle class where the OS has one: Linux's `ionice -c3` ("A
+ * program running with idle I/O priority will only get disk time when no
+ * other program has asked for disk I/O", ionice(1)), macOS's `taskpolicy -b`
+ * (darwin background: throttled CPU and I/O).
+ */
+export const HEAVY_NICE = 10;
+
+/**
+ * Shell lines that put the shell running them, and everything it starts
+ * after, at {@link HEAVY_NICE} and the idle I/O class (Linux `ionice`, macOS
+ * `taskpolicy`): the agent puts them before a heavy command it runs
+ * (hub-command.ts), so they run where the command does, inside a
+ * workspace's boundary in the runner's own shell, not in the executor
+ * outside it. `$$` is that shell, in its own pid namespace.
+ */
+export const BACKGROUND_SHELL = `renice -n ${HEAVY_NICE} -p $$ >/dev/null
+if command -v ionice >/dev/null 2>&1; then ionice -c3 -p $$; elif command -v taskpolicy >/dev/null 2>&1; then taskpolicy -b -p $$; fi
+`;
+
+/**
+ * This process and every thread it has at {@link HEAVY_NICE} at least
+ * (never raised back: a run started at a lower priority keeps it), and in
+ * the idle I/O class where the OS has one: what a holder that takes its own
+ * slot does (scripts/check.ts, the probe kit's slot.ts), so what it starts
+ * afterwards runs so too. Linux keeps a nice and an I/O priority per thread,
+ * and a child takes the forking thread's.
+ */
+export function runInBackground(): void {
+  const tids =
+    process.platform === "linux"
+      ? readdirSync("/proc/self/task").map(Number)
+      : [0];
+  for (const tid of tids) {
+    try {
+      if (getPriority(tid) < HEAVY_NICE) {
+        setPriority(tid, HEAVY_NICE);
+      }
+    } catch {
+      // A thread that ended between the listing and the call.
+    }
+  }
+  const io =
+    process.platform === "linux"
+      ? ["ionice", "-c3", "-p", ...tids.map(String)]
+      : ["taskpolicy", "-b", "-p", String(process.pid)];
+  if (Bun.which(io[0] as string)) {
+    Bun.spawnSync(io, { stdout: "ignore", stderr: "inherit" });
+  }
+}
 
 /**
  * Cores a slot stands for. Measured on obelisk 2026-10-25, each run's whole

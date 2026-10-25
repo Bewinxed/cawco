@@ -23,9 +23,17 @@
  * - (d) `bun run check` as a merge check runs it (under the runner's
  *   lease, every other slot held): it takes no slot of its own and waits
  *   for none.
+ * - (e) What a merge check runs is in the background: a child its command
+ *   starts reads nice 10 (`ps -o nice=`) and, on Linux, the idle I/O class
+ *   (`ionice -p`), where the spec's own process and a plain command's
+ *   child read the machine's default; `bun run check` that took its own
+ *   slot in (c) reads the same. run.ts starts this spec's process without
+ *   lowering it (slot.ts `probeSlot(false)`), so the reading is the runner's
+ *   doing.
  *
  *   bun scripts/probe-kit/run.ts heavy-slots
  */
+import { existsSync, readFileSync } from "node:fs";
 import { cpus } from "node:os";
 import { join } from "node:path";
 import {
@@ -45,6 +53,7 @@ import {
   queueWords,
 } from "../../../packages/core/src/harness";
 import {
+  HEAVY_NICE,
   HEAVY_SLOT_ENV,
   machinePlace,
   type SlotPlace,
@@ -58,6 +67,25 @@ const NOW_MS = `perl -MTime::HiRes=time -e 'printf "%.0f", time*1000'`;
 const WORK = `echo "START $(${NOW_MS}) $${HEAVY_SLOT_ENV}"; sleep 2; echo "END $(${NOW_MS})"`;
 const START = /^START (\d+) (.*)$/m;
 const END = /^END (\d+)$/m;
+
+/** A process's nice (`ps -o nice=`) and, on Linux, its I/O class (`ionice -p`, "idle" or "none: prio 4"). */
+const priorityOf = (pid: number): { io: string; nice: number } => ({
+  nice: Number(
+    Bun.spawnSync(["ps", "-o", "nice=", "-p", String(pid)])
+      .stdout.toString()
+      .trim()
+  ),
+  io:
+    process.platform === "linux"
+      ? Bun.spawnSync(["ionice", "-p", String(pid)])
+          .stdout.toString()
+          .trim()
+      : "idle",
+});
+
+/** In the background: {@link HEAVY_NICE} and the idle I/O class. */
+const inBackground = ({ io, nice }: { io: string; nice: number }): boolean =>
+  nice === HEAVY_NICE && io === "idle";
 
 /** How many of `place`'s slot files some process holds now. */
 function heldNow(place: SlotPlace): number {
@@ -297,6 +325,8 @@ async function checkWaits(kit: Kit, place: SlotPlace): Promise<void> {
     check.out().includes("CAWCO-QUEUE held heavy")
   );
   const tookAfter = Date.now() - freedAt;
+  await until(() => check.out().includes("check: "));
+  const lowered = priorityOf(check.proc.pid);
   const code = await check.ended;
   await endAll(held);
   const out = check.out();
@@ -316,6 +346,52 @@ async function checkWaits(kit: Kit, place: SlotPlace): Promise<void> {
       Number(share?.[3]) === expected &&
       Number(share?.[2]) === Math.min(8, expected),
     `held ${tookAfter} ms after the holder ended; ${share?.[0] ?? "(no share line)"}; check exited ${code}`
+  );
+  kit.check(
+    "(e) `bun run check` that took its own slot runs at nice 10 in the idle I/O class",
+    inBackground(lowered),
+    `bun run check (pid ${check.proc.pid}): nice ${lowered.nice}, I/O ${lowered.io}`
+  );
+}
+
+/** Starts `cmd` with `run`, and reads the priority of the child it writes the pid of, while it runs. */
+async function childPriority(
+  kit: Kit,
+  name: string,
+  run: CommandRun | undefined
+): Promise<{ io: string; nice: number; pid: number }> {
+  const file = join(kit.out, `${name}.pid`);
+  const ran = runHubCommand(
+    ROOT,
+    `sleep 3 & echo $! > ${file}; wait`,
+    30_000,
+    undefined,
+    run
+  );
+  await until(
+    () => existsSync(file) && readFileSync(file, "utf8").trim() !== ""
+  );
+  const pid = Number(readFileSync(file, "utf8").trim());
+  const read = { ...priorityOf(pid), pid };
+  await ran;
+  return read;
+}
+
+async function background(kit: Kit): Promise<void> {
+  const own = priorityOf(process.pid);
+  const plain = await childPriority(kit, "plain", undefined);
+  const merge = await childPriority(kit, "merge", {
+    id: "e-0",
+    queueMaxMs: 60_000,
+    gate: "merge check reading its priority",
+  });
+  kit.check(
+    "(e) a merge check's child runs at nice 10 in the idle I/O class, where the spec and a plain command's child do not",
+    !inBackground(own) &&
+      own.nice < HEAVY_NICE &&
+      !inBackground(plain) &&
+      inBackground(merge),
+    `the spec: nice ${own.nice}, I/O ${own.io}; a plain command's child: nice ${plain.nice}, I/O ${plain.io}; the merge check's child (pid ${merge.pid}): nice ${merge.nice}, I/O ${merge.io}`
   );
 }
 
@@ -356,6 +432,7 @@ const spec: Spec = {
       place.dir.startsWith(process.env.HOME ?? "/nowhere") && place.count >= 1,
       `${place.count} slots at ${place.dir}`
     );
+    await background(kit);
     await inLine(kit, place);
     await cancelWhileWaiting(kit, place);
     await checkWaits(kit, place);

@@ -45,8 +45,11 @@
  * from before it reads the tree until it ends, taken in line behind every
  * other heavy run on the machine (merge checks, other checks, probe runs);
  * one run under a merge check's slot (its environment says so) takes none
- * of its own. Its own parallelism is its share of the machine's cores as it
- * starts: the cores over the runs holding a slot then ({@link SHARE}).
+ * of its own. It and every check it starts run at nice 10 and the idle I/O
+ * class (core `runInBackground`; under a merge check, the runner's shell
+ * set that already). Its own parallelism is its share of the machine's
+ * cores as it starts: the cores over the runs holding a slot then
+ * ({@link SHARE}).
  */
 import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
@@ -56,6 +59,7 @@ import {
   coresPerRun,
   heldAbove,
   machinePlace,
+  runInBackground,
   takeSlot,
 } from "../packages/core/src/heavy-slots";
 import { type Check, runChecks } from "./lib/checks";
@@ -96,6 +100,7 @@ if (!DRY) {
     if (waited) {
       console.log("CAWCO-QUEUE held heavy");
     }
+    runInBackground();
   }
 }
 /** This run's share of the machine's cores: the cores over the heavy runs holding a slot as it starts. */

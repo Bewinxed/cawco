@@ -32,11 +32,11 @@ import {
   unlock,
 } from "../../../packages/core/src/flock";
 import {
+  HEAVY_NICE,
   HEAVY_SLOT_ENV,
   machineSlots,
 } from "../../../packages/core/src/heavy-slots";
 import type { Kit, Spec } from "../kit";
-import { SLOT_NICE } from "../slot";
 
 const CHILD = join(import.meta.dir, "..", "slot-child.ts");
 const POLL_MS = 200;
@@ -196,10 +196,10 @@ async function inLine(kit: Kit, root: string): Promise<void> {
     took.slice(14)
   );
   kit.check(
-    `(a) each holder runs at nice ${SLOT_NICE} or more, and a child it starts takes no slot and runs at the same nice`,
+    `(a) each holder runs at nice ${HEAVY_NICE} or more, and a child it starts takes no slot and runs at the same nice`,
     runs.every(
       (run) =>
-        niceOf(lineOf(run, "TAKEN")) >= SLOT_NICE &&
+        niceOf(lineOf(run, "TAKEN")) >= HEAVY_NICE &&
         niceOf(lineOf(run, "INHERITED")) === niceOf(lineOf(run, "TAKEN"))
     ),
     runs

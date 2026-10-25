@@ -144,8 +144,11 @@ for (const name of chosen) {
  */
 const runOwnHome = async (spec: Spec): Promise<number> => {
   // Its probe slot is this run's, taken here: its own process reads the
-  // machine's slots under its scratch HOME, where none of them are.
-  await probeSlot();
+  // machine's slots under its scratch HOME, where none of them are. That
+  // process starts at this run's priority and lowers itself as its first
+  // heavy work takes the slot it inherits (slot.ts `holdSlot`), so a spec
+  // that reads what lowers a command's priority starts from the machine's.
+  await probeSlot(false);
   const home = mkdtempSync(join(tmpdir(), `probe-${spec.name}-`));
   const env = Object.fromEntries(
     Object.entries(process.env).filter(

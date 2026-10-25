@@ -6,75 +6,48 @@
  * and `bun run check` take from it too. quiet.ts only makes a timing leg
  * wait and measure again; it never kept a run from starting.
  *
- * The holder and every process it starts afterwards run at nice
- * {@link SLOT_NICE}. Sessions and their commands share sessiond's
- * `children` cgroup, which has no cpu controller of its own (its
- * subtree_control reads "pids"), so inside it the scheduler weighs tasks by
- * nice alone: a nice-10 task weighs 110 against a nice-0 task's 1024
- * (kernel/sched/core.c `sched_prio_to_weight`; "nice levels were changed to
- * be multiplicative", https://docs.kernel.org/scheduler/sched-nice-design.html),
- * so the person's own sessions win the CPU from the probes.
+ * The holder and every process it starts afterwards run at core
+ * `HEAVY_NICE` and the idle I/O class (core `runInBackground`).
  */
-import { readdirSync } from "node:fs";
-import { getPriority, setPriority } from "node:os";
 import { basename } from "node:path";
 import {
+  HEAVY_NICE,
   HEAVY_SLOT_ENV,
   heldAbove,
   machinePlace,
+  runInBackground,
   type SlotLease,
   type SlotOptions,
   type SlotPlace,
   takeSlot,
 } from "../../packages/core/src/heavy-slots";
 
-/** The nice a lease's holder and its children run at. */
-export const SLOT_NICE = 10;
-
-/**
- * This process and every thread it has at {@link SLOT_NICE} at least
- * (never raised back: a run started at a lower priority keeps it): Linux
- * keeps a nice per thread, and a child takes the nice of the thread that
- * starts it.
- */
-function lowerPriority(): void {
-  const tids =
-    process.platform === "linux"
-      ? readdirSync("/proc/self/task").map(Number)
-      : [0];
-  for (const tid of tids) {
-    try {
-      if (getPriority(tid) < SLOT_NICE) {
-        setPriority(tid, SLOT_NICE);
-      }
-    } catch {
-      // A thread that ended between the listing and the call.
-    }
-  }
-}
-
 /**
  * Takes a slot of `place` for this process's run, and holds it under it:
- * every process it starts runs under the lease ({@link HEAVY_SLOT_ENV}) and
- * at {@link SLOT_NICE}. Null when an ancestor's lease already covers this
- * process (core `heldAbove`), whose words its environment then carries.
+ * every process it starts runs under the lease ({@link HEAVY_SLOT_ENV}).
+ * Null when an ancestor's lease already covers this process (core
+ * `heldAbove`), whose words its environment then carries. Either way this
+ * process and what it starts afterwards run at core `HEAVY_NICE` and the
+ * idle I/O class (core `runInBackground`), unless `background` is false
+ * ({@link probeSlot} lowers its process at its first heavy start instead).
  */
 export async function holdSlot(
   place: SlotPlace,
   what: string,
-  options: SlotOptions = {}
+  options: SlotOptions = {},
+  background = true
 ): Promise<SlotLease | null> {
   const above = heldAbove(place);
-  if (above) {
-    process.env[HEAVY_SLOT_ENV] = above;
-    return null;
+  const lease = above ? null : await takeSlot(place, what, options);
+  process.env[HEAVY_SLOT_ENV] = above ?? lease?.words;
+  if (background) {
+    runInBackground();
+    if (lease) {
+      (options.say ?? console.log)(
+        `… it and what it starts run at nice ${HEAVY_NICE} or more, in the idle I/O class`
+      );
+    }
   }
-  const lease = await takeSlot(place, what, options);
-  process.env[HEAVY_SLOT_ENV] = lease.words;
-  lowerPriority();
-  (options.say ?? console.log)(
-    `… it and what it starts run at nice ${SLOT_NICE} or more`
-  );
   return lease;
 }
 
@@ -87,13 +60,28 @@ export const nameProbeRun = (name: string): void => {
 };
 
 let machineLease: Promise<SlotLease | null> | null = null;
+/** Whether this process runs in the background yet (core `runInBackground`). */
+let lowered = false;
 
 /**
  * This process's slot on the machine, taken the first time anything heavy
  * starts and held until it ends. Every later call answers the same lease,
  * and a run whose wait ran out fails each heavy start after it at once.
+ * From the first call with `background` on, this process and what it
+ * starts run in the background ({@link holdSlot}); run.ts takes an
+ * `ownHome` spec's slot with it off.
  */
-export const probeSlot = (): Promise<SlotLease | null> => {
-  machineLease ??= holdSlot(machinePlace(), runName);
-  return machineLease;
+export const probeSlot = async (
+  background = true
+): Promise<SlotLease | null> => {
+  machineLease ??= holdSlot(machinePlace(), runName, {}, false);
+  const lease = await machineLease;
+  if (background && !lowered) {
+    lowered = true;
+    runInBackground();
+    console.log(
+      `… it and what it starts run at nice ${HEAVY_NICE} or more, in the idle I/O class`
+    );
+  }
+  return lease;
 };

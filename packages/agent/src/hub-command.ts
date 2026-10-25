@@ -14,6 +14,7 @@ import {
   type WorkspaceRef,
 } from "@cawco/core";
 import {
+  BACKGROUND_SHELL,
   HEAVY_SLOT_ENV,
   machinePlace,
   SlotWaitStopped,
@@ -420,7 +421,10 @@ const underSlot = async (
  * A heavy run starts only under one of the machine's heavy-work slots
  * ({@link underSlot}): a merge check (the run names its `gate`), or a
  * command its caller here names `heavy` (stage-clone.ts's install), in
- * these words.
+ * these words. Its shell first puts itself, and so all it runs, at nice 10
+ * and the idle I/O class (core `BACKGROUND_SHELL`): inside a boundary that
+ * is the runner's shell in the sandbox, which the executor outside it never
+ * reaches.
  */
 export async function runHubCommand(
   cwd: unknown,
@@ -451,14 +455,18 @@ export async function runHubCommand(
     }
     return await movedCommand(cwd, cmd, timeoutMs, workspace, named);
   }
-  const [file, args] = await commandLine(cmd, workspace, named);
+  const who = named?.gate ?? heavy;
+  const [file, args] = await commandLine(
+    who === undefined ? cmd : `${BACKGROUND_SHELL}${cmd}`,
+    workspace,
+    named
+  );
   // Cancelled while it waited its turn or its boundary: it never starts.
   if (named && cancelledEarly.delete(named.id)) {
     return CANCELLED;
   }
   const start = (env: Record<string, string>) =>
     spawned({ file, args, cwd, cmd, env, timeoutMs, workspace, named });
-  const who = named?.gate ?? heavy;
   return who === undefined
     ? await start({})
     : await underSlot(who, named, (words) =>
