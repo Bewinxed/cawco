@@ -1,0 +1,581 @@
+/* The demo's look: the dashboard's built tokens (tokens.css, copied from
+   apps/dashboard/src/lib/tokens at b7b06ab9a), the house faces, and the
+   transcript's geometry from design.css (tx-columns, rail-row, rail-line,
+   turn-pad) and TranscriptSkeleton, written as plain CSS on those tokens. */
+@import "./tokens.css";
+
+@layer theme, base, demo, transcript, veil;
+
+@font-face {
+  font-family: "Figtree Variable";
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: block;
+  src: url("../fonts/Figtree.ttf") format("truetype");
+}
+@font-face {
+  font-family: "JetBrains Mono Variable";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: block;
+  src: url("../fonts/JetBrainsMono.ttf") format("truetype");
+}
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+    /* The transcript's columns (design.css tx-columns), stepped in under 900px. */
+    --x-rail: var(--tx-x-rail);
+    --x-glyph: calc(var(--x-rail) + var(--space-3));
+    --w-glyph: var(--tx-w-glyph);
+    --x-text: calc(var(--x-glyph) + var(--w-glyph) + var(--space-2));
+    --pad: var(--space-3);
+    --gutter-start: var(--space-7);
+    --gutter-end: var(--space-6);
+
+    @media (width < 900px) {
+      --x-rail: var(--tx-x-rail-narrow);
+      --pad: var(--space-2);
+      --gutter-start: var(--space-5);
+      --gutter-end: var(--space-5);
+    }
+  }
+
+  html,
+  body {
+    block-size: 100%;
+    margin: 0;
+  }
+
+  body {
+    background: var(--surface-page);
+    color: var(--ink-strong);
+    font: var(--type-body);
+    text-wrap: pretty;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  #app {
+    block-size: 100%;
+  }
+
+  h1 {
+    text-wrap: balance;
+  }
+
+  code,
+  pre {
+    font-family: var(--font-mono);
+    font-variant-ligatures: none;
+  }
+
+  .sr-only {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+@layer demo {
+  .demo {
+    display: block grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    block-size: 100dvh;
+  }
+
+  /* The bar: the latency, the gone spot, Refresh, and what to try. */
+  .bar {
+    display: block flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-5);
+    padding: var(--space-2) var(--gutter-start);
+    border-block-end: 1px solid var(--border-hairline);
+    background: var(--surface-raised);
+    font: var(--type-meta);
+    color: var(--ink-muted);
+
+    fieldset {
+      display: block flex;
+      align-items: center;
+      gap: var(--space-1);
+      margin: 0;
+      padding: 0;
+      border: 0;
+      min-inline-size: 0;
+    }
+
+    legend {
+      float: inline-start;
+      margin-inline-end: var(--space-2);
+      padding: 0;
+    }
+
+    label {
+      display: inline flex;
+      align-items: center;
+      gap: var(--space-1);
+      cursor: pointer;
+    }
+
+    .latency label {
+      position: relative;
+      min-block-size: var(--c-btn-h-sm);
+      padding-inline: var(--space-3);
+      border-radius: var(--radius-pill);
+      color: var(--ink-strong);
+
+      input {
+        position: absolute;
+        inset: 0;
+        margin: 0;
+        opacity: 0;
+        cursor: pointer;
+      }
+
+      &:has(input:checked) {
+        background: var(--surface-fill);
+        font-weight: 500;
+      }
+
+      &:has(input:focus-visible) {
+        outline: var(--focus-ring-width, 2px) solid var(--focus-ring);
+        outline-offset: 1px;
+      }
+
+      @media (hover: hover) {
+        &:hover:not(:has(input:checked)) {
+          background: var(--surface-hover);
+        }
+      }
+    }
+
+    .gone {
+      color: var(--ink-strong);
+
+      input {
+        margin: 0;
+        accent-color: var(--ink-strong);
+      }
+    }
+
+    .refresh {
+      min-block-size: var(--c-btn-h-sm);
+      min-inline-size: var(--c-btn-min-w, 4rem);
+      padding-inline: var(--space-3);
+      border: 1px solid var(--border-button-outline);
+      border-radius: var(--radius-sm);
+      background: var(--surface-raised);
+      color: var(--ink-strong);
+      font: var(--type-button);
+      cursor: pointer;
+
+      @media (hover: hover) {
+        &:hover {
+          background: var(--surface-hover);
+        }
+      }
+
+      &:focus-visible {
+        outline: var(--focus-ring-width, 2px) solid var(--focus-ring);
+        outline-offset: 1px;
+      }
+    }
+
+    .hint {
+      margin: 0;
+      min-inline-size: 0;
+    }
+  }
+
+  /* One session's pane: its head, then the transcript. */
+  .pane {
+    display: block grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    min-block-size: 0;
+  }
+
+  .pane-head {
+    display: block flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 var(--space-3);
+    padding: var(--space-3) var(--gutter-end) var(--space-3) var(--gutter-start);
+    border-block-end: 1px solid var(--border-hairline);
+    min-inline-size: 0;
+
+    h1 {
+      margin: 0;
+      min-inline-size: 0;
+      font: var(--type-label);
+      font-weight: 600;
+      overflow-wrap: anywhere;
+    }
+
+    p {
+      margin: 0;
+      font: var(--type-meta);
+      color: var(--ink-muted);
+    }
+  }
+}
+
+@layer transcript {
+  .transcript {
+    position: relative;
+    display: block grid;
+    min-block-size: 0;
+  }
+
+  .scroller {
+    min-block-size: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    overflow-anchor: none;
+    outline: none;
+  }
+
+  .listing:not([data-shown]) {
+    visibility: hidden;
+  }
+
+  .room {
+    block-size: var(--space-8);
+  }
+
+  .loading {
+    display: block flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0;
+    padding: var(--space-5) var(--gutter-end) var(--space-5) var(--gutter-start);
+    font: var(--type-meta);
+    color: var(--ink-muted);
+  }
+
+  .live-dot {
+    flex: none;
+    inline-size: var(--status-dot-size);
+    block-size: var(--status-dot-size);
+    border-radius: var(--radius-pill);
+    background: var(--status-live-glyph);
+
+    @media (prefers-reduced-motion: no-preference) {
+      animation: breathe var(--breath) var(--ease-crossfade) infinite;
+    }
+  }
+
+  @keyframes breathe {
+    50% {
+      opacity: var(--breath-floor);
+    }
+  }
+
+  /* A block of the conversation. */
+  .row,
+  .veil {
+    padding-inline: var(--gutter-start) var(--gutter-end);
+  }
+
+  .row {
+    box-sizing: border-box;
+    min-inline-size: 0;
+
+    &:is([data-kind="user"], [data-kind="text"]),
+    &[data-rail-start] {
+      padding-block-start: var(--space-4);
+    }
+  }
+
+  /* Who: the speaker's 18px mark and name, on the label's line box. */
+  .who {
+    display: block flex;
+    align-items: center;
+    gap: var(--space-2);
+    block-size: max(var(--space-5), 1lh);
+    margin-block-end: var(--space-2);
+    font: var(--type-label);
+    color: var(--ink-strong);
+  }
+
+  .mark {
+    flex: none;
+    inline-size: var(--c-row-mark);
+    block-size: var(--c-row-mark);
+    border-radius: var(--radius-xs);
+    background: var(--surface-fill-strong);
+
+    &[data-who="agent"] {
+      background: var(--neutral-8);
+    }
+  }
+
+  /* The reader's words, in the sunken well. */
+  .well {
+    margin-inline-start: var(--well-x);
+    padding: calc(var(--space-2) + 1px) var(--pad);
+    border-radius: var(--well-r);
+    background: var(--surface-recess-deep);
+    box-shadow: inset 0 0 0 1px var(--well-edge);
+
+    p {
+      max-inline-size: var(--c-measure);
+      margin: 0;
+      overflow-wrap: anywhere;
+    }
+  }
+
+  /* The agent's prose in its measure; its code in the house code block. */
+  .prose {
+    max-inline-size: var(--c-measure);
+    overflow-wrap: anywhere;
+
+    > :first-child {
+      margin-block-start: 0;
+    }
+
+    > :last-child {
+      margin-block-end: 0;
+    }
+
+    p,
+    ul,
+    ol {
+      margin-block: 0 var(--space-3);
+    }
+
+    ul,
+    ol {
+      padding-inline-start: var(--space-6);
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
+      margin-block: var(--space-4) var(--space-2);
+      font: var(--type-label);
+      font-weight: 600;
+      text-wrap: balance;
+    }
+
+    :not(pre) > code {
+      padding-inline: var(--tx-code-span-pad, 3px);
+      border-radius: var(--radius-xs);
+      background: var(--surface-fill);
+      font-size: 0.9em;
+    }
+
+    pre {
+      margin-block: var(--tx-code-margin);
+      padding: var(--tx-code-pad-block) var(--tx-code-pad-inline);
+      border-radius: var(--radius-sm);
+      background: var(--surface-recess);
+      box-shadow: inset 0 0 0 1px var(--border-hairline);
+      overflow-x: auto;
+      overscroll-behavior-inline: contain;
+
+      code {
+        font-size: var(--text-code);
+        line-height: var(--leading-code);
+        white-space: pre;
+        overflow-wrap: normal;
+      }
+    }
+
+    table {
+      display: block;
+      max-inline-size: 100%;
+      margin-block: var(--space-2) var(--space-3);
+      overflow-x: auto;
+      border-collapse: collapse;
+      font: var(--type-meta);
+    }
+
+    th,
+    td {
+      padding: var(--space-1) var(--space-2);
+      border: 1px solid var(--border-hairline);
+      text-align: start;
+      vertical-align: top;
+    }
+
+    a {
+      color: inherit;
+    }
+  }
+
+  /* Tool calls and thinking: one 26px line each on the rail (design.css rail-row, rail-line). */
+  .rail-line {
+    display: block flex;
+    align-items: center;
+    gap: calc(var(--x-text) - var(--x-glyph) - var(--w-glyph));
+    min-block-size: var(--tx-line);
+    min-inline-size: 0;
+    margin-inline-start: var(--x-rail);
+    padding-inline-start: calc(var(--x-glyph) - var(--x-rail));
+    background: var(--rail) left top / 2px 100% no-repeat;
+
+    @media (pointer: coarse) {
+      min-block-size: var(--tx-line-touch, var(--tx-line));
+    }
+  }
+
+  .rail-cell {
+    display: block grid;
+    flex: none;
+    place-items: center;
+    inline-size: var(--w-glyph);
+    block-size: var(--w-glyph);
+  }
+
+  .glyph {
+    inline-size: var(--space-2);
+    block-size: var(--space-2);
+    border: 1.5px solid var(--ink-subtle);
+    border-radius: var(--radius-pill);
+  }
+
+  .verb {
+    flex: none;
+    font: var(--type-label);
+    color: var(--ink-strong);
+  }
+
+  .arg {
+    min-inline-size: 0;
+    overflow: hidden;
+    font-family: var(--font-mono);
+    font-size: var(--text-code);
+    color: var(--ink-muted);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+
+    [data-kind="thinking"] & {
+      font: var(--type-meta);
+    }
+  }
+
+  /* Said once, where the reader looks: the place asked for is gone. */
+  .dock {
+    position: absolute;
+    inset-block-end: var(--space-5);
+    inset-inline: 0;
+    inline-size: fit-content;
+    max-inline-size: calc(100% - 2 * var(--space-5));
+    margin: 0 auto;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-overlay);
+    font: var(--type-meta);
+    color: var(--ink-strong);
+    text-align: center;
+    text-wrap: balance;
+
+    &:empty {
+      padding: 0;
+      border: 0;
+      box-shadow: none;
+    }
+  }
+}
+
+@layer veil {
+  /* The skeleton veil over the list (TranscriptSkeleton), on the edge the landing will be. */
+  .veil {
+    position: absolute;
+    inset: 0;
+    display: block flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    overflow: hidden;
+    padding-block-end: var(--space-8);
+    background: var(--surface-page);
+    --line-my: calc((1lh - var(--c-skeleton-x-height)) / 2);
+
+    &[data-align="top"] {
+      justify-content: flex-start;
+      padding-block: 0;
+    }
+  }
+
+  .sk-block {
+    flex: none;
+    padding-block-start: var(--space-4);
+  }
+
+  .sk-rail {
+    flex: none;
+    padding-block-start: var(--space-4);
+  }
+
+  .sk-para {
+    display: block flex;
+    flex-direction: column;
+    max-inline-size: var(--c-measure);
+    line-height: var(--leading-body);
+
+    & + & {
+      margin-block-start: var(--space-3);
+    }
+  }
+
+  .sk-well {
+    display: block flex;
+    flex-direction: column;
+  }
+
+  .sk {
+    display: block;
+    flex: none;
+    border-radius: var(--radius-hair);
+    background: var(--surface-fill);
+
+    @media (prefers-reduced-motion: no-preference) {
+      animation: skeleton-pulse var(--dur-skeleton-pulse) var(--ease-crossfade) infinite;
+    }
+
+    &.line {
+      block-size: var(--c-skeleton-x-height);
+      margin-block: var(--line-my);
+    }
+
+    &.mark {
+      inline-size: var(--c-row-mark);
+      block-size: var(--c-row-mark);
+      border-radius: var(--radius-xs);
+    }
+
+    &.name {
+      inline-size: 4rem;
+      block-size: var(--c-skeleton-x-height);
+    }
+
+    &.cell {
+      inline-size: var(--w-glyph);
+      block-size: var(--w-glyph);
+      border-radius: var(--radius-xs);
+    }
+
+    &.verb {
+      inline-size: var(--space-8);
+      block-size: var(--c-skeleton-x-height);
+    }
+  }
+
+  .veil .rail-line .sk.line {
+    margin-block: 0;
+  }
+
+  @keyframes skeleton-pulse {
+    50% {
+      opacity: var(--skeleton-pulse-floor);
+    }
+  }
+}
