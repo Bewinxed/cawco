@@ -14,16 +14,18 @@
  *   `assets/<item>/x.md` and `assets/<item>/notes/y.md`.
  * - Its workspace retires (its own settle, or the archive the hub serves),
  *   its scratch dir gone.
- * - The parent's `folder_read` of `assets/<item>/x.md` and of
- *   `assets/<item>/notes/y.md` returns what the leaf wrote.
+ * - Each path the report names holds what the leaf wrote: the parent reads
+ *   it there on the hub's machine.
  * - A second leaf writes `$TMPDIR/outputs/z.md` and never finishes: its
- *   parent stops it, its workspace is archived, and `folder_read` of
- *   `assets/<item>/z.md` returns what it wrote (copied as the workspace
- *   closed).
+ *   parent stops it, and its workspace is archived (copied as it closed).
+ * - A third delegate of the project, on a fresh workspace, reads all three
+ *   with `folder_read` (roles.ts: a delegate reads its own project's folder;
+ *   a worker such as the parent has no `folder_read`, which is Caw's and
+ *   the delegates').
  *
  *   bun scripts/probe-kit/run.ts scratch-outputs
  */
-import { mkdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { workWords } from "../../../packages/core/src/words/work";
 import { toolWords } from "../../lib/tool-call";
@@ -32,6 +34,8 @@ import type { Kit, Spec } from "../kit";
 
 const TAG = "PROBE-SCRATCH-OUTPUTS";
 const STOPPED_TAG = "PROBE-SCRATCH-OUTPUTS-STOPPED";
+/** The third delegate's brief: it works until stopped, and the spec calls folder_read as it. */
+const READER_TAG = "PROBE-OUTPUTS-READER";
 const FINISH = "mcp__cawco__finish_item";
 const X = `x-${crypto.randomUUID()}`;
 const Y = `y-${crypto.randomUUID()}`;
@@ -68,6 +72,9 @@ const leaf: { finished: boolean; stoppedWrote: boolean; wrote: boolean } = {
 const respond = (request: Seen): Reply => {
   if (!request.tools) {
     return text("ok");
+  }
+  if (request.all.includes(READER_TAG)) {
+    return useTool("Bash", { command: "sleep 2", description: "Work" });
   }
   if (request.all.includes(STOPPED_TAG)) {
     if (!leaf.stoppedWrote) {
@@ -183,14 +190,45 @@ const retired = async (fleet: Fleet, started: Started): Promise<string> => {
   return state();
 };
 
-/** What `folder_read` gives the parent for `path`. */
-const readAsset = async (
-  fleet: Fleet,
-  parent: string,
-  path: string
-): Promise<string> => {
-  const read = await parentTool(fleet, parent, "folder_read", { path });
-  return `${read.refused ? `refused ${read.status}: ` : ""}${read.text}`;
+/** A file a leaf handed in: its path in the project's folder, what it holds, which leaf wrote it. */
+interface Handed {
+  by: string;
+  path: string;
+  token: string;
+}
+
+/**
+ * The paths the report names, `- <project folder>/assets/…` a line (hub
+ * work-items.ts `collectOutputs`), each read on the hub's machine, as the
+ * parent reads them there: every handed file is at its path and holds what
+ * the leaf wrote.
+ */
+const reportPathsHold = async (
+  { check }: Kit,
+  result: string,
+  handed: readonly Handed[]
+): Promise<void> => {
+  const listed = result
+    .split("\n")
+    .filter((line) => line.startsWith("- /") && line.includes("/assets/"))
+    .map((line) => line.slice(2));
+  const read = await Promise.all(
+    handed.map(async (one) => {
+      const at = listed.find((path) => path.endsWith(`/${one.path}`));
+      const held = at ? await readFile(at, "utf8").catch(() => "") : "";
+      return { path: one.path, at, ok: held === one.token };
+    })
+  );
+  check(
+    "each path the report names holds what the leaf wrote, on the hub's machine",
+    read.every((one) => one.ok),
+    read
+      .map(
+        (one) =>
+          `${one.path}: ${one.at ?? "not listed"} ${one.ok ? "ok" : "wrong"}`
+      )
+      .join("; ")
+  );
 };
 
 /** The scratch dir is gone from the machine. */
@@ -202,11 +240,12 @@ const scratchGone = async (started: Started): Promise<boolean> =>
 
 /** The first leaf: write two files, finish, retire, read them back. */
 const finishedLeg = async (
-  { check }: Kit,
+  kit: Kit,
   fleet: Fleet,
   parent: string,
   src: string
-): Promise<void> => {
+): Promise<Handed[]> => {
+  const { check } = kit;
   const started = await fleet.api<Started>("/api/work-items", {
     parentInstanceId: parent,
     title: "Scratch outputs probe",
@@ -259,18 +298,12 @@ const finishedLeg = async (
     state === "archived" && (await scratchGone(started)),
     `state ${state}, ${started.workspaceTmp} ${(await scratchGone(started)) ? "gone" : "still there"}`
   );
-  const x = await readAsset(fleet, parent, `${assets}/x.md`);
-  check(
-    `folder_read ${assets}/x.md returns what the leaf wrote, after its workspace retired`,
-    x.includes(X),
-    x.slice(0, 400)
-  );
-  const y = await readAsset(fleet, parent, `${assets}/notes/y.md`);
-  check(
-    `folder_read ${assets}/notes/y.md returns what the leaf wrote, at its path under outputs/`,
-    y.includes(Y),
-    y.slice(0, 400)
-  );
+  const handed = [
+    { by: "the finished leaf", path: `${assets}/x.md`, token: X },
+    { by: "the finished leaf", path: `${assets}/notes/y.md`, token: Y },
+  ];
+  await reportPathsHold(kit, result, handed);
+  return handed;
 };
 
 /** The second leaf: write one file, get stopped, its workspace archived, read it back. */
@@ -279,7 +312,7 @@ const stoppedLeg = async (
   fleet: Fleet,
   parent: string,
   src: string
-): Promise<void> => {
+): Promise<Handed[]> => {
   const started = await fleet.api<Started>("/api/work-items", {
     parentInstanceId: parent,
     title: "Stopped outputs probe",
@@ -314,12 +347,55 @@ const stoppedLeg = async (
     state === "archived" && (await scratchGone(started)),
     `state ${state}`
   );
-  const z = await readAsset(fleet, parent, `${assets}/z.md`);
-  check(
-    `folder_read ${assets}/z.md returns what the stopped leaf wrote, copied as its workspace closed`,
-    z.includes(Z),
-    z.slice(0, 400)
+  return [
+    {
+      by: "the stopped leaf, copied as its workspace closed",
+      path: `${assets}/z.md`,
+      token: Z,
+    },
+  ];
+};
+
+/**
+ * A third delegate of the project, in a workspace of its own, reads every
+ * handed file with `folder_read` as itself (its own credential, while its
+ * session runs), then its parent stops it.
+ */
+const readerLeg = async (
+  { check }: Kit,
+  fleet: Fleet,
+  parent: string,
+  src: string,
+  handed: readonly Handed[]
+): Promise<void> => {
+  const started = await fleet.api<Started>("/api/work-items", {
+    parentInstanceId: parent,
+    title: "Outputs reader probe",
+    prompt: `${READER_TAG}: keep working.`,
+    harness: "claude",
+    model: "claude-haiku-4-5",
+    cwd: src,
+    lands: "none",
+  });
+  const credential = await until(
+    "the reader's session credential",
+    () => fleet.sessionCredential(started.instanceId),
+    (held) => held !== "",
+    180_000
   );
+  const reader = { base: fleet.base, id: started.instanceId, credential };
+  for (const one of handed) {
+    // biome-ignore lint/performance/noAwaitInLoops: one read at a time, as a delegate makes them
+    const read = await toolWords(reader, "folder_read", { path: one.path });
+    check(
+      `a delegate's folder_read ${one.path} returns what ${one.by} wrote, its workspace gone`,
+      !read.refused && read.text.includes(one.token),
+      `${read.refused ? `refused ${read.status}: ` : ""}${read.text.slice(0, 400)}`
+    );
+  }
+  await parentTool(fleet, parent, "stop_delegate", {
+    target: started.instanceId,
+  });
 };
 
 const spec: Spec = {
@@ -327,8 +403,11 @@ const spec: Spec = {
   host: "it delegates, so its fleet cuts workspaces",
   run: async (kit: Kit) => {
     const { fleet, parent, src } = await setUp(kit);
-    await finishedLeg(kit, fleet, parent, src);
-    await stoppedLeg(kit, fleet, parent, src);
+    const handed = [
+      ...(await finishedLeg(kit, fleet, parent, src)),
+      ...(await stoppedLeg(kit, fleet, parent, src)),
+    ];
+    await readerLeg(kit, fleet, parent, src, handed);
   },
 };
 

@@ -18,7 +18,7 @@ export const workWords = {
    * project's folder.
    */
   scratchOutputsCopied: (assets: string) =>
-    `Files you leave in $TMPDIR/outputs/ are copied into the project's folder at ${assets}/ (each at its path under outputs/) when you finish and before this workspace goes; your parent reads them there with folder_read, and the hub's report names each path.`,
+    `Files you leave in $TMPDIR/outputs/ are copied into the project's folder at ${assets}/ (each at its path under outputs/) when you finish and before this workspace goes; the hub's report names each path for your parent, and the project's delegates read them there with folder_read.`,
   /** What a delegate of no project is told of its `$TMPDIR/outputs/`: nothing there is collected. */
   scratchOutputsNoProject:
     "This item belongs to no project, so nothing in $TMPDIR is collected: what your parent needs goes in your report or a commit.",
