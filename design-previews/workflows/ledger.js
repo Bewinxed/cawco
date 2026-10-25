@@ -6,22 +6,22 @@ import { block, btn, esc, glyph, ic } from "./parts.js";
 
 const WORKFLOWS = [
   {
-    name: "Release 2.4",
-    meta: "5 steps · writer, checker, runner · slack-brand",
+    name: "Reply shortlist",
+    meta: "5 steps · research, low · x-use",
     v: 3,
     state: "needs",
-    last: "run 12 · 4m ago",
-    runs: 12,
-    score: "8 of 9",
+    last: "run 7 · 4m ago",
+    runs: 7,
+    score: "5 of 6",
   },
   {
-    name: "Nightly deps",
-    meta: "3 steps · bumper, runner",
+    name: "Milestone check",
+    meta: "2 steps · low · x-use",
     v: 1,
-    state: "done",
-    last: "Tue 05:00",
-    runs: 4,
-    score: "4 of 4",
+    state: "failed",
+    last: "Oct 19",
+    runs: 1,
+    score: "0 of 1",
   },
 ];
 
@@ -73,7 +73,7 @@ export const wfPhoneList = ({ open = "" } = {}) =>
   ).join("")}</div>`;
 
 export const inputsLine = (extra = "") =>
-  `<span class="row-wrap"><span class="meta">Inputs</span><span class="field" style="min-block-size:26px"><span class="mono">version</span><span class="ph">2.5</span></span>${extra}</span>`;
+  `<span class="row-wrap"><span class="meta">Inputs</span><span class="field" style="min-block-size:26px"><span class="mono">account</span><span class="ph">cawcodev</span></span>${extra}</span>`;
 
 export const versionLine = (acts) =>
-  `<div class="row-wrap" style="justify-content:space-between"><span class="meta num">${ic("runs", "sm")} v3 · saved 2m ago · 12 runs</span><span class="acts">${acts}</span></div>`;
+  `<div class="row-wrap" style="justify-content:space-between"><span class="meta num">${ic("runs", "sm")} v3 · saved 2m ago · 7 runs</span><span class="acts">${acts}</span></div>`;

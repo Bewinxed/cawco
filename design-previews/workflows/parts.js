@@ -1,6 +1,6 @@
 /*
- * The pieces every drawing shares: the glyph helper, the release workflow and
- * its run 12, and the desk's and the phone's chrome as CawCo draws them.
+ * The pieces every drawing shares: the glyph helper, the reply-shortlist
+ * workflow and its run 7, and the desk's and the phone's chrome as CawCo draws them.
  */
 import { ICONS } from "./icons.js";
 
@@ -39,73 +39,81 @@ export const KIND = {
 export const kind = (k) =>
   `<span class="kind">${ic(KIND[k].icon)}${KIND[k].word}</span>`;
 
-/** The workflow every option draws: Release 2.4, five steps. */
+/*
+ * The workflow every option draws is his own work: the Cawco project's
+ * routine "Daily reply shortlist for X" (06:30, the x-use connection,
+ * account @cawcodev, read-only), laid out as five steps. The step words
+ * are its prompt's; the delegate types (research, low) are the hub's.
+ */
+export const PROJECT = "Cawco";
+export const MACHINE = "obelisk-of-light";
+export const WF = "Reply shortlist";
+
 export const STEPS = [
   {
     n: 1,
-    title: "Draft the release notes",
-    short: "Draft notes",
+    title: "Find 8–12 posts from the last 24 hours",
+    short: "Find posts",
     kind: "agent",
-    who: "writer",
+    who: "research",
     after: [],
     brief:
-      "Draft the notes for {{version}} from the PRs merged since the last tag.",
+      "Find 8–12 posts from the last 24 hours where developers talk about running Claude Code, OpenCode or pi across several sessions or machines.",
   },
   {
     n: 2,
-    title: "Check the changelog links",
-    short: "Check links",
+    title: "Read @cawcodev’s recent posts",
+    short: "Read our posts",
     kind: "agent",
-    who: "checker",
+    who: "low",
     after: [],
-    brief:
-      "Open every link in CHANGELOG.md; report any that does not answer 200.",
+    brief: "search_profile on cawcodev · read-only tools only",
   },
   {
     n: 3,
-    title: "Post the notes to Slack #releases",
-    short: "Post to Slack",
+    title: "Read each post through x-use",
+    short: "Read via x-use",
     kind: "call",
-    who: "slack-brand",
+    who: "x-use",
     after: [1, 2],
-    brief: "post · approved at start",
+    brief: "get_tweet · approved at start",
   },
   {
     n: 4,
-    title: "Which channel does 2.4 ship to?",
-    short: "Which channel?",
+    title: "Which replies do you keep?",
+    short: "Which replies?",
     kind: "ask",
     who: "you",
     after: [3],
-    brief: "beta or stable",
+    brief: "all of them or none",
   },
   {
     n: 5,
-    title: "Run the smoke test",
-    short: "Smoke test",
+    title: "Measure posts after 48 hours",
+    short: "Measure at 48h",
     kind: "agent",
-    who: "runner",
+    who: "low",
     after: [4],
-    brief: "if the channel is beta · done when 0 failed",
+    brief: "if you keep any · done when each kept reply has its numbers",
   },
 ];
 
-/** Run 12 as it stands: three done, one asking, one planned. */
-export const RUN12 = {
-  1: { state: "done", took: "1m 3s", report: "Notes cover 2.3 → 2.4, 14 PRs" },
-  2: { state: "done", took: "48s", report: "Every link answers 200" },
+/** Run 7 as it stands: three done, one asking, one planned. */
+export const RUN = {
+  1: { state: "done", took: "1m 3s", report: "11 posts from the last 24 hours" },
+  2: { state: "done", took: "48s", report: "Read @cawcodev’s last 20 posts" },
   3: {
     state: "done",
     took: "2s",
-    report: "Posted to #releases · approved at start",
+    report: "Read 11 posts · approved at start",
   },
   4: { state: "needs", took: "1m", report: "Waiting on you" },
-  5: { state: "planned", took: "", report: "Waits on 4 · if beta" },
+  5: { state: "planned", took: "", report: "Waits on 4 · if you keep any" },
 };
 
 export const RUNS = [
   {
-    n: 12,
+    n: 7,
     when: "4m ago",
     v: 3,
     state: "running",
@@ -116,8 +124,8 @@ export const RUNS = [
     cost: "0.41",
   },
   {
-    n: 11,
-    when: "Tue 05:12",
+    n: 6,
+    when: "Oct 21",
     v: 3,
     state: "done",
     outcome: "Delivered",
@@ -127,19 +135,19 @@ export const RUNS = [
     cost: "0.88",
   },
   {
-    n: 10,
-    when: "Mon 17:40",
+    n: 5,
+    when: "Oct 18",
     v: 2,
     state: "failed",
-    outcome: "Smoke test: 2 failed",
+    outcome: "Failed, ran again",
     took: "6m",
     steps: "5 of 5",
     score: "1 of 3",
     cost: "0.52",
   },
   {
-    n: 9,
-    when: "Oct 18",
+    n: 4,
+    when: "Oct 17",
     v: 2,
     state: "done",
     outcome: "Delivered",
@@ -150,22 +158,22 @@ export const RUNS = [
   },
 ];
 
-/** The checks, each with its last twelve runs as marks: 1 passed, 0 failed, null not yet. */
+/** The checks, each with its runs as marks: 1 passed, 0 failed, null not yet. */
 export const CHECKS = [
   {
-    text: "The notes name every merged PR",
-    marks: [1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1],
-    pass: "11 of 12",
+    text: "The shortlist holds 8–12 posts",
+    marks: [1, 1, 0, 1, 1, 1],
+    pass: "5 of 6",
   },
   {
-    text: "Every changelog link answers 200",
-    marks: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    pass: "12 of 12",
+    text: "Every post is from the last 24 hours",
+    marks: [1, 1, 1, 1, 1, 1],
+    pass: "6 of 6",
   },
   {
-    text: "The Slack post carries the version",
-    marks: [1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, null],
-    pass: "10 of 11",
+    text: "Nothing was posted, liked or followed",
+    marks: [1, 0, 1, 1, 1, 1, null],
+    pass: "5 of 6",
   },
 ];
 
@@ -226,19 +234,19 @@ const railRun = (extra) => {
   const rows = [
     treeRow({
       mark: tile("workflow", "attn"),
-      title: "Workflow · Release 2.4 · run 12",
+      title: `Workflow · ${WF} · run 7`,
       age: "4m",
     }),
     treeRow({
       depth: 1,
       mark: bare("done"),
-      title: "Draft the release notes",
+      title: STEPS[0].title,
       age: "3m",
     }),
     treeRow({
       depth: 1,
       mark: bare("done"),
-      title: "Check the changelog links",
+      title: STEPS[1].title,
       age: "3m",
     }),
     ...(extra
@@ -246,7 +254,7 @@ const railRun = (extra) => {
           treeRow({
             depth: 1,
             mark: bare("unplanned"),
-            title: "Verify the tag",
+            title: "Check the DM drafts",
             age: "20s",
             cls: "unplanned",
           }),
@@ -255,7 +263,7 @@ const railRun = (extra) => {
     treeRow({
       depth: 1,
       mark: bare("needs"),
-      title: "Which channel does 2.4 ship to?",
+      title: STEPS[3].title,
       age: "1m",
     }),
   ];
@@ -271,9 +279,9 @@ export const rail = ({
     <span class="nav">${ic("working")}<span>Working</span><span class="count num">1</span></span>
     <span class="nav">${ic("done")}<span>Finished</span><span class="count num">4</span></span>
   </nav>
-  <div class="rail-group"><p class="rail-h">obelisk</p><div class="tree">${railRun(drift)}</div></div>
+  <div class="rail-group"><p class="rail-h">${MACHINE}</p><div class="tree">${railRun(drift)}</div></div>
   <div class="rail-group"><p class="rail-h">Projects</p>
-    <span class="nav on">${ic("folder")}<span class="trunc">Release app</span><span class="count num">1</span></span>
+    <span class="nav on">${ic("folder")}<span class="trunc">${PROJECT}</span><span class="count num">1</span></span>
   </div>
 </aside>`;
 
@@ -284,9 +292,30 @@ export const bar = () => `<header class="bar">
   <div class="bar-end">${btn("New task", { size: "sm", icon: "plus" })}</div>
 </header>`;
 
-export const projectHead = (acts = "") => `<header class="phead">
-  <div class="phead-title"><span class="pmark">${ic("folder")}</span><div><h3>Release app</h3><p>obelisk · ~/code/release-app</p></div></div>
-  <div class="acts">${acts || `${btn("Ask Caw", { size: "sm" })}${btn("Spin off", { size: "sm" })}`}</div>
+/** A machine drawn as a place: its OS mark and its name (The Title Bars Follow Liquid Glass Rule). */
+export const place = (name = MACHINE) =>
+  `<span class="place">${ic("tux")}<span>${esc(name)}</span></span>`;
+
+/** One capsule of the panel's glass holding bare items: [icon, name] for a symbol, [ "", words ] for a word. */
+export const glass = (items, cls = "") =>
+  `<div class="glass ${cls}" role="group">${items
+    .map(([icon, name]) =>
+      icon
+        ? `<button type="button" class="gi" aria-label="${esc(name)}" title="${esc(name)}">${ic(icon)}</button>`
+        : `<button type="button" class="gi words">${esc(name)}</button>`
+    )
+    .join("")}</div>`;
+
+/** The project's head: one row, its name leading, the machine and its acts trailing in glass. */
+export const projectHead = () => `<header class="phead">
+  <h3 class="phead-title"><span class="pmark">${ic("folder")}</span><span class="trunc">${PROJECT}</span></h3>
+  <div class="phead-end"><div class="glass" role="group" aria-label="Machine"><span class="gi words" title="On ${MACHINE}">${place()}</span></div>${glass(
+    [
+      ["", "Ask Caw"],
+      ["", "Spin off"],
+    ],
+    "acts-words"
+  )}</div>
 </header>`;
 
 export const desk = ({
@@ -300,16 +329,22 @@ export const desk = ({
   </div>
 </div>`;
 
-/** A run opened in the Split beside the view: head, body, composer. */
+/**
+ * A run opened in the Split beside the view. Its head is one row: the view's
+ * own short name, then one glass group of bare symbols, Close last. What the
+ * run is doing (`facts`) is content, the first line of its body, with the
+ * machine drawn as a place.
+ */
 export const splitPane = ({
-  title,
-  meta,
-  acts = "",
+  title = "",
+  label = title,
+  facts = "",
+  acts = [],
   body,
   asking = false,
-}) => `<aside class="split" aria-label="${esc(title)}">
-  <header class="split-head"><div class="row1">${ic("workflow")}<h4 class="trunc">${title}</h4>${acts}${btn("", { v: "ghost", size: "sm", icon: "close" })}</div><p class="meta num">${meta}</p></header>
-  <div class="split-body">${body}</div>
+}) => `<aside class="split" aria-label="${esc(label)}">
+  <header class="split-head">${title ? `<h4 class="trunc">${esc(title)}</h4>` : '<span class="grow"></span>'}${glass([...acts, ["close", "Close"]])}</header>
+  <div class="split-body">${facts ? `<p class="facts meta num">${facts} · ${place()}</p>` : ""}${body}</div>
   <div class="composer"><span>Message the orchestrator…</span>${btn("", { v: asking ? "secondary" : "primary", size: "sm", icon: "arrow" })}</div>
 </aside>`;
 
@@ -334,13 +369,13 @@ export const composerFoot = () =>
 /** A run's steps as lit tree rows: glyph, title, took; the report's first line under it. */
 export const runTree = ({ ask = "", drift = false, stepsOf = STEPS } = {}) => {
   const rows = [
-    `<div class="runrow"><span>${glyph("running")}</span><span class="t">Workflow · Release 2.4</span><span class="r">orchestrator</span></div>`,
+    `<div class="runrow"><span>${glyph("running")}</span><span class="t">Workflow · ${WF}</span><span class="r">orchestrator</span></div>`,
   ];
   for (const s of stepsOf) {
-    const r = RUN12[s.n];
+    const r = RUN[s.n];
     if (drift && s.n === 3) {
       rows.push(
-        `<div class="runrow unplanned" data-depth="1" style="--depth:1"><span>${glyph("unplanned")}</span><span class="t">Verify the tag</span><span class="r num">${glyph("running", "sm")} 20s</span><span class="d">Not in v3 · the orchestrator added it ${btn("Keep", { v: "secondary", size: "xs" })}</span></div>`
+        `<div class="runrow unplanned" data-depth="1" style="--depth:1"><span>${glyph("unplanned")}</span><span class="t">Check the DM drafts</span><span class="r num">${glyph("running", "sm")} 20s</span><span class="d">Not in v3 · the orchestrator added it ${btn("Keep", { v: "secondary", size: "xs" })}</span></div>`
       );
     }
     rows.push(
@@ -352,9 +387,9 @@ export const runTree = ({ ask = "", drift = false, stepsOf = STEPS } = {}) => {
 
 /** The question of step 4, opened in place under its row. */
 export const askTile = ({ chosen = "" } = {}) => `<div class="ask">
-  <p class="q">Which channel does 2.4 ship to?</p>
-  <p class="why">Step 5 runs the smoke test only for beta. The orchestrator waits here.</p>
-  <div class="opts"><span class="opt${chosen === "beta" ? " on" : ""}"><span class="key">1</span>beta</span><span class="opt${chosen === "stable" ? " on" : ""}"><span class="key">2</span>stable</span><span class="grow"></span>${btn("Answer", { v: "primary", size: "sm" })}</div>
+  <p class="q">${STEPS[3].title}</p>
+  <p class="why">Step 5 measures only the replies you keep. The orchestrator waits here.</p>
+  <div class="opts"><span class="opt${chosen === "all" ? " on" : ""}"><span class="key">1</span>all 11</span><span class="opt${chosen === "none" ? " on" : ""}"><span class="key">2</span>none</span><span class="grow"></span>${btn("Answer", { v: "primary", size: "sm" })}</div>
 </div>`;
 
 export const runsLedger = ({
@@ -400,12 +435,12 @@ export const manageMenu = ({
 
 /** Asking in the page before a delete: what it reaches, named. */
 export const deleteAsk =
-  () => `<div class="askhere" role="group" aria-label="Delete Release 2.4?">
-  <p class="t">Delete Release 2.4?</p>
+  () => `<div class="askhere" role="group" aria-label="Delete ${WF}?">
+  <p class="t">Delete ${WF}?</p>
   <ul>
-    <li>${ic("runs", "sm")}<span>Its 12 runs stay in Runs, read-only, with their reports and scores.</span></li>
-    <li>${ic("calendar", "sm")}<span>The routine “Weekly release” starts it every Monday 07:30; that routine stops and waits for you to point it elsewhere.</span></li>
-    <li>${ic("working", "sm")}<span>Run 12 is still going: it finishes on v3 unless you stop it.</span></li>
+    <li>${ic("runs", "sm")}<span>Its 7 runs stay in Runs, read-only, with their reports and scores.</span></li>
+    <li>${ic("calendar", "sm")}<span>The routine “Daily reply shortlist for X” starts it every day at 06:30; that routine stops and waits for you to point it elsewhere.</span></li>
+    <li>${ic("working", "sm")}<span>Run 7 is still going: it finishes on v3 unless you stop it.</span></li>
   </ul>
   <div class="row">${btn("Cancel", { v: "ghost", size: "sm" })}${btn("Delete workflow", { v: "danger", size: "sm" })}</div>
 </div>`;

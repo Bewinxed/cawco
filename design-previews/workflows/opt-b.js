@@ -14,7 +14,7 @@ import {
   kind,
   manageMenu,
   phone,
-  RUN12,
+  RUN,
   runsLedger,
   STEPS,
   seg,
@@ -28,7 +28,7 @@ const after = (s) =>
     : '<span class="meta">start</span>';
 
 const stepRow = (s, { open = "", sel = false, sel5quiet = false } = {}) =>
-  `<div class="step${sel ? " sel" : ""}" data-step="${s.n}"><span class="grip" aria-label="Drag to reorder">${ic("grip")}</span><span class="g-idle">${ic("planned")}</span><span class="title trunc">${s.title}</span><span>${kind(s.kind)}</span><span class="col trunc">${s.who}</span><span class="chips">${after(s)}</span>${btn("", { v: "ghost", size: "xs", icon: "more" })}${s.n === 5 && !sel5quiet ? '<span class="sub">if the channel is beta · done when 0 failed</span>' : ""}${s.n === 3 && !open ? '<span class="sub">slack-brand · post · {"text": "{{notes}}"} · approved at start</span>' : ""}</div>${open}`;
+  `<div class="step${sel ? " sel" : ""}" data-step="${s.n}"><span class="grip" aria-label="Drag to reorder">${ic("grip")}</span><span class="g-idle">${ic("planned")}</span><span class="title trunc">${s.title}</span><span>${kind(s.kind)}</span><span class="col trunc">${s.who}</span><span class="chips">${after(s)}</span>${btn("", { v: "ghost", size: "xs", icon: "more" })}${s.n === 5 && !sel5quiet ? '<span class="sub">if you keep any · done when each kept reply has its numbers</span>' : ""}${s.n === 3 && !open ? '<span class="sub">x-use · get_tweet · {"id": "{{post}}"} · approved at start</span>' : ""}</div>${open}`;
 
 const ghost = () =>
   `<button type="button" class="step ghost" data-play="b-add" style="inline-size:100%;text-align:start"><span></span><span>${ic("plus")}</span><span class="title">Add a step</span></button>`;
@@ -38,8 +38,8 @@ const stepsHead = () =>
 
 const callEditor = () => `<div class="well" style="padding-inline-start:52px">
   <dl class="kv">
-    <dt>Connection</dt><dd class="row"><span class="field" style="inline-size:220px">${ic("link")}<span class="grow">slack-brand</span>${ic("sort")}</span><span class="meta">tool</span><code>post</code></dd>
-    <dt>Arguments</dt><dd><div class="argwell">{ <span class="k">"channel"</span>: <span class="s">"#releases"</span>, <span class="k">"text"</span>: <span class="s">"{{notes}}"</span> }</div></dd>
+    <dt>Connection</dt><dd class="row"><span class="field" style="inline-size:220px">${ic("link")}<span class="grow">x-use</span>${ic("sort")}</span><span class="meta">tool</span><code>get_tweet</code></dd>
+    <dt>Arguments</dt><dd><div class="argwell">{ <span class="k">"id"</span>: <span class="s">"{{post}}"</span> }</div></dd>
     <dt>Approve</dt><dd>${seg(
       [
         { value: "start", label: "At Start run" },
@@ -47,12 +47,12 @@ const callEditor = () => `<div class="well" style="padding-inline-start:52px">
       ],
       "start",
       "Approve"
-    )}<span class="meta" style="margin-inline-start:var(--space-3)">{{notes}} comes from step 1: you see the exact call at Start run.</span></dd>
+    )}<span class="meta" style="margin-inline-start:var(--space-3)">{{post}} comes from step 1: you see the exact call at Start run.</span></dd>
   </dl>
 </div>`;
 
 const ledgerWell = ({ open = "", view = "ledger", create = false } = {}) => `<div class="well">
-  <div class="row-wrap"><span class="meta">Brief</span><span class="grow trunc">Release {{version}} from main. Post the notes once both checks pass.</span>${inputsLine()}</div>
+  <div class="row-wrap"><span class="meta">Brief</span><span class="grow trunc">Build today’s reply shortlist for @{{account}}. You publish nothing.</span>${inputsLine()}</div>
   <div class="row" style="justify-content:space-between"><span class="label">Steps</span>${seg(
     [
       { value: "ledger", label: "Ledger", icon: "ledger" },
@@ -76,7 +76,7 @@ const ledgerWell = ({ open = "", view = "ledger", create = false } = {}) => `<di
 const proposal =
   () => `<div class="card"><div class="well" style="background:var(--surface-raised);border:0">
   <div class="row">${ic("sparkles", "g-brand")}<span class="label grow">Drafted from your sentence: 5 steps</span>${btn("Dismiss", { v: "ghost", size: "sm" })}${btn("Use all 5", { size: "sm" })}</div>
-  <p class="meta">“release 2.4: notes and link check together, post to #releases, ask me the channel, smoke test if beta”. Nothing runs on a proposal; each row is yours to keep or drop.</p>
+  <p class="meta">“reply shortlist: find posts and read ours together, read each through x-use, ask me which to keep, measure at 48 hours if any”. Nothing runs on a proposal; each row is yours to keep or drop.</p>
   <div class="steps">${STEPS.slice(0, 2)
     .map(
       (s) =>
@@ -84,7 +84,7 @@ const proposal =
     )
     .join(
       ""
-    )}<div class="step" style="grid-template-columns:minmax(0,1fr)"><span class="meta">3 more rows: Post to Slack (Call), Which channel? (Ask me), Run the smoke test (Agent · runner)</span></div></div>
+    )}<div class="step" style="grid-template-columns:minmax(0,1fr)"><span class="meta">3 more rows: Read via x-use (Call), Which replies? (Ask me), Measure posts after 48 hours (Agent · low)</span></div></div>
 </div></div>`;
 
 const createDesk = () =>
@@ -109,7 +109,7 @@ const createPhone = () => [
   phone({
     title: "New workflow",
     back: true,
-    body: `<span class="field focus"><span>Release</span></span>
+    body: `<span class="field focus"><span>Reply shortlist</span></span>
       <span class="field"><span class="ph">The orchestrator’s brief…</span></span>
       ${inputsLine()}<p class="label">Steps</p>${phoneSteps()}`,
     foot: `${btn("Ask Caw to draft it", { icon: "sparkles" })}${btn("Create", { v: "primary" })}`,
@@ -121,11 +121,11 @@ const editDesk = () =>
 
 const editPhone = () => [
   phone({
-    title: "Release 2.4",
+    title: "Reply shortlist",
     back: true,
-    body: `<div class="ptitle"><h4>Release 2.4</h4><p>v3 · 5 steps · 12 runs</p></div>
+    body: `<div class="ptitle"><h4>Reply shortlist</h4><p>v3 · 5 steps · 7 runs</p></div>
       ${phoneSteps(
-        `<div class="stack" style="padding-block:var(--space-2)"><span class="field">${ic("link")}<span class="grow">slack-brand · post</span>${ic("sort")}</span><div class="argwell">{ <span class="k">"text"</span>: <span class="s">"{{notes}}"</span> }</div>${seg(
+        `<div class="stack" style="padding-block:var(--space-2)"><span class="field">${ic("link")}<span class="grow">x-use · get_tweet</span>${ic("sort")}</span><div class="argwell">{ <span class="k">"id"</span>: <span class="s">"{{post}}"</span> }</div>${seg(
           [
             { value: "start", label: "At Start run" },
             { value: "every", label: "Every run" },
@@ -140,7 +140,7 @@ const editPhone = () => [
 
 const runRows = ({ open = true } = {}) => {
   const rows = STEPS.map((s) => {
-    const r = RUN12[s.n];
+    const r = RUN[s.n];
     const ask =
       s.n === 4
         ? `<div class="fold" data-fold${open ? " data-open" : ""}><div><div style="padding:0 var(--space-2) var(--space-2) 40px">${askTile()}</div></div></div>`
@@ -149,30 +149,31 @@ const runRows = ({ open = true } = {}) => {
       s.n === 4
         ? ' data-play="b-unfold" role="button" tabindex="0" aria-expanded="true"'
         : "";
-    return `<div class="runrow ${r.state}" data-depth="1" style="--depth:1"${press}><span>${glyph(r.state)}</span><span class="t">${s.title}</span><span class="r num">${r.took || kind(s.kind)}</span><span class="d">${s.kind === "call" ? "slack-brand · post · approved at start" : r.report}</span></div>${ask}`;
+    return `<div class="runrow ${r.state}" data-depth="1" style="--depth:1"${press}><span>${glyph(r.state)}</span><span class="t">${s.title}</span><span class="r num">${r.took || kind(s.kind)}</span><span class="d">${s.kind === "call" ? "x-use · get_tweet · approved at start" : r.report}</span></div>${ask}`;
   });
-  return `<div class="stack" style="gap:0"><div class="runrow"><span>${glyph("running")}</span><span class="t">Workflow · Release 2.4</span><span class="r">orchestrator</span></div>${rows.join("")}</div>`;
+  return `<div class="stack" style="gap:0"><div class="runrow"><span>${glyph("running")}</span><span class="t">Workflow · Reply shortlist</span><span class="r">orchestrator</span></div>${rows.join("")}</div>`;
 };
 
 const runDesk = () =>
   desk({
-    pane: `${wfLedger()}${block({ icon: "runs", title: "Runs", count: "12", body: runsLedger() })}`,
+    pane: `${wfLedger()}${block({ icon: "runs", title: "Runs", count: "7", body: runsLedger() })}`,
     split: splitPane({
-      title: "Release 2.4 · run 12",
-      meta: "v3 · 3 of 5 steps · 4m · $0.41 · obelisk",
-    asking: true,
-      acts: btn("Stop run", { size: "sm", icon: "stop" }),
-      body: `${runRows()}<div class="hr"></div><p class="meta">${glyph("done", "sm")} Checks so far: 2 of 3 · “The Slack post carries the version” scores when the run ends.</p>`,
+      title: "Run 7",
+      label: "Reply shortlist, run 7",
+      facts: "v3 · 3 of 5 steps · 4m · $0.41",
+      asking: true,
+      acts: [["stop", "Stop run"]],
+      body: `${runRows()}<div class="hr"></div><p class="meta">${glyph("done", "sm")} Checks so far: 2 of 3 · “Nothing was posted, liked or followed” scores when the run ends.</p>`,
     }),
   });
 
 const runPhone = () => [
   phone({
-    title: "Release app",
+    title: "Cawco",
     body: `<div class="ptitle"><h4>Workflows</h4><p>2 workflows · 1 run going</p></div>${wfPhoneList()}
       <p class="label">Runs</p><div class="pcard">${[
-        ["running", "Run 12", "4m ago · 3 of 5 · needs you"],
-        ["done", "Run 11", "Tue 05:12 · delivered · 9m"],
+        ["running", "Run 7", "4m ago · 3 of 5 · needs you"],
+        ["done", "Run 6", "Oct 21 · delivered · 9m"],
       ]
         .map(
           ([s, t, m]) =>
@@ -181,15 +182,15 @@ const runPhone = () => [
         .join("")}</div>`,
   }),
   phone({
-    title: "Run 12",
+    title: "Run 7",
     back: true,
-    body: `<div class="ptitle"><h4>Release 2.4 · run 12</h4><p class="num">Working · 4m · 3 of 5 · $0.41</p></div>${runRows()}`,
+    body: `<div class="ptitle"><h4>Reply shortlist · run 7</h4><p class="num">Working · 4m · 3 of 5 · $0.41</p></div>${runRows()}`,
     foot: btn("Stop run", { icon: "stop" }),
   }),
 ];
 
 const doneWhen = () =>
-  `<div class="card checks"><div class="check">${ic("checks", "g-idle")}<span class="t">Step 5 · Run the smoke test: done when 0 failed</span><span class="marks" role="img" aria-label="9 passed of 10"><i></i><i></i><i class="f"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="s">9 of 10</span><span class="scope">Scored on that step’s report alone</span></div></div>`;
+  `<div class="card checks"><div class="check">${ic("checks", "g-idle")}<span class="t">Step 5 · Measure posts after 48 hours: done when each kept reply has its numbers</span><span class="marks" role="img" aria-label="5 passed of 6"><i></i><i></i><i class="f"></i><i></i><i></i><i></i></span><span class="s">5 of 6</span><span class="scope">Scored on that step’s report alone</span></div></div>`;
 
 const evalDesk = () =>
   desk({
@@ -198,12 +199,12 @@ const evalDesk = () =>
         ${block({ icon: "checks", title: "Checks", count: "3", acts: btn("Add a check", { size: "sm", icon: "plus" }), body: checksList() })}
         ${block({ icon: "checks", title: "Step checks", count: "1", body: doneWhen() })}
       </div>
-      ${block({ icon: "runs", title: "Runs", count: "12", body: runsLedger() })}`,
+      ${block({ icon: "runs", title: "Runs", count: "7", body: runsLedger() })}`,
   });
 
 const evalPhone = () => [
   phone({
-    title: "Release 2.4",
+    title: "Reply shortlist",
     back: true,
     body: `<div class="ptitle"><h4>Checks</h4><p>The run’s, and one step’s</p></div>${checksList()}${doneWhen()}`,
   }),
@@ -217,7 +218,7 @@ const deleteDesk = () =>
 
 const deletePhone = () => [
   phone({
-    title: "Release app",
+    title: "Cawco",
     body: `<div class="ptitle"><h4>Workflows</h4><p>2 workflows</p></div>${wfPhoneList()}${deleteAsk()}`,
   }),
 ];
@@ -249,7 +250,7 @@ export const B = {
     run: {
       desk: runDesk,
       phones: runPhone,
-      note: "Run 12 is the same ledger, lit. Press the asking row: its question folds and unfolds in place.",
+      note: "Run 7 is the same ledger, lit. Press the asking row: its question folds and unfolds in place.",
     },
     evaluate: {
       desk: evalDesk,

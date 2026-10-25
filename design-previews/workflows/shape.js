@@ -4,7 +4,7 @@
  * reads the steps off the numbered brief; B's Shape toggle, C's canvas and
  * the lit runs draw the same layout.
  */
-import { esc, glyph, ic, KIND, RUN12, STEPS } from "./parts.js";
+import { esc, glyph, ic, KIND, RUN, STEPS } from "./parts.js";
 
 const NUMBERED = /^\s*(\d+)\.\s+(.*)$/;
 const WHO = /\(([a-z-]+)\)/i;
@@ -12,7 +12,7 @@ const WITH = /\bwith (\d+)\b/i;
 const IF = /^if\b([^,]*),\s*(.*)$/i;
 const POST = /^(post|call|send)\b/i;
 const ASK = /^ask me\b/i;
-const CHANNEL = /#[a-z0-9-]+/i;
+const CONNECTION = /^(?:post|call|send)\s+(?:to\s+)?([a-z0-9-]+)/i;
 
 const WITH_WORDS = /,?\s*with \d+/i;
 const SPACE_DOT = /\s+\./g;
@@ -58,7 +58,7 @@ export function parseBrief(text) {
       n,
       title: title.charAt(0).toUpperCase() + title.slice(1),
       kind,
-      who: kind === "call" ? (CHANNEL.exec(body)?.[0] ?? "slack-brand") : who,
+      who: kind === "call" ? (CONNECTION.exec(body)?.[1] ?? "") : who,
       with: withN,
       cond,
       unparsed: kind === "",
@@ -95,7 +95,7 @@ const NODE_H = 50;
 const PITCH = 70;
 const TOP = 34;
 
-const stateOf = (s, lit) => (lit ? (RUN12[s.n]?.state ?? "planned") : "");
+const stateOf = (s, lit) => (lit ? (RUN[s.n]?.state ?? "planned") : "");
 
 const nodeMark = (s, lit) => {
   if (s.kind === "start") {
@@ -117,7 +117,7 @@ const nodeMeta = (s) => {
 
 /**
  * The shape drawn: nodes placed by percent across, edges in an SVG on the
- * same grid. `lit` draws run 12's states; `sel` marks one node chosen.
+ * same grid. `lit` draws run 7's states; `sel` marks one node chosen.
  */
 export function shapeView(
   steps,
@@ -199,25 +199,25 @@ export function shapeView(
   return `<div class="shape" data-shape style="--node-w:${w}px;block-size:${height}px"><span class="shape-cap">${caption}</span><svg class="edges" viewBox="0 0 100 ${height}" preserveAspectRatio="none" aria-hidden="true">${paths}</svg>${nodes}${tagHtml}${extraTag}</div>`;
 }
 
-export const BRIEF = `Release {{version}} from main.
-1. Draft the release notes (writer).
-2. Check the changelog links (checker), with 1.
-3. Post the notes to Slack #releases.
-4. Ask me which channel.
-5. If I say beta, run the smoke test (runner).`;
+export const BRIEF = `Build today’s reply shortlist for @{{account}}. You publish nothing.
+1. Find 8–12 posts from the last 24 hours (research).
+2. Read @cawcodev’s recent posts (low), with 1.
+3. Call x-use get_tweet on each post.
+4. Ask me which replies to keep.
+5. If I keep any, measure them after 48 hours (low).`;
 
 export const BRIEF_SLIPPED = `${BRIEF}
-6. Tell QA if it slipped.`;
+6. Tell me if fewer than 8 turn up.`;
 
 export const READ_STEPS = parseBrief(BRIEF);
 
-/** STEPS as the shape reads them: the release workflow's own steps. */
+/** STEPS as the shape reads them: the reply shortlist's own steps. */
 export const PLAN = STEPS.map((s) => ({
   n: s.n,
   title: s.short,
   kind: s.kind,
   who: s.who,
   with: s.n === 2 ? 1 : 0,
-  cond: s.n === 5 ? "if beta" : "",
+  cond: s.n === 5 ? "if any kept" : "",
   unparsed: false,
 }));

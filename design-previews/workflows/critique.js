@@ -31,11 +31,11 @@ export const CRITIQUE = {
         fixed: false,
       },
       {
-        text: "P1 error prevention: the grammar fails silently. “If I say beta” parses; “when it’s beta” does not, and the shape only drops a branch.",
+        text: "P1 error prevention: the grammar fails silently. “If I keep any” parses; “when I keep some” does not, and the shape only drops a branch.",
         fixed: false,
       },
       {
-        text: "P2 recognition over recall: (writer), “with 1”, Post, Ask me and If are words he must remember; on a phone he types them.",
+        text: "P2 recognition over recall: (research), “with 1”, Call, Ask me and If are words he must remember; on a phone he types them.",
         fixed: false,
       },
       {
@@ -61,7 +61,7 @@ export const CRITIQUE = {
   B: {
     craft: [
       {
-        text: "Strength: the editor and the run are one picture. The same five rows go from planned glyphs to lit ones; run 12 needs nothing new to learn.",
+        text: "Strength: the editor and the run are one picture. The same five rows go from planned glyphs to lit ones; run 7 needs nothing new to learn.",
         fixed: true,
       },
       {
@@ -83,7 +83,7 @@ export const CRITIQUE = {
         fixed: false,
       },
       {
-        text: "P2 recovery: run 10 failed at the smoke test, but its Retry from the failed step is not drawn in these screens.",
+        text: "P2 recovery: run 5 failed on Oct 18, but its Retry from the failed step is not drawn in these screens.",
         fixed: false,
       },
       {
@@ -129,7 +129,7 @@ export const CRITIQUE = {
         fixed: true,
       },
       {
-        text: "Was: the pinned check wore the done status pair at 10 of 11. Now a neutral tag; status colour stays for status.",
+        text: "Was: the pinned check wore the done status pair at 5 of 6. Now a neutral tag; status colour stays for status.",
         fixed: true,
       },
     ],

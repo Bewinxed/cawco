@@ -125,7 +125,7 @@ export function redraw(host, html) {
 
 /* -------------------------------------------------- option A: the brief */
 
-const EXTRA_LINE = "\n6. Tell QA when it ships (writer).";
+const EXTRA_LINE = "\n6. Draft up to 3 DMs (low).";
 
 export function wireBrief(stage) {
   const area = stage.querySelector("[data-brief]");
@@ -171,7 +171,7 @@ export function addStep(stage) {
   row.className = "step";
   row.dataset.newStep = "";
   row.style.overflow = "clip";
-  row.innerHTML = `<span class="grip">${ic("grip")}</span><span class="g-idle">${ic("planned")}</span><span class="title"><span class="field focus" style="min-block-size:28px"><span class="ph">What this step does…</span></span></span><span class="kind">${ic("agent")}Agent</span><span class="col">writer</span><span class="chips"><span class="chip">5</span></span><span></span>`;
+  row.innerHTML = `<span class="grip">${ic("grip")}</span><span class="g-idle">${ic("planned")}</span><span class="title"><span class="field focus" style="min-block-size:28px"><span class="ph">What this step does…</span></span></span><span class="kind">${ic("agent")}Agent</span><span class="col">low</span><span class="chips"><span class="chip">5</span></span><span></span>`;
   ghost.before(row);
   const h = row.offsetHeight;
   const frames = motionOk()

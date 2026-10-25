@@ -7,6 +7,20 @@
 /* biome-ignore-all lint/style/noDescendingSpecificity: each component nests its own parts (.t, .ic, .meta) under its own class, so a later component's part never overrides an earlier one's; the order is by component, not by specificity */
 @layer theme, base, page, kit, mock, motion;
 
+/* The edge fade's lengths, registered so its scroll-driven animation
+   interpolates them (apps/dashboard/src/edge-fade.css). */
+@property --fade-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --fade-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
 @font-face {
   font-display: swap;
   font-family: "Figtree Variable";
@@ -1057,29 +1071,109 @@
     overflow: clip;
   }
 
+  /* The project's head: one row (The Title Bars Follow Liquid Glass Rule). Its
+     name leads; the machine, drawn as a place, and the worded acts trail, each
+     group one capsule of glass. No ground, hairline or facts line of its own. */
   .phead {
     display: block flex;
     gap: var(--space-4);
     align-items: center;
     justify-content: space-between;
-    min-block-size: 72px;
+    min-block-size: var(--c-top-bar-h, 44px);
     padding-block-start: var(--space-3);
   }
 
   .phead-title {
     display: block flex;
+    flex: 0 1 auto;
     gap: var(--space-3);
     align-items: center;
     min-inline-size: 0;
+    margin-inline-end: var(--space-3);
+    font: var(--type-title);
+    letter-spacing: -0.01em;
+  }
 
-    h3 {
-      font: var(--type-title);
-      letter-spacing: -0.01em;
+  .phead-end {
+    display: block flex;
+    flex: none;
+    gap: var(--space-2);
+    align-items: center;
+  }
+
+  /* One capsule of the panel's glass (DESIGN.md, Top bar's trailing edge):
+     the material, a hairline and the tile shadow, its items borderless,
+     4px in and 4px apart, concentric with it. */
+  .glass {
+    display: inline flex;
+    flex: none;
+    gap: var(--c-bar-group-pad, 4px);
+    align-items: center;
+    block-size: var(--c-btn-h);
+    padding: var(--c-bar-group-pad, 4px);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-pill);
+    background: var(--material-panel);
+    box-shadow: var(--shadow-tile);
+    backdrop-filter: blur(var(--material-blur)) saturate(var(--material-saturate));
+
+    @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+      border-color: var(--border-contrast);
+      background: var(--surface-raised);
+      backdrop-filter: none;
+    }
+  }
+
+  .gi {
+    display: inline flex;
+    gap: var(--space-1);
+    align-items: center;
+    justify-content: center;
+    min-inline-size: var(--c-bar-item, 28px);
+    block-size: var(--c-bar-item, 28px);
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--ink-muted);
+    font: var(--type-label);
+    white-space: nowrap;
+    transition: background-color var(--dur-control) var(--ease-out);
+
+    > .ic {
+      inline-size: var(--c-bar-symbol, 20px);
+      block-size: var(--c-bar-symbol, 20px);
     }
 
-    p {
+    &.words {
+      padding-inline: var(--space-3);
+      color: var(--ink-strong);
+    }
+
+    @media (hover: hover) {
+      &:is(button):hover {
+        background: var(--surface-hover);
+      }
+    }
+
+    &:is(button):active {
+      background: var(--surface-pressed);
+    }
+  }
+
+  /* A machine drawn as a place: its OS mark, then its name. */
+  .place {
+    display: inline flex;
+    gap: var(--space-1);
+    align-items: center;
+    min-inline-size: 0;
+    color: var(--ink-strong);
+
+    .ic {
+      flex: none;
+      inline-size: var(--icon-md);
+      block-size: var(--icon-md);
       color: var(--ink-muted);
-      font: var(--type-meta);
     }
   }
 
@@ -1393,28 +1487,33 @@
     background: var(--surface-raised);
   }
 
+  /* The Split's head: one row, the view's short name leading and one glass
+     group of bare symbols trailing, Close last; no ground or hairline. What
+     the run is doing is the body's first line (.facts). */
   .split-head {
-    display: block grid;
-    gap: var(--space-2);
-    padding: var(--space-3) var(--space-4);
-    border-block-end: 1px solid var(--border-hairline);
-
-    .row1 {
-      display: block flex;
-      gap: var(--space-2);
-      align-items: center;
-    }
+    display: block flex;
+    gap: var(--space-3);
+    align-items: center;
+    min-block-size: var(--c-top-bar-h, 44px);
+    padding: var(--space-2) var(--space-4);
 
     h4 {
       flex: 1 1 auto;
       min-inline-size: 0;
+      margin-inline-end: var(--space-3);
       font: var(--type-label);
     }
 
-    .meta {
-      color: var(--ink-muted);
-      font: var(--type-meta);
+    .grow {
+      flex: 1 1 auto;
     }
+  }
+
+  .facts {
+    display: block flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    align-items: center;
   }
 
   .split-body {
@@ -1955,13 +2054,59 @@
     }
   }
 
+  /* The phone's page scrolls; while more stands past its foot (or above its
+     top) that edge fades out, the house edge fade at the phone's length
+     (apps/dashboard/src/edge-fade.css, kit-edge-fade-block). Its parts keep
+     their own height, so nothing is squeezed and cut. */
   .pbody {
+    --fade-len: var(--c-edge-fade-len-phone);
+
     display: block flex;
     flex-direction: column;
     gap: var(--space-4);
     min-block-size: 0;
     padding: var(--space-4) var(--space-5) var(--space-5);
-    overflow: clip;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+    isolation: isolate;
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      #000 var(--fade-start),
+      #000 calc(100% - var(--fade-end)),
+      transparent
+    );
+    animation-name: pbody-fade-start, pbody-fade-end;
+    animation-duration: auto;
+    animation-timing-function: linear;
+    animation-fill-mode: both;
+    animation-range:
+      0% 6%,
+      94% 100%;
+    animation-timeline: scroll(self block);
+
+    > * {
+      flex: none;
+    }
+  }
+
+  @keyframes pbody-fade-start {
+    from {
+      --fade-start: 0px;
+    }
+    to {
+      --fade-start: var(--fade-len);
+    }
+  }
+
+  @keyframes pbody-fade-end {
+    from {
+      --fade-end: var(--fade-len);
+    }
+    to {
+      --fade-end: 0px;
+    }
   }
 
   .pfoot {

@@ -10,6 +10,7 @@ import {
   ic,
   kind,
   phone,
+  STEPS,
   seg,
 } from "./parts.js";
 import { PLAN, shapeView } from "./shape.js";
@@ -17,9 +18,9 @@ import { PLAN, shapeView } from "./shape.js";
 export const C_START = [
   {
     n: 1,
-    title: "Draft notes",
+    title: "Find posts",
     kind: "agent",
-    who: "writer",
+    who: "research",
     with: 0,
     cond: "",
     unparsed: false,
@@ -29,9 +30,9 @@ export const C_GROWN = [
   ...C_START,
   {
     n: 2,
-    title: "Check links",
+    title: "Read our posts",
     kind: "agent",
-    who: "checker",
+    who: "low",
     with: 1,
     cond: "",
     unparsed: false,
@@ -50,7 +51,7 @@ const tray = () =>
     .join("")}</div>`;
 
 const head = (state = "Draft") =>
-  `<div class="row-wrap" style="justify-content:space-between"><span class="row">${ic("workflow")}<span class="label">Release 2.4</span>${badge(`v3 · ${state}`)}</span><span class="acts">${btn("Run now", { size: "sm", icon: "play" })}${btn("Publish", { v: "primary", size: "sm" })}</span></div>`;
+  `<div class="row-wrap" style="justify-content:space-between"><span class="row">${ic("workflow")}<span class="label">Reply shortlist</span>${badge(`v3 · ${state}`)}</span><span class="acts">${btn("Run now", { size: "sm", icon: "play" })}${btn("Publish", { v: "primary", size: "sm" })}</span></div>`;
 
 const surface = (canvas, side, h = 640) =>
   `<div class="card" style="display:grid;grid-template-columns:minmax(0,1fr) 272px;block-size:${h}px">${canvas}${side}</div>`;
@@ -60,20 +61,20 @@ const edgeMenu =
   <span class="mi hot" role="menuitem">${ic("arrow")}<span>Fixed: always next</span><span></span></span>
   <span class="mi" role="menuitem">${ic("sparkles")}<span>The orchestrator decides…</span><span></span></span>
   <span class="msep" role="separator"></span>
-  <span class="meta" style="padding:var(--space-1) var(--space-2)">“Decides” takes a sentence: when the channel is beta.</span>
+  <span class="meta" style="padding:var(--space-1) var(--space-2)">“Decides” takes a sentence: when you keep any.</span>
 </div>`;
 
 export const inspectorFor = (n) => {
   if (n === 4) {
-    return `<h5>Which channel?</h5><span class="lbl">Ask me · after Post to Slack</span>${askTile()}`;
+    return `<h5>Which replies?</h5><span class="lbl">Ask me · after Read via x-use</span>${askTile()}`;
   }
   if (n === 1) {
-    return `<h5>Draft notes</h5><span class="lbl">Agent · writer</span><span class="field">${ic("user")}<span class="grow">writer</span>${ic("sort")}</span><span class="lbl">Brief</span><div class="argwell" style="font:var(--type-body)">Draft the notes for {{version}} from the PRs merged since the last tag.</div><span class="lbl">Budget</span><span class="row"><span class="meter" style="--v:40%"><i></i></span><span class="meta num">$2 · 30 min</span></span>`;
+    return `<h5>Find posts</h5><span class="lbl">Agent · research</span><span class="field">${ic("user")}<span class="grow">research</span>${ic("sort")}</span><span class="lbl">Brief</span><div class="argwell" style="font:var(--type-body)">${STEPS[0].brief}</div><span class="lbl">Budget</span><span class="row"><span class="meter" style="--v:40%"><i></i></span><span class="meta num">$2 · 30 min</span></span>`;
   }
-  return `<h5>Post to Slack</h5><span class="lbl">Call · after Draft notes, Check links</span>
-    <span class="lbl">Connection</span><span class="field">${ic("link")}<span class="grow">slack-brand</span>${ic("sort")}</span>
-    <span class="lbl">Tool</span><code>post</code>
-    <span class="lbl">Arguments</span><div class="argwell">{ <span class="k">"text"</span>: <span class="s">"{{notes}}"</span> }</div>
+  return `<h5>Read via x-use</h5><span class="lbl">Call · after Find posts, Read our posts</span>
+    <span class="lbl">Connection</span><span class="field">${ic("link")}<span class="grow">x-use</span>${ic("sort")}</span>
+    <span class="lbl">Tool</span><code>get_tweet</code>
+    <span class="lbl">Arguments</span><div class="argwell">{ <span class="k">"id"</span>: <span class="s">"{{post}}"</span> }</div>
     <span class="lbl">Approve</span>${seg(
       [
         { value: "start", label: "At start" },
@@ -91,7 +92,7 @@ const createDesk = () =>
   desk({
     pane: `${head()}${surface(
       `<div class="canvas" data-canvas-host>${shapeView(C_START, { start: true, caption: "New workflow · drag a node from the tray", w: 160 })}${edgeMenu()}${tray()}</div>`,
-      `<aside class="inspector" aria-label="Inspector"><h5>Draft notes</h5><span class="lbl">Agent</span><span class="field">${ic("user")}<span class="grow">writer</span>${ic("sort")}</span><span class="lbl">Brief</span><span class="field"><span class="ph">What this agent does…</span></span><p class="meta">From a past run: Keep as workflow lays the finished tree out here, every edge fixed.</p></aside>`
+      `<aside class="inspector" aria-label="Inspector"><h5>Find posts</h5><span class="lbl">Agent</span><span class="field">${ic("user")}<span class="grow">research</span>${ic("sort")}</span><span class="lbl">Brief</span><span class="field"><span class="ph">What this agent does…</span></span><p class="meta">From a past run: Keep as workflow lays the finished tree out here, every edge fixed.</p></aside>`
     )}`,
   });
 
@@ -112,18 +113,18 @@ const createPhone = () => [
 ];
 
 const canvasSel = (sel, lit = false) =>
-  `<div class="canvas" data-canvas-pick>${shapeView(PLAN, { start: true, sel, lit, caption: lit ? "Run 12 on the canvas" : "Click a node", w: 164 })}${lit ? "" : tray()}</div>`;
+  `<div class="canvas" data-canvas-pick>${shapeView(PLAN, { start: true, sel, lit, caption: lit ? "Run 7 on the canvas" : "Click a node", w: 164 })}${lit ? "" : tray()}</div>`;
 
 const editDesk = () =>
   desk({ pane: `${head()}${surface(canvasSel(3), inspector(3))}` });
 
 const readOnlyPhone = (lit) =>
   phone({
-    title: lit ? "Run 12" : "Release 2.4",
+    title: lit ? "Run 7" : "Reply shortlist",
     back: true,
-    body: `<div class="ptitle"><h4>${lit ? "Release 2.4 · run 12" : "Release 2.4"}</h4><p>${lit ? "Working · 4m · 3 of 5" : "v3 · read-only here · edit on a desk"}</p></div>
+    body: `<div class="ptitle"><h4>${lit ? "Reply shortlist · run 7" : "Reply shortlist"}</h4><p>${lit ? "Working · 4m · 3 of 5" : "v3 · read-only here · edit on a desk"}</p></div>
       ${shapeView(PLAN, { start: true, lit, sel: lit ? 4 : 3, caption: lit ? "Tap a node" : "Read-only", w: 120 })}
-      <div class="pcard">${lit ? askTile({ chosen: "beta" }) : inspectorFor(3)}</div>`,
+      <div class="pcard">${lit ? askTile({ chosen: "all" }) : inspectorFor(3)}</div>`,
     foot: lit
       ? btn("Stop run", { icon: "stop" })
       : `${btn("Steps", { icon: "ledger" })}${btn("Run now", { v: "primary", icon: "play" })}`,
@@ -133,7 +134,7 @@ const editPhone = () => [readOnlyPhone(false)];
 
 const runDesk = () =>
   desk({
-    pane: `<div class="row-wrap" style="justify-content:space-between"><span class="row">${glyph("running")}<span class="label">Release 2.4 · run 12</span><span class="meta num">v3 · 3 of 5 · 4m · $0.41</span></span><span class="acts">${btn("Stop run", { size: "sm", icon: "stop" })}${btn("Back to the editor", { v: "ghost", size: "sm" })}</span></div>
+    pane: `<div class="row-wrap" style="justify-content:space-between"><span class="row">${glyph("running")}<span class="label">Reply shortlist · run 7</span><span class="meta num">v3 · 3 of 5 · 4m · $0.41</span></span><span class="acts">${btn("Stop run", { size: "sm", icon: "stop" })}${btn("Back to the editor", { v: "ghost", size: "sm" })}</span></div>
       ${surface(canvasSel(4, true), inspector(4), 700)}`,
   });
 
@@ -147,15 +148,15 @@ const evalDesk = () =>
         sel: 3,
         caption: "Checks pinned to nodes",
         w: 164,
-        extraTag: `<span class="edge-tag" style="left:50%;top:199px;translate:96px -50%;border:1px solid var(--border-control);background:var(--surface-raised)">${ic("checks", "sm")} carries the version · 10 of 11</span>`,
+        extraTag: `<span class="edge-tag" style="left:50%;top:199px;translate:96px -50%;border:1px solid var(--border-control);background:var(--surface-raised)">${ic("checks", "sm")} nothing posted · 5 of 6</span>`,
       })}</div>`,
-      `<aside class="inspector" aria-label="Checks"><h5>Checks</h5><span class="lbl">The run’s, and one pinned to Post to Slack</span>${checksList({ scope: true })}${btn("Add a check", { size: "sm", icon: "plus" })}</aside>`
+      `<aside class="inspector" aria-label="Checks"><h5>Checks</h5><span class="lbl">The run’s, and one pinned to Read via x-use</span>${checksList({ scope: true })}${btn("Add a check", { size: "sm", icon: "plus" })}</aside>`
     )}`,
   });
 
 const evalPhone = () => [
   phone({
-    title: "Release 2.4",
+    title: "Reply shortlist",
     back: true,
     body: `<div class="ptitle"><h4>Checks</h4><p>One is pinned to a node</p></div>${checksList({ scope: true })}`,
   }),
@@ -166,9 +167,9 @@ const versions =
   <p class="meta">Save makes a draft to try. Publish makes it the version every run starts.</p>
   <div class="pcard" style="padding-block:0">${[
     ["pen", "Draft", "edited 2m ago · not run", ""],
-    ["done", "v3", "Live · published Tue · 6 runs", "Live"],
-    ["runs", "v2", "Oct 12 · 4 runs", ""],
-    ["runs", "v1", "Oct 3 · 2 runs", ""],
+    ["done", "v3", "Live · published Oct 21 · 2 runs", "Live"],
+    ["runs", "v2", "Oct 17 · 3 runs", ""],
+    ["runs", "v1", "Oct 15 · 2 runs", ""],
   ]
     .map(
       ([i, t, m, b]) =>
@@ -185,7 +186,7 @@ const deleteDesk = () =>
 
 const deletePhone = () => [
   phone({
-    title: "Release 2.4",
+    title: "Reply shortlist",
     back: true,
     body: `<div class="ptitle"><h4>Versions</h4><p>Draft, then published</p></div>${versions()}`,
   }),

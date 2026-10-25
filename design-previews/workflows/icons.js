@@ -1,7 +1,8 @@
 /*
  * Solar bold-duotone glyphs (linear for chevrons and arrows) and the dashboard's local Close, Plus, Tick and Minus,
  * copied from @iconify-json/solar 1.2.13 and apps/dashboard/src/lib/components/icons for this static preview.
- * Every one is drawn on a 24px grid in currentColor (DESIGN.md, The Solar Duotone Rule).
+ * Every one is drawn on a 24px grid in currentColor (DESIGN.md, The Solar Duotone Rule). `tux` is the
+ * dashboard's Linux mark (OsMark.svelte, a 16px grid) scaled onto the 24px one.
  */
 export const ICONS = {
   working:
@@ -100,4 +101,5 @@ export const ICONS = {
   moon: '<g fill="currentColor"><path fill-rule="evenodd" d="M22 12.0004C22 17.5232 17.5228 22.0004 12 22.0004C10.8358 22.0004 9.71801 21.8014 8.67887 21.4357C8.24138 20.3772 8 19.217 8 18.0004C8 15.7792 8.80467 13.7459 10.1384 12.1762C11.31 13.8818 13.2744 15.0004 15.5 15.0004C17.8615 15.0004 19.9289 13.741 21.0672 11.8572C21.3065 11.4612 22 11.5377 22 12.0004Z" clip-rule="evenodd" opacity=".5"/><path d="M2 12C2 16.3586 4.78852 20.0659 8.67887 21.4353C8.24138 20.3768 8 19.2166 8 18C8 15.7788 8.80467 13.7455 10.1384 12.1758C9.42027 11.1303 9 9.86422 9 8.5C9 6.13845 10.2594 4.07105 12.1432 2.93276C12.5392 2.69347 12.4627 2 12 2C6.47715 2 2 6.47715 2 12Z"/></g>',
   sidebar:
     '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.5"><path d="M2 11C2 7.22876 2 5.34315 3.17157 4.17157C4.34315 3 6.22876 3 10 3H14C17.7712 3 19.6569 3 20.8284 4.17157C22 5.34315 22 7.22876 22 11V13C22 16.7712 22 18.6569 20.8284 19.8284C19.6569 21 17.7712 21 14 21H10C6.22876 21 4.34315 21 3.17157 19.8284C2 18.6569 2 16.7712 2 13V11Z"/><path d="M15 21L15 3" opacity=".5"/></g>',
+  tux: '<path fill="currentColor" transform="scale(1.5)" d="M1.8 14.6a2.4 1.25 0 0 1 4.8 0 2.4 1.25 0 0 1-4.8 0ZM9.4 14.6a2.4 1.25 0 0 1 4.8 0 2.4 1.25 0 0 1-4.8 0ZM2.57 7.13a3.1 1.35 82 0 1 .86 6.14 3.1 1.35 82 0 1-.86-6.14ZM13.43 7.13a3.1 1.35 98 0 1 -.86 6.14 3.1 1.35 98 0 1 .86-6.14ZM3.1 9.9a4.9 5.1 0 0 1 9.8 0 4.9 5.1 0 0 1-9.8 0ZM4.7 4.1a3.3 3.4 0 0 1 6.6 0 3.3 3.4 0 0 1-6.6 0ZM5.55 3.9a.9 1.1 0 0 0 1.8 0 .9 1.1 0 0 0-1.8 0ZM8.65 3.9a.9 1.1 0 0 0 1.8 0 .9 1.1 0 0 0-1.8 0ZM8 5.6 6.6 7h2.8Z"/>',
 };

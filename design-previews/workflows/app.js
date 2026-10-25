@@ -92,13 +92,13 @@ const SHORT = { A: "Brief", B: "Ledger", C: "Canvas", D: "Keep" };
 
 const folder =
   () => `<div class="argwell" style="font:var(--type-code);line-height:1.9">
-  <div>${ic("folder", "sm")} Release app/</div>
+  <div>${ic("folder", "sm")} Cawco/</div>
   <div style="padding-inline-start:2ch">${ic("folder", "sm")} workflows/</div>
-  <div style="padding-inline-start:4ch">${ic("folder", "sm")} release-2-4/</div>
+  <div style="padding-inline-start:4ch">${ic("folder", "sm")} reply-shortlist/</div>
   <div style="padding-inline-start:6ch">workflow.md <span class="g-idle">· the orchestrator’s brief</span></div>
   <div style="padding-inline-start:6ch">steps.json <span class="g-idle">· each step and what it waits for</span></div>
   <div style="padding-inline-start:6ch">checks.json <span class="g-idle">· what a judge scores</span></div>
-  <div style="padding-inline-start:6ch">runs/12/ <span class="g-idle">· one folder per run</span></div>
+  <div style="padding-inline-start:6ch">runs/7/ <span class="g-idle">· one folder per run</span></div>
   <div style="padding-inline-start:2ch">${ic("folder", "sm")} decisions/ <span class="g-idle">· as today</span></div>
 </div>`;
 
@@ -118,17 +118,17 @@ const lives = () => `<section class="pv-section pv-col" aria-labelledby="lives">
     ${reach(
       "monitor",
       "On a desk: a tab of its own",
-      `<div class="bar" style="border-radius:var(--radius-md);overflow:clip"><nav class="strip">${["Board", "Table", "Routines", "Workflows", "Decisions"].map((v) => `<span class="tab${v === "Workflows" ? " on" : ""}">${v}</span>`).join("")}</nav></div><code>/project/release-app?view=workflows</code>`,
+      `<div class="bar" style="border-radius:var(--radius-md);overflow:clip"><nav class="strip">${["Board", "Table", "Routines", "Workflows", "Decisions"].map((v) => `<span class="tab${v === "Workflows" ? " on" : ""}">${v}</span>`).join("")}</nav></div><code>/project/cawco?view=workflows</code>`,
       "Between Routines and Decisions. Three blocks: Workflows, Runs, Checks. A workflow opens in place under its row; a run opens as its tree in the Split beside the view."
     )}
     ${reach(
       "workflow",
       "In the rail and the home lists",
       `<div class="tree">${[
-        [0, "workflow", "Workflow · Release 2.4 · run 12", "4m", "attn"],
-        [1, "done", "Draft the release notes", "3m", ""],
-        [1, "done", "Check the changelog links", "3m", ""],
-        [1, "needs", "Which channel does 2.4 ship to?", "1m", ""],
+        [0, "workflow", "Workflow · Reply shortlist · run 7", "4m", "attn"],
+        [1, "done", "Find 8–12 posts from the last 24 hours", "3m", ""],
+        [1, "done", "Read @cawcodev’s recent posts", "3m", ""],
+        [1, "needs", "Which replies do you keep?", "1m", ""],
       ]
         .map(
           ([d, i, t, a, dot]) =>
@@ -154,7 +154,7 @@ const lives = () => `<section class="pv-section pv-col" aria-labelledby="lives">
         ],
         "workflow",
         "Each run starts"
-      )}<span class="field">${ic("workflow")}<span class="grow">Release 2.4</span>${ic("sort")}</span></div>`,
+      )}<span class="field">${ic("workflow")}<span class="grow">Reply shortlist</span>${ic("sort")}</span></div>`,
       "The routine form’s third choice. A relay event can start one the same way, through a routine on that relay."
     )}
     ${reach(
@@ -475,7 +475,7 @@ function page() {
   root.innerHTML = `<header class="pv-col pv-head">
       <div><p class="pv-mark"><span class="wordmark">Caw&amp;Co</span><span>· design preview</span></p>
       <h1 class="pv-title">Workflows: four ways to make one</h1>
-      <p class="pv-lede">“A Workflows feature where you create, edit, design and visualise, delete, run and see the runs of, and evaluate workflows. Routines are not part of it. It runs on the delegation tree.” Each option is drawn at Desk 1440 and Phone 390, for every one of those jobs, on the release workflow below.</p></div>
+      <p class="pv-lede">“A Workflows feature where you create, edit, design and visualise, delete, run and see the runs of, and evaluate workflows. Routines are not part of it. It runs on the delegation tree.” Each option is drawn at Desk 1440 and Phone 390, for every one of those jobs, on one workflow made of his own work: the Cawco project’s routine “Daily reply shortlist for X”, through x-use, as five steps.</p></div>
       ${seg(
         [
           { value: "light", label: "Day", icon: "sun" },
