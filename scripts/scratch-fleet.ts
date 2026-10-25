@@ -961,8 +961,13 @@ const workspaceFleetDir = async (id: string): Promise<string | undefined> => {
  * 35 bytes), which goes with the workspace when it is archived, so no fleet
  * a SIGKILL cut short outlives it: the sandbox at the dir's real path, and
  * the services' HOME and runtime dirs two hex under TMPDIR as named (on
- * macOS a short link to it, for sockets' sake). Elsewhere both are under the
- * cache root (`~/.cache`, 22 bytes).
+ * macOS a short link to it, for sockets' sake). Elsewhere both are under
+ * `~/.fleets` (22 bytes), never `~/.cache`: tools read a path with a
+ * `.cache` folder in it as generated and leave it alone, as impeccable's
+ * hook skips every file under one ("skipped":"generated", its
+ * `GENERATED_PATH_RE` `[/\\](?:dist|build|out|\.next|\.cache|coverage)[/\\]`,
+ * crates/hook/src/hook_lib.rs), so a delegate's project there is not one a
+ * person's could be.
  *
  * On macOS a workspace's fleet keeps its sandbox and its services' HOMEs in
  * the workspace's fleet folder instead ({@link workspaceFleetDir}), which
@@ -978,9 +983,11 @@ async function fleetRoots(): Promise<{
   const workspace = process.env.CAWCO_WORKSPACE;
   const workspaceTmp =
     workspace && process.env.TMPDIR ? process.env.TMPDIR : undefined;
-  const cache =
-    process.env.XDG_CACHE_HOME ?? join(process.env.HOME ?? "/tmp", ".cache");
-  const short = workspaceTmp ?? cache;
+  const fleets = join(process.env.HOME ?? "/tmp", ".fleets");
+  if (!workspaceTmp) {
+    await mkdir(fleets, { recursive: true, mode: 0o700 });
+  }
+  const short = workspaceTmp ?? fleets;
   const fleet = workspaceTmp
     ? await workspaceFleetDir(workspace as string)
     : undefined;
@@ -990,7 +997,7 @@ async function fleetRoots(): Promise<{
     return { fleet: real, scratch: real, homes: real, short };
   }
   return {
-    scratch: workspaceTmp ? realpathSync(workspaceTmp) : cache,
+    scratch: workspaceTmp ? realpathSync(workspaceTmp) : fleets,
     homes: short,
     short,
   };
@@ -1362,21 +1369,6 @@ class FleetDirs {
  * of the same name removes them ({@link removeKept}).
  */
 const KEPT_FILE = ".kept.json";
-
-/**
- * {@link removeTree} where nothing can wait (an exit, a signal): a folder of
- * the tree its owner may not write (a delegate's Go module cache in its
- * TMPDIR, under a service HOME) is given back to its owner first, so the
- * fleet's folders go whole, read-only ones included.
- */
-const removeTreeSync = (dir: string): void => {
-  try {
-    rmSync(dir, { recursive: true, force: true });
-  } catch {
-    Bun.spawnSync(["chmod", "-R", "u+rwx", dir], { stderr: "ignore" });
-    rmSync(dir, { recursive: true, force: true });
-  }
-};
 
 /**
  * Removes the sandboxes earlier fleets named `name` kept for reading under

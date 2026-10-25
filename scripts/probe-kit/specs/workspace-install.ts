@@ -21,9 +21,9 @@
  * In each leg:
  *
  * - at its first command a clone's `node_modules` holds nothing: nothing
- *   installed at the cut (a Linux clone's bun `node_modules` is there
- *   already, an empty folder of its own in the cache it links to: agent
- *   workspace-modules.ts);
+ *   installed at the cut (on Linux a bun `node_modules` is there already, a
+ *   link to an empty folder of the workspace's own in the cache,
+ *   `modules/<workspace id>`: agent workspace-modules.ts);
  * - its own frozen install, run in its boundary, finishes;
  * - its packages link into the cache, as above;
  * - B adds under {@link SECOND_CLONE_LIMIT_KB} to the disk, counted by
@@ -31,6 +31,10 @@
  *   manager's cache and A's `node_modules` before B's install, against the
  *   cache, A's and B's after it. A copied install adds about 2 GB for this
  *   repository, about 115 MB for the pnpm project;
+ *
+ * A delegate's workspace retires once its turn ends with its item, its copy
+ * and its cache folder with it, so each delegate's last answer ("Done.") is
+ * held until the leg has read both copies ({@link gates}).
  * - (bun leg) neither boundary can list the other's clone: on the Mac its
  *   folder; on Linux, where both are views of the one folder at its own
  *   path (agent layer.ts), the other's writes on the host, its view's upper.
@@ -41,7 +45,7 @@
  */
 import { lstatSync } from "node:fs";
 import { readdir, realpath, writeFile } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import {
   copyPath,
@@ -110,7 +114,25 @@ const installCommand = (tag: Tag): string =>
 const listCommand = (tag: Tag, other: string): string =>
   `ls -A '${other.replaceAll("'", `'\\''`)}' 2>&1 | head -n 5; echo ${apart(`LISTED-${tag}:`)}\${PIPESTATUS[0]}`;
 
-const respond = (request: Seen): Reply => {
+/**
+ * Each delegate's last answer, held until the leg lets it go
+ * ({@link release}): its turn, and so its item, runs on until then, and its
+ * workspace with it, its copy and cache folder still there to read.
+ */
+const gates = new Map<Tag, PromiseWithResolvers<void>>();
+const gateOf = (tag: Tag): PromiseWithResolvers<void> => {
+  const gate = gates.get(tag) ?? Promise.withResolvers<void>();
+  gates.set(tag, gate);
+  return gate;
+};
+/** `tags`' delegates answer their last, and their turns end. */
+const release = (...tags: Tag[]): void => {
+  for (const tag of tags) {
+    gateOf(tag).resolve();
+  }
+};
+
+const respond = async (request: Seen): Promise<Reply> => {
   if (!request.tools) {
     return text("Probe title");
   }
@@ -133,6 +155,7 @@ const respond = (request: Seen): Reply => {
       timeout: 600_000,
     });
   }
+  await gateOf(tag).promise;
   return text("Done.");
 };
 
@@ -158,6 +181,12 @@ interface Leg {
   /** The manager's part of the workspaces' cache, counted with each clone's `node_modules`. */
   cache: string;
   linked: (fleet: Fleet, self: Delegated) => Promise<Linked>;
+  /**
+   * Linux, bun: the cache's folders each workspace's `node_modules` resolves
+   * into, `<cache>/modules/<workspace id>/node_modules` (agent
+   * workspace-modules.ts).
+   */
+  modulesIn?: string;
   name: string;
   tags: readonly [Tag, Tag];
 }
@@ -383,6 +412,21 @@ const installed = async (
     store.entries > 0 && store.linked / store.entries >= 0.9,
     `${store.linked} of ${store.entries} entries link into ${store.into}`
   );
+  if (leg.modulesIn) {
+    const [at = ""] = await realpathsInCopy(fleet, self, [
+      join(self.path, "node_modules"),
+    ]);
+    const own = join(
+      await realpath(leg.modulesIn).catch(() => leg.modulesIn as string),
+      self.id,
+      "node_modules"
+    );
+    kit.check(
+      `${tag}: its node_modules is a folder of its own in the workspaces' cache, named by its workspace, where bun hard-links what its global store cannot hold`,
+      at === own,
+      `${at || "unresolved"} (its own: ${own})`
+    );
+  }
   return exit === "0";
 };
 
@@ -395,18 +439,29 @@ const runLeg = async (
   repo: string
 ): Promise<[Delegated, Delegated]> => {
   const [tagA, tagB] = leg.tags;
+  // Both turns held open until both copies are read: A's copy, and its
+  // cache folder, go as A's workspace retires.
   const a = await delegate(fleet, parent, repo, tagA);
-  const aDone = await installed(kit, fleet, leg, tagA, a);
-  const aModules = await nodeModulesOf(ownWritesOf(fleet, a));
-  const before = await unique([leg.cache, ...aModules]);
+  let aDone: boolean;
+  let bDone: boolean;
+  let before: number;
+  let after: number;
+  let b: Delegated;
+  try {
+    aDone = await installed(kit, fleet, leg, tagA, a);
+    const aModules = await nodeModulesOf(ownWritesOf(fleet, a));
+    before = await unique([leg.cache, ...aModules]);
 
-  const b = await delegate(fleet, parent, repo, tagB);
-  const bDone = await installed(kit, fleet, leg, tagB, b);
-  const after = await unique([
-    leg.cache,
-    ...aModules,
-    ...(await nodeModulesOf(ownWritesOf(fleet, b))),
-  ]);
+    b = await delegate(fleet, parent, repo, tagB);
+    bDone = await installed(kit, fleet, leg, tagB, b);
+    after = await unique([
+      leg.cache,
+      ...aModules,
+      ...(await nodeModulesOf(ownWritesOf(fleet, b))),
+    ]);
+  } finally {
+    release(tagA, tagB);
+  }
   const added = after - before;
   // Both counts read (du answered), and B within the limit. A second clone
   // that reuses the whole store adds nothing, and the store itself may lose a
@@ -492,6 +547,9 @@ const run = async (kit: Kit) => {
     tags: ["A", "B"],
     cache,
     linked: bunStoreOf(join(cache, "bun", "links")),
+    ...(process.platform === "linux"
+      ? { modulesIn: join(cache, "modules") }
+      : {}),
   };
   const repo = await makeRepo(fleet);
   const [a, b] = await runLeg(
@@ -500,27 +558,6 @@ const run = async (kit: Kit) => {
     bunLeg,
     await parentOn(fleet, repo, "Workspace install"),
     repo
-  );
-
-  const cacheAt = await realpath(cache);
-  const modulesAt = await Promise.all(
-    [a, b].map((one) =>
-      realpath(join(one.path, "node_modules")).catch(() => "")
-    )
-  );
-  kit.check(
-    "bun: each clone's node_modules is a folder of its own in the workspaces' cache, where bun hard-links what its global store cannot hold",
-    modulesAt.every(
-      (at, index) =>
-        at ===
-        join(
-          cacheAt,
-          "modules",
-          basename([a, b][index]?.path ?? ""),
-          "node_modules"
-        )
-    ),
-    modulesAt.join("; ")
   );
 
   const pnpmStore = join(cache, "pnpm", "store");
