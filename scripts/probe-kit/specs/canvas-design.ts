@@ -3952,15 +3952,32 @@ async function graphLeg(
     read.tabs.length === 2 && read.tabs.every((one) => one.length > 0),
     read.tabs.join(" | ")
   );
+  // Machine names (the owner: "neither, the state machines are already namedin the grpah, stop adding redundant/useless copy"): no header band, and no element in the graph or the dock says the machine's name.
+  const machineSaid = await page.evaluate(
+    (name) =>
+      [
+        ...document.querySelectorAll<HTMLElement>("[data-design-graph-host] *"),
+      ].filter(
+        (el) =>
+          el.checkVisibility() &&
+          [...el.childNodes].some(
+            (one) => one.nodeType === 3 && one.textContent?.trim() === name
+          )
+      ).length,
+    "Saving it"
+  );
   kit.check(
-    `G3 (headers): ${leg}: the machine is named by its slab's header, and said nowhere else in the graph`,
-    read.bands.map((one) => one.text).join("|") === "Saving it" &&
-      Object.values(read.namesSaid).every((count) => count === 1),
+    `G3 (machine names): ${leg}: no header band names the machine, and nothing drawn in the graph says "Saving it"`,
+    read.bands.length === 0 &&
+      machineSaid === 0 &&
+      read.regions.some((one) => one.machine === "Saving it"),
     JSON.stringify({
       bands: read.bands.map((one) => one.text),
-      said: read.namesSaid,
+      machineSaid,
+      regions: read.regions.map((one) => one.machine),
     })
   );
+
   let staged = await stageStands(page, "Filled");
   kit.check(
     `G4: ${leg}: the page stands the kept state alone (Filled), every other frame mounted out of sight`,
@@ -4064,7 +4081,12 @@ async function graphLeg(
   // The state's own words as its node says them: the pin's path names it so.
   const stateWords =
     (await page.locator(nodeWordsAt("SaveFailed")).textContent())?.trim() ?? "";
-  await page.locator(nodeWordsAt("SaveFailed")).click();
+  // A press as the person makes it: a tap under a finger, a click with a mouse.
+  if (finger) {
+    await page.locator(nodeWordsAt("SaveFailed")).tap();
+  } else {
+    await page.locator(nodeWordsAt("SaveFailed")).click();
+  }
   staged = await stageStands(page, "SaveFailed");
   // Read on the graph's face, before a drawer turns to its timeline.
   read = await readGraph(page);
@@ -4110,6 +4132,47 @@ async function graphLeg(
   );
   if (docked) {
     await dockHeadLeg(kit, page, leg, "before an edit");
+    // Clip kinds (the owner's pick "Its own colour per kind"): each clip one of the six kinds, its glyph, its length's figure and its bar's edge in its kind's hue.
+    const kinds = await page.evaluate(() => {
+      const colour = (token: string) => {
+        const probe = document.createElement("i");
+        probe.style.color = `var(${token})`;
+        document.body.append(probe);
+        const value = getComputedStyle(probe).color;
+        probe.remove();
+        return value;
+      };
+      return [...document.querySelectorAll<HTMLElement>("[data-clip]")].map(
+        (row) => {
+          const kind = row.dataset.kind ?? "";
+          const hue = colour(`--c-clip-${kind}`);
+          const glyph = row.querySelector<HTMLElement>(
+            '[role="img"][data-kind]'
+          );
+          const figure = row.querySelector<HTMLElement>(
+            '[data-fact="duration"] > span'
+          );
+          const bar = row.querySelector<HTMLElement>("[data-bar]");
+          return {
+            kind,
+            glyph: !!glyph && getComputedStyle(glyph).color === hue,
+            figure: !!figure && getComputedStyle(figure).color === hue,
+            bar: !!bar && getComputedStyle(bar).borderTopColor === hue,
+          };
+        }
+      );
+    });
+    const SIX = ["opacity", "position", "size", "colour", "text", "unfold"];
+    kit.check(
+      `G32 (clip kinds): ${leg}: every clip is one of the six kinds, its glyph, its length's figure and its bar's edge in its kind's own hue (the routine's move: its unfolds)`,
+      kinds.length > 0 &&
+        kinds.every(
+          (one) => SIX.includes(one.kind) && one.glyph && one.figure && one.bar
+        ) &&
+        // The failure line unfolds into the form on every engine (the button's colour runs where the engine fires its transition).
+        kinds.some((one) => one.kind === "unfold"),
+      JSON.stringify(kinds)
+    );
   }
   if (!docked) {
     const thrown = [...errors, ...(await thrownIn(page))];
@@ -4132,14 +4195,14 @@ async function graphLeg(
       "[data-clip-controls]"
     );
     return {
-      placement: controls?.dataset.placement ?? null,
       inRow: !!controls?.closest('[data-clip="0"]'),
+      inspector: document.querySelectorAll("[data-inspector]").length,
       dialogs: document.querySelectorAll('[role="dialog"]').length,
     };
   });
   kit.check(
-    `G10 (controls): ${leg}: a clip's controls open in its row, and nothing opens as a dialog`,
-    placement.placement === "row" && placement.inRow && placement.dialogs === 0,
+    `G10 (controls): ${leg}: a clip's controls open in its row (the owner's pick), no inspector stands, and nothing opens as a dialog`,
+    placement.inRow && placement.inspector === 0 && placement.dialogs === 0,
     JSON.stringify(placement)
   );
   // A spring at any value: response and bounce off every token.

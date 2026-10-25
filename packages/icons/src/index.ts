@@ -165,20 +165,18 @@ export { default as IconListRows } from "~icons/solar/list-bold-duotone";
 export { default as IconListCheck } from "~icons/solar/list-check-bold-duotone";
 /** Waits on another task that has not landed. */
 export { default as IconLock } from "~icons/solar/lock-keyhole-minimalistic-bold-duotone";
-/** A design graph clip that brings its element in. */
-export { default as IconClipEnter } from "~icons/solar/login-2-bold-duotone";
-/** A design graph clip that takes its element away. */
-export {
-  default as IconLogout,
-  default as IconClipExit,
-} from "~icons/solar/logout-2-bold-duotone";
+export { default as IconLogout } from "~icons/solar/logout-2-bold-duotone";
 export { default as IconSparkles } from "~icons/solar/magic-stick-3-bold-duotone";
 export {
   default as IconSearch,
   default as IconToolSearch,
 } from "~icons/solar/magnifer-bold-duotone";
 export { default as IconMapPoint } from "~icons/solar/map-point-bold-duotone";
-export { default as IconMaximize } from "~icons/solar/maximize-bold-duotone";
+/** A design graph clip that changes its element's size (mockup round 29's kinds). */
+export {
+  default as IconMaximize,
+  default as IconClipSize,
+} from "~icons/solar/maximize-bold-duotone";
 export { default as IconMore } from "~icons/solar/menu-dots-bold-duotone";
 export { default as IconMic } from "~icons/solar/microphone-bold-duotone";
 export { default as IconZoomIn } from "~icons/solar/minimalistic-magnifer-zoom-in-bold-duotone";
@@ -189,9 +187,13 @@ export { default as IconMinusCircle } from "~icons/solar/minus-circle-bold-duoto
 export { default as IconMonitor } from "~icons/solar/monitor-bold-duotone";
 export { default as IconMoon } from "~icons/solar/moon-bold-duotone";
 export { default as IconMoonSleep } from "~icons/solar/moon-sleep-bold-duotone";
+/** A design graph clip that moves its element. */
+export { default as IconClipPosition } from "~icons/solar/move-bold-duotone";
 export { default as IconAudio } from "~icons/solar/music-note-bold-duotone";
 export { default as IconToolNotebook } from "~icons/solar/notebook-bold-duotone";
 export { default as IconFileLog } from "~icons/solar/notes-bold-duotone";
+/** A design graph clip that changes its element's colour. */
+export { default as IconClipColour } from "~icons/solar/palette-bold-duotone";
 /** Solar's own spelling. The `palette-*` cut is a board; this one is the palette. */
 export { default as IconPalette } from "~icons/solar/pallete-2-bold-duotone";
 /** Attach's Files and photos. */
@@ -246,8 +248,6 @@ export { default as IconRocket } from "~icons/solar/rocket-2-bold-duotone";
  * lib/cawco/folder-prefs.svelte.ts), picked to span the kinds of work a
  * directory holds rather than to be a complete icon set.
  */
-/** A design graph clip that changes its element where it stands. */
-export { default as IconClipChange } from "~icons/solar/round-transfer-horizontal-bold-duotone";
 /** Hooks: a lifecycle event branching into what runs. */
 export { default as IconHook } from "~icons/solar/routing-2-bold-duotone";
 /** A design system: the project's look, written down (StarterCards' `system`). */
@@ -276,7 +276,11 @@ export { default as IconPhone } from "~icons/solar/smartphone-bold-duotone";
  * without their containers").
  */
 export { default as IconSort } from "~icons/solar/sort-from-top-to-bottom-bold-duotone";
-export { default as IconUnfold } from "~icons/solar/sort-vertical-bold-duotone";
+/** A design graph clip that unfolds or folds its element. */
+export {
+  default as IconUnfold,
+  default as IconClipUnfold,
+} from "~icons/solar/sort-vertical-bold-duotone";
 export { default as IconCollapseOthers } from "~icons/solar/square-double-alt-arrow-up-bold-duotone";
 export { default as IconExternal } from "~icons/solar/square-top-down-bold-duotone";
 /** A tab moved to another group (its menu's Move to group). */
@@ -290,7 +294,11 @@ export { default as IconStopped } from "~icons/solar/stop-circle-bold-duotone";
 export { default as IconStructureSolid } from "~icons/solar/structure-bold";
 export { default as IconStructure } from "~icons/solar/structure-bold-duotone";
 export { default as IconSun } from "~icons/solar/sun-bold-duotone";
+/** A design graph clip that changes its element's opacity. */
+export { default as IconClipOpacity } from "~icons/solar/sun-fog-bold-duotone";
 export { default as IconLab } from "~icons/solar/test-tube-bold-duotone";
+/** A design graph clip that swaps its element's words. */
+export { default as IconClipText } from "~icons/solar/text-bold-duotone";
 export { default as IconTransfer } from "~icons/solar/transfer-horizontal-bold-duotone";
 export { default as IconTrash } from "~icons/solar/trash-bin-minimalistic-bold-duotone";
 export { default as IconTuning } from "~icons/solar/tuning-2-bold-duotone";

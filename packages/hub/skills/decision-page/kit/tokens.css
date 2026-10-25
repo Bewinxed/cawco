@@ -534,12 +534,69 @@
       color-mix(in oklab, var(--brand-wash) 40%, transparent),
       var(--brand-wash)
     );
-    /* A clip that brings its element in: its glyph and its bar's hue (pin 27, "color things differently") (Projects spec §5.10, "The design graph"; mockup round 29). */
-    --c-clip-enter: var(--data-ok);
-    /* A clip that changes its element where it stands: its glyph and its bar's hue (Projects spec §5.10, "The design graph"; mockup round 29). */
-    --c-clip-change: var(--status-live-glyph);
-    /* A clip that takes its element away: its glyph and its bar's hue (Projects spec §5.10, "The design graph"; mockup round 29). */
-    --c-clip-exit: var(--data-bad);
+    /* A clip that changes its element's opacity: its glyph, its length's figure and its bar's edge, each kind its own hue (the owner's pick "Its own colour per kind" on design-graph-finish; mockup round 29's hue option, at the designer's strength). */
+    --c-clip-opacity: light-dark(oklch(50% 0.12 176), oklch(74% 0.11 176));
+    /* The bar of a clip that changes its element's opacity: its kind's hue as a wash (mockup round 29). */
+    --c-clip-opacity-wash: light-dark(oklch(92% 0.05 176), oklch(34% 0.06 176));
+    /* The bar of a opacity clip held or chosen: its hue mixed 20% into its wash (mockup round 29's --prop-held-mix). */
+    --c-clip-opacity-held: color-mix(
+      in oklab,
+      var(--c-clip-opacity) 20%,
+      var(--c-clip-opacity-wash)
+    );
+    /* A clip that changes its element's position: its glyph, its length's figure and its bar's edge, each kind its own hue (the owner's pick "Its own colour per kind" on design-graph-finish; mockup round 29's hue option, at the designer's strength). */
+    --c-clip-position: light-dark(oklch(50% 0.12 272), oklch(74% 0.11 272));
+    /* The bar of a clip that changes its element's position: its kind's hue as a wash (mockup round 29). */
+    --c-clip-position-wash: light-dark(
+      oklch(92% 0.05 272),
+      oklch(34% 0.06 272)
+    );
+    /* The bar of a position clip held or chosen: its hue mixed 20% into its wash (mockup round 29's --prop-held-mix). */
+    --c-clip-position-held: color-mix(
+      in oklab,
+      var(--c-clip-position) 20%,
+      var(--c-clip-position-wash)
+    );
+    /* A clip that changes its element's size: its glyph, its length's figure and its bar's edge, each kind its own hue (the owner's pick "Its own colour per kind" on design-graph-finish; mockup round 29's hue option, at the designer's strength). */
+    --c-clip-size: light-dark(oklch(50% 0.12 62), oklch(74% 0.11 62));
+    /* The bar of a clip that changes its element's size: its kind's hue as a wash (mockup round 29). */
+    --c-clip-size-wash: light-dark(oklch(92% 0.05 62), oklch(34% 0.06 62));
+    /* The bar of a size clip held or chosen: its hue mixed 20% into its wash (mockup round 29's --prop-held-mix). */
+    --c-clip-size-held: color-mix(
+      in oklab,
+      var(--c-clip-size) 20%,
+      var(--c-clip-size-wash)
+    );
+    /* A clip that changes its element's colour: its glyph, its length's figure and its bar's edge, each kind its own hue (the owner's pick "Its own colour per kind" on design-graph-finish; mockup round 29's hue option, at the designer's strength). */
+    --c-clip-colour: light-dark(oklch(50% 0.12 335), oklch(74% 0.11 335));
+    /* The bar of a clip that changes its element's colour: its kind's hue as a wash (mockup round 29). */
+    --c-clip-colour-wash: light-dark(oklch(92% 0.05 335), oklch(34% 0.06 335));
+    /* The bar of a colour clip held or chosen: its hue mixed 20% into its wash (mockup round 29's --prop-held-mix). */
+    --c-clip-colour-held: color-mix(
+      in oklab,
+      var(--c-clip-colour) 20%,
+      var(--c-clip-colour-wash)
+    );
+    /* A clip that changes its element's a text swap: its glyph, its length's figure and its bar's edge, each kind its own hue (the owner's pick "Its own colour per kind" on design-graph-finish; mockup round 29's hue option, at the designer's strength). */
+    --c-clip-text: light-dark(oklch(50% 0.12 300), oklch(74% 0.11 300));
+    /* The bar of a clip that changes its element's a text swap: its kind's hue as a wash (mockup round 29). */
+    --c-clip-text-wash: light-dark(oklch(92% 0.05 300), oklch(34% 0.06 300));
+    /* The bar of a a text swap clip held or chosen: its hue mixed 20% into its wash (mockup round 29's --prop-held-mix). */
+    --c-clip-text-held: color-mix(
+      in oklab,
+      var(--c-clip-text) 20%,
+      var(--c-clip-text-wash)
+    );
+    /* A clip that changes its element's unfold: its glyph, its length's figure and its bar's edge, each kind its own hue (the owner's pick "Its own colour per kind" on design-graph-finish; mockup round 29's hue option, at the designer's strength). */
+    --c-clip-unfold: light-dark(oklch(50% 0.12 235), oklch(74% 0.11 235));
+    /* The bar of a clip that changes its element's unfold: its kind's hue as a wash (mockup round 29). */
+    --c-clip-unfold-wash: light-dark(oklch(92% 0.05 235), oklch(34% 0.06 235));
+    /* The bar of a unfold clip held or chosen: its hue mixed 20% into its wash (mockup round 29's --prop-held-mix). */
+    --c-clip-unfold-held: color-mix(
+      in oklab,
+      var(--c-clip-unfold) 20%,
+      var(--c-clip-unfold-wash)
+    );
     --shadow-xs: 0 1px 2px var(--shadow-tint);
     --shadow-tile:
       0 1px 2px
@@ -800,8 +857,6 @@
     --c-graph-node-w: 168px;
     /* The narrowest a state on the design graph is drawn, in a phone's single column (mockup round 22's floor). */
     --c-graph-node-min-w: 120px;
-    /* A machine's header band on the design graph: its name in the label role across the top of its region (mockup round 27, pin 30). */
-    --c-graph-region-band-h: 24px;
     /* The design graph's drawer at its first stop on a phone or a narrow pane: the graph in view, the component above it (mockup round 22). */
     --c-graph-drawer-stop: 45dvh;
     /* The iOS app's Comments panel (until its parity with the web's Comments rail, c-comments-w), floating over the well's top-right: its share of the well's width, held between c-pin-list-min and c-pin-list-max. At 0.3 a desk well past about 930px gives the rows more than the floor's 225px text column, so a longer comment wraps to fewer lines. */

@@ -18,14 +18,15 @@
  */
 
 import { readWithin } from "@cawco/core/bounded";
-import type {
-  DialsModel,
-  GraphModel,
-  GraphSection,
-  MoveAsk,
-  MoveModel,
-  StageAsk,
-  StagePoint,
+import {
+  type DialsModel,
+  type GraphModel,
+  type GraphSection,
+  kindOfClip,
+  type MoveAsk,
+  type MoveModel,
+  type StageAsk,
+  type StagePoint,
 } from "@cawco/core/design-graph";
 import {
   type AnimationRead,
@@ -2103,8 +2104,10 @@ export function boot(options: BootOptions): void {
     const args = argsOf(section, from);
     const mounted = mountInto(body, section, from, args, into);
     await frameTick();
-    // What stood before the move: an element it animates that wasn't here came in with it.
-    const before = new Set(body.querySelectorAll("*"));
+    // What stood before the move, each with its words: a clip whose element's words changed with it is a text swap.
+    const wordsBefore = new Map<Element, string>(
+      [...body.querySelectorAll("*")].map((el) => [el, el.textContent ?? ""])
+    );
     const seen = new Set<Animation>();
     const t0 = document.timeline.currentTime as number;
     let watching = true;
@@ -2120,7 +2123,8 @@ export function boot(options: BootOptions): void {
         // Read as it starts: an exit's element is gone by the move's end.
         element: elementWords(target, read.target),
         source: target ? sourceOf(target, root) : null,
-        kind: target && before.has(target) ? "change" : "enter",
+        // Its properties' kind as it starts; a text swap is known once the move has ended (`markWords`).
+        kind: kindOfClip(read.property, false),
       };
     };
     const watch = () => {
@@ -2171,7 +2175,7 @@ export function boot(options: BootOptions): void {
     if (into.error && !move.error) {
       move.error = into.error;
     }
-    markExits(records);
+    markWords(records, wordsBefore);
     move.animations = records.map((one) => one.read);
     (body as HTMLElement & { __cawcoMounted?: Mounted }).__cawcoMounted =
       mounted;
@@ -3447,11 +3451,38 @@ const WORLD_INSET = { x: 24, y: 16 };
 /** `file:Story`: the colon before the story's name. */
 const LAST_COLON = /:(?=[^:]+$)/;
 
-/** Each clip whose element the move took away: an exit, read once the move has ended. */
-function markExits(records: PlayedRecord[]): void {
+/**
+ * Each clip whose words changed with the move: a text swap, read once the
+ * move has ended. Its element's own words where it stood before; else the
+ * nearest element that stood before around it, its words now less the
+ * clip's own (a line that came in under it adds words, a label whose letters
+ * swap changes them).
+ */
+function markWords(
+  records: PlayedRecord[],
+  wordsBefore: ReadonlyMap<Element, string>
+): void {
   for (const one of records) {
-    if (!one.target?.isConnected) {
-      one.kind = "exit";
+    const { target } = one;
+    if (!target?.isConnected) {
+      continue;
+    }
+    const own = wordsBefore.get(target);
+    let changed = false;
+    if (own === undefined) {
+      let up = target.parentElement;
+      while (up && !wordsBefore.has(up)) {
+        up = up.parentElement;
+      }
+      changed =
+        !!up &&
+        (up.textContent ?? "").replace(target.textContent ?? "", "") !==
+          wordsBefore.get(up);
+    } else {
+      changed = (target.textContent ?? "") !== own;
+    }
+    if (changed) {
+      one.kind = kindOfClip(one.read.property, true);
     }
   }
 }
