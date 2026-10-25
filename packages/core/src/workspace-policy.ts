@@ -363,10 +363,23 @@ export const PERSON_UNTRACKED_START =
   "# cawco: the folder's own untracked files as the workspace started";
 export const PERSON_UNTRACKED_END = "# cawco: end of the folder's own";
 
+/** What gitignore(5) reads as a pattern's special characters, each matched as itself once a backslash is before it. */
+const PATTERN_SPECIAL = /[\\*?[\]]|\s$/g;
+const ESCAPED = /\\(.)/g;
+
+/**
+ * `path` as a line of an `info/exclude` that names exactly it, from the
+ * repository's root (gitignore(5): a leading slash anchors it; a backslash
+ * makes `*`, `?`, `[`, a backslash or a trailing space match itself).
+ */
+export const excludeLine = (path: string): string =>
+  `/${path.replace(PATTERN_SPECIAL, (special) => `\\${special}`)}`;
+
 /**
  * The paths CawCo's block of a copy's `info/exclude` text names as the
- * person's own untracked files: they came along with the folder (agent
- * layer.ts) and are no work of the workspace's.
+ * person's own untracked files ({@link excludeLine}): they came along with
+ * the folder (agent layer.ts), or the person made them there since (a Linux
+ * view shows the folder live), and are no work of the workspace's.
  */
 export const personUntrackedIn = (exclude: string): string[] => {
   const named: string[] = [];
@@ -377,10 +390,46 @@ export const personUntrackedIn = (exclude: string): string[] => {
     } else if (line === PERSON_UNTRACKED_END) {
       inside = false;
     } else if (inside && line.startsWith("/")) {
-      named.push(line.slice(1));
+      named.push(line.slice(1).replace(ESCAPED, "$1"));
     }
   }
   return named;
+};
+
+/**
+ * `exclude` (a copy's `info/exclude` text) with CawCo's block of the
+ * person's own untracked files naming `paths` in place of what it named
+ * ({@link personUntrackedIn}), its other lines as they were; added at the
+ * end when it has none, and none when `paths` is empty.
+ */
+export const withPersonUntracked = (
+  exclude: string,
+  paths: readonly string[]
+): string => {
+  const kept: string[] = [];
+  let inside = false;
+  for (const line of exclude.split("\n")) {
+    if (line === PERSON_UNTRACKED_START) {
+      inside = true;
+    } else if (line === PERSON_UNTRACKED_END) {
+      inside = false;
+    } else if (!inside) {
+      kept.push(line);
+    }
+  }
+  while (kept.length > 0 && kept.at(-1) === "") {
+    kept.pop();
+  }
+  const block =
+    paths.length > 0
+      ? [
+          PERSON_UNTRACKED_START,
+          ...paths.map(excludeLine),
+          PERSON_UNTRACKED_END,
+        ]
+      : [];
+  const lines = [...kept, ...block];
+  return lines.length > 0 ? `${lines.join("\n")}\n` : "";
 };
 
 /**

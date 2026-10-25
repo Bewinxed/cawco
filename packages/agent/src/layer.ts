@@ -83,7 +83,11 @@ import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { listedPid, signal as signalPid } from "@cawco/core/signal";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
-import { cloneDenies } from "@cawco/core/workspace-policy";
+import {
+  cloneDenies,
+  personUntrackedIn,
+  withPersonUntracked,
+} from "@cawco/core/workspace-policy";
 import { removeTree } from "./remove-tree";
 import { SYSTEM_PATH } from "./workspace-needs";
 
@@ -1067,6 +1071,107 @@ const delegateFile = (layer: Layer, rel: string): string | undefined => {
     .reverse()
     .find((each) => within(target, each.at));
   return mount ? join(mount.upper, relative(mount.at, target)) : undefined;
+};
+
+/**
+ * Whether `rel` of a Linux view's folder is the delegate's own write: an
+ * entry of the view's upper (a whiteout is a deletion, none). One only the
+ * lower holds is the folder's own, the person's, the view showing it live:
+ * a file the person made there since the view began reads in the view as
+ * an untracked one, and is never the workspace's work. Every path of a copy
+ * of its own is its own: it sees none of the folder's later files.
+ */
+export const ownWrite = async (layer: Layer, rel: string): Promise<boolean> => {
+  if (layer.form === "copy") {
+    return true;
+  }
+  const upper = delegateFile(layer, rel);
+  const info = upper ? await lstat(upper).catch(() => undefined) : undefined;
+  return info !== undefined && !(info.isCharacterDevice() && info.rdev === 0);
+};
+
+/** Each view's {@link markPersonsOwn} under way: one at a time per workspace. */
+const marking = new Map<string, Promise<void>>();
+
+/**
+ * A repository's Linux view's block of the person's own untracked files
+ * (workspace.ts `excludeStart`) brought up to now: the view shows the
+ * folder live, so a file the person made there since the view began reads
+ * in it as untracked. Each untracked path git lists in the view that is not
+ * the delegate's own write ({@link ownWrite}) joins the block, with those it
+ * named already, so neither the delegate's finish_item, the landing's
+ * check for uncommitted changes, an archive's holding nor a carry reads the
+ * person's file as the workspace's work, and `git add -A` there leaves it
+ * out. Run before the hub's every command in such a workspace (hub-command.ts
+ * `runHubCommand`) and before an archive reads it; nothing for a copy of its
+ * own, which sees none of the folder's later files.
+ */
+export const markPersonsOwn = (workspace: {
+  id: string;
+  path: string;
+}): Promise<void> => {
+  const pending = marking.get(workspace.id);
+  if (pending) {
+    return pending;
+  }
+  const work = (async () => {
+    const layer = await readLayer(workspace.id).catch(() => undefined);
+    if (!(layer?.form === "overlay" && layer.kind === "repo" && layer.made)) {
+      return;
+    }
+    const pid = await ensureView(workspace.id, layer);
+    const listed = Bun.spawn(
+      viewArgv(pid, workspace.path, [
+        "git",
+        ...SAFE_GIT_FLAGS,
+        "ls-files",
+        "-z",
+        "--others",
+        "--exclude-standard",
+      ]),
+      {
+        cwd: "/",
+        env: { ...hostEnvironment(), ...SAFE_GIT_ENV },
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+      }
+    );
+    const [out, err, code] = await Promise.all([
+      new Response(listed.stdout).text(),
+      new Response(listed.stderr).text(),
+      listed.exited,
+    ]);
+    if (code !== 0) {
+      throw new Error(
+        `workspace ${workspace.id}'s untracked files were not read: ${err.trim() || `git exited ${code}`}`
+      );
+    }
+    const untracked = out.split("\0").filter(Boolean);
+    const own = await Promise.all(
+      untracked.map((file) => ownWrite(layer, file))
+    );
+    const persons = untracked.filter((_, at) => !own[at]);
+    if (persons.length === 0) {
+      return;
+    }
+    const exclude = viewPath(
+      pid,
+      join(workspace.path, ".git", "info", "exclude")
+    );
+    const before = await readFile(exclude, "utf8").catch(() => "");
+    await writeStateFile(
+      exclude,
+      withPersonUntracked(before, [
+        ...new Set([...personUntrackedIn(before), ...persons]),
+      ])
+    );
+    console.info(
+      `[workspace] ${workspace.id}: ${persons.length} untracked file(s) the person made in ${layer.folder} since its view began are theirs, kept out of its status: ${persons.slice(0, 5).join(", ")}${persons.length > 5 ? ", …" : ""}`
+    );
+  })().finally(() => marking.delete(workspace.id));
+  marking.set(workspace.id, work);
+  return work;
 };
 
 /**

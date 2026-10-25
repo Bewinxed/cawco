@@ -77,10 +77,10 @@ import {
 import {
   cloneDenies,
   excludedPaths,
+  excludeLine,
   IGNORED_STATUS,
-  PERSON_UNTRACKED_END,
-  PERSON_UNTRACKED_START,
   personUntrackedIn,
+  withPersonUntracked,
 } from "@cawco/core/workspace-policy";
 import {
   addAccount,
@@ -121,6 +121,7 @@ import {
   layerOf,
   makeLayer,
   markMade,
+  markPersonsOwn,
   readChanges,
   readLayer,
   removeLayer,
@@ -672,25 +673,14 @@ const excludeStart = async (
   );
   const exclude = access.at(join(path, ".git", "info", "exclude"));
   const before = await readFile(exclude, "utf8").catch(() => "");
-  const blocks = [
-    ...(standIns.length > 0
-      ? [BLOCK_START, ...standIns.map((name) => `/${name}`), BLOCK_END]
-      : []),
-    ...(untracked.length > 0
-      ? [
-          PERSON_UNTRACKED_START,
-          ...untracked.map((file) => `/${file}`),
-          PERSON_UNTRACKED_END,
-        ]
-      : []),
-  ];
-  if (blocks.length === 0) {
+  if (standIns.length === 0 && untracked.length === 0) {
     return;
   }
-  await writeStateFile(
-    exclude,
-    `${before}${before && !before.endsWith("\n") ? "\n" : ""}${blocks.join("\n")}\n`
-  );
+  const withStandIns =
+    standIns.length > 0
+      ? `${before}${before && !before.endsWith("\n") ? "\n" : ""}${[BLOCK_START, ...standIns.map(excludeLine), BLOCK_END].join("\n")}\n`
+      : before;
+  await writeStateFile(exclude, withPersonUntracked(withStandIns, untracked));
 };
 
 /** The person's untracked files a copy's `info/exclude` names in CawCo's block ({@link excludeStart}). */
@@ -2462,6 +2452,7 @@ const readAndClose = async (
   const { path } = workspace;
   if (read && access.layer.kind === "repo") {
     await refreshBase(workspace, access, request.base);
+    await markPersonsOwn(workspace);
   }
   const held = read
     ? await holding(workspace, access, skip, request.base, request.landed)
