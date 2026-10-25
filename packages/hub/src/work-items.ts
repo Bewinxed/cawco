@@ -1238,6 +1238,15 @@ export interface ItemPlacement {
 }
 
 /**
+ * Whether the workspace works in a copy of its own (a clone on macOS, and
+ * every workspace made before layers): not a Linux view of the folder itself
+ * (agent layer.ts), whose path is the person's folder, written by nothing of
+ * CawCo's until its change set lands.
+ */
+const ownCopy = (workspace: WorkspaceRow): boolean =>
+  workspace.path !== workspace.repoRoot;
+
+/**
  * A workspace as its machine is told about it: a clone and its boundary. A
  * host-scope row (schema.ts `workspaces.host`) is the host's own folder,
  * which no machine call may treat as a clone (an archive deletes one), so
