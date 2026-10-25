@@ -15,7 +15,7 @@
  *
  * | rule        | read by                     | what it reads |
  * | ----------- | --------------------------- | ------------- |
- * | overflow    | scan.ts + impeccable `text-occlusion` | boxes past the screen, out of their control or box, text under a control or an opaque box |
+ * | overflow    | scan.ts + impeccable `text-occlusion` | boxes past the screen, out of their control or box, a control out of its row, card or panel, text under a control or an opaque box |
  * | coral       | own code                    | each view's controls and grounded chips whose fill, border or (a control's) ink resolves to a coral token from tokens.css; at most one; a checked checkbox, switch or radio is allowed and named |
  * | glyph       | own code                    | a control whose only content is a glyph: no fill, border or shadow on it or on a wrapper that holds it alone; its svg holds no solid disc, tile or rounded shape spanning 70% of its viewBox |
  * | bar-ground  | own code                    | bars (`header`, toolbars, the bar data-slots, foot bars) paint no fill, border or shadow; a folder-tab shelf (DESIGN.md:665) and a group's capsule (DESIGN.md:666) are named, not failed |

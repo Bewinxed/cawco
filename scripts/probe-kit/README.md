@@ -16,6 +16,9 @@ one line over every spec it ran, `ALL PASS (N specs, …)` or `N FAILED: <spec>,
 and exits 0 only when every assertion passed. A spec
 that needs a hub gets a scratch fleet (`kit.fleet`, `scripts/scratch-fleet.ts`):
 a real hub, agent and sessiond with their own HOME, against a mock model.
+Its teardown ends every process whose environment still names one of its
+folders (its HOME, runtime dir, sandbox), however far it forked away: a
+session's MCP server's daemon included (`fleet-leaves-nothing`).
 
 Leave the dashboard's source alone while a run is going: a spec that serves
 it with the dev server (`/motion/` benches, canvas-design's panel) hot-reloads
@@ -40,7 +43,7 @@ moving in the surface is the `settled` rule's finding.
 
 | Rule | Read by | What it reads |
 | --- | --- | --- |
-| `overflow` | `journeys/scan.ts` + impeccable `text-occlusion` | text past the screen, out of its control or box; text under a control or an opaque box |
+| `overflow` | `journeys/scan.ts` + impeccable `text-occlusion` | text past the screen, out of its control or box; a control out of the row, card or panel it is laid out in (`specs/web/scan-control-box`); text under a control or an opaque box |
 | `coral` | own code | per view (`views`), controls and worded chips whose fill, edge or (a control's) ink is a coral token from tokens.css: at most one; a checked checkbox, switch or radio is named, not counted; a bare link is link ink |
 | `glyph` | own code | a control whose only content is a glyph sits on no fill, edge or shadow, nor does a wrapper holding it alone; its svg holds no solid disc, tile or rounded shape spanning 70% of its viewBox (`marks` adds standalone status glyphs) |
 | `bar-ground` | own code | `header`, toolbars, the bar and foot data-slots paint nothing; a folder-tab shelf (DESIGN.md:665) and a group's capsule are named |
@@ -82,8 +85,9 @@ asserting the outcome the flow promises on the hub or the machine and on what
 the page says, never that a control exists. Every journey runs on Chromium,
 WebKit and Firefox at 390×844 and 768×1024 (touch) and 1440×900, with normal
 data and stretched (titles three times longer, twice as many items), the same
-steps everywhere. After every step the page is held to two rules
-(`journeys/scan.ts`: nothing spills, no control covers text) and to no
+steps everywhere. After every step the page is held to three rules
+(`journeys/scan.ts`: nothing spills, no control runs out of its row, card
+or panel, no control covers text) and to no
 console error. Locators are roles, labels and the person's words only.
 
 It prints one line per journey × engine × size × data, `PASS`, or `FAIL` with

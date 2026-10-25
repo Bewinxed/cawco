@@ -47,7 +47,10 @@ import {
   socketPathProblem,
   workspaceCacheDir,
 } from "../packages/core/src/paths";
-import { processArgs } from "../packages/core/src/process-identity";
+import {
+  commandLines,
+  processArgs,
+} from "../packages/core/src/process-identity";
 import { forgetSessiondLink } from "../packages/core/src/sessiond";
 import {
   listedPid,
@@ -1118,6 +1121,76 @@ async function removeFleetBrowsers(dir: string): Promise<void> {
 }
 
 /**
+ * Every live process but this one whose environment names one of `dirs`, or
+ * a path under one: its pid and command line.
+ */
+export async function carrying(
+  dirs: readonly string[]
+): Promise<{ command: string; pid: number }[]> {
+  const names = (value: string) =>
+    dirs.some((dir) => value === dir || value.startsWith(`${dir}/`));
+  return (
+    await Promise.all(
+      (await commandLines()).map(async ({ pid, command }) =>
+        pid !== process.pid &&
+        (await processArgs(pid))?.env.some((pair) =>
+          names(pair.slice(pair.indexOf("=") + 1))
+        )
+          ? { pid, command: command.trim().slice(0, 200) }
+          : null
+      )
+    )
+  ).filter((one): one is { command: string; pid: number } => one !== null);
+}
+
+/** How long a process carrying a fleet's folders gets to end on SIGTERM before SIGKILL. */
+const CARRIER_GRACE_MS = 3000;
+
+/**
+ * Every live process whose environment names one of `dirs` (a fleet's
+ * HOME, runtime dir, sandbox), ended: SIGTERM, then SIGKILL once
+ * {@link CARRIER_GRACE_MS} is spent. Answers `<pid> <command line>` of each.
+ *
+ * A fleet leaves no process behind, and its services' trees are not all it
+ * starts: a session started in a checkout of this repository loads the
+ * checkout's `.mcp.json`, whose playwriter server (`npx playwriter@latest`)
+ * starts a `playwriter-ws-server` that leaves its parent's tree and process
+ * group, re-parents to the nearest subreaper and outlived the fleet with the
+ * fleet's HOME in its environment. Whatever a fleet's processes start
+ * inherits their environment, however far it forks away, so the fleet's
+ * folders in it name what is the fleet's; this process, whose own
+ * environment names none of them, is never among them. Read with core's
+ * process readers (`/proc` on Linux, `KERN_PROCARGS2` on macOS): a process
+ * of another user, or one that has ended, reads as nothing.
+ */
+async function endCarriers(dirs: readonly string[]): Promise<string[]> {
+  if (dirs.length === 0) {
+    return [];
+  }
+  const carriers = () => carrying(dirs);
+  const found = await carriers();
+  for (const { pid } of found) {
+    signalPid(listedPid(pid), "SIGTERM");
+  }
+  const graceEnds = performance.now() + CARRIER_GRACE_MS;
+  for (
+    let left = found;
+    left.length > 0;
+    // biome-ignore lint/performance/noAwaitInLoops: each read after the last, until none is left or the grace is spent
+    left = await carriers()
+  ) {
+    if (performance.now() > graceEnds) {
+      for (const { pid } of left) {
+        signalPid(listedPid(pid), "SIGKILL");
+      }
+      break;
+    }
+    await delay(100);
+  }
+  return found.map(({ pid, command }) => `${pid} ${command}`);
+}
+
+/**
  * The folders one fleet made, each stamped with its owner as it is made, and
  * what its setup started that has to stop with them. They go with the fleet
  * however it ends: `clean`, a setup that throws (`scratchFleet`), this
@@ -1214,7 +1287,17 @@ class FleetDirs {
     }
   }
 
-  /** Stops what the setup started, removes its browsers and deletes every folder. */
+  /** Every process still carrying one of the folders in its environment, ended ({@link endCarriers}), and said. */
+  async endCarriers(): Promise<void> {
+    const ended = await endCarriers(this.dirs);
+    if (ended.length > 0) {
+      console.log(
+        `… ${ended.length} process(es) left carrying the fleet's folders in their environment, ended: ${ended.join("; ")}`
+      );
+    }
+  }
+
+  /** Stops what the setup started, ends what still carries its folders, removes its browsers and deletes every folder. */
   async remove(): Promise<void> {
     LIVE.delete(this);
     for (const stop of this.#stops.splice(0)) {
@@ -1223,6 +1306,7 @@ class FleetDirs {
         .then(stop)
         .catch(() => undefined);
     }
+    await this.endCarriers();
     await this.removeBrowsers();
     for (const dir of this.dirs.splice(0)) {
       // biome-ignore lint/performance/noAwaitInLoops: a handful of dirs
@@ -1438,11 +1522,19 @@ export async function sweepDeadFleets(): Promise<string[]> {
         continue;
       }
       try {
-        if (
-          !tryLock(fd) ||
-          // biome-ignore lint/performance/noAwaitInLoops: one folder at a time, each read against every process
-          (await heldByLive(dir))
-        ) {
+        if (!tryLock(fd)) {
+          continue;
+        }
+        // The fleet is gone (its lock is free): what it started that
+        // outlived it still carries the folder in its environment.
+        // biome-ignore lint/performance/noAwaitInLoops: one folder at a time, each read against every process
+        const ended = await endCarriers([dir]);
+        if (ended.length > 0) {
+          console.log(
+            `… ${ended.length} process(es) a dead fleet left carrying ${dir} in their environment, ended: ${ended.join("; ")}`
+          );
+        }
+        if (await heldByLive(dir)) {
           continue;
         }
         // A fleet that died (a SIGKILL) left its browsers too.
@@ -3076,6 +3168,9 @@ async function standUp(
     await dirs.removeBrowsers();
     await stop("hub");
     await killSessiond();
+    // What its processes started that left their trees (a project's MCP
+    // server's daemon), found by the fleet's folders in its environment.
+    await dirs.endCarriers();
     await mock.stop(true);
     ports.release();
     previews.release();
