@@ -1977,7 +1977,9 @@ export const hookArmed = async (id: string): Promise<void> => {
  * no command to run: it is armed the moment a session there is adopted or
  * launched, or anything else ensures its boundary, so the start neither
  * starts a boundary for an idle workspace nor hands one over; an idle one
- * still running closes once quiet ({@link sweepQuiet}). A reading that could
+ * still running closes once quiet ({@link sweepQuiet}), and an older
+ * boundary an earlier agent left beside it is closed in this pass when
+ * nothing runs in it ({@link closeLeftRetiring}). A reading that could
  * not be made whole blocks every gate by name and is read again. What this
  * returns settles once the first whole reading's arming is done.
  */
@@ -1992,14 +1994,16 @@ export const rearmHooks = async (): Promise<void> => {
     arm.kind === "later" ? [] : [id]
   );
   await Promise.all(now.map((id) => rearming.get(id)));
-  const later = Object.values(armState.workspaces).filter(
-    (arm) => arm.kind === "later"
-  ).length;
+  const laterIds = Object.entries(armState.workspaces).flatMap(([id, arm]) =>
+    arm.kind === "later" ? [id] : []
+  );
+  const later = laterIds.length;
+  const retired = await closeLeftRetiring(laterIds);
   const ms = Date.now() - started;
   console.info(
-    `[workspace] boundary hooks written for ${now.length} workspace(s) with a session or command in it, or a session's process with no boundary, in ${ms} ms; ${later} with nothing in them are armed when a session there starts`
+    `[workspace] boundary hooks written for ${now.length} workspace(s) with a session or command in it, or a session's process with no boundary, in ${ms} ms; ${later} with nothing in them are armed when a session there starts; ${retired} older boundar${retired === 1 ? "y" : "ies"} an earlier agent left running, with nothing in ${retired === 1 ? "it" : "them"}, closed`
   );
-  await recordAgentState("startup", { armed: now.length, later, ms });
+  await recordAgentState("startup", { armed: now.length, later, ms, retired });
 };
 
 /**
@@ -5996,28 +6000,64 @@ const closeRetiring = async (): Promise<void> => {
   }
 };
 
+/** The look at the older boundaries under way ({@link lookAtStale}): one at a time. */
+let staleLook: Promise<void> | undefined;
+
+/** A look at the older boundaries: the one under way, or one begun now. Never throws: what fails is said. */
+const lookOnce = (): Promise<void> => {
+  staleLook ??= lookAtStale()
+    .catch((error: unknown) => {
+      console.warn(
+        `[workspace] the older boundaries could not be looked at: ${error instanceof Error ? error.message : String(error)}`
+      );
+    })
+    .finally(() => {
+      staleLook = undefined;
+    });
+  return staleLook;
+};
+
 /** Looks at the older boundaries each {@link STALE_LOOK_MS} while there are any ({@link lookAtStale}). */
 const lookSoon = (): void => {
   if (staleTimer) {
     return;
   }
-  let looking = false;
   staleTimer = setInterval(() => {
-    if (looking) {
-      return;
+    if (!staleLook) {
+      lookOnce();
     }
-    looking = true;
-    lookAtStale()
-      .catch((error: unknown) => {
-        console.warn(
-          `[workspace] the older boundaries could not be looked at: ${error instanceof Error ? error.message : String(error)}`
-        );
-      })
-      .finally(() => {
-        looking = false;
-      });
   }, STALE_LOOK_MS);
   staleTimer.unref();
+};
+
+/**
+ * At start-up: the older boundaries an earlier agent left running beside the
+ * current one (or alone) in the workspaces armed later, each closed now if
+ * nothing runs in it ({@link closeIdle}), one that still runs something left
+ * to close once it ends. Answers how many were closed. Without it an older one
+ * nothing ran in ran on until its workspace's quiet close: in r361 (2026-10-25)
+ * fifteen idle workspaces held two boundaries for 10 min after a restart.
+ * A workspace armed now is closed by its own arming ({@link rearmOne}).
+ */
+const closeLeftRetiring = async (ids: readonly string[]): Promise<number> => {
+  const counts = await Promise.all(
+    ids.map(async (id) => (await readRetiring(id)).length)
+  );
+  const left = ids.filter((_, at) => (counts[at] ?? 0) > 0);
+  if (left.length === 0) {
+    return 0;
+  }
+  for (const id of left) {
+    closeWhenIdle(id);
+  }
+  // A look begun before they were added may have passed them by.
+  await staleLook;
+  await lookOnce();
+  const after = await Promise.all(
+    left.map(async (id) => (await readRetiring(id)).length)
+  );
+  const before = counts.reduce((sum, count) => sum + count, 0);
+  return before - after.reduce((sum, count) => sum + count, 0);
 };
 
 /** Hands workspace `ref`'s boundary, of an older form, over at the next look. */
