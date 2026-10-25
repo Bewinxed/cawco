@@ -2351,7 +2351,7 @@ export function boot(options: BootOptions): void {
     if (error) {
       state = "failed";
     } else if (frame.el.getClientRects().length === 0) {
-      // Not on screen at this width (a phone shows one frame at a time): it has not drawn nothing, it is not shown.
+      // Not laid out at all (an embed's section that holds none of the stories it draws): it has not drawn nothing, it is not shown.
       state = "unshown";
     } else if (drew(frame.body)) {
       error = atFloor(frame, box) ?? undefined;

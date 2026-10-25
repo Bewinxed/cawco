@@ -210,9 +210,9 @@ export interface Form {
 
 /**
  * What a browser drew of one frame: `unseen` until one drew it since its
- * file last changed; `unshown` when the page did not show it at its width (a
- * phone's canvas shows one frame at a time), so it is neither drawn nor
- * empty: `empty` is a frame shown that drew nothing.
+ * file last changed; `unshown` when the page laid it out nowhere (an
+ * embed's section holding none of the stories it draws), so it is neither
+ * drawn nor empty: `empty` is a frame shown that drew nothing.
  */
 export type FrameState = "drawn" | "empty" | "failed" | "unseen" | "unshown";
 

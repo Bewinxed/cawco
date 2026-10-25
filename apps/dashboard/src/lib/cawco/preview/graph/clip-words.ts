@@ -73,6 +73,35 @@ export function nearest(
   return best;
 }
 
+const CAPITAL = /[A-Z]/g;
+const SEPARATORS = /[\s,]+/;
+/** The family a longhand belongs to, as a person names it: `padding-top` is padding, `border-top-width` border. */
+const FAMILY = /^(padding|margin|border|inset|gap|outline)(-.*)?$/;
+/** How many properties a clip's row names before it says how many more. */
+const PROPERTIES_SAID = 3;
+
+/**
+ * What a clip animates, as its row says it: each property in CSS's own
+ * spelling (`marginBlockEnd` as `margin-block-end`), longhands folded into
+ * their family (`padding-top`, `padding-bottom` as `padding`), each once, the
+ * first three and how many more. An unfold that runs eight longhands reads
+ * "margin, padding, opacity +3", not eight names in code.
+ */
+export function propertyWords(property: string): string {
+  const said: string[] = [];
+  for (const one of property.split(SEPARATORS)) {
+    const css = one.replaceAll(CAPITAL, (letter) => `-${letter.toLowerCase()}`);
+    const name = css.match(FAMILY)?.[1] ?? css;
+    if (name && !said.includes(name)) {
+      said.push(name);
+    }
+  }
+  const more = said.length - PROPERTIES_SAID;
+  return more > 0
+    ? `${said.slice(0, PROPERTIES_SAID).join(", ")} +${more}`
+    : said.join(", ");
+}
+
 /** A length rounded to the 10ms a free drag takes. */
 export const tens = (ms: number) => Math.round(ms / 10) * 10;
 

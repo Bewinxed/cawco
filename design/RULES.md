@@ -303,49 +303,49 @@ Under "Composer" (DESIGN.md line 917); rule at line 923.
 
 ## The One Target Rule
 
-Under "Artifact panel, canvas and ink" (DESIGN.md line 932); rule at line 946.
+Under "Artifact panel, canvas and ink" (DESIGN.md line 932); rule at line 957.
 
 - **The One Target Rule.** On a page in Comment mode, coral is the target and nothing else, and no mark on the page is wider than 1px.
 
 ## The Peer Rule
 
-Under "Permission gate" (DESIGN.md line 981); rule at line 984.
+Under "Permission gate" (DESIGN.md line 992); rule at line 995.
 
 **The Peer Rule.** Approve and Deny are peers: the same size (`sm`, 30px; 44px of touch area on a coarse pointer), the same label type, the same fill, the same edge, and neither is ever made the more inviting. Why the rule exists (4ca69663): the operator answers under time pressure, often from a phone, and a rushed thumb must not grant when it meant deny. They take one form on every surface (Caw's panel, the transcript's permission card `transcript/Prompt.svelte`, the peek's answer row `PeekPane.svelte`): apart and untinted. Deny and Approve stand at opposite ends of their row, the row's full width between them and never less than `--space-8`, no third control in that gap, so distance guards the thumb. Both take the one recessed fill (`surface-recess`) and one 1px `border-button-outline` edge, and their glyphs (a cross, a tick) and labels are `ink-strong`; they read apart by glyph, word and place, never by hue. No status fill or status ink touches either (The Reserved Hue Rule; the owner, on a red and a green button under a yellow card: "yellow card on red and green buttons i'm going to VOMIT"). Neither the fill nor the edge changes under the pointer, so the hand's last move never makes one brighter. In Caw's panel the pair's row is the row's last line: Deny on the text column's start, Approve on the trailing edge.
 
 ## The Consequential Grant Rule
 
-Under "Permission gate" (DESIGN.md line 981); rule at line 986.
+Under "Permission gate" (DESIGN.md line 992); rule at line 997.
 
 **The Consequential Grant Rule.** A standing grant ("Always allow … for …") is a wider grant than the request, so it is kept apart: under a 32px break and a hairline, after a sentence saying what it would allow, and drawn in the warning tint with warning ink, a shield glyph and a real edge. It is the most salient control on the card on purpose. Above the answer row the card says who asks (its title), what will happen and to what (one strong line), and how much changes; then the change itself, open (the transcript's diff, at most `c-ask-diff-share` of the screen tall, scrolling inside), and the other input fields in a recess well, each value scrolling past 200px. Nothing is behind a disclosure: a grant is made on what it changes.
 
 ## The Solar Duotone Rule
 
-Under "Icons" (DESIGN.md line 1007); rule at line 1008.
+Under "Icons" (DESIGN.md line 1018); rule at line 1019.
 
 **The Solar Duotone Rule.** Every product icon is Solar's bold-duotone cut, imported through `$lib/icons.ts`: one face for the whole product. The duotone's second layer is the same `currentColor` at 50% opacity. A status glyph keeps its hue (`status-*-glyph`) at that 0.5 and holds 3:1 or more as a whole on the surfaces it sits on, so a row's state reads in colour at a glance (9ca3b2154). Chevrons and arrows (`alt-arrow-*`, `arrow-*`) use Solar's linear cut because they are glyphs, not marks. Close, Minus, Plus and Tick are local glyphs drawn to Solar's 24px grid with a 1.5 linear stroke and round caps, because Solar has no bare version. An icon is the glyph alone: no circle, square, squircle or box stands round a Solar glyph, so a `*-circle`, `*-square` or boxed cut is never used where Solar ships the bare one (sort is `sort-from-top-to-bottom`, not the squircled `sort`), and where Solar ships only a contained cut a container-less glyph is drawn in Solar's style, as the local four are (the owner, 10-24: "u need to draw similar style icons that are without their containers").
 - **Sizes:** 12px beside meta text, 16px in controls and rows (the default for any unsized icon), 20px in nav and headers.
 
 ## The Caret Rule
 
-Under "Focus and hit areas" (DESIGN.md line 1011); rule at line 1012.
+Under "Focus and hit areas" (DESIGN.md line 1022); rule at line 1023.
 
 **The Caret Rule.** A text field's focus indicator is its caret ("When text fields receive focus, a vertical bar is displayed in the field, indicating that the user can insert text", WCAG 2.2 Understanding 2.4.7, w3.org/WAI/WCAG22/Understanding/focus-visible.html). No text field, editor or search strip ever draws the coral focus ring, by a key or by a press: a browser matches `:focus-visible` on any focus of a text field, so a ring there stands the whole time it is typed in. A field with a frame of its own steps that frame's 1px border from `border-control` to `border-control-strong` (3:1, WCAG 1.4.11) while its text has focus, on the frame's own radius (`field-edge`: on the field, or on the frame round a borderless editor). A field that is the whole surface (Find's strip, the composer) shows its caret and nothing else. Under forced colours a text field keeps a transparent outline the system paints (Tailwind's `outline-hidden`).
 
 ## The One Ring Rule
 
-Under "Focus and hit areas" (DESIGN.md line 1011); rule at line 1014.
+Under "Focus and hit areas" (DESIGN.md line 1022); rule at line 1025.
 
 **The One Ring Rule.** Every control (a button, a tab, a row, an option, a handle, a select, a link) shows one ring on keyboard focus only, on `:focus-visible`: a 2px solid outline in `focus-ring`, 2px outside the element. A press on a button shows none. List rows, tabs, options, a select and anything flush against a container or inside a clipping scroller carry the ring inset on their own border box instead, so it never stacks on a border or gets cut. The ring is for focus alone: nothing that is a selection or a mode borrows its colour or its shape, which take the selected marks instead (`selected-bg` and `selected-ink`, the chosen option's `brand-solid` edge, a page mode's 1px `seam`, a selected canvas frame's label in `selected-ink` and its 1px `border-control-strong` edge). The ring's colour is set at rest, so focus only switches it on. A scroller brings a focused control into view with room for its ring. Pointer focus on a control shows nothing.
 
 ## The 44 Touch Rule
 
-Under "Focus and hit areas" (DESIGN.md line 1011); rule at line 1016.
+Under "Focus and hit areas" (DESIGN.md line 1022); rule at line 1027.
 
 **The 44 Touch Rule.** On a coarse pointer every control's tappable area reaches 44×44 through a transparent `::after` (`.touch-hit`, WCAG 2.5.8), while its drawn size and the layout stay the same. Where neighbours sit closer, `--hit-gap-x` and `--hit-gap-y` stop each area at the midpoint so areas never overlap; clusters open their gap on touch (8 to 14px for a row's controls, to 16px in the top bar). A scroller that would clip the areas pads into an equal negative margin. Menu items and nav rows are 44px tall on touch. One exception: a chip set in running text (ui/chip `inline`: a session, mention or skill in the composer or the transcript) takes its line's height as its hit area, as a link does, because a 44px area there would cover the lines above and below it. WCAG 2.2 SC 2.5.8 exempts it: "Inline: The target is in a sentence or its size is otherwise constrained by the line-height of non-target text" (w3.org/WAI/WCAG22/Understanding/target-size-minimum). Every other chip keeps its 44px under a finger.
 
 ## The 24 Pointer Rule
 
-Under "Focus and hit areas" (DESIGN.md line 1011); rule at line 1018.
+Under "Focus and hit areas" (DESIGN.md line 1022); rule at line 1029.
 
 **The 24 Pointer Rule.** On a fine pointer, a control drawn smaller than 24×24 reaches 24px through `.pointer-hit`, with the same midpoint stops. `--hit-scale` keeps the area at 24px on screen inside a zoomed canvas.

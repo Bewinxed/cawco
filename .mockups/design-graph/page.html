@@ -2340,8 +2340,7 @@ html[data-layout="desk"] .panel[data-open="false"] .panel-shell:active .tab-glyp
 /* One row, a hairline the dock's whole width under it (pin 14): the head runs out over the dock's inline padding
    and takes it back inside. */
 .dock-head { flex: none; display: flex; align-items: center; gap: var(--space-2); min-block-size: var(--c-row-h); margin-inline: calc(-1 * var(--space-4)); padding-inline: var(--space-4); border-block-end: 1px solid var(--border-hairline); }
-.dock-title { flex: 1 1 auto; min-inline-size: 0; margin: 0; font: var(--type-label); color: var(--ink-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.transport { display: flex; align-items: center; gap: var(--space-1); flex: none; }
+.transport { display: flex; align-items: center; gap: var(--space-1); flex: none; margin-inline-start: auto; }
 .edits { display: flex; align-items: center; gap: var(--space-2); flex: none; }
 .edits:empty { display: none; }
 .ghost-btn { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; block-size: var(--c-btn-h-sm); padding: 0 var(--space-3); border-radius: var(--radius-md); font: var(--type-label); color: var(--ink-strong); cursor: pointer; transition: var(--transition-control); }
@@ -2367,9 +2366,6 @@ html[data-layout="desk"] .panel[data-open="false"] .panel-shell:active .tab-glyp
 @media (hover: hover) { .tbtn:hover { color: var(--ink-strong); } }
 .tbtn:active { scale: var(--press-scale); }
 /* The time: a Measured figure, "320 / 320 ms". */
-.readout { min-inline-size: 13ch; text-align: end; font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); font-variant-numeric: tabular-nums; color: var(--ink-muted); white-space: nowrap; }
-.readout b { font-weight: var(--weight-body); color: var(--ink-strong); }
-.readout .fig:not(b) { color: var(--ink-muted); }
 .ruler { position: relative; block-size: var(--c-pill-h); cursor: ew-resize; touch-action: none; user-select: none; }
 .ruler span { position: absolute; inset-block-start: 0; font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); line-height: 1; color: var(--ink-subtle); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ruler span.over-end { color: var(--ink-muted); }
@@ -2433,7 +2429,9 @@ html[data-kinds="hue"] .fact-dur > .fig { color: var(--kind); }
 /* A phone's facts line keeps one line: the badge goes first, then the curve's word (data-drop, app.js). */
 .facts[data-drop~="tok"] .tok { display: none; }
 .facts[data-drop~="word"] .word { display: none; }
-.edits-count .num { font-variant-numeric: tabular-nums; color: var(--ink-strong); }
+.tl-edits { display: flex; align-items: center; gap: var(--space-2); padding-block-end: var(--space-1); font: var(--type-meta); color: var(--ink-muted); }
+.tl-edits[hidden] { display: none; }
+.tl-edits .num { font-variant-numeric: tabular-nums; color: var(--ink-strong); }
 
 /* The lane is the row: bars, ghosts and tails on the bare row. A bar on its kind's opaque wash, its 1px edge in
    the kind's ink; in ink only, surface-fill with the 3:1 edge. */
@@ -2648,9 +2646,6 @@ html:is([data-input="touch"], [data-input="touch-hover"]) .fld input { font-size
 /* A row narrower than a name column and a usable lane stacks: its name and facts, then the lane across the
    dock's whole width; lines that run down through the rows at a desk are drawn inside each lane. */
 @container dock (width < 440px) {
-  /* The head stays one row (pin 11): the time is the playhead's pill's to say, the count the rows' changed
-     figures'. */
-  .dock-head :is(.readout, .edits-count) { display: none; }
   .tl { --rows: stacked; }
   .tl-row { grid-template-columns: minmax(0, 1fr); }
   .ruler-row .ruler { grid-column: 1; }
@@ -7213,16 +7208,21 @@ function buildDock(opts = {}) {
   // Its head bar: the move, play and loop, the time; Compare, the count and Reset at its end.
   // The transport and the time hold the bar's trailing end, so play stays where the hand left it whatever
   // the move is called; the edits stand before them when there are any.
-  let head = '<header class="dock-head"><h2 class="dock-title">' + esc(title) + "</h2>";
+  // No title (the graph's lit edge names the move; a reader hears it), no time (the playhead's pill says it) and no
+  // count (it stands over the rows it counts): DESIGN.md, One bar, one row; the design advisor's ruling.
+  let head = '<header class="dock-head" aria-label="' + esc(title) + '">';
   head += '<div class="edits">';
-  if (edited) head += '<div class="t-tabs" id="compare" role="tablist" aria-label="Compare"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" data-view="original"><span class="t-label">Original</span></button><button class="t-tab" role="tab" data-view="edited"><span class="t-label">Edited</span></button></div><span class="badge edits-count"><span class="num">' + n + "</span>" + (n === 1 ? " edit" : " edits") + '</span><button class="ghost-btn" id="resetAll">Reset</button>';
-  head += '</div><div class="transport"><button class="tbtn" id="play" aria-label="Play">' + icon(ICON.play, "i-play") + icon(ICON.pause, "i-pause") + '</button><button class="tbtn" id="loop" aria-label="Loop" aria-pressed="' + looping + '">' + icon(ICON.loop) + '</button></div><span class="readout" id="readout"></span></header>';
+  if (edited) head += '<div class="t-tabs" id="compare" role="tablist" aria-label="Compare"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" data-view="original"><span class="t-label">Original</span></button><button class="t-tab" role="tab" data-view="edited"><span class="t-label">Edited</span></button></div>';
+  head += '</div><div class="transport"><button class="tbtn" id="play" aria-label="Play">' + icon(ICON.play, "i-play") + icon(ICON.pause, "i-pause") + '</button><button class="tbtn" id="loop" aria-label="Loop" aria-pressed="' + looping + '">' + icon(ICON.loop) + '</button></div></header>';
+  // The timeline's own head: how many clips stand edited away from the agent's timing, Reset beside it, only above 0.
+  const editsLine = edited ? '<span class="tl-edits-n"><span class="num">' + n + "</span> changed</span>" + '<button class="ghost-btn" id="resetAll">Reset</button>' : "";
   // The same move drawn again (an edit, a held slider) patches its head and each row in place: the timeline
   // keeps its scroll, and the clip's controls standing in a row stay where they are, a held control keeping
   // its pointer. Any other move draws the dock whole.
   const rowsNow = $("rows"), patch = sameMove && rowsNow && km.clips.every((c) => rowsNow.querySelector('.clip[data-key="' + c.key + '"]')) && rowsNow.querySelectorAll(".clip").length === km.clips.length;
   if (patch) {
     dock.querySelector(".dock-head").outerHTML = head;
+    $("tlEdits").innerHTML = editsLine; $("tlEdits").hidden = !edited;
     const t = document.createElement("div");
     for (const c of km.clips) {
       const old = rowsNow.querySelector('.clip[data-key="' + c.key + '"]');
@@ -7234,6 +7234,7 @@ function buildDock(opts = {}) {
     }
   } else {
     let html = head + '<div class="tl" id="tl"><div class="end-area" id="endArea"></div>';
+    html += '<div class="tl-edits" id="tlEdits"' + (edited ? "" : " hidden") + ">" + editsLine + "</div>";
     html += '<div class="tl-row ruler-row"><div class="ruler" id="ruler"></div></div>';
     html += '<div class="rows" id="rows"><div class="row-ghost" id="rowGhost" aria-hidden="true"></div>' + km.clips.map((c) => clipRow(km.e, c)).join("") + "</div>";
     html += '<div id="ties"></div><div class="playhead" id="playhead"></div></div>';
@@ -7438,7 +7439,6 @@ function updateTime() {
   $("tl").style.setProperty("--ph-x", xOf(g, Math.min(t, g.end)) - g.x0 + "px");
   const rb = $("ruler").getBoundingClientRect(), tb = $("tl").getBoundingClientRect();
   $("playhead").style.setProperty("--ph-y", rb.bottom - tlTop() - px("--space-1") / 2 + "px");
-  $("readout").innerHTML = '<b class="fig">' + Math.round(t) + '</b> / <span class="fig">' + Math.round(len) + '<span class="unit">ms</span></span>';
   $("ruler").dataset.t = Math.round(t);
   $("play").toggleAttribute("data-playing", !!playing);
   $("play").setAttribute("aria-label", playing ? "Pause" : "Play");

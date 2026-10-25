@@ -21,6 +21,7 @@
     type ClipTiming,
     durationTokenOf,
     runEnd,
+    stateName,
   } from "@cawco/core/design-graph";
   import { tick } from "svelte";
   import { frameSize } from "#lib/cawco/frame-observer.js";
@@ -33,7 +34,13 @@
   import { IconPause, IconPlay, IconRepeat } from "#lib/icons.js";
   import ClipControls from "./ClipControls.svelte";
   import CurveGlyph from "./CurveGlyph.svelte";
-  import { curveWord, dragTo, ladderOf, tokenWord } from "./clip-words";
+  import {
+    curveWord,
+    dragTo,
+    ladderOf,
+    propertyWords,
+    tokenWord,
+  } from "./clip-words";
   import type { DesignGraph } from "./design-graph.svelte";
   import GlassGroup from "./GlassGroup.svelte";
   import KindGlyph from "./KindGlyph.svelte";
@@ -345,24 +352,18 @@
     {@attach frameSize((node: HTMLElement) => {
       dockW = node.clientWidth;
     })}
-    aria-label={words.timeline}
+    aria-label={words.move(stateName(move.from), stateName(move.to))}
     class="flex h-full min-h-0 min-w-0 flex-col"
     data-inspecting={inspecting || undefined}
     data-move-dock
     data-stacked={stacked || undefined}
     data-view={graph.view}
   >
-    <!-- The head is one row (pin 11): the move's name, cut to fit, then Original | Edited, the count and Reset once it has edits, then play, loop and the time; a hairline the dock's whole width under it (pin 14). A narrow dock leaves the time to the playhead's pill and the count to the rows' changed figures. -->
+    <!-- The head is one row at every width with a hairline the dock's whole width under it (pins 11, 14): Original | Edited once the move has edits, then play and loop, one trailing glass group of bare symbols. No title (the graph's lit edge names the move; the dock says it to a reader), no time (the playhead's pill says it) and no count (it stands over the rows it counts): DESIGN.md, One bar, one row. -->
     <header
       class="flex min-h-c-row-h min-w-0 flex-none items-center gap-space-2 border-b border-border-hairline px-space-2"
       data-dock-head
     >
-      <h3
-        class="m-0 min-w-0 flex-1 truncate type-label text-ink-strong"
-        title={words.move(move.from, move.to)}
-      >
-        {words.move(move.from, move.to)}
-      </h3>
       {#if graph.changed.size > 0}
         <Tabs
           class="flex-none"
@@ -376,23 +377,8 @@
             <TabItem label={words.edited} value="edited" />
           </TabsList>
         </Tabs>
-        {#if !stacked}
-          <span
-            class="flex-none rounded-xs bg-surface-recess px-space-1 type-meta whitespace-nowrap text-ink-row tabular-nums"
-            data-edits
-          >
-            {words.edits(graph.changed.size)}
-          </span>
-        {/if}
-        <button
-          class={GHOST}
-          data-reset-all
-          onclick={() => graph.resetAll()}
-          title={words.resetTip}
-          type="button">{words.reset}</button
-        >
       {/if}
-      <GlassGroup class="flex-none">
+      <GlassGroup class="ms-auto flex-none">
         <button
           aria-label={graph.playing ? words.pause : words.play}
           class={SYMBOL}
@@ -418,16 +404,6 @@
           type="button"><IconRepeat /></button
         >
       </GlassGroup>
-      {#if !stacked}
-        <output
-          aria-label={words.readout(readout, Math.round(graph.length))}
-          class="flex-none text-end type-code whitespace-nowrap text-ink-muted tabular-nums"
-          data-readout
-          ><b class="font-normal text-ink-strong">{readout}</b> / {Math.round(
-            graph.length
-          )}<span class="type-meta"> ms</span></output
-        >
-      {/if}
     </header>
 
     {#if move.error}
@@ -464,6 +440,25 @@
               ? "minmax(0, 1fr)"
               : "minmax(0, var(--c-dock-name-w)) minmax(0, 1fr)"}
           >
+            {#if graph.changed.size > 0}
+              <!-- The timeline's own head: how many clips stand edited away from the agent's timing, and Reset beside it, only above 0 (The Earned Count Rule). -->
+              <div
+                class="col-span-full flex min-w-0 items-center gap-space-2 pb-space-1"
+                data-edits-line
+              >
+                <span
+                  class="min-w-0 truncate type-meta text-ink-muted tabular-nums"
+                  data-edits>{words.changed(graph.changed.size)}</span
+                >
+                <button
+                  class={GHOST}
+                  data-reset-all
+                  onclick={() => graph.resetAll()}
+                  title={words.resetTip}
+                  type="button">{words.reset}</button
+                >
+              </div>
+            {/if}
             <!-- The ruler: round times, sticky over the rows; a press or a drag on it scrubs. -->
             {#if !stacked}<span class="sticky top-0 z-2 bg-surface-raised"
               ></span>{/if}
@@ -488,10 +483,9 @@
                   >{mark}</span
                 >
               {/each}
-              <!-- The playhead's head (pin 13): a pill saying the moment the page stands, over the ruler's marks, its line down through the lanes; ink, never coral (DESIGN.md, The Coral Is Where You Act Rule), as a tooltip is (The Ink Stays Ink Rule). Held inside the ruler at its ends. -->
+              <!-- The playhead's head (pin 13), the one place the time is said: a pill saying the moment the page stands in tabular figures, over the ruler's marks, its line down through the lanes; ink, never coral (DESIGN.md, The Coral Is Where You Act Rule), as a tooltip is (The Ink Stays Ink Rule). Held inside the ruler at its ends. -->
               <output
                 aria-label={words.readout(readout, Math.round(graph.length))}
-                aria-hidden={!stacked || undefined}
                 class="pointer-events-none absolute inset-y-0 left-(--x) z-1 grid -translate-x-1/2 place-items-center rounded-pill bg-ink-solid px-space-1 type-code text-on-ink tabular-nums"
                 data-playhead-knob
                 style:--x={`${Math.max(numberOf("--space-4"), Math.min(laneW - numberOf("--space-4"), xOf(Math.min(time, end))))}px`}
@@ -523,7 +517,7 @@
                       >
                         {clip.element}
                         <code class="type-code text-ink-muted"
-                          >{clip.property}</code
+                          >{propertyWords(clip.property)}</code
                         >
                       </p>
                     </div>

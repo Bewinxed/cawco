@@ -18,6 +18,9 @@
       // Design previews served as plain folders for the owner to judge (design-previews/<page>/),
       // mock-ups as mocks/ are; their proof is a probe-kit spec, which is linted.
       "!design-previews",
+      // A design's mock-up rounds (.mockups/<design>/: the drawing a build follows), as design-previews/ are; their
+      // proof is the mock-up's own check.mjs, read from the engine.
+      "!.mockups",
       "!.design-foundations",
       "!.mcp.json",
       "!packages/jsonl-parser",

@@ -681,7 +681,11 @@ async function pins(browser, w, h, engine) {
     const facts = [...document.querySelectorAll(".clip .facts")].map((f) => { const b = f.getBoundingClientRect(), m = b.top + b.height / 2; return { wide: f.scrollWidth > f.clientWidth + 1, off: Math.max(0, ...[...f.children].filter((c) => c.getClientRects().length).map((c) => { const q = c.getBoundingClientRect(); return Math.abs(q.top + q.height / 2 - m); })) }; });
     return {
       // A narrow dock leaves the count to the rows (its container query): it is asked for where the dock is wide.
-      parts: ["#compare", "#resetAll", ".dock-title", "#play", "#loop", ...(d.clientWidth >= 440 ? [".edits-count"] : [])].filter((q) => { const e = el.querySelector(q); return !e || !e.getClientRects().length; }),
+      parts: ["#compare", "#play", "#loop"].filter((q) => { const e = el.querySelector(q); return !e || !e.getClientRects().length; }),
+      // The ruling: no title, time, count or Reset in the head at any width; the count over the rows, Reset beside it.
+      inHead: [...el.querySelectorAll("h1, h2, h3, .readout, .edits-count, .tl-edits-n, #resetAll")].map((e) => e.textContent.trim()),
+      edits: document.querySelector("#tlEdits:not([hidden]) .tl-edits-n")?.textContent.trim() ?? null,
+      reset: !!document.querySelector("#tlEdits:not([hidden]) #resetAll"),
       off: Math.round(Math.max(...kids.map((k) => Math.abs(k.top + k.height / 2 - mid))) * 10) / 10,
       inside: kids.every((k) => k.left >= r.left - 0.5 && k.right <= r.right + 0.5),
       height: Math.round(r.height), rowH: parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--c-row-h")),
@@ -691,7 +695,7 @@ async function pins(browser, w, h, engine) {
       says: ruler.dataset.t, pill: { content: pill.content, radius: parseFloat(pill.borderTopLeftRadius), h: parseFloat(pill.height) || rr.height, bg: pill.backgroundColor, ink: __k.color("--ink-solid") },
     };
   });
-  ok(V, "#11: the dock's head is one row of the row's height, its name then Original | Edited, the count, Reset, play and loop, all inside it; each clip's facts one line", head.parts.length === 0 && head.off <= 2 && head.inside && head.height <= head.rowH + 1 && head.factsWide === 0 && head.factsTall === 0, JSON.stringify(head));
+  ok(V, "#11: the dock's head is one row of the row's height, Original | Edited then play and loop, all inside it, with no title, time, count or Reset; the count of changed clips over the rows with Reset beside it; each clip's facts one line", head.parts.length === 0 && head.inHead.length === 0 && /^[1-9]\d* changed$/.test(head.edits || "") && head.reset && head.off <= 2 && head.inside && head.height <= head.rowH + 1 && head.factsWide === 0 && head.factsTall === 0, JSON.stringify(head));
   ok(V, "#14: a 1px hairline the dock's whole width under its head", head.hairline === "1px" && Math.abs(head.across) <= 1, JSON.stringify({ hairline: head.hairline, across: head.across }));
   ok(V, "#13: the playhead's head is an ink pill on the ruler saying the time in figures", /^\d+$/.test(head.says || "") && head.pill.radius >= head.pill.h / 2 - 0.5 && head.pill.bg === head.pill.ink, JSON.stringify({ says: head.says, pill: head.pill }));
   // #18: no corner grip: the only resize marks are the two arcs (section A), no L-shaped grip anywhere.

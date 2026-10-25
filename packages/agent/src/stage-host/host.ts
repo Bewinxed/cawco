@@ -1125,7 +1125,8 @@ const VIEWPORT_META = /<meta\b[^>]*\bname=["']viewport["']/i;
 /** A page's head tag, where its encoding goes first. */
 const HEAD_TAG = /<head\b[^>]*>/i;
 /** A page's own declared encoding: `<meta charset>` or its `http-equiv` form. */
-const CHARSET_META = /<meta\b[^>]*\b(?:charset|http-equiv=["']content-type["'])/i;
+const CHARSET_META =
+  /<meta\b[^>]*\b(?:charset|http-equiv=["']content-type["'])/i;
 /** `%sveltekit.head%`, `%sveltekit.assets%` … and a project's own (`%cawco.tab-icon%`). */
 const PLACEHOLDER = /%[\w.-]+%/g;
 const INLINE_SCRIPT = /<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/gi;

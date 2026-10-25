@@ -35,6 +35,7 @@
     curveWord,
     ladderOf,
     nearest,
+    propertyWords,
     sliderMax,
     tokenWord,
   } from "./clip-words";
@@ -501,7 +502,9 @@
             class="m-0 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-strong"
           >
             {clip.element}
-            <code class="type-code text-ink-muted">{clip.property}</code>
+            <code class="type-code text-ink-muted"
+              >{propertyWords(clip.property)}</code
+            >
           </p>
         </div>
       {:else}

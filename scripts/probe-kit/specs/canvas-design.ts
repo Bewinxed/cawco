@@ -7,31 +7,33 @@
  * daemon starts one (minus the workspace boundary), and the `/motion/
  * artifact-head` bench holding the real PreviewPane on that canvas.
  *
- * The canvas page at 390 and 523 (a phone's: one frame and its strip, under
- * a finger) and 1024 (the desk), light and dark:
- * 1. The strip stands under the band: their boxes don't overlap, and
- *    Outline and Reset layout are what a press at their centres lands on.
- * 2. The page is the well (`surface-well`), the head's foot its edge
- *    (`border-well`).
- * 3. The frame in view is said by its label row (`selected-bg`,
- *    `selected-ink`, 4.5:1); the inspector's story by DESIGN.md's
- *    selected marks, never the focus ring's shape: its label's words in
- *    `selected-ink` and a 1px `border-control-strong` edge flush on its
- *    box (a box-shadow; no outline), meeting neither its label nor its
- *    status.
- * 4. A pressed ghost is `surface-pressed`, the current outline row
- *    `selected-bg` with `selected-ink`.
- * 5. The state chips are 30px at `radius-sm` with a 44px touch area under a
- *    finger, the chosen one edged in `brand-solid` (3:1 on the strip); the
- *    story picker is the input recipe, edged in `border-button-outline`
- *    (3:1), with the sort-vertical glyph.
- * 6. An unnamed story's label says "Unnamed" in meta, upright; a label never
- *    repeats its name under it; a section is named in words (no path, no
- *    `.stories`) over its file in meta ink (owner: "the hyperlink thing"),
- *    never underlined; the steps lead and end with Solar's chevrons, no ◀ ▶.
- * 7. The house faces load: `document.fonts.check('500 13px "Figtree
- *    Variable"')`, and JetBrains Mono's once asked for (the page sets no
- *    code at rest; a failed section's details do).
+ * The design graph (Projects spec §5.10; `CANVAS_DESIGN=graph` alone,
+ * `CANVAS_GRAPH=<width>[,<theme>]` one leg), on the bench over the routine
+ * form's canvas, its page overlaid as the hub serves it into a panel, at
+ * 1440, 680 and 390 light and 1440 dark, in Chromium and WebKit
+ * (`PROBE_ENGINE=webkit`). G: the stage draws every section and plays its
+ * moves first. G1–G6: the graph stands as a panel or a drawer inside the
+ * pane, a tab per component, a machine named by its slab's header alone
+ * (pick "headers"), the page standing the kept state alone, every state in
+ * its slab, the move and the agent's edge drawn. G28: the agent's two dials,
+ * each a slider drawing on the kept frame at once. G7–G8: a hover previews a
+ * state with a wash over what came in (pick "washes"), gone on leaving.
+ * G9: a press keeps it, the move into it lit and its clips in the dock.
+ * G29–G31: the dock's head is one row with a hairline its width under it,
+ * holding no title, time, count or Reset; the playhead an ink pill saying
+ * the time; the count of edited clips over the rows with Reset beside it,
+ * only above 0 (pins 11, 13, 14 and the design advisor's ruling). G10: a clip's
+ * controls open in its row, never a dialog (the seam's default). G11–G12: a
+ * spring at 437 ms and 0.37 bounce reaches `tuned` as ad hoc, each value
+ * replaying the move (pick "replay"). G13–G15: the bar's end snaps to a page
+ * token, ⌥ frees it to a dashed ad-hoc chip, a key's nudge stays still (pick
+ * "snap"). G16: Original | Edited, the edited bar an outline under Original
+ * (pick "segments"). G17: a pin left while Save failed is kept carries the
+ * graph's path, said on its card (pick "pins"). G18–G20b: the panel's edges
+ * resize it, a corner double-press restores it, Hide and Show one box on one
+ * clock, read on the Animation domain (pick "edges"). G26–G27: the drawer's
+ * stops. G22–G25: no text under the meta size, nothing spills, the canvas
+ * page loads once, no error in the pane or the page.
  *
  * The panel (the bench) at 390, 523 and 720, light and dark:
  * 8. (330 too, where the mode stands as one button; and 8h, at 330 with
@@ -266,7 +268,8 @@ const GRAPH_CANVAS: CanvasSpec = {
     {
       from: `${ROUTINE_FILE}:SaveFailed`,
       to: `${ROUTINE_FILE}:Saving`,
-      label: "Try again",
+      // The agent's own label for the edge, the house's words for it.
+      label: commonWords.tryAgain,
     },
   ],
   // Two of the agent's own, each a slider (pin 7: "the agent decides"): the form's field corners and the room between its fields, each a token the form draws with.
@@ -566,10 +569,6 @@ const EDGES_AT = ({
   shadows: boolean;
 }): string[] => {
   const scopes: (Document | ShadowRoot)[] = [document];
-  const shadow = document.getElementById("cawco-chrome")?.shadowRoot;
-  if (shadow) {
-    scopes.push(shadow);
-  }
   // An element by its hook: its slot, else its first data attribute, else
   // its first class (the canvas chrome's own DOM keeps classes).
   const hookOf = (el: Element) => {
@@ -1286,19 +1285,9 @@ async function ownTabLeg(
         frame.url().includes("/@cawco/canvas") &&
         !frame.url().includes("by=map")
     );
-  // What the band shows, not what it holds: a framed band keeps its name hidden, and draws no line under it.
+  // What the framed page says, as drawn: its sections' names and its frames, never the canvas's name or its ask.
   const band = canvas
-    ? await canvas.evaluate(() => {
-        const root = document.getElementById("cawco-chrome")?.shadowRoot;
-        return [
-          ...(root?.querySelectorAll<HTMLElement>(
-            ".band > div:not(.crumb, .tools)"
-          ) ?? []),
-        ]
-          .filter((el) => getComputedStyle(el).display !== "none")
-          .map((el) => el.textContent ?? "")
-          .join(" | ");
-      })
+    ? await canvas.evaluate(() => document.body.innerText)
     : null;
   kit.check(
     `8i: ${theme}: in its own tab the canvas is named once, by its head, its ask on the line under the name; its page, framed there, says neither`,
@@ -2212,8 +2201,14 @@ async function serveDoc(
       const [first] = docs.values();
       return first
         ? {
-            state: first.doc.getMap("state").toJSON() as Record<string, unknown>,
-            pins: first.doc.getMap("pins").toJSON() as Record<string, Partial<Pin>>,
+            state: first.doc.getMap("state").toJSON() as Record<
+              string,
+              unknown
+            >,
+            pins: first.doc.getMap("pins").toJSON() as Record<
+              string,
+              Partial<Pin>
+            >,
           }
         : null;
     },
@@ -3189,8 +3184,7 @@ async function withOverlay(
     await route.fulfill({
       status: 200,
       headers: {
-        "content-type":
-          answer.headers.get("content-type") ?? "text/javascript",
+        "content-type": answer.headers.get("content-type") ?? "text/javascript",
         "cache-control": "no-store",
       },
       body: await answer.text(),
@@ -3211,6 +3205,8 @@ async function withOverlay(
 const GRAPH_PANEL = "[data-graph-panel]";
 /** A time in whole figures, as the playhead's pill says it. */
 const FIGURES = /^\d+$/;
+/** The timeline's count of clips edited away from the agent's timing. */
+const FIGURES_CHANGED = /^[1-9]\d* changed$/;
 const nodeAt = (story: string) => `${GRAPH_PANEL} [data-node="${story}"]`;
 /** A state's own words in its node: a press there keeps the state at rest, past its variations' chips. */
 const nodeWordsAt = (story: string) => `${nodeAt(story)} > span:first-child`;
@@ -3313,7 +3309,9 @@ async function openGraphBench(
           );
           return {
             frame: frame
-              ? [...frame.attributes].map((one) => `${one.name}=${one.value.slice(0, 80)}`)
+              ? [...frame.attributes].map(
+                  (one) => `${one.name}=${one.value.slice(0, 80)}`
+                )
               : null,
             graph: !!document.querySelector("[data-design-graph-host]"),
           };
@@ -3321,7 +3319,9 @@ async function openGraphBench(
       )} | page: ${JSON.stringify(
         await canvasFrameOf(page)
           ?.evaluate(() => ({
-            overlay: !!document.querySelector('script[src*="/__cawco/overlay.js"]'),
+            overlay: !!document.querySelector(
+              'script[src*="/__cawco/overlay.js"]'
+            ),
             graph: String(
               JSON.stringify(
                 (window as unknown as { __cawcoDesignGraph?: unknown })
@@ -3348,7 +3348,9 @@ async function openGraphBench(
               const r = document
                 .querySelector(".cawco-canvas")
                 ?.getBoundingClientRect();
-              return r ? [r.left, r.top, r.width, r.height].map(Math.round) : null;
+              return r
+                ? [r.left, r.top, r.width, r.height].map(Math.round)
+                : null;
             })(),
             sections: [
               ...document.querySelectorAll<HTMLElement>(".cawco-section"),
@@ -3356,8 +3358,9 @@ async function openGraphBench(
               const r = one.getBoundingClientRect();
               return `${[r.left, r.top, r.width, r.height].map(Math.round).join(",")} ${JSON.stringify(one.dataset)}`;
             }),
-            world: document.querySelector<HTMLElement>(".cawco-world")?.style
-              .transform,
+            world:
+              document.querySelector<HTMLElement>(".cawco-world")?.style
+                .transform,
           }))
           .catch((error: Error) => error.message)
       )} | stage: ${JSON.stringify(stage.errors()).slice(0, 900)} ${stage.heard()} | errors: ${errors.join(" | ")}`
@@ -3378,7 +3381,13 @@ interface GraphRead {
   fonts: { at: string; least: number; meta: number };
   mode: string | null;
   namesSaid: Record<string, number>;
-  nodes: { box: Box; kept: boolean; machine: string; peek: boolean; story: string }[];
+  nodes: {
+    box: Box;
+    kept: boolean;
+    machine: string;
+    peek: boolean;
+    story: string;
+  }[];
   open: string | null;
   pane: Box | null;
   panel: Box | null;
@@ -3404,7 +3413,9 @@ async function readGraph(page: Page): Promise<GraphRead> {
     };
     const panel = document.querySelector<HTMLElement>(selector);
     const host = document.querySelector("[data-design-graph-host]");
-    const frame = document.querySelector("[data-bench-pane] iframe[data-ready]");
+    const frame = document.querySelector(
+      "[data-bench-pane] iframe[data-ready]"
+    );
     const probe = document.createElement("i");
     probe.style.font = "var(--type-meta)";
     document.body.append(probe);
@@ -3496,7 +3507,9 @@ async function readGraph(page: Page): Promise<GraphRead> {
         continue;
       }
       // A drawn box outside the pane, its own scrollers' content aside (a graph or a timeline runs on past its view).
-      const scrolled = el.closest("[data-design-graph], [data-lanes], [data-inspector]");
+      const scrolled = el.closest(
+        "[data-design-graph], [data-lanes], [data-inspector]"
+      );
       if (
         paneBox &&
         !scrolled &&
@@ -3507,7 +3520,12 @@ async function readGraph(page: Page): Promise<GraphRead> {
           b.bottom > paneBox.bottom + 0.5)
       ) {
         spills.push(
-          `${el.tagName.toLowerCase()}[${[...el.attributes].map((one) => one.name).filter((one) => one.startsWith("data-")).join(",")}] outside the pane: ${Math.round(b.left)}–${Math.round(b.right)} × ${Math.round(b.top)}–${Math.round(b.bottom)} in ${Math.round(paneBox.left)}–${Math.round(paneBox.right)} × ${Math.round(paneBox.top)}–${Math.round(paneBox.bottom)}`
+          `${el.tagName.toLowerCase()}[${[...el.attributes]
+            .map((one) => one.name)
+            .filter((one) => one.startsWith("data-"))
+            .join(
+              ","
+            )}] outside the pane: ${Math.round(b.left)}–${Math.round(b.right)} × ${Math.round(b.top)}–${Math.round(b.bottom)} in ${Math.round(paneBox.left)}–${Math.round(paneBox.right)} × ${Math.round(paneBox.top)}–${Math.round(paneBox.bottom)}`
         );
       }
     }
@@ -3575,21 +3593,23 @@ async function readStage(page: Page): Promise<{
       story: el.dataset.cawcoStory ?? "",
       interaction: el.dataset.cawcoInteraction ?? "",
     }));
-    const view = document.querySelector(".cawco-canvas")?.getBoundingClientRect();
+    const view = document
+      .querySelector(".cawco-canvas")
+      ?.getBoundingClientRect();
     // Frames a reader would see: drawn, in the canvas's view, and not faded out.
-    const seen = [...document.querySelectorAll<HTMLElement>(".cawco-frame")].filter(
-      (el) => {
-        const r = el.getBoundingClientRect();
-        return (
-          !!view &&
-          Number(getComputedStyle(el).opacity) > 0 &&
-          r.right > view.left &&
-          r.left < view.right &&
-          r.bottom > view.top &&
-          r.top < view.bottom
-        );
-      }
-    ).length;
+    const seen = [
+      ...document.querySelectorAll<HTMLElement>(".cawco-frame"),
+    ].filter((el) => {
+      const r = el.getBoundingClientRect();
+      return (
+        !!view &&
+        Number(getComputedStyle(el).opacity) > 0 &&
+        r.right > view.left &&
+        r.left < view.right &&
+        r.bottom > view.top &&
+        r.top < view.bottom
+      );
+    }).length;
     return {
       staged: document.documentElement.hasAttribute("data-cawco-staged"),
       on,
@@ -3638,15 +3658,17 @@ async function asksSince(page: Page): Promise<string[]> {
 /** Every error thrown in any of the bench's frames, the canvas page's among them, as `openGraphBench` keeps them. */
 async function thrownIn(page: Page): Promise<string[]> {
   const all = await Promise.all(
-    page.frames().map((frame) =>
-      frame
-        .evaluate(
-          () =>
-            (window as unknown as { __probeErrors?: string[] }).__probeErrors ??
-            []
-        )
-        .catch(() => [] as string[])
-    )
+    page
+      .frames()
+      .map((frame) =>
+        frame
+          .evaluate(
+            () =>
+              (window as unknown as { __probeErrors?: string[] })
+                .__probeErrors ?? []
+          )
+          .catch(() => [] as string[])
+      )
   );
   return all.flat();
 }
@@ -3671,9 +3693,10 @@ async function commentMode(
   const compact = page
     .locator(`${head} button[aria-label^="Mode: "]`)
     .filter({ visible: true });
-  await ((await compact.count()) > 0
-    ? compact.first()
-    : page.locator(`${head} [data-slot=more]`)
+  await (
+    (await compact.count()) > 0
+      ? compact.first()
+      : page.locator(`${head} [data-slot=more]`)
   ).click();
   await page.getByRole("menuitemradio", { name: mode }).click();
 }
@@ -3685,61 +3708,89 @@ async function dockHeadLeg(
   leg: string,
   when: string
 ): Promise<void> {
-    // Pin 11 and 14: the dock's head is one row, a hairline the dock's whole width under it; pin 13: the playhead's head a pill saying the time.
-    const head = await page.evaluate(() => {
-      const el = document.querySelector<HTMLElement>("[data-dock-head]");
-      const surface = el?.closest<HTMLElement>(
-        '[data-graph-dock], [data-graph-panel="drawer"]'
-      );
-      const knob = document.querySelector<HTMLElement>("[data-playhead-knob]");
-      if (!(el && surface && knob)) {
-        return null;
-      }
-      const r = el.getBoundingClientRect();
-      const s = surface.getBoundingClientRect();
-      const kids = [...el.children].map((one) => one.getBoundingClientRect());
-      const k = knob.getBoundingClientRect();
-      const ks = getComputedStyle(knob);
-      return {
-        // How far the furthest of its children stands off the head's middle: one row is all of them on it.
-        off: Math.max(
-          0,
-          ...kids.map((one) =>
-            Math.abs(one.top + one.height / 2 - (r.top + r.height / 2))
-          )
+  // Pin 11 and 14: the dock's head is one row, a hairline the dock's whole width under it; pin 13: the playhead's head a pill saying the time.
+  const head = await page.evaluate(() => {
+    const el = document.querySelector<HTMLElement>("[data-dock-head]");
+    const surface = el?.closest<HTMLElement>(
+      '[data-graph-dock], [data-graph-panel="drawer"]'
+    );
+    const knob = document.querySelector<HTMLElement>("[data-playhead-knob]");
+    if (!(el && surface && knob)) {
+      return null;
+    }
+    const r = el.getBoundingClientRect();
+    const s = surface.getBoundingClientRect();
+    const kids = [...el.children].map((one) => one.getBoundingClientRect());
+    const k = knob.getBoundingClientRect();
+    const ks = getComputedStyle(knob);
+    return {
+      // How far the furthest of its children stands off the head's middle: one row is all of them on it.
+      off: Math.max(
+        0,
+        ...kids.map((one) =>
+          Math.abs(one.top + one.height / 2 - (r.top + r.height / 2))
+        )
+      ),
+      inside: kids.every(
+        (one) => one.left >= r.left - 0.5 && one.right <= r.right + 0.5
+      ),
+      height: Math.round(r.height),
+      hairline: getComputedStyle(el).borderBottomWidth,
+      across: Math.round(r.width - s.width + 2),
+      pill: Number.parseFloat(ks.borderTopLeftRadius) >= k.height / 2,
+      says: knob.textContent?.trim(),
+      figures: ks.fontVariantNumeric,
+      ink: ks.backgroundColor,
+      // What the head may not say (DESIGN.md, One bar, one row): a title, the time, a count, Reset.
+      inHead: [
+        ...el.querySelectorAll(
+          "h1, h2, h3, h4, [data-readout], [data-edits], [data-reset-all]"
         ),
-        inside: kids.every(
-          (one) => one.left >= r.left - 0.5 && one.right <= r.right + 0.5
-        ),
-        height: Math.round(r.height),
-        hairline: getComputedStyle(el).borderBottomWidth,
-        across: Math.round(r.width - s.width + 2),
-        pill: Number.parseFloat(ks.borderTopLeftRadius) >= k.height / 2,
-        says: knob.textContent?.trim(),
-        ink: ks.backgroundColor,
-      };
-    });
-    const rowH = await page.evaluate(() =>
-      Number.parseFloat(
-        getComputedStyle(document.documentElement).getPropertyValue("--c-row-h")
-      )
-    );
-    kit.check(
-      `G29 (pins 11, 14): ${leg}, ${when}: the dock's head is one row of the row's height, everything in it inside it, a 1px hairline the dock's whole width under it`,
-      !!head &&
-        head.off <= 2 &&
-        head.inside &&
-        head.height <= rowH + 1 &&
-        head.hairline === "1px" &&
-        Math.abs(head.across) <= 2,
-      JSON.stringify({ head, rowH })
-    );
-    kit.check(
-      `G30 (pin 13): ${leg}, ${when}: the playhead's head is a pill saying the time the page stands, in figures`,
-      !!head && head.pill && FIGURES.test(head.says ?? ""),
-      JSON.stringify(head)
-    );
-  }
+      ].map((one) => one.textContent?.trim() ?? ""),
+      // The count over the rows it counts, Reset beside it: drawn only above 0.
+      edits:
+        document
+          .querySelector("[data-edits-line] [data-edits]")
+          ?.textContent?.trim() ?? null,
+      reset: !!document.querySelector("[data-edits-line] [data-reset-all]"),
+      edited: !!document.querySelector(
+        '[data-move-dock] [aria-label="Compare"]'
+      ),
+    };
+  });
+  const rowH = await page.evaluate(() =>
+    Number.parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue("--c-row-h")
+    )
+  );
+  kit.check(
+    `G29 (pins 11, 14): ${leg}, ${when}: the dock's head is one row of the row's height, everything in it inside it, a 1px hairline the dock's whole width under it`,
+    !!head &&
+      head.off <= 2 &&
+      head.inside &&
+      head.height <= rowH + 1 &&
+      head.hairline === "1px" &&
+      Math.abs(head.across) <= 2,
+    JSON.stringify({ head, rowH })
+  );
+  kit.check(
+    `G30 (pin 13): ${leg}, ${when}: the playhead's head is a pill saying the time the page stands, in tabular figures, the one place the time is said`,
+    !!head &&
+      head.pill &&
+      FIGURES.test(head.says ?? "") &&
+      head.figures.includes("tabular-nums"),
+    JSON.stringify(head)
+  );
+  kit.check(
+    `G31 (the head's ruling): ${leg}, ${when}: the head holds no title, time, count or Reset; the count stands over the rows it counts with Reset beside it, only above 0`,
+    !!head &&
+      head.inHead.length === 0 &&
+      (head.edited
+        ? FIGURES_CHANGED.test(head.edits ?? "") && head.reset
+        : head.edits === null && !head.reset),
+    JSON.stringify(head)
+  );
+}
 
 /** A clip bar's box and the clip's duration figure, in the dock. */
 const barOf = async (page: Page, id: number) => ({
@@ -3751,8 +3802,9 @@ const barOf = async (page: Page, id: number) => ({
     .then((one) => Number.parseInt(one ?? "", 10))
     .catch(() => Number.NaN),
   adHoc:
-    (await page.locator(`[data-clip="${id}"] [data-ad-hoc="duration"]`).count()) >
-    0,
+    (await page
+      .locator(`[data-clip="${id}"] [data-ad-hoc="duration"]`)
+      .count()) > 0,
 });
 
 /**
@@ -3815,7 +3867,10 @@ async function graphLeg(
     `G3 (headers): ${leg}: the machine is named by its slab's header, and said nowhere else in the graph`,
     read.bands.map((one) => one.text).join("|") === "Saving it" &&
       Object.values(read.namesSaid).every((count) => count === 1),
-    JSON.stringify({ bands: read.bands.map((one) => one.text), said: read.namesSaid })
+    JSON.stringify({
+      bands: read.bands.map((one) => one.text),
+      said: read.namesSaid,
+    })
   );
   let staged = await stageStands(page, "Filled");
   kit.check(
@@ -3835,7 +3890,9 @@ async function graphLeg(
   );
   kit.check(
     `G5: ${leg}: every state stands inside its slab, none on another`,
-    placed && apart && read.nodes.some((one) => one.kept && one.story === "Filled"),
+    placed &&
+      apart &&
+      read.nodes.some((one) => one.kept && one.story === "Filled"),
     JSON.stringify(read.nodes.map((one) => [one.story, one.machine, one.kept]))
   );
   const tryAgain = read.edges.find(
@@ -3844,11 +3901,15 @@ async function graphLeg(
   kit.check(
     `G6: ${leg}: the move and the agent's edge are drawn between the states`,
     !!tryAgain &&
-      read.edges.some((one) => one.from === "Filled" && one.to === "SaveFailed"),
+      read.edges.some(
+        (one) => one.from === "Filled" && one.to === "SaveFailed"
+      ),
     JSON.stringify(read.edges)
   );
   // Dials (pin 7): every dial the agent put up stands as its own slider; one moved draws on the page's frames at once.
-  const sliders = page.locator(`${GRAPH_PANEL} [data-dials] input[type="range"]`);
+  const sliders = page.locator(
+    `${GRAPH_PANEL} [data-dials] input[type="range"]`
+  );
   const sliderNames = await sliders.evaluateAll((all) =>
     all.map((one) => one.getAttribute("aria-label") ?? "")
   );
@@ -3905,15 +3966,15 @@ async function graphLeg(
     const back = await readStage(page);
     kit.check(
       `G8 (washes): ${leg}: leaving it, the page stands the kept state again and its washes go`,
-      back.on.every((one) => one.story === "Filled") && back.washes.length === 0,
+      back.on.every((one) => one.story === "Filled") &&
+        back.washes.length === 0,
       JSON.stringify(back)
     );
   }
   // A press keeps Save failed: the move into it plays, and the dock stands.
   // The state's own words as its node says them: the pin's path names it so.
   const stateWords =
-    (await page.locator(nodeWordsAt("SaveFailed")).textContent())?.trim() ??
-    "";
+    (await page.locator(nodeWordsAt("SaveFailed")).textContent())?.trim() ?? "";
   await page.locator(nodeWordsAt("SaveFailed")).click();
   staged = await stageStands(page, "SaveFailed");
   // Read on the graph's face, before a drawer turns to its timeline.
@@ -3949,7 +4010,11 @@ async function graphLeg(
       ),
       move: await canvasFrameOf(page)
         ?.evaluate(() =>
-          String(JSON.stringify((window as unknown as { __cawcoMove?: unknown }).__cawcoMove)).slice(0, 600)
+          String(
+            JSON.stringify(
+              (window as unknown as { __cawcoMove?: unknown }).__cawcoMove
+            )
+          ).slice(0, 600)
         )
         .catch((error: Error) => error.message),
     })
@@ -3970,9 +4035,13 @@ async function graphLeg(
   // Clip controls open in the row (the seam's default), never a dialog.
   await asksSince(page);
   await page.locator('[data-bar="0"]').click();
-  await page.waitForSelector("[data-clip-controls]", { timeout: 5000 }).catch(() => undefined);
+  await page
+    .waitForSelector("[data-clip-controls]", { timeout: 5000 })
+    .catch(() => undefined);
   const placement = await page.evaluate(() => {
-    const controls = document.querySelector<HTMLElement>("[data-clip-controls]");
+    const controls = document.querySelector<HTMLElement>(
+      "[data-clip-controls]"
+    );
     return {
       placement: controls?.dataset.placement ?? null,
       inRow: !!controls?.closest('[data-clip="0"]'),
@@ -4001,12 +4070,16 @@ async function graphLeg(
     await page.close();
     return;
   }
-  await page.waitForSelector("[data-clip-controls] [data-spring]", { timeout: 5000 }).catch(() => undefined);
+  await page
+    .waitForSelector("[data-clip-controls] [data-spring]", { timeout: 5000 })
+    .catch(() => undefined);
   for (const [field, value] of [
     ["duration", "437"],
     ["bounce", "0.37"],
   ] as const) {
-    const input = page.locator(`[data-clip-controls] input[data-field="${field}"]`);
+    const input = page.locator(
+      `[data-clip-controls] input[data-field="${field}"]`
+    );
     // biome-ignore lint/performance/noAwaitInLoops: one field, then the next
     await input.fill(value);
     await input.press("Enter");
@@ -4014,17 +4087,40 @@ async function graphLeg(
   }
   await page.waitForTimeout(900);
   const sprung = await page.evaluate(() => ({
-    duration: (document.querySelector('[data-clip-controls] input[data-field="duration"]') as HTMLInputElement | null)?.value,
-    bounce: (document.querySelector('[data-clip-controls] input[data-field="bounce"]') as HTMLInputElement | null)?.value,
-    fields: [...document.querySelectorAll<HTMLInputElement>("[data-clip-controls] [data-spring] input[data-field]")].map((one) => one.dataset.field),
+    duration: (
+      document.querySelector(
+        '[data-clip-controls] input[data-field="duration"]'
+      ) as HTMLInputElement | null
+    )?.value,
+    bounce: (
+      document.querySelector(
+        '[data-clip-controls] input[data-field="bounce"]'
+      ) as HTMLInputElement | null
+    )?.value,
+    fields: [
+      ...document.querySelectorAll<HTMLInputElement>(
+        "[data-clip-controls] [data-spring] input[data-field]"
+      ),
+    ].map((one) => one.dataset.field),
   }));
-  const tunedSpring = (doc.read()?.state.tuned as { value?: { spring?: { bounce: number; response: number } | null; durationToken?: string | null }[] } | undefined)?.value?.find((one) => one.spring);
+  const tunedSpring = (
+    doc.read()?.state.tuned as
+      | {
+          value?: {
+            spring?: { bounce: number; response: number } | null;
+            durationToken?: string | null;
+          }[];
+        }
+      | undefined
+  )?.value?.find((one) => one.spring);
   kit.check(
     "G11 (springs): " +
       `${leg}: a spring takes values off every token (437 ms, 0.37 bounce), its mass, stiffness, damping and velocity stand as figures, and tuned carries it as ad hoc`,
     sprung.duration === "437" &&
       sprung.bounce === "0.37" &&
-      ["mass", "stiffness", "damping", "velocity"].every((one) => sprung.fields.includes(one)) &&
+      ["mass", "stiffness", "damping", "velocity"].every((one) =>
+        sprung.fields.includes(one)
+      ) &&
       tunedSpring?.spring?.response === 437 &&
       tunedSpring.spring.bounce === 0.37 &&
       tunedSpring.durationToken === null,
@@ -4129,7 +4225,10 @@ async function graphLeg(
     );
   }
   // Segments: Original | Edited once the move has edits; under Original an edited bar is an outline.
-  const compare = page.locator('[data-move-dock] [aria-label="Compare"] [role="tab"]', { hasText: "Original" });
+  const compare = page.locator(
+    '[data-move-dock] [aria-label="Compare"] [role="tab"]',
+    { hasText: "Original" }
+  );
   const hasCompare = (await compare.count()) > 0;
   if (hasCompare) {
     await asksSince(page);
@@ -4143,11 +4242,18 @@ async function graphLeg(
   const viewAsks = await asksSince(page);
   kit.check(
     `G16 (segments): ${leg}: once edited, Original | Edited stands in the dock's head; Original plays the agent's timing and draws the edited bar as an outline`,
-    hasCompare && outlined.view === "original" && outlined.outline >= 1 && viewAsks.includes("play"),
+    hasCompare &&
+      outlined.view === "original" &&
+      outlined.outline >= 1 &&
+      viewAsks.includes("play"),
     JSON.stringify({ hasCompare, outlined, viewAsks })
   );
   if (hasCompare) {
-    await page.locator('[data-move-dock] [aria-label="Compare"] [role="tab"]', { hasText: "Edited" }).click();
+    await page
+      .locator('[data-move-dock] [aria-label="Compare"] [role="tab"]', {
+        hasText: "Edited",
+      })
+      .click();
   }
   await dockHeadLeg(kit, page, leg, "with its edits");
   // Pins: a pin placed while Save failed is kept records its path, said under its words.
@@ -4193,7 +4299,9 @@ async function graphLeg(
     const view = await frame.evaluate(() => {
       const r = (el: Element | null) => {
         const b = el?.getBoundingClientRect();
-        return b ? [b.x, b.y, b.width, b.height].map(Math.round).join(",") : "none";
+        return b
+          ? [b.x, b.y, b.width, b.height].map(Math.round).join(",")
+          : "none";
       };
       return `world ${document.querySelector<HTMLElement>(".cawco-world")?.style.transform}; canvas ${r(document.querySelector(".cawco-canvas"))}; on ${[...document.querySelectorAll(".cawco-frame[data-cawco-on-stage]")].map(r).join(" | ")}; label ${r(document.querySelector(".cawco-frame[data-cawco-on-stage] .cawco-frame-body label"))}; vars ${getComputedStyle(document.documentElement).getPropertyValue("--cawco-stage-bottom")} ${getComputedStyle(document.documentElement).getPropertyValue("--cawco-stage-end")}`;
     });
@@ -4213,7 +4321,9 @@ async function graphLeg(
       .then(() => true)
       .catch(() => false);
     // What the composer names the pin by, before any words: the pin's title is these.
-    const named = composed ? ((await composer.textContent())?.trim() ?? "") : "";
+    const named = composed
+      ? ((await composer.textContent())?.trim() ?? "")
+      : "";
     if (composed) {
       await composer
         .getByRole("combobox")
@@ -4323,10 +4433,18 @@ async function graphLeg(
       const from = band.left + band.width / 2;
       await page.mouse.move(from, y);
       await page.waitForTimeout(200);
-      const reached = await page.evaluate(() => document.querySelector('[data-resize-handle="bl"]')?.hasAttribute("data-reached"));
+      const reached = await page.evaluate(() =>
+        document
+          .querySelector('[data-resize-handle="bl"]')
+          ?.hasAttribute("data-reached")
+      );
       await page.mouse.down();
       await page.mouse.move(band.left - 60, y, { steps: 6 });
-      const held = await page.evaluate(() => document.querySelector('[data-resize-handle="bl"]')?.hasAttribute("data-held"));
+      const held = await page.evaluate(() =>
+        document
+          .querySelector('[data-resize-handle="bl"]')
+          ?.hasAttribute("data-held")
+      );
       await page.mouse.up();
       await page.waitForTimeout(400);
       const after = (await readGraph(page)).panel;
@@ -4336,7 +4454,12 @@ async function graphLeg(
           !!held &&
           !!after &&
           Math.abs(after.width - before.width - (from - (band.left - 60))) <= 1,
-        JSON.stringify({ reached, held, before: before.width, after: after?.width })
+        JSON.stringify({
+          reached,
+          held,
+          before: before.width,
+          after: after?.width,
+        })
       );
       await page.locator('[data-sash="corner"]').dblclick();
       await page.waitForTimeout(400);
@@ -4358,11 +4481,18 @@ async function graphLeg(
         own: true,
         read: async () =>
           await page.evaluate(() => {
-            const r = document.querySelector("[data-show-graph]")?.getBoundingClientRect();
+            const r = document
+              .querySelector("[data-show-graph]")
+              ?.getBoundingClientRect();
             return r ? Math.round(r.width) : 0;
           }),
       }
-    ).catch((error: Error) => ({ at: [], by: "clock" as const, runs: [], error: error.message }));
+    ).catch((error: Error) => ({
+      at: [],
+      by: "clock" as const,
+      runs: [],
+      error: error.message,
+    }));
     await page.waitForTimeout(600);
     const tab = await boxAt(page, "[data-show-graph]");
     const tucked = await page.evaluate(() =>
@@ -4583,7 +4713,10 @@ async function graphLegs(kit: Kit, bench: string, stage: Stage): Promise<void> {
     return;
   }
   for (const [width, theme] of legs) {
-    if ((onlyWidth && Number(onlyWidth) !== width) || (onlyTheme && onlyTheme !== theme)) {
+    if (
+      (onlyWidth && Number(onlyWidth) !== width) ||
+      (onlyTheme && onlyTheme !== theme)
+    ) {
       continue;
     }
     // biome-ignore lint/performance/noAwaitInLoops: one page at a time

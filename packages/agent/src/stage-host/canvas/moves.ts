@@ -53,8 +53,37 @@ interface Replay {
 const ELEMENT_WORDS = 40;
 
 /**
+ * The words a person sees in an element: its text whose element is drawn,
+ * not transparent, not hidden and not the screen reader's alone. A button
+ * that tells a reader its pending label beside its label ("Create routine",
+ * with an `sr-only` "Creating…") is said by its label alone.
+ */
+function seenWords(el: Element): string {
+  const words: string[] = [];
+  const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  for (let node = walk.nextNode(); node; node = walk.nextNode()) {
+    const holder = node.parentElement;
+    const box = holder?.getBoundingClientRect();
+    // Drawn, not transparent or hidden, and not the screen reader's alone (`sr-only`: a 1px box, clipped).
+    if (
+      box &&
+      box.width > 1 &&
+      box.height > 1 &&
+      holder?.checkVisibility({
+        opacityProperty: true,
+        visibilityProperty: true,
+      })
+    ) {
+      words.push(node.textContent ?? "");
+    }
+  }
+  return words.join(" ").replaceAll(/\s+/g, " ").trim();
+}
+
+/**
  * An element as the dock's row names it: its own words (a label, a line),
- * its accessible name, else its tag and class as `describe` writes them.
+ * its accessible name, else the words a person sees in it, else its tag and
+ * class as `describe` writes them.
  */
 export function elementWords(el: Element | null, described: string): string {
   if (!el) {
@@ -66,12 +95,7 @@ export function elementWords(el: Element | null, described: string): string {
     .join(" ")
     .replaceAll(/\s+/g, " ")
     .trim();
-  const said =
-    own ||
-    el.getAttribute("aria-label")?.trim() ||
-    (el instanceof HTMLElement ? el.innerText : "")
-      .replaceAll(/\s+/g, " ")
-      .trim();
+  const said = own || el.getAttribute("aria-label")?.trim() || seenWords(el);
   if (!said) {
     return described;
   }
@@ -128,7 +152,10 @@ function rootProperties(
         rootProperties(rule.cssRules, into, true);
       }
     } else if (inRoot && "style" in rule) {
-      customProperties((rule as CSSRule & { style: CSSStyleDeclaration }).style, into);
+      customProperties(
+        (rule as CSSRule & { style: CSSStyleDeclaration }).style,
+        into
+      );
     } else if ("cssRules" in rule) {
       rootProperties((rule as CSSGroupingRule).cssRules, into, inRoot);
     }

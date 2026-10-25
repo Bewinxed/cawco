@@ -1145,16 +1145,21 @@ function buildDock(opts = {}) {
   // Its head bar: the move, play and loop, the time; Compare, the count and Reset at its end.
   // The transport and the time hold the bar's trailing end, so play stays where the hand left it whatever
   // the move is called; the edits stand before them when there are any.
-  let head = '<header class="dock-head"><h2 class="dock-title">' + esc(title) + "</h2>";
+  // No title (the graph's lit edge names the move; a reader hears it), no time (the playhead's pill says it) and no
+  // count (it stands over the rows it counts): DESIGN.md, One bar, one row; the design advisor's ruling.
+  let head = '<header class="dock-head" aria-label="' + esc(title) + '">';
   head += '<div class="edits">';
-  if (edited) head += '<div class="t-tabs" id="compare" role="tablist" aria-label="Compare"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" data-view="original"><span class="t-label">Original</span></button><button class="t-tab" role="tab" data-view="edited"><span class="t-label">Edited</span></button></div><span class="badge edits-count"><span class="num">' + n + "</span>" + (n === 1 ? " edit" : " edits") + '</span><button class="ghost-btn" id="resetAll">Reset</button>';
-  head += '</div><div class="transport"><button class="tbtn" id="play" aria-label="Play">' + icon(ICON.play, "i-play") + icon(ICON.pause, "i-pause") + '</button><button class="tbtn" id="loop" aria-label="Loop" aria-pressed="' + looping + '">' + icon(ICON.loop) + '</button></div><span class="readout" id="readout"></span></header>';
+  if (edited) head += '<div class="t-tabs" id="compare" role="tablist" aria-label="Compare"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" data-view="original"><span class="t-label">Original</span></button><button class="t-tab" role="tab" data-view="edited"><span class="t-label">Edited</span></button></div>';
+  head += '</div><div class="transport"><button class="tbtn" id="play" aria-label="Play">' + icon(ICON.play, "i-play") + icon(ICON.pause, "i-pause") + '</button><button class="tbtn" id="loop" aria-label="Loop" aria-pressed="' + looping + '">' + icon(ICON.loop) + '</button></div></header>';
+  // The timeline's own head: how many clips stand edited away from the agent's timing, Reset beside it, only above 0.
+  const editsLine = edited ? '<span class="tl-edits-n"><span class="num">' + n + "</span> changed</span>" + '<button class="ghost-btn" id="resetAll">Reset</button>' : "";
   // The same move drawn again (an edit, a held slider) patches its head and each row in place: the timeline
   // keeps its scroll, and the clip's controls standing in a row stay where they are, a held control keeping
   // its pointer. Any other move draws the dock whole.
   const rowsNow = $("rows"), patch = sameMove && rowsNow && km.clips.every((c) => rowsNow.querySelector('.clip[data-key="' + c.key + '"]')) && rowsNow.querySelectorAll(".clip").length === km.clips.length;
   if (patch) {
     dock.querySelector(".dock-head").outerHTML = head;
+    $("tlEdits").innerHTML = editsLine; $("tlEdits").hidden = !edited;
     const t = document.createElement("div");
     for (const c of km.clips) {
       const old = rowsNow.querySelector('.clip[data-key="' + c.key + '"]');
@@ -1166,6 +1171,7 @@ function buildDock(opts = {}) {
     }
   } else {
     let html = head + '<div class="tl" id="tl"><div class="end-area" id="endArea"></div>';
+    html += '<div class="tl-edits" id="tlEdits"' + (edited ? "" : " hidden") + ">" + editsLine + "</div>";
     html += '<div class="tl-row ruler-row"><div class="ruler" id="ruler"></div></div>';
     html += '<div class="rows" id="rows"><div class="row-ghost" id="rowGhost" aria-hidden="true"></div>' + km.clips.map((c) => clipRow(km.e, c)).join("") + "</div>";
     html += '<div id="ties"></div><div class="playhead" id="playhead"></div></div>';
@@ -1370,7 +1376,6 @@ function updateTime() {
   $("tl").style.setProperty("--ph-x", xOf(g, Math.min(t, g.end)) - g.x0 + "px");
   const rb = $("ruler").getBoundingClientRect(), tb = $("tl").getBoundingClientRect();
   $("playhead").style.setProperty("--ph-y", rb.bottom - tlTop() - px("--space-1") / 2 + "px");
-  $("readout").innerHTML = '<b class="fig">' + Math.round(t) + '</b> / <span class="fig">' + Math.round(len) + '<span class="unit">ms</span></span>';
   $("ruler").dataset.t = Math.round(t);
   $("play").toggleAttribute("data-playing", !!playing);
   $("play").setAttribute("aria-label", playing ? "Pause" : "Play");

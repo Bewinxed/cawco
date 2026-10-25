@@ -482,8 +482,7 @@ html[data-layout="desk"] .panel[data-open="false"] .panel-shell:active .tab-glyp
 /* One row, a hairline the dock's whole width under it (pin 14): the head runs out over the dock's inline padding
    and takes it back inside. */
 .dock-head { flex: none; display: flex; align-items: center; gap: var(--space-2); min-block-size: var(--c-row-h); margin-inline: calc(-1 * var(--space-4)); padding-inline: var(--space-4); border-block-end: 1px solid var(--border-hairline); }
-.dock-title { flex: 1 1 auto; min-inline-size: 0; margin: 0; font: var(--type-label); color: var(--ink-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.transport { display: flex; align-items: center; gap: var(--space-1); flex: none; }
+.transport { display: flex; align-items: center; gap: var(--space-1); flex: none; margin-inline-start: auto; }
 .edits { display: flex; align-items: center; gap: var(--space-2); flex: none; }
 .edits:empty { display: none; }
 .ghost-btn { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; block-size: var(--c-btn-h-sm); padding: 0 var(--space-3); border-radius: var(--radius-md); font: var(--type-label); color: var(--ink-strong); cursor: pointer; transition: var(--transition-control); }
@@ -509,9 +508,6 @@ html[data-layout="desk"] .panel[data-open="false"] .panel-shell:active .tab-glyp
 @media (hover: hover) { .tbtn:hover { color: var(--ink-strong); } }
 .tbtn:active { scale: var(--press-scale); }
 /* The time: a Measured figure, "320 / 320 ms". */
-.readout { min-inline-size: 13ch; text-align: end; font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); font-variant-numeric: tabular-nums; color: var(--ink-muted); white-space: nowrap; }
-.readout b { font-weight: var(--weight-body); color: var(--ink-strong); }
-.readout .fig:not(b) { color: var(--ink-muted); }
 .ruler { position: relative; block-size: var(--c-pill-h); cursor: ew-resize; touch-action: none; user-select: none; }
 .ruler span { position: absolute; inset-block-start: 0; font: var(--type-code); font-size-adjust: cap-height var(--mono-figure-cap); line-height: 1; color: var(--ink-subtle); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ruler span.over-end { color: var(--ink-muted); }
@@ -575,7 +571,9 @@ html[data-kinds="hue"] .fact-dur > .fig { color: var(--kind); }
 /* A phone's facts line keeps one line: the badge goes first, then the curve's word (data-drop, app.js). */
 .facts[data-drop~="tok"] .tok { display: none; }
 .facts[data-drop~="word"] .word { display: none; }
-.edits-count .num { font-variant-numeric: tabular-nums; color: var(--ink-strong); }
+.tl-edits { display: flex; align-items: center; gap: var(--space-2); padding-block-end: var(--space-1); font: var(--type-meta); color: var(--ink-muted); }
+.tl-edits[hidden] { display: none; }
+.tl-edits .num { font-variant-numeric: tabular-nums; color: var(--ink-strong); }
 
 /* The lane is the row: bars, ghosts and tails on the bare row. A bar on its kind's opaque wash, its 1px edge in
    the kind's ink; in ink only, surface-fill with the 3:1 edge. */
@@ -790,9 +788,6 @@ html:is([data-input="touch"], [data-input="touch-hover"]) .fld input { font-size
 /* A row narrower than a name column and a usable lane stacks: its name and facts, then the lane across the
    dock's whole width; lines that run down through the rows at a desk are drawn inside each lane. */
 @container dock (width < 440px) {
-  /* The head stays one row (pin 11): the time is the playhead's pill's to say, the count the rows' changed
-     figures'. */
-  .dock-head :is(.readout, .edits-count) { display: none; }
   .tl { --rows: stacked; }
   .tl-row { grid-template-columns: minmax(0, 1fr); }
   .ruler-row .ruler { grid-column: 1; }

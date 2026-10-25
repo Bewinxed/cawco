@@ -20,6 +20,7 @@
  * chooses to use the tokens or adhoc values").
  */
 import type { CanvasDial, CanvasEdge, Interaction } from "./stage";
+import { humanize } from "./tool-presentation";
 
 /** One story as the graph draws it. */
 export interface GraphStory {
@@ -79,18 +80,30 @@ export const STAGE_PATH_MAX = 240;
 /** A variation of a state: another story grouped under it, or an interaction its CSS reaches. */
 export interface Variation {
   interaction: Interaction;
-  /** Its words: the story's label, or the interaction's name. */
+  /** Its name on its chip: the story's name in words (`TypeRefused` as "Type refused"), or the interaction's. */
   label: string;
+  /** The story's doc comment, its chip's title; null for an interaction or a story with none. */
+  note: string | null;
   story: string;
 }
 
-/** A state: one story's node, with the chips of its variations. */
+/**
+ * A state: one story's node, with the chips of its variations. Named as
+ * round 29 draws a state: its name in words on the node's first line, its
+ * doc comment the note under it.
+ */
 export interface GraphState {
-  label: string;
+  /** The story's doc comment; null when it has none. */
+  label: string | null;
+  /** The story's name in words (`SaveFailed` as "Save failed"): the node's title, the dock's and a pin's path. */
+  name: string;
   /** The story's own name. */
   story: string;
   variations: Variation[];
 }
+
+/** A story's name in words, as the graph says it: `SaveFailed` as "Save failed". */
+export const stateName = (story: string): string => humanize(story);
 
 /** A machine: a region of the graph, the agent's `group` heading; null for the section's own stories, which its tab names. */
 export interface Machine {
@@ -180,11 +193,13 @@ export function graphOf(
     }
     const state: GraphState = {
       story: story.name,
-      label: story.label ?? story.name,
+      name: stateName(story.name),
+      label: story.label,
       variations: story.interactions.map((interaction) => ({
         story: story.name,
         interaction,
         label: INTERACTION_WORDS[interaction],
+        note: null,
       })),
     };
     states.set(story.name, state);
@@ -196,7 +211,8 @@ export function graphOf(
       states.get(parent)?.variations.push({
         story: story.name,
         interaction: "rest",
-        label: story.label ?? story.name,
+        label: stateName(story.name),
+        note: story.label,
       });
     }
   }
@@ -269,7 +285,7 @@ export const samePoint = (
 /**
  * A kept state's path in words, as a pin records it: its machine's name
  * (the region's header; none for the section's own stories, which its tab
- * names), the state's label and the kept variation's, joined by ` › `.
+ * names), the state's name and the kept variation's, joined by ` › `.
  */
 export function pathOf(
   section: GraphSection,
@@ -285,7 +301,7 @@ export function pathOf(
       if (state.story === point.story || variation) {
         const parts = [
           machine.name ?? section.name,
-          state.label,
+          state.name,
           ...(variation ? [variation.label] : []),
         ];
         return parts.join(" › ").slice(0, STAGE_PATH_MAX);

@@ -749,10 +749,17 @@
                 style:--y={`${box?.y ?? 0}px`}
                 tabindex="0"
               >
+                <!-- Its name in words, then the agent's note on it (its doc comment), as round 29 draws a state. -->
                 <span
                   class="type-label text-ink-strong text-pretty wrap-anywhere group-data-kept/node:text-selected-ink"
-                  >{state.label}</span
+                  >{state.name}</span
                 >
+                {#if state.label}
+                  <span
+                    class="type-meta text-ink-muted text-pretty wrap-anywhere group-data-kept/node:text-ink-row"
+                    data-note>{state.label}</span
+                  >
+                {/if}
                 {#if state.variations.length > 0}
                   <span class="mt-space-1 flex flex-col gap-space-1">
                     {#each state.variations as variation (`${variation.story}|${variation.interaction}`)}
@@ -773,6 +780,7 @@
                             onpreview(point);
                           }
                         }}
+                        title={variation.note ?? undefined}
                         type="button">{variation.label}</button
                       >
                     {/each}

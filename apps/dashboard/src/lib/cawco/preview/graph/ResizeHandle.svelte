@@ -149,56 +149,37 @@
   </defs>
   <path
     class={[
-      "arc fill-none stroke-current transition-[stroke-dasharray,stroke-dashoffset,stroke-width] ease-out",
+      "fill-none stroke-current transition-[stroke-dasharray,stroke-dashoffset,stroke-width] ease-out motion-reduce:transition-[stroke-width]",
       clock,
       reached
         ? "stroke-(length:--c-handle-stroke-held)"
         : "stroke-(length:--c-handle-stroke)",
     ]}
     d={`M ${inset} ${height - R} A ${r} ${r} 0 0 0 ${R} ${height - inset}`}
+    stroke-dasharray={reached ? `${quarter} ${quarter}` : `${rest} ${quarter}`}
+    stroke-dashoffset={reached ? 0 : -(quarter - rest) / 2}
     stroke-linecap="round"
-    style:--dash={reached ? `${quarter} ${quarter}` : `${rest} ${quarter}`}
-    style:--offset={reached ? 0 : -(quarter - rest) / 2}
   ></path>
   <path
     class={[
-      "leg fill-none transition-[stroke-dasharray,opacity] ease-out stroke-(length:--c-handle-stroke-held)",
+      "fill-none transition-[stroke-dasharray,opacity] ease-out motion-reduce:transition-opacity stroke-(length:--c-handle-stroke-held)",
       clock,
     ]}
     d={`M ${inset} ${height - R} V ${R}`}
     opacity={legA > 0 ? 1 : 0}
     stroke={`url(#${uid}-a)`}
+    stroke-dasharray={`${legA} ${fullA + 1}`}
     stroke-linecap="round"
-    style:--dash={`${legA} ${fullA + 1}`}
   ></path>
   <path
     class={[
-      "leg fill-none transition-[stroke-dasharray,opacity] ease-out stroke-(length:--c-handle-stroke-held)",
+      "fill-none transition-[stroke-dasharray,opacity] ease-out motion-reduce:transition-opacity stroke-(length:--c-handle-stroke-held)",
       clock,
     ]}
     d={`M ${R} ${height - inset} H ${width - R}`}
     opacity={legB > 0 ? 1 : 0}
     stroke={`url(#${uid}-b)`}
+    stroke-dasharray={`${legB} ${fullB + 1}`}
     stroke-linecap="round"
-    style:--dash={`${legB} ${fullB + 1}`}
   ></path>
 </svg>
-
-<style>
-  /* tailwind: no stroke-dasharray utility exists, so the handle's dashes stand here — tailwindcss.com/docs/stroke-width */
-  /* residual: svg-paint — the arc's visible run and each leg's length, as dashes of their own paths */
-  .arc,
-  .leg {
-    stroke-dasharray: var(--dash);
-  }
-  .arc {
-    stroke-dashoffset: var(--offset);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    /* residual: svg-paint — with less motion the run's length lands at once; only its ink fades */
-    .arc,
-    .leg {
-      transition-property: opacity, stroke-width;
-    }
-  }
-</style>

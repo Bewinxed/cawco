@@ -35,9 +35,7 @@ export const designGraphWords = {
   /** The resize handles, to a reader: the panel's corner, the dock's top edge. */
   resizePanel: "Resize the graph panel",
   resizeDock: "Resize the timeline",
-  /** The dock, to a reader. */
-  timeline: "The timeline",
-  /** The kept move, as the dock's head names it. */
+  /** The kept move, as the dock says it to a reader (its head draws no title: the graph's lit edge names it). */
   move: (from: string, to: string) => `${from} → ${to}`,
   /** The move as `tuned` names it to the agent. */
   moveTuned: (from: string, to: string) => `${from} → ${to}`,
@@ -45,7 +43,8 @@ export const designGraphWords = {
   compare: "Compare",
   original: "Original",
   edited: "Edited",
-  edits: (count: number) => `${count} ${count === 1 ? "edit" : "edits"}`,
+  /** The timeline's head: how many clips stand edited away from the agent's timing. */
+  changed: (count: number) => `${count} changed`,
   reset: "Reset",
   resetTip: "Every clip back to the agent's timing",
   play: "Play",
