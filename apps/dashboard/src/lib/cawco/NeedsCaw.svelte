@@ -684,7 +684,9 @@
   {#snippet children(tip)}
     <!-- An item of the bar's group (Shell's bar-item recipe, on
          [data-bar-item], draws its box, hover and focus); a circle whatever
-         the strips' boxes: the beat's reaches past it. -->
+         the strips' boxes: the beat's reaches past it. On the phone's glass,
+         flush with the screen's trailing edge, its focus ring is drawn over
+         its own box (`focus-inset`), so the edge never cuts it. -->
     <button
       data-bar-item
       data-glass-opens="caw"
@@ -697,7 +699,7 @@
       aria-expanded={barGlass.open === "caw"}
       aria-haspopup="dialog"
       aria-label={label}
-      class="select-none touch-hit press-tint relative grid w-c-bar-item flex-none place-items-center p-0 tap-highlight-none @max-desk/shell:coarse:after:start-auto @max-desk/shell:coarse:after:end-0 @max-desk/shell:coarse:after:top-(--caw-hit-top) @max-desk/shell:coarse:after:bottom-auto @max-desk/shell:coarse:after:size-c-btn-h-lg"
+      class="select-none touch-hit press-tint relative grid w-c-bar-item flex-none place-items-center p-0 tap-highlight-none @max-desk/shell:focus-inset @max-desk/shell:coarse:after:start-auto @max-desk/shell:coarse:after:end-0 @max-desk/shell:coarse:after:top-(--caw-hit-top) @max-desk/shell:coarse:after:bottom-auto @max-desk/shell:coarse:after:size-c-btn-h-lg"
       data-needs-caw
       style:--caw-hit-top={"calc((var(--c-bar-caw-glass-phone) - var(--c-btn-h-lg)) / 2)"}
       type="button"

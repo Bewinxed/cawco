@@ -1101,7 +1101,8 @@
            narrow bar already, its inset and ground. On the phone's one row
            (44px, the compact bar's) the toggle and Caw's glass start from
            the screen's edges, each inside a landscape notch's inset, so the
-           row has no pad of its own; with a conversation in front the bar
+           row has no pad of its own (each draws its focus ring inside its
+           box, so neither ring runs past the screen); with a conversation in front the bar
            floats over the group's own tab row and takes only its two
            controls' touches. Hosting the tabs, the bar is the shelf they
            stand on: two steps below the transcript and one below an
@@ -1125,17 +1126,17 @@
              retires (`desk:hidden`). On the phone's row it is a bare
              glyph (owner, variant B): its leading edge c-bar-phone-edge from
              the screen's, its centre on the tabs' centre line, which stand
-             on the bar's floor, in a 44px touch area that reaches into the
-             screen's edge. Tactile press: it dips under the finger, with
+             on the bar's floor, in a 44px touch area that starts at the
+             screen's edge (its glyph padded in, so the box and its focus
+             ring never run past the screen). Tactile press: it dips under the finger, with
              less motion not at all. -->
         <button
           data-slot="burger"
           aria-label={sidebarWords.openNavigation}
-          class="select-none desk:hidden size-c-btn-h-lg -ms-space-2 grid place-items-center border-none border-current bg-transparent rounded-sm text-ink-strong transition-[background] duration-(--dur-control) ease-in-out hover:bg-surface-hover motion-safe:active:scale-(--press-scale) max-desk:self-start max-desk:ms-(--burger-start) max-desk:mt-(--burger-top) max-desk:text-ink-muted max-desk:group-data-floating/top:pointer-events-auto"
+          class="select-none desk:hidden size-c-btn-h-lg -ms-space-2 grid place-items-center border-none border-current bg-transparent rounded-sm text-ink-strong transition-[background] duration-(--dur-control) ease-in-out hover:bg-surface-hover motion-safe:active:scale-(--press-scale) max-desk:self-start max-desk:ms-0 max-desk:ps-c-bar-phone-edge max-desk:justify-items-start max-desk:focus-inset max-desk:mt-(--burger-top) max-desk:text-ink-muted max-desk:group-data-floating/top:pointer-events-auto"
           onclick={() => {
             railOpen = true;
           }}
-          style:--burger-start={"calc(var(--c-bar-phone-edge) + var(--c-bar-toggle-glyph) / 2 - var(--c-btn-h-lg) / 2)"}
           style:--burger-top={"calc(var(--c-top-bar-h) - var(--c-tab-row-h) / 2 - var(--c-btn-h-lg) / 2)"}
           type="button"
           bind:this={burger}
