@@ -47,7 +47,7 @@ const VARIANTS = [
     gives:
       "Each sentence over its reason, so the person sees why before asking. Raised on the thread’s recess, as content is.",
     costs:
-      "Taller than the list in a narrow column: three with their reasons stand 207px in Caw’s 380px column (224px on a phone) against the list’s 134px, pushing his earlier threads down.",
+      "Taller than the list: three with their reasons stand 207px in Caw’s 380px panel and in the 390px Phone frame here, against the list’s 134px, and 224px in the 358px frame a 390px screen leaves, where more reasons wrap; his earlier threads move down by as much.",
   },
   {
     look: "chips",
@@ -72,6 +72,16 @@ const STATES = [
   ["Being read", "loading"],
 ];
 
+/**
+ * Caw's still at a size, by day and by night: the night still is drawn on
+ * the paper rim (the Caw panel preview's stills), so his near-black body
+ * stands clear of the night's near-black ground; his 28px head mark takes
+ * the night still whose rim is grown to a device pixel at that size
+ * (capture/night-mark.py). The scheme shows one.
+ */
+const caw = (size, cls) =>
+  `<img class="${cls} caw-still day" src="caw/caw-ready-day.png" alt="" width="${size}" height="${size}" /><img class="${cls} caw-still night" src="caw/caw-ready-night${size < 48 ? "-mark" : ""}.png" alt="" width="${size}" height="${size}" />`;
+
 const part = (key) => {
   const html = PARTS[key];
   if (html === undefined) {
@@ -84,12 +94,12 @@ const part = (key) => {
 const thread = (key, frame) => `
   <article class="frame frame-${frame}" data-context="thread" data-part-key="${key}" aria-label="Caw’s first thread, ${frame}">
     <header class="panel-head">
-      <img class="panel-mark" src="caw/hero.png" alt="" width="28" height="28" />
+      ${caw(28, "panel-mark")}
       <span class="panel-words"><strong>Caw</strong><span>Obelisk Site</span></span>
     </header>
     <div class="thread-body">
       <div class="hero">
-        <img class="caw" src="caw/hero.png" alt="" width="80" height="80" />
+        ${caw(80, "caw")}
         <h3 class="hero-title">What’s next for Obelisk Site?</h3>
         <div class="hero-action">${part(key)}</div>
       </div>
@@ -110,14 +120,14 @@ const thread = (key, frame) => `
 const panel = (key, frame) => `
   <article class="frame frame-${frame} frame-page" data-context="panel" data-part-key="${key}" aria-label="The empty Decisions tab, ${frame}">
     <div class="empty">
-      <img class="caw" src="caw/hero.png" alt="" width="80" height="80" />
+      ${caw(80, "caw")}
       <h3 class="hero-title">No decisions yet</h3>
       <p class="empty-line">Caw writes a decision page: the choices this project needs you to make, each with its options.</p>
       <div class="hero-action">${part(key)}</div>
     </div>
     <aside class="caw-dock" data-slot="caw-dock" aria-label="Caw’s panel" hidden>
       <header class="panel-head">
-        <img class="panel-mark" src="caw/hero.png" alt="" width="28" height="28" />
+        ${caw(28, "panel-mark")}
         <span class="panel-words"><strong>Caw</strong><span>Obelisk Site</span></span>
       </header>
       <div class="dock-body">
@@ -159,11 +169,11 @@ const section = (v) => {
         <div><dt>Costs</dt><dd>${v.costs}</dd></div>
       </dl>
     </header>
-    <div class="row">
+    <div class="row" data-row="desk">
       <h3 class="row-head">Desk</h3>
       <div class="frames">${thread(threadKey, "desk")}${panel(panelKey, "desk")}</div>
     </div>
-    <div class="row">
+    <div class="row" data-row="phone">
       <h3 class="row-head">Phone</h3>
       <div class="frames">${thread(threadKey, "phone")}${panel(panelKey, "phone")}</div>
     </div>

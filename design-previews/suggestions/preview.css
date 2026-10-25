@@ -181,6 +181,14 @@
     color: var(--ink-muted);
   }
 
+  /* Under the phone's line (DESIGN.md, 640px) the desk's frames are the
+     phone's width too, so the page shows the Phone row alone. */
+  @media (width < 640px) {
+    .row[data-row="desk"] {
+      display: none;
+    }
+  }
+
   .frames {
     display: flex;
     flex-wrap: wrap;
@@ -229,9 +237,22 @@
   .panel-mark {
     inline-size: var(--c-row-lead);
     block-size: var(--c-row-lead);
-    border-radius: var(--radius-pill);
-    object-fit: cover;
-    background: var(--surface-recess);
+    object-fit: contain;
+  }
+
+  /* Caw's still by day; by night his still drawn on the paper rim. */
+  .caw-still.night {
+    display: none;
+  }
+
+  [data-scheme="dark"] .caw-still {
+    &.day {
+      display: none;
+    }
+
+    &.night {
+      display: inline-block;
+    }
   }
 
   .panel-words {

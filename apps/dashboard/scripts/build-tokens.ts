@@ -356,6 +356,15 @@ const CONTAINERS = {
   // with the row's three space-2 gaps. Narrower, Reconnect gives way to its
   // glyph, and the account and the state keep their words.
   "connect-row": "400px",
+  // A suggestion row's reason (cawco/suggestions/Suggestions.svelte, rows)
+  // wraps to a second line more often under here: its text column is the
+  // list less the row's insets (2 × space-4), the glyph (icon-md) and a
+  // space-3 (55px), and the hub's reasons run about 53 characters of meta,
+  // 280px on one line (measured: "Nothing on the board is ready after the
+  // contact form."), so a list narrower than 335px wraps them. The rows'
+  // skeleton stands a second reason line on every row here, on every other
+  // row wider (probe-kit suggestions-preview).
+  "suggestion-rows-narrow": "340px",
 };
 const APPLE_DIR = "../apple/Packages/CawCoKit/Sources/CawCoDesign/";
 /** The decision-page skill CawCo ships (packages/hub/src/bundled-skills.ts): its pages wear the same tokens. */

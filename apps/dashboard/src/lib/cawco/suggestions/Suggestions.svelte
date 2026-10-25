@@ -63,7 +63,8 @@
    * While the caller is still reading them (`loading`), skeletons stand at
    * each look's own size (The Claim Of Nothing Rule), `loading` of them: a
    * row's lines where its words and reason will stand (the hub's reasons
-   * run one line or two in Caw's column, so every other row's stands two;
+   * run one line or two in Caw's column, so every other row's stands two,
+   * and every row's under `suggestion-rows-narrow`, where they wrap more;
    * one in a panel's measure), a chip as wide as a sentence. Every item is a button: a finger's 44px area on a
    * coarse pointer, the house ring on keyboard focus, a press that tints a
    * wide item and scales a compact chip (The Press Rule).
@@ -195,12 +196,27 @@
                 class="flex flex-col group-data-[placement=composer]/suggestions:hidden"
               >
                 <Skeleton class="w-full" line="meta" radius="line" />
-                {#if slot % 2 === 1}
-                  <span
-                    class="flex group-data-[placement=panel]/suggestions:hidden"
-                    ><Skeleton class="w-1/2" line="meta" radius="line" /></span
-                  >
-                {/if}
+                <span
+                  class="contents group-data-[placement=panel]/suggestions:hidden"
+                >
+                  {#if slot % 2 === 1}
+                    <span class="flex"
+                      ><Skeleton
+                        class="w-1/2"
+                        line="meta"
+                        radius="line"
+                      /></span
+                    >
+                  {:else}
+                    <span class="hidden @max-suggestion-rows-narrow:flex"
+                      ><Skeleton
+                        class="w-1/2"
+                        line="meta"
+                        radius="line"
+                      /></span
+                    >
+                  {/if}
+                </span>
               </span>
             </span>
           </li>

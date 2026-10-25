@@ -57,8 +57,10 @@ button, input:where([type="button"], [type="reset"], [type="submit"]), ::file-se
 .m-0 { margin: 0px; }
 :where(.mark-cell) { display: grid; flex: 0 0 auto; place-content: center; place-items: center; block-size: 1lh; }
 .block { display: block; }
+.contents { display: contents; }
 .flex { display: flex; }
 .grid { display: grid; }
+.hidden { display: none; }
 .inline-grid { display: inline-grid; }
 :where(.ns-theme .fai-scroll) { scrollbar-width: thin; scrollbar-color: var(--neutral-5) transparent; }
 :where(.ns-theme .fai-scroll)::-webkit-scrollbar { width: var(--c-scrollbar-thin); height: var(--c-scrollbar-thin); }
@@ -212,6 +214,9 @@ button, input:where([type="button"], [type="reset"], [type="submit"]), ::file-se
 }
 @container table (width < 424px) {
 :is(.\@max-table-424px\/table\:\*\:flex > *) { display: flex; }
+}
+@container (width < 340px) {
+.\@max-suggestion-rows-narrow\:flex { display: flex; }
 }
 @container (width >= 30rem) {
 .\@details\:grid-cols-\(--cards-cols\) { grid-template-columns: var(--cards-cols); }

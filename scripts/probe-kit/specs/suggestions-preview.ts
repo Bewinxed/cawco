@@ -35,6 +35,9 @@
  *    recess it stands on (DESIGN.md, Borders: `border-row-outline`).
  * 9. A press on the empty Decisions tab opens Caw's panel in that frame,
  *    the words in his composer, the caret after them.
+ * 10. Caw is his day still by day and his night still at night, and the
+ *    night still's paper rim stands round him at each size he is drawn.
+ * 11. Under the phone's line each look shows the Phone row alone.
  *
  *   bun scripts/probe-kit/run.ts suggestions-preview
  *   SUGGESTIONS_ENGINES=chromium bun scripts/probe-kit/run.ts suggestions-preview
@@ -109,11 +112,17 @@ async function statesLeg(kit: Kit, page: Page, at: string): Promise<void> {
     ({ looks, counts }) => {
       const bad: string[] = [];
       let parts = 0;
+      // Under the phone's line the Desk row stands down (the Phone row alone): its parts aren't drawn.
+      const desk = document.querySelector('.row[data-row="desk"]');
+      const want = looks.length * (desk?.getClientRects().length ? 8 : 6);
       for (const look of looks) {
         const section = document.querySelector(`.variant[data-look="${look}"]`);
         for (const holder of section?.querySelectorAll<HTMLElement>(
           "[data-part-key]"
         ) ?? []) {
+          if (holder.getClientRects().length === 0) {
+            continue;
+          }
           parts += 1;
           const key = holder.dataset.partKey ?? "";
           const set = key.split(":")[1] ?? "";
@@ -122,7 +131,10 @@ async function statesLeg(kit: Kit, page: Page, at: string): Promise<void> {
             // One item's place per skeleton row: each holds skeletons, every one with a box.
             const rows = [...(list?.children ?? [])];
             const sized = rows.filter((row) => {
-              const bones = [...row.querySelectorAll('[data-slot="skeleton"]')];
+              // A bone a narrower list would draw (a second reason line) stands down here.
+              const bones = [
+                ...row.querySelectorAll('[data-slot="skeleton"]'),
+              ].filter((bone) => bone.getClientRects().length > 0);
               return (
                 bones.length > 0 &&
                 bones.every((bone) => {
@@ -166,13 +178,13 @@ async function statesLeg(kit: Kit, page: Page, at: string): Promise<void> {
           }
         }
       }
-      return { bad, parts };
+      return { bad, parts, want };
     },
     { looks: [...LOOKS], counts: COUNTS }
   );
   kit.check(
-    `${at}: each look's states render (${read.parts} parts: thread and Decisions at desk and phone, one, seven, longest, being read)`,
-    read.bad.length === 0 && read.parts === LOOKS.length * 8,
+    `${at}: each look's states render (${read.parts} parts: thread and Decisions in each frame shown, one, seven, longest, being read)`,
+    read.bad.length === 0 && read.parts === read.want,
     read.bad.slice(0, 4).join(" | ")
   );
 }
@@ -194,6 +206,9 @@ async function hitLeg(kit: Kit, page: Page, at: string): Promise<void> {
         for (const item of document.querySelectorAll<HTMLElement>(
           `.variant[data-look="${look}"] button[data-slot="suggestion"]`
         )) {
+          if (item.getClientRects().length === 0) {
+            continue;
+          }
           item.scrollIntoView({ block: "center", inline: "center" });
           // biome-ignore lint/performance/noAwaitInLoops: each item scrolled in and read before the next
           await new Promise((done) => requestAnimationFrame(done));
@@ -486,9 +501,12 @@ async function inkLeg(kit: Kit, page: Page, at: string): Promise<void> {
       let lowest = 99;
       let worst = 0;
       for (const look of ["today", ...looks]) {
-        const holder = document.querySelector<HTMLElement>(
-          `.variant[data-look="${look}"] .frame-desk[data-context="thread"] .hero-action > *`
-        );
+        // The first thread frame drawn: the Desk's, or under the phone's line the Phone's.
+        const holder = [
+          ...document.querySelectorAll<HTMLElement>(
+            `.variant[data-look="${look}"] .frame[data-context="thread"] .hero-action > *`
+          ),
+        ].find((el) => el.getClientRects().length > 0);
         tall.push(
           `${look} ${Math.round(holder?.getBoundingClientRect().height ?? 0)}px`
         );
@@ -511,7 +529,7 @@ async function inkLeg(kit: Kit, page: Page, at: string): Promise<void> {
           const words = glyph
             .closest('[data-slot="suggestion"]')
             ?.querySelector<HTMLElement>('[data-slot="suggestion-text"]');
-          if (!words) {
+          if (!words || glyph.getClientRects().length === 0) {
             continue;
           }
           // The first line's x-height middle: the mark line trims the run to
@@ -586,6 +604,9 @@ async function placeLeg(kit: Kit, page: Page, at: string): Promise<void> {
         for (const frame of section?.querySelectorAll<HTMLElement>(
           '.frame[data-context="thread"]'
         ) ?? []) {
+          if (frame.getClientRects().length === 0) {
+            continue;
+          }
           const list = frame
             .querySelector('[data-slot="suggestions"]')
             ?.getBoundingClientRect();
@@ -608,10 +629,12 @@ async function placeLeg(kit: Kit, page: Page, at: string): Promise<void> {
         if (drawn) {
           glyphs.push(`${look}: ${drawn}`);
         }
-        const real = section
-          ?.querySelector(
-            '.frame-desk[data-context="thread"] [data-slot="suggestions"]'
-          )
+        const real = [
+          ...(section?.querySelectorAll(
+            '.frame[data-context="thread"] [data-slot="suggestions"]'
+          ) ?? []),
+        ]
+          .find((el) => el.getClientRects().length > 0)
           ?.getBoundingClientRect().height;
         const held = section
           ?.querySelector(
@@ -715,6 +738,131 @@ async function panelPressLeg(kit: Kit, page: Page, at: string): Promise<void> {
   }
 }
 
+/**
+ * Leg 10: Caw by night. Every Caw drawn is his day still by day and his
+ * night still at night (none of the other), each loaded; and at each size
+ * he is drawn (80px in a hero, 28px in a head) the night still's paper rim
+ * stands round the day drawing's edge, on average at least a pixel wide
+ * (the rim's pixels per pixel of the drawing's edge), so his near-black
+ * body never stands bare on the night's near-black ground.
+ */
+async function nightLeg(
+  kit: Kit,
+  page: Page,
+  at: string,
+  which: "light" | "dark"
+): Promise<void> {
+  const read = await page.evaluate(async (night) => {
+    const drawn = [
+      ...document.querySelectorAll<HTMLImageElement>("img.caw-still"),
+    ].filter((img) => img.getClientRects().length > 0);
+    const wrong = drawn.filter(
+      (img) =>
+        img.classList.contains(night ? "day" : "night") ||
+        !img.complete ||
+        img.naturalWidth === 0
+    ).length;
+    const sizes = [...new Set(drawn.map((img) => img.width))].sort(
+      (a, b) => b - a
+    );
+    // The night still each size is drawn from, read off the page.
+    const nightOf = new Map(
+      [
+        ...document.querySelectorAll<HTMLImageElement>("img.caw-still.night"),
+      ].map((img) => [img.width, img.src])
+    );
+    const load = (src: string) =>
+      new Promise<HTMLImageElement>((done, fail) => {
+        const img = new Image();
+        img.onload = () => done(img);
+        img.onerror = fail;
+        img.src = src;
+      });
+    const alpha = (img: HTMLImageElement, side: number) => {
+      const c = document.createElement("canvas");
+      c.width = side;
+      c.height = side;
+      const g = c.getContext("2d") as CanvasRenderingContext2D;
+      g.drawImage(img, 0, 0, side, side);
+      const d = g.getImageData(0, 0, side, side).data;
+      return Array.from({ length: side * side }, (_, i) => d[i * 4 + 3] ?? 0);
+    };
+    const day = await load("caw/caw-ready-day.png");
+    const rims: Record<number, number> = {};
+    for (const side of sizes) {
+      // biome-ignore lint/performance/noAwaitInLoops: two sizes, read one by one
+      const nightStill = await load(nightOf.get(side) ?? "");
+      const a = alpha(day, side);
+      const b = alpha(nightStill, side);
+      const inside = (i: number) => (a[i] ?? 0) > 127;
+      let rim = 0;
+      let edge = 0;
+      for (let i = 0; i < side * side; i += 1) {
+        if (!inside(i) && (b[i] ?? 0) > 127) {
+          rim += 1;
+        }
+        const x = i % side;
+        const near = [i - 1, i + 1, i - side, i + side].filter(
+          (j) => j >= 0 && j < side * side && Math.abs((j % side) - x) <= 1
+        );
+        if (inside(i) && near.some((j) => !inside(j))) {
+          edge += 1;
+        }
+      }
+      rims[side] = Math.round((rim / Math.max(1, edge)) * 100) / 100;
+    }
+    return { count: drawn.length, wrong, sizes, rims };
+  }, which === "dark");
+  kit.check(
+    `${at}: every Caw drawn (${read.count}, at ${read.sizes.join(" and ")}px) is his ${which === "dark" ? "night still on the paper rim" : "day still"}, loaded`,
+    read.count > 0 && read.wrong === 0 && read.sizes.length === 2,
+    JSON.stringify(read)
+  );
+  if (which === "dark") {
+    kit.check(
+      `${at}: the night still's paper rim stands round his drawing at every size he is drawn (${Object.entries(
+        read.rims
+      )
+        .map(([side, rim]) => `${side}px ${rim}px`)
+        .join(", ")} of rim per pixel of edge)`,
+      Object.values(read.rims).every((rim) => rim >= 1),
+      JSON.stringify(read.rims)
+    );
+  }
+}
+
+/**
+ * Leg 11: under the phone's line (a 390 screen) the Desk and Phone frames
+ * would be the same width, so each look shows the Phone row alone, headed
+ * Phone; wider, both rows.
+ */
+async function framesLeg(
+  kit: Kit,
+  page: Page,
+  at: string,
+  width: number
+): Promise<void> {
+  const read = await page.evaluate(() =>
+    [...document.querySelectorAll(".variant")].map((section) => {
+      const shown = [
+        ...section.querySelectorAll<HTMLElement>(".row[data-row]"),
+      ].filter((row) => row.getClientRects().length > 0);
+      return shown
+        .map(
+          (row) =>
+            `${row.dataset.row}:${row.querySelector(".row-head")?.textContent ?? ""}`
+        )
+        .join(",");
+    })
+  );
+  const want = width < 640 ? "phone:Phone" : "desk:Desk,phone:Phone";
+  kit.check(
+    `${at}: every look shows ${width < 640 ? "the Phone row alone" : "the Desk and Phone rows"} (${read.length} sections)`,
+    read.length === LOOKS.length + 1 && read.every((rows) => rows === want),
+    read.join(" | ")
+  );
+}
+
 const spec: Spec = {
   name: "suggestions-preview",
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: every engine, width and scheme, each leg in turn
@@ -744,6 +892,7 @@ const spec: Spec = {
             // biome-ignore lint/performance/noAwaitInLoops: one scheme read at a time on one page
             await scheme(page, which);
             await statesLeg(kit, page, at);
+            await nightLeg(kit, page, at, which);
             await longLeg(kit, page, at);
             if (view !== "narrowDesk") {
               await inkLeg(kit, page, at);
@@ -757,6 +906,7 @@ const spec: Spec = {
             }
           }
           const at = `${engine} ${width}`;
+          await framesLeg(kit, page, at, width);
           if (view === "phone") {
             await hitLeg(kit, page, at);
           } else {

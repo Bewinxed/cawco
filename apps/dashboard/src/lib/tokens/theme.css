@@ -35,6 +35,7 @@
   --container-project-dock: 938px;
   --container-section-row: 312px;
   --container-connect-row: 400px;
+  --container-suggestion-rows-narrow: 340px;
 }
 
 @theme inline {
