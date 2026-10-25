@@ -1165,16 +1165,26 @@ signin_state() {
   accounts=$(hub_api /api/accounts) || return 1
   json "d => d.signins.find(s => s.accountId === '$1' && s.machineId === '$2')?.state" <<< "$accounts"
 }
-# `<epoch ms> <state>` every second until the stop file is there; `hub-away` while the hub does not answer.
+# `<epoch ms> <state>` each second until the stop file is there; `hub-away` while the hub does not answer. Each sample
+# is stamped when the hub was asked, so one stamped after a read ended is the hub's word from after it however long the
+# asking took: a podman exec and a Bun on a loaded host (load average 44, nightly a3d9e8ed1's keeperkilled: 4 samples
+# in the 22.6 s after the last read). One that took a second or more is followed by the next at once.
 signin_sampler() {
-  local machine=$1 file=$2 stop=$3 aid state
+  local machine=$1 file=$2 stop=$3 aid state asked rest
   aid=$(cat "$rigdir/account-id")
   while [[ ! -e $stop ]]; do
+    asked=$(now_ms)
     state=$(signin_state "$aid" "$machine" 2> /dev/null) || state=hub-away
-    echo "$(now_ms) ${state:-none}" >> "$file"
-    sleep 1
+    echo "$asked ${state:-none}" >> "$file"
+    rest=$((1000 - ($(now_ms) - asked)))
+    (( rest <= 0 )) || sleep "$((rest / 1000)).$(printf '%03d' $((rest % 1000)))"
   done
 }
+# The samples in file $1 where the hub answered and said other than signed-in.
+signin_bad() { awk '$2 != "signed-in" && $2 != "hub-away"' "$1"; }
+# How many samples in file $1 asked the hub after epoch ms $2 and heard signed-in, and how long after $2 the newest of
+# them asked: `<count> <ms>`, `0 0` for none.
+signin_heard_after() { awk -v t="$2" '$1 > t && $2 == "signed-in" { n++; past = $1 - t } END { print n + 0, past + 0 }' "$1"; }
 claude_late() { as_user "$1" sh /shared/claude-late.sh "$2"; }
 claude_calls() { as_user "$1" sh -c 'cat "$HOME/.cawco-proof/claude-calls.log" 2> /dev/null || true'; }
 # The late `auth status` reads of machine $1's Claude Code that have ended since $2 (epoch ms): answered, or `cut` by
@@ -1257,25 +1267,31 @@ update_sends_delivered() {
 # CLAUDE_LATE_S late, past the agent's 20 s bound on it (accounts.ts `authStatusIn`): from before the update until a
 # late read of it had ended (cut at the bound, or answered under a longer one) and 15 s past the last read that ended
 # (the agent's report follows its reads within 2 s, slow-harness-cli.ts), the hub said signed-in at every sample it
-# answered. The 15 s run from the last read, not the first: the agent reads each minute (a sixth of one here, the
+# answered, and it was heard saying so at least 5 times after the last read that ended, the newest asked 15 s or more
+# past it. The 15 s run from the last read, not the first: the agent reads each minute (a sixth of one here, the
 # proof's pace), and a fixed wait after the first could end a moment after another read, with no sample of the hub's
-# word on it.
+# word on it. The check waits for those samples, up to 240 s, rather than for 15 s of the clock: on a loaded host a
+# sample takes seconds (nightly a3d9e8ed1, keeperkilled: 4 in the 22.6 s after the last read, every one signed-in, and
+# the check failed). The last read is read again at each look, so a read that ends meanwhile starts the count again;
+# a sample that says otherwise ends the wait at once.
 update_signin_kept() {
-  local c machine since bad last
+  local c machine since bad last=0 heard=0 past=0 file="$rigdir/outcomes-signin.txt"
   [[ -s "$rigdir/outcomes-of" ]] || { echo "ASSERTION FAILED: the update's check ended before the sign-in was watched"; return 1; }
   read -r c machine _ since _ < "$rigdir/outcomes-of"
   on_exit "touch \"\$rigdir/outcomes-signin.stop\"; claude_late $c 0"
   wait_until 300 '(( $(auth_reads_ended_since "$c" "$since") >= 1 ))' \
     || { echo "ASSERTION FAILED: no late read of the machine's account ended after its update began, so none was proven"; claude_calls "$c"; return 1; }
-  wait_until 120 'last=$(auth_read_last_ended "$c") && (( $(now_ms) - last >= 15000 ))'
+  wait_until 240 '[[ -n $(signin_bad "$file") ]] || { last=$(auth_read_last_ended "$c") &&
+    read -r heard past <<< "$(signin_heard_after "$file" "$last")" && (( heard >= 5 && past >= 15000 )); }' || true
   touch "$rigdir/outcomes-signin.stop"
   echo "== the Claude Code stand-in's late calls (<epoch ms> start|answered|cut <pid> <args>)"
   claude_calls "$c"
-  bad=$(awk '$2 != "signed-in" && $2 != "hub-away"' "$rigdir/outcomes-signin.txt")
-  echo "the hub's word on the sign-in: $(wc -l < "$rigdir/outcomes-signin.txt") samples since $since, $(awk '$2 == "hub-away"' "$rigdir/outcomes-signin.txt" | wc -l) while the hub was away"
+  bad=$(signin_bad "$file")
+  echo "the hub's word on the sign-in: $(wc -l < "$file") samples since $since, $(awk '$2 == "hub-away"' "$file" | wc -l) while the hub was away"
   [[ -z $bad ]] || { echo "ASSERTION FAILED: a read that timed out changed the machine's account: the hub said"; awk '{ print $1, $2 }' <<< "$bad" | uniq -f 1 | head -n 20; return 1; }
-  (( $(awk -v t="$last" '$1 > t && $2 == "signed-in"' "$rigdir/outcomes-signin.txt" | wc -l) >= 5 )) \
-    || { echo "ASSERTION FAILED: the hub said nothing of the sign-in after the last read that timed out"; return 1; }
+  echo "after the last read that ended, at $last: $heard samples heard signed-in, the newest asked $past ms after it"
+  (( heard >= 5 && past >= 15000 )) \
+    || { echo "ASSERTION FAILED: in 240 s the hub was heard on the sign-in $heard times after the last read that timed out (at $last), the newest asked $past ms after it: the check needs 5, the newest 15000 ms or more past the read"; return 1; }
 }
 # The session running on the machine before its update is the same process after it, reattached and running, though
 # the keeper holding it, retiring, answers its listing late.
@@ -1287,7 +1303,7 @@ update_session_reattached() {
   cat "$rigdir/outcomes-session.txt"
   survived "$c" "$rigdir/outcomes-session.txt"
 }
-export -f signin_state signin_sampler claude_late claude_calls auth_reads_ended_since auth_read_last_ended turns_on turns_of all_reached \
+export -f signin_state signin_sampler signin_bad signin_heard_after claude_late claude_calls auth_reads_ended_since auth_read_last_ended turns_on turns_of all_reached \
   update_outcomes_start update_sends_stop update_sends_delivered update_signin_kept update_session_reattached
 
 # ================================================================ THE RIGS
