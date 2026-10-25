@@ -71,7 +71,7 @@ them: a separate reviewer reads anatomy, proportion and character.
 | Last minute | `caw/lastminute.png` | `tk_qpzFqEOgLm30y5iH5l7XU` |
 | Checking | `caw/checking.png` | `tk_Pg4KWYmyJkbZ-ydttEIdx` |
 | Paired | `caw/approved.png` | `tk_vdFvg-7_BXJtsxZg8_37W`, cut out of `tk_5MKhbxfDbzzuMFIGJzA9x` |
-| Removed | `caw/removed.png` | `tk_j8UHibltNAAOqoDnMAXrc`, cut out of `tk_scTWkTlb5Y9CXhr2BJ0DI` |
+| Removed | `caw/removed.png` | `tk_h71NPWAoipVsFPRpJtyDM`, cut out of `tk_ndbwdeDBJ35JXI4E7jExY` |
 | Not let in | `caw/denied.png` | `tk_Q-q2L8tsk-HsTV2vS97oa` |
 | That code expired | `caw/expired.png` | `tk_UUycqx4EcxvnLivv9rBYf` |
 | That scan didn't match | `caw/nomatch.png` | `tk_vYCT4PHo2PzsWV2p8AFkc`, cut out of `tk_zHhwGrEet-1dbYUGCLf48` |
@@ -90,18 +90,23 @@ unchanged"): the operation, then one clause keeping the rest, `keepRest:
 - Paired: "Raise both wings a little higher in a small, calm cheer, each
   wing the same size and shape as in the input; keep his open eyes, beak,
   body, two feet and the transparent background unchanged."
-- Removed: "Lower both wings to hang at his sides and add a small beige
-  smartphone falling just below the tip of the wing on the right, tilted as
-  if he let it go; keep his open eyes, beak, body, two feet and the
+- Removed: "Lower both wings to hang straight down at his sides at their
+  full length, folded but whole, and add a beige smartphone with a dark
+  screen lying on the ground beside his right foot, about as long as his
+  foot; keep his open eyes, calm face, beak, body, two feet and the
   transparent background unchanged."
 - That scan didn't match: "Add a small beige smartphone pinched at the red
   tip of the wing on the right, the wing raised a little so the phone is in
   front of his beak, screen toward his eye; keep his open eyes, the wing on
   the left, beak, body, two feet and the transparent background unchanged."
 
-Each cut-out came back with a pale sticker outline (45–55% of its edge
-band light, against the source's 0.2%); `halo.py` cleared it (2.0–2.6%
-left, the phone's own beige), then the 512 take was halved to 256.
+Each cut-out came back with a pale sticker outline (27–55% of its edge
+band light, against the source's 0.2%); `halo.py` cleared it, then the
+bluish-grey bits of that outline left in pockets its flood cannot reach
+(off his palette: `b > r + 5`, light) were cleared too, and on Removed the
+phone's warm beige the flood had taken (`r − b ≥ 25`) was put back from
+the cut-out. What stays light in the edge band is the phones' own beige.
+Then the 512 take was halved to 256.
 
 **By night** each still is drawn on the house's paper rim (`--paper`,
 #f4f0e6), as the Caw panel and Decisions list previews' night stills are:
