@@ -9057,7 +9057,36 @@ function toolFrames(messages: Message[]): Set<string | undefined> {
   );
 }
 
+/**
+ * Each session's rewindable turns as last read, by the revision they were
+ * read at (`SessionState.rev`, which moves with every change to its
+ * messages). Every reader's turn asks as its row mounts, and read afresh
+ * each time, a wheel bringing in a few of them walked the whole session for
+ * each (1ms of a wheel's task, transcript-holds' steady wheel, profiled).
+ */
+const rewindable = new WeakMap<
+  SessionState,
+  { cursor: string | null; length: number; rev: number; turns: Set<string> }
+>();
+
 export function rewindableTurns(target: SessionState): Set<string> {
+  const { cursor, rev } = target;
+  const { length } = target.messages;
+  const kept = rewindable.get(target);
+  if (
+    kept &&
+    kept.rev === rev &&
+    kept.cursor === cursor &&
+    kept.length === length
+  ) {
+    return kept.turns;
+  }
+  const turns = readRewindable(target);
+  rewindable.set(target, { cursor, length, rev, turns });
+  return turns;
+}
+
+function readRewindable(target: SessionState): Set<string> {
   const turns = new Set<string>();
   const calls = toolFrames(target.messages);
   // An anchor on an older page is resolved by rewindPointBehind on demand.
