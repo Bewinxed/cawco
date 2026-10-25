@@ -2375,7 +2375,9 @@ async function detachedLeg(
             "# Once every pane is shown again, the busy one left in front",
             ...holders(before, shownAgain),
           ]
-        : [`# ${engine}: no heap to read (the DevTools protocol is Chromium's)`]),
+        : [
+            `# ${engine}: no heap to read (the DevTools protocol is Chromium's)`,
+          ]),
       `# Taken out of a pane put away over the switches: ${taken(ANY_NODE)}, by what each was and where it sat`,
       ...removals.slice(0, 20).map((one) => `  ${one.count}× ${one.what}`),
       `# The transcripts' lists (tabs in order: ${tabs.join(", ")}; the busy one second)`,

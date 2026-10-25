@@ -307,6 +307,7 @@ const topFunctions = (
 const UNTRACED: MainThread = {
   elsewhere: () => [],
   evaluated: [],
+  inclusive: () => [],
   marks: [],
   selfTime: () => [],
   stacksIn: () => [],
