@@ -19,14 +19,22 @@
  * - a. Five quiet minutes: the hub sends no delta or welcome, and the agent
  *   takes no sync.
  * - b. Three workspaces opened, one after another, and each archived: no
- *   delta sent. Each clone holds the project's skill, memory document, MCP
- *   server (in the fleet MCP set, at the clone) and hook (its script and its
- *   harness-set entry, at the clone), each written before its first
- *   session's spawn.
- * - c. Two workspaces open, then the memory document changed: exactly one
- *   delta, and the document's new text in the checkout and in both clones.
+ *   delta sent. Each clone holds the project's skill, memory document (its
+ *   body the row's), MCP server (in the fleet MCP set, at the clone) and
+ *   hook (its script and its harness-set entry, at the clone), each written
+ *   before its first session's spawn.
+ * - c. Two workspaces open, their delegates resting on a declared wait so
+ *   their items stay live and their clones stand, then the memory document
+ *   changed: exactly one delta, and the document's new text in the checkout
+ *   and in both clones.
  * - d. The agent started again, then a workspace opened: its clone holds the
  *   changed document, placed from the rows kept on disk.
+ *
+ * Every delegate rests on `wait_item` as its first turn: one that ended
+ * three turns without `finish_item` fails its item, and its workspace
+ * retires and deletes its clone (the first host run's leg c read a deleted
+ * clone's document as empty, 2026-10-25). A document that is not there is
+ * said missing, never read as empty text.
  *
  *   bun scripts/probe-kit/run.ts fleet-sync-idle
  */
@@ -38,7 +46,7 @@ import {
   placedMemoryDir,
   placedSkillsDir,
 } from "../../../packages/core/src/paths";
-import { MACHINE, until } from "../../scratch-fleet";
+import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
 /** How long the fleet is left alone. */
@@ -65,6 +73,39 @@ const MCP_SERVER = join(
 const DOC = "idle-probe.md";
 const DOC_FIRST = "# Idle probe\n";
 const DOC_CHANGED = "# Idle probe, changed\n";
+/** What every delegate's brief carries: the mock rests it on a wait ({@link respond}). */
+const TAG = "IDLE-PROBE-DELEGATE:";
+const WAIT = "mcp__cawco__wait_item";
+
+const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
+const tool = (name: string, input: object): Reply => ({
+  everyMs: 5,
+  words: [],
+  tool: { name, input },
+});
+
+/** A delegate's declared wait: its item stays live until the spec stops it. */
+const rest = tool(WAIT, { minutes: 60, reason: "the probe's word to end" });
+
+/**
+ * A delegate rests on a declared wait as its first turn, so its item stays
+ * live and its workspace keeps its clone until the spec stops it: it loads
+ * the wait first where the tool is deferred (the search's answer holds the
+ * tool's `<functions>`), and once the wait has answered it says ok. Every
+ * other request is answered ok.
+ */
+const respond = (request: Seen): Reply => {
+  if (!(request.tools && request.all.includes(TAG))) {
+    return text("ok");
+  }
+  const searched = request.afterTool && request.last.includes("<functions>");
+  if (request.afterTool && !searched) {
+    return text("ok");
+  }
+  return request.toolNames.includes(WAIT)
+    ? rest
+    : tool("ToolSearch", { query: `select:${WAIT}`, max_results: 1 });
+};
 
 type Fleet = Awaited<ReturnType<Kit["fleet"]>>;
 
@@ -95,8 +136,8 @@ const hubCall = async (
   return JSON.parse(read.value.text || "null") as unknown;
 };
 
-const count = (text: string, pattern: RegExp): string[] =>
-  [...text.matchAll(pattern)].map((found) => found[0]);
+const count = (log: string, pattern: RegExp): string[] =>
+  [...log.matchAll(pattern)].map((found) => found[0]);
 
 /** CawCo's data dir on the scratch machine (core `cawcoDataDir`). */
 const dataDirOf = (fleet: Fleet): string =>
@@ -134,7 +175,8 @@ const placedAt = async (fleet: Fleet, cwd: string, hookId: string) => {
     skill: mtime(paths.skill),
     memory: mtime(paths.memory),
     hook: mtime(paths.hook),
-    memoryText: await readFile(paths.memory, "utf8").catch(() => ""),
+    // Undefined when the file is not there: a missing document is no empty one.
+    memoryText: await readFile(paths.memory, "utf8").catch(() => undefined),
     mcp: Object.values(mcpSet?.placed ?? {}).some(
       (one) => one.cwd === cwd && one.name === MCP
     ),
@@ -158,7 +200,7 @@ const whole = (placed: Placed): boolean =>
 const said = (placed: Placed): string =>
   [
     `skill ${placed.paths.skill} ${placed.skill ? "there" : "missing"}`,
-    `memory ${placed.paths.memory} ${placed.memory ? "there" : "missing"}`,
+    `memory ${placed.paths.memory} ${placed.memoryText === undefined ? "missing" : JSON.stringify(placed.memoryText)}`,
     `hook script ${placed.paths.hook} ${placed.hook ? "there" : "missing"}`,
     `MCP ${MCP} in ${placed.paths.mcpSet} at the folder: ${placed.mcp}`,
     `hook entry in ${placed.paths.harnessSet} at the folder: ${placed.hookEntry}`,
@@ -186,7 +228,7 @@ const openWorkspace = async (
   }>("/api/work-items", {
     parentInstanceId: parent,
     title,
-    prompt: "Say ok.",
+    prompt: `${TAG} wait for the probe's word.`,
     harness: "claude",
     model: "claude-haiku-4-5",
     cwd: src,
@@ -275,7 +317,7 @@ const run = async (kit: Kit) => {
     );
     return;
   }
-  const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
+  const fleet = await kit.fleet(respond);
   const home = fleet.env.HOME as string;
   fleet.launch("sessiond");
   await fleet.sessiondUp();
@@ -411,8 +453,11 @@ const run = async (kit: Kit) => {
       .map((one) => PLACED_LINE.exec(one))
       .find((found) => found?.[1] === opened.clone);
     kit.check(
-      `b: workspace ${opened.workspaceId.slice(0, 8)}'s clone holds the project's skill, memory document, MCP server and hook, written before its first session's spawn`,
-      whole(placed) && before && line?.[2] === project.id,
+      `b: workspace ${opened.workspaceId.slice(0, 8)}'s clone holds the project's skill, memory document (the row's body), MCP server and hook, written before its first session's spawn`,
+      whole(placed) &&
+        placed.memoryText === DOC_FIRST &&
+        before &&
+        line?.[2] === project.id,
       `${said(placed)}; files written ${[placed.skill, placed.memory, placed.hook].map((at) => (at === undefined ? "never" : `${Math.round(opened.spawnedAt - at)} ms before the spawn`)).join(", ")}; agent: ${line?.[0] ?? "no placement line"}`
     );
   }
@@ -425,6 +470,33 @@ const run = async (kit: Kit) => {
   ];
   await Bun.sleep(SETTLE_MS);
   const twoSent = count(await hubTwo.since(), SENT_LINE);
+  // Both still live as the row changes: their items open, their clones there.
+  const standing = live.map((one) => ({
+    clone: one.clone,
+    workspace:
+      fleet.query<{ state: string }>(
+        "SELECT state FROM workspaces WHERE id = ?",
+        one.workspaceId
+      )[0]?.state ?? "gone",
+    item:
+      fleet.query<{ state: string }>(
+        "SELECT state FROM work_items WHERE workspace_id = ?",
+        one.workspaceId
+      )[0]?.state ?? "gone",
+    there: existsSync(one.clone),
+  }));
+  kit.check(
+    "c: both delegates rest on their wait: their items live, their workspaces active, their clones there, as the row changes",
+    standing.every(
+      (one) => one.workspace === "active" && one.item === "running" && one.there
+    ),
+    standing
+      .map(
+        (one) =>
+          `${one.clone}: workspace ${one.workspace}, item ${one.item}, clone ${one.there ? "there" : "gone"}`
+      )
+      .join("; ")
+  );
   const hubChange = await fleet.logMark("hub");
   const agentChange = await fleet.logMark("agent");
   await hubCall(fleet, "PUT", "/api/fleet/memory/docs", {
@@ -441,7 +513,7 @@ const run = async (kit: Kit) => {
           async (folder) => (await placedAt(fleet, folder, hookId)).memoryText
         )
       ),
-    (read) => read.every((text) => text === DOC_CHANGED),
+    (read) => read.every((body) => body === DOC_CHANGED),
     60_000
   ).catch(() => undefined);
   await Bun.sleep(SETTLE_MS);
@@ -461,11 +533,11 @@ const run = async (kit: Kit) => {
   );
   kit.check(
     "c: the changed document is in the checkout and in every live clone",
-    texts.every(({ text }) => text === DOC_CHANGED),
+    texts.every((one) => one.text === DOC_CHANGED),
     texts
       .map(
-        ({ folder, text }) =>
-          `${join(placedMemoryDir(folder), DOC)}: ${JSON.stringify(text)}`
+        ({ folder, text: body }) =>
+          `${join(placedMemoryDir(folder), DOC)}: ${body === undefined ? "missing" : JSON.stringify(body)}`
       )
       .join("; ")
   );
@@ -493,7 +565,7 @@ const run = async (kit: Kit) => {
       whole(placedAfter) &&
       placedAfter.memoryText === DOC_CHANGED &&
       lineAfter?.[2] === project.id,
-    `${kept} kept before the restart: ${keptBefore}; ${said(placedAfter)}; its document ${JSON.stringify(placedAfter.memoryText)}; agent: ${lineAfter?.[0] ?? "no placement line"}`
+    `${kept} kept before the restart: ${keptBefore}; ${said(placedAfter)}; agent: ${lineAfter?.[0] ?? "no placement line"}`
   );
   await archiveWorkspace(fleet, parent, after);
 };
