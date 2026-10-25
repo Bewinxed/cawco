@@ -40,6 +40,7 @@ const inputOf = (leg: Leg) => ({
 /** One leg's call, as the mock plays it. */
 interface Step {
   called: boolean;
+  /** The request that carried the call's result: its body as sent, the result in it. */
   result?: { body: string; failed: boolean; at: number };
 }
 const steps = new Map<Leg, Step>();
@@ -68,7 +69,7 @@ const respond = (request: Seen): Reply => {
   if (step.called) {
     if (request.afterTool) {
       step.result = {
-        body: request.last,
+        body: request.body,
         failed: request.toolFailed,
         at: Date.now(),
       };
@@ -142,7 +143,7 @@ const spec: Spec = {
         `${harness}: nothing came back before the person answered, ${HOLD_MS / 60_000} minutes in`,
         early === undefined,
         early
-          ? `${Math.round((early.at - parked) / 1000)} s after it parked: ${early.body.slice(0, 400)}`
+          ? `${Math.round((early.at - parked) / 1000)} s after it parked: ${early.body.slice(-400)}`
           : ""
       );
       await fleet.post({
@@ -169,7 +170,7 @@ const spec: Spec = {
           !result.failed &&
           result.body.includes(KEPT_HASH) &&
           after * 1000 >= HOLD_MS,
-        `${after} s after it parked; failed ${result?.failed}; came back ${result?.body.slice(0, 400)}`
+        `${after} s after it parked; failed ${result?.failed}; came back ${result?.body.slice(-400)}`
       );
     };
     await Promise.all(HARNESSES.map(leg));
