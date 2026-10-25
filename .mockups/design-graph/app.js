@@ -6,7 +6,7 @@
 const icon = (name, cls) => SOLAR[name].replace("<svg ", '<svg aria-hidden="true" focusable="false"' + (cls ? ' class="' + cls + '"' : "") + " ");
 const ICON = { zoomIn: "minimalistic-magnifer-zoom-in-bold-duotone", zoomOut: "minimalistic-magnifer-zoom-out-bold-duotone", play: "play-bold-duotone", pause: "pause-bold-duotone", loop: "repeat-bold-duotone", chevron: "alt-arrow-down-linear", chevronRight: "alt-arrow-right-linear", chevronLeft: "alt-arrow-left-linear", chevronUp: "alt-arrow-up-linear", graph: "structure-bold-duotone", outline: "list-bold-duotone", fail: "danger-circle-bold-duotone", close: "close-bare" };
 // A clip's kind of property and its glyph (section B): what moves, read before its words are.
-const PROP_GLYPH = { opacity: "sun-fog-bold-duotone", position: "move-bold-duotone", size: "maximize-bold-duotone", colour: "palette-bold-duotone", text: "text-field-bold-duotone", unfold: "sort-vertical-bold-duotone" };
+const PROP_GLYPH = { opacity: "sun-fog-bold-duotone", position: "move-bold-duotone", size: "maximize-bold-duotone", colour: "palette-bold-duotone", text: "text-bold-duotone", unfold: "sort-vertical-bold-duotone" };
 const PROP_WORD = { opacity: "Opacity", position: "Position", size: "Size", colour: "Colour", text: "Text swap", unfold: "Unfold" };
 for (const el of document.querySelectorAll("[data-icon]")) el.insertAdjacentHTML("afterbegin", icon(ICON[el.dataset.icon]));
 
@@ -1664,7 +1664,18 @@ function openCtl(key, origin, anchor) {
   ctl.ro = new ResizeObserver(() => requestAnimationFrame(() => { if (tl) layoutDock(); scrollFade($("insp")); }));
   ctl.ro.observe(el);
   // Scrolled into the timeline's view as far as it fits, its head never under the sticky ruler.
-  if (mode === "row") { const t = $("tl"), b = el.getBoundingClientRect(), tb = t.getBoundingClientRect(), head = t.querySelector(".ruler-row").offsetHeight + px("--space-2"); if (b.bottom > tb.bottom) t.scrollTop += Math.min(b.bottom - tb.bottom + px("--space-2"), b.top - tb.top - head); }
+  // Stacked, the row's head holds under the ruler, so the row opens with its head there and its controls under it.
+  if (mode === "row") {
+    const t = $("tl"), b = el.getBoundingClientRect(), tb = t.getBoundingClientRect(), ruler = t.querySelector(".ruler-row").offsetHeight;
+    if (stacked()) {
+      t.scrollTop += el.parentElement.getBoundingClientRect().top - tb.top - ruler;
+      // Then on as far as the first control (the length) shows whole, the head holding over the lane meanwhile.
+      const len = el.querySelector(".ctl-len").getBoundingClientRect(), nameH = el.parentElement.querySelector(".clip-name").offsetHeight;
+      const over = len.bottom + px("--space-2") - tb.bottom, most = el.getBoundingClientRect().top - (tb.top + ruler + nameH);
+      if (over > 0) t.scrollTop += Math.min(over, Math.max(0, most));
+    }
+    else if (b.bottom > tb.bottom) t.scrollTop += Math.min(b.bottom - tb.bottom + px("--space-2"), b.top - tb.top - ruler - px("--space-2"));
+  }
   if (origin === "key") focusFirst();
   playLive();
 }
@@ -1677,6 +1688,7 @@ function closeCtl() {
   if (!ctl) return;
   const p = ctl; ctl = null;
   if (p.ro) p.ro.disconnect();
+  if (p.labelRo) p.labelRo.disconnect();
   p.el.remove();
   mountCtl();
   if (tl) layoutDock();
@@ -1703,11 +1715,14 @@ function labelTicks() {
   const box = (n) => { const x = (parseFloat(n.style.left) / 100) * W, w = n.offsetWidth; return [x - w / 2, x + w / 2]; };
   const taken = [];
   const fits = ([a, b]) => a >= 0 && b <= W && taken.every(([c, d]) => b + gap <= c || a >= d + gap);
-  // The chosen detent's name first, then the lengths the designer named (ghost, fade, pop, panel, grow), then
-  // the rest left to right.
-  const named = ["ghost", "fade", "pop", "panel", "grow"], rank = (n) => (n.hasAttribute("data-on") ? -1 : named.includes(n.textContent) ? named.indexOf(n.textContent) : named.length);
-  const order = names.slice().sort((a, b) => rank(a) - rank(b));
-  for (const n of order) { const b = box(n); if (fits(b)) { taken.push(b); n.style.visibility = ""; } else n.style.visibility = "hidden"; }
+  // One set of names on every width and wherever the controls open, so the scale reads the same in the row, in
+  // the inspector and on a phone: ghost, fade, panel and settle (the house spring's length), spaced to stand
+  // whole on the narrowest track; the chosen detent's own name first, where a value stands on one. A name that
+  // still can't stand whole keeps its tick alone.
+  const named = ["ghost", "fade", "panel", "settle"], rank = (n) => (n.hasAttribute("data-on") ? -1 : named.indexOf(n.textContent));
+  const order = names.filter((n) => rank(n) !== -1 || n.hasAttribute("data-on")).sort((a, b) => rank(a) - rank(b));
+  for (const n of names) n.style.visibility = "hidden";
+  for (const n of order) { const b = box(n); if (fits(b)) { taken.push(b); n.style.visibility = ""; } }
 }
 // The chosen curve drawn large, an easing editor: its plot 0 to 1 across and up, room above and below
 // for a curve that overshoots; a bezier's two handles to drag; a live dot that plays the clip's length on it.
@@ -1792,12 +1807,12 @@ function renderCtl(work) {
   const d = msOf(c.dur), narrow = stacked();
   // The head: in the inspector the row's first line, led by the row's own glyph, so the controls say whose they
   // are; in the row, the row is the head and only its actions stand, trailing. Reset where the clip is edited,
-  // then Close (Back where the inspector stands in the timeline's place), bare symbols in one glass group.
+  // then Close (Back where the inspector stands in the timeline's place), each a bare symbol.
   const close = narrow && ctl.mode === "inspector" ? '<button class="icon-btn" id="ctlClose" type="button" aria-label="Back to the timeline" data-tip="Back to the timeline">' + icon(ICON.chevronLeft) + "</button>" : '<button class="icon-btn" id="ctlClose" type="button" aria-label="Close the clip\'s controls" data-tip="Close (Esc)">' + icon(ICON.close) + "</button>";
   let html = '<div class="ctl-head" data-prop="' + (c.kind || "text") + '">';
-  if (narrow && ctl.mode === "inspector") html += '<div class="glass">' + close + "</div>";
+  if (narrow && ctl.mode === "inspector") html += close;
   if (ctl.mode === "inspector") html += '<span class="lead" role="img" aria-label="' + PROP_WORD[c.kind || "text"] + '">' + icon(PROP_GLYPH[c.kind || "text"]) + "</span><p>" + esc(c.of) + " <span>" + esc(c.does) + "</span></p>";
-  html += (isEdited ? '<button class="ghost-btn" id="ctlReset" type="button">Reset</button>' : "") + (narrow && ctl.mode === "inspector" ? "" : '<div class="glass">' + close + "</div>") + "</div>";
+  html += (isEdited ? '<button class="ghost-btn" id="ctlReset" type="button">Reset</button>' : "") + (narrow && ctl.mode === "inspector" ? "" : close) + "</div>";
   // Length: the slider and its figure. A spring's length is its perceptual duration: its response.
   html += '<div class="ctl-sec ctl-len"><div class="ctl-label"><span>' + (mode === "spring" ? "Response" : "Duration") + "</span>" + (adhocDur(c, o) ? adhocBadge : "") + '</div><div class="ctl-line">' + sliderHtml(c, mode) + fieldHtml("dur", fieldVal(d), "ms", (mode === "spring" ? "Response" : "Duration") + ", ms") + "</div></div>";
   // The curve: past four short segments the list, as the inspector's variant control does (designer's 2C):
@@ -1830,6 +1845,9 @@ function renderCtl(work) {
   ctl.committed = { dur: fieldVal(d), from: String(c.from), to: String(c.to), bez: Array.isArray(c.ease) ? c.ease.map((n) => +(+n).toFixed(3)).join(", ") : "", ...(mode === "spring" ? springFields(c) : {}) };
   wireCtl();
   labelTicks();
+  if (ctl.labelRo) ctl.labelRo.disconnect();
+  const track = el.querySelector(".dslider");
+  if (track) { ctl.labelRo = new ResizeObserver(() => requestAnimationFrame(labelTicks)); ctl.labelRo.observe(track); }
   if (focusKey) {
     const f = focusKey.startsWith("range-") ? el.querySelector('input[type="range"][data-f="' + focusKey.slice(6) + '"]') : focusKey.startsWith("#") ? el.querySelector(focusKey) : el.querySelector('input[data-f="' + focusKey + '"]:not([type="range"]), [data-curve="' + focusKey + '"], [data-h="' + focusKey + '"]') || (focusKey === "slider" ? el.querySelector(".dslider") : null);
     if (f) { f.focus({ preventScroll: true }); if (caret != null && f.setSelectionRange) try { f.setSelectionRange(caret, caret); } catch {} }
