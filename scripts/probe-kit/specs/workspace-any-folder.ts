@@ -23,12 +23,16 @@
  *   checkout is untouched: its HEAD, refs, index, config and working tree.
  * - d. The checkout's untracked `.env` is read in the delegate's copy, and
  *   its write there stays in the copy: the checkout's `.env` is as it was.
- * - e. A linked worktree of that repository (`git worktree add`, its `.git`
+ * - e. A file the person makes in the checkout while a delegate works there
+ *   is theirs: the delegate's finish is not refused for it, the work lands,
+ *   the workspace retires rather than being held for it, and the file
+ *   stands.
+ * - f. A linked worktree of that repository (`git worktree add`, its `.git`
  *   a file): its delegate's copy has a `.git` folder of its own (agent
  *   workspace.ts `ownRepository`), its commit lands on the hub's main
  *   through the merge checks, and the person's repository (refs, config)
  *   and the worktree (its HEAD, index and working tree) are untouched.
- * - f. An OpenCode delegate in a folder works in a server of its
+ * - g. An OpenCode delegate in a folder works in a server of its
  *   workspace's own entered into the view: its file tool's write is read by
  *   its shell at the folder's path while the folder lacks it, and it lands;
  *   once the workspace retired, a handoff continues the same session in the
@@ -45,7 +49,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CAWCO_ENV } from "../../../packages/core/src/cawco-env";
 import { toolWords } from "../../lib/tool-call";
@@ -60,10 +64,13 @@ import { declareGate } from "../gate";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 const FINISH = "mcp__cawco__finish_item";
-const TAG = /PROBE-FOLDER-(A|B|C1|C2|E|F)\b/;
+const TAG = /PROBE-FOLDER-(A|B|C1|C2|C3|E|F)\b/;
 /** How finish_item answers a folder landing's conflict (hub work-items.ts `conflictText`). */
 const CONFLICT = "Not landed: a file you changed";
-type Tag = "A" | "B" | "C1" | "C2" | "E" | "F";
+type Tag = "A" | "B" | "C1" | "C2" | "C3" | "E" | "F";
+/** What the person writes in the checkout while g's delegate works there. */
+const PERSON_LATER = "person-later.txt";
+const PERSON_TEXT = "PERSON-LATER-1";
 /** The handoff that continues f's OpenCode session once its workspace retired. */
 const F_AGAIN = "PROBE-FOLDER-F-AGAIN";
 /** OpenCode's Code Mode tool, which runs MCP tools from a script. */
@@ -154,6 +161,8 @@ const commandOf = (tag: Tag): string => {
       return `cd ${at} && echo one > one.txt && git add one.txt && git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Delegate one' && echo DONE-C1`;
     case "C2":
       return `cd ${at} && if test -f one.txt; then echo HAS-ONE; fi && cat .env && echo SECRET=2 > .env && cat .env && echo two > two.txt && git add two.txt && git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Delegate two' && echo DONE-C2`;
+    case "C3":
+      return `cd ${at} && echo three > c3.txt && git add c3.txt && git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Delegate c3' && echo DONE-C3`;
     case "E":
       return `cd ${at} && if test -d .git; then echo DOTGIT-""DIR; fi && echo three > three.txt && git add three.txt && git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Delegate three' && echo DONE-E`;
     case "F":
@@ -168,10 +177,16 @@ const commandOf = (tag: Tag): string => {
 /**
  * What the host's folder holds as `tag`'s command answers: a's config, c's
  * `.env`; for b, the person writes the same file the delegate just wrote;
- * e's worktree holds no `.env`, and nothing is noted.
+ * e's worktree holds no `.env`, and nothing is noted; while g's delegate
+ * works, the person makes a file of their own in the checkout.
  */
 const noteHost = (tag: Tag): void => {
   const at = folders[tag] as string;
+  if (tag === "C3") {
+    writeFileSync(join(at, PERSON_LATER), `${PERSON_TEXT}\n`);
+    hostAt.C3 = "written";
+    return;
+  }
   if (tag === "E") {
     hostAt.E = "noted";
     return;
@@ -476,7 +491,7 @@ const run = async (kit: Kit) => {
 };
 
 /**
- * f: an OpenCode delegate in a folder that is no repository works in a
+ * g: an OpenCode delegate in a folder that is no repository works in a
  * server of its workspace's own entered into the view (agent opencode.ts
  * `#ensureView`): its file tool's write is read by its shell at the
  * folder's path while the folder on the host lacks it, and lands there.
@@ -522,7 +537,7 @@ const openCodeLeg = async (
       started.workspaceId
     )[0]?.state;
   const first = await until(
-    "f's item ended",
+    "g's item ended",
     itemOf,
     (row) => ["done", "failed", "cancelled"].includes(row.state),
     600_000
@@ -539,19 +554,19 @@ const openCodeLeg = async (
     ocSeen.view !== undefined &&
     ocSeen.server.mnt === ocSeen.view;
   check(
-    "f: an OpenCode delegate in a folder runs in a server of its workspace's own entered into the view: its file tool's write is read by its shell at the folder's path while the folder on the host lacks it",
+    "g: an OpenCode delegate in a folder runs in a server of its workspace's own entered into the view: its file tool's write is read by its shell at the folder's path while the folder on the host lacks it",
     said.includes(OC_TEXT) && hostAt.F === "absent" && inView,
     `host then: ${JSON.stringify(hostAt.F)}; server ${JSON.stringify(ocSeen.server)}, view ${ocSeen.view ?? "unread"} (workspace ${started.workspaceId}); ${said.slice(-400)}`
   );
   check(
-    "f: it lands through the folder's checks, the file in the folder",
+    "g: it lands through the folder's checks, the file in the folder",
     first?.state === "done" &&
       (await readFile(join(folder, OC_FILE), "utf8").catch(() => "")) ===
         `${OC_TEXT}\n`,
     `${first?.state} ${first?.error ?? ""}\n${(first?.result ?? "").slice(0, 800)}`
   );
   const retired = await until(
-    "f's workspace retired",
+    "g's workspace retired",
     workspaceState,
     (state) => state === "archived",
     180_000
@@ -570,7 +585,7 @@ const openCodeLeg = async (
     });
   }
   const again = await until(
-    "f's session finished again",
+    "g's session finished again",
     itemOf,
     (row) =>
       steps.F?.finishAgain === true &&
@@ -585,7 +600,7 @@ const openCodeLeg = async (
     started.workspaceId
   );
   check(
-    "f: once its workspace retired, a handoff continues the same OpenCode session in the workspace made again: the same item and session, its first turn in its conversation, its shell reading the landed file",
+    "g: once its workspace retired, a handoff continues the same OpenCode session in the workspace made again: the same item and session, its first turn in its conversation, its shell reading the landed file",
     retired === "archived" &&
       handed.status === 200 &&
       items.length === 1 &&
@@ -700,10 +715,61 @@ const repoLegs = async (
     c2Said.includes("SECRET=1\nSECRET=2") && after.env === "SECRET=1\n",
     `${c2Said.slice(-300)} | checkout: ${after.env}`
   );
+  await personLaterLeg(kit, fleet, { delegate, ended, env, git }, repoParent);
   return { parent: repoParent, repo, project: repoProject.id };
 };
 
-/** e: a linked worktree of the repository: its own repository in the copy, landed, nothing of the person's written. */
+/**
+ * e: a file the person makes in the checkout while a delegate works there
+ * shows in the delegate's view (the folder is live) and is theirs: the
+ * delegate's finish is not refused for it, its work lands, its workspace
+ * retires rather than being held for it, and the file stands in the
+ * checkout as the person left it.
+ */
+const personLaterLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  { delegate, ended }: Legs,
+  parent: string
+): Promise<void> => {
+  const { check } = kit;
+  const repo = folders.C2 as string;
+  folders.C3 = repo;
+  const c3 = await delegate("C3", repo, parent);
+  const row = await ended("C3", c3.workItemId);
+  const workspaceState = () =>
+    fleet.query<{ state: string }>(
+      "SELECT state FROM workspaces WHERE id = (SELECT workspace_id FROM work_items WHERE id = ?)",
+      c3.workItemId
+    )[0]?.state;
+  const settled = await until(
+    "e's workspace settled",
+    workspaceState,
+    (state) => state !== "active",
+    180_000
+  ).catch(workspaceState);
+  const refused = fleet.seen.some(
+    (one) =>
+      one.afterTool &&
+      one.all.includes("PROBE-FOLDER-C3") &&
+      one.all.includes(PERSON_LATER)
+  );
+  const stands = await readFile(join(repo, PERSON_LATER), "utf8").catch(
+    () => ""
+  );
+  check(
+    "e: a file the person makes in the checkout while its delegate works is theirs: the finish is not refused for it, the work lands, the workspace retires, and the file stands",
+    hostAt.C3 === "written" &&
+      !refused &&
+      row.state === "done" &&
+      settled === "archived" &&
+      stands === `${PERSON_TEXT}\n`,
+    `${row.state} ${row.error ?? ""}; workspace ${settled}; finish named it: ${refused}; file: ${JSON.stringify(stands)}\n${(row.result ?? "").slice(0, 600)}`
+  );
+  await rm(join(repo, PERSON_LATER), { force: true });
+};
+
+/** f: a linked worktree of the repository: its own repository in the copy, landed, nothing of the person's written. */
 const worktreeLeg = async (
   kit: Kit,
   fleet: KitFleet,
@@ -743,7 +809,7 @@ const worktreeLeg = async (
     .trim()
     .split("\n");
   check(
-    "e: a linked worktree's delegate works in a repository of its own in its copy, and its commit lands on the hub's main",
+    "f: a linked worktree's delegate works in a repository of its own in its copy, and its commit lands on the hub's main",
     workspace?.kind === "repo" &&
       workspace.repo_root === wt &&
       said.includes("DOTGIT-DIR") &&
@@ -753,7 +819,7 @@ const worktreeLeg = async (
   );
   const after = await stateOf();
   check(
-    "e: the person's repository and worktree are untouched: refs, config, the worktree's HEAD, branch, index and working tree",
+    "f: the person's repository and worktree are untouched: refs, config, the worktree's HEAD, branch, index and working tree",
     JSON.stringify(before) === JSON.stringify(after) &&
       !(await Bun.file(join(wt, "three.txt")).exists()),
     `${JSON.stringify(before)}\n${JSON.stringify(after)}`
