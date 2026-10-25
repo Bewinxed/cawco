@@ -253,7 +253,7 @@ const stage = async (
   };
   await setRule("off");
   await hubGit.openGitDoor({ id, path: clone });
-  const door = hubGit.gitDoorEnv(id, clone);
+  const door = await hubGit.gitDoorEnv(id, clone);
   const inside = (args: string[]) =>
     Bun.$`git ${args}`
       .cwd(clone)

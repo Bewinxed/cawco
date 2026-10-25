@@ -100,10 +100,12 @@ export const nestedSeatbeltReason = (): string =>
  * own start then says what). `sandboxExec` is the binary asked, sandbox-exec
  * unless a check names another.
  */
-export const nestedSeatbeltRefusal = (
+export const nestedSeatbeltRefusal = async (
   sandboxExec: string = SANDBOX_EXEC
-): string | undefined => {
-  const tried = Bun.spawnSync(
+): Promise<string | undefined> => {
+  // Awaited, never a synchronous spawn: one holds the calling thread's event
+  // loop for as long as its child runs (safe-git.ts `readSafeGit`).
+  const tried = Bun.spawn(
     [sandboxExec, "-p", "(version 1)(allow default)", "/usr/bin/true"],
     {
       env: hostEnvironment(),
@@ -112,8 +114,11 @@ export const nestedSeatbeltRefusal = (
       stderr: "pipe",
     }
   );
-  return tried.exitCode !== 0 &&
-    tried.stderr.toString().includes(SEATBELT_REFUSED)
+  const [stderr, exitCode] = await Promise.all([
+    new Response(tried.stderr).text(),
+    tried.exited,
+  ]);
+  return exitCode !== 0 && stderr.includes(SEATBELT_REFUSED)
     ? nestedSeatbeltReason()
     : undefined;
 };

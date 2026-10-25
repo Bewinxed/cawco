@@ -1187,19 +1187,22 @@ const PROC_NET_FIELDS = /\s+/;
  */
 export async function listeningPorts(pid: number): Promise<number[]> {
   if (process.platform !== "linux") {
-    const ran = Bun.spawnSync(
+    // Awaited, never a synchronous spawn: one holds the calling thread's
+    // event loop for as long as lsof runs.
+    const ran = Bun.spawn(
       ["lsof", "-nP", "-a", "-p", String(pid), "-iTCP", "-sTCP:LISTEN", "-Fn"],
       { env: hostEnvironment() }
     );
+    const [stdout] = await Promise.all([
+      new Response(ran.stdout).text(),
+      ran.exited,
+    ]);
     return [
       ...new Set(
-        ran.stdout
-          .toString()
-          .split("\n")
-          .flatMap((line) => {
-            const port = LSOF_LISTEN.exec(line)?.[1];
-            return port ? [Number(port)] : [];
-          })
+        stdout.split("\n").flatMap((line) => {
+          const port = LSOF_LISTEN.exec(line)?.[1];
+          return port ? [Number(port)] : [];
+        })
       ),
     ];
   }

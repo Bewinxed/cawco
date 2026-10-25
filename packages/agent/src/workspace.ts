@@ -421,7 +421,7 @@ const readySource = (
     // A clone of a workspace's clone reaches the hub as that workspace does.
     const hub = isHubRemote(origin) ? origin : undefined;
     if (hub && !fromClone) {
-      useHubCredentialHelper(repoRoot);
+      await useHubCredentialHelper(repoRoot);
     }
     const known = hub
       ? await hubBase(

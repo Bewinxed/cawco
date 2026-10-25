@@ -1697,7 +1697,7 @@ const armHookNow = async (
   // the keeper's list again before any boundary on record is armed.
   await writeWhole(
     held.exec,
-    execScript(id, { ...held, pid: listedPid(held.pid) }),
+    await execScript(id, { ...held, pid: listedPid(held.pid) }),
     0o755
   );
   await writeWhole(prefix, claudePrefixScript(id, held.exec), 0o755);
@@ -2524,10 +2524,14 @@ const refusal = (id: string, why: string): Error =>
  * made, so the person reads why, not the EPERM the profile it runs under
  * answers a write into the socket root with (`linkWorkspaceTmp`).
  */
-let seatbeltNested: { reason: string | undefined } | undefined;
-const nestedSeatbelt = (): string | undefined => {
-  seatbeltNested ??= { reason: nestedSeatbeltRefusal() };
-  return seatbeltNested.reason;
+let seatbeltNested: Promise<string | undefined> | undefined;
+const nestedSeatbelt = (): Promise<string | undefined> => {
+  // A failed ask is asked again next time, as the synchronous one was.
+  seatbeltNested ??= nestedSeatbeltRefusal().catch((error: unknown) => {
+    seatbeltNested = undefined;
+    throw error;
+  });
+  return seatbeltNested;
 };
 
 /** Says, as the agent starts, what this machine needs before it can hold a delegate's workspace (workspace-needs.ts). */
@@ -2698,7 +2702,8 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
   if (!walls.available) {
     throw refusal(ref.id, walls.reason ?? "");
   }
-  const nested = process.platform === "darwin" ? nestedSeatbelt() : undefined;
+  const nested =
+    process.platform === "darwin" ? await nestedSeatbelt() : undefined;
   if (nested) {
     throw refusal(ref.id, nested);
   }
@@ -3577,7 +3582,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
   // what it grants, to judge a later policy by ({@link narrowing}).
   const granted = `${JSON.stringify(policy, null, 2)}\n`;
   const runtime = await bunRuntime(id);
-  const exec = execScript(id, {
+  const exec = await execScript(id, {
     exec: join(stateDir(id), "exec"),
     gen,
     path: ref.path,
@@ -6840,7 +6845,7 @@ const ready = (
  * (hub-git.ts `guardedPushParameters`), which decides it the same way and
  * pushes what goes with the host's own credential.
  */
-const commandEnv = (id: string, clone: string): string[] => [
+const commandEnv = async (id: string, clone: string): Promise<string[]> => [
   `unset ${AGENT_SOCKET_ENV.join(" ")}`,
   // The session's CLI temp root, read only in here ({@link Boundary.claudeTmp}):
   // a Claude Code a command starts takes `TMPDIR`, the scratch dir, instead.
@@ -6861,7 +6866,7 @@ const commandEnv = (id: string, clone: string): string[] => [
     GIT_CONFIG_SYSTEM: gitSystemConfigOf(id),
     CAWCO_TOOL_SOCKET: toolDoorOf(id),
     CAWCO_WORKSPACE: id,
-    ...doorEnv(id, clone),
+    ...(await doorEnv(id, clone)),
   }).map(([name, value]) => `export ${name}=${shellQuote(value)}`),
 ];
 
@@ -6870,8 +6875,11 @@ const commandEnv = (id: string, clone: string): string[] => [
  * push across the network through it and those that leave no maintenance
  * running after a command's git (hub-git.ts `quietGitParameters`).
  */
-const doorEnv = (id: string, clone: string): Record<string, string> => {
-  const door = gitDoorEnv(id, clone);
+const doorEnv = async (
+  id: string,
+  clone: string
+): Promise<Record<string, string>> => {
+  const door = await gitDoorEnv(id, clone);
   return {
     ...door,
     CAWCO_GIT_PARAMETERS: [
@@ -7050,14 +7058,15 @@ const claudeCwdTail = (id: string): string => {
  * answered just before an update runs on this executor, and one this build's
  * judge answered runs on the earlier executor until it is written again.
  */
-const execScript = (
+const execScript = async (
   id: string,
   held: Pick<Held, "exec" | "gen" | "path" | "scratch"> & {
     readonly pid: Pid | undefined;
   }
-): string => {
+): Promise<string> => {
   const linux = process.platform === "linux";
   const pid = held.pid === undefined ? "PID" : String(held.pid);
+  const env = await commandEnv(id, held.path);
   // The workspace's read-only bin first: the hub's git helpers (`hub-git.ts`)
   // and, on macOS, the toolchain shims, one folder.
   const helpers = `${gitHelperDirOf(id)}:`;
@@ -7131,9 +7140,7 @@ pwd -P > "$req/cwd"
 # swept as the calling session's when that session's process ends.
 {
   (unset ${CAWCO_ENV.sessiondTree}; export -p)
-${commandEnv(id, held.path)
-  .map((line) => `  echo ${shellQuote(line)}`)
-  .join("\n")}
+${env.map((line) => `  echo ${shellQuote(line)}`).join("\n")}
 } > "$req/env"
 ${path}
 mkfifo "$req/out" "$req/err"
@@ -7211,7 +7218,7 @@ export const executorUnsandboxed = async (
   const hookAt = join(stateDir(ref.id), "hook");
   return {
     claudeTmp: workspaceClaudeTmpDir(ref.id),
-    exec: execScript(ref.id, {
+    exec: await execScript(ref.id, {
       exec: execAt,
       gen,
       path: ref.path,

@@ -61,6 +61,7 @@ import {
 } from "@cawco/core/paths";
 import {
   GIT_LOCALE,
+  readSafeGit,
   repositoryConfigProblem,
   SAFE_GIT_ENV,
   safeGitArgv,
@@ -439,18 +440,17 @@ export const runOnHost = (
   });
 
 /** The clone's `origin` remote-tracking refs, each with the commit it is at. */
-const remoteRefs = (clone: string): Map<string, string> => {
-  const listed = Bun.spawnSync(
-    safeGitArgv([
+const remoteRefs = async (clone: string): Promise<Map<string, string>> => {
+  const listed = await readSafeGit(
+    [
       "for-each-ref",
       "--format=%(objectname) %(refname)",
       "refs/remotes/origin/",
-    ]),
+    ],
     { cwd: clone, env: { ...process.env, ...SAFE_GIT_ENV } }
   );
   return new Map(
     listed.stdout
-      .toString()
       .split("\n")
       .filter(Boolean)
       .map((line) => {
@@ -639,8 +639,9 @@ const holdPush = async (
         )
       );
     }
-    const read = Bun.spawnSync(
-      safeGitArgv(["rev-parse", "--verify", "--quiet", `${src}^{commit}`]),
+    // biome-ignore lint/performance/noAwaitInLoops: the first refspec that names no commit refuses the whole push
+    const read = await readSafeGit(
+      ["rev-parse", "--verify", "--quiet", `${src}^{commit}`],
       {
         cwd: ref.path,
         env: {
@@ -650,7 +651,7 @@ const holdPush = async (
         },
       }
     );
-    const sha = read.stdout.toString().trim();
+    const sha = read.stdout.trim();
     if (read.exitCode !== 0 || !sha) {
       return oneLine(askRefusal(what, `${src} is no commit of this clone`));
     }
@@ -877,8 +878,11 @@ type PushRule =
 type DoorTarget =
   { kind: "hub" } | { kind: "host"; origin: boolean; push: PushRule };
 
-const doorTarget = (ref: WorkspaceRef, url: string): DoorTarget => {
-  const origin = originOf(ref.path);
+const doorTarget = async (
+  ref: WorkspaceRef,
+  url: string
+): Promise<DoorTarget> => {
+  const origin = await originOf(ref.path);
   if (origin !== "" && url === origin) {
     if (isHubRemote(origin)) {
       return { kind: "hub" };
@@ -1335,11 +1339,11 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
     if (problem) {
       throw new Error(`git did not run in ${ref.path}: ${problem}`);
     }
-    const target = doorTarget(ref, url);
+    const target = await doorTarget(ref, url);
     // git-lfs held to the clone's origin's LFS, or its project's declared
     // one (host-lfs.ts): read before the door answers, so a run whose
     // endpoint the hub could not say does not start.
-    const lfs = await doorLfsOf(ref, originOf(ref.path));
+    const lfs = await doorLfsOf(ref, await originOf(ref.path));
     // Read before the door answers too: what fails after `ok` reaches git
     // only as a connection cut short.
     let env: Record<string, string> = {};
@@ -1348,15 +1352,17 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
         ? await hostOriginGitEnv(url, lfs.declared)
         : await hostGitEnv();
     }
+    // The refs a fetch moves are told from these: read before `ok`, as git
+    // asks the helper nothing, and so fetches nothing, until it hears it.
+    const before = await remoteRefs(ref.path);
     socket.write("ok\n");
     answered = true;
     const channel = doorChannel(socket);
     switch (target.kind) {
       case "hub":
-        pipeHubHelper(ref, socket, channel, url, rest, lfs);
+        pipeHubHelper(ref, socket, channel, url, rest, lfs, before);
         return;
       case "host": {
-        const before = remoteRefs(ref.path);
         serveHelper(
           socket,
           channel,
@@ -1369,16 +1375,15 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
             }
             // git has written the refs it fetched by the time it ends the
             // connection: their large files come here before it closes.
-            await fetchLfs(
-              ref,
-              movedRefs(before, remoteRefs(ref.path)),
-              env,
-              lfs
-            ).catch((error: unknown) =>
-              console.warn(
-                `[hub-git] ${ref.id}: ${error instanceof Error ? error.message : String(error)}`
+            await remoteRefs(ref.path)
+              .then((after) =>
+                fetchLfs(ref, movedRefs(before, after), env, lfs)
               )
-            );
+              .catch((error: unknown) =>
+                console.warn(
+                  `[hub-git] ${ref.id}: ${error instanceof Error ? error.message : String(error)}`
+                )
+              );
           }
         );
         return;
@@ -1404,7 +1409,9 @@ const pipeHubHelper = (
   channel: DoorChannel,
   url: string,
   rest: Buffer,
-  lfs: DoorLfs
+  lfs: DoorLfs,
+  /** The clone's origin refs as the door answered (`remoteRefs`). */
+  before: Map<string, string>
 ): void => {
   const env = hubGitEnv(url, [], lfs.declared);
   const scheme = new URL(url).protocol === "https:" ? "https" : "http";
@@ -1417,7 +1424,6 @@ const pipeHubHelper = (
       stdio: ["pipe", "pipe", "pipe"],
     }
   );
-  const before = remoteRefs(ref.path);
   let stderr = "";
   child.stderr.on("data", (chunk: Buffer) => {
     stderr = (stderr + chunk.toString()).slice(-4000);
@@ -1430,8 +1436,12 @@ const pipeHubHelper = (
     }
     // git waits on the helper as it disconnects, after it has written the
     // refs it fetched: the door closes once their large files are here.
-    const moved = code === 0 ? movedRefs(before, remoteRefs(ref.path)) : [];
-    fetchLfs(ref, moved, env, lfs)
+    const moved =
+      code === 0
+        ? remoteRefs(ref.path).then((after) => movedRefs(before, after))
+        : Promise.resolve<string[]>([]);
+    moved
+      .then((refs) => fetchLfs(ref, refs, env, lfs))
       .catch((error: unknown) =>
         console.warn(
           `[hub-git] ${ref.id}: ${error instanceof Error ? error.message : String(error)}`
@@ -1551,19 +1561,19 @@ const shellWord = (word: string): string =>
   `'${word.replaceAll("'", "'\\''")}'`;
 
 /** The clone's `origin` URL as its own config names it; empty when it names none. */
-const originOf = (clone: string): string =>
-  Bun.spawnSync(
-    safeGitArgv([
-      "config",
-      "--file",
-      join(clone, ".git", "config"),
-      "--get",
-      "remote.origin.url",
-    ]),
-    { env: { ...process.env, ...SAFE_GIT_ENV } }
-  )
-    .stdout.toString()
-    .trim();
+const originOf = async (clone: string): Promise<string> =>
+  (
+    await readSafeGit(
+      [
+        "config",
+        "--file",
+        join(clone, ".git", "config"),
+        "--get",
+        "remote.origin.url",
+      ],
+      { env: { ...process.env, ...SAFE_GIT_ENV } }
+    )
+  ).stdout.trim();
 
 /**
  * The variables every command in workspace `id` runs with: the door, git's
@@ -1582,15 +1592,15 @@ const originOf = (clone: string): string =>
  * LFS server with a credential; the door sends a push's large files from
  * the host ({@link pushLfs}). None without a hub.
  */
-export const gitDoorEnv = (
+export const gitDoorEnv = async (
   id: string,
   clone: string
-): Record<string, string> => {
+): Promise<Record<string, string>> => {
   const origins = hubOrigins();
   if (origins.length === 0) {
     return {};
   }
-  const origin = originOf(clone);
+  const origin = await originOf(clone);
   const hubOrigin = isHubRemote(origin);
   const outsideOrigin = !hubOrigin && isNetworkRemote(origin);
   return {

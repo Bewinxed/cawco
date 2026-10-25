@@ -1588,7 +1588,7 @@ const cloneStep = (request: MoveCloneRequest): Promise<MoveLfsResult> =>
       await checkOut(run, scratch, request, fromHub);
       if (fromHub) {
         // Its origin is the hub: a plain `git pull` there authenticates.
-        useHubCredentialHelper(scratch);
+        await useHubCredentialHelper(scratch);
       }
       const lfs = await lfsOf(scratch, snapshot.commit);
       await writeStateFile(join(scratch, ".git", MARKER), `${jobId}\n`);

@@ -21,7 +21,7 @@ import { CAWCO_ENV } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { machineId } from "@cawco/core/machine-id";
 import { workspaceProjectFile } from "@cawco/core/paths";
-import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
+import { readSafeGit, SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { isDamagedRecord, readRecord } from "@cawco/core/state-file";
@@ -106,9 +106,12 @@ export const workspaceProjectOf = async (
 };
 
 /** The endpoint values `git config <source> --get-regexp` reads from one `.lfsconfig`; none when it names none or is not there. */
-const endpointsIn = (clone: string, source: string[]): string[] => {
-  const read = Bun.spawnSync(
-    safeGitArgv(["config", ...source, "--get-regexp", ENDPOINT_KEYS]),
+const endpointsIn = async (
+  clone: string,
+  source: string[]
+): Promise<string[]> => {
+  const read = await readSafeGit(
+    ["config", ...source, "--get-regexp", ENDPOINT_KEYS],
     {
       cwd: clone,
       env: { ...hostEnvironment(), ...SAFE_GIT_ENV },
@@ -120,7 +123,6 @@ const endpointsIn = (clone: string, source: string[]): string[] => {
     return [];
   }
   return read.stdout
-    .toString()
     .split("\n")
     .map((line) => line.slice(line.indexOf(" ") + 1).trim())
     .filter(Boolean);
@@ -136,13 +138,16 @@ export const lfsconfigEndpoints = async (
   treeishes: readonly string[]
 ): Promise<string[]> => {
   const file = `${clone}/.lfsconfig`;
+  const atTreeishes = await Promise.all(
+    treeishes.map((treeish) =>
+      endpointsIn(clone, ["--blob", `${treeish}:.lfsconfig`])
+    )
+  );
   return [
     ...new Set([
-      ...treeishes.flatMap((treeish) =>
-        endpointsIn(clone, ["--blob", `${treeish}:.lfsconfig`])
-      ),
+      ...atTreeishes.flat(),
       ...((await Bun.file(file).exists())
-        ? endpointsIn(clone, ["--file", file])
+        ? await endpointsIn(clone, ["--file", file])
         : []),
     ]),
   ];

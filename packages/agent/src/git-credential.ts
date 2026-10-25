@@ -28,7 +28,7 @@ import { fileURLToPath } from "node:url";
 import { CAWCO_ENV } from "@cawco/core";
 import { cawcoDataDir } from "@cawco/core/paths";
 import { standalone } from "@cawco/core/runtime";
-import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
+import { readSafeGit, SAFE_GIT_ENV } from "@cawco/core/safe-git";
 import { writeStateFile } from "@cawco/core/state-file";
 
 /**
@@ -165,13 +165,13 @@ export const hubOriginOf = (url: string): string | undefined =>
  * the computer readying it, the owner's own git) at its lock: "could not
  * lock config file .git/config: File exists" (link-under-load, 2026-10-20).
  */
-export const useHubCredentialHelper = (repo: string): void => {
+export const useHubCredentialHelper = async (repo: string): Promise<void> => {
   const config = (...args: string[]) =>
-    Bun.spawnSync(safeGitArgv(["-C", repo, "config", "--local", ...args]), {
+    readSafeGit(["-C", repo, "config", "--local", ...args], {
       env: { ...process.env, ...SAFE_GIT_ENV },
       stderr: "pipe",
     });
-  const named = config("--get", "remote.origin.url").stdout.toString().trim();
+  const named = (await config("--get", "remote.origin.url")).stdout.trim();
   const origin = hubOriginOf(named) ?? hubOrigin();
   if (!origin) {
     return;
@@ -179,31 +179,30 @@ export const useHubCredentialHelper = (repo: string): void => {
   const remote = `${origin}/git/`;
   const helper = `!${cawcoCommand("git-credential").map(shellWord).join(" ")}`;
   const key = `credential.${origin}.helper`;
-  const said = (...args: string[]) => {
-    const read = config(...args);
-    return read.exitCode === 0 ? read.stdout.toString() : undefined;
+  const said = async (...args: string[]) => {
+    const read = await config(...args);
+    return read.exitCode === 0 ? read.stdout : undefined;
   };
   if (
-    said("--get-all", key) === `\n${helper}\n` &&
-    said("--get-all", `credential.${remote}.helper`) === undefined &&
-    said("--get", `lfs.${remote}.locksverify`) === "false\n"
+    (await said("--get-all", key)) === `\n${helper}\n` &&
+    (await said("--get-all", `credential.${remote}.helper`)) === undefined &&
+    (await said("--get", `lfs.${remote}.locksverify`)) === "false\n"
   ) {
     return;
   }
   // Exit 5 when there is none to unset. The `/git/`-scoped key is what an
   // earlier build wrote: it matched none of git-lfs's requests.
-  config("--unset-all", key);
-  config("--unset-all", `credential.${remote}.helper`);
+  await config("--unset-all", key);
+  await config("--unset-all", `credential.${remote}.helper`);
   for (const args of [
     ["--add", key, ""],
     ["--add", key, helper],
     [`lfs.${remote}.locksverify`, "false"],
   ]) {
-    const ran = config(...args);
+    // biome-ignore lint/performance/noAwaitInLoops: git config writes one at a time, each under the config's lock
+    const ran = await config(...args);
     if (ran.exitCode !== 0) {
-      throw new Error(
-        `git config in ${repo} failed: ${ran.stderr.toString().trim()}`
-      );
+      throw new Error(`git config in ${repo} failed: ${ran.stderr.trim()}`);
     }
   }
 };
