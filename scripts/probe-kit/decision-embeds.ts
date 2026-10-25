@@ -994,6 +994,50 @@ async function scrollThrough(
   return tall;
 }
 
+/**
+ * Every one of a decision page's `count` Previews given its frame, as a
+ * person reaching each by scrolling does: a canvas's frame mounts only as
+ * its card nears the view (dashboard decisions host Preview.svelte
+ * `FETCH_MARGIN`). The page's scroller is taken half its height at a time
+ * to its end, each stop held until the frames near it have mounted, then
+ * back to its top. Answers how many frames stand.
+ */
+export async function reachEvery(
+  page: Page,
+  count: number,
+  timeout = 60_000
+): Promise<number> {
+  const deadline = Date.now() + timeout;
+  const frames = () =>
+    page.evaluate(
+      (selector) => document.querySelectorAll(selector).length,
+      EMBED_FRAME
+    );
+  for (;;) {
+    const now = await frames();
+    if (now >= count || Date.now() >= deadline) {
+      break;
+    }
+    const atEnd = await page.evaluate(() => {
+      const scroller = (document.querySelector("[data-slot=page-scroll]") ??
+        document.documentElement) as HTMLElement;
+      scroller.scrollTop += scroller.clientHeight / 2;
+      return (
+        scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1
+      );
+    });
+    // The frames near the stop mount on the observer's next callback.
+    await page.waitForTimeout(atEnd ? 500 : 150);
+  }
+  await page.evaluate(() => {
+    (
+      (document.querySelector("[data-slot=page-scroll]") ??
+        document.documentElement) as HTMLElement
+    ).scrollTop = 0;
+  });
+  return frames();
+}
+
 // ---- Decision pages on an origin of their own (specs/web/decision-review.ts)
 
 /**

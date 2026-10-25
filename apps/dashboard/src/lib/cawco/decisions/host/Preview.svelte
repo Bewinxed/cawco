@@ -26,7 +26,11 @@
   load together, each telling its module graph before it fetches any of it,
   fetching its share on its turn and the rest from the cache once another
   frame fetched it, so each module is asked of the network once for the
-  page, the one in view or nearest it first (embed-turns.ts). Each stands in its well, which hugs it
+  page, the one in view or nearest it first (embed-turns.ts). A canvas's
+  frame mounts and fetches only as its card nears the page's view, and
+  draws only nearer still (`FETCH_MARGIN`, `DRAW_MARGIN`): a page of many
+  canvases runs only the ones near what the person sees, and once drawn a
+  frame stays, so what was done in it survives a scroll. Each stands in its well, which hugs it
   and scrolls it sideways where it is wider (Well.svelte). While a screen's
   origin is asked, the well holds its 16:10, a skeleton until the wait
   outlasts its grace; a canvas waiting its turn or loading holds its
@@ -72,7 +76,7 @@
   import { hubRefusal } from "../../hub-read.js";
   import { dur, reveal, revealHere } from "../../motion/curves.svelte";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
-  import { type EmbedTurn, embedTurn } from "./embed-turns.js";
+  import { type EmbedTurn, embedTurn, scrollerOf } from "./embed-turns.js";
   import { served } from "./page.svelte.js";
   import { scheme } from "./scheme.svelte.js";
   import Well from "./Well.svelte";
@@ -380,11 +384,75 @@
           hostMode: ways?.hostMode ?? false,
         })
       : previewsNeedWords({ byHost: true, host: at.host });
+  /**
+   * How near the page's view a component canvas's card comes before its
+   * frame mounts and fetches its graph ({@link FETCH_MARGIN}), and before it
+   * loads its stories and draws ({@link DRAW_MARGIN}): shares of its
+   * scroller's height above and below the view, so at a person's scroll the
+   * network is behind it by the time it draws, and it has drawn by the time
+   * it comes into view. Our calls, measured in canvas-cost's `decision` leg.
+   */
+  const FETCH_MARGIN = "500% 0px";
+  const DRAW_MARGIN = "350% 0px";
+  /**
+   * Its card came within {@link FETCH_MARGIN} of the view: its frame mounts
+   * and fetches its graph, and never goes while the Preview stands, so what
+   * the person did in it (a menu opened, a pin) survives a scroll. Until
+   * then its skeleton stands at its shape, and it asks nothing of its origin.
+   */
+  let near = $state(false);
+  /** Its card came within {@link DRAW_MARGIN} of the view: its frame loads its stories and draws once its graph is in. */
+  let close = $state(false);
+  /** Watches its card until it comes within `margin` of its scroller's view, then calls `came` once. */
+  const watchNear = (place: Element, margin: string, came: () => void) => {
+    const comes = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((one) => one.isIntersecting)) {
+          came();
+          comes.disconnect();
+        }
+      },
+      { root: scrollerOf(place), rootMargin: margin }
+    );
+    comes.observe(place);
+    return () => comes.disconnect();
+  };
+  $effect(() => {
+    const place = box;
+    if (!place || near || held?.kind !== "component") {
+      return;
+    }
+    return watchNear(place, FETCH_MARGIN, () => {
+      near = true;
+    });
+  });
+  $effect(() => {
+    const place = box;
+    if (!place || close || held?.kind !== "component") {
+      return;
+    }
+    return watchNear(place, DRAW_MARGIN, () => {
+      close = true;
+    });
+  });
+  /** The rest of its graph once every module of it is in (embed-turns.ts `ready`), held until its card is {@link close}; and the frame's origin to tell it to. */
+  // Raw: a structured clone takes no proxy (postMessage refuses one with a DataCloneError).
+  let rest = $state.raw<{ origin: string; urls: string[] } | null>(null);
+  $effect(() => {
+    if (close && rest) {
+      frame?.contentWindow?.postMessage(
+        { type: CANVAS_EMBED_READY, urls: rest.urls },
+        rest.origin
+      );
+      rest = null;
+    }
+  });
   $effect(() => {
     const embed = held?.embed;
     // biome-ignore lint/complexity/noVoid: read-only dependency — each Try again asks again
     void attempt;
     ready = null;
+    rest = null;
     drawn = false;
     failed = null;
     slow = false;
@@ -392,6 +460,10 @@
       return;
     }
     const canvas = held?.kind === "component";
+    // A canvas far from the view waits as its skeleton, asking nothing.
+    if (canvas && !near) {
+      return;
+    }
     const address = canvas ? canvasEmbedUrl(embed, stories) : embed;
     let gone = false;
     const after = setTimeout(() => {
@@ -441,9 +513,9 @@
         turnState = "fetching";
         tell(CANVAS_EMBED_GO, share);
       });
-      mine.ready.then((rest) => {
+      mine.ready.then((urls) => {
         if (!gone) {
-          tell(CANVAS_EMBED_READY, rest);
+          rest = { origin: new URL(address).origin, urls };
         }
       });
     }

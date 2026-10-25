@@ -152,6 +152,7 @@ import {
   embedDrawFaults,
   idOf,
   pageReach,
+  reachEvery,
   readEmbeds,
   startDecisionStage,
 } from "../../decision-embeds";
@@ -1305,15 +1306,45 @@ function columnFor(
 /**
  * Before the page is scrolled, every picture stands at the height its
  * canvas says, the ones below the fold too: one rule for every Preview of
- * a canvas, the first as the rest. Then each reached as a person scrolls
- * to it, its frames drawn.
+ * a canvas, the first as the rest. A canvas near the view stands drawn; one
+ * farther, whose frame mounts only as its card nears the view (Preview.svelte
+ * `FETCH_MARGIN`), stands as its skeleton at the shape the page's media
+ * knows, and draws at that height when reached: no picture jumps. Then each
+ * reached as a person scrolls to it, its frames drawn.
  */
 async function picturesUnscrolled(kit: Kit, page: Page, { leg }: WidthLeg) {
+  // Before any scroll: each well's frame drawn at its height, else its skeleton's box.
+  const standing = () =>
+    page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>("[data-slot=media]")]
+        .filter((well) =>
+          well.querySelector("[data-slot=embed-wait], iframe[data-slot=embed]")
+        )
+        .map((well) => {
+          const frame = well.querySelector<HTMLIFrameElement>(
+            "iframe[data-slot=embed]"
+          );
+          if (frame?.dataset.shape === "drawn") {
+            return {
+              drawn: true,
+              h: Math.round(frame.getBoundingClientRect().height),
+            };
+          }
+          const wait = well.querySelector("[data-slot=embed-wait]");
+          return {
+            drawn: false,
+            h: Math.round(wait?.getBoundingClientRect().height ?? 0),
+          };
+        })
+    );
   await page.waitForFunction(
-    (selector) => document.querySelectorAll(selector).length === 5,
-    EMBED_FRAME,
+    () => document.querySelectorAll("[data-slot=media]").length >= 5,
+    undefined,
     { timeout: 60_000 }
   );
+  await settle(page, 3000);
+  const before = await standing();
+  await reachEvery(page, 5);
   const allDrawn = (timeout: number) =>
     page
       .waitForFunction(
@@ -1329,15 +1360,16 @@ async function picturesUnscrolled(kit: Kit, page: Page, { leg }: WidthLeg) {
         () => false
       );
   const unscrolled = await allDrawn(60_000);
-  const shapes = await page.$$eval(EMBED_FRAME, (frames) =>
-    frames.map(
-      (one) =>
-        `${one.dataset.shape} ${Math.round(one.getBoundingClientRect().height)}px at ${Math.round(one.getBoundingClientRect().top)}px`
-    )
+  const after = await standing();
+  const jumped = before.filter(
+    (one, at) => Math.abs(one.h - (after[at]?.h ?? 0)) > 2
   );
   kit.check(
-    `${leg}: before any scroll, all 5 pictures stand at the height their canvas says, below the fold too (${shapes.join(", ")})`,
-    unscrolled
+    `${leg}: before any scroll, all 5 pictures stand at the height their canvas says, below the fold too: ${before.filter((one) => one.drawn).length} drawn, the rest their skeleton at that height (${before.map((one, at) => `${one.drawn ? "drawn" : "skeleton"} ${one.h}px, drawn ${after[at]?.h ?? 0}px`).join("; ")})`,
+    unscrolled &&
+      before.length === 5 &&
+      after.length === 5 &&
+      jumped.length === 0
   );
   for (const handle of await page.$$(EMBED_FRAME)) {
     await handle.scrollIntoViewIfNeeded();
@@ -1799,6 +1831,7 @@ async function openReal(
     height: view === "desk" ? 900 : 844,
   });
   await page.goto(stage.pageUrl(REAL_PAGE, "light"), { waitUntil: "load" });
+  await reachEvery(page, 5);
   await page.waitForFunction(
     (selector) => document.querySelectorAll(selector).length === 5,
     EMBED_FRAME,
@@ -2084,6 +2117,7 @@ async function oneYjs(
     const page = await kit.page("desk", { engine, theme: "light" });
     const twice = heardTwice(page);
     await page.goto(stage.pageUrl(SHARED_PAGE, "light"), { waitUntil: "load" });
+    await reachEvery(page, 3);
     await page.waitForFunction(
       (selector) => document.querySelectorAll(selector).length === 3,
       EMBED_FRAME,
@@ -2324,6 +2358,7 @@ async function hublessOnDashboard(kit: Kit): Promise<void> {
       await page.goto(stage.pageUrl(CONNECT_PAGE, "light"), {
         waitUntil: "load",
       });
+      await reachEvery(page, CONNECT.length);
       await page.waitForFunction(
         ({ n, selector }) => document.querySelectorAll(selector).length === n,
         { n: CONNECT.length, selector: EMBED_FRAME },
@@ -2454,6 +2489,7 @@ const spec: Spec = {
             timeout: 30_000,
           });
           const count = Object.keys(PREVIEWS).length;
+          await reachEvery(page, count);
           await page.waitForFunction(
             ({ n, selector }) =>
               document.querySelectorAll(selector).length === n,
@@ -2925,6 +2961,7 @@ const spec: Spec = {
             waitUntil: "load",
           });
           const count = Object.keys(NAMED).length;
+          await reachEvery(page, count);
           await page.waitForFunction(
             ({ n, selector }) =>
               document.querySelectorAll(selector).length === n,

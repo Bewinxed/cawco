@@ -67,6 +67,13 @@ declare global {
 export interface ChromeOptions {
   applyDials: (values: Record<string, unknown>) => void;
   canvas: HTMLElement;
+  /**
+   * The page is a decision page's Preview (runtime `by=embed`): its frames
+   * alone in the page's own flow, never a phone's one at a time whatever its
+   * width (PAGE_CSS `cawco-embed`). Its chrome stands nowhere: nothing of it
+   * is laid out, styled or measured, only the page's own style is set.
+   */
+  embedded: boolean;
   /** The house faces' `@font-face` rules, set in the page: a shadow root's own are not heard. */
   faces: string;
   go: (key: string) => void;
@@ -435,9 +442,12 @@ export class Chrome {
     page.dataset.cawcoCanvas = "";
     page.textContent = `${options.faces}\n${options.tokens.replaceAll(":root", ".cawco-canvas-page")}\n${PAGE_CSS}`;
     document.head.append(page);
+    this.#flags.embedded = options.embedded;
     this.#host = document.createElement("div");
     this.#host.id = "cawco-chrome";
-    document.body.append(this.#host);
+    if (!options.embedded) {
+      document.body.append(this.#host);
+    }
     this.#root = this.#host.attachShadow({ mode: "open" });
     const style = document.createElement("style");
     style.textContent = `${options.tokens.replaceAll(":root", ":host")}\n${CHROME_CSS}`;
@@ -533,16 +543,6 @@ export class Chrome {
     this.#measure();
   }
 
-  /**
-   * The page as a decision page's Preview (runtime `by=embed`): a card's
-   * page with no chrome, never a phone's one frame at a time whatever its
-   * width, its frames in the page's own flow (PAGE_CSS `cawco-embed`).
-   */
-  asEmbed(): void {
-    this.#flags.embedded = true;
-    this.asCard();
-  }
-
   readonly #sizes = new ResizeObserver(() => this.#measure());
 
   /**
@@ -554,6 +554,10 @@ export class Chrome {
    * (`--cawco-outline`) and its dials beside it (`--cawco-end`).
    */
   #measure(): void {
+    // An embed's chrome stands nowhere: nothing stands over its frames.
+    if (this.#flags.embedded) {
+      return;
+    }
     const px = (value: string) =>
       Number.parseFloat(getComputedStyle(this.#host).getPropertyValue(value));
     const gap = px("--space-2");

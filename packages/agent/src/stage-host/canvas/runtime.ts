@@ -561,7 +561,10 @@ export function boot(options: BootOptions): void {
       if (!embed) {
         rewriteSheet(sheet, rewrite);
       }
-      forceMotion(sheet, view.motion);
+      // A sheet comes as the browser answers motion: only with motion reduced has it a condition to rewrite (setView rewrites and puts back every sheet's as the motion turns).
+      if (view.motion === "reduce") {
+        forceMotion(sheet, view.motion);
+      }
     }
   };
   /** The project's page background and ink, as its body's rules write them: each frame draws on them under its own scheme. */
@@ -1018,7 +1021,7 @@ export function boot(options: BootOptions): void {
    */
   function holdStandIns(section: Section): HTMLElement[] {
     const kept =
-      revealOf() && !embed
+      !embed && revealOf()
         ? section.standIns.filter((one) =>
             one.classList.contains("cawco-stand-in")
           )
@@ -1030,7 +1033,8 @@ export function boot(options: BootOptions): void {
 
   /** `going` (from {@link holdStandIns}) going and `drawn` coming, in the reveal. */
   function revealed(going: HTMLElement[], drawn: HTMLElement[]): void {
-    const look = revealOf();
+    // An embed reveals nothing: the page holding it does (holdStandIns).
+    const look = embed ? null : revealOf();
     // A stand-in still unseen (inside the wait's grace) has nothing to reveal.
     const seen = going.map((one) => Number(getComputedStyle(one).opacity));
     if (!look || seen.every((opacity) => opacity === 0)) {
@@ -3066,6 +3070,7 @@ export function boot(options: BootOptions): void {
 
   const chrome = new Chrome({
     canvas,
+    embedded: embed,
     spec,
     tokens: options.tokens,
     faces: options.faces,
@@ -3301,7 +3306,6 @@ export function boot(options: BootOptions): void {
     chrome.asCard();
   }
   if (embed) {
-    chrome.asEmbed();
     tellGraphFetched();
     // Its stories load now, not on the observer's first callback: a frame off the page's screen gets no rendering steps until it is scrolled to, and its module is fetched and mounted meanwhile.
     quietly(pump());

@@ -28,6 +28,12 @@
  *   cadence while they load (p95), and the browser's memory sampled over
  *   `--idle` seconds (240) after.
  * - `shared`: the same stories drawn inline in one frame, read alike.
+ * - `decision`: a decision page of `--embeds` Previews on the decision host,
+ *   at the owner's window: its first screen until every Preview in it is
+ *   drawn, then scrolled to its end at a person's pace (`--scroll`, px a
+ *   second): the time, frames, requests and page memory at each, and every
+ *   50 ms while scrolling, whether a Preview in view stood drawn, as its
+ *   skeleton, or empty.
  * - `raf`: a story running an animation-frame loop, its frame in view and
  *   one below the page's fold: the callbacks each runs in 20 s idle, and the
  *   one below once scrolled to.
@@ -36,7 +42,7 @@
  * NOTE line. The checks are what a frame owes: it draws, and it loads no
  * module its story's closure does not reach.
  *
- *   bun scripts/probe-kit/run.ts canvas-cost [--legs trace,page,shared,frame,raf] [--engines chromium,webkit] [--embeds 33] [--idle 240] [--story <file>#<story>]
+ *   bun scripts/probe-kit/run.ts canvas-cost [--legs trace,page,shared,frame,raf,decision] [--engines chromium,webkit] [--embeds 33] [--idle 240] [--story <file>#<story>] [--scroll 1200]
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one frame at a time, as the page gives them turns
 import { type ChildProcess, spawn } from "node:child_process";
@@ -54,6 +60,12 @@ import type { CDPSession, Page } from "playwright-core";
 import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { until } from "../../scratch-fleet";
+import { scratchCertificate } from "../cloudflare-front";
+import {
+  CAWCO_BRIDGE,
+  idOf as decisionId,
+  startDecisionStage,
+} from "../decision-embeds";
 import { type Engine, type Kit, ROOT, type Spec } from "../kit";
 
 const APP = join(ROOT, "apps/dashboard");
@@ -65,6 +77,8 @@ const arg = (name: string): string | undefined => {
 const LEGS = new Set((arg("legs") ?? "trace,page,shared,frame,raf").split(","));
 const ENGINES = (arg("engines") ?? "chromium,webkit").split(",") as Engine[];
 const EMBEDS = Number(arg("embeds") ?? 33);
+/** How many times the boot leg boots its frame; each phase its median. */
+const BOOTS = Number(arg("boots") ?? 5);
 const IDLE_S = Number(arg("idle") ?? 240);
 const LATENCIES = (arg("latencies") ?? "50,350").split(",").map(Number);
 /** The frame the trace and frame legs read: `<states file>#<story>`. */
@@ -1937,6 +1951,539 @@ async function bundledLeg(kit: Kit, stages: Stage[]): Promise<void> {
   }
 }
 
+/* --- One frame's boot, phase by phase, on any engine ------------------------ */
+
+/**
+ * Installed in the frame before its scripts: the moment of each phase of
+ * its boot (its graph's list read, the app's styles in, the runtime booted,
+ * its graph whole, its first frame made, its first story mounted, drawn)
+ * and every stretch its main thread was held past 30 ms (a chain of
+ * zero-delay timers: a gap between two is a task that ran that long), so
+ * an engine with no profiler for the page (WebKit) still says where its
+ * boot went.
+ */
+function installBootClock(): void {
+  if (!location.pathname.includes("/@cawco/canvas")) {
+    return;
+  }
+  const t = () => Math.round(performance.now());
+  const clock = {
+    at: {} as Record<string, number>,
+    held: [] as [number, number][],
+    styles: 0,
+    styleChars: 0,
+  };
+  (window as unknown as { __boot: typeof clock }).__boot = clock;
+  const mark = (name: string) => {
+    clock.at[name] ??= t();
+  };
+  const trap = (name: string, phase: string) => {
+    let value: unknown;
+    Object.defineProperty(window, name, {
+      configurable: true,
+      get: () => value,
+      set: (next) => {
+        mark(phase);
+        value = next;
+      },
+    });
+  };
+  trap("__cawcoGraph", "graph listed");
+  trap("__cawcoCanvas", "runtime booted");
+  addEventListener("cawco:graph-fetched", () => mark("graph whole"));
+  addEventListener("message", (event) => {
+    const type = (event.data as { type?: string } | null)?.type;
+    if (type === "cawco:embed-ready") {
+      mark("ready");
+    }
+  });
+  new MutationObserver((changes) => {
+    for (const change of changes) {
+      for (const node of change.addedNodes) {
+        if (node instanceof HTMLStyleElement) {
+          mark("first style");
+          clock.at["last style"] = t();
+          clock.styles += 1;
+          clock.styleChars += node.textContent?.length ?? 0;
+        }
+      }
+    }
+    if (document.querySelector(".cawco-frame")) {
+      mark("frame made");
+    }
+    if (document.querySelector(".cawco-frame-body *")) {
+      mark("story mounted");
+    }
+    if (document.querySelector('.cawco-frame-status[data-state="drawn"]')) {
+      mark("drawn");
+    }
+  }).observe(document, { childList: true, subtree: true, attributes: true });
+  let last = performance.now();
+  const tick = () => {
+    const now = performance.now();
+    if (now - last > 30) {
+      clock.held.push([Math.round(last), Math.round(now - last)]);
+    }
+    last = now;
+    const drawnAt = clock.at.drawn as number | undefined;
+    if (drawnAt === undefined || now - drawnAt < 1000) {
+      setTimeout(tick, 0);
+    }
+  };
+  setTimeout(tick, 0);
+}
+
+/** A page of one frame answering its graph at once, as a page with that one Preview does. */
+const BOOT_HOLDER = (url: string) => `<!doctype html><meta charset="utf-8">
+<style>body{margin:0}iframe{display:block;inline-size:100%;block-size:600px;border:0}</style>
+<iframe src="${url}"></iframe>
+<script>addEventListener("message", (e) => { if (e.data && e.data.type === "cawco:embed-graph") { e.source.postMessage({ type: "cawco:embed-go", urls: e.data.urls }, "*"); e.source.postMessage({ type: "cawco:embed-ready", urls: [] }, "*"); } });</script>`;
+
+/**
+ * One Preview's frame of `--story` booted on a warm stage in a fresh
+ * context, each engine, `--boots` times: each phase's moment, and the main
+ * thread held between them (installBootClock), the median of the boots.
+ */
+async function bootLeg(
+  kit: Kit,
+  stages: Stage[],
+  warm: Stage | null
+): Promise<Stage> {
+  const stage = warm ?? (await startStage());
+  if (!warm) {
+    stages.push(stage);
+  }
+  const [file, story] = TRACED.split("#") as [string, string | undefined];
+  const url = embedUrl(stage.base, file, story);
+  // Warm: drawn once on its own.
+  const first = await kit.page("desk", { scale: 1, init: [installCounters] });
+  await first
+    .goto(url, { waitUntil: "commit" })
+    .then(() => drawn(first))
+    .catch(() => undefined);
+  await first.close();
+  const holder = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () =>
+      new Response(BOOT_HOLDER(url), {
+        headers: { "content-type": "text/html" },
+      }),
+  });
+  try {
+    for (const engine of ENGINES) {
+      const boots: {
+        at: Record<string, number>;
+        held: [number, number][];
+        styles: number;
+        styleChars: number;
+      }[] = [];
+      for (let at = 0; at < BOOTS; at += 1) {
+        const page = await kit.page("desk", {
+          scale: 1,
+          engine,
+          browser: `canvas-cost-boot-${engine}`,
+          init: [installBootClock],
+        });
+        await page.goto(`http://127.0.0.1:${holder.port}/`);
+        const frame = await (await page.$("iframe"))?.contentFrame();
+        await frame?.waitForFunction(
+          () =>
+            (window as unknown as { __boot?: { at: Record<string, number> } })
+              .__boot?.at.drawn !== undefined,
+          undefined,
+          { timeout: DRAW_MS, polling: 100 }
+        );
+        await Bun.sleep(1200);
+        const read = await frame?.evaluate(
+          () =>
+            (
+              window as unknown as {
+                __boot: {
+                  at: Record<string, number>;
+                  held: [number, number][];
+                  styles: number;
+                  styleChars: number;
+                };
+              }
+            ).__boot
+        );
+        if (read) {
+          boots.push(read);
+        }
+        await page.close();
+      }
+      const median = (values: number[]) =>
+        [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] ??
+        null;
+      const phases = Object.keys(boots[0]?.at ?? {});
+      const at = Object.fromEntries(
+        phases.map((name) => [
+          name,
+          median(boots.map((one) => one.at[name] ?? Number.NaN)),
+        ])
+      );
+      // The main thread held inside each phase: from the phase before it to it.
+      const order = Object.entries(at).sort(
+        (a, b) => (a[1] ?? 0) - (b[1] ?? 0)
+      );
+      const heldIn = Object.fromEntries(
+        order.map(([name, end], index) => {
+          const start = index === 0 ? 0 : (order[index - 1]?.[1] ?? 0);
+          return [
+            name,
+            median(
+              boots.map((one) =>
+                one.held
+                  .filter(
+                    ([from, ms]) =>
+                      from + ms > (start ?? 0) && from < (end ?? 0)
+                  )
+                  .reduce((sum, [, ms]) => sum + ms, 0)
+              )
+            ),
+          ];
+        })
+      );
+      keep(kit, `boot.${engine}`, {
+        story: TRACED,
+        boots: boots.length,
+        at,
+        heldBefore: heldIn,
+        longest: boots[0]?.held.sort((a, b) => b[1] - a[1]).slice(0, 8),
+        styles: boots[0]?.styles,
+        styleChars: boots[0]?.styleChars,
+      });
+      kit.check(
+        `boot ${engine}: ${TRACED} drew ${boots.length} of ${BOOTS} boots (median ${at.drawn ?? "never"} ms)`,
+        boots.length === BOOTS
+      );
+    }
+  } finally {
+    holder.stop(true);
+  }
+  return stage;
+}
+
+/* --- A decision page of Previews, as the person opens and scrolls it ------- */
+
+/** The owner's window, as he reads a decision page. */
+const PERSON_VIEW = { width: 1037, height: 760 };
+/** A person's steady scroll through a page, px a second: a wheel's 100 px notches about twelve a second. Our call. */
+const PERSON_SCROLL = Number(arg("scroll") ?? 1200);
+/** How long the embed origin holds each answer: the hops through the hub's preview proxy (decision-embeds.ts `embedOrigin`). */
+const DECISION_HOLD_MS = 350;
+/** Options to a card on the leg's page. */
+const PER_CARD = 3;
+
+/** The leg's program: `picks` as Previews, `PER_CARD` options to a card, each its one Preview. */
+function decisionProgram(
+  picks: { file: string; story: string }[],
+  idOf: (file: string) => string
+): string {
+  const cards = Math.ceil(picks.length / PER_CARD);
+  const lines = [
+    `root = Decisions("A page of ${picks.length} canvases", [${Array.from({ length: cards }, (_, at) => `c${at}`).join(", ")}])`,
+  ];
+  for (let card = 0; card < cards; card += 1) {
+    const mine = picks.slice(card * PER_CARD, (card + 1) * PER_CARD);
+    lines.push(
+      `c${card} = Decision("c${card}", "Which reads right, ${card + 1} of ${cards}?", [${mine.map((_, at) => `c${card}o${at}`).join(", ")}], "Each option shows a canvas.")`
+    );
+    mine.forEach((pick, at) => {
+      const n = card * PER_CARD + at;
+      lines.push(
+        `c${card}o${at} = Option("c${card}o${at}", "Option ${at + 1}", "This canvas.", ${at === 0}, [p${n}], "Another.")`,
+        `p${n} = Preview("${idOf(pick.file)}", "${pick.story}", ["${pick.story}"])`
+      );
+    });
+  }
+  return lines.join("\n");
+}
+
+/**
+ * The decision page's own clock and samples, in the page: every 50 ms, each
+ * well in the scroller's view holds its drawn frame, its skeleton, or
+ * nothing (an empty box, kept with what it held).
+ */
+function decisionSampler(): void {
+  if (location.pathname.includes("/@cawco/canvas")) {
+    return;
+  }
+  const seen = { samples: 0, waiting: 0, empty: [] as string[], drawn: 0 };
+  (window as unknown as { __seen: typeof seen }).__seen = seen;
+  setInterval(() => {
+    const scroller = document.querySelector("[data-slot=page-scroll]");
+    if (!scroller) {
+      return;
+    }
+    const view = scroller.getBoundingClientRect();
+    const wells = [
+      ...document.querySelectorAll<HTMLElement>("[data-slot=media]"),
+    ];
+    seen.drawn = wells.filter((well) => {
+      const frame = well.querySelector<HTMLIFrameElement>(
+        "iframe[data-slot=embed]"
+      );
+      return (
+        frame?.dataset.shape === "drawn" && frame.dataset.drawn !== undefined
+      );
+    }).length;
+    wells.forEach((well, at) => {
+      const box = well.getBoundingClientRect();
+      if (box.bottom <= view.top || box.top >= view.bottom) {
+        return;
+      }
+      seen.samples += 1;
+      const frame = well.querySelector<HTMLIFrameElement>(
+        "iframe[data-slot=embed]"
+      );
+      if (
+        frame?.dataset.shape === "drawn" &&
+        frame.dataset.drawn !== undefined
+      ) {
+        return;
+      }
+      const skeleton = well
+        .querySelector("[data-slot=embed-wait] [data-slot=skeleton]")
+        ?.getBoundingClientRect();
+      if (skeleton && skeleton.width > 0 && skeleton.height > 0) {
+        seen.waiting += 1;
+      } else if (seen.empty.length < 8) {
+        seen.empty.push(
+          `well ${at + 1}: ${frame ? "frame not drawn" : "no frame"}, no skeleton`
+        );
+      }
+    });
+  }, 50);
+}
+
+/**
+ * A decision page of `--embeds` Previews, each one story of the dashboard's
+ * states files (as the page leg picks them), on the decision host the hub
+ * serves (decision-embeds.ts `startDecisionStage`), the embed origin on
+ * HTTPS over HTTP/2 holding each answer {@link DECISION_HOLD_MS}, the stage
+ * warm and the page's media knowing each Preview's shape (a first page
+ * scrolled through told them), each engine in a fresh context at the
+ * owner's window: until every
+ * Preview in the first screen is drawn, then scrolled to its end at a
+ * person's pace ({@link PERSON_SCROLL}) and on until every Preview is
+ * drawn. At each: the time, the frames on the page, the requests made, and
+ * the browser's page processes' memory; while scrolling, every 50 ms, each
+ * Preview in view holds its frame drawn, its skeleton, or nothing.
+ */
+async function decisionLeg(kit: Kit): Promise<void> {
+  const files = statesFiles().filter((file) => !file.startsWith(LOOP_DIR));
+  const idOf = (file: string) => decisionId(`cost-${files.indexOf(file)}`);
+  const programs = new Map<string, string>();
+  const tls = await scratchCertificate(kit.out, ["localhost"]);
+  const stage = await startDecisionStage(
+    programs,
+    Object.fromEntries(files.map((file) => [idOf(file), [file]])),
+    { root: APP, kit: true },
+    {},
+    new Set(),
+    DECISION_HOLD_MS,
+    tls
+  );
+  try {
+    const base = `http://127.0.0.1:${stage.stagePort}`;
+    const picks = await pagePicks(base);
+    programs.set("many", decisionProgram(picks, idOf));
+    // The stage warm: every states file drawn once on it.
+    const warmPage = await kit.page("desk", {
+      scale: 1,
+      init: [installCounters],
+    });
+    for (const one of new Set(picks.map((pick) => pick.file))) {
+      // A load Vite's client cut short (a dependency it built since: it reloads the page) is warm enough.
+      await warmPage
+        .goto(embedUrl(base, one), { waitUntil: "commit" })
+        .then(() => drawn(warmPage))
+        .catch(() => undefined);
+    }
+    await warmPage.close();
+    // Its Previews' shapes told once (each Preview tells the shape its canvas said, beside its page), so every next page's skeletons stand at their pictures' shapes, as a page the hub's media knows does.
+    const prime = await kit.page("desk", {
+      scale: 1,
+      init: [CAWCO_BRIDGE, decisionSampler],
+      ignoreHTTPSErrors: true,
+    });
+    await prime.setViewportSize(PERSON_VIEW);
+    await prime.goto(stage.pageUrl("many", "light"), { waitUntil: "load" });
+    for (let pass = 0; pass < 200; pass += 1) {
+      const all = await prime.evaluate((count) => {
+        const scroller = document.querySelector("[data-slot=page-scroll]");
+        if (scroller) {
+          scroller.scrollTop += scroller.clientHeight / 2;
+          if (
+            scroller.scrollTop + scroller.clientHeight >=
+            scroller.scrollHeight - 1
+          ) {
+            scroller.scrollTop = 0;
+          }
+        }
+        return (
+          (window as unknown as { __seen: { drawn: number } }).__seen.drawn ===
+          count
+        );
+      }, picks.length);
+      if (all) {
+        break;
+      }
+      await Bun.sleep(500);
+    }
+    await prime.close();
+    for (const engine of ENGINES) {
+      const before = new Set(browserPids([]));
+      const page = await kit.page("desk", {
+        scale: 1,
+        engine,
+        browser: `canvas-cost-decision-${engine}`,
+        init: [CAWCO_BRIDGE, decisionSampler],
+        ignoreHTTPSErrors: true,
+      });
+      await page.setViewportSize(PERSON_VIEW);
+      let requests = 0;
+      page.on("request", () => {
+        requests += 1;
+      });
+      const mine = () => browserPids([]).filter((pid) => !before.has(pid));
+      const at = async (label: string, startedAt: number) => {
+        const frames = await page.evaluate(
+          () => document.querySelectorAll("iframe[data-slot=embed]").length
+        );
+        const seen = await page.evaluate(
+          () =>
+            (window as unknown as { __seen: { drawn: number } }).__seen.drawn
+        );
+        return {
+          label,
+          ms: Date.now() - startedAt,
+          frames,
+          drawn: seen,
+          requests,
+          pageProcessMb: memoryMb(pageProcesses(mine())),
+        };
+      };
+      const started = Date.now();
+      await page.goto(stage.pageUrl("many", "light"), { waitUntil: "load" });
+      // The first screen: every Preview in the scroller's view drawn.
+      await page.waitForFunction(
+        () => {
+          const scroller = document.querySelector("[data-slot=page-scroll]");
+          const view = scroller?.getBoundingClientRect();
+          const wells = [
+            ...document.querySelectorAll<HTMLElement>("[data-slot=media]"),
+          ].filter((well) => {
+            const box = well.getBoundingClientRect();
+            return view && box.bottom > view.top && box.top < view.bottom;
+          });
+          return (
+            wells.length > 0 &&
+            wells.every((well) => {
+              const frame = well.querySelector<HTMLIFrameElement>(
+                "iframe[data-slot=embed]"
+              );
+              return (
+                frame?.dataset.shape === "drawn" &&
+                frame.dataset.drawn !== undefined
+              );
+            })
+          );
+        },
+        undefined,
+        { timeout: DRAW_MS, polling: 50 }
+      );
+      const firstMs = Date.now() - started;
+      // What the first screen set off settles (later turns, fonts).
+      await Bun.sleep(3000);
+      const first = {
+        ...(await at("first screen", started)),
+        settledMs: firstMs,
+      };
+      await page.evaluate(() => {
+        const seen = (
+          window as unknown as {
+            __seen: { samples: number; waiting: number; empty: string[] };
+          }
+        ).__seen;
+        seen.samples = 0;
+        seen.waiting = 0;
+        seen.empty = [];
+      });
+      // Scrolled to its end at a person's pace, one step a frame.
+      const scrolledMs = await page.evaluate(
+        (speed) =>
+          new Promise<number>((done) => {
+            const scroller = document.querySelector(
+              "[data-slot=page-scroll]"
+            ) as HTMLElement;
+            const t0 = performance.now();
+            let last = t0;
+            const step = (now: number) => {
+              scroller.scrollTop += (speed * (now - last)) / 1000;
+              last = now;
+              if (
+                scroller.scrollTop + scroller.clientHeight >=
+                scroller.scrollHeight - 1
+              ) {
+                done(Math.round(now - t0));
+                return;
+              }
+              requestAnimationFrame(step);
+            };
+            requestAnimationFrame(step);
+          }),
+        PERSON_SCROLL
+      );
+      const scrollStart = Date.now();
+      await page.waitForFunction(
+        (count) =>
+          (window as unknown as { __seen: { drawn: number } }).__seen.drawn ===
+          count,
+        picks.length,
+        { timeout: DRAW_MS, polling: 100 }
+      );
+      await Bun.sleep(3000);
+      const end = await at("scrolled to the end", scrollStart);
+      const seen = await page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __seen: { samples: number; waiting: number; empty: string[] };
+            }
+          ).__seen
+      );
+      keep(kit, `decision.${engine}`, {
+        previews: picks.length,
+        view: PERSON_VIEW,
+        scrollPxPerS: PERSON_SCROLL,
+        first,
+        scrolledMs,
+        end,
+        whileScrolling: seen,
+      });
+      kit.check(
+        `decision ${engine}: while scrolled at ${PERSON_SCROLL} px/s, no Preview in view is an empty box (${seen.empty.length} of ${seen.samples} samples)`,
+        seen.samples > 0 && seen.empty.length === 0,
+        seen.empty.join("; ") || undefined
+      );
+      kit.check(
+        `decision ${engine}: while scrolled at ${PERSON_SCROLL} px/s, every Preview had drawn before it came into view (${seen.waiting} of ${seen.samples} samples in view still waiting)`,
+        seen.samples > 0 && seen.waiting === 0
+      );
+      kit.check(
+        `decision ${engine}: every one of the ${picks.length} Previews drawn once scrolled to the end (${end.drawn})`,
+        end.drawn === picks.length
+      );
+      await page.close();
+    }
+  } finally {
+    await stage.stop();
+  }
+}
+
 const run = async (kit: Kit) => {
   const stages: Stage[] = [];
   const loopDir = join(APP, LOOP_DIR);
@@ -1971,6 +2518,12 @@ const run = async (kit: Kit) => {
     }
     if (LEGS.has("bundled")) {
       await bundledLeg(kit, stages);
+    }
+    if (LEGS.has("boot")) {
+      warm = await bootLeg(kit, stages, warm);
+    }
+    if (LEGS.has("decision")) {
+      await decisionLeg(kit);
     }
   } finally {
     for (const one of stages) {

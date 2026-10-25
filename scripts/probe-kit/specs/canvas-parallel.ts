@@ -14,7 +14,8 @@
  * answer of the embed origin held {@link HOLD_MS} as the hops to a stage
  * hold it, the stage warm
  * (each canvas drawn on it once first, as a canvas the person was shown is).
- * On each engine, every page opened in a fresh context (nothing cached):
+ * On each engine, every page opened in a fresh context (nothing cached), in
+ * a window that holds it whole ({@link WINDOW}):
  *
  * - each canvas alone on a page of its own, its first paint read (the
  *   Preview's frame drawn at its shape, its skeleton gone);
@@ -49,6 +50,8 @@ const CHROMIUM_CAP = 2700;
 const HOLD_MS = Number(process.env.CANVAS_PARALLEL_HOLD ?? 350);
 /** How many times each page is opened fresh; each paint is its best. */
 const TAKES = 3;
+/** Every page's window: a desk's width, tall enough to hold the page of five whole (RoutineForm's Filled alone stands 1,714px). */
+const WINDOW = { width: 1440, height: 4800 };
 /** The page of five paints its last within this many times the slowest canvas alone. The brief's. */
 const WITHIN = 1.5;
 
@@ -194,6 +197,8 @@ async function open(
     init: [CAWCO_BRIDGE, paintClock],
     ignoreHTTPSErrors: true,
   });
+  // A window that holds the whole page: the five stand in view together, as the canvases a person sees at once (a canvas far from the view mounts only as it nears it, Preview.svelte `FETCH_MARGIN`).
+  await page.setViewportSize(WINDOW);
   let inFlight = 0;
   let peak = 0;
   const capped: string[] = [];

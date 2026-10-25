@@ -78,18 +78,26 @@ const kept = new Set<string>();
 const flying = new Set<string>();
 let pending = false;
 
-/** The part of the window `el` is seen through, top and bottom: its nearest scroller's box (a decision page scrolls its cards in its own, Decisions.svelte `page-scroll`), inside the window's. */
-function viewOf(el: Element): { bottom: number; top: number } {
-  let top = 0;
-  let bottom = window.innerHeight;
+/** The nearest box `el` scrolls in (a decision page scrolls its cards in its own, Decisions.svelte `page-scroll`); null where only the window scrolls it. */
+export function scrollerOf(el: Element): Element | null {
   for (let up = el.parentElement; up; up = up.parentElement) {
     const scrolls = getComputedStyle(up).overflowY;
     if (scrolls === "auto" || scrolls === "scroll") {
-      const box = up.getBoundingClientRect();
-      top = Math.max(top, box.top);
-      bottom = Math.min(bottom, box.bottom);
-      break;
+      return up;
     }
+  }
+  return null;
+}
+
+/** The part of the window `el` is seen through, top and bottom: its scroller's box ({@link scrollerOf}), inside the window's. */
+function viewOf(el: Element): { bottom: number; top: number } {
+  let top = 0;
+  let bottom = window.innerHeight;
+  const scroller = scrollerOf(el);
+  if (scroller) {
+    const box = scroller.getBoundingClientRect();
+    top = Math.max(top, box.top);
+    bottom = Math.min(bottom, box.bottom);
   }
   return { top, bottom };
 }
