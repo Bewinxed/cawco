@@ -13,7 +13,9 @@
  * (artifact_create's `serve`), and finishes;
  * a twenty-second (W) starts a `setsid` server in its workspace and declares
  * a {@link WAIT_MINUTES}-minute wait (`wait_item`), its item live, its
- * session quiet. All 22 are delegated at once from one repository with no
+ * session quiet; a twenty-third (R) runs one command and finishes, kept as the
+ * I's are, for leg 1's older boundary. All 23 are delegated at once from one
+ * repository with no
  * `origin`, as a person fans delegates out: each workspace's create readies
  * that one source (agent workspace.ts `inSource`). The hub puts each finished
  * delegate to sleep. Every delegate's spill folder (agent boundary.ts
@@ -26,7 +28,14 @@
  *    started again or handed over, five of them given an older form first
  *    (an account added to their policy, as a session on another account
  *    would): each keeps the boundary process it had, and the start-up line
- *    leaves them as they are. W's is given an older form too.
+ *    leaves them as they are. W's is given an older form too. R's is given
+ *    an older form and its session woken, which hands its boundary over; the
+ *    agent is killed as the handover is recorded, before its next look closes
+ *    the older one, and R's session with it. The restart's start-up pass
+ *    closes that older boundary, nothing running in it (agent boundary.ts
+ *    `closeLeftRetiring`), and R's current one runs on. Before, it ran on until
+ *    its workspace's quiet close (r361, 2026-10-25: fifteen idle workspaces
+ *    held two boundaries for 10 min after a restart).
  * 2. After `QUIET_CLOSE_MS` (and a sweep's minute), every idle workspace's
  *    boundary and judge are closed, each as the agent records, its clone,
  *    state dir and scratch dir standing. P's closes with them: since the
@@ -76,6 +85,10 @@ import {
   OVERLAY_KEY,
   OVERLAY_PATH,
 } from "../../../packages/core/src/preview-proxy";
+import {
+  listedPid,
+  signal as signalPid,
+} from "../../../packages/core/src/signal";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import {
   decisionsOf,
@@ -91,7 +104,7 @@ const RE_FORMED = 5;
 const FINISH = "mcp__cawco__finish_item";
 const CREATE = "mcp__cawco__artifact_create";
 const WAIT = "mcp__cawco__wait_item";
-const TAG = /PROBE-QUIET-(?:AGAIN-|SERVE-|CHECK-|FINISH-)?(I\d+|P|W):/g;
+const TAG = /PROBE-QUIET-(?:AGAIN-|SERVE-|CHECK-|FINISH-)?(I\d+|P|W|R):/g;
 const PID_NS = /pid:\[\d+\]/;
 const WHITESPACE = /\s+/g;
 /** P's server port, I1's and W's, each in its own boundary's network. */
@@ -448,12 +461,14 @@ const serving = async (
   return { ok: false, last };
 };
 
-/** Restarts the agent; answers its start-up pass as it records it once done (agent agent-state.ts `startup`). */
+/** Restarts the agent, `whileDown` run while it is stopped; answers its start-up pass as it records it once done (agent agent-state.ts `startup`). */
 const restart = async (
-  fleet: Fleet
+  fleet: Fleet,
+  whileDown?: () => Promise<void>
 ): Promise<NonNullable<RecordedState["startup"]>> => {
   const before = Date.now();
   await fleet.stop("agent");
+  await whileDown?.();
   fleet.launch("agent");
   await fleet.agentUp();
   return startedSince(fleet.env, before);
@@ -517,7 +532,7 @@ const standUp = async (kit: Kit) => {
     // An idle one stays, its work over: the parent's preview artifact of it
     // holds it at the hub (work-items.ts `settle`) while no server of it is
     // served, so nothing on its machine holds its boundary (`liveWhy`).
-    if (tag.startsWith("I")) {
+    if (tag.startsWith("I") || tag === "R") {
       const now = Date.now();
       fleet.write(
         "INSERT INTO artifacts (id, instance_id, project_id, kind, name, machine_id, source_port, source_workspace, revision, seq, delivered_seq, created_at, updated_at, shown_at) VALUES (?, ?, ?, 'preview', ?, ?, 5199, ?, 1, 0, 0, ?, ?, ?)",
@@ -534,7 +549,12 @@ const standUp = async (kit: Kit) => {
     }
     return { ...started, tag };
   };
-  const tags = [...Array.from({ length: IDLE }, (_, at) => `I${at}`), "P", "W"];
+  const tags = [
+    ...Array.from({ length: IDLE }, (_, at) => `I${at}`),
+    "P",
+    "W",
+    "R",
+  ];
   // All at once, from one repository, as a person fans delegates out.
   const everyone = await Promise.all(tags.map(delegate));
   const w = everyone.find((one) => one.tag === "W") as Delegated;
@@ -606,13 +626,14 @@ const standUp = async (kit: Kit) => {
     count >= everyone.length && gone.length === 0,
     `${count} listed; gone: ${gone.join("; ") || "none"}`
   );
-  const idle = all.filter((one) => one.tag !== "P");
+  const idle = all.filter((one) => one.tag.startsWith("I"));
   const p = all.find((one) => one.tag === "P") as Delegated;
+  const r = all.find((one) => one.tag === "R") as Delegated;
   kit.check(
     "P's preview serves its page before anything closes",
     (await serving(fleet, p.instanceId, "P")).ok
   );
-  return { fleet, home, idle, p, w };
+  return { fleet, home, idle, p, r, w };
 };
 
 /** Workspace `id`'s spill folders as the agent lists them (agent boundary.ts `addSpill`). */
@@ -633,12 +654,70 @@ const reForm = async (home: string, id: string): Promise<void> => {
   await writeFile(file, `${JSON.stringify([...listed, ACCOUNT_ADDED])}\n`);
 };
 
-/** 1: a restart before the quiet time starts no idle boundary and hands none over, five of an older form. */
+/** Every process of session `instanceId`'s Claude Code, as its keeper holds it, killed with everything under it. Answers how many. */
+const killSession = async (
+  fleet: Fleet,
+  instanceId: string
+): Promise<number> => {
+  const procs = (await fleet.heldProcs()).filter(
+    (proc) => proc.procId === instanceId
+  );
+  const pids = (await Promise.all(procs.map((proc) => tree(proc.pid)))).flat();
+  for (const pid of pids) {
+    signalPid(listedPid(pid), "SIGKILL");
+  }
+  return pids.length;
+};
+
+/**
+ * R's boundary handed over, its agent killed before the older one closes:
+ * R's form older ({@link reForm}), a message wakes its sleeping session, whose
+ * spawn hands its boundary over to one of the form now, nothing running in it
+ * (agent boundary.ts `handOver`), and the older one is left to close at the
+ * next look, 5 s on (agent boundary.ts `STALE_LOOK_MS`). The agent is killed
+ * as soon as the handover is recorded, and R's session with it, so R is idle
+ * at the start: a current boundary and an older one beside it with nothing
+ * in it, as r361's restart found fifteen. Answers the older one's generation
+ * (none when the agent closed it before it died), and what was read.
+ */
+const handOverThenDie = async (
+  fleet: Fleet,
+  home: string,
+  r: Delegated
+): Promise<{ older: string | undefined; read: string }> => {
+  const since = Date.now();
+  await reForm(home, r.workspaceId);
+  await fleet.send(r.instanceId, "PROBE-QUIET-RETIRE-R: wake once more.");
+  const handed = await until(
+    "R's boundary handed over",
+    async () =>
+      (await decisionsOf(home, r.workspaceId)).find(
+        (one) => one.decision === "handed-over" && one.at >= since
+      ),
+    Boolean,
+    240_000
+  ).catch(() => undefined);
+  await fleet.stop("agent", "SIGKILL");
+  const killed = await killSession(fleet, r.instanceId);
+  const decisions = await decisionsOf(home, r.workspaceId);
+  const older = handed?.decision === "handed-over" ? handed.gen : undefined;
+  // Closed by the agent before it died: the state this leg needs was not made.
+  const closedBefore = decisions.some(
+    (one) => one.decision === "older-closed" && one.gen === older
+  );
+  return {
+    older: closedBefore ? undefined : older,
+    read: `handed over: ${handed ? JSON.stringify(handed) : "not within 240 s"}; closed before the agent died: ${closedBefore}; ${killed} process(es) of R's session killed`,
+  };
+};
+
+/** 1: a restart before the quiet time starts no idle boundary and hands none over, five of an older form; R's older boundary, its agent killed after the handover, is closed in the start-up pass. */
 const firstRestart = async (
   kit: Kit,
   fleet: Fleet,
   home: string,
   idle: readonly Delegated[],
+  r: Delegated,
   w: Delegated
 ): Promise<void> => {
   const boundariesNow = async () =>
@@ -657,7 +736,32 @@ const firstRestart = async (
   await Promise.all(
     [...idle.slice(-RE_FORMED), w].map((one) => reForm(home, one.workspaceId))
   );
+  const left = await handOverThenDie(fleet, home, r);
+  const rHad = await boundariesOf(fleet, r.workspaceId);
+  const restarted = Date.now();
   const startup = await restart(fleet);
+  // Read as the start-up pass is recorded: it records after its closes.
+  const rAfter = await boundariesOf(fleet, r.workspaceId);
+  const rClosed = (await decisionsOf(home, r.workspaceId)).find(
+    (one) =>
+      one.decision === "older-closed" &&
+      one.at >= restarted &&
+      one.why === "idle" &&
+      one.gen === left.older
+  );
+  const olderOf = (list: readonly string[]) =>
+    list.filter((entry) => entry.includes(`-${left.older}@`));
+  kit.check(
+    "1: R's older boundary, beside its current one with nothing running in it, its agent killed after the handover, is closed within the restart's start-up pass, as the agent records; its current one runs on",
+    left.older !== undefined &&
+      rHad.length === 2 &&
+      olderOf(rHad).length === 1 &&
+      rAfter.length === 1 &&
+      olderOf(rAfter).length === 0 &&
+      Boolean(rClosed) &&
+      startup.retired >= 1,
+    `${left.read}; before the restart: ${rHad.join(",") || "none"}; after the pass: ${rAfter.join(",") || "none"}; recorded: ${rClosed ? JSON.stringify(rClosed) : "no close"}; start-up pass: ${JSON.stringify(startup)}`
+  );
   const after = await boundariesNow();
   const moved = idle.filter(
     (one) =>
@@ -986,11 +1090,19 @@ const run = async (kit: Kit) => {
     );
     return;
   }
-  const { fleet, home, idle, p, w } = await standUp(kit);
+  const { fleet, home, idle, p, r, w } = await standUp(kit);
   const before = await footprint(fleet);
   const waiterHad = await boundariesOf(fleet, w.workspaceId);
-  await firstRestart(kit, fleet, home, idle, w);
+  await firstRestart(kit, fleet, home, idle, r, w);
   await quietCloses(kit, fleet, home, idle, p);
+  // R, idle too, closes once quiet: its session's last turn, the one that
+  // handed its boundary over, may end a sweep after the I's.
+  await until(
+    "R's boundary closed",
+    () => stillOpen(fleet, [r]),
+    (open) => open.length === 0,
+    CLOSE_SLACK_MS
+  ).catch(() => undefined);
 
   // 3. The footprint, before and after: W's boundary, and P's its request started again.
   const after = await footprint(fleet);
@@ -998,7 +1110,7 @@ const run = async (kit: Kit) => {
   const left = (await fleet.heldProcs())
     .filter((proc) => proc.procId.startsWith("boundary-"))
     .map((proc) => {
-      const owner = [...idle, p, w].find((one) =>
+      const owner = [...idle, p, r, w].find((one) =>
         isBoundaryOf(proc.procId, one.workspaceId)
       );
       return `${owner?.tag ?? "another workspace"} ${proc.procId}@${proc.pid}`;

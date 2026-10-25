@@ -46,11 +46,12 @@ export interface AgentState {
     readonly cpuPercent: number | null;
     readonly memoryPercent: number | null;
   };
-  /** The start-up pass over the workspaces (boundary.ts `rearmHooks`): those armed then, those left for a session there, and how long it took. */
+  /** The start-up pass over the workspaces (boundary.ts `rearmHooks`): those armed then, those left for a session there, the older boundaries an earlier agent left in those, closed in the pass with nothing in them (`closeLeftRetiring`), and how long it took. */
   readonly startup?: {
     readonly armed: number;
     readonly later: number;
     readonly ms: number;
+    readonly retired: number;
   };
 }
 
