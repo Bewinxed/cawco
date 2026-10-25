@@ -1085,7 +1085,14 @@ async function qrLeg(kit: Kit, page: Page, engine: Engine) {
         ).getBoundingClientRect().width,
       };
     });
-    const paper = await page.locator(".paper").boundingBox();
+    // Read in the page, at the window's top: the locator's own box read hung once on a loaded host's WebKit.
+    const paper = await page.evaluate(() => {
+      window.scrollTo(0, 0);
+      const r = (
+        document.querySelector(".paper") as HTMLElement
+      ).getBoundingClientRect();
+      return { x: r.left, y: r.top, width: r.width, height: r.height };
+    });
     const png = paper
       ? await page.screenshot({
           clip: {
