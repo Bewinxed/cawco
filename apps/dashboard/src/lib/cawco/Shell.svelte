@@ -504,7 +504,8 @@
   // with it. The URL is the address, and the browser follows it before
   // anything is drawn, as the server did.
   workspace.serve(
-    (page.data as { workspace?: WorkspaceV1 | null }).workspace ?? null
+    (page.data as { workspace?: WorkspaceV1 | null }).workspace ?? null,
+    (page.data as { resolved?: string[] }).resolved ?? []
   );
   if (browser) {
     workspace.followUrl(location.href);

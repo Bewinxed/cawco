@@ -202,16 +202,21 @@ const held = $state<WorkspaceV1>(unserved());
    that names a session under another id takes that id (`retarget`), one
    that names nothing is dropped and the tree saved without it, so it never
    reaches the cookie again. Until the hub answers, nothing is read or
-   followed for it: a read of an id that names nothing is a 404. */
+   followed for it: a read of an id that names nothing is a 404. A tab the
+   server drew this page with whose id the hub lists as a session (`serve`,
+   the layout's `resolved`) is named already and asked nothing: asked, the
+   pane reading it would be unwatched while the ask is out. */
 
 /** Tab ids asked of the hub and not answered yet: nothing reads them. */
 const unnamed = new SvelteSet<string>();
+/** Tab ids the server found the hub listing as sessions under that id: named already, until `restore` has asked the rest. */
+const resolved = new Set<string>();
 /** Tab ids waiting for the next ask, sent together. */
 const toName = new Set<string>();
 
 /** Asks the hub what tab `id` names, beside every other tab asked in this task. */
 function askName(id: string): void {
-  if (!browser || isThreadTab(id) || unnamed.has(id)) {
+  if (!browser || isThreadTab(id) || unnamed.has(id) || resolved.has(id)) {
     return;
   }
   unnamed.add(id);
@@ -268,10 +273,16 @@ function restore(): void {
     held.focusedLeaf = kept.focusedLeaf;
     held.ctx = kept.ctx ?? {};
   }
+  // The tree kept here may not hold the URL's tab yet (the server put it in
+  // the cookie's): following the URL puts it back, asked nothing when the
+  // server named it.
   workspace.followUrl(location.href);
   for (const id of workspace.openIds) {
     askName(id);
   }
+  // What the server found holds for this first naming alone: an address
+  // given later is asked as any is.
+  resolved.clear();
   save();
 }
 
@@ -1092,10 +1103,18 @@ export const workspace = {
    * render, because the module is shared across requests; in the browser
    * until `restore`, so the Shell coming back later (an artifact's own
    * route left) never sets the reader's tree back to the server's.
+   * `named`: the tabs the server found the hub listing as sessions under
+   * their own id, which `restore` asks nothing of (Naming the tabs); kept in
+   * the browser alone, since on the server the module is every request's.
    */
-  serve(served: WorkspaceV1 | null): void {
+  serve(served: WorkspaceV1 | null, named: readonly string[]): void {
     if (browser && restored) {
       return;
+    }
+    if (browser) {
+      for (const id of named) {
+        resolved.add(id);
+      }
     }
     const next = served && validate(served.root) ? served : unserved();
     held.root = next.root;

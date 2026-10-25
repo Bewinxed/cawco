@@ -257,6 +257,7 @@ export const load: LayoutServerLoad = async ({
       narrow,
       workspace,
       names,
+      resolved: [] as string[],
       pulses,
       foldBoxes,
       auth,
@@ -271,6 +272,7 @@ export const load: LayoutServerLoad = async ({
       narrow,
       workspace,
       names,
+      resolved: [] as string[],
       pulses,
       foldBoxes,
       auth,
@@ -294,14 +296,21 @@ export const load: LayoutServerLoad = async ({
       }
     }
   }
+  // The open tabs the hub lists as sessions under their own id: named
+  // already (workspace.svelte.ts, Naming the tabs), so the client asks the
+  // hub nothing of them, and the pane reading one is never left unwatched
+  // mid-read while the ask is out.
+  const resolved: string[] = [];
   for (const id of open) {
     if (!listing.ok) {
       names[id] = listing;
       continue;
     }
-    const title = listing.value
-      .find((instance) => instance.id === id)
-      ?.title?.trim();
+    const row = listing.value.find((instance) => instance.id === id);
+    if (row) {
+      resolved.push(id);
+    }
+    const title = row?.title?.trim();
     if (title) {
       names[id] = { ok: true, value: title };
     }
@@ -349,6 +358,7 @@ export const load: LayoutServerLoad = async ({
     narrow,
     workspace,
     names,
+    resolved,
     pulses,
     foldBoxes,
     auth,
