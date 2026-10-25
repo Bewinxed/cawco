@@ -51,6 +51,7 @@ import { ASK_USER_QUESTION, RESOLVE_PERMISSION } from "@cawco/core/ask-tools";
 import type { SendAttachment } from "@cawco/core/attachments";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type { ListedBrowser } from "@cawco/core/browser";
+import { GATED_PAGE_MARK, GATED_PAGE_PARAM } from "@cawco/core/browser-gate";
 import type { ConnectionView } from "@cawco/core/connections";
 import type { AvailableCommand } from "@cawco/core/fleet";
 import { classifyCommand } from "@cawco/core/fleet";
@@ -733,9 +734,9 @@ export interface SessionState {
   thinkingStream: string;
   /**
    * The MCP servers and tools the session's newest `init` announced — the `/`
-   * palette's servers and tools. Read from the hub's row when the view opens
-   * (`GET /api/instances/:id/tooling`, beside the transcript read) and replaced
-   * by every live `init` after that.
+   * palette's servers and tools. Said by the newest page's facts (the hub's
+   * row's, when the transcript read holds no `init`) and replaced by every
+   * live `init` after that.
    */
   tooling: SessionTooling;
   /**
@@ -5134,8 +5135,9 @@ function subscriptionIds(): string[] {
     ids.add(id);
   }
   // A thread's tab streams no frames of its own: they come with the thread
-  // frames, which every dashboard receives.
-  return [...ids].filter((id) => !isThreadTab(id));
+  // frames, which every dashboard receives. A tab the hub has not named yet
+  // is followed once it has (workspace `named`).
+  return [...ids].filter((id) => !isThreadTab(id) && workspace.named(id));
 }
 
 /** The last watched set synced, so an unchanged set of tabs stays quiet. */
@@ -5363,9 +5365,14 @@ function connect(): void {
   // older one the snapshot that reloads it and no delta it would misread.
   // …and that it reads parts (`WIRE_PARTS_PARAM`), so a large board can come
   // as parts; a tab from before parts says nothing and is sent it whole.
-  const socket = new WebSocket(
-    announcingParts(`${hubSocketUrl()}?protocol=${WIRE_PROTOCOL}`)
-  );
+  // A page an agent opened in its project's browser names the gate that
+  // owns it (core `GATED_PAGE_MARK`), so what it starts is that agent's check.
+  const query = new URLSearchParams({ protocol: String(WIRE_PROTOCOL) });
+  const gatedBy: unknown = Reflect.get(globalThis, GATED_PAGE_MARK);
+  if (typeof gatedBy === "string" && gatedBy) {
+    query.set(GATED_PAGE_PARAM, gatedBy);
+  }
+  const socket = new WebSocket(announcingParts(`${hubSocketUrl()}?${query}`));
 
   // The hub is reached once its board on this socket is read (`bind`).
   bind(socket);
@@ -7748,8 +7755,9 @@ export function readTranscript(
   cause: ReadCause = "open",
   fresh = false
 ): Promise<TranscriptOutcome> {
-  // A thread's transcript is its messages (`readThread`).
-  if (isThreadTab(viewId)) {
+  // A thread's transcript is its messages (`readThread`); a tab the hub has
+  // not named yet is read once it has (workspace `named`), if it names one.
+  if (isThreadTab(viewId) || !workspace.named(viewId)) {
     return Promise.resolve({ ok: true, skipped: true });
   }
   const target = session(viewId);
@@ -7901,13 +7909,21 @@ async function readBackToMeet(
  * is read again on the backoff too. One that found it reconnecting waits for
  * it as well; the view says offline once the hub's deadline for it passes,
  * on the clock ({@link reconnectingNow}), and the data is read again then
- * ({@link readAtDeadline}).
+ * ({@link readAtDeadline}). One the hub answered with nothing by its id
+ * (`again` false, a 404) is not read again by itself.
  */
-function readFailed(target: SessionState, fault: ReadFault): void {
+function readFailed(
+  target: SessionState,
+  fault: ReadFault,
+  again = true
+): void {
   if (target.blocks.length > 0) {
     target.behind = fault;
   } else {
     target.readFault = fault;
+  }
+  if (!again) {
+    return;
   }
   const listedOnline =
     fault.reason === "offline" &&
@@ -8025,20 +8041,6 @@ async function readNewestPage(
   const viewId = target.instanceId;
   beginRead(streamState, viewId);
   target.loading = true;
-  // The `/` palette's servers and tools are read beside the transcript: the
-  // board's rows do not carry them. A session with no hub row has none.
-  // biome-ignore lint/complexity/noVoid: runs beside the transcript read; the palette reads it off the session when it lands
-  void fetch(`/api/instances/${encodeURIComponent(viewId)}/tooling`)
-    .then(async (answer) => {
-      if (answer.ok) {
-        target.tooling = (await answer.json()) as SessionTooling;
-      }
-    })
-    .catch((error: unknown) => {
-      console.warn(
-        `[cawco] Could not read session tooling: ${messageOf(error)}`
-      );
-    });
   try {
     const answer = await readPage<
       | { page: TranscriptPage; fault?: undefined }
@@ -8056,8 +8058,10 @@ async function readNewestPage(
     }
     if (answer.fault) {
       if (!answer.fault.ok) {
-        const { ok: _ok, status: _status, ...fault } = answer.fault;
-        readFailed(target, fault);
+        const { ok: _ok, status, ...fault } = answer.fault;
+        // A 404 is the hub's answer that nothing goes by this id: asked
+        // again, it says the same.
+        readFailed(target, fault, status !== 404);
       }
       return answer.fault;
     }

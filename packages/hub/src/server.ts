@@ -95,6 +95,7 @@ import type {
   SessionTooling,
   SkillFile,
   SpawnPayload,
+  TabNamed,
   ThreadNote,
   ThreadSummary,
   ToolSpec,
@@ -399,7 +400,7 @@ import {
 } from "@cawco/core/browser";
 import {
   crossSiteRefusal,
-  GATED_PAGE_HEADER,
+  GATED_PAGE_PARAM,
   pageOrigin,
 } from "@cawco/core/browser-gate";
 import {
@@ -686,7 +687,7 @@ import { createForgePosts } from "./forge-posts";
 import { gateRoutes, projectCawEdits } from "./gate-file";
 import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
 import { createHandedInputs } from "./handed-inputs";
-import { byId as handledIds } from "./handles";
+import { byId as handledIds, handleId, isHandle } from "./handles";
 import { hidden } from "./hidden";
 import { addressOf, browserName, type Caller, createHubAuth } from "./hub-auth";
 import { hubId } from "./hub-id";
@@ -14626,6 +14627,52 @@ export const createServer = (
   };
 
   /**
+   * What a tab's id names (`POST /api/instances/named`, core `TabNamed`),
+   * asked in the order a read resolves it: a row (a former id read as its
+   * session's), a row's harness key, the one row a short id begins, an ask
+   * parked under it (a pane that is that ask's card), else a stored
+   * conversation located on the machines connected now. `machine`, the one
+   * the tab remembers the conversation on, away: unknown, never none.
+   */
+  const tabNamed = async (
+    asked: string,
+    machine: string | null
+  ): Promise<TabNamed> => {
+    const session = (id: string): TabNamed => ({ asked, kind: "session", id });
+    const now = db.instanceIdOf(asked);
+    if (db.getInstancesByIds([now]).length > 0) {
+      return session(now);
+    }
+    const keyed = db.instanceBySessionId(asked);
+    if (keyed) {
+      return session(keyed.id);
+    }
+    if (isHandle(asked)) {
+      const [only, ...more] = db.find.idsByPrefix(handleId(asked));
+      if (only && more.length === 0) {
+        return session(only);
+      }
+    }
+    if (pending.list().some((parked) => parked.instanceId === asked)) {
+      return session(asked);
+    }
+    if (machine && !registry.agent(machine)) {
+      return { asked, kind: "unknown" };
+    }
+    const located = await locateSession(asked);
+    switch (located.kind) {
+      case "found":
+        return session(asked);
+      case "nowhere":
+        return { asked, kind: "none" };
+      case "unanswered":
+        return { asked, kind: "unknown" };
+      default:
+        throw unreachable(located);
+    }
+  };
+
+  /**
    * Summariser turns a continuation is waiting on, by instance id. Settled by
    * frames the hub already reads: the turn's `result`, an `error` frame, or
    * the session stopping before it answered — or its machine going away. What
@@ -18305,7 +18352,8 @@ export const createServer = (
   /**
    * Each dashboard socket opened from a page in an agent's own browser, by
    * its id: the gate id its DevTools gate marked the page with (core
-   * `GATED_PAGE_HEADER`), a workspace's or a session's.
+   * `GATED_PAGE_MARK`), which the page's socket names (`GATED_PAGE_PARAM`),
+   * a workspace's or a session's.
    */
   const gatedPages = new Map<string, string>();
   /**
@@ -22478,6 +22526,7 @@ export const createServer = (
       return row?.status === "running";
     },
     commands: (instanceId) => db.instanceCommands(instanceId) ?? undefined,
+    tooling: (instanceId) => db.instanceTooling(instanceId) ?? undefined,
   });
 
   /** A rewind's spawn, by its request: its transcript is read whole again if the spawn fails. */
@@ -29158,6 +29207,41 @@ export const createServer = (
             : reported;
         }
       )
+      // What each tab's id names, as the dashboard asks of the tabs it kept
+      // from an earlier visit and of an address before it reads them: the
+      // session it is read by (itself, a former id's session, a harness key's
+      // row, the one row a short id begins, an ask parked under it, a stored
+      // conversation a connected machine holds), none, or unknown while the
+      // machine it names, or one asked, is away. Never a 404: a tab naming
+      // nothing is dropped, not read.
+      .post(
+        "/api/instances/named",
+        {
+          body: t.Object({
+            ids: t.Array(
+              t.Object({
+                id: t.String(),
+                machine: t.Optional(t.Nullable(t.String())),
+              })
+            ),
+          }),
+        },
+        async ({ body }) => {
+          const asked = new Map<string, string | null>();
+          for (const ask of body.ids) {
+            // Bounded as the titles ask is: a reader's tabs, never a sweep.
+            if (asked.size >= TITLE_ASK_LIMIT) {
+              break;
+            }
+            if (ask.id) {
+              asked.set(ask.id, ask.machine ?? null);
+            }
+          }
+          return await Promise.all(
+            [...asked].map(([id, machine]) => tabNamed(id, machine))
+          );
+        }
+      )
       // What these conversations are called — *whether or not the board still
       // lists them*.
       //
@@ -35790,7 +35874,7 @@ export const createServer = (
           dashboardDevices.set(ws, caller.device?.id ?? null);
           // A page an agent opened in its project's browser: what it starts
           // is that agent's check (`startFromDashboard`).
-          const gatedBy = ws.headers[GATED_PAGE_HEADER];
+          const gatedBy = ws.query[GATED_PAGE_PARAM];
           if (gatedBy) {
             gatedPages.set(ws.id, gatedBy);
           }

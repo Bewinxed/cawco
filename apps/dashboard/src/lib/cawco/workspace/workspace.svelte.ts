@@ -17,8 +17,10 @@
  * is open. `workingSet` only remembers what a conversation is called and
  * where a stored one lives.
  */
+import type { TabNamed } from "@cawco/core";
 import { artifactStopOf } from "@cawco/core/artifact-needs";
 import { type HarnessKind, harnessNamed } from "@cawco/core/harness";
+import { SvelteSet } from "svelte/reactivity";
 import { browser } from "$app/env";
 import { goto } from "$app/navigation";
 import { cawco } from "../client.svelte";
@@ -26,7 +28,7 @@ import { conversationHref, isSessionRow } from "../links";
 import { asPref, keepPrefs } from "../prefs";
 import { openArtifactIn } from "../reference-open.svelte";
 import { store, stored as storedIn } from "../storage";
-import { threadIdOf } from "../thread-tabs";
+import { isThreadTab, threadIdOf } from "../thread-tabs";
 import { askOpenAt, carryOpenAt } from "../transcript/open-at.svelte";
 import { workingSet } from "../working-set.svelte";
 import { layoutPolicy } from "./layout-policy.svelte";
@@ -191,6 +193,66 @@ function parse(raw: string | null | undefined): WorkspaceV1 | null {
 
 const held = $state<WorkspaceV1>(unserved());
 
+/* ── Naming the tabs ──────────────────────────────────────────────────
+   A tab kept from an earlier visit (the tree localStorage and the cookie
+   keep), or given by an address, may name a session the hub no longer
+   holds, a session by its short id, or something that is no session at all
+   (a kind of tab CawCo no longer has). Each is asked of the hub before
+   anything reads it (`POST /api/instances/named`, core `TabNamed`): a tab
+   that names a session under another id takes that id (`retarget`), one
+   that names nothing is dropped and the tree saved without it, so it never
+   reaches the cookie again. Until the hub answers, nothing is read or
+   followed for it: a read of an id that names nothing is a 404. */
+
+/** Tab ids asked of the hub and not answered yet: nothing reads them. */
+const unnamed = new SvelteSet<string>();
+/** Tab ids waiting for the next ask, sent together. */
+const toName = new Set<string>();
+
+/** Asks the hub what tab `id` names, beside every other tab asked in this task. */
+function askName(id: string): void {
+  if (!browser || isThreadTab(id) || unnamed.has(id)) {
+    return;
+  }
+  unnamed.add(id);
+  toName.add(id);
+  if (toName.size === 1) {
+    queueMicrotask(sendNames);
+  }
+}
+
+function sendNames(): void {
+  const asked = [...toName];
+  toName.clear();
+  fetch("/api/instances/named", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      ids: asked.map((id) => ({
+        id,
+        machine: held.ctx?.[id]?.machine ?? null,
+      })),
+    }),
+  })
+    .then(async (response) =>
+      response.ok ? ((await response.json()) as TabNamed[]) : []
+    )
+    // Not reached: each tab is read as it stands, and its read says why.
+    .catch((): TabNamed[] => [])
+    .then((answers) => {
+      for (const answer of answers) {
+        if (answer.kind === "none") {
+          workspace.drop(answer.asked);
+        } else if (answer.kind === "session" && answer.id !== answer.asked) {
+          workspace.retarget(answer.asked, answer.id);
+        }
+      }
+      for (const id of asked) {
+        unnamed.delete(id);
+      }
+    });
+}
+
 /** Whether the tree localStorage keeps has been put in front (`restore`); the server's needs none. */
 let restored = $state(!browser);
 
@@ -207,6 +269,9 @@ function restore(): void {
     held.ctx = kept.ctx ?? {};
   }
   workspace.followUrl(location.href);
+  for (const id of workspace.openIds) {
+    askName(id);
+  }
   save();
 }
 
@@ -543,6 +608,40 @@ function project(sessionId: string | null, mode: "push" | "replace"): void {
   }
 }
 
+/** A tab out of its group (`close`, `drop`); `mode` is how the URL comes to name what is in front. */
+function remove(sessionId: string, mode: "push" | "replace"): void {
+  restore();
+  const leaf = leafHolding(sessionId);
+  if (!leaf) {
+    return;
+  }
+  const at = leaf.tabs.indexOf(sessionId);
+  const back =
+    leaf.active === sessionId && leaf.opened?.id === sessionId
+      ? leaf.opened.from
+      : null;
+  leaf.tabs.splice(at, 1);
+  forget(leaf, sessionId);
+  workingSet.forget(sessionId);
+  if (held.ctx) {
+    delete held.ctx[sessionId];
+  }
+  if (leaf.active === sessionId) {
+    leaf.active =
+      (back && leaf.tabs.includes(back) ? back : null) ??
+      leaf.tabs[at] ??
+      leaf.tabs[at - 1] ??
+      null;
+  }
+  // Closing the last tab of a split half closes the half: a group with
+  // nothing in it is a divider with a blank on one side, which is not a
+  // state worth being able to reach.
+  settle();
+  if (leaf.id === held.focusedLeaf || !leafById(leaf.id)) {
+    project(focused().active, mode);
+  }
+}
+
 /* ── The store ────────────────────────────────────────────────────────── */
 
 export const workspace = {
@@ -650,6 +749,8 @@ export const workspace = {
     const leaf = (sessionId ? leafHolding(sessionId) : null) ?? focused();
     if (sessionId) {
       place(leaf, sessionId);
+      // An address can name anything: asked of the hub before it is read.
+      askName(sessionId);
     }
     show(leaf, sessionId);
     held.focusedLeaf = leaf.id;
@@ -771,36 +872,20 @@ export const workspace = {
    * Closing a tab that is not in front changes nothing about what is shown.
    */
   close(sessionId: string): void {
-    restore();
-    const leaf = leafHolding(sessionId);
-    if (!leaf) {
-      return;
-    }
-    const at = leaf.tabs.indexOf(sessionId);
-    const back =
-      leaf.active === sessionId && leaf.opened?.id === sessionId
-        ? leaf.opened.from
-        : null;
-    leaf.tabs.splice(at, 1);
-    forget(leaf, sessionId);
-    workingSet.forget(sessionId);
-    if (held.ctx) {
-      delete held.ctx[sessionId];
-    }
-    if (leaf.active === sessionId) {
-      leaf.active =
-        (back && leaf.tabs.includes(back) ? back : null) ??
-        leaf.tabs[at] ??
-        leaf.tabs[at - 1] ??
-        null;
-    }
-    // Closing the last tab of a split half closes the half: a group with
-    // nothing in it is a divider with a blank on one side, which is not a
-    // state worth being able to reach.
-    settle();
-    if (leaf.id === held.focusedLeaf || !leafById(leaf.id)) {
-      project(this.activeSessionId, "push");
-    }
+    remove(sessionId, "push");
+  },
+
+  /**
+   * Take away a tab that names nothing (the hub's `TabNamed` none) as
+   * `close` does, but as no move of the reader's: Back never walks to it.
+   */
+  drop(sessionId: string): void {
+    remove(sessionId, "replace");
+  },
+
+  /** Whether the hub has named tab `id` (Naming the tabs): until it has, nothing reads it. */
+  named(id: string): boolean {
+    return !unnamed.has(id);
   },
 
   /**

@@ -381,7 +381,9 @@
     // A session its project is still moving for has nothing to read yet;
     // this runs again the moment the move starts it. An ask standing alone
     // has no transcript at all.
-    if (!id || prestart || askAlone) {
+    // A tab the hub has not named yet (workspace `named`) is read once it
+    // has: an id that names nothing is dropped, never read.
+    if (!id || prestart || askAlone || !workspace.named(id)) {
       return;
     }
     // Retry the read once the hub can actually answer. On a reload the effect

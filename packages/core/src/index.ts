@@ -1129,6 +1129,21 @@ export interface ContinuationJob {
 /**
  * A session the hub knows about — one row of its `instances` table.
  */
+/**
+ * What the hub says a tab's id names (`POST /api/instances/named`): a tab
+ * kept from an earlier visit, or an address, may name a session by its full
+ * id, its short id, a former id, its harness key or a stored conversation's
+ * key, or name nothing at all.
+ * - `session`: the id the session is read by (`id`), the asked one or
+ *   another.
+ * - `none`: no session, stored conversation or ask goes by it.
+ * - `unknown`: the hub can't tell now (the machine it names, or one it had
+ *   to ask, is away or did not answer).
+ */
+export type TabNamed =
+  | { asked: string; kind: "session"; id: string }
+  | { asked: string; kind: "none" | "unknown" };
+
 /** What a session's `init` says about its MCP servers and tools. */
 export interface SessionTooling {
   servers: { name: string; status: string }[];

@@ -50,7 +50,7 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { GATED_PAGE_HEADER } from "../../../packages/core/src/browser-gate";
+import { gatedPageScript } from "../../../packages/core/src/browser-gate";
 import { sidebarWords, threadWords } from "../../../packages/core/src/index";
 import {
   MACHINE,
@@ -185,13 +185,13 @@ const delegate = async (
 /**
  * A session started from a page that carries an agent's mark, as the
  * agent's DevTools gate marks every page the agent opens in its project's
- * browser (gate.ts `#mark`: `Network.setExtraHTTPHeaders` with core
- * `GATED_PAGE_HEADER`, the gate id that owns it). The page is the kit's
- * Chromium with the same call made on it: the gate's own browser needs user
- * namespaces for its sandbox, which a workspace's boundary refuses, so the
- * gate itself marking the page runs in `sidebar-gated`, on the host. From
- * the page's own socket, a New session start that names neither parent nor
- * project, in the home folder. Its id.
+ * browser (gate.ts `#mark`: core `gatedPageScript`, the gate id that owns
+ * it, defined in every document). The page is the kit's Chromium with the
+ * same script on it: the gate's own browser needs user namespaces for its
+ * sandbox, which a workspace's boundary refuses, so the gate itself marking
+ * the page runs in `sidebar-gated`, on the host. From the dashboard's own
+ * socket, which names the mark, a New session start that names neither
+ * parent nor project, in the home folder. Its id.
  */
 async function markedStart(
   kit: Kit,
@@ -200,12 +200,15 @@ async function markedStart(
   owner: string
 ): Promise<string> {
   const page = await kit.page("desk");
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send("Network.enable");
-  await cdp.send("Network.setExtraHTTPHeaders", {
-    headers: { [GATED_PAGE_HEADER]: owner },
-  });
+  await page.addInitScript(gatedPageScript(owner));
   await open(page, `${base}/session`, "body", 120_000);
+  await page.waitForFunction(
+    () =>
+      (globalThis as { __cawcoSocket?: WebSocket }).__cawcoSocket
+        ?.readyState === 1,
+    undefined,
+    { timeout: 90_000 }
+  );
   const instanceId = crypto.randomUUID();
   const envelope = {
     verb: "spawn",
@@ -221,20 +224,9 @@ async function markedStart(
       permissionMode: "bypassPermissions",
     },
   };
-  await page.evaluate(
-    (message) =>
-      new Promise<void>((resolve, reject) => {
-        const ws = new WebSocket(
-          `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/dashboard?protocol=6`
-        );
-        ws.onopen = () => {
-          ws.send(message);
-          resolve();
-        };
-        ws.onerror = () => reject(new Error("the page's socket did not open"));
-      }),
-    JSON.stringify(envelope)
-  );
+  await page.evaluate((message) => {
+    (globalThis as { __cawcoSocket?: WebSocket }).__cawcoSocket?.send(message);
+  }, JSON.stringify(envelope));
   await until(
     "the marked page's start",
     () => fleet.instance(instanceId)?.status,

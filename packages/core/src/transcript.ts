@@ -40,6 +40,7 @@ import {
   uuidOf,
 } from "./transcript-rules";
 import type {
+  BlockTooling,
   TranscriptBlock,
   TranscriptBranch,
   TranscriptEvent,
@@ -310,6 +311,15 @@ export class TranscriptBuilder {
       ...this.facts,
       commands: { ...this.facts.commands, ...commands },
     };
+  }
+
+  /**
+   * The servers and tools the session's newest `init` announced, as the hub
+   * keeps them, before anything is read: a stored transcript that holds no
+   * `init` still says them, until an `init` read or live says its own.
+   */
+  carryTooling(tooling: BlockTooling): void {
+    this.facts = { ...this.facts, tooling };
   }
 
   /** Whether a history read carried this uuid. */

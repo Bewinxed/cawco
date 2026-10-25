@@ -59,14 +59,26 @@ export const pageOrigin = (
 ): string | undefined => headers[PAGE_ORIGIN_HEADER] ?? headers.origin;
 
 /**
- * What every request from a page an agent opened in its project's browser
- * carries (the agent's DevTools gate sets it on the page as the page becomes
- * the agent's: `Network.setExtraHTTPHeaders`, which Chromium puts on a
- * WebSocket's handshake too from 151): the gate id that owns the page, a
- * workspace's or a session's own. A session the page starts from the
+ * Where a page an agent opened in its project's browser holds the gate id
+ * that owns it, a workspace's or a session's own: a global the agent's
+ * DevTools gate defines in every document of the page as the page becomes
+ * the agent's ({@link gatedPageScript}). The dashboard names it on its socket
+ * ({@link GATED_PAGE_PARAM}), and a session the page starts from the
  * dashboard is that agent's check, nested under it, never the person's.
+ *
+ * Never a request header: a header the page did not set turns every
+ * cross-origin fetch it makes into a preflighted one, which a server that
+ * allows no such header refuses, so a gated page's requests would no longer
+ * do what the page asked.
  */
-export const GATED_PAGE_HEADER = "x-cawco-gated-by";
+export const GATED_PAGE_MARK = "__cawcoGatedBy";
+
+/** The dashboard socket's query parameter that names the page's {@link GATED_PAGE_MARK}. */
+export const GATED_PAGE_PARAM = "gatedBy";
+
+/** The script that marks every document of a page as `owner`'s: {@link GATED_PAGE_MARK}, read-only, replaced by a later owner's. */
+export const gatedPageScript = (owner: string): string =>
+  `Object.defineProperty(globalThis, ${JSON.stringify(GATED_PAGE_MARK)}, { value: ${JSON.stringify(owner)}, configurable: true, enumerable: false, writable: false });`;
 
 /** The headers a relay that passed the gate removes before it goes on: the hop behind it is not the page's origin. */
 export const BROWSER_HEADERS = [
