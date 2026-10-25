@@ -436,7 +436,8 @@
   });
 
   $effect(() => {
-    const ids = workspace.openIds;
+    // A tab the hub has not named yet is queued once it has.
+    const ids = workspace.openIds.filter((id) => workspace.named(id));
     untrack(() => {
       for (const id of ids) {
         if (!queued.has(id)) {

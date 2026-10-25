@@ -20302,6 +20302,68 @@
         }
       }
     },
+    "/api/instances/named": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "machine": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "ids"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiInstancesNamed",
+        "responses": {
+          "200": {
+            "description": "postApiInstancesNamed 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesNamed200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiInstancesNamed 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/instances/titles": {
       "post": {
         "requestBody": {
@@ -28771,6 +28833,12 @@
           "state",
           "why"
         ]
+      },
+      "postApiInstancesNamed200": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/TabNamed"
+        }
       },
       "postApiInstancesTitles200": {
         "type": "array",
@@ -47398,6 +47466,52 @@
           "file",
           "reason",
           "remedy"
+        ]
+      },
+      "TabNamed": {
+        "description": "What the hub says a tab's id names (`POST /api/instances/named`): a tab\nkept from an earlier visit, or an address, may name a session by its full\nid, its short id, a former id, its harness key or a stored conversation's\nkey, or name nothing at all.\n- `session`: the id the session is read by (`id`), the asked one or\n  another.\n- `none`: no session, stored conversation or ask goes by it.\n- `unknown`: the hub can't tell now (the machine it names, or one it had\n  to ask, is away or did not answer).",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "asked": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "session"
+                ]
+              },
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "asked",
+              "id",
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "asked": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "none",
+                  "unknown"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "asked",
+              "kind"
+            ]
+          }
         ]
       },
       "SessionTooling": {

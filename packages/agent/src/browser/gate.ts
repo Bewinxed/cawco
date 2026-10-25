@@ -31,11 +31,13 @@
  * tracing records the whole browser whichever page asks, so a page's trace
  * starts only while no other workspace has a connection or a page here, and
  * one running is cut, its data dropped, as another arrives. Every page a
- * session owns carries its owner on every request it makes (core
- * `GATED_PAGE_HEADER`, set on the page by the gate's watch as the page
- * becomes the session's, before it first loads anything): the hub files a
- * session such a page starts from the dashboard as that session's check,
- * nested under it. The shield cuts
+ * session owns carries its owner in every document it loads (core
+ * `GATED_PAGE_MARK`, defined on the page by the gate's watch as the page
+ * becomes the session's, before it first loads anything), and the
+ * dashboard names it on its socket: the hub files a session such a page
+ * starts from the dashboard as that session's check, nested under it. The
+ * mark adds nothing to the page's requests, so a cross-origin fetch it makes
+ * is the one it asked for. The shield cuts
  * every connection with {@link SHIELD_CLOSE} and refuses new ones with its
  * sentence until it opens again; a workspace whose boundary ends for good
  * has its connections cut and its pages closed. A connection holds its
@@ -54,7 +56,7 @@ import {
   SHIELD_CLOSE_WORDS,
   SHIELD_WORDS,
 } from "@cawco/core/browser";
-import { GATED_PAGE_HEADER } from "@cawco/core/browser-gate";
+import { gatedPageScript } from "@cawco/core/browser-gate";
 import { machineId } from "@cawco/core/machine-id";
 import { workspaceProjectFile, workspaceStateDir } from "@cawco/core/paths";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
@@ -393,8 +395,14 @@ export class Gate {
   readonly #windows = new Map<number, string>();
   /** Each page's session on the watch, by the page's target id. */
   readonly #pageSessions = new Map<string, string>();
-  /** Each page marked with its owner (or being), and the call that marks it. */
-  readonly #marks = new Map<string, { done: Promise<void>; owner: string }>();
+  /**
+   * Each page marked with its owner (or being), the call that marks it, and
+   * the script that marks its documents once that call has landed.
+   */
+  readonly #marks = new Map<
+    string,
+    { done: Promise<void>; owner: string; script?: string }
+  >();
   /** What waits for a page's mark that is not under way yet. */
   readonly #markWaits = new Map<string, Set<() => void>>();
   #watch: Watch | undefined;
@@ -639,27 +647,42 @@ export class Gate {
   }
 
   /**
-   * Puts page `page`'s owner on every request it makes from now on
-   * (`GATED_PAGE_HEADER`), on the watch's session of it, once the page is
-   * owned and the watch holds it; whatever waits for the mark goes on as it
-   * lands, or fails.
+   * Marks every document page `page` loads from now on, the one it holds
+   * included, as its owner's (core `gatedPageScript`), on the watch's
+   * session of it, once the page is owned and the watch holds it: an earlier
+   * owner's mark goes as this one lands. Whatever waits for the mark goes on
+   * as it lands, or fails. Nothing is put on the page's requests.
    */
   #mark(page: string): void {
     const owner = this.ownerOf(page);
     const session = this.#pageSessions.get(page);
     const wire = this.#watch?.wire;
-    if (!(owner && session && wire) || this.#marks.get(page)?.owner === owner) {
+    const before = this.#marks.get(page);
+    if (!(owner && session && wire) || before?.owner === owner) {
       return;
     }
-    const done = wire
-      .call("Network.enable", {}, session)
-      .then(() =>
-        wire.call(
-          "Network.setExtraHTTPHeaders",
-          { headers: { [GATED_PAGE_HEADER]: owner } },
+    const mark: { done: Promise<void>; owner: string; script?: string } = {
+      owner,
+      done: Promise.resolve(),
+    };
+    mark.done = (before?.done ?? Promise.resolve())
+      // A page's documents are told of scripts only while its Page domain is on.
+      .then(() => wire.call("Page.enable", {}, session))
+      .then(async () => {
+        if (before?.script) {
+          await wire.call(
+            "Page.removeScriptToEvaluateOnNewDocument",
+            { identifier: before.script },
+            session
+          );
+        }
+        const added = await wire.call(
+          "Page.addScriptToEvaluateOnNewDocument",
+          { source: gatedPageScript(owner), runImmediately: true },
           session
-        )
-      )
+        );
+        mark.script = text(added.identifier);
+      })
       .then(
         () => undefined,
         (error: unknown) =>
@@ -673,7 +696,7 @@ export class Gate {
         }
         this.#markWaits.delete(page);
       });
-    this.#marks.set(page, { owner, done });
+    this.#marks.set(page, mark);
   }
 
   /**
@@ -707,8 +730,8 @@ export class Gate {
 
   /**
    * Takes a page an agent opened on {@link BLANK} to the address it asked
-   * for, once the page carries its owner's mark: its first request is
-   * marked, its dashboard socket among them.
+   * for, once the page carries its owner's mark: its first document is
+   * marked, so the dashboard it may load names its owner on its socket.
    */
   async load(page: string, url: string): Promise<void> {
     await this.marked(page);
@@ -1132,7 +1155,7 @@ class Link {
       return;
     }
     // A load of one of its pages goes once the page carries its owner's
-    // mark (Gate `marked`), so the page's first request is marked.
+    // mark (Gate `marked`), so the page's first document is marked.
     const target =
       message.method === "Page.navigate" && message.sessionId
         ? this.#sessionTargets.get(message.sessionId)
@@ -1290,7 +1313,7 @@ class Link {
         return false;
       case "Target.createTarget": {
         // Opened blank, and taken where it was asked once marked (Gate
-        // `load`): a page is the agent's from its first request.
+        // `load`): a page is the agent's from its first document.
         const url = text(params.url);
         if (url && url !== BLANK) {
           this.#goes.set(message.id ?? 0, url);

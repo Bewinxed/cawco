@@ -1,11 +1,14 @@
 /**
  * A session started from a page an agent opened in its project's browser
  * is that agent's check, nested under it, never the person's: the agent's
- * DevTools gate marks every page the agent opens (gate.ts `#mark`, core
- * `GATED_PAGE_HEADER`) before the page loads anything, the dashboard's
- * relay carries the mark to the hub on the page's socket, and the hub
+ * DevTools gate marks every document the agent's page loads (gate.ts
+ * `#mark`, core `GATED_PAGE_MARK`) before the page loads anything, the
+ * dashboard names the mark on its socket (`GATED_PAGE_PARAM`), and the hub
  * stamps a start from that socket `check` under the session that owns the
- * page (server.ts `gatedOwner`), in that session's project.
+ * page (server.ts `gatedOwner`), in that session's project. The mark adds
+ * nothing to the page's requests: a cross-origin ping the page makes, as
+ * the dashboard pings a preview's port, is the simple request it asked for,
+ * never preflighted.
  *
  *   bun scripts/probe-kit/run.ts sidebar-gated
  *
@@ -15,11 +18,16 @@
  * the browser on the local host; P's own door (a session outside every
  * workspace). As P's browser tool does, a raw CDP connection to the gate as
  * P opens a page on the dashboard (`Target.createTarget`: the gate opens it
- * blank, marks it and takes it there); from that page's own socket, a New
- * session start in the home folder that names neither parent nor project.
+ * blank, marks it and takes it there); from the dashboard's own socket on
+ * that page, a New session start in the home folder that names neither
+ * parent nor project. From the same page, a ping to a server on another
+ * port that answers as a preview's ping does: any origin allowed, and no
+ * `Access-Control-Allow-Headers`.
  *
- * Asserted: the gate gave P a page of its own; the start's row is `check`,
- * under P, in cockpit, though its folder is the home project's.
+ * Asserted: the gate gave P a page of its own, marked as P's; the start's
+ * row is `check`, under P, in cockpit, though its folder is the home
+ * project's; the cross-origin ping answers, with no preflight and no header
+ * the page did not set.
  *
  * Run on the host, outside every workspace boundary: the gate's Chromium
  * keeps its sandbox, which needs user namespaces a boundary refuses ("No
@@ -29,6 +37,8 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BrowserKey } from "../../../packages/core/src/browser";
+import { GATED_PAGE_MARK } from "../../../packages/core/src/browser-gate";
+import { PREVIEW_PING_PATH } from "../../../packages/core/src/frames";
 import { MACHINE, MODEL, type Reply, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
@@ -136,6 +146,52 @@ const cdpAt = (endpoint: string, headers: Record<string, string>) =>
   });
 
 /**
+ * The ping the dashboard makes to a preview's port (`fetch(origin +
+ * "/__cawco/ping", { mode: "cors" })`), from the gated page to a server on
+ * another port that answers as the hub's preview listener does: the origin
+ * allowed, no request header allowed. The ping answers, and the server saw
+ * no preflight and no `x-cawco-` header.
+ */
+async function pingLeg(
+  kit: Kit,
+  evaluate: (expression: string) => Promise<unknown>
+): Promise<void> {
+  const seen: { method: string; headers: string[] }[] = [];
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: (request) => {
+      seen.push({
+        method: request.method,
+        headers: [...request.headers.keys()],
+      });
+      return new Response(request.method === "OPTIONS" ? null : "ok", {
+        headers: {
+          "access-control-allow-origin": "*",
+          "access-control-expose-headers": "x-cawco-ping",
+          "cache-control": "no-store",
+        },
+      });
+    },
+  });
+  try {
+    const answer = (await evaluate(
+      `fetch("http://127.0.0.1:${server.port}${PREVIEW_PING_PATH}", { mode: "cors", credentials: "omit", cache: "no-store" }).then((r) => r.status, (e) => String(e))`
+    )) as { value?: unknown } | undefined;
+    kit.check(
+      "the gated page's cross-origin ping answers, with no preflight and no header the page did not set",
+      answer?.value === 200 &&
+        seen.length === 1 &&
+        seen[0]?.method === "GET" &&
+        !seen[0].headers.some((name) => name.startsWith("x-cawco-")),
+      JSON.stringify({ answer, seen })
+    );
+  } finally {
+    server.stop(true);
+  }
+}
+
+/**
  * A session started from a page an agent opened through its gate: P's own
  * door (a session outside every workspace), a page on the dashboard opened
  * as P's tool opens one (`Target.createTarget`, which the gate opens blank,
@@ -210,6 +266,14 @@ async function gatedStart(
       (value) => (value as { value?: unknown } | undefined)?.value === true,
       90_000
     );
+    const mark = (await evaluate(`globalThis.${GATED_PAGE_MARK}`)) as
+      { value?: unknown } | undefined;
+    kit.check(
+      "the gate: the page P's tool opened carries P's mark",
+      mark?.value === owner,
+      JSON.stringify(mark)
+    );
+    await pingLeg(kit, evaluate);
     const envelope = {
       verb: "spawn",
       machineId: MACHINE,
@@ -224,11 +288,9 @@ async function gatedStart(
         permissionMode: "bypassPermissions",
       },
     };
-    await evaluate(`new Promise((resolve, reject) => {
-      const ws = new WebSocket(\`\${location.protocol === "https:" ? "wss" : "ws"}://\${location.host}/ws/dashboard?protocol=6\`);
-      ws.onopen = () => { ws.send(${JSON.stringify(JSON.stringify(envelope))}); resolve(true); };
-      ws.onerror = () => reject(new Error("socket"));
-    })`);
+    await evaluate(
+      `globalThis.__cawcoSocket.send(${JSON.stringify(JSON.stringify(envelope))})`
+    );
     await until(
       "the gated start's session",
       () => fleet.instance(instanceId)?.status,

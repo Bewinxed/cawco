@@ -26,6 +26,7 @@ import {
   type SessionCommands,
   type SessionMessage,
   type SessionStreamFrame,
+  type SessionTooling,
   STREAM_SO_FAR,
   TRANSCRIPT_PAGE,
   TranscriptBuilder,
@@ -97,6 +98,12 @@ export interface TranscriptPorts {
   ) => Promise<HistoryRead>;
   /** One frame onto the session's Ledger stream. */
   readonly sequence: (instanceId: string, frame: SessionStreamFrame) => void;
+  /**
+   * The servers and tools the session's newest `init` announced, as its row
+   * keeps them (db `instanceTooling`): the newest page says them, for the
+   * `/` palette, whether or not the transcript read holds an `init`.
+   */
+  readonly tooling: (instanceId: string) => SessionTooling | undefined;
 }
 
 /** A transcript whose load took this long or longer says so in the log, read and build apart. */
@@ -369,6 +376,10 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
     const commands = ports.commands(instanceId);
     if (commands) {
       builder.carryCommands(commands);
+    }
+    const tooling = ports.tooling(instanceId);
+    if (tooling) {
+      builder.carryTooling(tooling);
     }
     const entry: Entry = {
       build: undefined,
