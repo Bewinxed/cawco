@@ -117,6 +117,54 @@ def read_jsonl(path):
     return out
 
 
+def transcript(path):
+    """Where a drawn transcript is now. CawCo moves a session's files to the account the session moves to (agent
+    `[claude] session …: N entries moved from <account> to <account>`), so a path drawn hours ago can be gone while the
+    same file, append-only, lives under another account's same project dir. Searched by project dir and file name
+    across every account dir and ~/.claude; the drawn path when it still exists."""
+    if os.path.exists(path):
+        return path
+    proj, name = os.path.basename(os.path.dirname(path)), os.path.basename(path)
+    home = os.path.expanduser("~")
+    roots = [os.path.join(home, ".cawco", "accounts", a, "claude", "projects")
+             for a in sorted(os.listdir(os.path.join(home, ".cawco", "accounts")))] + [os.path.join(home, ".claude", "projects")]
+    found = [p for p in (os.path.join(r, proj, name) for r in roots) if os.path.exists(p)]
+    if not found:
+        raise RunStopped(f"transcript {name} is no longer under any account's projects/{proj}")
+    return max(found, key=os.path.getsize)
+
+
+_transcripts, _transcripts_lock = {}, threading.Lock()
+
+
+def read_transcript(path, upto=None, uuid=None):
+    """read_jsonl of transcript(path), checked to still hold the drawn cut: at least `upto` records and, when given,
+    the record `uuid` among them. A transcript only grows, so the prefix a cut was drawn on stays as it was."""
+    p = transcript(path)
+    with _transcripts_lock:  # a unit's runs share one read of the prefix (a live orchestrator's is ~460 MB)
+        key = (p, upto)
+        if key not in _transcripts:
+            recs = []
+            with open(p, errors="replace") as fh:
+                for line in fh:
+                    if upto is not None and len(recs) > upto:
+                        break
+                    line = line.strip()
+                    try:
+                        d = json.loads(line) if line else None
+                    except ValueError:
+                        d = None
+                    if isinstance(d, dict):
+                        recs.append(d)
+            _transcripts[key] = recs
+        recs = _transcripts[key]
+    if upto is not None and len(recs) < upto:
+        raise RunStopped(f"transcript {p} holds {len(recs)} records; the cut is at {upto}")
+    if uuid and not any(r.get("uuid") == uuid for r in recs[:(upto or len(recs)) + 1]):
+        raise RunStopped(f"transcript {p} no longer holds the cut's record {uuid} before index {upto}")
+    return recs
+
+
 def write_jsonl(path, recs):
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "w") as fh:

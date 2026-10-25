@@ -454,6 +454,8 @@ class Sandbox:
     def place(self, recs, session_id, config_dir, real_cwd):
         """The pre-cut records as session `session_id` working in the sandbox: every `cwd` field rewritten from the
         session's real directory to the sandbox's, `sessionId` to the new id."""
+        if not recs:
+            raise common.RunStopped("placement: no records to place")
         real = os.path.realpath(real_cwd)
         out = []
         for r in recs:

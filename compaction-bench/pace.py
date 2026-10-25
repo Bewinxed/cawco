@@ -158,6 +158,14 @@ def main():
                           f"{len(jobs)} left, {len(running)} running", flush=True)
                 time.sleep(a.start_gap)  # the load average trails a start: let it show before the next
                 continue
+            wait = "accounts: none under the cap with a unit slot free (" + ", ".join(
+                f"{x[:8]} {rd[x]['session']:.0f}%/{inflight[x]}" for x in accounts if x in rd) + ")"
+        elif jobs:
+            wait = f"load {load:.1f} ≥ {a.start_load}" if load >= a.start_load else f"{len(running)} units running"
+        else:
+            wait = None
+        if wait:  # what holds the next start, one line per poll, so what sets the pace is on record
+            common.append_jsonl(log, {"at": common.now_iso(), "wait": wait, "load": load, "running": len(running)})
         time.sleep(a.poll)
     print("pace: every unit ended", flush=True)
     return 0

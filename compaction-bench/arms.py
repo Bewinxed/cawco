@@ -166,7 +166,7 @@ def run_one(cut, arm, run, o):
            "chained": bool(cut.get("chained")), "dry": o.dry, "started": common.now_iso(),
            "accounts": {"session": cfg, "summarizer": o.summarizer_config_dir}}
     model, effort = cut["model"], cut.get("effort")
-    all_recs = common.read_jsonl(cut["jsonl"])
+    all_recs = []
 
     def turn(sid, message, new, name, kind, context=0):
         r = claude_turn(sb, cfg, sid, message, model, effort, new, os.path.join(rd, f"{name}.stream.jsonl"), o.dry, context)
@@ -210,6 +210,10 @@ def run_one(cut, arm, run, o):
         return sid, opening, summary
 
     try:
+        # the drawn transcript wherever CawCo has moved it since, holding the cut as drawn (2026-10-25: c24's moved
+        # from one account to another mid-run, and an empty placement resumed "No conversation found")
+        all_recs[:] = common.read_transcript(cut["jsonl"], cut["second"]["cut_index"] if cut.get("chained")
+                                             else cut["cut_index"], cut.get("cut_uuid"))
         sb.build()
         res["sandbox"] = {"base": sb.base, "session_cwd": sb.session_cwd, "commit": sb.commit}
         sb.envelope(cfg)

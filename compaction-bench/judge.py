@@ -141,7 +141,7 @@ def anchors_for(cut):
     have = common.load(path)
     if have is not None:
         return have
-    recs = common.read_jsonl(cut["jsonl"])[:cut["second"]["cut_index"] if cut.get("chained") else cut["cut_index"]]
+    recs = common.read_jsonl(common.transcript(cut["jsonl"]))[:cut["second"]["cut_index"] if cut.get("chained") else cut["cut_index"]]
     prior, scope = common.live_scope(recs)
     _, M, _ = common.eval_modules(O.out)
     text = ("[earlier summary]\n" + prior + "\n\n" if prior else "") + M.render_conv(common.to_eval_entries(scope))
@@ -161,7 +161,7 @@ def anchors_for(cut):
 
 def real_turn(cut):
     nxt = cut["second"] if cut.get("chained") else cut
-    recs = common.read_jsonl(nxt["real"]["jsonl"])
+    recs = common.read_jsonl(common.transcript(nxt["real"]["jsonl"]))
     return recs[nxt["real"]["index"]:nxt["real"]["end"]]
 
 
@@ -178,7 +178,7 @@ def judge_cut(cut, pool):
     real = real_turn(cut)
     real_txt = render(real)
     nxt = (cut["second"] if cut.get("chained") else cut)["next_text"]
-    pre = common.read_jsonl(cut["jsonl"])[:cut["second"]["cut_index"] if cut.get("chained") else cut["cut_index"]]
+    pre = common.read_jsonl(common.transcript(cut["jsonl"]))[:cut["second"]["cut_index"] if cut.get("chained") else cut["cut_index"]]
     _, _, pre_reads = readings(pre, cut["cwd"])
     pre_reads = set(pre_reads)
     r_edit, r_cmd, _ = readings(real, cut["cwd"])
