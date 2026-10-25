@@ -561,7 +561,6 @@ interface Preview {
     r: number;
   };
   go: (m: string) => void;
-  landPlace: () => void;
   landRecord: () => void;
   manualHub: (on: boolean) => void;
   play: (m: string) => Promise<void>;
@@ -1830,6 +1829,13 @@ async function shoot(
 ): Promise<Capture[]> {
   await playIn(page, m);
   await settled(page);
+  // A device asking is shot as it rests once the hub's record has landed: Deny and Approve live.
+  if (m.startsWith("checking")) {
+    await page.evaluate(() =>
+      (window as unknown as { preview: Preview }).preview.landRecord()
+    );
+    await settled(page);
+  }
   await page.evaluate(() => {
     for (const run of document.getAnimations()) {
       run.pause();

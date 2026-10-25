@@ -8,10 +8,18 @@ asked; the endings are report a8f73fdb §3 and §4. Every word on the screen
 is the copy report 24b5859f (a Fable writer) wrote, verbatim: under the code
 nothing is said while waiting.
 
+The phone on the cards is the owner's own, as recorded and nothing more:
+the hub's one device (`push_devices`: name "iPhone", platform `ios`;
+`owner_devices` holds none) and its tailnet name and address (`tailscale
+status`: `iphone182-1`, 100.99.18.79). The hub keeps no OS version, app
+version, place, or public or LAN address, so the cards say none: the public
+and LAN Checking moments show no address line.
+
 ```sh
 python3 -m http.server -d design-previews/pairing 8080   # any static server on this folder
 bun scripts/probe-kit/run.ts pairing-preview               # the proof (Chromium + WebKit)
 PAIRING_ENGINES=chromium PAIRING_LEGS=end,motion PAIRING_MOMENTS=expired …   # a narrower run
+PAIRING_ENGINES=chromium PAIRING_LEGS=captures bun scripts/probe-kit/run.ts pairing-preview   # the designer's captures
 ```
 
 - `index.html`, `preview.css`, `preview.js`: the page. Tokens are the
@@ -25,6 +33,10 @@ PAIRING_ENGINES=chromium PAIRING_LEGS=end,motion PAIRING_MOMENTS=expired …   #
   house's tokens, as Web Animations split into read and write phases.
 - `caw/`: Caw's drawings, one per moment, each with its night still
   (`<moment>-night.png`).
+- `captures/`: every moment at rest, the Desk and Phone frames each shot
+  alone, in a window 390 and 1440 wide, by day and by night, at DPR 1
+  (`<moment>-<frame>-<width>-<day|night>.png`), listed with a caption each
+  in `manifest.json`.
 
 The page has both schemes (`color-scheme: light dark`, the tokens'
 `light-dark()`), following the reader's system.

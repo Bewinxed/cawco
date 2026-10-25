@@ -1,0 +1,834 @@
+[
+  {
+    "file": "asking-desk-390-day.png",
+    "moment": "asking",
+    "frame": "Desk",
+    "width": 390,
+    "scheme": "day",
+    "caption": "Asking, the Desk frame, in a window 390px wide, by day"
+  },
+  {
+    "file": "asking-phone-390-day.png",
+    "moment": "asking",
+    "frame": "Phone",
+    "width": 390,
+    "scheme": "day",
+    "caption": "Asking, the Phone frame, in a window 390px wide, by day"
+  },
+  {
+    "file": "waiting-desk-390-day.png",
+    "moment": "waiting",
+    "frame": "Desk",
+    "width": 390,
+    "scheme": "day",
+    "caption": "Waiting, the Desk frame, in a window 390px wide, by day"
+  },
+  {
+    "file": "waiting-phone-390-day.png",
+    "moment": "waiting",
+    "frame": "Phone",
+    "width": 390,
+    "scheme": "day",
+    "caption": "Waiting, the Phone frame, in a window 390px wide, by day"
+  },
+  {
+    "file": "lastminute-desk-390-day.png",
+    "moment": "lastminute",
+    "frame": "Desk",
+    "width": 390,
+    "scheme": "day",
+    "caption": "Last minute, the Desk frame, in a window 390px wide, by day"
+  },
+  {
+    "file": "lastminute-phone-390-day.png",
+    "moment": "lastminute",
+    "frame": "Phone",
+    "width": 390,
+    "scheme": "day",
+    "caption": "Last minute, the Phone frame, in a window 390px wide, by day"
+  },
+  {
+    "file": "checking-public-desk-390-day.png",
+    "moment": "checking-public",
+    "frame": "Desk",
+    "width": 390,
+    "scheme": "day",
+    "caption": "Checking · public, the Desk frame, in a window 390px wide, by day"
+  },
+  {
+    "file": "checking-public-phone-390-day.png",
+    "moment": "checking-public",
+    "frame": "Phone",
+    "width": 390,
+    "scheme": "day",
+    "caption": "Checking · public, the Phone frame, in a window 390px wide, by day"
+  },
+  {
+    "file": "checking-tailnet-desk-390-day.png",
+    "moment": "checking-tailnet",
+    "frame": "Desk",
+    "width": 390,
+    "scheme": "day",
+    "caption": "Checking · tailnet, the Desk frame, in a window 390px wide, by day"
+  },
+  {
+    "file": "checking-tailnet-phone-390-day.png",
+    "moment": "checking-tailnet",
+    "frame": "Phone",
+    "width": 390,
+    "scheme": "day",
+    "caption": "Checking · tailnet, the Phone frame, in a window 390px wide, by day"
+  },
+  {
+    "file": "checking-lan-desk-390-day.png",
+    "moment": "checking-lan",
+    "frame": "Desk",
+    "width": 390,
+    "scheme": "day",
+    "caption": "Checking · LAN, the Desk frame, in a window 390px wide, by day"
+  },
+  {
+    "file": "checking-lan-phone-390-day.png",
+    "moment": "checking-lan",
+    "frame": "Phone",
+    "width": 390,
+    "scheme": "day",
+    "caption": "Checking · LAN, the Phone frame, in a window 390px wide, by day"
+  },
+  {
+    "file": "approved-desk-390-day.png",
+    "moment": "approved",
+    "frame": "Desk",
+    "width": 390,
+    "scheme": "day",
+    "caption": "Approved, the Desk frame, in a window 390px wide, by day"
+  },
+  {
+    "file": "approved-phone-390-day.png",
+    "moment": "approved",
+    "frame": "Phone",
+    "width": 390,
+    "scheme": "day",
+    "caption": "Approved, the Phone frame, in a window 390px wide, by day"
+  },
+  {
+    "file": "removed-desk-390-day.png",
+    "moment": "removed",
+    "frame": "Desk",
+    "width": 390,
+    "scheme": "day",
+    "caption": "Removed, the Desk frame, in a window 390px wide, by day"
+  },
+  {
+    "file": "removed-phone-390-day.png",
+    "moment": "removed",
+    "frame": "Phone",
+    "width": 390,
+    "scheme": "day",
+    "caption": "Removed, the Phone frame, in a window 390px wide, by day"
+  },
+  {
+    "file": "denied-desk-390-day.png",
+    "moment": "denied",
+    "frame": "Desk",
+    "width": 390,
+    "scheme": "day",
+    "caption": "Denied, the Desk frame, in a window 390px wide, by day"
+  },
+  {
+    "file": "denied-phone-390-day.png",
+    "moment": "denied",
+    "frame": "Phone",
+    "width": 390,
+    "scheme": "day",
+    "caption": "Denied, the Phone frame, in a window 390px wide, by day"
+  },
+  {
+    "file": "expired-desk-390-day.png",
+    "moment": "expired",
+    "frame": "Desk",
+    "width": 390,
+    "scheme": "day",
+    "caption": "Expired, the Desk frame, in a window 390px wide, by day"
+  },
+  {
+    "file": "expired-phone-390-day.png",
+    "moment": "expired",
+    "frame": "Phone",
+    "width": 390,
+    "scheme": "day",
+    "caption": "Expired, the Phone frame, in a window 390px wide, by day"
+  },
+  {
+    "file": "nomatch-desk-390-day.png",
+    "moment": "nomatch",
+    "frame": "Desk",
+    "width": 390,
+    "scheme": "day",
+    "caption": "Scan matches nothing, the Desk frame, in a window 390px wide, by day"
+  },
+  {
+    "file": "nomatch-phone-390-day.png",
+    "moment": "nomatch",
+    "frame": "Phone",
+    "width": 390,
+    "scheme": "day",
+    "caption": "Scan matches nothing, the Phone frame, in a window 390px wide, by day"
+  },
+  {
+    "file": "failed-desk-390-day.png",
+    "moment": "failed",
+    "frame": "Desk",
+    "width": 390,
+    "scheme": "day",
+    "caption": "Failed · pairing off, the Desk frame, in a window 390px wide, by day"
+  },
+  {
+    "file": "failed-phone-390-day.png",
+    "moment": "failed",
+    "frame": "Phone",
+    "width": 390,
+    "scheme": "day",
+    "caption": "Failed · pairing off, the Phone frame, in a window 390px wide, by day"
+  },
+  {
+    "file": "failed-down-desk-390-day.png",
+    "moment": "failed-down",
+    "frame": "Desk",
+    "width": 390,
+    "scheme": "day",
+    "caption": "Failed · hub silent, the Desk frame, in a window 390px wide, by day"
+  },
+  {
+    "file": "failed-down-phone-390-day.png",
+    "moment": "failed-down",
+    "frame": "Phone",
+    "width": 390,
+    "scheme": "day",
+    "caption": "Failed · hub silent, the Phone frame, in a window 390px wide, by day"
+  },
+  {
+    "file": "asking-desk-1440-day.png",
+    "moment": "asking",
+    "frame": "Desk",
+    "width": 1440,
+    "scheme": "day",
+    "caption": "Asking, the Desk frame, in a window 1440px wide, by day"
+  },
+  {
+    "file": "asking-phone-1440-day.png",
+    "moment": "asking",
+    "frame": "Phone",
+    "width": 1440,
+    "scheme": "day",
+    "caption": "Asking, the Phone frame, in a window 1440px wide, by day"
+  },
+  {
+    "file": "waiting-desk-1440-day.png",
+    "moment": "waiting",
+    "frame": "Desk",
+    "width": 1440,
+    "scheme": "day",
+    "caption": "Waiting, the Desk frame, in a window 1440px wide, by day"
+  },
+  {
+    "file": "waiting-phone-1440-day.png",
+    "moment": "waiting",
+    "frame": "Phone",
+    "width": 1440,
+    "scheme": "day",
+    "caption": "Waiting, the Phone frame, in a window 1440px wide, by day"
+  },
+  {
+    "file": "lastminute-desk-1440-day.png",
+    "moment": "lastminute",
+    "frame": "Desk",
+    "width": 1440,
+    "scheme": "day",
+    "caption": "Last minute, the Desk frame, in a window 1440px wide, by day"
+  },
+  {
+    "file": "lastminute-phone-1440-day.png",
+    "moment": "lastminute",
+    "frame": "Phone",
+    "width": 1440,
+    "scheme": "day",
+    "caption": "Last minute, the Phone frame, in a window 1440px wide, by day"
+  },
+  {
+    "file": "checking-public-desk-1440-day.png",
+    "moment": "checking-public",
+    "frame": "Desk",
+    "width": 1440,
+    "scheme": "day",
+    "caption": "Checking · public, the Desk frame, in a window 1440px wide, by day"
+  },
+  {
+    "file": "checking-public-phone-1440-day.png",
+    "moment": "checking-public",
+    "frame": "Phone",
+    "width": 1440,
+    "scheme": "day",
+    "caption": "Checking · public, the Phone frame, in a window 1440px wide, by day"
+  },
+  {
+    "file": "checking-tailnet-desk-1440-day.png",
+    "moment": "checking-tailnet",
+    "frame": "Desk",
+    "width": 1440,
+    "scheme": "day",
+    "caption": "Checking · tailnet, the Desk frame, in a window 1440px wide, by day"
+  },
+  {
+    "file": "checking-tailnet-phone-1440-day.png",
+    "moment": "checking-tailnet",
+    "frame": "Phone",
+    "width": 1440,
+    "scheme": "day",
+    "caption": "Checking · tailnet, the Phone frame, in a window 1440px wide, by day"
+  },
+  {
+    "file": "checking-lan-desk-1440-day.png",
+    "moment": "checking-lan",
+    "frame": "Desk",
+    "width": 1440,
+    "scheme": "day",
+    "caption": "Checking · LAN, the Desk frame, in a window 1440px wide, by day"
+  },
+  {
+    "file": "checking-lan-phone-1440-day.png",
+    "moment": "checking-lan",
+    "frame": "Phone",
+    "width": 1440,
+    "scheme": "day",
+    "caption": "Checking · LAN, the Phone frame, in a window 1440px wide, by day"
+  },
+  {
+    "file": "approved-desk-1440-day.png",
+    "moment": "approved",
+    "frame": "Desk",
+    "width": 1440,
+    "scheme": "day",
+    "caption": "Approved, the Desk frame, in a window 1440px wide, by day"
+  },
+  {
+    "file": "approved-phone-1440-day.png",
+    "moment": "approved",
+    "frame": "Phone",
+    "width": 1440,
+    "scheme": "day",
+    "caption": "Approved, the Phone frame, in a window 1440px wide, by day"
+  },
+  {
+    "file": "removed-desk-1440-day.png",
+    "moment": "removed",
+    "frame": "Desk",
+    "width": 1440,
+    "scheme": "day",
+    "caption": "Removed, the Desk frame, in a window 1440px wide, by day"
+  },
+  {
+    "file": "removed-phone-1440-day.png",
+    "moment": "removed",
+    "frame": "Phone",
+    "width": 1440,
+    "scheme": "day",
+    "caption": "Removed, the Phone frame, in a window 1440px wide, by day"
+  },
+  {
+    "file": "denied-desk-1440-day.png",
+    "moment": "denied",
+    "frame": "Desk",
+    "width": 1440,
+    "scheme": "day",
+    "caption": "Denied, the Desk frame, in a window 1440px wide, by day"
+  },
+  {
+    "file": "denied-phone-1440-day.png",
+    "moment": "denied",
+    "frame": "Phone",
+    "width": 1440,
+    "scheme": "day",
+    "caption": "Denied, the Phone frame, in a window 1440px wide, by day"
+  },
+  {
+    "file": "expired-desk-1440-day.png",
+    "moment": "expired",
+    "frame": "Desk",
+    "width": 1440,
+    "scheme": "day",
+    "caption": "Expired, the Desk frame, in a window 1440px wide, by day"
+  },
+  {
+    "file": "expired-phone-1440-day.png",
+    "moment": "expired",
+    "frame": "Phone",
+    "width": 1440,
+    "scheme": "day",
+    "caption": "Expired, the Phone frame, in a window 1440px wide, by day"
+  },
+  {
+    "file": "nomatch-desk-1440-day.png",
+    "moment": "nomatch",
+    "frame": "Desk",
+    "width": 1440,
+    "scheme": "day",
+    "caption": "Scan matches nothing, the Desk frame, in a window 1440px wide, by day"
+  },
+  {
+    "file": "nomatch-phone-1440-day.png",
+    "moment": "nomatch",
+    "frame": "Phone",
+    "width": 1440,
+    "scheme": "day",
+    "caption": "Scan matches nothing, the Phone frame, in a window 1440px wide, by day"
+  },
+  {
+    "file": "failed-desk-1440-day.png",
+    "moment": "failed",
+    "frame": "Desk",
+    "width": 1440,
+    "scheme": "day",
+    "caption": "Failed · pairing off, the Desk frame, in a window 1440px wide, by day"
+  },
+  {
+    "file": "failed-phone-1440-day.png",
+    "moment": "failed",
+    "frame": "Phone",
+    "width": 1440,
+    "scheme": "day",
+    "caption": "Failed · pairing off, the Phone frame, in a window 1440px wide, by day"
+  },
+  {
+    "file": "failed-down-desk-1440-day.png",
+    "moment": "failed-down",
+    "frame": "Desk",
+    "width": 1440,
+    "scheme": "day",
+    "caption": "Failed · hub silent, the Desk frame, in a window 1440px wide, by day"
+  },
+  {
+    "file": "failed-down-phone-1440-day.png",
+    "moment": "failed-down",
+    "frame": "Phone",
+    "width": 1440,
+    "scheme": "day",
+    "caption": "Failed · hub silent, the Phone frame, in a window 1440px wide, by day"
+  },
+  {
+    "file": "asking-desk-390-night.png",
+    "moment": "asking",
+    "frame": "Desk",
+    "width": 390,
+    "scheme": "night",
+    "caption": "Asking, the Desk frame, in a window 390px wide, by night"
+  },
+  {
+    "file": "asking-phone-390-night.png",
+    "moment": "asking",
+    "frame": "Phone",
+    "width": 390,
+    "scheme": "night",
+    "caption": "Asking, the Phone frame, in a window 390px wide, by night"
+  },
+  {
+    "file": "waiting-desk-390-night.png",
+    "moment": "waiting",
+    "frame": "Desk",
+    "width": 390,
+    "scheme": "night",
+    "caption": "Waiting, the Desk frame, in a window 390px wide, by night"
+  },
+  {
+    "file": "waiting-phone-390-night.png",
+    "moment": "waiting",
+    "frame": "Phone",
+    "width": 390,
+    "scheme": "night",
+    "caption": "Waiting, the Phone frame, in a window 390px wide, by night"
+  },
+  {
+    "file": "lastminute-desk-390-night.png",
+    "moment": "lastminute",
+    "frame": "Desk",
+    "width": 390,
+    "scheme": "night",
+    "caption": "Last minute, the Desk frame, in a window 390px wide, by night"
+  },
+  {
+    "file": "lastminute-phone-390-night.png",
+    "moment": "lastminute",
+    "frame": "Phone",
+    "width": 390,
+    "scheme": "night",
+    "caption": "Last minute, the Phone frame, in a window 390px wide, by night"
+  },
+  {
+    "file": "checking-public-desk-390-night.png",
+    "moment": "checking-public",
+    "frame": "Desk",
+    "width": 390,
+    "scheme": "night",
+    "caption": "Checking · public, the Desk frame, in a window 390px wide, by night"
+  },
+  {
+    "file": "checking-public-phone-390-night.png",
+    "moment": "checking-public",
+    "frame": "Phone",
+    "width": 390,
+    "scheme": "night",
+    "caption": "Checking · public, the Phone frame, in a window 390px wide, by night"
+  },
+  {
+    "file": "checking-tailnet-desk-390-night.png",
+    "moment": "checking-tailnet",
+    "frame": "Desk",
+    "width": 390,
+    "scheme": "night",
+    "caption": "Checking · tailnet, the Desk frame, in a window 390px wide, by night"
+  },
+  {
+    "file": "checking-tailnet-phone-390-night.png",
+    "moment": "checking-tailnet",
+    "frame": "Phone",
+    "width": 390,
+    "scheme": "night",
+    "caption": "Checking · tailnet, the Phone frame, in a window 390px wide, by night"
+  },
+  {
+    "file": "checking-lan-desk-390-night.png",
+    "moment": "checking-lan",
+    "frame": "Desk",
+    "width": 390,
+    "scheme": "night",
+    "caption": "Checking · LAN, the Desk frame, in a window 390px wide, by night"
+  },
+  {
+    "file": "checking-lan-phone-390-night.png",
+    "moment": "checking-lan",
+    "frame": "Phone",
+    "width": 390,
+    "scheme": "night",
+    "caption": "Checking · LAN, the Phone frame, in a window 390px wide, by night"
+  },
+  {
+    "file": "approved-desk-390-night.png",
+    "moment": "approved",
+    "frame": "Desk",
+    "width": 390,
+    "scheme": "night",
+    "caption": "Approved, the Desk frame, in a window 390px wide, by night"
+  },
+  {
+    "file": "approved-phone-390-night.png",
+    "moment": "approved",
+    "frame": "Phone",
+    "width": 390,
+    "scheme": "night",
+    "caption": "Approved, the Phone frame, in a window 390px wide, by night"
+  },
+  {
+    "file": "removed-desk-390-night.png",
+    "moment": "removed",
+    "frame": "Desk",
+    "width": 390,
+    "scheme": "night",
+    "caption": "Removed, the Desk frame, in a window 390px wide, by night"
+  },
+  {
+    "file": "removed-phone-390-night.png",
+    "moment": "removed",
+    "frame": "Phone",
+    "width": 390,
+    "scheme": "night",
+    "caption": "Removed, the Phone frame, in a window 390px wide, by night"
+  },
+  {
+    "file": "denied-desk-390-night.png",
+    "moment": "denied",
+    "frame": "Desk",
+    "width": 390,
+    "scheme": "night",
+    "caption": "Denied, the Desk frame, in a window 390px wide, by night"
+  },
+  {
+    "file": "denied-phone-390-night.png",
+    "moment": "denied",
+    "frame": "Phone",
+    "width": 390,
+    "scheme": "night",
+    "caption": "Denied, the Phone frame, in a window 390px wide, by night"
+  },
+  {
+    "file": "expired-desk-390-night.png",
+    "moment": "expired",
+    "frame": "Desk",
+    "width": 390,
+    "scheme": "night",
+    "caption": "Expired, the Desk frame, in a window 390px wide, by night"
+  },
+  {
+    "file": "expired-phone-390-night.png",
+    "moment": "expired",
+    "frame": "Phone",
+    "width": 390,
+    "scheme": "night",
+    "caption": "Expired, the Phone frame, in a window 390px wide, by night"
+  },
+  {
+    "file": "nomatch-desk-390-night.png",
+    "moment": "nomatch",
+    "frame": "Desk",
+    "width": 390,
+    "scheme": "night",
+    "caption": "Scan matches nothing, the Desk frame, in a window 390px wide, by night"
+  },
+  {
+    "file": "nomatch-phone-390-night.png",
+    "moment": "nomatch",
+    "frame": "Phone",
+    "width": 390,
+    "scheme": "night",
+    "caption": "Scan matches nothing, the Phone frame, in a window 390px wide, by night"
+  },
+  {
+    "file": "failed-desk-390-night.png",
+    "moment": "failed",
+    "frame": "Desk",
+    "width": 390,
+    "scheme": "night",
+    "caption": "Failed · pairing off, the Desk frame, in a window 390px wide, by night"
+  },
+  {
+    "file": "failed-phone-390-night.png",
+    "moment": "failed",
+    "frame": "Phone",
+    "width": 390,
+    "scheme": "night",
+    "caption": "Failed · pairing off, the Phone frame, in a window 390px wide, by night"
+  },
+  {
+    "file": "failed-down-desk-390-night.png",
+    "moment": "failed-down",
+    "frame": "Desk",
+    "width": 390,
+    "scheme": "night",
+    "caption": "Failed · hub silent, the Desk frame, in a window 390px wide, by night"
+  },
+  {
+    "file": "failed-down-phone-390-night.png",
+    "moment": "failed-down",
+    "frame": "Phone",
+    "width": 390,
+    "scheme": "night",
+    "caption": "Failed · hub silent, the Phone frame, in a window 390px wide, by night"
+  },
+  {
+    "file": "asking-desk-1440-night.png",
+    "moment": "asking",
+    "frame": "Desk",
+    "width": 1440,
+    "scheme": "night",
+    "caption": "Asking, the Desk frame, in a window 1440px wide, by night"
+  },
+  {
+    "file": "asking-phone-1440-night.png",
+    "moment": "asking",
+    "frame": "Phone",
+    "width": 1440,
+    "scheme": "night",
+    "caption": "Asking, the Phone frame, in a window 1440px wide, by night"
+  },
+  {
+    "file": "waiting-desk-1440-night.png",
+    "moment": "waiting",
+    "frame": "Desk",
+    "width": 1440,
+    "scheme": "night",
+    "caption": "Waiting, the Desk frame, in a window 1440px wide, by night"
+  },
+  {
+    "file": "waiting-phone-1440-night.png",
+    "moment": "waiting",
+    "frame": "Phone",
+    "width": 1440,
+    "scheme": "night",
+    "caption": "Waiting, the Phone frame, in a window 1440px wide, by night"
+  },
+  {
+    "file": "lastminute-desk-1440-night.png",
+    "moment": "lastminute",
+    "frame": "Desk",
+    "width": 1440,
+    "scheme": "night",
+    "caption": "Last minute, the Desk frame, in a window 1440px wide, by night"
+  },
+  {
+    "file": "lastminute-phone-1440-night.png",
+    "moment": "lastminute",
+    "frame": "Phone",
+    "width": 1440,
+    "scheme": "night",
+    "caption": "Last minute, the Phone frame, in a window 1440px wide, by night"
+  },
+  {
+    "file": "checking-public-desk-1440-night.png",
+    "moment": "checking-public",
+    "frame": "Desk",
+    "width": 1440,
+    "scheme": "night",
+    "caption": "Checking · public, the Desk frame, in a window 1440px wide, by night"
+  },
+  {
+    "file": "checking-public-phone-1440-night.png",
+    "moment": "checking-public",
+    "frame": "Phone",
+    "width": 1440,
+    "scheme": "night",
+    "caption": "Checking · public, the Phone frame, in a window 1440px wide, by night"
+  },
+  {
+    "file": "checking-tailnet-desk-1440-night.png",
+    "moment": "checking-tailnet",
+    "frame": "Desk",
+    "width": 1440,
+    "scheme": "night",
+    "caption": "Checking · tailnet, the Desk frame, in a window 1440px wide, by night"
+  },
+  {
+    "file": "checking-tailnet-phone-1440-night.png",
+    "moment": "checking-tailnet",
+    "frame": "Phone",
+    "width": 1440,
+    "scheme": "night",
+    "caption": "Checking · tailnet, the Phone frame, in a window 1440px wide, by night"
+  },
+  {
+    "file": "checking-lan-desk-1440-night.png",
+    "moment": "checking-lan",
+    "frame": "Desk",
+    "width": 1440,
+    "scheme": "night",
+    "caption": "Checking · LAN, the Desk frame, in a window 1440px wide, by night"
+  },
+  {
+    "file": "checking-lan-phone-1440-night.png",
+    "moment": "checking-lan",
+    "frame": "Phone",
+    "width": 1440,
+    "scheme": "night",
+    "caption": "Checking · LAN, the Phone frame, in a window 1440px wide, by night"
+  },
+  {
+    "file": "approved-desk-1440-night.png",
+    "moment": "approved",
+    "frame": "Desk",
+    "width": 1440,
+    "scheme": "night",
+    "caption": "Approved, the Desk frame, in a window 1440px wide, by night"
+  },
+  {
+    "file": "approved-phone-1440-night.png",
+    "moment": "approved",
+    "frame": "Phone",
+    "width": 1440,
+    "scheme": "night",
+    "caption": "Approved, the Phone frame, in a window 1440px wide, by night"
+  },
+  {
+    "file": "removed-desk-1440-night.png",
+    "moment": "removed",
+    "frame": "Desk",
+    "width": 1440,
+    "scheme": "night",
+    "caption": "Removed, the Desk frame, in a window 1440px wide, by night"
+  },
+  {
+    "file": "removed-phone-1440-night.png",
+    "moment": "removed",
+    "frame": "Phone",
+    "width": 1440,
+    "scheme": "night",
+    "caption": "Removed, the Phone frame, in a window 1440px wide, by night"
+  },
+  {
+    "file": "denied-desk-1440-night.png",
+    "moment": "denied",
+    "frame": "Desk",
+    "width": 1440,
+    "scheme": "night",
+    "caption": "Denied, the Desk frame, in a window 1440px wide, by night"
+  },
+  {
+    "file": "denied-phone-1440-night.png",
+    "moment": "denied",
+    "frame": "Phone",
+    "width": 1440,
+    "scheme": "night",
+    "caption": "Denied, the Phone frame, in a window 1440px wide, by night"
+  },
+  {
+    "file": "expired-desk-1440-night.png",
+    "moment": "expired",
+    "frame": "Desk",
+    "width": 1440,
+    "scheme": "night",
+    "caption": "Expired, the Desk frame, in a window 1440px wide, by night"
+  },
+  {
+    "file": "expired-phone-1440-night.png",
+    "moment": "expired",
+    "frame": "Phone",
+    "width": 1440,
+    "scheme": "night",
+    "caption": "Expired, the Phone frame, in a window 1440px wide, by night"
+  },
+  {
+    "file": "nomatch-desk-1440-night.png",
+    "moment": "nomatch",
+    "frame": "Desk",
+    "width": 1440,
+    "scheme": "night",
+    "caption": "Scan matches nothing, the Desk frame, in a window 1440px wide, by night"
+  },
+  {
+    "file": "nomatch-phone-1440-night.png",
+    "moment": "nomatch",
+    "frame": "Phone",
+    "width": 1440,
+    "scheme": "night",
+    "caption": "Scan matches nothing, the Phone frame, in a window 1440px wide, by night"
+  },
+  {
+    "file": "failed-desk-1440-night.png",
+    "moment": "failed",
+    "frame": "Desk",
+    "width": 1440,
+    "scheme": "night",
+    "caption": "Failed · pairing off, the Desk frame, in a window 1440px wide, by night"
+  },
+  {
+    "file": "failed-phone-1440-night.png",
+    "moment": "failed",
+    "frame": "Phone",
+    "width": 1440,
+    "scheme": "night",
+    "caption": "Failed · pairing off, the Phone frame, in a window 1440px wide, by night"
+  },
+  {
+    "file": "failed-down-desk-1440-night.png",
+    "moment": "failed-down",
+    "frame": "Desk",
+    "width": 1440,
+    "scheme": "night",
+    "caption": "Failed · hub silent, the Desk frame, in a window 1440px wide, by night"
+  },
+  {
+    "file": "failed-down-phone-1440-night.png",
+    "moment": "failed-down",
+    "frame": "Phone",
+    "width": 1440,
+    "scheme": "night",
+    "caption": "Failed · hub silent, the Phone frame, in a window 1440px wide, by night"
+  }
+]

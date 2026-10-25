@@ -96,10 +96,21 @@ const READOUT = {
   lastminute: "Expires in 0:42",
 };
 
-/** The device the phone's record names, as the endings say it (the public case). */
-const RECORD = ["iPhone", "iOS 26.1", "203.0.113.7", "Riyadh, Saudi Arabia"];
-/** Which of the record's parts is the address (set in the mono figure). */
-const RECORD_ADDR = 2;
+/**
+ * The owner's real phone, as the hub and his tailnet record it, nothing
+ * more: the hub's one device (push_devices: name "iPhone", platform ios;
+ * owner_devices holds none) and its tailnet name and address (`tailscale
+ * status`: iphone182-1, 100.99.18.79). The hub keeps no OS version, app
+ * version, place, public or LAN address, so the card says none.
+ */
+const DEVICE = { name: "iPhone", kind: "iOS" };
+const TAILNET = { addr: "100.99.18.79", alias: "iphone182-1" };
+/** The device's record as the endings say it: each part, and whether it is set in the mono figure. */
+const RECORD = [
+  { text: DEVICE.kind, mono: false },
+  { text: TAILNET.addr, mono: true },
+  { text: TAILNET.alias, mono: true },
+];
 
 /**
  * Each ending in report a8f73fdb §3's shape (its note 2): the glyph, its
@@ -114,7 +125,7 @@ const OUTCOME = {
   approved: {
     glyph: "check",
     tone: "done",
-    said: "Bewin's iPhone is paired.",
+    said: `${DEVICE.name} is paired.`,
     record: RECORD,
     means:
       "You can answer permissions and questions from its lock screen. It shows every machine, project and session.",
@@ -126,7 +137,7 @@ const OUTCOME = {
   removed: {
     glyph: "close",
     tone: "",
-    said: "Bewin's iPhone was removed. It can pair again with a new code.",
+    said: `${DEVICE.name} was removed. It can pair again with a new code.`,
     record: RECORD,
     means: null,
     acts: [NEW_CODE],
@@ -134,7 +145,7 @@ const OUTCOME = {
   denied: {
     glyph: "close",
     tone: "fail",
-    said: "Bewin's iPhone was denied.",
+    said: `${DEVICE.name} was denied.`,
     record: RECORD,
     means: "That code no longer works.",
     acts: [NEW_CODE],
@@ -176,29 +187,15 @@ const OUTCOME = {
   },
 };
 
-/** The three network cases, as the device card says them. */
+/**
+ * The three network cases, as the device card says them: only the tailnet
+ * has an address the hub could show (his phone's own); over the public
+ * internet and the LAN it recorded none, so those cards show no address.
+ */
 const NETWORK = {
-  public: {
-    addr: "203.0.113.7",
-    tag: "",
-    second: "Riyadh, Saudi Arabia",
-    mono: false,
-    late: true,
-  },
-  tailnet: {
-    addr: "100.84.12.9",
-    tag: "tailnet",
-    second: "bewin-iphone",
-    mono: true,
-    late: false,
-  },
-  lan: {
-    addr: "192.168.1.42",
-    tag: "on this network",
-    second: "",
-    mono: false,
-    late: false,
-  },
+  public: { addr: "", tag: "", alias: "" },
+  tailnet: { addr: TAILNET.addr, tag: "tailnet", alias: TAILNET.alias },
+  lan: { addr: "", tag: "", alias: "" },
 };
 
 /** The iPhone's line drawing, one path per stroke, on a 96 box. */
@@ -463,8 +460,10 @@ function build(viewport) {
     strokes: [],
     facts: $(".facts"),
     actions: $(".actions"),
-    addr: $(".addr"),
-    second: $(".second"),
+    name: $(".facts .name"),
+    kind: $(".facts .kind"),
+    addr: $(".facts .addr"),
+    second: $(".facts .second"),
     ago: $(".ago"),
     deny: $('[data-act="deny"]'),
     approve: $('[data-act="approve"]'),
@@ -613,27 +612,29 @@ function build(viewport) {
 
 /* --------------------------------------------------------- resting */
 
-/** Fills the device card for a network case; `placeIn`: the place row has landed. */
-function fillDevice(S, network, { recordIn, placeIn }) {
+/** Fills the device card for a network case; `recordIn`: the hub's record has landed, so it can be answered. */
+function fillDevice(S, network, { recordIn }) {
   const net = NETWORK[network];
   S.network = network;
+  S.name.textContent = DEVICE.name;
+  S.kind.textContent = DEVICE.kind;
   S.addr.replaceChildren();
-  const code = document.createElement("code");
-  code.textContent = net.addr;
-  S.addr.append(code);
-  if (net.tag) {
-    S.addr.append(` · ${net.tag}`);
+  if (net.addr) {
+    const code = document.createElement("code");
+    code.textContent = net.addr;
+    S.addr.append(code);
+    if (net.tag) {
+      S.addr.append(` · ${net.tag}`);
+    }
   }
-  S.second.className = net.mono ? "second alias" : "second place";
+  S.addr.hidden = !net.addr;
   S.second.replaceChildren();
-  if (net.mono) {
+  if (net.alias) {
     const alias = document.createElement("code");
-    alias.textContent = net.second;
+    alias.textContent = net.alias;
     S.second.append(alias);
-  } else {
-    S.second.textContent = net.second;
   }
-  S.second.hidden = !net.second || (net.late && !placeIn);
+  S.second.hidden = !net.alias;
   S.deny.disabled = !recordIn;
   S.approve.disabled = !recordIn;
 }
@@ -658,9 +659,9 @@ function fillOutcome(S, m) {
   S.tail.textContent = v.tail;
   S.record.hidden = !out.record;
   S.record.replaceChildren(
-    ...(out.record ?? []).map((text, i) => {
+    ...(out.record ?? []).map(({ text, mono }) => {
       const part = document.createElement("span");
-      part.className = i === RECORD_ADDR ? "part addr" : "part";
+      part.className = mono ? "part addr" : "part";
       part.textContent = text;
       return part;
     })
@@ -685,10 +686,8 @@ function measureHeights(S) {
   const of = (kind) => S.scenes[kind].offsetHeight + 2;
   const heights = { code: of("code"), device: {}, outcome: {} };
   for (const net of Object.keys(NETWORK)) {
-    fillDevice(S, net, { recordIn: true, placeIn: false });
-    const pending = of("device");
-    fillDevice(S, net, { recordIn: true, placeIn: true });
-    heights.device[net] = { pending, in: of("device") };
+    fillDevice(S, net, { recordIn: true });
+    heights.device[net] = of("device");
   }
   for (const m of Object.keys(OUTCOME)) {
     fillOutcome(S, m);
@@ -697,14 +696,13 @@ function measureHeights(S) {
   S.heights = heights;
 }
 
-function heightFor(S, m, { placeIn = true } = {}) {
+function heightFor(S, m) {
   const kind = kindOf(m);
   if (kind === "code") {
     return S.heights.code;
   }
   if (kind === "device") {
-    const h = S.heights.device[m.split("-")[1]];
-    return placeIn ? h.in : h.pending;
+    return S.heights.device[m.split("-")[1]];
   }
   return S.heights.outcome[m];
 }
@@ -1086,7 +1084,7 @@ function rest(S, m, { still = false, keepPing = false, ping = true } = {}) {
 
   // The device.
   if (kind === "device") {
-    fillDevice(S, m.split("-")[1], { recordIn: true, placeIn: true });
+    fillDevice(S, m.split("-")[1], { recordIn: true });
   }
   fillOutcome(S, m);
 
@@ -1457,21 +1455,6 @@ function landRecord(S) {
   S.card.removeAttribute("data-busy");
   S.deny.disabled = false;
   S.approve.disabled = false;
-  if (NETWORK[S.network].late && settings.hub === "auto") {
-    S.timers.push(setTimeout(() => landPlace(S), 500));
-  }
-}
-
-/** A late place row arrives: the card resizes ("Card resize") as the row fades in. */
-function landPlace(S) {
-  if (!S.second.hidden || kindOf(S.moment) !== "device") {
-    return;
-  }
-  S.second.hidden = false;
-  const from = S.height;
-  setHeight(S, heightFor(S, S.moment, { placeIn: true }));
-  resize(S, from, 0);
-  arrive(S, S.second);
 }
 
 /* ------------------------------------------------------- moments */
@@ -1547,8 +1530,8 @@ function plan(S, m) {
       // The band runs while the hub's record is on its way.
       card.setAttribute("data-busy", "");
       card.classList.add("lap");
-      fillDevice(S, m.split("-")[1], { recordIn: false, placeIn: false });
-      setHeight(S, heightFor(S, m, { placeIn: false }));
+      fillDevice(S, m.split("-")[1], { recordIn: false });
+      setHeight(S, heightFor(S, m));
       if (settings.hub === "auto") {
         S.timers.push(setTimeout(() => landRecord(S), 700));
       }
@@ -1867,7 +1850,7 @@ async function start() {
   for (const S of stages) {
     measureHeights(S);
     rest(S, "waiting", { still: true });
-    placeDots(S, Math.max(S.heights.code, ...Object.values(S.heights.outcome), ...Object.values(S.heights.device).map((h) => h.in)));
+    placeDots(S, Math.max(S.heights.code, ...Object.values(S.heights.outcome), ...Object.values(S.heights.device)));
     S.stage.style.setProperty("--stage-h", `${S.stage.offsetHeight + 24}px`);
   }
   fitFrames();
@@ -1953,11 +1936,6 @@ window.preview = {
   landRecord() {
     for (const S of stages) {
       landRecord(S);
-    }
-  },
-  landPlace() {
-    for (const S of stages) {
-      landPlace(S);
     }
   },
 };
