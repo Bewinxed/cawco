@@ -11,27 +11,23 @@
  *    holder), and the page itself scrolls no wider than the window at 390,
  *    1100 and 1500.
  * 2. Nothing covers what the comment is about: the commented element stands
- *    whole inside the page area, and a sheet or the composer meets neither
- *    it nor its pill; the thread's card stands on the element only where it
- *    hangs from its pin standing on it (PinFloat: the card hangs beside the
- *    pin, its edge on the pin's foot), and never on the pill.
+ *    whole inside the page area, and the card, a sheet or the composer
+ *    meets neither it nor its pill; but for a card standing beside its pill
+ *    over an element too wide to stand beside whose rooms above and below
+ *    can't hold all of it (PinFloat: a long thread is read whole, never in a
+ *    sliver).
  * 3. The owner's case, measured: the agent's reply (about 180 words with
  *    bullets) against the room it scrolls in, and where scrolling remains,
  *    why.
  * 4. The opening and the hand-off on the house clocks, held and sought:
- *    A's card is the product's own PinFloat, live (live-card/card.js), the
- *    top bar's HangCard hung from its pin's foot: Replay opens it and its
- *    Close shuts it, read at 0, ⅒, ¼, ½, ¾ and 1 on the DevTools Animation
- *    domain (Chromium) or the page's held clock (WebKit), the long and the
- *    short thread, at 1440 and his window (pin-hang.ts): only translate
- *    animates on the card, over --dur-pop on --ease-out in and --dur-exit
- *    out; shut it stands wholly behind the cut at the pin's side; its neck
- *    stands on the pin within 1px at every fraction; the pin's fill never
- *    changes; early in the slide the pin and the card are one silhouette
- *    (the bridge), and open the bridge has drawn itself into the neck.
- *    Scrolling the page under it, by wheel steps and from code, every frame
- *    read: the card stands still between its moves (0px), each move one
- *    travel from the box it stood at to its next, keeping its side;
+ *    A's card is its pill grown (one surface from the pill's box, corner
+ *    and fill to the card's over --dur-pop, the thread fading in only once
+ *    the shape has room) and goes back into it over --dur-exit, read at 0,
+ *    ¼, ½, ¾ and 1 on the DevTools Animation domain (Chromium) or the
+ *    page's held clock (WebKit), the long and the short thread, at 1440 and
+ *    his window; scrolling the page under it, by wheel steps and from code,
+ *    every frame read, the card keeps its offset from its pill within 1px
+ *    while clear of the edges and never steps more than its pill moved;
  *    a rail widening to hold the thread tweens its width over
  *    --dur-morph on --ease-drawer while the list fades out over --dur-exit
  *    and the thread fades in on the width's clock; a rail arriving comes in
@@ -42,9 +38,9 @@
  *    does a thread B handed to Comments.
  * 6. A's card is as tall as what it holds, up to the page area: the
  *    owner's long thread near the foot moves up to stand whole beside its
- *    pin (never cut at the foot, never stretched to it), scrolling inside
+ *    pill (never cut at the foot, never stretched to it), scrolling inside
  *    only at the page area's full height; a short exchange stays short, its
- *    top at its pin's.
+ *    top at its pill's.
  * 7. Nothing in the card, the composer, a sheet or the rail scrolls
  *    sideways (scrollWidth ≤ clientWidth for every part that can scroll)
  *    or is drawn past a part's edge, every option, comment and screen; the
@@ -57,21 +53,8 @@ import { join, normalize } from "node:path";
 import type { Page } from "playwright-core";
 import type { Engine, Kit, Spec, View } from "../kit";
 import { ROOT, readMotion } from "../kit";
-import {
-  ground,
-  type HangSel,
-  hangChecks,
-  inkAt,
-  readHang,
-  recordStill,
-  stillChecks,
-  stillOf,
-  twoFrames,
-} from "../pin-hang";
 
 const DIR = join(ROOT, "design-previews", "comment-sizing");
-/** A number written without its leading zero (a token's `.32`), as an engine serialises it with one (`0.32`). */
-const BARE_POINT = /(?<![\d.])\./g;
 const OPTIONS = ["a", "b", "c"] as const;
 const CASES = ["long", "closed", "short", "new"] as const;
 type Option = (typeof OPTIONS)[number];
@@ -313,22 +296,34 @@ function readFrame(): Read {
     }
   }
   const pill = q('[data-page-pin="3"], [data-page-pin="new"]');
-  // The thread's card stands on the element only as it hangs from its pin
-  // standing on it: its edge facing the pin on the pin's foot (PinFloat).
+  // PinFloat's one case for standing on the element: beside its pill alone,
+  // where the element leaves no room beside it and neither its room above
+  // nor below holds the whole card (clear 11px, gap 7px).
   let overByRule: string | null = null;
   const cardCover = target && float ? meet(box(target), box(float)) : 0;
-  const foot = q<HTMLElement>('[data-slot="pin-foot"]');
-  if (target && float && foot && cardCover > 1) {
-    const card = box(float.parentElement ?? float);
-    const f = box(foot);
+  if (target && float && pill && cardCover > 1) {
     const t = box(target);
-    const edge =
-      float.dataset.side === "left"
-        ? card.x + card.w - f.x
-        : card.x - (f.x + f.w);
-    const onIt = meet(f, t) > 1;
-    if (Math.abs(edge) <= 1 && onIt) {
-      overByRule = `hung from its pin, which stands on the element, its edge on the pin's foot at ${f.y.toFixed(0)}`;
+    const p = box(pill.firstElementChild ?? pill);
+    const top = Math.min(t.y, p.y);
+    const bottom = Math.max(t.y + t.h, p.y + p.h);
+    const left = Math.min(t.x, p.x);
+    const right = Math.max(t.x + t.w, p.x + p.w);
+    const card = box(float);
+    const room = float.querySelector<HTMLElement>("[data-pin-room]");
+    const natural =
+      card.h +
+      Math.max(0, float.scrollHeight - float.clientHeight) +
+      (room ? Math.max(0, room.scrollHeight - room.clientHeight) : 0);
+    const above = top - 11 - 7;
+    const below = well.h - bottom - 11 - 7;
+    const noBeside = right + 11 + card.w > well.w - 7 && left - 11 - card.w < 7;
+    const besidePill =
+      (float.dataset.side === "right" &&
+        Math.abs(card.x - (p.x + p.w + 11)) <= 1) ||
+      (float.dataset.side === "left" &&
+        Math.abs(card.x + card.w - (p.x - 11)) <= 1);
+    if (noBeside && besidePill && natural > Math.max(above, below)) {
+      overByRule = `beside its pill alone: ${Math.round(natural)}px to hold, ${Math.round(above)}px above and ${Math.round(below)}px below the element, no room beside it`;
     }
   }
   let onPill = 0;
@@ -595,15 +590,14 @@ function readCard() {
   const p = pill.getBoundingClientRect();
   const thread = card.querySelector<HTMLElement>("[data-pin-room]");
   const body = card.querySelector<HTMLElement>('[data-slot="pin-body"]');
-  // Its laid-out box: its floating wrapper's, which its slide never moves.
-  const laid = (card.parentElement ?? card).getBoundingClientRect();
   return {
     side: card.dataset.side ?? "",
+    // Its laid-out box, which no transform moves.
     box: {
-      x: laid.left - at.left,
-      y: laid.top - at.top,
-      w: laid.width,
-      h: laid.height,
+      x: card.offsetLeft,
+      y: card.offsetTop,
+      w: card.offsetWidth,
+      h: card.offsetHeight,
     },
     pill: { x: p.left - at.left, y: p.top - at.top, w: p.width, h: p.height },
     well: { w: room.clientWidth, h: room.clientHeight },
@@ -626,44 +620,155 @@ type CardRead = NonNullable<ReturnType<typeof readCard>>;
 const onto = (value: number, low: number, high: number) =>
   Math.max(low, Math.min(value, high));
 
-const HANG: HangSel = {
-  card: '[data-slot="frame"] [data-slot="pin-card"]',
-  face: '[data-page-pin="3"] [data-mark]',
-  room: '[data-slot="pin-room"]',
-};
-const FRACTIONS = [0, 0.1, 0.25, 0.5, 0.75, 1];
+/**
+ * A's card against its pill, in the frame's px: how many surfaces stand,
+ * the surface's box, corner, fill (as the screen draws it, sRGB bytes) and
+ * opacity, the card's and the pill's boxes, and what the thread shows.
+ * Runs in the page.
+ */
+function readMorph() {
+  const frame = document.querySelector<HTMLElement>('[data-slot="frame"]');
+  const card = frame?.querySelector<HTMLElement>('[data-slot="pin-card"]');
+  const surfaces = card?.querySelectorAll<HTMLElement>(
+    '[data-slot="pin-surface"]'
+  );
+  const surface = surfaces?.[0];
+  const body = card?.querySelector<HTMLElement>('[data-slot="pin-body"]');
+  const pill = frame?.querySelector('[data-page-pin="3"]')?.firstElementChild;
+  if (!(frame && card && surface && body && pill)) {
+    return null;
+  }
+  const origin = frame.getBoundingClientRect();
+  const rect = (el: Element) => {
+    const r = el.getBoundingClientRect();
+    return {
+      x: r.left - origin.left,
+      y: r.top - origin.top,
+      w: r.width,
+      h: r.height,
+    };
+  };
+  const paint = document.createElement("canvas").getContext("2d", {
+    willReadFrequently: true,
+  });
+  const drawn = (value: string) => {
+    if (!paint) {
+      return value;
+    }
+    paint.clearRect(0, 0, 1, 1);
+    paint.fillStyle = value;
+    paint.fillRect(0, 0, 1, 1);
+    return [...paint.getImageData(0, 0, 1, 1).data.slice(0, 3)].join(",");
+  };
+  const colour = (token: string) => {
+    const probe = document.createElement("i");
+    probe.style.color = `var(${token})`;
+    document.body.append(probe);
+    const value = getComputedStyle(probe).color;
+    probe.remove();
+    return drawn(value);
+  };
+  const shape = getComputedStyle(surface);
+  const root = getComputedStyle(document.documentElement);
+  return {
+    surfaces: surfaces?.length ?? 0,
+    surface: rect(surface),
+    radius: Number.parseFloat(shape.borderTopLeftRadius),
+    fill: drawn(shape.backgroundColor),
+    opacity: Number(shape.opacity) * Number(getComputedStyle(card).opacity),
+    shown: Number(getComputedStyle(body).opacity),
+    card: rect(card),
+    pill: rect(pill),
+    pillFill: colour("--action-solid"),
+    cardFill: colour("--surface-raised"),
+    cardRadius: Number.parseFloat(root.getPropertyValue("--radius-lg")),
+  };
+}
+type Morph = NonNullable<ReturnType<typeof readMorph>>;
+type Rect = Morph["card"];
+const sameRect = (a: Rect, b: Rect) =>
+  Math.abs(a.x - b.x) <= 1 &&
+  Math.abs(a.y - b.y) <= 1 &&
+  Math.abs(a.w - b.w) <= 1 &&
+  Math.abs(a.h - b.h) <= 1;
+const rectWords = (r: Rect) =>
+  `${r.x.toFixed(1)},${r.y.toFixed(1)} ${r.w.toFixed(1)}×${r.h.toFixed(1)}`;
+const FRACTIONS = [0, 0.25, 0.5, 0.75, 1];
+
+/** Each read a step on from the last, box and corner together, growing or shrinking. */
+const oneWay = (reads: Morph[], growing: boolean) =>
+  reads.every((read, i) => {
+    const before = reads[i - 1];
+    const sign = growing ? 1 : -1;
+    return (
+      !before ||
+      (sign * (read.surface.w - before.surface.w) >= -0.5 &&
+        sign * (read.surface.h - before.surface.h) >= -0.5 &&
+        sign * (read.radius - before.radius) >= -0.5)
+    );
+  });
+
+/** One way of the morph, read at its fractions: the checks on what it read. */
+function morphChecks(
+  kit: Kit,
+  at: string,
+  way: "opens" | "closes",
+  held: Morph[],
+  runs: string
+): void {
+  const first = held[0] as Morph;
+  const last = held.at(-1) as Morph;
+  const [pillEnd, cardEnd] = way === "opens" ? [first, last] : [last, first];
+  kit.check(
+    `${at}: as the card ${way}, one surface stands the whole way, opaque (${held.map((one) => `${one.surfaces}@${one.opacity}`).join(" ")}; ${runs})`,
+    held.every((one) => one.surfaces === 1 && Math.abs(one.opacity - 1) < 0.001)
+  );
+  kit.check(
+    `${at}: ${way === "opens" ? "at 0" : "at 1"} the surface is the pill: its box ${rectWords(pillEnd.surface)} against the pill's ${rectWords(pillEnd.pill)}, its corner ${pillEnd.radius}px (the pill's ${pillEnd.pill.h / 2}px), its fill the pill's (${pillEnd.fill} against ${pillEnd.pillFill})`,
+    sameRect(pillEnd.surface, pillEnd.pill) &&
+      Math.abs(pillEnd.radius - pillEnd.pill.h / 2) <= 0.5 &&
+      pillEnd.fill === pillEnd.pillFill,
+    JSON.stringify(pillEnd)
+  );
+  kit.check(
+    `${at}: ${way === "opens" ? "at 1" : "at 0"} the surface is the card: its box ${rectWords(cardEnd.surface)} against the card's ${rectWords(cardEnd.card)}, its corner ${cardEnd.radius}px (--radius-lg ${cardEnd.cardRadius}px), its fill the raised surface`,
+    sameRect(cardEnd.surface, cardEnd.card) &&
+      Math.abs(cardEnd.radius - cardEnd.cardRadius) <= 0.5 &&
+      cardEnd.fill === cardEnd.cardFill,
+    JSON.stringify(cardEnd)
+  );
+  kit.check(
+    `${at}: between, the shape ${way === "opens" ? "grows" : "shrinks"} one way, box and corner (${held.map((one) => `${one.surface.w.toFixed(0)}×${one.surface.h.toFixed(0)} r${one.radius.toFixed(1)}`).join(" → ")})`,
+    oneWay(held, way === "opens"),
+    JSON.stringify(held.map((one) => one.surface))
+  );
+  const shown = held.map((one) => Math.round(one.shown * 100) / 100);
+  kit.check(
+    way === "opens"
+      ? `${at}: the thread shows only once the shape has room: hidden at 0 and ¼, whole at 1 (${shown.join(" → ")})`
+      : `${at}: the thread is gone by half way as it goes back (${shown.join(" → ")})`,
+    way === "opens"
+      ? shown[0] === 0 && shown[1] === 0 && shown[4] === 1
+      : shown[0] === 1 && shown[2] === 0 && shown[4] === 0,
+    JSON.stringify(shown)
+  );
+}
 
 /**
- * A's card hung from its pin (the owner: "a gooey animation that morphs out
+ * A's card is its pill grown (the owner: "a gooey animation that morphs out
  * of the comment just how the caw/search/machine bar on the top right does
- * it"): the product's PinFloat, live. Replay opens it again and its Close
- * shuts it, each held on the clock (the DevTools Animation domain on
- * Chromium; the page's held clock on WebKit) and read at its fractions with
- * the ink where the pin meets it (pin-hang.ts); each run on the house's own
- * clock, --dur-pop on --ease-out in, --dur-exit out.
+ * it"): Replay opens it again and its Close shuts it, each held on the
+ * clock (the DevTools Animation domain on Chromium, `Animation.setPaused`
+ * and `seekAnimations`; the page's held clock on WebKit) and read at 0, ¼,
+ * ½, ¾ and 1.
  */
-async function hangLeg(
+async function morphLeg(
   kit: Kit,
   page: Page,
   base: string,
   engine: Engine,
   screen: ScreenName
 ): Promise<void> {
-  const tokens = await page.evaluate(() => {
-    const probe = document.createElement("i");
-    probe.style.transitionDuration = "var(--dur-pop), var(--dur-exit)";
-    probe.style.transitionTimingFunction = "var(--ease-out)";
-    document.body.append(probe);
-    const style = getComputedStyle(probe);
-    const [pop = "0", exit = "0"] = style.transitionDuration.split(",");
-    const ease = style.transitionTimingFunction.replaceAll(" ", "");
-    probe.remove();
-    return {
-      pop: Number.parseFloat(pop) * 1000,
-      exit: Number.parseFloat(exit) * 1000,
-      ease,
-    };
-  });
   for (const which of ["long", "short"] as const) {
     // biome-ignore lint/performance/noAwaitInLoops: one frame at a time on one page
     await load(page, base, "a", which, screen);
@@ -682,59 +787,107 @@ async function hangLeg(
             press?.click();
           }, way === "opens"),
         '[data-slot="frame"]',
-        {
-          fractions: FRACTIONS,
-          read: async () => {
-            await twoFrames(page);
-            const read = await page.evaluate(readHang, HANG);
-            if (!read) {
-              return null;
-            }
-            await ground(page, HANG.room, true);
-            const ink = await inkAt(page, read);
-            await ground(page, HANG.room, false);
-            return { read, ink };
-          },
-        }
+        { fractions: FRACTIONS, read: () => page.evaluate(readMorph) }
       );
-      const reads = motion.at.flatMap((one) =>
-        one.value ? [{ fraction: one.fraction, ...one.value }] : []
-      );
-      if (reads.length !== FRACTIONS.length) {
+      const reads = motion.at.map((one) => one.value);
+      if (reads.some((one) => !one) || reads.length !== FRACTIONS.length) {
         kit.check(
           `${at}: the card ${way}, read at each fraction`,
           false,
-          JSON.stringify(motion.at.map((one) => one.fraction))
+          JSON.stringify(reads)
         );
-        await landed(page);
         continue;
       }
-      hangChecks(kit, at, way, reads, motion.runs);
-      const slide = reads
-        .flatMap((one) => one.read.runs)
-        .find((run) => run.props === "translate");
-      const want = way === "opens" ? tokens.pop : tokens.exit;
-      kit.check(
-        `${at}: it ${way === "opens" ? "opens" : "closes"} on the house's clock: ${slide ? `${slide.ms}ms on ${slide.easing}` : "no slide"} (--dur-${way === "opens" ? "pop" : "exit"} ${want}ms on --ease-out)`,
-        !!slide &&
-          Math.abs(slide.ms - want) < 1 &&
-          slide.easing.replaceAll(" ", "") === tokens.ease,
-        JSON.stringify({ slide, tokens })
+      morphChecks(
+        kit,
+        at,
+        way,
+        reads as Morph[],
+        `${motion.by} clock: ${motion.runs.map((run) => `${run.name} ${run.end - run.delay}ms`).join(", ")}`
       );
-      await landed(page);
     }
   }
 }
 
+/** Records, every frame for `ms`, the card's and its pill's boxes. Runs in the page. */
+function recordScroll(ms: number) {
+  const frames: {
+    card: { y: number; h: number };
+    pill: number;
+    well: { y: number; h: number };
+    side: string;
+  }[] = [];
+  const until = performance.now() + ms;
+  return new Promise<typeof frames>((done) => {
+    const step = () => {
+      const card = document.querySelector('[data-slot="pin-card"]');
+      const pill = document.querySelector('[data-page-pin="3"]');
+      const well = document.querySelector('[data-slot="pin-room"]');
+      if (card && pill && well) {
+        const c = card.getBoundingClientRect();
+        const w = well.getBoundingClientRect();
+        frames.push({
+          card: { y: c.top, h: c.height },
+          pill: pill.getBoundingClientRect().top,
+          well: { y: w.top, h: w.height },
+          side: (card as HTMLElement).dataset.side ?? "",
+        });
+      }
+      if (performance.now() < until) {
+        requestAnimationFrame(step);
+      } else {
+        done(frames);
+      }
+    };
+    requestAnimationFrame(step);
+  });
+}
+
+/** What a run of frames says of a card following its pill: its drift while clear of the edges, its largest step past the pill's, its sides, the pill's travel. */
+function followed(
+  frames: Awaited<ReturnType<typeof recordScroll>>,
+  gap: number
+) {
+  let drift = 0;
+  let step = 0;
+  let travel = 0;
+  let base: number | null = null;
+  for (const [i, frame] of frames.entries()) {
+    const clear =
+      frame.card.y > frame.well.y + gap + 0.5 &&
+      frame.card.y + frame.card.h < frame.well.y + frame.well.h - gap - 0.5;
+    if (clear) {
+      base ??= frame.card.y - frame.pill;
+      drift = Math.max(drift, Math.abs(frame.card.y - frame.pill - base));
+    }
+    const before = frames[i - 1];
+    if (before) {
+      travel += Math.abs(frame.pill - before.pill);
+      step = Math.max(
+        step,
+        Math.abs(frame.card.y - before.card.y) -
+          Math.abs(frame.pill - before.pill)
+      );
+    }
+  }
+  return {
+    drift,
+    step,
+    travel,
+    sides: [...new Set(frames.map((frame) => frame.side))],
+    frames: frames.length,
+  };
+}
+
 /**
- * Scrolling the page under A's open card (the owner: "WRONG, u keep
- * animating it as i scroll down, instead of only letting it move when it
- * reaches the spot where it will move from one spot to the next, it should
- * animate THEN, not animate WHILE i'm scrolling"): by wheel steps over the
- * page and by a scroll set from code, every frame read (pin-hang.ts
- * `stillOf`).
+ * Scrolling the page under A's open card (the owner: "when scrolling the
+ * page why does this jump up and down instead of animating its
+ * position?"): by wheel steps over the page and by a scroll set from code,
+ * every frame read. While clear of the well's edges the card's offset from
+ * its pill holds within 1px; at an edge it is held there, never stepping
+ * more than its pill moved plus 1.5px; it never changes side.
  */
-async function stillLeg(
+async function scrollLeg(
   kit: Kit,
   page: Page,
   base: string,
@@ -744,23 +897,24 @@ async function stillLeg(
   for (const which of ["long", "short"] as const) {
     // biome-ignore lint/performance/noAwaitInLoops: one frame at a time on one page
     await load(page, base, "a", which, screen);
+    const gap = await page.evaluate(() =>
+      Number.parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue("--space-2")
+      )
+    );
     const scroller = await page
       .locator('[data-slot="page-scroll"]')
       .boundingBox();
     const at = `${engine} ${screen} A ${which}`;
     for (const how of ["wheel", "code"] as const) {
-      const recording = page.evaluate(recordStill, {
-        ms: 2200,
-        card: HANG.card,
-        room: HANG.room,
-      });
+      const recording = page.evaluate(recordScroll, 1600);
       if (how === "wheel" && scroller) {
         // biome-ignore lint/performance/noAwaitInLoops: the wheel, then a scroll from code, each read on its own
         await page.mouse.move(scroller.x + 40, scroller.y + 60);
         for (const dy of [-120, -120, -120, 120, 120, -200, 200, 120]) {
           // biome-ignore lint/performance/noAwaitInLoops: one wheel step a frame or so apart, as a hand gives them
           await page.mouse.wheel(0, dy);
-          await page.waitForTimeout(90);
+          await page.waitForTimeout(60);
         }
       } else {
         await page.evaluate(async () => {
@@ -774,12 +928,20 @@ async function stillLeg(
             }
             // biome-ignore lint/performance/noAwaitInLoops: one scroll a frame, in order
             await new Promise((done) => requestAnimationFrame(done));
-            await new Promise((done) => setTimeout(done, 120));
+            await new Promise((done) => setTimeout(done, 40));
           }
         });
       }
-      stillChecks(kit, at, how, stillOf(await recording));
-      await page.waitForTimeout(400);
+      const read = followed(await recording, gap);
+      kit.check(
+        `${at}: scrolled by ${how === "wheel" ? "wheel steps" : "code"} (the pill travelled ${read.travel.toFixed(0)}px over ${read.frames} frames), the card follows its pill: its offset holds within 1px while clear of the edges (${read.drift.toFixed(1)}px), it never steps more than the pill moved plus 1.5px (${read.step.toFixed(1)}px over), and it keeps its side (${read.sides.join(", ")})`,
+        read.frames > 10 &&
+          read.travel > 50 &&
+          read.drift <= 1 &&
+          read.step <= 1.5 &&
+          read.sides.length === 1,
+        JSON.stringify(read)
+      );
     }
   }
 }
@@ -791,25 +953,15 @@ function standsFor(kit: Kit, at: string, read: CardRead): void {
   const whole = box.y >= gap - 0.5 && box.y + box.h <= well.h - gap + 0.5;
   const span = `${box.y.toFixed(0)} to ${(box.y + box.h).toFixed(0)}`;
   if (read.side === "right" || read.side === "left") {
-    // Hung from its pin: the pill as drawn, its rings round its box.
-    const ring = 4;
-    const pin = {
-      x: pill.x - ring,
-      y: pill.y - ring,
-      w: pill.w + 2 * ring,
-      h: pill.h + 2 * ring,
-    };
     const tall = Math.min(read.natural, full);
-    const top = onto(pin.y, gap, well.h - gap - tall);
-    const edge =
-      read.side === "right" ? box.x - (pin.x + pin.w) : pin.x - (box.x + box.w);
+    const top = onto(pill.y, gap, well.h - gap - tall);
+    const pillMid = pill.y + pill.h / 2;
     kit.check(
-      `${at}: hung from its pin at its ${read.side === "right" ? "end" : "start"} side (its edge ${edge.toFixed(1)}px off the pin's), the card is as tall as what it holds (${box.h}px of ${read.natural}px, the page area ${well.h}px), whole on screen (${span}), the pin against its edge (${pin.y.toFixed(0)}–${(pin.y + pin.h).toFixed(0)}), its top at the pin's (${pin.y.toFixed(0)}) or moved up only as far as it takes to stand whole (${top.toFixed(0)}); it scrolls inside (${read.scrolls}px) only at the page area's full height`,
-      Math.abs(edge) <= 1 &&
-        Math.abs(box.h - tall) <= 1 &&
+      `${at}: beside its pill (${read.side}), the card is as tall as what it holds (${box.h}px of ${read.natural}px, the page area ${well.h}px), whole on screen (${span}), level with its pill (centre at ${pillMid.toFixed(0)}), its top at the pill's (${pill.y.toFixed(0)}) or moved up only as far as it takes to stand whole (${top.toFixed(0)}); it scrolls inside (${read.scrolls}px) only at the page area's full height`,
+      Math.abs(box.h - tall) <= 1 &&
         whole &&
-        pin.y >= box.y - 0.5 &&
-        pin.y + pin.h <= box.y + box.h + 0.5 &&
+        pillMid >= box.y &&
+        pillMid <= box.y + box.h &&
         Math.abs(box.y - top) <= 1 &&
         (read.scrolls <= 1 || box.h >= full - 1),
       JSON.stringify(read)
@@ -931,9 +1083,8 @@ async function motionLeg(
       drawer: css.getPropertyValue("--ease-drawer").trim(),
     };
   });
-  const curve = (value: string) =>
-    value.replaceAll(" ", "").replaceAll(BARE_POINT, "0.");
-  const same = (a: string, b: string) => curve(a) === curve(b);
+  const same = (a: string, b: string) =>
+    a.replaceAll(" ", "") === b.replaceAll(" ", "");
   const legs: {
     option: Option;
     which: Case;
@@ -1214,26 +1365,6 @@ async function pageWidthLeg(
 const spec: Spec = {
   name: "comment-sizing-preview",
   async run(kit: Kit) {
-    // A's float is the product's own PinFloat, built from the dashboard's
-    // source into the preview (live-card/) before it is read, so what is
-    // read is what the source draws now.
-    const dashboard = join(ROOT, "apps", "dashboard");
-    const built = Bun.spawnSync(
-      [
-        join(dashboard, "node_modules", ".bin", "vite"),
-        "build",
-        "--config",
-        "scripts/comment-card.vite.ts",
-        "--logLevel",
-        "warn",
-      ],
-      { cwd: dashboard, stdout: "pipe", stderr: "pipe" }
-    );
-    kit.check(
-      "the live card (live-card/: the dashboard's own PinFloat, HangCard and PinFoot) is built from the dashboard's source",
-      built.exitCode === 0,
-      built.stderr.toString().slice(-600)
-    );
     const server = serve();
     const base = `http://127.0.0.1:${server.port}/`;
     try {
@@ -1266,8 +1397,8 @@ const spec: Spec = {
           spills += await boxesLeg(kit, page, base, engine, screen);
           spills += await pageWidthLeg(kit, page, engine, shape.window);
           if (screen !== "phone") {
-            await hangLeg(kit, page, base, engine, screen);
-            await stillLeg(kit, page, base, engine, screen);
+            await morphLeg(kit, page, base, engine, screen);
+            await scrollLeg(kit, page, base, engine, screen);
             await heightLeg(kit, page, base, engine, screen);
           }
           await capLeg(kit, page, base, engine, screen);

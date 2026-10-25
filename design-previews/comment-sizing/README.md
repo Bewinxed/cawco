@@ -8,15 +8,14 @@ thread where the chosen option puts it.
 ```sh
 python3 -m http.server -d design-previews/comment-sizing 8080   # any static server on this folder
 bun scripts/probe-kit/run.ts comment-sizing-preview              # the proof (Chromium + WebKit)
-bun design-previews/comment-sizing/capture/capture.ts            # remake parts.js, house.css, fonts/, live-card/
+bun design-previews/comment-sizing/capture/capture.ts            # remake parts.js, house.css, fonts/
 ```
 
-- **Option**: A, beside the comment (what main ships, played live: the
-  product's own PinFloat, two fifths of the well, 280 to 480px, hung from
-  its pin's foot as the top bar's card hangs from its glass, sliding out of
-  it with the foot's liquid bridge, as tall as what it holds up to the page
-  area, moved up to stand whole near the foot, standing still as the page
-  scrolls until its pin leaves its edge); B, a 320px card at most min(480px, 50%)
+- **Option**: A, beside the comment (what main ships: two fifths of the well,
+  280 to 480px, PinFloat's placement: as tall as what it holds up to the
+  page area, moved up to stand whole near the foot, above or below an
+  element too wide to stand beside, the pill growing into the card and
+  keeping to it as the page scrolls); B, a 320px card at most min(480px, 50%)
   of the well tall (our call: the report's min(400px, 40%) was under what a
   three-entry one-line exchange needs, so B never drew its card), a thread
   whose whole exchange needs more handed to Comments at 400px (500px on a pane
@@ -32,23 +31,15 @@ bun design-previews/comment-sizing/capture/capture.ts            # remake parts.
 
 What it is made of:
 
-- `live-card/`: the float over the page, live: `card.js` and `card.css`, the
-  dashboard's own PinFloat (its HangCard, its PinFoot) and stylesheet, built
-  from the dashboard's source by `apps/dashboard/scripts/comment-card.vite.ts`
-  (`live/`: LiveCard, which mounts it, and its entry); every option's card,
-  composer and foot sheet is it, at the option's width. capture.ts builds
-  it, and the proof builds it again before it reads the preview.
-- `parts.js`: every other comment part as its real component drew it
-  (PinCard, CommentRail, CommentComposer, PinMark, the kit's Button and
-  split handle), mounted with `capture/fixture.js` by `capture/Stage.svelte`
-  in the dashboard's own dev server; the live card holds PinCard's.
+- `parts.js`: every comment part as its real component drew it (PinCard,
+  CommentRail, CommentComposer, PinMark, PinFloat's own element, the kit's
+  Button and split handle), mounted with `capture/fixture.js` by
+  `capture/Stage.svelte` in the dashboard's own dev server.
 - `house.css`: the dashboard's stylesheet cut to the rules those parts reach;
   `fonts/` the two faces they draw in.
-- `preview.js` places them: tells the live card where the pill and what it
-  is about stand (as the page's overlay tells the pane), each option's
-  sizes, the page lifted clear of a drawer, and the house motion for what is
-  not the card (`morph`'s width tween for a hand-off, `railIn` and
-  `railOut`, `unfold` for a row opening). It copies none of the card's
-  placement or motion. What is shown is kept through a reload.
+- `preview.js` places them: PinFloat's placement ported line for line, each
+  option's sizes, the page lifted clear of a drawer, and the house motion (the
+  card's morph out of its pill and back into it, `morph`'s width tween for a hand-off, `railIn` and
+  `railOut`, `unfold` for a row opening). What is shown is kept through a reload.
 - `preview.css` draws only what stands round the parts: the switches, the
   frame, the pane's head, the decision page, each option's holders.

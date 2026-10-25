@@ -9,6 +9,7 @@
   import CommentComposer from "../../../apps/dashboard/src/lib/cawco/preview/CommentComposer.svelte";
   import CommentRail from "../../../apps/dashboard/src/lib/cawco/preview/CommentRail.svelte";
   import PinCard from "../../../apps/dashboard/src/lib/cawco/preview/PinCard.svelte";
+  import PinFloat from "../../../apps/dashboard/src/lib/cawco/preview/PinFloat.svelte";
   import PinMark from "../../../apps/dashboard/src/lib/cawco/preview/PinMark.svelte";
   import { ComposerDraft } from "../../../apps/dashboard/src/lib/cawco/transcript/composer-draft.svelte";
   import { Button } from "../../../apps/dashboard/src/lib/components/ui/button/index.js";
@@ -140,4 +141,80 @@
       <Resizable.Pane defaultSize={40}><div></div></Resizable.Pane>
     </Resizable.PaneGroup>
   </div>
+  <div
+    data-part="float"
+    style="position: relative; inline-size: 900px; block-size: 400px"
+  >
+    <PinFloat
+      label="Comment 3"
+      mark={{ x: 100, y: 100, w: 20, h: 20 }}
+      pin={3}
+      room={{ w: 900, h: 400 }}
+      slot="pin-card"
+    >
+      <span></span>
+    </PinFloat>
+  </div>
+  <div
+    data-part="float-sheet"
+    style="position: relative; inline-size: 390px; block-size: 400px"
+  >
+    <PinFloat
+      label="Comment 3"
+      mark={{ x: 100, y: 100, w: 20, h: 20 }}
+      pin={3}
+      room={{ w: 390, h: 400 }}
+      sheet
+      slot="pin-card"
+    >
+      <span></span>
+    </PinFloat>
+  </div>
+  <div
+    data-part="float-bare"
+    style="position: relative; inline-size: 900px; block-size: 400px"
+  >
+    <PinFloat
+      bare
+      label={said.comment}
+      mark={{ x: 100, y: 100, w: 20, h: 20 }}
+      room={{ w: 900, h: 400 }}
+      slot="pin-composer"
+    >
+      <span></span>
+    </PinFloat>
+  </div>
+  <div
+    data-part="float-bare-sheet"
+    style="position: relative; inline-size: 390px; block-size: 400px"
+  >
+    <PinFloat
+      bare
+      label={said.comment}
+      mark={{ x: 100, y: 100, w: 20, h: 20 }}
+      room={{ w: 390, h: 400 }}
+      sheet
+      slot="pin-composer"
+    >
+      <span></span>
+    </PinFloat>
+  </div>
+  <!-- A composer on each other side of its pill (left, under, over), not
+       captured as parts: standing here, the stylesheet's rules for each side
+       its pop rises from are kept in house.css. -->
+  {#each [{ w: 900, x: 860, y: 100 }, { w: 300, x: 10, y: 10 }, { w: 300, x: 10, y: 370 }] as at (`${at.w}-${at.y}`)}
+    <div
+      style="position: relative; inline-size: {at.w}px; block-size: 400px"
+    >
+      <PinFloat
+        bare
+        label={said.comment}
+        mark={{ x: at.x, y: at.y, w: 20, h: 20 }}
+        room={{ w: at.w, h: 400 }}
+        slot="pin-composer"
+      >
+        <span></span>
+      </PinFloat>
+    </div>
+  {/each}
 </main>

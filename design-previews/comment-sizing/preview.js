@@ -2,22 +2,20 @@
  * The comment sizing preview: the preview pane at a real size, its decision
  * page, the comments' pills on it, the Comments rail, and the open thread
  * where the chosen option puts it. Every comment part is the real
- * component's markup (parts.js, captured by capture/capture.ts); option A's
- * card and composer are the product's own PinFloat, live (live-card/card.js,
- * built from the dashboard's source by apps/dashboard/scripts/comment-card.vite.ts):
- * the thread's card hung from its pin's foot (HangCard), sliding out of it
- * and back, where it stands and how it keeps still as the page scrolls, all
- * the product's, never a copy; this file only tells it where the pill and
- * what it is about stand, as the page's overlay tells the pane. It places
- * the rest by each option's sizes, and plays the house motion for handing
- * off: a rail changing size tweens its width (motion/morph: --dur-morph on
+ * component's markup (parts.js, captured by capture/capture.ts); this file
+ * places them, by the pane's own rules (PinFloat's placement, ported line
+ * for line below) and each option's sizes, and plays the house motion for
+ * opening and handing off: the card is its pill grown (PinFloat `grow`:
+ * one surface from the pill's shape to the card's, the thread fading in
+ * once it has room) and goes back into it (`shrink`), and keeps to its
+ * pill as the page scrolls (PinFloat `plan`),
+ * a rail changing size tweens its width (motion/morph: --dur-morph on
  * --ease-drawer) while what it held fades out and what it holds fades in,
  * a rail arriving comes in from its end (PreviewPane `railIn`: --dur-panel
  * on --ease-drawer) and goes closing to none (`railOut`: --dur-exit on
  * --ease-out), and what opens inside a list unfolds (motion/fold `unfold`:
  * --dur-pop on --ease-out) while the rows under it slide.
  */
-import { mountCard } from "./live-card/card.js";
 import { PARTS } from "./parts.js";
 
 /* ---- The sizes. A's are main's tokens; B's and C's are the report's
@@ -80,7 +78,7 @@ const T = {
   easeOut: token("--ease-out") || "ease-out",
   easeDrawer: token("--ease-drawer") || "ease-out",
 };
-/** B's and C's card and composer stand `--space-2` from the pill as drawn, past its focus ring. */
+/** PinFloat `clear`: `--space-2` from the pill as drawn, past its focus ring. */
 T.clear = T.gap + 4;
 const motionOk = () =>
   matchMedia("(prefers-reduced-motion: no-preference)").matches;
@@ -145,6 +143,17 @@ const railShell = (form) => {
   shell.dataset.holds = "thread";
   return shell;
 };
+/** A float's own element (PinFloat), its contents emptied. */
+const floatShell = (kind) => {
+  const shell = first(PARTS[kind]);
+  bodyOf(shell).replaceChildren();
+  shell.removeAttribute("style");
+  shell.removeAttribute("data-side");
+  return shell;
+};
+/** What a float holds (PinFloat `pin-body`): the one part that scrolls. */
+const bodyOf = (float) => float.querySelector('[data-slot="pin-body"]');
+
 /** The thread's own parts (PinCard), its head carrying the pill when its page pill is out of reach. */
 const threadParts = (beside) => {
   const kind = state.case === "short" ? "short" : "long";
@@ -310,43 +319,20 @@ function build() {
   const target = scroller.querySelector(`#${targetId}`);
   target.dataset.commented = "";
 
-  // The float over the page: the card (A, B), a foot sheet (A, B on a
-  // phone), the composer. Each is the product's PinFloat, live: it stands,
-  // opens, keeps still as the page scrolls and goes by its own rules, at its
-  // option's width (B's card and composer 320px, C's composer the
-  // composer's 280: the reading width it stands at, `--c-pin-card-reading-w`,
-  // set on the room) and, B's, its card's tallest (`--b-cap`, preview.css).
-  liveCard?.unmount();
-  liveCard = null;
-  const floats = stands === "card" || stands === "sheet" || stands === "compose";
-  if (state.option === "b") {
-    room.style.setProperty("--c-pin-card-reading-w", `${B_CARD_W}px`);
-  } else if (state.option === "c") {
-    room.style.setProperty("--c-pin-card-reading-w", "var(--c-pin-card-w)");
-  }
-  if (floats) {
-    // What the person reads is read again once the card stands open (hang's
-    // `grown`, on the card): placed and drawn out of its pin, not shut
-    // behind its cut as it was when the frame was laid out.
-    room.addEventListener("grown", () => readout(), { capture: true });
-    liveCard = mountCard(room, {
-      open: true,
-      number: 3,
-      mark: null,
-      box: null,
-      room: { w: 0, h: 0 },
-      sheet: phone,
-      bare: stands === "compose",
-      fill: (holder) => {
-        holder.append(
-          stands === "compose" ? fragment(PARTS.composer) : threadParts(true)
-        );
-        if (stands !== "compose") {
-          wireLive(holder);
-          requestAnimationFrame(settleRooms);
-        }
-      },
-    });
+  // The float over the page: the card (A, B), a foot sheet (A on a phone), the composer.
+  let float = null;
+  if (stands === "card" || stands === "sheet") {
+    float = floatShell(stands === "sheet" ? "float-sheet" : "float");
+    bodyOf(float).append(threadParts(true));
+    room.append(float);
+  } else if (stands === "compose") {
+    float = floatShell(phone ? "float-bare-sheet" : "float-bare");
+    if (!phone) {
+      // PinFloat: the composer mounts closed, and opens once it is placed (render).
+      float.dataset.state = "closed";
+    }
+    bodyOf(float).append(fragment(PARTS.composer));
+    room.append(float);
   }
 
   // Beside the well: the list, the rail holding the thread, or C's panel.
@@ -386,7 +372,7 @@ function build() {
   // PreviewPane `railAway` (main 9d00bda27, PreviewPane.svelte:1782-1785,
   // 4378): on a phone the list's foot sheet stands aside while a thread or a
   // composer stands as the well's foot drawer, so neither covers the other.
-  const railAway = phone && floats;
+  const railAway = phone && float !== null;
   if (phone) {
     if (stands === "row" || stands === "bottom" || (listOpen && !railAway)) {
       sheet = document.createElement("div");
@@ -443,6 +429,7 @@ function build() {
     pills,
     spots,
     target,
+    float,
     side,
     sheet,
     handle,
@@ -453,7 +440,7 @@ function build() {
   // entries' words), and the frame is placed again in the next frame.
   sizes?.disconnect();
   sizes = new ResizeObserver(() => requestAnimationFrame(() => layout()));
-  for (const el of [sheet, side, well]) {
+  for (const el of [float, sheet, side, well]) {
     if (el) {
       sizes.observe(el);
     }
@@ -461,10 +448,6 @@ function build() {
   return built;
 }
 let sizes = null;
-/** Option A's live card (live-card/card.js `mountCard`), while the frame holds one. */
-let liveCard = null;
-/** The float standing over the page: the live card's element (the card, the composer or the foot sheet). */
-const floatOf = () => liveCard?.float ?? null;
 
 /** B's card's tallest in a well `wellH` tall. */
 const bCap = (wellH) => Math.min(B_CAP.px, B_CAP.share * wellH);
@@ -473,13 +456,9 @@ const bCap = (wellH) => Math.min(B_CAP.px, B_CAP.share * wellH);
 function needsRail(phone) {
   const screen = SCREENS[state.screen];
   const wellH = screen.h - HEAD_H;
-  // What PinFloat's card (or its foot sheet) holds, as it pads it, at B's width.
-  const probe = document.createElement("div");
-  probe.className = phone
-    ? "flex min-h-0 min-w-0 flex-col px-space-3 pt-space-3 pb-(--sheet-pb)"
-    : "flex min-h-0 min-w-0 flex-col gap-space-2 p-space-3";
-  probe.append(threadParts(true));
-  probe.style.cssText = `position: absolute; visibility: hidden; inset-block: 0 auto; inset-inline-start: 0; inline-size: ${B_CARD_W}px; --sheet-pb: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));`;
+  const probe = floatShell(phone ? "float-sheet" : "float");
+  bodyOf(probe).append(threadParts(true));
+  probe.style.cssText = `position: absolute; visibility: hidden; inset-block: 0 auto; inset-inline-start: 0; --float-w: ${B_CARD_W}px; --float-max: none; max-block-size: none;`;
   const host = document.createElement("div");
   host.className = "pin-room";
   host.style.cssText = `inline-size: ${screen.w}px; block-size: ${wellH}px; position: fixed; inset: 0; visibility: hidden;`;
@@ -573,6 +552,105 @@ function openRow(list) {
   item.append(thread);
 }
 
+/* ---- Placement: PinFloat's, line for line. ---- */
+/** Two boxes as one. */
+const union = (parts) => {
+  const left = Math.min(...parts.map((one) => one.x));
+  const top = Math.min(...parts.map((one) => one.y));
+  return {
+    x: left,
+    y: top,
+    w: Math.max(...parts.map((one) => one.x + one.w)) - left,
+    h: Math.max(...parts.map((one) => one.y + one.h)) - top,
+  };
+};
+
+/** PinFloat `decide`: where it stands (the side, what it stands beside, its tallest), chosen once. */
+function decideOf({ mark, whole, room, width, natural, cap }) {
+  const { gap, clear } = T;
+  const left = Math.max(0, whole.x);
+  const top = Math.max(0, whole.y);
+  const right = Math.min(room.w, whole.x + whole.w);
+  const bottom = Math.min(room.h, whole.y + whole.h);
+  const subject =
+    right > left && bottom > top
+      ? { x: left, y: top, w: right - left, h: bottom - top }
+      : mark;
+  const full = Math.max(0, Math.min(room.h - 2 * gap, cap));
+  const tall = Math.min(natural, full);
+  const pill = mark;
+  const fits = (about) => {
+    if (about.x + about.w + clear + width <= room.w - gap) {
+      return "right";
+    }
+    return about.x - clear - width >= gap ? "left" : null;
+  };
+  const under = room.h - (subject.y + subject.h + clear) - gap;
+  const over = subject.y - clear - gap;
+  const nextTo = fits(subject);
+  if (nextTo) {
+    return { along: "subject", side: nextTo, max: full };
+  }
+  if (under >= tall) {
+    return { along: "subject", side: "bottom", max: Math.min(under, full) };
+  }
+  if (over >= tall) {
+    return { along: "subject", side: "top", max: Math.min(over, full) };
+  }
+  const alone = fits(pill);
+  if (alone) {
+    return { along: "pill", side: alone, max: full };
+  }
+  const belowPill = room.h - (pill.y + pill.h + clear) - gap;
+  const abovePill = pill.y - clear - gap;
+  return belowPill >= tall || belowPill >= abovePill
+    ? { along: "pill", side: "bottom", max: Math.max(0, Math.min(belowPill, full)) }
+    : { along: "pill", side: "top", max: Math.max(0, Math.min(abovePill, full)) };
+}
+
+/** PinFloat `place`: where it stands now, from the plan and the pill as it stands, held whole in the well. */
+function standOf({ plan, mark, whole, room, width, natural }) {
+  const { gap, clear } = T;
+  const tall = Math.min(natural, plan.max);
+  const inX = (x) => Math.max(gap, Math.min(x, room.w - width - gap));
+  const inY = (y) => Math.max(gap, Math.min(y, room.h - gap - tall));
+  const about = plan.along === "pill" ? mark : whole;
+  let left = mark.x;
+  let top = mark.y;
+  if (plan.side === "right") {
+    left = about.x + about.w + clear;
+  } else if (plan.side === "left") {
+    left = about.x - clear - width;
+  } else if (plan.side === "bottom") {
+    top = about.y + about.h + clear;
+  } else {
+    top = about.y - clear - tall;
+  }
+  left = inX(left);
+  top = inY(top);
+  const inside = (value, most) => Math.max(0, Math.min(value, most));
+  return {
+    left,
+    top,
+    side: plan.side,
+    max: plan.max,
+    origin: {
+      x: inside(mark.x + mark.w / 2 - left, width),
+      y: inside(mark.y + mark.h / 2 - top, tall),
+    },
+  };
+}
+
+/** PinFloat's `natural`: its height with nothing capping it, its body's and its thread's room's overflow counted. */
+const naturalOf = (float) => {
+  const body = bodyOf(float);
+  let past = body ? body.scrollHeight - body.clientHeight : 0;
+  for (const room of float.querySelectorAll("[data-pin-room]")) {
+    past += room.scrollHeight - room.clientHeight;
+  }
+  return float.offsetHeight + Math.max(0, past);
+};
+
 /** A box in the well's own px (the frame may be drawn scaled). */
 const inWell = (node) => {
   const well = built.well.getBoundingClientRect();
@@ -585,12 +663,24 @@ const inWell = (node) => {
   };
 };
 
+/** The float's width, by option. */
+const floatWidth = () => {
+  if (state.case === "new") {
+    return {
+      a: "var(--c-pin-card-reading-w)",
+      b: `${B_CARD_W}px`,
+      c: "var(--c-pin-card-w)",
+    }[state.option];
+  }
+  return state.option === "b" ? `${B_CARD_W}px` : "var(--c-pin-card-reading-w)";
+};
+
 /** Every pill on its element, the float beside its pill, and the page lifted clear of a foot sheet. */
 function layout() {
   if (!built) {
     return;
   }
-  const { well, scroller, room, pills, target, sheet, look } = built;
+  const { well, scroller, room, pills, target, float, sheet, look } = built;
   const size = { w: well.clientWidth, h: well.clientHeight };
   // The rail's foot sheet covers nothing: the page ends where it begins
   // (PreviewPane.svelte:4051-4054, `--frame-h: calc(100% - railSheetH)`),
@@ -603,10 +693,9 @@ function layout() {
   // page is scrolled as little as lifts what the comment is about clear
   // above it (the overlay's `reveal`), never so far that its pill leaves the top.
   if (look.phone) {
-    const standing = floatOf();
     const over = Math.min(
       size.h - railH,
-      standing?.dataset.sheet ? inWell(standing).y : Number.POSITIVE_INFINITY
+      float?.dataset.sheet ? inWell(float).y : Number.POSITIVE_INFINITY
     );
     const about = inWell(target);
     const need = about.y + about.h + T.clearance - over;
@@ -623,34 +712,84 @@ function layout() {
     pill.style.setProperty("--x", String(x));
     pill.style.setProperty("--y", String(y));
   }
-  const pill = pills.get(look.composing ? "away-card" : "away-rail");
-  const mark = pill
-    ? {
-        x: Number(pill.style.getPropertyValue("--x")),
-        y: Number(pill.style.getPropertyValue("--y")),
-        w: pill.firstElementChild.getBoundingClientRect().width / built.s,
-        h: T.pin,
-      }
-    : null;
-  if (liveCard) {
-    // As the page's overlay tells the pane where the pill stands (and the
-    // pane tells PinFloat): the pill, what it is about, the well's room. A
-    // pill scrolled out of the well is out of view.
-    const roomBox = { w: room.clientWidth, h: room.clientHeight };
-    const shown =
-      mark &&
-      mark.y + mark.h > 0 &&
-      mark.y < roomBox.h &&
-      mark.x + mark.w > 0 &&
-      mark.x < roomBox.w;
-    liveCard.set({
-      mark: shown ? mark : null,
-      box: shown ? inWell(target) : null,
-      room: roomBox,
+  if (float && !float.dataset.sheet) {
+    float.style.setProperty(
+      "--float-w",
+      `min(${floatWidth()}, calc(100% - 2 * var(--space-2)))`
+    );
+    const pill = pills.get(look.composing ? "away-card" : "away-rail");
+    const mark = {
+      x: Number(pill.style.getPropertyValue("--x")),
+      y: Number(pill.style.getPropertyValue("--y")),
+      w: pill.firstElementChild.getBoundingClientRect().width / built.s,
+      h: T.pin,
+    };
+    const box = inWell(target);
+    const whole = union([mark, box]);
+    const cap =
+      state.option === "b" && !look.composing
+        ? bCap(size.h)
+        : Number.POSITIVE_INFINITY;
+    const width = float.offsetWidth;
+    const natural = naturalOf(float);
+    // PinFloat `plan`: chosen again only when what it was chosen from
+    // changes size, never as the page scrolls under it.
+    const key = [
+      size.w,
+      size.h,
+      width,
+      Math.round(natural),
+      `${mark.w}x${mark.h}`,
+      `${Math.round(whole.w)}x${Math.round(whole.h)}`,
+    ].join();
+    if (key !== built.planFor || !built.plan) {
+      const before = built.plan ? { ...built.place } : null;
+      built.planFor = key;
+      built.plan = decideOf({ mark, whole, room: size, width, natural, cap });
+      built.replanned = before;
+    }
+    const place = standOf({
+      plan: built.plan,
+      mark,
+      whole,
+      room: size,
+      width,
+      natural,
     });
-  }
-  if (state.option === "b") {
-    room.style.setProperty("--b-cap", `${Math.round(bCap(size.h))}px`);
+    // A new plan while it stands: it travels there over --dur-morph on
+    // --ease-drawer, from where it was drawn.
+    if (built.replanned && built.opened && motionOk()) {
+      const from = built.replanned;
+      float.animate(
+        [
+          { translate: `${from.left - place.left}px ${from.top - place.top}px` },
+          { translate: "0px 0px" },
+        ],
+        { duration: T.morph, easing: T.easeDrawer }
+      );
+    }
+    built.replanned = null;
+    built.place = place;
+    built.mark = mark;
+    float.dataset.side = place.side;
+    float.style.setProperty("--float-x", `${place.left}px`);
+    float.style.setProperty("--float-y", `${place.top}px`);
+    float.style.setProperty(
+      "--float-origin",
+      `${place.origin.x}px ${place.origin.y}px`
+    );
+    float.style.setProperty("--float-max", `${place.max}px`);
+  } else if (float) {
+    float.style.setProperty("--float-max", "calc(100% - 2 * var(--space-2))");
+    if (state.option === "b" && !look.composing) {
+      // B's drawer stops at its card's tallest, not the drawer's 70%.
+      float.style.maxBlockSize = `${bCap(size.h)}px`;
+    }
+    float.style.setProperty("--float-origin", "bottom center");
+    float.style.setProperty(
+      "--sheet-pb",
+      "calc(var(--space-3) + env(safe-area-inset-bottom, 0px))"
+    );
   }
   room.dataset.laid = "";
   readout();
@@ -677,15 +816,139 @@ function follow(duration) {
 }
 
 /* ---- Motion. ---- */
+/** The card's one surface (PinFloat `pin-surface`). */
+const surfaceOf = (float) => float.querySelector('[data-slot="pin-surface"]');
+
+/** A colour token as the page computes it now. */
+const colourOf = (token) => {
+  const probe = document.createElement("i");
+  probe.style.color = `var(${token})`;
+  probe.hidden = true;
+  document.body.append(probe);
+  const value = getComputedStyle(probe).color;
+  probe.remove();
+  return value;
+};
+
+/** The pill's shape in the card's own coordinates (PinFloat `pillShape`): the pill, sent, is filled with `action-solid`. */
+const pillShapeOf = () => {
+  const { place, mark } = built;
+  if (!(place && mark)) {
+    return null;
+  }
+  return {
+    left: `${mark.x - place.left}px`,
+    top: `${mark.y - place.top}px`,
+    width: `${mark.w}px`,
+    height: `${mark.h}px`,
+    borderRadius: `${mark.h / 2}px`,
+    backgroundColor: colourOf("--action-solid"),
+    borderColor: colourOf("--action-solid"),
+  };
+};
+
+/** The surface as it stands (PinFloat `surfaceShape`). */
+const surfaceShapeOf = (el) => {
+  const style = getComputedStyle(el);
+  return {
+    left: `${el.offsetLeft}px`,
+    top: `${el.offsetTop}px`,
+    width: `${el.offsetWidth}px`,
+    height: `${el.offsetHeight}px`,
+    borderRadius: style.borderTopLeftRadius,
+    backgroundColor: style.backgroundColor,
+    borderColor: style.borderTopColor,
+  };
+};
+
+/**
+ * PinFloat `grow`: the card is its pill grown, one surface from the pill's
+ * shape to the card's over --dur-pop on --ease-out (the top bar's card's
+ * own open, motion/hang), the thread waiting two fifths of it, then coming
+ * in as the shape lands.
+ */
+function growRuns(float) {
+  const shape = surfaceOf(float);
+  const body = bodyOf(float);
+  const from = pillShapeOf();
+  if (!(motionOk() && from)) {
+    return [
+      float.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: T.control,
+        easing: T.easeOut,
+      }),
+    ];
+  }
+  const to = surfaceShapeOf(shape);
+  return [
+    shape.animate([from, to], { duration: T.pop, easing: T.easeOut }),
+    body.animate(
+      [
+        { opacity: 0, filter: "blur(var(--part-blur))" },
+        { opacity: 1, filter: "blur(0px)" },
+      ],
+      {
+        delay: T.pop * 0.4,
+        duration: T.pop * 0.6,
+        easing: T.easeOut,
+        fill: "backwards",
+      }
+    ),
+  ];
+}
+
+/** PinFloat `shrink`: back into the pill over --dur-exit, the thread gone in the first half. */
+function shrinkRuns(float) {
+  const shape = surfaceOf(float);
+  const body = bodyOf(float);
+  const to = pillShapeOf();
+  if (!(motionOk() && to)) {
+    return [
+      float.animate([{ opacity: 1 }, { opacity: 0 }], {
+        duration: T.control,
+        easing: T.easeOut,
+        fill: "forwards",
+      }),
+    ];
+  }
+  const from = surfaceShapeOf(shape);
+  const shown = getComputedStyle(body).opacity;
+  for (const run of [...shape.getAnimations(), ...body.getAnimations()]) {
+    run.cancel();
+  }
+  return [
+    shape.animate([from, to], {
+      duration: T.exit,
+      easing: T.easeOut,
+      fill: "forwards",
+    }),
+    body.animate([{ opacity: shown }, { opacity: 0 }], {
+      duration: T.exit / 2,
+      easing: T.easeOut,
+      fill: "forwards",
+    }),
+  ];
+}
+
 /** How the open plays, from what stood before it: the list (or nothing) beside the page, no thread. */
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one branch per surface the thread can open in, each on its house clock
 function playOpen() {
-  const { side, sheet, look } = built;
+  const { float, side, sheet, look } = built;
   const ok = motionOk();
   const runs = [];
-  // The float over the page (PinFloat, live) opens itself: the card hung
-  // from its pin and out of its foot, the composer by the kit's pop, the
-  // foot sheet by its fade.
+  if (float && surfaceOf(float)) {
+    runs.push(...growRuns(float));
+  } else if (float && !float.dataset.sheet) {
+    // The composer: the kit's pop, out of the pill, on its `data-state`.
+    runs.push(...float.getAnimations());
+  } else if (float) {
+    runs.push(
+      float.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: T.menu,
+        easing: T.easeOut,
+      })
+    );
+  }
   const holds = side?.querySelector("[data-holds]");
   if (side && holds) {
     const to = Number(side.style.getPropertyValue("--side-w"));
@@ -769,16 +1032,27 @@ function unfoldRun(node) {
   );
 }
 
-/** A thread in the rail, the panel or a row: its Close, it goes the way it came, then the frame stands without it. */
+/** The thread's Close: it goes the way it came, then the frame stands without it. */
 function wireThread() {
-  const { side, sheet } = built;
+  const { float, side, sheet } = built;
   const holder =
     side?.querySelector("[data-holds]") ??
-    sheet?.querySelector('[data-slot="row-thread"], [data-holds]');
+    sheet?.querySelector('[data-slot="row-thread"], [data-holds]') ??
+    float;
   const close = holder?.querySelector('button[aria-label="Close"]');
   close?.addEventListener("click", async () => {
     const runs = [];
-    if (side) {
+    if (holder === float && surfaceOf(float)) {
+      runs.push(...shrinkRuns(float));
+    } else if (holder === float) {
+      runs.push(
+        float.animate([{ opacity: 1 }, { opacity: 0 }], {
+          duration: T.control,
+          easing: T.easeOut,
+          fill: "forwards",
+        })
+      );
+    } else if (side) {
       const from = side.getBoundingClientRect().width / built.s;
       runs.push(
         side.animate(
@@ -810,33 +1084,6 @@ function wireThread() {
   });
 }
 
-/**
- * The live card's Close: PinFloat folds it back into its pin's foot (its
- * own close, `--dur-exit`), and once it has left the room (its block let it
- * go), the frame stands without it.
- */
-function wireLive(holder) {
-  const close = holder.querySelector('button[aria-label="Close"]');
-  close?.addEventListener("click", () => {
-    const leaving = liveCard;
-    const room = built?.room;
-    if (!(leaving && room)) {
-      return;
-    }
-    const gone = new MutationObserver(() => {
-      if (!room.querySelector('[data-slot="pin-card"]')) {
-        gone.disconnect();
-        if (liveCard === leaving) {
-          state.open = false;
-          render({ play: null });
-        }
-      }
-    });
-    gone.observe(room, { childList: true, subtree: true });
-    leaving.set({ open: false });
-  });
-}
-
 /* ---- The readout: what the person reads in this frame. ---- */
 /**
  * How much of `node` a person sees, px: its box cut by every box that clips
@@ -858,7 +1105,7 @@ function inView(node) {
     }
   }
   const clipped = Math.max(0, bottom - top);
-  for (const el of [floatOf(), built.sheet, built.side]) {
+  for (const el of [built.float, built.sheet, built.side]) {
     if (!el || el.contains(node)) {
       continue;
     }
@@ -882,8 +1129,7 @@ function inView(node) {
 
 /** The open thread's readout: where it stands, its size, and how much of the agent's reply a person sees. */
 function threadReadout() {
-  const { look, side, sheet } = built;
-  const float = floatOf();
+  const { look, float, side, sheet } = built;
   const holder =
     side?.querySelector("[data-holds]") ??
     sheet?.querySelector('[data-slot="row-thread"], [data-holds]') ??
@@ -927,8 +1173,7 @@ function threadReadout() {
 }
 
 function readout() {
-  const { look } = built;
-  const float = floatOf();
+  const { look, float } = built;
   delete els.readout.dataset.visible;
   let text = "";
   if (look.composing) {
@@ -993,13 +1238,31 @@ function render({ play }) {
   }
   syncSwitches();
   build();
-  const { scroller, target, well } = built;
+  const { scroller, target, well, float } = built;
+  // The composer opens once it is placed (PinFloat `opened`): from
+  // `closed` to `open`, the kit's pop. A frame drawn again for what is not
+  // an opening (the list toggled) shows it standing, with no transition.
+  // The card grows from its pill in `playOpen`.
+  const card =
+    float && !float.dataset.sheet && float.dataset.state ? float : null;
+  const opening = play === "open";
+  if (card && !opening) {
+    card.style.transition = "none";
+  }
   const top = inWell(target).y + scroller.scrollTop;
   scroller.scrollTop = Math.max(0, top - TARGET_AT * well.clientHeight);
   layout();
   settleRooms();
   layout();
   scroller.addEventListener("scroll", () => layout(), { passive: true });
+  if (card) {
+    getComputedStyle(card).translate;
+    card.dataset.state = "open";
+    if (!opening) {
+      getComputedStyle(card).opacity;
+      card.style.transition = "";
+    }
+  }
   save();
   built.opened = true;
   if (play === "open") {
@@ -1027,25 +1290,16 @@ function render({ play }) {
   root.dataset.ready = String(Number(root.dataset.ready ?? 0) + 1);
 }
 
-// The frame's scale follows the stage's width, read in the next frame, never
-// inside the observer's own delivery: there, laying the frame out again
-// resized what it watched (WebKit: "ResizeObserver loop completed with
-// undelivered notifications"). The root keeps its scrollbar's room
-// (preview.css), so the scrollbar coming and going never changes that width.
-let rescale = 0;
 new ResizeObserver(() => {
-  rescale ||= requestAnimationFrame(() => {
-    rescale = 0;
-    if (!built) {
-      return;
-    }
-    const s = scaleOf(built.look.screen);
-    if (Math.abs(s - built.s) > 0.001) {
-      built.s = s;
-      els.fit.style.setProperty("--s", String(s));
-      layout();
-    }
-  });
+  if (!built) {
+    return;
+  }
+  const s = scaleOf(built.look.screen);
+  if (Math.abs(s - built.s) > 0.001) {
+    built.s = s;
+    els.fit.style.setProperty("--s", String(s));
+    layout();
+  }
 }).observe(document.querySelector(".stage"));
 
 await document.fonts.ready;

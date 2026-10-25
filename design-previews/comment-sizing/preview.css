@@ -7,10 +7,6 @@
    layer of the house's, so it wins only where it names its own classes. */
 @layer preview {
   :root {
-    /* The root's scrollbar keeps its room, so its coming and going never
-       changes the stage's width, which sets the frame's scale (preview.js):
-       without it the scale and the scrollbar chased each other every frame. */
-    scrollbar-gutter: stable;
     color-scheme: light dark;
     background: var(--surface-page);
     color: var(--ink-strong);
@@ -230,23 +226,12 @@
     overflow-y: auto;
     overscroll-behavior: contain;
   }
-  /* The pane's pin room, as PreviewPane draws it: the size container a
-     card's width reads, its own stacking layer over the page, cut at the
-     well's edges, so a card shut behind its pin's side never reaches past
-     them. */
+  /* The pane's pin room: the size container a card's width reads. */
   .pin-room {
     position: absolute;
     inset: 0;
-    z-index: 2;
-    isolation: isolate;
-    overflow: clip;
     container-type: inline-size;
     pointer-events: none;
-  }
-  /* B: its card, and its drawer on a phone, no taller than its cap
-     (preview.js `bCap`, written on the room as --b-cap). */
-  [data-option="b"] :is([data-slot="pin-card"], [data-sheet]) {
-    max-block-size: var(--b-cap) !important;
   }
   .page-pin {
     position: absolute;
