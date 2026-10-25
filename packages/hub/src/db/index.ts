@@ -120,6 +120,10 @@ import { type BrowsersDb, browsersDb } from "./browsers";
 import { type ConnectionsDb, connectionsDb } from "./connections";
 import { type DesignChecksDb, designChecksDb } from "./design-checks";
 import { type DesignOffersDb, designOffersDb } from "./design-offers";
+import {
+  dropGraphPlaces,
+  GRAPH_PLACES_MIGRATION_WHEN,
+} from "./drop-graph-places";
 import { type FindDb, findDb } from "./find";
 import { type HubAuthDb, hubAuthDb } from "./hub-auth";
 import { type IngressDb, ingressDb } from "./ingress";
@@ -3189,8 +3193,10 @@ const make = async (path: string): Promise<DbShape> => {
   try {
     // Every migration before 0275, then a project's page rows of one name
     // folded into one (merge-project-pages.ts), then 0275 makes its name the
-    // project's, and the rest: drizzle applies only what is newer than the
-    // last one applied, so each runs once, in order.
+    // project's; every migration before 0317, then the decision graph's
+    // places taken out of each page's state (drop-graph-places.ts), then
+    // 0317 and the rest: drizzle applies only what is newer than the last
+    // one applied, so each runs once, in order.
     const migrations = readMigrationFiles({ migrationsFolder: MIGRATIONS_DIR });
     // What drizzle's bun-sqlite `migrate` is (its migrator.js), whose
     // dialect and session its types keep internal.
@@ -3212,6 +3218,14 @@ const make = async (path: string): Promise<DbShape> => {
       { migrationsFolder: MIGRATIONS_DIR }
     );
     mergeProjectPages(db.$client);
+    dialect.migrate(
+      migrations.filter(
+        (one) => one.folderMillis < GRAPH_PLACES_MIGRATION_WHEN
+      ),
+      session,
+      { migrationsFolder: MIGRATIONS_DIR }
+    );
+    dropGraphPlaces(db.$client);
     dialect.migrate(migrations, session, { migrationsFolder: MIGRATIONS_DIR });
   } finally {
     rmSync(migrating, { force: true });

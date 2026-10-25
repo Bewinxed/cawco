@@ -2164,6 +2164,13 @@
       "when": 1792912372335,
       "tag": "0316_task_index_agreed_todos",
       "breakpoints": true
+    },
+    {
+      "idx": 317,
+      "version": "6",
+      "when": 1792915298473,
+      "tag": "0317_drop_graph_places",
+      "breakpoints": true
     }
   ]
 }

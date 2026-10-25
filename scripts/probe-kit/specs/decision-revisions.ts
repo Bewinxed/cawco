@@ -33,8 +33,14 @@
  *     (rollout's `after`, pricing's `unlocks`).
  * (f) A later session's create of the page's name in the project is a
  *     revision of that page: the same artifact, its picks kept.
+ * (h) An old drag of the decision graph's, kept in a sent page's state under
+ *     `graph.places` after its send, reads the page as not sent; migration
+ *     0317, run again by a hub start that finds it unapplied, takes it out:
+ *     the page reads as sent, its pick kept, its state (what artifact_read's
+ *     value lines list) holds no `graph.places`, and no change row names it.
  */
 import type { Page } from "playwright-core";
+import { GRAPH_PLACES_MIGRATION_WHEN } from "../../../packages/hub/src/db/drop-graph-places";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -114,6 +120,7 @@ interface Broken {
 interface ListRead {
   pages: {
     after: { name: string; title: string }[];
+    artifactId: string | null;
     cards: number;
     name: string;
     picked: number;
@@ -446,6 +453,81 @@ const run = async (kit: Kit) => {
       owner: owner ?? null,
       pages: pages?.n,
       shape: reread?.state.shape ?? null,
+    })
+  );
+
+  // (h) The rollout picked and sent; then a drag of the graph's kept after the send.
+  const rolloutId =
+    (await listOf()).pages.find((each) => each.name === "rollout")
+      ?.artifactId ?? "";
+  const patch = (body: unknown) =>
+    fetch(`${fleet.base}${at(later)}/${rolloutId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ patch: body }),
+    });
+  const standing = () =>
+    fleet
+      .api<{ state: string }>(`/api/projects/${projectId}/decisions/rollout`)
+      .then((read) => read.state);
+  const pickedGo = await patch([
+    { op: "add", path: "/go", value: { options: ["ship"], note: "" } },
+  ]);
+  await fleet.api(`/api/projects/${projectId}/decisions/rollout/send`, {});
+  const sentFirst = await standing();
+  const dragged = await patch([
+    {
+      op: "add",
+      path: "/graph.places",
+      value: { options: [], note: "", value: { go: { x: 640, y: 320 } } },
+    },
+  ]);
+  const drifted = await standing();
+  const seeded = await fleet.api<Read>(`${at(later)}/${rolloutId}`);
+  kit.check(
+    "(h) seeded: a sent page whose state takes a graph.places entry after its send reads as not sent",
+    pickedGo.ok &&
+      dragged.ok &&
+      sentFirst === "sent" &&
+      drifted === "picking" &&
+      "graph.places" in seeded.state,
+    JSON.stringify({
+      picked: pickedGo.status,
+      dragged: dragged.status,
+      sentFirst,
+      drifted,
+      keys: Object.keys(seeded.state),
+    })
+  );
+  // The hub stopped, 0317 marked unapplied, the hub started: it runs again.
+  await fleet.stop("hub");
+  fleet.write(
+    "DELETE FROM __drizzle_migrations WHERE created_at = ?",
+    GRAPH_PLACES_MIGRATION_WHEN
+  );
+  fleet.launch("hub");
+  await fleet.hubUp();
+  const migrated = await standing();
+  const cleaned = await fleet.api<Read>(`${at(later)}/${rolloutId}`);
+  const [applied] = fleet.query<{ n: number }>(
+    "SELECT count(*) AS n FROM __drizzle_migrations WHERE created_at = ?",
+    GRAPH_PLACES_MIGRATION_WHEN
+  );
+  const [changeRows] = fleet.query<{ n: number }>(
+    "SELECT count(*) AS n FROM artifact_changes WHERE key = 'graph.places'"
+  );
+  kit.check(
+    "(h) migration 0317 takes graph.places out: the page reads as sent, its pick kept, its state holds no graph.places, no change row names it",
+    migrated === "sent" &&
+      !("graph.places" in cleaned.state) &&
+      JSON.stringify(cleaned.state.go?.options) === JSON.stringify(["ship"]) &&
+      applied?.n === 1 &&
+      changeRows?.n === 0,
+    JSON.stringify({
+      migrated,
+      keys: Object.keys(cleaned.state),
+      applied: applied?.n,
+      changeRows: changeRows?.n,
     })
   );
 };
