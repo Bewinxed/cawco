@@ -85,18 +85,37 @@ export const CANVAS_EMBED_SIZE = "cawco:embed-size";
 export const EMBED_WORDS = "cawco:embed-words";
 
 /**
- * A canvas embed's whole module graph has arrived (every `modulepreload`
- * its page carried answered), the message it posts to the page holding it,
- * `{ type }`, before it has evaluated and drawn: the page may let the next
- * embed fetch while this one evaluates (dashboard decisions host
- * embed-turns.ts).
+ * A canvas embed's module graph, before it fetches any of it: the message
+ * it posts to the page holding it as its page is read, `{ type, urls }`,
+ * each module's absolute address. It fetches nothing of it until the page
+ * answers {@link CANVAS_EMBED_GO}, and loads its stories on
+ * {@link CANVAS_EMBED_READY} (dashboard decisions host embed-turns.ts: a
+ * page's embeds fetch together, each module asked of the network once).
+ */
+export const CANVAS_EMBED_GRAPH = "cawco:embed-graph";
+
+/** The page's answer to {@link CANVAS_EMBED_GRAPH}, `{ type, urls }`: the embed's share of its graph, the modules it fetches now (absolute addresses; none where others fetch them all). */
+export const CANVAS_EMBED_GO = "cawco:embed-go";
+
+/** The page's word once every module of an embed's graph has arrived in one of its frames, `{ type, urls }`: the rest of its graph, which it loads from the cache, then its stories. */
+export const CANVAS_EMBED_READY = "cawco:embed-ready";
+
+/**
+ * A canvas embed's share of its graph has arrived (every `modulepreload` of
+ * it answered; on a page of its own, its whole graph), the message it posts
+ * to the page holding it, `{ type }`: those modules are the page's now, so
+ * another embed asking for them asks the network for none (dashboard
+ * decisions host embed-turns.ts).
  */
 export const CANVAS_EMBED_FETCHED = "cawco:embed-fetched";
 
-/** The canvas page's count of its graph's preloads (stage-host host.ts `serveCanvas`), read by the runtime. */
+/** The canvas page's count of its preloads (stage-host host.ts `serveCanvas`), read by the runtime. */
 export interface CanvasGraph {
+  /** Its share's preloads: the whole graph on a page of its own, the page's {@link CANVAS_EMBED_GO} in a Preview (unknown until then). */
   asked: number;
   done: number;
+  /** Settles once the page may load its stories: at once on a page of its own, on {@link CANVAS_EMBED_READY} in a Preview. */
+  go: Promise<void>;
   whole: boolean;
 }
 /** The event the canvas page dispatches once every preload of its graph answered. */

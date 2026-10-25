@@ -54,6 +54,9 @@ import { parse } from "@babel/parser";
 import { hostEnvironment } from "@cawco/core/session-env";
 import {
   AS_PAGE,
+  CANVAS_EMBED_GO,
+  CANVAS_EMBED_GRAPH,
+  CANVAS_EMBED_READY,
   CANVAS_GRAPH_FETCHED,
   CANVAS_PATH,
   CANVAS_PLAN_ID,
@@ -1149,11 +1152,33 @@ const json = (res: ServerResponse, status: number, body: unknown) => {
  * and `error` reach it in their capture phase), never by a handler of its
  * own: a handler attribute is a script the frame compiles, 665 of them for
  * a 665-module graph.
+ *
+ * A Preview's page (`embed`, framed) asks for none of its graph until the
+ * page holding it says so (dashboard decisions host embed-turns.ts: a
+ * page's embeds fetch together, each module asked of the network once): it
+ * tells that page every module's address (core `CANVAS_EMBED_GRAPH`),
+ * preloads its share on `CANVAS_EMBED_GO` (counted as above: its `asked`),
+ * and the rest of its graph, which another frame's fetch has put in the
+ * renderer's cache, on `CANVAS_EMBED_READY`, which settles the graph's `go`
+ * (the runtime loads its stories after it). Any other page, or one opened
+ * on its own, preloads its graph as it is read.
  */
-const graphPreloads = (urls: string[]): string =>
-  `<script>(function(){var g=window.__cawcoGraph={asked:${urls.length},done:0,whole:false};function heard(e){var t=e.target;if(!(t instanceof HTMLLinkElement&&t.rel==="modulepreload"))return;g.done+=1;if(!g.whole&&g.done>=g.asked){g.whole=true;document.removeEventListener("load",heard,true);document.removeEventListener("error",heard,true);dispatchEvent(new Event(${JSON.stringify(CANVAS_GRAPH_FETCHED)}))}}document.addEventListener("load",heard,true);document.addEventListener("error",heard,true)})();</script>${urls
-    .map((url) => `<link rel="modulepreload" href="${escapeAttr(url)}">`)
-    .join("")}`;
+const graphPreloads = (urls: string[], embed: boolean, key: string): string => {
+  const count = `var g=window.__cawcoGraph={asked:${urls.length},done:0,whole:false,go:null};function check(){if(!g.whole&&g.done>=g.asked){g.whole=true;document.removeEventListener("load",heard,true);document.removeEventListener("error",heard,true);dispatchEvent(new Event(${JSON.stringify(CANVAS_GRAPH_FETCHED)}))}}function heard(e){var t=e.target;if(!(t instanceof HTMLLinkElement&&t.rel==="modulepreload"))return;g.done+=1;check()}document.addEventListener("load",heard,true);document.addEventListener("error",heard,true);`;
+  if (!embed) {
+    return `<script>(function(){${count}g.go=Promise.resolve()})();</script>${urls
+      .map((url) => `<link rel="modulepreload" href="${escapeAttr(url)}">`)
+      .join("")}`;
+  }
+  // At the page's key, as `keyedPage` keys its tags (the modules' own imports ask for them so); JSON in a script element: no `<` closes it early.
+  const list = JSON.stringify(urls.map((url) => keyedUrl(url, key))).replaceAll(
+    "<",
+    "\\u003c"
+  );
+  const go = JSON.stringify(CANVAS_EMBED_GO);
+  const ready = JSON.stringify(CANVAS_EMBED_READY);
+  return `<script>(function(){var u=${list};${count}function preload(list){var f=document.createDocumentFragment();list.forEach(function(x){var l=document.createElement("link");l.rel="modulepreload";l.href=x;f.appendChild(l)});document.head.appendChild(f)}g.go=new Promise(function(go){if(window.parent===window){preload(u);go();return}addEventListener("message",function hear(e){var d=e.data;if(e.source!==window.parent||!d||!Array.isArray(d.urls))return;if(d.type===${go}){g.asked=d.urls.length;preload(d.urls);check()}else if(d.type===${ready}){removeEventListener("message",hear);preload(d.urls);go()}});window.parent.postMessage({type:${JSON.stringify(CANVAS_EMBED_GRAPH)},urls:u.map(function(x){return new URL(x,location.href).href})},"*")})})();</script>`;
+};
 
 /** The canvas's page, through the project's own HTML transforms. */
 async function serveCanvas(
@@ -1167,9 +1192,11 @@ async function serveCanvas(
     const files = asked.getAll("file");
     // JSON in a script element: no `<` closes it early.
     const plan = JSON.stringify(planOf(files)).replaceAll("<", "\\u003c");
-    const preloads = graphPreloads(
-      await settledClosureOf(dev, files, asked.get("by") === "embed")
-    );
+    const embed = asked.get("by") === "embed";
+    const urls = await settledClosureOf(dev, files, embed);
+    // One key for the page's tags and its graph's list, read once its graph has settled.
+    const key = generationOf(dev);
+    const preloads = graphPreloads(urls, embed, key);
     const html = keyedPage(
       await dev.transformIndexHtml(
         req.url ?? CANVAS_PATH,
@@ -1179,7 +1206,7 @@ async function serveCanvas(
         ),
         (req as IncomingMessage & { originalUrl?: string }).originalUrl
       ),
-      generationOf(dev)
+      key
     );
     res.setHeader("content-type", "text/html");
     res.setHeader("cache-control", "no-store");

@@ -182,6 +182,12 @@ const freePort = async (): Promise<number> => {
   return port;
 };
 
+/** A certificate and its key, as Bun's `tls` takes them (cloudflare-front.ts `scratchCertificate`). */
+export interface Pair {
+  cert: string;
+  key: string;
+}
+
 interface Socket {
   path: string;
   protocols?: string[];
@@ -216,15 +222,21 @@ async function overlayAnswer(
  * With `latencyMs`, each answer from the stage waits that long first, as
  * the hops between the owner's browser and a stage hold each request (some
  * 350 ms through the hub's preview proxy, stage-host host.ts `closureOf`).
+ * With `tls`, it answers HTTPS and speaks HTTP/2 to a browser that offers
+ * it, as the hub's preview origin does on the tailnet (hub preview.ts: one
+ * connection carries a canvas's whole graph at once, where HTTP/1.1 queues
+ * it six at a time); its sockets stay on HTTP/1.1.
  */
 export function embedOrigin(
   stage: number,
   overlaid: (() => readonly string[]) | null = null,
-  latencyMs = 0
+  latencyMs = 0,
+  tls: Pair | null = null
 ) {
   return Bun.serve<Socket>({
     hostname: "127.0.0.1",
     port: 0,
+    ...(tls ? { tls, http2: true } : {}),
     async fetch(request, server) {
       const url = new URL(request.url);
       if (url.pathname === "/__cawco/ping") {
@@ -384,7 +396,9 @@ function decisionPage(
  * serves a decision page, and its Previews embed through an origin that
  * gives every page the overlay, as a machine's preview proxy does: such a
  * page needs no `CAWCO_BRIDGE`, the overlay being its bridge. Each answer
- * of the embed origin waits `latencyMs` (`embedOrigin`).
+ * of the embed origin waits `latencyMs` (`embedOrigin`). With `tls`, the
+ * pages and the embed origin answer HTTPS over HTTP/2, as the hub's do on
+ * the tailnet (a page opened on them needs `ignoreHTTPSErrors`).
  * Answers once the stage says it is ready.
  */
 export async function startDecisionStage(
@@ -393,8 +407,10 @@ export async function startDecisionStage(
   project: StageProject = { root: APP, kit: true },
   pages: Readonly<Record<string, string>> = {},
   overlaid: ReadonlySet<string> = new Set(),
-  latencyMs = 0
+  latencyMs = 0,
+  tls: Pair | null = null
 ): Promise<DecisionStage> {
+  const scheme = tls ? "https" : "http";
   const host = join(project.root, ".cawco/stage/host.mjs");
   mkdirSync(join(project.root, ".cawco/stage"), { recursive: true });
   writeFileSync(host, await buildStageHost());
@@ -417,11 +433,13 @@ export async function startDecisionStage(
   };
   stage.stdout.on("data", hear);
   stage.stderr.on("data", hear);
-  const embedHost = embedOrigin(stagePort, null, latencyMs);
+  const embedHost = embedOrigin(stagePort, null, latencyMs, tls);
   /** The decision pages' origin: the one an overlaid embed's overlay is framed from. */
   const parents: string[] = [];
   const overlaidHost =
-    overlaid.size > 0 ? embedOrigin(stagePort, () => parents, latencyMs) : null;
+    overlaid.size > 0
+      ? embedOrigin(stagePort, () => parents, latencyMs, tls)
+      : null;
   const picking = await pickWiring();
   /** The shapes Previews told, by canvas id, served in every page's media after. */
   const said = new Map<string, Record<string, EmbedShape>>();
@@ -431,12 +449,13 @@ export async function startDecisionStage(
     : () => Promise.resolve(null);
   const pageOf = (name: string, program: string, theme: string) => {
     const on = overlaidHost !== null && overlaid.has(name);
-    const embedAt = `http://127.0.0.1:${on ? overlaidHost.port : embedHost.port}`;
+    const embedAt = `${scheme}://127.0.0.1:${on ? overlaidHost.port : embedHost.port}`;
     return decisionPage(program, { files, pages, embedAt, said, theme }, on);
   };
   const served = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
+    ...(tls ? { tls, http2: true } : {}),
     async fetch(request) {
       const { pathname } = new URL(request.url);
       const script = await answerOverlay(request);
@@ -482,7 +501,7 @@ export async function startDecisionStage(
       return pageOf(String(name), program, theme);
     },
   });
-  parents.push(`http://127.0.0.1:${served.port}`);
+  parents.push(`${scheme}://127.0.0.1:${served.port}`);
   const stop = async () => {
     await served.stop(true);
     await embedHost.stop(true);
@@ -503,7 +522,7 @@ export async function startDecisionStage(
   return {
     stagePort,
     pageUrl: (name, theme) =>
-      `http://127.0.0.1:${served.port}/page/${name}/${theme}/`,
+      `${scheme}://127.0.0.1:${served.port}/page/${name}/${theme}/`,
     stop,
   };
 }

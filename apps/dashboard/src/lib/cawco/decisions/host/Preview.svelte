@@ -23,9 +23,10 @@
   when it names none) as the component alone, each at its own size, and
   says how tall it stands and how wide its widest story is (runtime.ts
   `sayShape`), so its frame is that wide and that tall; a page's canvases
-  fetch one at a time, the one in view or nearest it first, each once the
-  graph of the one before it has arrived (embed-turns.ts: together they ask
-  more than the browser takes in flight). Each stands in its well, which hugs it
+  load together, each telling its module graph before it fetches any of it,
+  fetching its share on its turn and the rest from the cache once another
+  frame fetched it, so each module is asked of the network once for the
+  page, the one in view or nearest it first (embed-turns.ts). Each stands in its well, which hugs it
   and scrolls it sideways where it is wider (Well.svelte). While a screen's
   origin is asked, the well holds its 16:10, a skeleton until the wait
   outlasts its grace; a canvas waiting its turn or loading holds its
@@ -49,6 +50,9 @@
   } from "@cawco/core/preview-reach";
   import {
     CANVAS_EMBED_FETCHED,
+    CANVAS_EMBED_GO,
+    CANVAS_EMBED_GRAPH,
+    CANVAS_EMBED_READY,
     CANVAS_EMBED_SIZE,
     canvasEmbedUrl,
     EMBED_WORDS,
@@ -211,8 +215,10 @@
     }
   }
   let watch: FrameObserver | undefined;
-  /** A component canvas's place among the page's canvases, which load one at a time (embed-turns.ts): its turn ends once it says its shape. */
+  /** A component canvas's place among the page's canvases, which fetch their graphs together (embed-turns.ts): its share is held until it arrived, else until it says its shape. */
   let turn: EmbedTurn | undefined;
+  /** Where its canvas's graph stands in the page's turns: told and waiting, fetching its share on its turn, or its share fetched whole. */
+  let turnState = $state<"waiting" | "fetching" | "fetched">("waiting");
 
   /**
    * The shape its canvas said, told beside the page's own address (hub
@@ -240,6 +246,7 @@
         height?: unknown;
         least?: unknown;
         type?: unknown;
+        urls?: unknown;
         width?: unknown;
       } | null;
       if (event.source !== frame?.contentWindow) {
@@ -254,9 +261,15 @@
         words = said.least;
         return;
       }
-      // Its graph arrived: the next canvas fetches while this one evaluates and draws.
+      // Its graph, told before it fetches any of it: it fetches on its turn.
+      if (said?.type === CANVAS_EMBED_GRAPH && Array.isArray(said.urls)) {
+        turn?.graph(said.urls.map(String));
+        return;
+      }
+      // Its share arrived: those modules are the page's, and the budget they held is free.
       if (said?.type === CANVAS_EMBED_FETCHED) {
-        turn?.done();
+        turnState = "fetched";
+        turn?.fetched();
         return;
       }
       if (said?.type === CANVAS_EMBED_SIZE && typeof said.height === "number") {
@@ -411,13 +424,31 @@
       }
     };
     asking = true;
+    // A canvas fetches its graph on its turn among the page's canvases, the one in view first (embed-turns.ts); it takes its place now, as it mounts, so every Preview of the page is in the queue before the first turn, and its frame loads meanwhile, its skeleton standing.
+    if (canvas) {
+      turnState = "waiting";
+      const mine = embedTurn(() => box);
+      turn = mine;
+      const tell = (type: string, urls: string[]) =>
+        frame?.contentWindow?.postMessage(
+          { type, urls },
+          new URL(address).origin
+        );
+      mine.granted.then((share) => {
+        if (gone) {
+          return;
+        }
+        turnState = "fetching";
+        tell(CANVAS_EMBED_GO, share);
+      });
+      mine.ready.then((rest) => {
+        if (!gone) {
+          tell(CANVAS_EMBED_READY, rest);
+        }
+      });
+    }
     (async () => {
-      // A canvas loads in its turn among the page's canvases, the one in view first (embed-turns.ts); its skeleton stands meanwhile.
-      if (canvas) {
-        turn = embedTurn(() => box);
-        await turn.granted;
-      }
-      const why = gone ? null : await reached();
+      const why = await reached();
       if (gone) {
         return;
       }
@@ -590,9 +621,12 @@
               data-drawn={drawn || undefined}
               data-shape={shape}
               data-slot="embed"
+              data-turn={screen ? undefined : turnState}
               data-words={words ?? undefined}
               onload={() => {
                 drawn = true;
+                // A page that told no graph by its load has none to fetch (a stage's error page): it holds no turn.
+                turn?.graph([]);
               }}
               src={ready}
               style:--frame-scale={scaled ? String(scale) : undefined}

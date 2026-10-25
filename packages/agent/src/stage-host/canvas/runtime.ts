@@ -599,8 +599,19 @@ export function boot(options: BootOptions): void {
     return pageGround;
   };
   let rewriting = false;
-  new MutationObserver(() => {
-    if (rewriting) {
+  /** A change that only adds an embed's module preloads on its turn (host.ts `graphPreloads`): it brings no sheet, so nothing is rewritten. */
+  const preloadsOnly = (changes: MutationRecord[]) =>
+    changes.every(
+      (change) =>
+        change.type === "childList" &&
+        change.removedNodes.length === 0 &&
+        [...change.addedNodes].every(
+          (node) =>
+            node instanceof HTMLLinkElement && node.rel === "modulepreload"
+        )
+    );
+  new MutationObserver((changes) => {
+    if (rewriting || preloadsOnly(changes)) {
       return;
     }
     rewriting = true;
@@ -1367,9 +1378,10 @@ export function boot(options: BootOptions): void {
   /**
    * The page holding an embed hears its whole graph arrived (core
    * `CANVAS_EMBED_FETCHED`), once its page's preloads have all answered,
-   * before it is evaluated and drawn: the next embed may fetch meanwhile
-   * (dashboard decisions host embed-turns.ts). Every page the stage serves
-   * carries its graph (host.ts `closureOf`).
+   * before it is evaluated and drawn: its modules are the page's now, and
+   * the budget they held is free for the embeds still waiting (dashboard
+   * decisions host embed-turns.ts). Every page the stage serves carries its
+   * graph (host.ts `closureOf`).
    */
   function tellGraphFetched(): void {
     const graph = (window as unknown as { __cawcoGraph: CanvasGraph })
@@ -1398,8 +1410,8 @@ export function boot(options: BootOptions): void {
    * 760px. Its height read here lays it out, rendering steps or none.
    *
    * Said once every section has drawn or says why it didn't, never of its
-   * stand-ins: the page holding it loads its canvases one at a time, the
-   * next when this one has said its shape (dashboard decisions host
+   * stand-ins: the page holding it ends this embed's turn at its shape
+   * where it said no graph arrived (dashboard decisions host
    * embed-turns.ts), and a shape said at boot, 0.6 s in with no frame
    * drawn, let the next start while this one still fetched its graph; a
    * page of 33 such Previews had ten say "didn't load".
@@ -1723,6 +1735,11 @@ export function boot(options: BootOptions): void {
     }
     pumping = true;
     try {
+      // An embed's stories wait until the page holding it says its whole graph is in the renderer (host.ts `graphPreloads`, core `CANVAS_EMBED_READY`): imported before, they would ask the network again for modules another frame is still fetching.
+      if (embed) {
+        await (window as unknown as { __cawcoGraph: CanvasGraph }).__cawcoGraph
+          .go;
+      }
       for (const section of sections) {
         if (section.loaded) {
           continue;

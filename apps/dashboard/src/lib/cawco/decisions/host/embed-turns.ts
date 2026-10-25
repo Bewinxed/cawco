@@ -1,46 +1,81 @@
 /**
- * A page's component canvases load one at a time (Preview.svelte), the one
- * in view, or nearest to it, first.
+ * A page's component canvases fetch their module graphs together, each
+ * module asked of the network once for the whole page (Preview.svelte).
  *
  * Each canvas embed asks for its whole module graph at once (stage-host
- * host.ts `closureOf`: every module a `modulepreload`, 626 for the pairing
- * canvas), and every embed of a page stands in one renderer process: the
+ * host.ts `closureOf`: every module a `modulepreload`, 666 for the Needs you
+ * card), and every embed of a page stands in one renderer process: the
  * hub's host is one site whatever the port. Chromium caps a process's
  * requests in flight at 2,700 (services/network/network_context.h,
  * `kMaxOutstandingRequestsPerProcess = 2700`) and fails each past it with
  * `net::ERR_INSUFFICIENT_RESOURCES`: twelve Previews of the pairing canvas
  * asked for some 7,500 modules at once, six said "Pairing didn't load" (the
- * section's import refused) and five never drew (their entry's). One at a
- * time, every embed after the first of a canvas reads the modules the first
- * kept (host.ts `KEPT`, `immutable`).
+ * section's import refused) and five never drew (their entry's). Five
+ * canvases of the dashboard, each asking its whole graph at once, failed the
+ * same way (canvas-parallel), and the stage served 1,726 modules where they
+ * hold 869 between them: a module two frames ask for at once is fetched
+ * twice. One at a time, a page of five drew its last 5.6 s in where one
+ * alone drew at 1.3 s (the owner's dashboard, 2026-10-25).
  *
- * Each next turn goes to the waiting embed whose place is nearest the view
- * as the page stands then (in view first, top to bottom), so a page scrolled
- * to its middle draws what the person sees before what is above or below,
- * and a scroll while they wait moves the next turn with it. The first turn
- * is given once the page's Previews have all asked (a task after the first
- * ask), so it goes by place too, not to whichever asked first.
+ * A module one frame of the page has fetched whole, the renderer answers to
+ * every other frame from its memory cache, asking the network for none (a
+ * second Preview of the Needs you card: 667 of its 667 `requestServedFromCache`,
+ * the stage serving none of them). So:
  *
- * A turn ends when its embed says its whole graph arrived (core
- * `CANVAS_EMBED_FETCHED`: one graph in flight at a time, the next fetching
- * while this one evaluates on the page's one main thread), else when it says
- * its shape (it drew, or says why it didn't), when its Preview goes, or
- * after {@link TURN_MS}, so a canvas that never answers holds the rest no
- * longer than that.
+ * - every embed is given its address at once, and its page tells its graph
+ *   before it fetches any of it (core `CANVAS_EMBED_GRAPH`);
+ * - on its turn it fetches its share (`CANVAS_EMBED_GO` with the modules):
+ *   the modules of its graph no embed has fetched or is fetching;
+ * - once every module of its graph has arrived, in its frame or another's,
+ *   it loads the rest from the cache and draws (`CANVAS_EMBED_READY`).
+ *
+ * The requests in flight are then the modules of the page's graphs, each
+ * once: 869 for all 21 of the dashboard's states files (4,123 asked one
+ * frame at a time). Turns are given while the shares fetching hold
+ * {@link BUDGET} at most; a share past it alone is fetched alone.
+ *
+ * Turns go nearest the view first, as the page stands then (in view first,
+ * top to bottom), so a page scrolled to its middle fetches what the person
+ * sees before what is above or below; an embed whose graph is not told yet
+ * holds those after it, so none farther goes ahead of it. The first turns
+ * are given once the page's Previews have all asked (a task after the first
+ * ask), so they go by place too, not to whichever asked first.
+ *
+ * An embed's share is held until it says its share arrived (core
+ * `CANVAS_EMBED_FETCHED`), else until it says its shape, its Preview goes,
+ * or {@link TURN_MS} passes; a share let go that way no longer holds the
+ * embeds that wait on it, which fetch those modules themselves.
  */
 
-/** How long one embed holds the page's turn at most. Our call. */
+/** The modules the shares fetching at once may hold in flight: Chromium's 2,700 less room for the page's own requests and each embed's entry, which loads before its turn. Our call. */
+const BUDGET = 2000;
+
+/** How long one embed holds its share at most. Our call. */
 const TURN_MS = 20_000;
 
-interface Waiting {
+interface Asked {
+  /** Its graph, each module's address, once its page told it. */
+  graph: readonly string[] | null;
   /** Where its picture stands on the page, when it stands anywhere. */
   place: () => Element | null | undefined;
-  start: () => void;
+  /** Its graph's modules, beyond its share, once none is still fetched by another: it loads them from the cache now. */
+  ready: (rest: string[]) => void;
+  /** The modules it fetches itself, once its turn came. */
+  share: ReadonlySet<string>;
+  /** Its turn, with its share. */
+  start: (share: string[]) => void;
 }
 
 /** The embeds waiting for their turn. */
-const waiting: Waiting[] = [];
-let loading = false;
+const waiting: Asked[] = [];
+/** Each embed fetching its share now, and its share. */
+const fetching = new Map<Asked, readonly string[]>();
+/** The embeds given their turn whose graph still waits on modules another fetches. */
+const unready = new Set<Asked>();
+/** Every module an embed of this page has fetched whole: the renderer answers it from its cache. */
+const kept = new Set<string>();
+/** Every module an embed's share is fetching now. */
+const flying = new Set<string>();
 let pending = false;
 
 /** The part of the window `el` is seen through, top and bottom: its nearest scroller's box (a decision page scrolls its cards in its own, Decisions.svelte `page-scroll`), inside the window's. */
@@ -60,7 +95,7 @@ function viewOf(el: Element): { bottom: number; top: number } {
 }
 
 /** How far a place stands from the view, px (0 inside it), then how far down: the nearest first, top to bottom. */
-function rank(one: Waiting): [number, number] {
+function rank(one: Asked): [number, number] {
   const el = one.place();
   if (!el) {
     return [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY];
@@ -76,8 +111,8 @@ function rank(one: Waiting): [number, number] {
   return [away, box.top];
 }
 
-const nearest = (): Waiting | undefined => {
-  let best: Waiting | undefined;
+const nearest = (): Asked | undefined => {
+  let best: Asked | undefined;
   let bestRank: [number, number] = [
     Number.POSITIVE_INFINITY,
     Number.POSITIVE_INFINITY,
@@ -96,19 +131,61 @@ const nearest = (): Waiting | undefined => {
   return best;
 };
 
-const next = () => {
-  if (loading) {
-    return;
-  }
-  const one = nearest();
-  if (one) {
-    waiting.splice(waiting.indexOf(one), 1);
-    loading = true;
-    one.start();
+/** Each embed given its turn whose graph no share fetches any more is told to load the rest of it. */
+const readyNow = () => {
+  for (const one of unready) {
+    const share = fetching.get(one);
+    if (share || (one.graph ?? []).some((url) => flying.has(url))) {
+      continue;
+    }
+    unready.delete(one);
+    one.ready((one.graph ?? []).filter((url) => !one.share.has(url)));
   }
 };
 
-/** The next turn given a task later: once every Preview mounting now has asked, or once the page has laid out what the last turn drew. */
+/**
+ * Turns to the nearest waiting embeds while the budget holds what they ask
+ * between them; one whose graph is not told yet holds the rest. Those given
+ * their turn together take their shares smallest graph first, so a small
+ * graph is its own embed's to fetch, arrives first and draws while the
+ * larger ones still fetch, the page's one main thread busy meanwhile.
+ */
+const next = () => {
+  const asking = new Set(flying);
+  const batch: Asked[] = [];
+  for (let one = nearest(); one?.graph; one = nearest()) {
+    const fresh = one.graph.filter(
+      (url) => !(kept.has(url) || asking.has(url))
+    );
+    if (
+      fetching.size + batch.length > 0 &&
+      asking.size + fresh.length > BUDGET
+    ) {
+      break;
+    }
+    waiting.splice(waiting.indexOf(one), 1);
+    for (const url of fresh) {
+      asking.add(url);
+    }
+    batch.push(one);
+  }
+  batch.sort((a, b) => (a.graph?.length ?? 0) - (b.graph?.length ?? 0));
+  for (const one of batch) {
+    const share = (one.graph ?? []).filter(
+      (url) => !(kept.has(url) || flying.has(url))
+    );
+    fetching.set(one, share);
+    unready.add(one);
+    for (const url of share) {
+      flying.add(url);
+    }
+    one.share = new Set(share);
+    one.start(share);
+  }
+  readyNow();
+};
+
+/** The next turns given a task later: once every Preview mounting now has asked, or once the page has laid out what the last turn drew. */
 const soon = () => {
   if (pending) {
     return;
@@ -123,38 +200,85 @@ const soon = () => {
 export interface EmbedTurn {
   /** Ends the turn, or takes it out of the queue before it came: once, later calls do nothing. */
   done: () => void;
-  /** Settles when it is this embed's turn to load. */
-  granted: Promise<void>;
+  /** Its share arrived whole (core `CANVAS_EMBED_FETCHED`): those modules are the page's, and the budget they held is free. */
+  fetched: () => void;
+  /** Settles on its turn, with its share: the modules it fetches (core `CANVAS_EMBED_GO`). */
+  granted: Promise<string[]>;
+  /** Its graph as its page told it (core `CANVAS_EMBED_GRAPH`), each module's address; the first told counts, and a page that tells none answers `[]`. */
+  graph: (urls: readonly string[]) => void;
+  /** Settles once no module of its graph is fetched by another, with the rest of its graph: it loads them and draws (core `CANVAS_EMBED_READY`). */
+  ready: Promise<string[]>;
 }
 
 /** A place in the page's queue of canvas embeds, for the picture standing at `place`. */
 export function embedTurn(place: () => Element | null | undefined): EmbedTurn {
-  let state: "waiting" | "loading" | "done" = "waiting";
+  let state: "waiting" | "fetching" | "done" = "waiting";
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const asked: Waiting = { place, start: () => undefined };
+  let tellReady: (rest: string[]) => void = () => undefined;
+  const ready = new Promise<string[]>((resolve) => {
+    tellReady = resolve;
+  });
+  const asked: Asked = {
+    graph: null,
+    place,
+    share: new Set(),
+    ready: (rest) => tellReady(rest),
+    start: () => undefined,
+  };
+  /** Its share no longer held: arrived (`kept`), or let go for whoever needs it to fetch itself. */
+  const letGo = (arrived: boolean) => {
+    clearTimeout(timer);
+    for (const url of fetching.get(asked) ?? []) {
+      flying.delete(url);
+      if (arrived) {
+        kept.add(url);
+      }
+    }
+    fetching.delete(asked);
+    readyNow();
+    // A task later: the page laid out again by then, the nearest is judged where the pictures now stand.
+    soon();
+  };
   const done = () => {
-    if (state === "loading") {
-      clearTimeout(timer);
-      loading = false;
-      state = "done";
-      // A task later: the shape just said has laid the page out again by then, so the nearest is judged where the pictures now stand.
-      soon();
+    if (state === "fetching" && fetching.has(asked)) {
+      letGo(false);
     } else if (state === "waiting") {
-      state = "done";
       const at = waiting.indexOf(asked);
       if (at >= 0) {
         waiting.splice(at, 1);
       }
+      // It may have held those after it, its graph untold.
+      soon();
+    }
+    unready.delete(asked);
+    state = "done";
+  };
+  const fetched = () => {
+    if (state === "fetching" && fetching.has(asked)) {
+      letGo(true);
     }
   };
-  const granted = new Promise<void>((resolve) => {
-    asked.start = () => {
-      state = "loading";
-      timer = setTimeout(done, TURN_MS);
-      resolve();
+  const graph = (urls: readonly string[]) => {
+    if (asked.graph !== null) {
+      return;
+    }
+    asked.graph = urls;
+    if (state === "waiting") {
+      soon();
+    }
+  };
+  const granted = new Promise<string[]>((resolve) => {
+    asked.start = (share) => {
+      state = "fetching";
+      timer = setTimeout(() => {
+        if (fetching.has(asked)) {
+          letGo(false);
+        }
+      }, TURN_MS);
+      resolve(share);
     };
   });
   waiting.push(asked);
   soon();
-  return { done, granted };
+  return { done, fetched, graph, granted, ready };
 }
