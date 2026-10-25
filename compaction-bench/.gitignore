@@ -1,0 +1,3 @@
+# Transcripts, runs, judgments and the ledger never leave the host.
+out/
+__pycache__/

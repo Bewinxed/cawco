@@ -1,0 +1,230 @@
+{
+ "delegate": [
+  {
+   "name": "generate_image",
+   "description": "Generate one PNG, or a reference-guided edit, on the owner's ChatGPT subscription whatever model or harness calls it: the machine's OpenCode ChatGPT login, never API-key billing or another provider"
+  },
+  {
+   "name": "list_delegate_types",
+   "description": "The live delegate catalog, the one a named delegate's dispatch reads: each type's task description, harness, model, effort, skills, denied tools and whether it may delegate"
+  },
+  {
+   "name": "list_sessions",
+   "description": "The other sessions on the fleet, each with the directory and machine it works in, then the machines online now by the names `machine` takes on delegate and start_session"
+  },
+  {
+   "name": "handoff",
+   "description": "Send a message to another session on the fleet: guide one of your delegates while its work item runs, or brief a session that already owns the work"
+  },
+  {
+   "name": "wait_item",
+   "description": "Declare a bounded wait on a command you started, then end your turn"
+  },
+  {
+   "name": "finish_item",
+   "description": "Finish your work item"
+  },
+  {
+   "name": "send_to_user",
+   "description": "Show the user a message on their Telegram: progress, partial results, or content they must see exactly as written before the task finishes"
+  },
+  {
+   "name": "open_items",
+   "description": "Your open items, word for word, as every compaction lists them."
+  },
+  {
+   "name": "set_title",
+   "description": "Name this session in 3 to 6 plain words, verb first if it is a task (e.g"
+  },
+  {
+   "name": "show_image",
+   "description": "Show an image file to the user inline in this session's transcript, by path"
+  },
+  {
+   "name": "artifact_list",
+   "description": "Your artifacts (a lead: its project's too), newest first: shown, opened, open pins, unread changes, picks, and `waitingOn` person or session"
+  },
+  {
+   "name": "artifact_create",
+   "description": "Make an artifact and open it in your panel"
+  },
+  {
+   "name": "artifact_update",
+   "description": "Change one of your artifacts in place"
+  },
+  {
+   "name": "artifact_read",
+   "description": "Read the person's picks, notes and values on one of your artifacts, each with the page hash it was made on"
+  },
+  {
+   "name": "components_list",
+   "description": "Your workspace's components a sheet can show, and each one's story files."
+  },
+  {
+   "name": "artifact_show",
+   "description": "Bring one of your artifacts to the front of your panel for the person to look at again"
+  },
+  {
+   "name": "artifact_promote",
+   "description": "Keep an artifact worth keeping with your project: commits it to artifacts/<name>/ in the project's folder, which outlives this session"
+  },
+  {
+   "name": "artifact_delete",
+   "description": "Remove an artifact of yours a newer one superseded, once that one is up"
+  },
+  {
+   "name": "comment_read",
+   "description": "Read the person's pins on your artifacts: each numbered, its anchor (selector, file:line, text, ink box), its thread"
+  },
+  {
+   "name": "comment_reply",
+   "description": "Answer a pin in its thread on the page"
+  },
+  {
+   "name": "comment_resolve",
+   "description": "Resolve a pin once your change answers it, with a last line when it helps"
+  },
+  {
+   "name": "task_read",
+   "description": "Your project's tasks"
+  },
+  {
+   "name": "todo_write",
+   "description": "Two scopes"
+  },
+  {
+   "name": "task_comment",
+   "description": "Comment on your work item's task (a session the operator started names any): an entry with your name and the time, never changed."
+  },
+  {
+   "name": "task_result",
+   "description": "Hand in your task's work before finish_item: what you did, what to check, what you made"
+  },
+  {
+   "name": "folder_read",
+   "description": "Read a file, or list a folder (no path: the root), of your project's folder on the hub."
+  },
+  {
+   "name": "memory_note",
+   "description": "A lasting fact for this project's later sessions (a convention, command, decision, place), not a step of your task, into its inbox; the person decides what is kept."
+  },
+  {
+   "name": "design_write",
+   "description": "Write files of the project's design/ system, as the design-system skill says"
+  }
+ ],
+ "orchestrator": [
+  {
+   "name": "generate_image",
+   "description": "Generate one PNG, or a reference-guided edit, on the owner's ChatGPT subscription whatever model or harness calls it: the machine's OpenCode ChatGPT login, never API-key billing or another provider"
+  },
+  {
+   "name": "list_delegate_types",
+   "description": "The live delegate catalog, the one a named delegate's dispatch reads: each type's task description, harness, model, effort, skills, denied tools and whether it may delegate"
+  },
+  {
+   "name": "list_sessions",
+   "description": "The other sessions on the fleet, each with the directory and machine it works in, then the machines online now by the names `machine` takes on delegate and start_session"
+  },
+  {
+   "name": "handoff",
+   "description": "Send a message to another session on the fleet: guide one of your delegates while its work item runs, or brief a session that already owns the work"
+  },
+  {
+   "name": "wait_item",
+   "description": "Declare a bounded wait on a command you started, then end your turn"
+  },
+  {
+   "name": "finish_item",
+   "description": "Finish your work item"
+  },
+  {
+   "name": "send_to_user",
+   "description": "Show the user a message on their Telegram: progress, partial results, or content they must see exactly as written before the task finishes"
+  },
+  {
+   "name": "open_items",
+   "description": "Your open items, word for word, as every compaction lists them."
+  },
+  {
+   "name": "set_title",
+   "description": "Name this session in 3 to 6 plain words, verb first if it is a task (e.g"
+  },
+  {
+   "name": "show_image",
+   "description": "Show an image file to the user inline in this session's transcript, by path"
+  },
+  {
+   "name": "artifact_list",
+   "description": "Your artifacts (a lead: its project's too), newest first: shown, opened, open pins, unread changes, picks, and `waitingOn` person or session"
+  },
+  {
+   "name": "artifact_create",
+   "description": "Make an artifact and open it in your panel"
+  },
+  {
+   "name": "artifact_update",
+   "description": "Change one of your artifacts in place"
+  },
+  {
+   "name": "artifact_read",
+   "description": "Read the person's picks, notes and values on one of your artifacts, each with the page hash it was made on"
+  },
+  {
+   "name": "components_list",
+   "description": "Your workspace's components a sheet can show, and each one's story files."
+  },
+  {
+   "name": "artifact_show",
+   "description": "Bring one of your artifacts to the front of your panel for the person to look at again"
+  },
+  {
+   "name": "artifact_promote",
+   "description": "Keep an artifact worth keeping with your project: commits it to artifacts/<name>/ in the project's folder, which outlives this session"
+  },
+  {
+   "name": "artifact_delete",
+   "description": "Remove an artifact of yours a newer one superseded, once that one is up"
+  },
+  {
+   "name": "comment_read",
+   "description": "Read the person's pins on your artifacts: each numbered, its anchor (selector, file:line, text, ink box), its thread"
+  },
+  {
+   "name": "comment_reply",
+   "description": "Answer a pin in its thread on the page"
+  },
+  {
+   "name": "comment_resolve",
+   "description": "Resolve a pin once your change answers it, with a last line when it helps"
+  },
+  {
+   "name": "task_read",
+   "description": "Your project's tasks"
+  },
+  {
+   "name": "todo_write",
+   "description": "Two scopes"
+  },
+  {
+   "name": "task_comment",
+   "description": "Comment on your work item's task (a session the operator started names any): an entry with your name and the time, never changed."
+  },
+  {
+   "name": "task_result",
+   "description": "Hand in your task's work before finish_item: what you did, what to check, what you made"
+  },
+  {
+   "name": "folder_read",
+   "description": "Read a file, or list a folder (no path: the root), of your project's folder on the hub."
+  },
+  {
+   "name": "memory_note",
+   "description": "A lasting fact for this project's later sessions (a convention, command, decision, place), not a step of your task, into its inbox; the person decides what is kept."
+  },
+  {
+   "name": "design_write",
+   "description": "Write files of the project's design/ system, as the design-system skill says"
+  }
+ ]
+}
