@@ -221,6 +221,8 @@
   );
   let needsOnly = $state(false);
   let adding = $state(false);
+  /** The view strip's actions stand by their glyphs, so more views stand as tabs (ViewTabs `fold`). */
+  let actionsFold = $state(false);
   /** Moves the hub has not answered yet: the card already stands in its new column. */
   let moving = $state<Record<string, string>>({});
 
@@ -1575,6 +1577,7 @@
       hrefOf={(view) => hrefOf(null, view)}
       onchoose={choose}
       views={barViews}
+      bind:fold={actionsFold}
     />
     {#if trailing}
       <!-- Under 640px New task and Ask Caw are in the head's ⋯: the rule
@@ -1588,7 +1591,14 @@
         ]}
       ></span>
     {/if}
-    <div class="flex flex-none items-center gap-space-2">
+    <!-- The actions, whole while their words cost no tab; in their narrow
+         form, each by its glyph and count, where that stands more views
+         (ViewTabs `fold`). -->
+    <div
+      data-strip-actions
+      data-form={actionsFold ? "compact" : undefined}
+      class="flex flex-none items-center gap-space-2"
+    >
       <!-- Filter, on the views of the tasks: whole in the bar; on a phone,
            where the row has no room for it, its glyph and count stand while
            a filter does, and the head's ⋯ opens it. -->
@@ -1612,6 +1622,7 @@
       {/if}
       {#if strippedNewTask}
         <Button
+          aria-label="New task"
           data-wide
           layout="wide"
           press="pressable"
@@ -1622,23 +1633,26 @@
             adding = true;
           }}
           size="sm"
+          title={actionsFold ? "New task" : undefined}
           variant="outline"
         >
           <IconPlus />
-          <span>New task</span>
+          <span class="in-form-compact:hidden">New task</span>
         </Button>
       {/if}
       {#if canTalk}
         <Button
+          aria-label={viewsWords.ask}
           data-wide
           layout="wide"
           press="pressable"
           onclick={(event) => ask(event.currentTarget as HTMLElement)}
           size="sm"
+          title={actionsFold ? viewsWords.ask : undefined}
           variant="ghost"
         >
           <IconSparkles />
-          <span>{viewsWords.ask}</span>
+          <span class="in-form-compact:hidden">{viewsWords.ask}</span>
         </Button>
       {/if}
     </div>

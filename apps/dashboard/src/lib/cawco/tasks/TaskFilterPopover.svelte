@@ -99,7 +99,7 @@
         <Button
           data-filter-trigger
           {...props}
-          aria-label={compact ? compactName : undefined}
+          aria-label={compactName}
           {look}
           press="pressable"
           size={compact ? "icon-sm" : "sm"}
@@ -112,7 +112,9 @@
             <IconFilter />
           {/if}
           {#if !compact}
-            <span>Filter</span>
+            <!-- In the view strip's narrow form (`data-form="compact"`) its
+                 glyph and count stand alone, as on a phone. -->
+            <span class="in-form-compact:hidden">Filter</span>
           {/if}
           {#if active > 0}
             <span
@@ -123,7 +125,7 @@
             >
           {/if}
           {#if !compact}
-            <IconChevronDown />
+            <IconChevronDown class="in-form-compact:hidden" />
           {/if}
         </Button>
       {/snippet}

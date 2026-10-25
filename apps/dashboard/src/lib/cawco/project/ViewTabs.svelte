@@ -16,7 +16,14 @@
    *
    * The room is the strip's own width less everything else it holds (the
    * hairline, the filter, Needs you, New task, Ask Caw: none of them sized
-   * by the tabs), so it is known whatever the tabs show. Each tab's width is
+   * by the tabs), so it is known whatever the tabs show. The strip's actions
+   * (`data-strip-actions`) have a narrow form, each by its glyph and count
+   * alone (`data-form="compact"`, as a side surface's head draws its
+   * controls): they take it (`fold`) whenever it lets more views stand as
+   * tabs than their words do, so a tab never goes into the menu to keep a
+   * button's words (at 900px with the rail beside the strip, their words
+   * left the views 60px, room for no tab). Both forms are read each time,
+   * whichever stands, so the choice never feeds back. Each tab's width is
    * read off a ruler, every view drawn as a tab out of sight (inert, hidden,
    * in a box of no size), so a view in the menu is measured as it would
    * stand. Both are read in the frame a size changes (frameObserver).
@@ -42,6 +49,7 @@
     current,
     hrefOf,
     onchoose,
+    fold = $bindable(false),
   }: {
     /** Every view, in the strip's order: Decisions with the pages waiting on picks, Caw's drafts marked. */
     views: BarView[];
@@ -49,9 +57,13 @@
     /** A view's own address: a tab is a link. */
     hrefOf: (view: string) => string;
     onchoose: (view: string) => void;
+    /** The strip's actions stand in their narrow form, so more views stand as tabs. */
+    fold?: boolean;
   } = $props();
 
   interface Measures {
+    /** What the actions' narrow form gives back to the views. */
+    folds: number;
     /** The list's own pad at its two ends, and the gap between two tabs. */
     gap: number;
     /** The ⋯'s width, and the gap before it. */
@@ -73,6 +85,26 @@
   const EDGE = 0.5;
   const px = (value: string) => Number.parseFloat(value) || 0;
 
+  /**
+   * The width `el` lays out at in its narrow form (`compact`) or whole, its
+   * own form put back before anything paints.
+   */
+  function widthAs(el: HTMLElement, compact: boolean): number {
+    const was = el.dataset.form;
+    if (compact) {
+      el.dataset.form = "compact";
+    } else {
+      delete el.dataset.form;
+    }
+    const { width } = el.getBoundingClientRect();
+    if (was === undefined) {
+      delete el.dataset.form;
+    } else {
+      el.dataset.form = was;
+    }
+    return width;
+  }
+
   /** The room the strip leaves its views, the tabs' widths, the list's own. */
   function measure(): Measures | null {
     const strip = root?.parentElement;
@@ -88,9 +120,21 @@
     const others = [...strip.children].filter(
       (child) => getComputedStyle(child).display !== "none"
     );
-    const beside = others
-      .filter((child) => child !== root)
-      .reduce((sum, child) => sum + child.getBoundingClientRect().width, 0);
+    // The actions are counted whole; their narrow form gives back `folds`.
+    let beside = 0;
+    let folds = 0;
+    for (const child of others) {
+      if (child === root) {
+        continue;
+      }
+      if (child instanceof HTMLElement && "stripActions" in child.dataset) {
+        const whole = widthAs(child, false);
+        beside += whole;
+        folds = Math.max(0, whole - widthAs(child, true));
+      } else {
+        beside += child.getBoundingClientRect().width;
+      }
+    }
     const room =
       strip.clientWidth -
       px(style.paddingInlineStart) -
@@ -106,6 +150,7 @@
       widths.set(view.value, tabs[i]?.getBoundingClientRect().width ?? 0);
     }
     return {
+      folds,
       room,
       widths,
       pad: px(own.paddingInlineStart) + px(own.paddingInlineEnd),
@@ -163,24 +208,32 @@
     };
   });
 
+  /** How the views stand in some room: the tabs, and the one menu where not even the chosen tab has room. */
+  interface Placed {
+    kept: Set<string>;
+    /**
+     * Not even the chosen tab stands beside the ⋯: every view goes into one
+     * menu, its trigger naming the view on screen (`named`), or, where the
+     * name has no room either, the ⋯ alone (`dots`), its name said to a
+     * screen reader.
+     */
+    menu: "named" | "dots" | null;
+  }
+
   /**
-   * The views that stand as tabs: all of them where they fit; otherwise the
-   * chosen one, then each before or after it in order while it fits beside
-   * the ⋯, the first that does not ending the run.
+   * The views that stand as tabs in `room`: all of them where they fit;
+   * otherwise the chosen one, then each before or after it in order while
+   * it fits beside the ⋯, the first that does not ending the run.
    */
-  const shown = $derived.by((): Set<string> => {
-    const all = new Set(views.map((view) => view.value));
-    if (!measures) {
-      return all;
-    }
-    const { widths, gap, pad, room, more } = measures;
+  function place(m: Measures, room: number): Placed {
+    const { widths, gap, pad, more, picker } = m;
     const width = (value: string) => widths.get(value) ?? 0;
     const whole =
       pad +
       views.reduce((sum, view) => sum + width(view.value), 0) +
       gap * Math.max(0, views.length - 1);
     if (whole <= room + EDGE) {
-      return all;
+      return { kept: new Set(views.map((view) => view.value)), menu: null };
     }
     const kept = new Set<string>();
     let left = room - more - pad + EDGE;
@@ -200,26 +253,43 @@
       kept.add(view.value);
       left -= takes;
     }
-    return kept;
+    if (pad + width(current) + more <= room + EDGE) {
+      return { kept, menu: null };
+    }
+    return { kept, menu: picker <= room + EDGE ? "named" : "dots" };
+  }
+
+  /** What a placing shows of the views: its tabs, and the named menu over the ⋯ alone. */
+  const worth = (one: Placed) => {
+    if (one.menu === null) {
+      return one.kept.size;
+    }
+    return one.menu === "named" ? 0.5 : 0;
+  };
+
+  /** Beside the actions whole, and beside them narrow; the narrow form only where it stands more views. */
+  const placing = $derived.by(
+    (): { folded: boolean; placed: Placed } | null => {
+      if (!measures) {
+        return null;
+      }
+      const whole = place(measures, measures.room);
+      const narrow = place(measures, measures.room + measures.folds);
+      return worth(narrow) > worth(whole)
+        ? { folded: true, placed: narrow }
+        : { folded: false, placed: whole };
+    }
+  );
+  const placed = $derived(placing?.placed ?? null);
+  $effect(() => {
+    fold = placing?.folded ?? false;
   });
+  const shown = $derived(
+    placed?.kept ?? new Set(views.map((view) => view.value))
+  );
   const tabs = $derived(views.filter((view) => shown.has(view.value)));
   const rest = $derived(views.filter((view) => !shown.has(view.value)));
-  /**
-   * Not even the chosen tab stands beside the ⋯: every view goes into one
-   * menu, its trigger naming the view on screen (`named`), or, where the
-   * name has no room either, the ⋯ alone (`dots`), its name said to a
-   * screen reader.
-   */
-  const menu = $derived.by((): "named" | "dots" | null => {
-    if (!measures || rest.length === 0) {
-      return null;
-    }
-    const { widths, pad, room, more, picker } = measures;
-    if (pad + (widths.get(current) ?? 0) + more <= room + EDGE) {
-      return null;
-    }
-    return picker <= room + EDGE ? "named" : "dots";
-  });
+  const menu = $derived(rest.length === 0 ? null : (placed?.menu ?? null));
   const currentLabel = $derived(
     views.find((view) => view.value === current)?.label ?? ""
   );

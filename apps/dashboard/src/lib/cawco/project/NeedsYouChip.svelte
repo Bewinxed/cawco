@@ -26,6 +26,7 @@
 
 <button
   data-slot="needs"
+  aria-label={`Needs you, ${count}`}
   aria-pressed={on}
   class={[
     "select-none mark-line type-label inline-flex h-c-btn-h-sm flex-none items-center gap-space-2 rounded-md border border-transparent bg-status-attn-bg px-space-3 text-status-attn-ink transition-[background-color,color,border-color] duration-(--dur-control) ease-out motion-safe:active:transform-(--tpress) aria-pressed:border-status-attn-glyph",
@@ -41,6 +42,8 @@
     aria-hidden="true"
     class="size-icon-md text-status-attn-glyph"
   />
-  <span>Needs you</span>
+  <!-- In the view strip's narrow form (`data-form="compact"`) its glyph and
+       count stand alone. -->
+  <span class="in-form-compact:hidden">Needs you</span>
   <span data-slot="num" class="num text-status-attn-ink">{count}</span>
 </button>

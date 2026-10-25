@@ -39,6 +39,12 @@
  *     folder tab drawn over it; and the page's heads (the rail's head, the
  *     bar, the project's head, the view strip, a column's head, the task's
  *     head) each clear of the others, as drawn.
+ *  3. Wherever the strip stands, it stands as many views as tabs as fit
+ *     beside its actions, the rest in the ⋯, its actions in their narrow
+ *     form exactly where that stands more tabs (`stripFills`); from 900,
+ *     with the rail where it rests, the chosen view is one of them (the
+ *     owner: at 900 it showed only the ⋯). The overflow sweep
+ *     (journeys/scan.ts) totals zero there.
  *
  *   bun scripts/probe-kit/run.ts web project-clipped
  *   PROBE_CLIPPED_ENGINES=chromium bun scripts/probe-kit/run.ts web project-clipped
@@ -48,6 +54,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { MACHINE, type Reply, type Seen, until } from "../../../scratch-fleet";
+import { scan } from "../../journeys/scan";
 import { type Engine, type Kit, open, type Spec, settle } from "../../kit";
 
 const WORK = "WORK";
@@ -65,7 +72,9 @@ const respond = (request: Seen): Reply =>
       }
     : { words: ["Done."], everyMs: 20, limits: limits() };
 
-const WIDTHS = (process.env.PROBE_CLIPPED_WIDTHS ?? "320,390,680,900,1100,1440")
+const WIDTHS = (
+  process.env.PROBE_CLIPPED_WIDTHS ?? "320,390,680,900,1037,1100,1440"
+)
   .split(",")
   .map(Number);
 const ENGINES: Engine[] = (
@@ -705,6 +714,7 @@ const leg = async (
   }
   // The strip stands from 640, over the board (a task under 900 is its own page).
   if (!phone && board) {
+    await stripFills(kit, page, tag, width >= 900 && rail === null);
     await viewsMenu(kit, page, tag, !withTask && rail === null);
   }
   await page.close();
@@ -744,6 +754,145 @@ const readStrip = (page: Page) =>
         strip?.querySelector("[data-views-picker]")?.textContent?.trim() || "⋯",
     };
   });
+
+/**
+ * What the strip gives its views, read off its boxes: the room its own
+ * width leaves beside everything else it holds, the views' box, the next
+ * view in order that is not a tab and its width as a tab (the ruler's), and
+ * what the actions' narrow form (`data-form="compact"`) gives back, read by
+ * drawing them in it for the read and back.
+ */
+const readFill = (page: Page) =>
+  page.evaluate(() => {
+    const views = document.querySelector<HTMLElement>('[data-slot="views"]');
+    const strip = views?.parentElement;
+    if (!(views && strip)) {
+      return null;
+    }
+    const px = (value: string) => Number.parseFloat(value) || 0;
+    const style = getComputedStyle(strip);
+    const children = [...strip.children].filter(
+      (child) => getComputedStyle(child).display !== "none"
+    );
+    const actions = strip.querySelector<HTMLElement>(
+      ":scope > [data-strip-actions]"
+    );
+    const widthAs = (el: HTMLElement, form: string | undefined) => {
+      const was = el.dataset.form;
+      if (form === undefined) {
+        delete el.dataset.form;
+      } else {
+        el.dataset.form = form;
+      }
+      const { width } = el.getBoundingClientRect();
+      if (was === undefined) {
+        delete el.dataset.form;
+      } else {
+        el.dataset.form = was;
+      }
+      return width;
+    };
+    const folded = actions?.dataset.form === "compact";
+    const folds = actions
+      ? widthAs(actions, undefined) - widthAs(actions, "compact")
+      : 0;
+    const room =
+      strip.clientWidth -
+      px(style.paddingInlineStart) -
+      px(style.paddingInlineEnd) -
+      children
+        .filter((child) => child !== views)
+        .reduce((sum, child) => sum + child.getBoundingClientRect().width, 0) -
+      px(style.columnGap) * Math.max(0, children.length - 1);
+    const label = (tab: Element) =>
+      tab.querySelector('[data-slot="text"]')?.textContent?.trim() ?? "";
+    const shown = new Set(
+      [
+        ...views.querySelectorAll(
+          ':scope > div:not([data-views-ruler]) [data-slot="ff-tab"]'
+        ),
+      ].map(label)
+    );
+    const ruled = [
+      ...views.querySelectorAll('[data-views-ruler] [data-slot="ff-tab"]'),
+    ].map((tab) => ({
+      label: label(tab),
+      width: tab.getBoundingClientRect().width,
+    }));
+    const rest = ruled.filter((one) => !shown.has(one.label));
+    const list = views.querySelector<HTMLElement>(
+      ':scope > div:not([data-views-ruler]) [data-slot="ff-tabs-list"]'
+    );
+    const more = views.querySelector<HTMLElement>("[data-views-more]");
+    return {
+      room,
+      folded,
+      folds,
+      box: views.getBoundingClientRect().width,
+      gap: list ? px(getComputedStyle(list).columnGap) : 0,
+      // The ⋯ and the gap before it, which go once the last view is a tab.
+      more: more
+        ? more.getBoundingClientRect().width +
+          px(getComputedStyle(views).columnGap)
+        : 0,
+      next: rest[0] ?? null,
+      left: rest.length,
+      tabs: shown.size,
+      views: ruled.length,
+    };
+  });
+
+/**
+ * The strip stands as many views as tabs as fit beside its actions, and
+ * only those that don't go into the ⋯ (owner: at 900px it showed only the
+ * ⋯): the views' box fits its room, and the next view as a tab would not.
+ * The actions take their narrow form exactly where it stands more views:
+ * narrow, their words would have cost a tab standing now; whole, their
+ * narrow form would have stood no more. With `chosen` (900px and wider),
+ * the chosen view stands as a tab. Then the overflow sweep
+ * (journeys/scan.ts): nothing spills, no control covers text.
+ */
+const stripFills = async (
+  kit: Kit,
+  page: Page,
+  tag: string,
+  chosen: boolean
+) => {
+  const fill = await readFill(page);
+  const strip = await readStrip(page);
+  if (!fill) {
+    kit.check(`${tag}: the view strip stands`, false, "no [data-slot=views]");
+    return;
+  }
+  const SLACK = 0.5;
+  /** The views' box with the next view a tab beside the rest. */
+  const withNext = fill.next
+    ? fill.box + fill.gap + fill.next.width - (fill.left === 1 ? fill.more : 0)
+    : 0;
+  const said = `${fill.tabs} of ${fill.views} tabs in ${fill.box.toFixed(1)}px of ${fill.room.toFixed(1)}px room${fill.next ? `; next, “${fill.next.label}”, ${withNext.toFixed(1)}px` : ""}; actions ${fill.folded ? "narrow" : "whole"}, narrow gives ${fill.folds.toFixed(1)}px back`;
+  kit.check(
+    `${tag}: the strip stands every view as a tab that fits beside its actions (${said})`,
+    fill.box <= fill.room + SLACK &&
+      (fill.next === null || withNext > fill.room + SLACK) &&
+      (fill.folded
+        ? fill.box > fill.room - fill.folds + SLACK
+        : fill.next === null || withNext > fill.room + fill.folds + SLACK),
+    JSON.stringify({ fill, strip })
+  );
+  if (chosen) {
+    kit.check(
+      `${tag}: the chosen view stands as a tab (“${strip.chosen}”)`,
+      strip.picker === null && strip.chosen !== "" && fill.tabs > 0,
+      JSON.stringify(strip)
+    );
+  }
+  const spills = await page.evaluate(scan);
+  kit.check(
+    `${tag}: the overflow sweep totals ${spills.length}`,
+    spills.length === 0,
+    spills.slice(0, 6).join(" | ")
+  );
+};
 
 /**
  * Every view is reachable from the strip: a tab, or an item of the ⋯ that
