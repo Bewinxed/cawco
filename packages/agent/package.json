@@ -29,7 +29,7 @@
     "@cawco/core": "workspace:*",
     "@cawco/jsonl-parser": "workspace:*",
     "@code-inspector/core": "2.0.9",
-    "@earendil-works/pi-ai": "1.0.1",
+    "@earendil-works/pi-ai": "1.4.0",
     "@earendil-works/pi-coding-agent": "1.4.0",
     "@excalidraw/excalidraw": "0.18.1",
     "@excalidraw/mermaid-to-excalidraw": "2.2.2",
