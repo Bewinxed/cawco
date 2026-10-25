@@ -677,8 +677,8 @@
     }
   }
 
-  /* The status glyph, Solar duotone, drawn bare: its three faces share one
-     cell (transitions.dev "Icon swap"), data-glyph shows one. */
+  /* The status glyph, Solar's mark alone, no disc under it: its three faces
+     share one cell (transitions.dev "Icon swap"), data-glyph shows one. */
   .mark {
     display: block grid;
     inline-size: 20px;

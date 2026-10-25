@@ -44,7 +44,7 @@
  *   bun scripts/probe-kit/run.ts pairing-preview
  *   PAIRING_ENGINES=chromium PAIRING_MOMENTS=waiting,expired …   # a narrower run
  */
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { cpus, loadavg } from "node:os";
 import { dirname, join, normalize } from "node:path";
@@ -1785,6 +1785,113 @@ async function frameCost(kit: Kit, page: Page, m: Moment) {
   );
 }
 
+/** One capture as the manifest says it. */
+interface Capture {
+  caption: string;
+  file: string;
+  frame: string;
+  moment: string;
+  scheme: string;
+  width: number;
+}
+
+/** Moment `m` played and held still, its Desk and Phone frames each shot alone. */
+async function shoot(
+  page: Page,
+  {
+    out,
+    m,
+    width,
+    scheme,
+    labels,
+  }: {
+    labels: Record<string, string>;
+    m: Moment;
+    out: string;
+    scheme: "light" | "dark";
+    width: number;
+  }
+): Promise<Capture[]> {
+  await playIn(page, m);
+  await settled(page);
+  await page.evaluate(() => {
+    for (const run of document.getAnimations()) {
+      run.pause();
+    }
+  });
+  const when = scheme === "light" ? "day" : "night";
+  const shot: Capture[] = [];
+  for (const frame of ["desk", "phone"] as const) {
+    const name = frame === "desk" ? "Desk" : "Phone";
+    const file = `${m}-${frame}-${width}-${when}.png`;
+    // biome-ignore lint/performance/noAwaitInLoops: one frame at a time
+    await page
+      .locator(`.frame:has(.viewport[data-layout="${frame}"])`)
+      .screenshot({ path: join(out, file) });
+    shot.push({
+      file,
+      moment: m,
+      frame: name,
+      width,
+      scheme: when,
+      caption: `${labels[m] ?? m}, the ${name} frame, in a window ${width}px wide, by ${when}`,
+    });
+  }
+  await page.evaluate(() => {
+    for (const run of document.getAnimations()) {
+      run.play();
+    }
+  });
+  return shot;
+}
+
+/**
+ * The designer's captures (`PAIRING_LEGS=captures`, off by default): every
+ * moment at rest, the Desk and the Phone frame each shot alone, in a window
+ * 390 and 1440 wide, by day and by night, at DPR 1, into
+ * design-previews/pairing/captures/ with a manifest.json. Every run is held
+ * where it stands for the shot (a ping, the cloud's drift). Pictures for a
+ * person to read, never compared with anything.
+ */
+async function capturesLeg(kit: Kit, url: string, engine: Engine) {
+  const out = join(DIR, "captures");
+  rmSync(out, { recursive: true, force: true });
+  mkdirSync(out, { recursive: true });
+  const { page, errors } = await openPreview(kit, url, engine, "phone");
+  const labels = await page.evaluate(() =>
+    Object.fromEntries(
+      [...document.querySelectorAll<HTMLElement>("[data-moment]")].map((b) => [
+        b.dataset.moment ?? "",
+        (b.textContent ?? "").trim(),
+      ])
+    )
+  );
+  const manifest: Capture[] = [];
+  for (const scheme of ["light", "dark"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one scheme at a time
+    await page.emulateMedia({ colorScheme: scheme });
+    for (const width of [390, 1440]) {
+      // biome-ignore lint/performance/noAwaitInLoops: one window width at a time
+      await page.setViewportSize({ width, height: 1000 });
+      await page.waitForFunction((w) => window.innerWidth === w, width);
+      for (const m of MOMENTS) {
+        // biome-ignore lint/performance/noAwaitInLoops: one moment at a time
+        const shot = await shoot(page, { out, m, width, scheme, labels });
+        manifest.push(...shot);
+      }
+    }
+  }
+  writeFileSync(
+    join(out, "manifest.json"),
+    `${JSON.stringify(manifest, null, 2)}\n`
+  );
+  kit.check(
+    `${engine}: ${manifest.length} captures written to design-previews/pairing/captures/ (${MOMENTS.length} moments × Desk and Phone × 390 and 1440 × day and night, DPR 1) with their manifest`,
+    manifest.length === MOMENTS.length * 8 && errors.length === 0,
+    errors.slice(0, 4).join(" | ")
+  );
+}
+
 /** The legs PAIRING_LEGS names, in order, on one engine's page. */
 async function runLegs(kit: Kit, page: Page, url: string, engine: Engine) {
   if (LEGS.has("qr")) {
@@ -1813,6 +1920,9 @@ async function runLegs(kit: Kit, page: Page, url: string, engine: Engine) {
   }
   if (LEGS.has("frames")) {
     await framesLeg(kit, url, engine);
+  }
+  if (LEGS.has("captures")) {
+    await capturesLeg(kit, url, engine);
   }
   if (engine === "chromium" && LEGS.has("cost")) {
     for (const m of ONLY) {
