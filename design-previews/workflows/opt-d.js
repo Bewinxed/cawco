@@ -3,7 +3,6 @@ import { MILESTONE, REPLY, wfLedger, wfPhoneList, wfRow } from "./ledger.js";
 import {
   askTile,
   askUnder,
-  badge,
   block,
   btn,
   CHECKS,
@@ -120,8 +119,8 @@ const editPhone = () => [
   }),
 ];
 
-const driftLine = () =>
-  `<div class="drift">${ic("keep", "sm")}<span>vs kept run ${KEPT_RUN}:</span>${badge("1 step added", "", "unplanned")}<span>0 missed · 1 answer still to give</span></div>`;
+/** Run 8 beside the kept run, said on the run's own root row. */
+const against = `vs kept run ${KEPT_RUN}: 1 step added, 0 missed, 1 answer still to give`;
 
 const runDesk = () =>
   desk({
@@ -130,10 +129,10 @@ const runDesk = () =>
     split: splitPane({
       title: "Reply shortlist",
       label: `Reply shortlist, run ${LIVE}`,
-      facts: liveFacts([`v1, kept from run ${KEPT_RUN}`]),
+      facts: liveFacts(),
       asking: true,
       acts: [["stop", "Stop run"]],
-      body: `${driftLine()}${runTree({ drift: true, ask: askTile() })}`,
+      body: runTree({ drift: true, ask: askTile(), against }),
     }),
   });
 
@@ -141,7 +140,7 @@ const runPhone = () => [
   phone({
     title: "Reply shortlist",
     back: true,
-    body: `${facts(liveFacts())}${driftLine()}${runTree({ drift: true, ask: askTile({ chosen: "all" }) })}`,
+    body: `${facts(liveFacts())}${runTree({ drift: true, ask: askTile({ chosen: "all" }), against })}`,
     foot: btn("Stop run", { icon: "stop" }),
   }),
 ];

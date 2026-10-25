@@ -1137,7 +1137,8 @@
     gap: var(--space-group);
     min-inline-size: 0;
     min-block-size: 0;
-    padding: var(--c-top-bar-h) var(--space-6) var(--space-6) var(--space-7);
+    padding: calc(var(--c-top-bar-h) + var(--space-group)) var(--space-6)
+      var(--space-6) var(--space-7);
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-width: none;
@@ -1210,6 +1211,16 @@
     @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
       border-color: var(--border-contrast);
       background: var(--surface-raised);
+      backdrop-filter: none;
+    }
+
+    /* A lone symbol in a head that sits in the page's flow: the glyph
+       alone, no capsule drawn round it (its 28px item is still its target). */
+    &.lone {
+      padding: 0;
+      border-color: transparent;
+      background: transparent;
+      box-shadow: none;
       backdrop-filter: none;
     }
   }
@@ -2112,27 +2123,6 @@
     font: var(--type-meta);
     white-space: nowrap;
     translate: -50% -50%;
-  }
-
-  /* Option D: drift against the kept run. */
-  .drift {
-    display: block flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    align-items: center;
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-    color: var(--ink-muted);
-    font: var(--type-meta);
-  }
-
-  .delta-up {
-    color: var(--data-ok);
-  }
-
-  .delta-down {
-    color: var(--data-bad);
   }
 
   /* The phone: a 44px bar floating over the page, the page, the bottom ViewBar. */

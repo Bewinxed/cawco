@@ -280,7 +280,14 @@ export const glass = (items, cls = "") =>
  * alone, named by where it goes.
  */
 export const paneHead = ({ title, back = "", acts = [], prominent = "" }) =>
-  `<header class="vhead">${back ? glass([["left", back]]) : ""}<h3 class="trunc">${esc(title)}</h3><span class="grow"></span>${acts.length ? glass(acts) : ""}${prominent}</header>`;
+  `<header class="vhead">${back ? group([["left", back]]) : ""}<h3 class="trunc">${esc(title)}</h3><span class="grow"></span>${acts.length ? group(acts) : ""}${prominent}</header>`;
+
+/**
+ * A head's group in the page's flow (a pane's head, the Split's): two or
+ * more symbols share one capsule of glass; a lone symbol stands bare, the
+ * glyph alone, with no capsule drawn round it.
+ */
+const group = (items) => glass(items, items.length === 1 ? "lone" : "");
 
 export const desk = ({
   pane,
@@ -306,7 +313,7 @@ export const splitPane = ({
   body,
   asking = false,
 }) => `<aside class="split" aria-label="${esc(label)}">
-  <header class="split-head">${title ? `<h4 class="trunc">${esc(title)}</h4>` : '<span class="grow"></span>'}${glass([...acts, ["close", "Close"]])}</header>
+  <header class="split-head">${title ? `<h4 class="trunc">${esc(title)}</h4>` : '<span class="grow"></span>'}${group([...acts, ["close", "Close"]])}</header>
   <div class="split-body">${list.length ? facts(list) : ""}${body}</div>
   <div class="composer"><span>Message the orchestrator…</span>${btn("", { v: asking ? "secondary" : "primary", size: "sm", icon: "arrow" })}</div>
 </aside>`;
@@ -342,16 +349,19 @@ export const liveFacts = (extra = []) => [
   ...extra,
 ];
 
-/** A run's steps as lit tree rows: glyph, title, kind; the report's first line under it. */
-export const runTree = ({ ask = "", drift = false, stepsOf = STEPS } = {}) => {
+/**
+ * A run's steps as lit tree rows: glyph, title, kind; the report's first line
+ * under it. `against` is what the root row says of the run beside another.
+ */
+export const runTree = ({ ask = "", drift = false, stepsOf = STEPS, against = "" } = {}) => {
   const rows = [
-    `<div class="runrow"><span>${glyph("needs")}</span><span class="t">Workflow · ${WF}</span><span class="r">orchestrator</span></div>`,
+    `<div class="runrow"><span>${glyph("needs")}</span><span class="t">Workflow · ${WF}</span><span class="r">orchestrator</span>${against ? `<span class="d">${against}</span>` : ""}</div>`,
   ];
   for (const s of stepsOf) {
     const r = RUN[s.n];
     if (drift && s.n === 3) {
       rows.push(
-        `<div class="runrow unplanned" data-depth="1" style="--depth:1"><span>${glyph("unplanned")}</span><span class="t">Check the DM drafts</span><span class="r num">${glyph("running", "sm")}</span><span class="d">Not in v1 · the orchestrator added it ${btn("Keep", { v: "secondary", size: "xs" })}</span></div>`
+        `<div class="runrow unplanned" data-depth="1" style="--depth:1"><span>${glyph("unplanned")}</span><span class="t">Check the DM drafts</span><span class="r">Working</span><span class="d">Not in v1 · the orchestrator added it ${btn("Keep", { v: "secondary", size: "xs" })}</span></div>`
       );
     }
     rows.push(
