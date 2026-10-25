@@ -82,7 +82,8 @@ start, one duration, one easing; `app/clock.js`), a fade alone with less
 motion:
 
 - **Unsent drafts:** the bubble scales to 0.985 under the hand, then travels
-  down into the box and fades while the rest of the stack dims to 50%
+  down into the box and fades while the rest of the stack dims a step of
+  ink, its words to `ink-muted` and its reasons to `ink-subtle`
   (`--dur-morph`, `--ease-out`). The stack leaves by `popOut` once the box
   holds other words; "3 more" opens by `morph()`.
 - **The ledger:** the row tints deeper (`--dur-control`), and its pencil
@@ -106,7 +107,6 @@ variables in `app/preview.css`:
 | `--drafts-max` | 85% | a bubble's widest |
 | `--drafts-hover-fill` | ink at 4% | hover |
 | `--drafts-press-scale` | 0.985 | press |
-| `--drafts-dim` | 0.5 | the stack once words are in the box |
 | `--drafts-ghost-1/2/3` | 60% / 78% / 52% | loading outlines |
 | `--drafts-ghost-reason` / `--drafts-ghost-provenance` | 40% / 30ch | loading's reason bar under each outline (the designer: under the narrowest bubble, the ledger's and tray's reason width), and the provenance line's bar (its 30 characters) |
 | `--drafts-ghost-edge-low/high` | ink at 20% / 40% | loading pulse |

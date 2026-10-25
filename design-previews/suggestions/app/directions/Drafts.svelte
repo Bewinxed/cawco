@@ -10,7 +10,9 @@
   a bubble can read as history).
 
   A press scales the bubble to 0.985 under the hand, then the bubble travels
-  down into the box and fades as the rest of the stack dims to 50%, one
+  down into the box and fades as the rest of the stack dims a step of ink
+  (its words to `ink-muted`, its reasons and provenance to `ink-subtle`,
+  each still 4.5:1 on its ground, where 50% opacity read 2.09:1), one
   clock (`--dur-morph`, `--ease-out`); the box takes the words, the caret
   after them, and the live region says so. Typing hides the stack; a box
   cleared brings it back. With less motion the travel is a fade.
@@ -92,8 +94,18 @@
     const read = (name: string) =>
       Number.parseFloat(getComputedStyle(bubble).getPropertyValue(name));
     const scale = read("--drafts-press-scale");
-    const dim = read("--drafts-dim");
     const travel = bubble.closest<HTMLElement>("[data-draft]") ?? bubble;
+    // The dimmed inks, read off the stack as it stands dimmed (keyframes
+    // take no var()): every word the rest of the stack holds, from its ink now.
+    const inked = [
+      ...(stack?.querySelectorAll<HTMLElement>(
+        ".draft, .reason, [data-provenance], [data-more]"
+      ) ?? []),
+    ].filter((el) => !travel.contains(el));
+    const now = inked.map((el) => getComputedStyle(el).color);
+    stack?.setAttribute("data-dimmed", "");
+    const dimmed = inked.map((el) => getComputedStyle(el).color);
+    stack?.removeAttribute("data-dimmed");
     const runs = [
       travel.animate(
         motionOk.current
@@ -104,11 +116,9 @@
           : [{ opacity: 1 }, { opacity: 0 }],
         timing
       ),
-      ...[...(stack?.querySelectorAll<HTMLElement>("[data-draft], [data-provenance], [data-more]") ?? [])]
-        .filter((el) => el !== travel)
-        .map((el) =>
-          el.animate([{ opacity: 1 }, { opacity: dim }], timing)
-        ),
+      ...inked.map((el, i) =>
+        el.animate([{ color: now[i] }, { color: dimmed[i] }], timing)
+      ),
     ];
     await oneClock(runs);
     taken = index;
@@ -201,9 +211,19 @@
     align-items: end;
     gap: var(--drafts-gap);
     transition: opacity var(--dur-control) var(--ease-out);
+  }
 
-    &[data-dimmed] {
-      opacity: var(--drafts-dim);
+  /* Dimmed once his words are in the box: a step down the house inks, each
+     still 4.5:1 on its ground. */
+  .stack[data-dimmed] {
+    & .draft {
+      color: var(--ink-muted);
+    }
+
+    & .reason,
+    & .provenance,
+    & .more {
+      color: var(--ink-subtle);
     }
   }
 

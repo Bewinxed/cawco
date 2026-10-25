@@ -88,6 +88,11 @@ const SHOTS: string[] = [
     )
   ),
   "direction:today,where:thread,data:three,theme:dark",
+  // The house rules: the drafts dimmed by ink once his words are in the box.
+  ...["thread", "board", "phone"].map(
+    (where) => `direction:drafts,where:${where},data:filled,theme:light`
+  ),
+  "direction:drafts,where:thread,data:filled,theme:dark",
 ];
 const PRESSES: [string, string, string][] = [
   ["drafts", "the drafts' travel into the box", "--dur-morph"],

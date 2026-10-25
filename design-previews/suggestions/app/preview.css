@@ -26,7 +26,6 @@
     --drafts-max: 85%;
     --drafts-hover-fill: color-mix(in oklch, var(--ink-strong) 4%, transparent);
     --drafts-press-scale: 0.985;
-    --drafts-dim: 0.5;
     --drafts-ghost-1: 60%;
     --drafts-ghost-2: 78%;
     --drafts-ghost-3: 52%;
@@ -219,7 +218,6 @@
     align-items: center;
     gap: var(--space-3);
     padding: var(--space-3) var(--space-4);
-    border-block-end: 1px solid var(--border-hairline);
   }
 
   .panel-mark {
