@@ -6,9 +6,10 @@
  * unknown kind or id reads as the label alone. CommonMark takes any URI
  * scheme as a link's destination (spec 0.31.2, Links).
  *
- * Agents are told to write it (the cawco MCP server's instructions), and
- * CawCo's own tool results and reports write it wherever they name a
- * session, so the form is the one they copy.
+ * Agents are told to name things only by it (the cawco MCP server's
+ * instructions), and CawCo's own tool results and reports lead with it
+ * wherever they name a thing, its id kept inside the destination, so the
+ * form is the one they copy.
  */
 
 /**
@@ -197,9 +198,11 @@ export function parseReference(
 }
 
 /**
- * The line every session's CawCo guidance carries: how to name a session in
- * what it writes, so the person sees the session itself and not its id.
+ * The line every session's CawCo guidance carries: how to name anything
+ * CawCo knows in what it writes, so the person sees the thing itself and
+ * never its id.
  */
 export const REFERENCE_GUIDANCE =
-  "To mention a session, delegate or Caw thread in anything you write, link it by the handle CawCo's tools name it by, or its id: `[its title](cawco:session/cockpit#5a167bde)`. CawCo shows the link as that session's chip; a bare id or handle stays plain text. CawCo's own tool results and reports name sessions this way. " +
-  'To point at a pin, a spot an update changed, a decision card, an artifact, a task or its to-do, a plan or its step, a routine, a project or a machine, write the link CawCo\'s tool results and deliveries give you for it (`[When](cawco:pin/<artifact>/12)`, `[Fix the tray](cawco:task/<project>/tsk-12)`). CawCo draws each as a chip that opens it where it lives; a bare id or number ("tsk-12", "pin 12") stays plain text.';
+  "Name every session, delegate or Caw thread you mention by its link, `[its title](cawco:session/cockpit#5a167bde)`, written with the handle CawCo's tools name it by, or its id. " +
+  "Name every pin, spot an update changed, decision card, artifact, task or to-do, plan or step, routine, project and machine by the link CawCo's tool results and deliveries give you for it (`[When](cawco:pin/<artifact>/12)`, `[Fix the tray](cawco:task/<project>/tsk-12)`); they name each thing this way. " +
+  'The link is the one way to name it to the person, who cannot read an id: its label is the thing\'s title as the tool result gave it, and the id stays inside the link\'s destination, out of your words and the label ("tsk-12", "td-3", "pin 12"). CawCo draws each link as a chip that opens the thing where it lives.';

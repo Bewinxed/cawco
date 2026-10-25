@@ -37505,6 +37505,10 @@
             "description": "The delegate that put it in this session's panel, when another session made it.",
             "type": "string"
           },
+          "madeByLink": {
+            "description": "That delegate's link, `[title](cawco:session/<id>)`, what the agent names it by.",
+            "type": "string"
+          },
           "name": {
             "type": "string"
           },
@@ -37546,6 +37550,10 @@
           },
           "session": {
             "description": "The session that made it, when it is not the caller's own (a lead reading its project's).",
+            "type": "string"
+          },
+          "sessionLink": {
+            "description": "That session's link, what the agent names it by.",
             "type": "string"
           },
           "shown": {

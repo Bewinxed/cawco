@@ -33,6 +33,7 @@ import {
   type PlanEdit,
   type PlanReceiver,
   type SessionPlan,
+  sessionLink,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { Elysia, t } from "elysia";
@@ -61,6 +62,7 @@ export interface PlanChangesDeps {
   busy: (instanceId: string) => boolean;
   db: Pick<
     DbShape,
+    | "artifacts"
     | "closePlanChanges"
     | "getInstancesByIds"
     | "project"
@@ -91,9 +93,9 @@ export interface PlanChangesDeps {
   wakeCaw: (projectId: string, text: string) => Promise<string | undefined>;
 }
 
-/** A session as a message names it. */
+/** A session as a message names it: its link, its title the label. */
 const named = (row: InstanceRow): string =>
-  `“${row.title || row.derivedTitle || row.id.slice(0, 8)}” (${row.id.slice(0, 8)})`;
+  sessionLink(row.id, row.title || row.derivedTitle || "a session");
 
 export const createPlanChanges = (deps: PlanChangesDeps) => {
   const { db, plans } = deps;
@@ -154,7 +156,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
         ...changes.map((change) => `- ${changeLine(change)}`),
         "",
         `${own ? "Your plan" : "That plan"} now:`,
-        stepLines(steps),
+        stepLines(db, instanceId, steps),
         "",
         next,
       ].join("\n");
@@ -168,13 +170,10 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
     instanceId: string
   ): { next: string; whose: string } => {
     const [owner] = db.getInstancesByIds([instanceId]);
-    const who = owner ? named(owner) : `session ${instanceId.slice(0, 8)}`;
+    const who = owner ? named(owner) : "a session since removed";
     if (to.kind === "caw") {
-      const item = owner?.workItemId
-        ? db.workItem(owner.workItemId)
-        : undefined;
       return {
-        whose: `the plan of ${who}, an attempt at task ${item?.taskId ?? "of this project"}`,
+        whose: `the plan of ${who}, an attempt at a task of this project`,
         next: "The attempt has not heard this. Decide whether to tell it (handoff), start a new attempt, or reshape the task.",
       };
     }

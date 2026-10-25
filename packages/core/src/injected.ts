@@ -19,6 +19,7 @@
  * migration over its stored sends (hub db/tag-markers.ts).
  */
 import type { ArtifactKind, CarryRestored } from "./index";
+import { artifactLink, stepLink } from "./references";
 
 /** One marker's tag, read: its kind, its fields, and the text after the tag's line. */
 export interface MarkerTag {
@@ -351,12 +352,14 @@ export interface AwayWait {
   /** The page's artifact id and name: its `cawco:artifact` chip. */
   artifact: { id: string; name: string };
   content: string;
+  /** The session whose plan it is: the step's `cawco:step` chip. */
+  session: string;
   step: string;
 }
 
-/** A waiting step as the recap names it: the step, then its page's chip. */
-const waitLine = ({ artifact, content, step }: AwayWait): string =>
-  `- step ${step} (${content}) waits on [${artifact.name}](cawco:artifact/${artifact.id})`;
+/** A waiting step as the recap names it: the step's chip, labelled by its words, then its page's chip. */
+const waitLine = ({ artifact, content, session, step }: AwayWait): string =>
+  `- ${stepLink(session, step, content)} waits on ${artifactLink(artifact.id, artifact.name)}`;
 
 /** The heading a session's away notes open with in its plan's spec: `## Since 12:18 (you were away)`. */
 export const awayNotesHeading = (since: string): string =>
@@ -398,7 +401,7 @@ export const presenceLine = (said: PresenceSaid): string => {
       return "[CawCo presence] The person is at their desk but not on this chat. Work quietly: keep your plan current with todo_write, and write to them only for what needs them.";
     case "away": {
       const heading = awayNotesHeading(said.since ?? "now");
-      return `[CawCo presence] The person is away${said.since ? ` since ${said.since}` : ""}. Work without talking: no narration, and no questions in this chat unless you are blocked. Keep what they would want to know in your plan's spec with todo_write, under "${heading}" at its top: one line for each thing done, decided, or waiting on them. Something waiting on them is a step of your plan: name the step by its id, never a copy of its state. Tick steps as they finish.`;
+      return `[CawCo presence] The person is away${said.since ? ` since ${said.since}` : ""}. Work without talking: no narration, and no questions in this chat unless you are blocked. Keep what they would want to know in your plan's spec with todo_write, under "${heading}" at its top: one line for each thing done, decided, or waiting on them. Something waiting on them is a step of your plan: name the step by its link as todo_write answers it, labelled by its words, never a copy of its state. Tick steps as they finish.`;
     }
   }
 };

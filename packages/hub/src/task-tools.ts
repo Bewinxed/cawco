@@ -25,11 +25,13 @@ import {
 import { z } from "zod";
 import { BUILD_TITLE } from "./design-offers";
 import type { AttemptStart } from "./dispatch";
+import type { DuplicateOutcome } from "./jev-tasks";
 import { tool } from "./mcp-tool";
 import type { WrittenStep } from "./plans";
 import {
   attemptStartWords,
   type LinkScope,
+  type TaskAnswer,
   taskArchivedWords,
   taskChangedWords,
   taskCommentedWords,
@@ -78,7 +80,7 @@ export interface TaskToolContext {
    * Duplicates (§5.9) for a task this session just filed (jev-tasks.ts
    * `filed`): Jev's verdict, or the candidates the session compares.
    */
-  duplicates?: (projectId: string, task: TaskView) => Promise<unknown>;
+  duplicates?: (projectId: string, task: TaskView) => Promise<DuplicateOutcome>;
   /** Its role files tasks (roles.ts): it may name any task's to-dos, not only its own work item's. */
   mainline: boolean;
   /** The project's own `runs_on` (dispatch settings): a task filed under one is not told to set its own. */
@@ -155,7 +157,23 @@ const resultArtifact = (
 };
 
 const taskRef = () =>
-  z.string().trim().min(1).describe("A task id, like tsk-12.");
+  z
+    .string()
+    .trim()
+    .min(1)
+    .describe(
+      "A task id, like tsk-12: what ends its link, cawco:task/<project>/tsk-12."
+    );
+
+/** Whether a task's answer names other tasks: its edges, or a to-do promoted to one. */
+const namesTasks = (task: TaskView): boolean =>
+  task.after.length > 0 ||
+  task.blockedBy.length > 0 ||
+  task.related.length > 0 ||
+  task.parent !== null ||
+  task.foundIn !== null ||
+  task.duplicateOf !== null ||
+  task.todos.some((todo) => todo.promoted);
 const landsParameter = () =>
   z
     .enum(LANDS_MODES as [LandsMode, ...LandsMode[]])
@@ -302,6 +320,30 @@ export function taskTools(context: TaskToolContext | undefined) {
     session: context?.actor.id ?? null,
   });
 
+  /**
+   * A task's concise answer with the titles of the tasks it names, so each
+   * reads as its link; the detailed one is the record alone.
+   */
+  const titled = async <T extends TaskView>(
+    projectId: string,
+    task: T,
+    format: "concise" | "detailed",
+    namesOthers = false
+  ): Promise<T & Pick<TaskAnswer, "titles">> => {
+    if (
+      format === "detailed" ||
+      !context ||
+      !(namesOthers || namesTasks(task))
+    ) {
+      return task;
+    }
+    const board = await context.tasks.list(projectId, {});
+    return {
+      ...task,
+      titles: Object.fromEntries(board.tasks.map((one) => [one.id, one.title])),
+    };
+  };
+
   /** The task todo_write or task_comment may change: the work item's own, or any one a mainline session names. */
   const ownTask = (
     name: "todo_write" | "task_comment",
@@ -345,10 +387,14 @@ export function taskTools(context: TaskToolContext | undefined) {
         needsYou: z.boolean().optional(),
         archived: z.boolean().optional(),
       },
-      async ({ id, history, ...filter }) => {
+      async ({ id, history, ...filter }, format) => {
         const { projectId, tasks } = scope();
         if (id) {
-          const task = await tasks.get(projectId, id);
+          const task = await titled(
+            projectId,
+            await tasks.get(projectId, id),
+            format
+          );
           return history
             ? {
                 ...task,
@@ -371,7 +417,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_create",
-      "File a task: work that must outlive this conversation or run without you. Answers its id (tsk-12) and any duplicates to act on.",
+      "File a task: work that must outlive this conversation or run without you. Answers its link, its id (tsk-12) ending it, and any duplicates to act on.",
       {
         title: z.string().describe("Verb first."),
         description: z.string().optional(),
@@ -402,7 +448,7 @@ export function taskTools(context: TaskToolContext | undefined) {
         labels: lines(),
         fields: fieldsParameter(),
       },
-      async ({ found_in, runs_on, ...draft }) => {
+      async ({ found_in, runs_on, ...draft }, format) => {
         const { projectId, tasks, actor } = scope();
         // The design system's build carries the hub's words, never the filer's.
         if (draft.title.trim() === BUILD_TITLE && context?.designBuild) {
@@ -424,8 +470,13 @@ export function taskTools(context: TaskToolContext | undefined) {
                 task.acceptance,
                 ...task.checks,
               ]);
+        // A verdict names the task it duplicates.
+        const named =
+          duplicates !== undefined &&
+          "duplicateOf" in duplicates &&
+          duplicates.duplicateOf !== null;
         return {
-          ...task,
+          ...(await titled(projectId, task, format, named)),
           ...(duplicates ? { duplicates } : {}),
           ...(suggest ? { suggest } : {}),
         };
@@ -454,7 +505,7 @@ export function taskTools(context: TaskToolContext | undefined) {
         labels: lines(),
         fields: fieldsParameter(),
       },
-      async ({ id, stage, reason, runs_on, ...rest }) => {
+      async ({ id, stage, reason, runs_on, ...rest }, format) => {
         const patch = { ...rest, runsOn: runs_on };
         const { projectId, tasks, actor } = scope();
         if (reason !== undefined && stage === undefined) {
@@ -471,7 +522,11 @@ export function taskTools(context: TaskToolContext | undefined) {
         if (stage !== undefined) {
           task = await tasks.move(projectId, id, stage, actor, reason);
         }
-        return task ?? (await tasks.get(projectId, id));
+        return await titled(
+          projectId,
+          task ?? (await tasks.get(projectId, id)),
+          format
+        );
       },
       (said) => taskChangedWords(said, linkScope())
     ),
@@ -484,9 +539,13 @@ export function taskTools(context: TaskToolContext | undefined) {
         to: taskRef(),
         remove: z.boolean().optional(),
       },
-      async ({ id, edge, to, remove }) => {
+      async ({ id, edge, to, remove }, format) => {
         const { projectId, tasks, actor } = scope();
-        return await tasks.link(projectId, id, { edge, to, remove }, actor);
+        return await titled(
+          projectId,
+          await tasks.link(projectId, id, { edge, to, remove }, actor),
+          format
+        );
       },
       (said) => taskChangedWords(said, linkScope())
     ),
@@ -518,7 +577,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "todo_write",
-      "Your plan: `steps` replaces your step list (`depth` nests), `spec` your spec (what you build, how and why). Or a task's to-dos: tick, untick, add or reword by id (td-3) or position (2.1), on your work item's task (an operator's session names any); all land together. Every compaction lists them.",
+      "Your plan: `steps` replaces your step list (`depth` nests), `spec` your spec (what you build, how and why). Or a task's to-dos: tick, untick, add or reword by id (td-3, what ends its link) or position (2.1), on your work item's task (an operator's session names any); all land together. Every compaction lists them.",
       {
         steps: z.array(stepParameter()).optional(),
         spec: z.string().optional(),
@@ -564,7 +623,7 @@ export function taskTools(context: TaskToolContext | undefined) {
           changes,
           actor
         );
-        return { id: done.id, todos: done.todos };
+        return { id: done.id, title: done.title, todos: done.todos };
       },
       (said) => todoWrittenWords(said, linkScope())
     ),
@@ -580,9 +639,9 @@ export function taskTools(context: TaskToolContext | undefined) {
           text,
           actor
         );
-        return { id: done.id, comments: done.comments };
+        return { id: done.id, title: done.title, comments: done.comments };
       },
-      taskCommentedWords
+      (said) => taskCommentedWords(said, linkScope())
     ),
     tool(
       "task_result",
@@ -636,11 +695,12 @@ export function taskTools(context: TaskToolContext | undefined) {
         );
         return {
           id: done.id,
+          title: done.title,
           path: done.path,
           archivedAt: done.archivedAt,
         };
       },
-      taskArchivedWords
+      (said) => taskArchivedWords(said, linkScope())
     ),
   ];
 }

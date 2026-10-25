@@ -25,6 +25,15 @@
  * d. A concise answer's words (what it copies whole aside) are never longer
  *    than its detailed one, past the one sentence that says what there is
  *    ("No relays." beside `[]`).
+ * e. An answer about one thing (a task filed, read, linked or commented on,
+ *    a plan or a task's to-dos written, an artifact read or shown, a pin
+ *    answered or resolved) leads with its link: the first line holds a
+ *    `[label](cawco:…)` whose label is words, not a bare id (the owner,
+ *    2026-10-25: "tsk-63 is meaningless to the user"). Agents copy the
+ *    head of an answer.
+ * f. No concise answer names a task or a to-do by its bare id (`tsk-12`,
+ *    `td-3`) outside a link's destination; what people and agents said
+ *    (thread_read, find) is quoted as said.
  *
  *   bun scripts/probe-kit/run.ts tool-answers
  */
@@ -56,6 +65,8 @@ interface Called {
 interface Measured {
   concise: Called;
   detailed: Called;
+  /** It answers about one thing, so its first line names it by its link (e). */
+  leads: boolean;
   name: string;
   /** What it was asked, as the table names it. */
   shape: string;
@@ -183,6 +194,15 @@ const NULL = /\bnull\b/;
  * or an artifact, which the agent copies whole for the person's chip.
  */
 const REFERENCE_DESTINATION = /\(cawco:[a-z]+\/[^)\s]+\)/g;
+/** A reference link, its label captured. */
+const REFERENCE_LINK = /\[((?:\\.|[^\]\\])+)\]\(cawco:[a-z]+\/[^)\s]+\)/g;
+/** A label that is an id, not words: a task's, a to-do's, a pin's number, a handle. */
+const BARE_LABEL =
+  /^(tsk-\d+|td-\d+|pin \d+|#?\d+|[0-9a-f]{8}(-[0-9a-f-]+)?|[\w.-]+#[0-9a-f]{8})$/i;
+/** A task's or a to-do's bare id in words; a file's path (`tasks/tsk-2-….md`) is a path, not a name. */
+const BARE_TASK_ID = /(?<![/\w-])(tsk|td)-\d+\b(?!-)/;
+/** The tools that quote what was said, ids and all. */
+const QUOTES: ReadonlySet<string> = new Set(["thread_read", "find"]);
 
 const standUp = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
@@ -568,13 +588,25 @@ const calls = (
     pins: { id: string }[];
     threadId: string;
   }
-): { as: Session; args: object; name: string; shape?: string }[] => [
-  { as: orch, name: "artifact_read", args: { id: seeded.decisionId } },
+): {
+  as: Session;
+  args: object;
+  leads?: true;
+  name: string;
+  shape?: string;
+}[] => [
+  {
+    as: orch,
+    name: "artifact_read",
+    args: { id: seeded.decisionId },
+    leads: true,
+  },
   {
     as: orch,
     name: "artifact_read",
     args: { id: seeded.pinnedId },
     shape: "a page",
+    leads: true,
   },
   { as: orch, name: "artifact_list", args: {} },
   { as: orch, name: "comment_read", args: { filter: "all" } },
@@ -583,10 +615,43 @@ const calls = (
   { as: orch, name: "list_sessions", args: {} },
   { as: orch, name: "list_delegate_types", args: {} },
   { as: orch, name: "task_read", args: {} },
-  { as: orch, name: "task_read", args: { id: "tsk-2" }, shape: "one task" },
+  {
+    as: orch,
+    name: "task_read",
+    args: { id: "tsk-2" },
+    shape: "one task",
+    leads: true,
+  },
+  {
+    as: orch,
+    name: "task_create",
+    args: {
+      title: "Quiet the hover on every save button",
+      todos: ["Change the hover colour"],
+      after: ["tsk-8"],
+    },
+    leads: true,
+  },
+  {
+    as: orch,
+    name: "task_link",
+    args: { id: "tsk-3", edge: "related", to: "tsk-5" },
+    leads: true,
+  },
+  {
+    as: orch,
+    name: "task_comment",
+    args: { task: "tsk-3", text: "The hover is part of it." },
+    leads: true,
+  },
   { as: orch, name: "find", args: { query: "settings", project: "all" } },
   { as: orch, name: "open_items", args: {} },
-  { as: orch, name: "artifact_show", args: { id: seeded.decisionId } },
+  {
+    as: orch,
+    name: "artifact_show",
+    args: { id: seeded.decisionId },
+    leads: true,
+  },
   { as: orch, name: "artifact_browse", args: { id: seeded.decisionId } },
   {
     as: orch,
@@ -596,8 +661,14 @@ const calls = (
       text: "Made it secondary.",
       files: ["src/routes/settings/+page.svelte"],
     },
+    leads: true,
   },
-  { as: orch, name: "comment_resolve", args: { pin: seeded.pins[1]?.id } },
+  {
+    as: orch,
+    name: "comment_resolve",
+    args: { pin: seeded.pins[1]?.id },
+    leads: true,
+  },
   {
     as: orch,
     name: "todo_write",
@@ -607,6 +678,14 @@ const calls = (
         { content: "Change", status: "in_progress" },
       ],
     },
+    leads: true,
+  },
+  {
+    as: orch,
+    name: "todo_write",
+    args: { task: "tsk-4", add: [{ text: "Check the hover" }] },
+    shape: "a task's to-dos",
+    leads: true,
   },
   { as: orch, name: "admin_delegate_types_read", args: { action: "list" } },
   { as: orch, name: "admin_connections_read", args: { action: "list" } },
@@ -657,6 +736,7 @@ const measureAll = async (
     measured.push({
       name: call.name,
       shape: call.shape ?? "",
+      leads: call.leads ?? false,
       concise,
       detailed,
     });
@@ -743,6 +823,27 @@ const checkOne = (kit: Kit, one: Measured) => {
       Math.max(Buffer.byteLength(one.detailed.text), SENTENCE_BYTES),
     `${Buffer.byteLength(words)} of words (${Buffer.byteLength(one.concise.text)} in all) > ${Buffer.byteLength(one.detailed.text)}`
   );
+  if (one.leads) {
+    const [head = ""] = one.concise.text.split("\n");
+    const labels = [...head.matchAll(REFERENCE_LINK)].map(
+      (link) => link[1] ?? ""
+    );
+    kit.check(
+      `e: ${tag}'s answer leads with the thing's link, labelled by words and not its id`,
+      labels.length > 0 && labels.every((label) => !BARE_LABEL.test(label)),
+      `labels ${JSON.stringify(labels)}; first line: ${head}`
+    );
+  }
+  if (!QUOTES.has(one.name)) {
+    const bare = BARE_TASK_ID.exec(
+      one.concise.text.replace(REFERENCE_DESTINATION, "(cawco:…)")
+    );
+    kit.check(
+      `f: ${tag}'s concise answer names no task or to-do by its bare id`,
+      bare === null,
+      `${bare?.[0] ?? ""}; ${shortOf(one.concise.text)}`
+    );
+  }
 };
 
 const run = async (kit: Kit) => {

@@ -9044,7 +9044,7 @@ export const createServer = (
    * step waiting on a page, with the page by its chip, never a copy of the
    * page's state.
    */
-  const waitingOn = (steps: readonly PlanStep[]): AwayWait[] =>
+  const waitingOn = (session: string, steps: readonly PlanStep[]): AwayWait[] =>
     steps.flatMap((step) => {
       const page = step.waitsOn
         ? db.artifacts.get(step.waitsOn.artifactId)
@@ -9052,6 +9052,7 @@ export const createServer = (
       return page && step.status !== "completed"
         ? [
             {
+              session,
               step: step.id,
               content: step.content,
               artifact: { id: page.id, name: page.name },
@@ -9088,7 +9089,7 @@ export const createServer = (
       return { kind: "on" };
     }
     recapped.set(instanceId, notes.notes);
-    const waiting = waitingOn(plan?.steps ?? []);
+    const waiting = waitingOn(instanceId, plan?.steps ?? []);
     return {
       kind: "on",
       recap: {

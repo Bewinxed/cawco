@@ -25,6 +25,7 @@
  *   stage). Off: the lead reads the sentence. The push's own buttons are
  *   not this and always work.
  */
+import { taskLink } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { Elysia, status, t } from "elysia";
 import type { Caw } from "./caw";
@@ -224,7 +225,7 @@ export const createJevTasks = ({
       ? {
           by: "jev",
           duplicateOf: null,
-          note: `Jev judged it a duplicate of ${found.id}, but it was not dropped: ${refusedWhy}`,
+          note: `Jev judged it a duplicate of ${taskLink(projectId, found.id, candidates.find((one) => one.id === found.id)?.title ?? found.id)}, but it was not dropped: ${refusedWhy}`,
         }
       : { by: "jev", duplicateOf: found.id, noul: found.noul };
   };
@@ -246,7 +247,7 @@ export const createJevTasks = ({
         id: each.id,
         title: each.title,
       })),
-      ask: `Compare ${task.id} with these open tasks. If it repeats one, link it: task_link({ id: "${task.id}", edge: "duplicate_of", to: "<that task>" }), which drops it.`,
+      ask: 'Compare it with these open tasks. If it repeats one, link it to that one with task_link, edge "duplicate_of", which drops it.',
     };
   };
 

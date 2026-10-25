@@ -1,11 +1,14 @@
 /**
  * Artifacts as an agent reads them: what is in the person's panel and whose
  * move it is, what they picked and wrote on each, their pins and threads.
- * Each artifact by its name and handle, which every artifact tool takes
- * back (handles.ts); a pin by its number and handle. The whole record
- * (every id, hash and time, a decision page's program) is the detailed form.
+ * Each artifact, pin and session by its link (core references.ts), labelled
+ * by its name or title: the artifact's id inside the link, its name what
+ * every artifact tool takes back (handles.ts); a pin's handle after its link,
+ * what comment_reply and comment_resolve take. The whole record (every id,
+ * hash and time, a decision page's program) is the detailed form.
  */
 
+import { artifactLink } from "@cawco/core";
 import { type Pin, pinStandsOn, type ThreadEntry } from "@cawco/core/comments";
 import { PLACES_KEY } from "@cawco/core/decisions";
 import type { CanvasSpec, DesignMap } from "@cawco/core/stage";
@@ -82,9 +85,9 @@ const cardLinkLines = (
   return links.length > 0 ? [heading, ...links.map((link) => `- ${link}`)] : [];
 };
 
-/** An artifact as an agent names it: `pricing (page 08899254)`. */
+/** An artifact as an agent names it: its link, then its kind, `[pricing](cawco:artifact/<id>) (page)`. */
 const named = (artifact: { id: string; kind: string; name: string }): string =>
-  `${artifact.name} (${artifact.kind} ${handle(artifact.id)})`;
+  `${artifactLink(artifact.id, artifact.name)} (${artifact.kind})`;
 
 /** Whose move an artifact is, in words. */
 const moveWords = (waitingOn: ArtifactStatus["waitingOn"]): string => {
@@ -121,8 +124,8 @@ const statusLine = (status: ArtifactStatus, now: number): string => {
     ...(status.pins > 0 ? [`${count(status.pins, "open pin")}`] : []),
     ...(status.sent ? ["Send pressed since your last change"] : []),
     moveWords(status.waitingOn),
-    ...(status.session ? [`made in session ${handle(status.session)}`] : []),
-    ...(status.madeBy ? [`put here by delegate ${handle(status.madeBy)}`] : []),
+    ...(status.sessionLink ? [`made in ${status.sessionLink}`] : []),
+    ...(status.madeByLink ? [`put here by ${status.madeByLink}`] : []),
     `changed ${ago(status.updatedAt, now)}`,
   ];
   return `- ${named(status)}, ${status.does}: ${quote(status.ask, 140)} · ${facts.join(" · ")}`;
@@ -135,7 +138,7 @@ export const artifactListWords = (statuses: ArtifactStatus[]): string => {
   return statuses.length === 0
     ? "No artifacts: artifact_create opens one in the person's panel."
     : lines(
-        `${count(statuses.length, "artifact")}, newest first; every artifact tool takes the name or the handle:`,
+        `${count(statuses.length, "artifact")}, newest first; every artifact tool takes the name:`,
         shown.map((status) => statusLine(status, now)),
         statuses.length > shown.length &&
           `…and ${statuses.length - shown.length} older ones: artifact_delete takes those a newer one superseded.`
@@ -482,7 +485,6 @@ const brokenLines = (broken: GraphBroken | undefined): string[] =>
 export const artifactCreatedWords = (created: Created): string =>
   lines(
     `Made ${named(created)}. ${openedWords(created.opened ? { opened: true } : { opened: false, why: created.why ?? "no view said why" })}`,
-    created.link && `Name it to the person as ${created.link}.`,
     markedLine(created.marked),
     created.held,
     created.note,
@@ -574,17 +576,13 @@ const markedLine = (marked: string[] | undefined): string | false =>
   !!marked?.length &&
   `What it changed, as you name each to the person: ${marked.join(", ")}.`;
 
-/** A page's change: the page as it reads now, its link and what it changed first when the answer carries them. */
+/** A page's change: the page as it reads now, led by its link, and what it changed first when the answer carries it. */
 const pageChangedWords = (
   answer: ArtifactRead & { link?: string }
 ): Presented => {
-  const { marked, ...rest } = answer;
+  const { marked, link: _link, ...rest } = answer;
   const read = artifactReadWords(rest);
-  const { link } = answer;
-  const naming = lines(
-    link && `Name it to the person as ${link}.`,
-    markedLine(marked)
-  );
+  const naming = markedLine(marked);
   if (!naming) {
     return read;
   }
@@ -633,7 +631,7 @@ export const artifactPromotedWords = (promoted: Promoted): string =>
 
 /** `artifact_delete`: what the panel shows now. */
 export const artifactRemovedWords = (removed: Removed): string => {
-  const what = `Removed ${removed.removed.name} (${removed.removed.kind} ${removed.removed.id}).`;
+  const what = `Removed ${quote(removed.removed.name, 120)} (${removed.removed.kind}).`;
   return removed.showing
     ? `${what} Your panel shows ${named(removed.showing)} now.`
     : `${what} Your panel shows nothing now.`;
@@ -688,8 +686,7 @@ const pinLines = (
           `- Ink: ${Math.round(pin.inkBox.w)} × ${Math.round(pin.inkBox.h)} px at ${Math.round(pin.inkBox.x)}, ${Math.round(pin.inkBox.y)} in the page`,
         ]
       : []),
-    `- Pin ${handle(pin.id)}: ${pinState(pin, now)}, left ${ago(pin.at, now)}`,
-    `- Link: ${pin.link}`,
+    `- ${pin.link}: ${pinState(pin, now)}, left ${ago(pin.at, now)}; its handle ${handle(pin.id)}`,
     ...threadLines(pin.thread, now),
   ];
 };
@@ -706,21 +703,21 @@ export const commentReadWords = (
   }
   return lines(
     read.artifacts.flatMap((artifact) => [
-      `# ${artifact.link} (${artifact.kind} ${handle(artifact.id)}): ${count(artifact.pins.length, filter === "all" ? "pin" : `${filter} pin`)}${artifact.address.endsWith(`/${artifact.id}`) ? "" : `, marked at ${artifact.address}`}`,
+      `# ${artifact.link} (${artifact.kind}): ${count(artifact.pins.length, filter === "all" ? "pin" : `${filter} pin`)}${artifact.address.endsWith(`/${artifact.id}`) ? "" : `, marked at ${artifact.address}`}`,
       ...artifact.pins.flatMap((pin) => pinLines(pin, now)),
     ]),
-    "comment_reply and comment_resolve take a pin's handle.",
+    "comment_reply and comment_resolve take a pin's handle; name a pin to the person by its link.",
     `Read at ${read.at}: since takes it, for only what is newer.`
   );
 };
 
 /** `comment_reply`. */
 export const commentRepliedWords = (replied: CommentReplied): string =>
-  `Answered ${replied.link} (pin ${handle(replied.pin)}) in its thread${replied.entry.files?.length ? `, naming ${listed(replied.entry.files)}` : ""}${replied.entry.asks ? "; it asks the person in Needs you until they reply or resolve" : ""}.`;
+  `Answered ${replied.link} in its thread${replied.entry.files?.length ? `, naming ${listed(replied.entry.files)}` : ""}${replied.entry.asks ? "; it asks the person in Needs you until they reply or resolve" : ""}.`;
 
 /** `comment_resolve`. */
 export const commentResolvedWords = (resolved: CommentResolved): string =>
-  `Resolved ${resolved.link} (pin ${handle(resolved.pin)}). The person can reopen it.`;
+  `Resolved ${resolved.link}. The person can reopen it.`;
 
 /** `design_map`: each component of the library, or one's card. */
 export const designMapWords = (map: DesignMap): string => {

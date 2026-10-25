@@ -21,6 +21,8 @@
  *   it.
  */
 import {
+  artifactLink,
+  decisionLink,
   type InstanceRow,
   type PlanStep,
   type SessionPlan,
@@ -91,16 +93,15 @@ const stepLine =
   (step: PlanStep): string =>
     `${"  ".repeat(step.depth)}- [${step.status}] ${stepLink(session, step.id, step.content)}`;
 
-/** A to-do's line, its words as its link when it has an id and a task in a project. */
+/** A to-do's line: its link, its words the label, when it has an id and a task in a project; else its marker or position and its words. */
 const todoLine =
   (projectId: string | null, task: string | undefined) =>
-  (todo: TaskTodo): string => {
-    const words =
+  (todo: TaskTodo): string =>
+    `${"  ".repeat(todo.depth)}- ${
       projectId && task && todo.id
         ? todoLink(projectId, task, todo.id, todo.text)
-        : todo.text;
-    return `${"  ".repeat(todo.depth)}- ${todo.id ? `${todo.id} ` : ""}(${todo.path}) ${words}`;
-  };
+        : `${todo.id ?? todo.path} ${todo.text}`
+    }`;
 
 /** Text under a list line, indented so it stays that line's. */
 const under = (text: string): string[] =>
@@ -134,7 +135,7 @@ export function openItemsSection(rows: OpenItemRows): string {
   const todos = (rows.plan?.todos ?? []).filter((todo) => !todo.done);
   if (rows.plan?.taskId && todos.length > 0) {
     parts.push(
-      `### Your task ${rows.plan.taskId}'s open to-dos`,
+      "### Your task's open to-dos",
       ...todos.map(todoLine(rows.projectId, rows.plan.taskId))
     );
   }
@@ -142,7 +143,7 @@ export function openItemsSection(rows: OpenItemRows): string {
     parts.push(
       "### Open tasks you filed",
       ...rows.tasks.flatMap((task) => [
-        `- ${task.id} (${task.stage}): ${rows.projectId ? taskLink(rows.projectId, task.id, task.title) : task.title}`,
+        `- ${rows.projectId ? taskLink(rows.projectId, task.id, task.title) : `${task.id} ${task.title}`} (${task.stage})`,
         ...(task.description.trim() ? under(task.description) : []),
         ...task.todos
           .filter((todo) => !todo.done)
@@ -154,9 +155,9 @@ export function openItemsSection(rows: OpenItemRows): string {
     parts.push(
       "### Your decision pages the person has not decided",
       ...rows.decisions.flatMap(({ read, cards }) => [
-        `- ${read.name} (${read.state}): ${read.title}`,
+        `- ${read.artifactId ? artifactLink(read.artifactId, read.title) : `${read.name}: ${read.title}`} (${read.state})`,
         ...cards.flatMap((card) => [
-          `  - ${card.question}`,
+          `  - ${read.artifactId ? decisionLink(read.artifactId, card.id, card.question) : card.question}`,
           ...(card.why.trim() ? [`    Why: ${card.why.trim()}`] : []),
         ]),
       ])
