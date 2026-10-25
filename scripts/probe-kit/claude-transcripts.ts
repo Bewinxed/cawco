@@ -72,6 +72,8 @@ class TranscriptWriter {
   #clock = Date.UTC(2026, 9, 1);
   /** The chain's last record: the next one's parent. */
   parent: string | null = null;
+  /** That record as written. */
+  last: Record<string, unknown> | null = null;
   turn = 0;
   readonly running: Task[] = [];
   /** Sends absorbed mid-turn, one of which the next session start may hand again. */
@@ -127,14 +129,16 @@ class TranscriptWriter {
   chained(record: Record<string, unknown>, keep = true): string {
     const uuid =
       typeof record.uuid === "string" ? record.uuid : this.id("uuid");
-    this.line({
+    const written = {
       ...this.envelope(this.parent),
       ...record,
       uuid,
       timestamp: this.at(),
-    });
+    };
+    this.line(written);
     if (keep) {
       this.parent = uuid;
+      this.last = written;
     }
     return uuid;
   }
@@ -401,8 +405,16 @@ const step = (
   }
 };
 
-/** A `/compact`: the boundary starts a chain of its own, its summary hangs from it. */
+/**
+ * A `/compact`: the boundary starts a chain of its own, its summary hangs
+ * from it. Now and then the CLI writes the block again later
+ * (anthropics/claude-code#92089): the boundary, the summary and the record
+ * it kept, that one now hung from the summary, all under their old uuids.
+ * The kept record is the boundary's logical parent, so its later copy leads
+ * back to the boundary.
+ */
 const compaction = (writer: TranscriptWriter): void => {
+  const kept = writer.last;
   const before = writer.parent;
   writer.parent = null;
   writer.chained({
@@ -413,6 +425,7 @@ const compaction = (writer: TranscriptWriter): void => {
     compactMetadata: { trigger: "auto", preTokens: 160_000 + writer.turn },
     level: "info",
   });
+  const boundary = writer.last;
   writer.chained({
     type: "user",
     isCompactSummary: true,
@@ -422,6 +435,15 @@ const compaction = (writer: TranscriptWriter): void => {
       content: `This session is being continued from a previous conversation that ran out of context. ${writer.words(200)}`,
     },
   });
+  const summary = writer.last;
+  if (kept && boundary && summary && writer.chance(0.3)) {
+    writer.line(boundary);
+    writer.line(summary);
+    const again = { ...kept, parentUuid: summary.uuid };
+    writer.line(again);
+    writer.parent = kept.uuid as string;
+    writer.last = again;
+  }
 };
 
 /** One turn: what was queued, the prompt (or a task's notification), its steps and its end. */
