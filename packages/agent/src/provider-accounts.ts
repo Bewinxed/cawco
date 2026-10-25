@@ -17,7 +17,7 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, readdir, readFile, rm } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   type AccountBorrowFrame,
@@ -1008,6 +1008,16 @@ export const opencodeOwnSignInTypes = async (): Promise<
   answered(await storeRead("opencode.ownSignInTypes", undefined, OWN_READ_MS));
 
 /**
+ * OpenCode's own active sign-ins on this machine, values included, read-only
+ * from the machine's database on the stores thread: no server is started to
+ * list them. None for a database 2.0 has not made yet.
+ */
+export const opencodeOwnCredentialRows = async (): Promise<
+  OpencodeOwnCredential[]
+> =>
+  answered(await storeRead("opencode.ownCredentials", undefined, OWN_READ_MS));
+
+/**
  * The providers OpenCode's own sign-ins on this machine are for (each active
  * credential's integration), read-only, never their values: the providers the
  * machine's server sends requests to with them. None for a database 2.0 has
@@ -1017,26 +1027,54 @@ export const opencodeOwnIntegrations = async (): Promise<string[]> =>
   answered(await storeRead("opencode.ownIntegrations", undefined, OWN_READ_MS));
 
 /**
+ * The machine's OpenCode database as its files stand: the database and its
+ * write-ahead log, each by size and mtime. 2.0 keeps it in WAL mode, so a
+ * sign-in written since the last checkpoint moves only the `-wal` file. Two
+ * equal stamps mean no write reached either file between them.
+ */
+const opencodeDbStamp = async (): Promise<string> => {
+  const db = join(opencodeDataDir(), "opencode.db");
+  const files = await Promise.all(
+    [db, `${db}-wal`].map((path) =>
+      stat(path).then(
+        (found) => `${found.size}:${found.mtimeMs}`,
+        () => "none"
+      )
+    )
+  );
+  return files.join("/");
+};
+
+/** OpenCode's sign-in rows as last read, and the files' stamp they were read at. */
+let ownRowsRead: { rows: string; stamp: string } | undefined;
+
+/**
  * A fingerprint of pi's and OpenCode's own stores as they are now: it
  * changes whenever a login is made, refreshed or moved out there, so the hub
  * moves a login made under a connected machine at once
  * ({@link HeartbeatPayload.homeStores}). Never the stores' contents.
  * OpenCode's are its sign-ins' ids and when each last changed, read on the
- * stores thread; undefined when that read is unanswered, so nothing is
- * taken for a change.
+ * stores thread only when its database's files moved since the last read
+ * ({@link opencodeDbStamp}): the beat asks every minute, and the database
+ * is multi-gigabyte on obelisk. Undefined when that read is unanswered, so
+ * nothing is taken for a change.
  */
 export const homeStoresStamp = async (): Promise<string | undefined> => {
-  const [pi, own] = await Promise.all([
+  const [pi, stamp] = await Promise.all([
     readFile(piStorePath()).catch(() => "absent"),
-    storeRead("opencode.ownRows", undefined, OWN_READ_MS),
+    opencodeDbStamp(),
   ]);
-  if (own.kind === "unanswered") {
-    return;
+  if (ownRowsRead?.stamp !== stamp) {
+    const own = await storeRead("opencode.ownRows", undefined, OWN_READ_MS);
+    if (own.kind === "unanswered") {
+      return;
+    }
+    ownRowsRead = { rows: own.value, stamp };
   }
   return createHash("sha256")
     .update(pi)
     .update("\u0000")
-    .update(own.value)
+    .update(ownRowsRead.rows)
     .digest("hex")
     .slice(0, 16);
 };
@@ -1211,8 +1249,8 @@ export const readHomeCredentials = async (): Promise<HomeCredential[]> => {
       credential: piCredentialOf(entry),
     })
   );
-  // OpenCode's are on the machine's server; one that cannot be asked lists
-  // none of them, and says why, while pi's are listed.
+  // OpenCode's are in the machine's server's database, read in place; a
+  // read that fails lists none of them, and says why, while pi's are listed.
   const opencode = (
     opencodeHost
       ? await opencodeHost.ownCredentials().catch((error: unknown) => {

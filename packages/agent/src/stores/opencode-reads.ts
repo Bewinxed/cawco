@@ -180,6 +180,36 @@ export const opencodeReads = {
       )
     ),
 
+  /**
+   * The active sign-ins whole: each one's id, its integration and its value,
+   * as the server's own `GET /api/credential` gives them from this table.
+   * Read for the move of a login into a CawCo account, which takes the
+   * value; none for a database 2.0 has not made yet.
+   */
+  ownCredentials: (): Promise<
+    { id: string; integrationID: string; value: Record<string, unknown> }[]
+  > =>
+    readDb(
+      machineDb(),
+      [] as {
+        id: string;
+        integrationID: string;
+        value: Record<string, unknown>;
+      }[],
+      (db) =>
+        (
+          db
+            .query(
+              "SELECT id, integration_id, value FROM credential WHERE active = 1 AND integration_id IS NOT NULL ORDER BY id"
+            )
+            .all() as { id: string; integration_id: string; value: string }[]
+        ).map((row) => ({
+          id: row.id,
+          integrationID: row.integration_id,
+          value: JSON.parse(row.value) as Record<string, unknown>,
+        }))
+    ),
+
   /** The providers the active sign-ins are for (each one's integration), never their values. */
   ownIntegrations: (): Promise<string[]> =>
     readDb(machineDb(), [] as string[], (db) =>

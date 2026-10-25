@@ -793,9 +793,9 @@ const dirOf = (arg: unknown): string | undefined => {
  * lets a rail draw ages that differ from each other.
  *
  * `from` picks the catalogs: `disk`, the ones read from files, which the
- * register carries; `server`, the ones a harness's server answers
- * ({@link Harness.catalogFromServer}), read after the register because the
- * read starts that server. The hub judges no row by a server's catalog
+ * register carries; `server`, the ones read from a harness's servers'
+ * databases ({@link Harness.catalogFromServer}), read after the register
+ * because that read can be slow. The hub judges no row by a server's catalog
  * (OpenCode's rows resume whatever it lists), so the register's is complete
  * without it.
  */

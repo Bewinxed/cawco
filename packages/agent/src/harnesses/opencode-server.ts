@@ -482,6 +482,15 @@ export class OpencodeServerOwner {
     return this.#record?.active ?? null;
   }
 
+  /** Whether its record names no generation, active or retired: nothing of this slot runs or is still to be ended. */
+  get holdsNone(): boolean {
+    const record = this.#record;
+    return (
+      !this.#transition &&
+      (!record || (record.active === null && record.retired.length === 0))
+    );
+  }
+
   /** Why this server would not start, while that stands; null when it has not refused. */
   get refusal(): string | null {
     return this.#refused?.error.message ?? null;

@@ -16,4 +16,11 @@ export const harnessWords = {
   /** One that ended on its own with `code`, in the last of what it said on stderr. */
   claudeExited: (code: number, said: string) =>
     `Claude Code stopped on its own (exit ${code}) and said “${said}”. A message to it starts it again.`,
+  /**
+   * Why a machine's report carries no OpenCode models: no OpenCode server
+   * here has listed them yet, and none is started only to list them (a
+   * session's start starts one, and its catalog is reported from then on).
+   */
+  opencodeModelsUnlisted:
+    "OpenCode lists its models here once a session has run on it.",
 };

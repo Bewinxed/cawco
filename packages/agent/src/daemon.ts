@@ -229,7 +229,10 @@ import { setHubGitOrigins } from "./git-credential";
 import type { Harness } from "./harness";
 import { harness, harnesses } from "./harnesses";
 import { transcriptIndexes } from "./harnesses/claude-transcript";
-import { removeCawcoSessionConfigs } from "./harnesses/opencode";
+import {
+  OPENCODE_REPORTED_FILES,
+  removeCawcoSessionConfigs,
+} from "./harnesses/opencode";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { ghAccounts, ghAccountToken } from "./host-gh";
 import { serveHubCredential } from "./hub-git";
@@ -482,8 +485,8 @@ const MEMORY_LOG_INTERVAL = Duration.millis(MEMORY_LOG_INTERVAL_MS);
  */
 const CLAUDE_LOGIN_CHECK_INTERVAL_MS = timerMs(60_000);
 /**
- * How often each of pi's settings, models and sign-in files is looked at
- * (a stat) for a change. Ours: a change reaches the hub within this and the
+ * How often each of pi's settings, models and sign-in files, and the files
+ * OpenCode's report is read from, is looked at (a stat) for a change. Ours: a change reaches the hub within this and the
  * report's one-second settle, as a dir watch's did within the settle alone.
  */
 const PI_FILE_LOOK_MS = 2000;
@@ -640,10 +643,10 @@ const machineProviders = async (): Promise<
 > => {
   const [pi, opencode] = await Promise.all([
     readPart("pi's providers", piProviders),
-    readPart(
-      "OpenCode's providers",
-      async () => (await harness("opencode")?.providerList?.()) ?? []
-    ),
+    readPart("OpenCode's providers", async () => {
+      const adapter = harness("opencode");
+      return adapter?.providerList ? await adapter.providerList() : [];
+    }),
   ]);
   if (!(pi || opencode)) {
     return undefined;
@@ -742,6 +745,70 @@ const readHarness = (
   adapter: Harness
 ): Promise<MachineHarnessReport | undefined> =>
   readPart(`the ${adapter.kind} harness's report`, () => adapter.detect());
+
+/**
+ * OpenCode's report and the providers it can sign in to are what its
+ * servers last said of themselves, kept in files written while one runs
+ * (opencode.ts `OPENCODE_REPORTED_FILES`), since no read starts a server.
+ * Each file is looked at by its stat, as pi's are ({@link PI_FILE_LOOK_MS}),
+ * and when one moves both are read again and sent on `socket`, the report
+ * kept with `keep`. Answers the watch's stop.
+ */
+const watchOpencodeReport = (
+  socket: WebSocket,
+  machine: string,
+  instances: () => string[],
+  keep: (report: MachineHarnessReport) => void
+): (() => void) => {
+  const adapter = harness("opencode");
+  if (!adapter) {
+    return () => undefined;
+  }
+  const report = async (): Promise<void> => {
+    const [read, providers] = await Promise.all([
+      readHarness(adapter),
+      machineProviders(),
+    ]);
+    if (read) {
+      keep(read);
+    }
+    if ((read || providers) && socket.readyState === WebSocket.OPEN) {
+      send(socket, {
+        verb: "heartbeat",
+        machineId: machine,
+        payload: {
+          at: Date.now(),
+          instances: instances(),
+          ...(read ? { harnesses: [read] } : {}),
+          ...(providers ? { providers } : {}),
+        } satisfies HeartbeatPayload,
+      });
+    }
+  };
+  // A burst of writes is read once, a second on.
+  let soon: ReturnType<typeof setTimeout> | undefined;
+  const reportSoon = (): void => {
+    clearTimeout(soon);
+    soon = setTimeout(() => {
+      report().catch((error: unknown) =>
+        console.warn(`[opencode] report failed: ${errorWords(error)}`)
+      );
+    }, 1000);
+  };
+  for (const file of OPENCODE_REPORTED_FILES) {
+    watchFile(
+      file,
+      { interval: PI_FILE_LOOK_MS, persistent: false },
+      reportSoon
+    );
+  }
+  return () => {
+    clearTimeout(soon);
+    for (const file of OPENCODE_REPORTED_FILES) {
+      unwatchFile(file, reportSoon);
+    }
+  };
+};
 
 /** The provider-account controls, each telling the machine's harnesses when the accounts moved. */
 const registerProviderAccounts = (supervisor: SessionSupervisor): void => {
@@ -1914,6 +1981,14 @@ const attach = (
         reportPiSoon
       );
     }
+    // OpenCode's report and its providers, sent again whenever what its
+    // servers last said of themselves moves (`watchOpencodeReport`).
+    const stopOpencodeWatch = watchOpencodeReport(
+      socket,
+      identity.machineId,
+      () => supervisor.instanceIds,
+      keepReport
+    );
     // The machine's network changed (an interface's address came or went):
     // its capabilities read again, so the public address its router maps it
     // to (STUN, browser/relay-reach.ts) follows the network it is on, and a
@@ -1969,6 +2044,7 @@ const attach = (
         for (const file of piFiles) {
           unwatchFile(file, reportPiSoon);
         }
+        stopOpencodeWatch();
         clearInterval(networkWatch);
       })
     );
@@ -2078,9 +2154,9 @@ const attach = (
     // each harness whose word on its version gate (`refused`) may be what
     // just moved: Claude's always (its `detect` starts nothing), and any
     // other whose last report was refused, which an install pressed in the
-    // dashboard is there to clear. An OpenCode that runs is not read again
-    // here: its `detect` may start its server, and a version moving is no
-    // reason to start one. A burst is read once, a second on.
+    // dashboard is there to clear. An OpenCode that runs is read again when
+    // what its server last said of itself moves (`reportOpencodeSoon`). A
+    // burst is read once, a second on.
     let toolsSoon: ReturnType<typeof setTimeout> | undefined;
     const reportTools = async (): Promise<void> => {
       const again = harnesses().filter(

@@ -21,6 +21,7 @@ export const storeOps = {
   "opencode.ownChanges": (_: undefined) => opencodeReads.ownChanges(),
   "opencode.ownSignInTypes": (_: undefined) => opencodeReads.ownSignInTypes(),
   "opencode.ownIntegrations": (_: undefined) => opencodeReads.ownIntegrations(),
+  "opencode.ownCredentials": (_: undefined) => opencodeReads.ownCredentials(),
   "opencode.sessions": (query: SessionQuery) => opencodeReads.sessions(query),
   "opencode.backupV1": (dataHome: string) => opencodeReads.backupV1(dataHome),
   "search.open": (_: undefined) => searchHost.open(),

@@ -56,6 +56,7 @@ import {
   CONTROL_SUPPORTED_COMMANDS,
   CUSTODY_HELD,
   contactWords,
+  harnessWords,
   machineLabel,
   mcpFleetState,
   offeredMode,
@@ -122,6 +123,7 @@ import {
   opencodeAccountEnv,
   opencodeCredentialOf,
   opencodeOwnChanges,
+  opencodeOwnCredentialRows,
   opencodeOwnIntegrations,
   opencodeOwnSignInTypes,
   opencodeProviderOf,
@@ -356,13 +358,13 @@ const startInputs = async (launch: ServerLaunch): Promise<string> => {
 };
 
 /**
- * How long an account's OpenCode server runs on once no session is on it.
- * Ours: a session at rest is already kept attached for half an hour before it
- * sleeps, so the server is free only once its sessions slept, ended or moved
- * off the account; five more minutes cover a session woken or moved straight
- * back, and no longer is memory held for nobody.
+ * How long an OpenCode server, the machine's or an account's, runs on once
+ * no session is on it. Ours: a session at rest is already kept attached for
+ * half an hour before it sleeps, so the server is free only once its
+ * sessions slept, ended or moved off it; five more minutes cover a session
+ * woken or moved straight back, and no longer is memory held for nobody.
  */
-const ACCOUNT_SERVER_IDLE_MS = 5 * 60_000;
+const SERVER_IDLE_MS = 5 * 60_000;
 
 /**
  * How often the machine is read for CawCo's OpenCode servers that nothing
@@ -509,6 +511,17 @@ const DOOR_ONLY: FleetItemState = {
   state: "applied",
   detail:
     "OpenCode reaches it only in a workspace's location, through that workspace's MCP gate.",
+};
+
+/**
+ * What a status read says of a fleet server while no OpenCode server runs
+ * here: written into the launch config the next one starts on, which
+ * connects it then. No server is started to read it.
+ */
+const UNSERVED: FleetItemState = {
+  state: "applied",
+  detail:
+    "In OpenCode's config here; OpenCode connects it when a session starts.",
 };
 
 /**
@@ -1605,20 +1618,42 @@ interface ServerSlot {
   /** The config, binary and launch its active server was verified on (an account's). */
   applied: string | null;
   client: OpencodeClient | null;
-  /** Since when no session has been on its server (an account's); null while one is. */
+  /** Since when no session has been on its server; null while one is. */
   idleSince: number | null;
   readonly owner: OpencodeServerOwner;
   ready: Promise<OpencodeClient> | null;
   /**
-   * While {@link OpencodeHarness.#ensureAccount} starts, boots and verifies
-   * the server (an account's): its client is already set, but it is not yet
-   * the watcher's to replace or retire.
+   * While {@link OpencodeHarness.#ensure} or
+   * {@link OpencodeHarness.#ensureAccount} starts, boots and verifies the
+   * server: its client is already set, but it is not yet the watcher's to
+   * replace or retire.
    */
   starting: boolean;
 }
 
 /** Each account's OpenCode models, by OpenCode's provider id, as its own server last listed them. */
 const ACCOUNT_CATALOGS = join(OPENCODE_DIR, "cawco-account-catalogs.json");
+
+/**
+ * What the machine's own server last said of itself while one ran: its
+ * models (`GET /api/model`, as {@link opencodeCatalog} reads them) and the
+ * providers it can sign in to (its integrations). The machine's report and
+ * its provider list say these, so neither starts a server: one starts only
+ * for a session. Written each time a server running here is read; the
+ * daemon looks at it and reports OpenCode again when it moves.
+ */
+const OPENCODE_SERVER_FACTS = join(OPENCODE_DIR, "cawco-server-facts.json");
+
+interface ServerFacts {
+  models: ModelInfo[];
+  providers: { id: string; name: string }[];
+}
+
+/** The files OpenCode's report is read from: when one moves, the daemon reports OpenCode again. */
+export const OPENCODE_REPORTED_FILES: readonly string[] = [
+  OPENCODE_SERVER_FACTS,
+  ACCOUNT_CATALOGS,
+];
 
 /** The machine's own OpenCode sign-ins their providers last refused, by provider ({@link HarnessReport.signInFaults}), kept across an agent's restart. */
 const SIGN_IN_FAULTS = join(OPENCODE_DIR, "cawco-sign-in-faults.json");
@@ -1718,7 +1753,7 @@ const CREDENTIAL_PREFIX = "cred_cawco_";
 
 export class OpencodeHarness implements Harness {
   readonly kind = "opencode" as const;
-  /** Its catalog is the server's: {@link listSessions} starts one. */
+  /** Its catalog is its servers' databases, read on the stores thread ({@link listSessions}). */
   readonly catalogFromServer = true as const;
   readonly capabilities = OPENCODE_CAPABILITIES;
   auth: import("@cawco/core").AuthState = "authenticated";
@@ -1986,28 +2021,14 @@ export class OpencodeHarness implements Harness {
 
   /**
    * OpenCode's own sign-ins on this machine: the credential each provider
-   * uses on the machine's server (`GET /api/credential`, its active one per
-   * integration). CawCo's own (`cred_cawco_…`) are on account servers only,
-   * and never listed.
+   * uses on the machine's server, its active one per integration, read from
+   * the machine's database in place ({@link opencodeOwnCredentialRows}), so
+   * the hub's read of them at each connection starts no server. CawCo's own
+   * (`cred_cawco_…`) are on account servers only, and never listed.
    */
   async #ownCredentials(): Promise<OpencodeOwnCredential[]> {
-    const client = await this.#ensure();
-    const stored = answerOf(
-      await askOpencode((options) => client.credential.list(options)),
-      "the machine's sign-ins"
-    );
-    return stored.flatMap((entry) =>
-      entry.active &&
-      entry.integrationID &&
-      !entry.id.startsWith(CREDENTIAL_PREFIX)
-        ? [
-            {
-              id: entry.id,
-              integrationID: entry.integrationID,
-              value: entry.value as Record<string, unknown>,
-            },
-          ]
-        : []
+    return (await opencodeOwnCredentialRows()).filter(
+      (entry) => !entry.id.startsWith(CREDENTIAL_PREFIX)
     );
   }
 
@@ -2277,24 +2298,18 @@ export class OpencodeHarness implements Harness {
    * fleet's servers) applies whatever runs.
    */
   async #configTick(now = false): Promise<void> {
-    this.#cutOnDeadServers();
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: #converging is set in #ensure, a different method
-    if (!this.#converging) {
+    if (!((await this.#tendServers()) && this.#converging)) {
       return;
     }
     let needed = now;
     this.#signInChecksDue();
     const hash = await this.#hashConfig();
     const version = await this.#installedVersion();
-    for (const slot of this.#slots()) {
-      slot.owner.maintain();
-    }
     await this.#leaveUnkept();
     if (Date.now() >= this.#straysSweptAt + STRAY_SWEEP_MS) {
       this.#straysSweptAt = Date.now();
       await this.#adoptStrays();
     }
-    await this.#retireIdleAccounts();
     await this.#prunePlugins();
     // A keeper handover left the machine's server on the keeper before it:
     // it is replaced at rest as one on another config is.
@@ -2405,9 +2420,12 @@ export class OpencodeHarness implements Harness {
 
   /**
    * A server in use whose active generation no keeper holds any more takes no
-   * new session: its slot's client is dropped and the server ensured again,
-   * which retires that generation and starts one on the current keeper. Its
-   * sessions keep their own clients and turns; each moves over at rest.
+   * new session: its slot's client is dropped, and while a session is on it
+   * the server is ensured again, which retires that generation and starts
+   * one on the current keeper. Its sessions keep their own clients and
+   * turns; each moves over at rest. With none on it, nothing is started:
+   * the next start retires it ({@link OpencodeServerOwner.ensure}), and
+   * until then it is ended once idle ({@link #retireIdle}).
    */
   async #leaveUnkept(): Promise<void> {
     for (const slot of this.#slots()) {
@@ -2424,6 +2442,9 @@ export class OpencodeHarness implements Harness {
       );
       slot.client = null;
       slot.ready = null;
+      if (!this.#slotHeld(slot)) {
+        continue;
+      }
       await (slot.account === undefined
         ? this.#ensure()
         : this.#ensureAccount(slot.account));
@@ -2475,21 +2496,26 @@ export class OpencodeHarness implements Harness {
     await prunePlugins(kept);
   }
 
-  /** An account's server no session has been on for {@link ACCOUNT_SERVER_IDLE_MS} is retired. */
-  async #retireIdleAccounts(): Promise<void> {
+  /**
+   * A server no session has been on for {@link SERVER_IDLE_MS} is retired,
+   * the machine's as each account's: it was started for a session, and that
+   * need has ended. The next session starts one again.
+   */
+  async #retireIdle(): Promise<void> {
     const now = Date.now();
-    for (const slot of this.#accounts.values()) {
+    for (const slot of this.#slots()) {
       if (
         !slot.owner.active ||
         this.#slotHeld(slot) ||
         slot.starting ||
-        this.#operationsPending()
+        this.#operationsPending() ||
+        this.#syncing > 0
       ) {
         slot.idleSince = null;
         continue;
       }
       slot.idleSince ??= now;
-      if (now - slot.idleSince < ACCOUNT_SERVER_IDLE_MS) {
+      if (now - slot.idleSince < SERVER_IDLE_MS) {
         continue;
       }
       slot.idleSince = null;
@@ -2497,10 +2523,57 @@ export class OpencodeHarness implements Harness {
       slot.ready = null;
       slot.applied = null;
       console.info(
-        `[opencode] account ${slot.account}: no session on its server for ${ACCOUNT_SERVER_IDLE_MS / 60_000} minutes`
+        `[opencode] ${slot.account === undefined ? "the machine's server" : `account ${slot.account}`}: no session on it for ${SERVER_IDLE_MS / 60_000} minutes`
       );
       // biome-ignore lint/performance/noAwaitInLoops: one retirement at a time; each reads the keeper
       await slot.owner.retireActive();
+    }
+  }
+
+  /**
+   * The servers' upkeep on each tick, converging or not: dead clients cut,
+   * retired generations ended, idle servers retired ({@link #retireIdle}).
+   * False once nothing is left to watch: the watcher stops, and the next
+   * start ({@link #ensure}) starts it again.
+   */
+  async #tendServers(): Promise<boolean> {
+    this.#cutOnDeadServers();
+    for (const slot of this.#slots()) {
+      slot.owner.maintain();
+    }
+    await this.#retireIdle();
+    if (this.#holdsNothing()) {
+      this.#stopConfigWatcher();
+      return false;
+    }
+    return true;
+  }
+
+  /** Whether no server of this agent's runs or is still to be ended, and nothing is on one or wants one. */
+  #holdsNothing(): boolean {
+    return (
+      this.#slots().every((slot) => slot.owner.holdsNone && !slot.starting) &&
+      this.#sessions.size === 0 &&
+      this.#syncing === 0 &&
+      !this.#operationsPending()
+    );
+  }
+
+  /**
+   * After an agent restart, the servers an earlier agent left running are
+   * watched as this agent's own: each is retired once no session is on it
+   * ({@link #retireIdle}), with no need to start one first, and so are
+   * CawCo's servers no keeper holds and no record names ({@link #adoptStrays}).
+   * Before this, only a start did, and a server no session asked for again
+   * ran on.
+   */
+  async #watchRecorded(): Promise<void> {
+    await isMachineAgent();
+    await this.#loadRecorded();
+    await this.#adoptStrays();
+    this.#straysSweptAt = Date.now();
+    if (!this.#holdsNothing()) {
+      this.#startConfigWatcher();
     }
   }
 
@@ -2839,6 +2912,11 @@ export class OpencodeHarness implements Harness {
 
   setCustodyReadiness(read: () => boolean): void {
     this.#custodyReadiness = read;
+    this.#watchRecorded().catch((error: unknown) =>
+      console.warn(
+        `[opencode] the servers an earlier agent left were not read: ${errorText(error)}`
+      )
+    );
   }
 
   #operationsPending(): boolean {
@@ -2911,16 +2989,9 @@ export class OpencodeHarness implements Harness {
   // biome-ignore lint/suspicious/useAwait: the Harness contract returns a promise; activity reporting itself is deliberately synchronous
   async busyInstances(): Promise<string[]> {
     const identity = this.#serverOwner.active;
-    const client = this.#client;
     const generations = this.#generations();
     if (!identity && generations.length === 0) {
       return [];
-    }
-    if (identity && !client) {
-      return [
-        ...this.#activity(identity).snapshot().instances,
-        "opencode:activity-unknown",
-      ];
     }
     const live = new Set(
       generations.map(
@@ -3191,6 +3262,9 @@ export class OpencodeHarness implements Harness {
           this.#configError = null;
           // biome-ignore lint/complexity/noVoid: publication does not wait for busy incumbent sessions to migrate
           void this.#handoffIdle().catch(console.warn);
+          // Its catalog is the new config's.
+          // biome-ignore lint/complexity/noVoid: the read rides on the publication; nothing waits on it
+          void this.#currentFacts();
           // What was reported of the fleet's servers may have been read on
           // other servers than this generation runs: the pass reads them
           // again unless a reading of the same servers stands (#mendFleetMcp).
@@ -3288,20 +3362,17 @@ export class OpencodeHarness implements Harness {
     const installed = gate.refused !== "not-installed";
     const { version } = gate;
     // The catalog the machine reports, so a picker lists OpenCode's models
-    // with no OpenCode session running: the machine's server is started for
-    // it when none runs. One that cannot be read says why instead.
+    // with no OpenCode session running: what the machine's server last
+    // listed ({@link OPENCODE_SERVER_FACTS}), read again from it while one
+    // runs. No server is started for it; one that never ran says so.
     const read = installed
-      ? await this.#ensure()
-          .then(() => this.#catalog())
-          .then(
-            (models) => ({ models }),
-            (error: unknown) => {
-              console.warn(`[opencode] model catalog unavailable: ${error}`);
-              return {
-                modelsUnread: `OpenCode's server here didn't list its models (${errorText(error)}).`,
-              };
-            }
-          )
+      ? await this.#catalog().then(
+          (models) => ({ models }),
+          (error: unknown) => ({
+            modelsUnread:
+              error instanceof Error ? error.message : errorText(error),
+          })
+        )
       : {};
     // An OpenCode at another version is the machine's word on OpenCode; one
     // not there is no fault.
@@ -3391,8 +3462,10 @@ export class OpencodeHarness implements Harness {
     if (!kind) {
       return;
     }
-    if (!this.#oauthIntegrations) {
-      const client = await this.#ensure();
+    // A turn on the machine's server ended: it runs. Its integrations are
+    // read there once; none is started for them.
+    const client = this.#client;
+    if (!this.#oauthIntegrations && client) {
       const quiet = at(await quietDir());
       this.#oauthIntegrations = oauthIntegrationsOf(
         answerOf(
@@ -3409,7 +3482,7 @@ export class OpencodeHarness implements Harness {
       why,
       {
         integration: provider,
-        offersOAuth: this.#oauthIntegrations.has(provider),
+        offersOAuth: this.#oauthIntegrations?.has(provider) ?? false,
         heldOAuth: kind === "oauth",
       }
     );
@@ -3444,7 +3517,8 @@ export class OpencodeHarness implements Harness {
    * the rows read on the stores thread: the tick never waits on them.
    */
   #signInChecksDue(): void {
-    if (this.#checkingSignIns) {
+    // Checked on the machine's server while one runs; none is started for it.
+    if (this.#checkingSignIns || !this.#client) {
       return;
     }
     this.#checkingSignIns = this.#checkSignInsIfDue()
@@ -3483,7 +3557,11 @@ export class OpencodeHarness implements Harness {
    * sign-in is held for any more has none.
    */
   async #checkOwnSignIns(): Promise<void> {
-    const client = await this.#ensure();
+    // Checked on the machine's server while one runs; none is started for it.
+    const client = this.#client;
+    if (!client) {
+      return;
+    }
     const quiet = at(await quietDir());
     const [own, [integrations, models]] = await Promise.all([
       this.#ownCredentials(),
@@ -3780,6 +3858,7 @@ export class OpencodeHarness implements Harness {
       // A spawn after a dispose is a revival: the adapter is a module
       // singleton, the server it attaches to outlived the teardown.
       this.#disposed = false;
+      this.#machine.starting = true;
       this.#ready = (async () => {
         // Only OPENCODE_VERSION starts: its server API and plugin are what this speaks.
         await this.#installedVersion();
@@ -3801,6 +3880,9 @@ export class OpencodeHarness implements Harness {
           await askOpencode((options) => client.server.info(options)),
           "its server info"
         );
+        // What it says of itself, kept for the reports, which start no server.
+        // biome-ignore lint/complexity/noVoid: the read rides on the start; nothing waits on it
+        void this.#currentFacts();
         // Convergence keeps the server matching the machine's global config;
         // that is the machine agent's to do, and only for a server that reads
         // the config this agent writes.
@@ -3861,10 +3943,14 @@ export class OpencodeHarness implements Harness {
           this.#startConfigWatcher();
         }
         return client;
-      })().catch((error) => {
-        this.#ready = null;
-        throw error;
-      });
+      })()
+        .catch((error) => {
+          this.#ready = null;
+          throw error;
+        })
+        .finally(() => {
+          this.#machine.starting = false;
+        });
     }
     return this.#ready;
   }
@@ -4036,41 +4122,70 @@ export class OpencodeHarness implements Harness {
     return models;
   }
 
+  /** {@link OPENCODE_SERVER_FACTS} as last read or written; undefined until a server here has been read. */
+  #facts: ServerFacts | null | undefined;
+
+  async #serverFacts(): Promise<ServerFacts | undefined> {
+    if (this.#facts === undefined) {
+      this.#facts = await readJson<ServerFacts>(OPENCODE_SERVER_FACTS);
+    }
+    return this.#facts ?? undefined;
+  }
+
   /**
-   * Every model this machine's OpenCode runs: the machine's own server's, and
-   * for each provider an account here is of, that provider's as an account's
-   * own server lists them.
+   * What the machine's server says of itself, read from it while it runs and
+   * kept ({@link OPENCODE_SERVER_FACTS}); the facts as kept when none runs.
+   * Never starts one. A read the running server fails is said, and the
+   * facts kept before it stand.
+   */
+  async #currentFacts(): Promise<ServerFacts | undefined> {
+    const client = this.#client;
+    if (client) {
+      try {
+        const quiet = await quietDir();
+        const [models, listed] = await Promise.all([
+          opencodeCatalog(client, quiet),
+          askOpencode((options) =>
+            client.integration.list(at(quiet), options)
+          ).then((read) => answerOf(read, "its integrations")),
+        ]);
+        const facts: ServerFacts = {
+          models,
+          providers: listed.data.map((one) => ({ id: one.id, name: one.name })),
+        };
+        if (!Bun.deepEquals(facts, await this.#serverFacts())) {
+          this.#facts = facts;
+          await writeJson(OPENCODE_SERVER_FACTS, facts);
+        }
+      } catch (error) {
+        console.warn(
+          `[opencode] the machine's server did not say its models and providers: ${errorText(error)}`
+        );
+      }
+    }
+    return await this.#serverFacts();
+  }
+
+  /**
+   * Every model this machine's OpenCode runs: the machine's own server's
+   * ({@link #currentFacts}), and for each provider an account here is of,
+   * that provider's as an account's own server last listed them, each read
+   * as its server starts. No server is started for it.
    */
   async #catalog(): Promise<ModelInfo[]> {
-    const own = await opencodeCatalog(await this.#ensure(), await quietDir());
-    const accounts = new Map<string, string>();
+    const own = (await this.#currentFacts())?.models;
+    if (!own) {
+      throw new Error(harnessWords.opencodeModelsUnlisted);
+    }
+    const accounts = new Set<string>();
     for (const account of credentialAccountIds()) {
       const held = readHeld(account);
-      const provider = held ? opencodeProviderOf(held.provider) : undefined;
-      if (provider && !accounts.has(provider)) {
-        accounts.set(provider, account);
+      if (held) {
+        accounts.add(opencodeProviderOf(held.provider));
       }
     }
     const cached = this.#loadAccountCatalogs();
-    const listed = await Promise.all(
-      [...accounts].map(async ([provider, account]) => {
-        const known = cached[provider];
-        if (known) {
-          return known;
-        }
-        try {
-          return await this.#readAccountCatalog(
-            account,
-            await this.#ensureAccount(account)
-          );
-        } catch (error) {
-          console.warn(
-            `[opencode] ${provider}'s models are not listed: account ${account}'s server did not answer (${errorText(error)})`
-          );
-          return [];
-        }
-      })
-    );
+    const listed = [...accounts].map((provider) => cached[provider] ?? []);
     const provided = (row: ModelInfo): string =>
       row.value.slice(0, row.value.indexOf("/"));
     const models = [
@@ -4126,29 +4241,30 @@ export class OpencodeHarness implements Harness {
     );
   }
 
-  /** Every provider OpenCode can sign in to (its integrations), by id and name. */
-  async providerList(): Promise<{ id: string; name: string }[]> {
+  /**
+   * Every provider OpenCode can sign in to (its integrations), by id and
+   * name, as the machine's server last listed them ({@link #currentFacts});
+   * undefined while no server here ever has. No server is started for it.
+   */
+  async providerList(): Promise<{ id: string; name: string }[] | undefined> {
     if ((await opencodeBinary()) === undefined) {
       return [];
     }
-    const client = await this.#ensure();
-    const listed = await client.integration.list(at(await quietDir()));
-    return listed.data.map((one) => ({ id: one.id, name: one.name }));
+    return (await this.#currentFacts())?.providers;
   }
 
   /**
    * The accounts on this machine changed (one signed in, keyed, moved in or
    * forgotten). Each running account's server has its credential put on it as
    * it is written; one whose provider settings changed is replaced at rest,
-   * and one whose account is gone retires once idle. A provider whose models
-   * no account's server has listed yet has them listed.
+   * and one whose account is gone retires once idle. A provider's models are
+   * listed as its account's server next starts.
    */
   async accountsChanged(): Promise<void> {
     if (!this.#client) {
       return;
     }
     await this.#configTick();
-    await this.#catalog();
   }
 
   /** The plugin version this agent's servers load, written once per process. */
@@ -5624,15 +5740,14 @@ export class OpencodeHarness implements Harness {
   /**
    * The sessions OpenCode holds on this machine, root sessions only: every
    * server's database, the machine's and each account's, read in place
-   * ({@link sessionsOnMachine}), so a stopped account server's sessions are
-   * listed without starting it. The machine's server is up first: it is
-   * what converts a 1.x database before anything reads it as 2.0's.
+   * ({@link sessionsOnMachine}), so no server is started to list them. A
+   * 1.x database 2.0 has not converted yet holds no 2.0 sessions table, and
+   * lists none until a session's server converts it.
    */
   async listSessions(dir?: string): Promise<NeutralSessionInfo[]> {
     if ((await opencodeBinary()) === undefined) {
       return [];
     }
-    await this.#ensure();
     const tags = await readTags();
     return (await sessionsOnMachine(dir ? { directory: dir } : {})).map(
       (session) => sessionToInfo(session, tags[session.id])
@@ -5651,7 +5766,6 @@ export class OpencodeHarness implements Harness {
     if (!OPENCODE_SESSION_ID.test(sessionKey)) {
       return;
     }
-    await this.#ensure();
     const [session] = await sessionsOnMachine({ id: sessionKey });
     return session
       ? sessionToInfo(session, (await readTags())[sessionKey])
@@ -5930,9 +6044,9 @@ export class OpencodeHarness implements Harness {
       ) !== serversBefore;
     // Poke the watcher now rather than up to 2 s later.
     await this.#configTick(serversMoved);
-    await this.#ensure();
     // What follows talks to the server on the servers just written, never
-    // to the one it replaces.
+    // to the one it replaces. With none running, nothing is started for it:
+    // the next server starts on them ({@link #readFleetMcpNow}).
     const unsettled = serversMoved ? await this.#configSettled() : undefined;
     if (unsettled) {
       const { read, said } = await apartUnread(mcp);
@@ -6016,8 +6130,10 @@ export class OpencodeHarness implements Harness {
    * need ({@link #applyIfNeeded}) starts now.
    */
   async #configSettled(): Promise<FleetItemState | undefined> {
+    // With no server running there is nothing to settle: the next one starts
+    // on the config as written.
     // biome-ignore lint/suspicious/noUnnecessaryConditions: #converging is set in #ensure, a different method
-    if (!this.#converging) {
+    if (!(this.#converging && this.#client)) {
       return;
     }
     const settled = await readWithin(
@@ -6275,6 +6391,11 @@ export class OpencodeHarness implements Harness {
     if (this.#disposed || !this.#converging) {
       return;
     }
+    if (!this.#client) {
+      // No server runs here: nothing to mend, and none is started for it.
+      this.#mendAttempt = 0;
+      return;
+    }
     if (this.#syncing > 0) {
       this.#mendAttempt = Math.max(0, this.#mendAttempt - 1);
       this.#mendLater();
@@ -6411,6 +6532,13 @@ export class OpencodeHarness implements Harness {
       return {};
     }
     const { read: names, said } = await apartUnread(all);
+    if (!this.#client) {
+      // No server runs here, and none is started to read them: each is said
+      // as the last reading of these servers said it, else as written.
+      const states = { ...said, ...(await this.#unservedFleetMcp(names)) };
+      this.#heardFleetMcp(states, by);
+      return states;
+    }
     const { states: live, read } =
       names.length > 0 ? await this.#readLiveFleetMcp(names) : { states: {} };
     if (read) {
@@ -6435,24 +6563,44 @@ export class OpencodeHarness implements Harness {
     return states;
   }
 
+  /**
+   * The fleet servers' states with no server running here: each as the last
+   * reading said it when that reading was of the servers the launch config
+   * runs now ({@link fleetDigest}), else {@link UNSERVED}.
+   */
+  async #unservedFleetMcp(
+    names: string[]
+  ): Promise<Record<string, FleetItemState>> {
+    const taken = this.#fleetMcpRead;
+    const fleet = fleetDigest(await this.#launchConfig());
+    return Object.fromEntries(
+      names.map((name) => [
+        name,
+        (taken?.fleet === fleet && taken.names.has(name)
+          ? taken.states[name]
+          : undefined) ?? UNSERVED,
+      ])
+    );
+  }
+
   /** {@link #readFleetMcpNow}'s read of `names`, and the location it borrowed for it, for the release. */
   async #readLiveFleetMcp(names: string[]): Promise<{
     states: Record<string, FleetItemState>;
     read?: { directory: string; identity: ServerIdentity };
   }> {
     try {
-      await this.#ensure();
       const unsettled = await this.#configSettled();
       if (unsettled) {
         return {
           states: Object.fromEntries(names.map((name) => [name, unsettled])),
         };
       }
-      const client = await this.#ensure();
+      // The server serving now: a settle that replaced it published another.
+      const client = this.#client;
       const identity = this.#serverOwner.active;
-      if (!identity) {
+      if (!(client && identity)) {
         throw new Error(
-          "OpenCode's server isn't running, so its MCP servers couldn't be checked."
+          "OpenCode's server here ended before its MCP servers were read."
         );
       }
       // The server's own directory: a read there boots its location, which
