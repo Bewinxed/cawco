@@ -715,7 +715,8 @@ async function captures(browser) {
   const manifest = [];
   const shot = async (page, card, option, width, file, caption) => { await page.screenshot({ path: join(dir, file), type: "jpeg", quality: 88 }); manifest.push({ card, option, width, file, caption }); };
   const pick = (page, id, attr, v) => page.evaluate(([id, attr, v]) => document.querySelector("#" + id + ' [data-' + attr + '="' + v + '"]').click(), [id, attr, v]);
-  const openReveal = async (page) => { await page.evaluate(() => document.querySelector('.clip[data-key="reveal"] .fact-dur').click()); await page.waitForTimeout(500); };
+  // A pointer's press, as a person's: a key's press would put the focus (and its ring) in the controls.
+  const openReveal = async (page) => { await page.click('.clip[data-key="reveal"] .fact-dur'); await page.waitForTimeout(500); };
   for (const [w, h] of [[1440, 900], [390, 844]]) {
     let { page } = await openPage(browser, w, h);
     const phone = w === 390;

@@ -4,7 +4,7 @@
 
 // ---- Glyphs ----
 const icon = (name, cls) => SOLAR[name].replace("<svg ", '<svg aria-hidden="true" focusable="false"' + (cls ? ' class="' + cls + '"' : "") + " ");
-const ICON = { zoomIn: "minimalistic-magnifer-zoom-in-bold-duotone", zoomOut: "minimalistic-magnifer-zoom-out-bold-duotone", play: "play-bold-duotone", pause: "pause-bold-duotone", loop: "repeat-bold-duotone", chevron: "alt-arrow-down-linear", chevronRight: "alt-arrow-right-linear", chevronLeft: "alt-arrow-left-linear", chevronUp: "alt-arrow-up-linear", graph: "structure-bold-duotone", outline: "list-bold-duotone", fail: "danger-circle-bold-duotone", close: "close-bare" };
+const ICON = { zoomIn: "minimalistic-magnifer-zoom-in-bold-duotone", zoomOut: "minimalistic-magnifer-zoom-out-bold-duotone", play: "play-bold-duotone", pause: "pause-bold-duotone", loop: "repeat-bold-duotone", chevron: "alt-arrow-down-linear", chevronRight: "alt-arrow-right-linear", chevronLeft: "alt-arrow-left-linear", chevronUp: "alt-arrow-up-linear", graph: "structure-bold-duotone", outline: "list-bold-duotone", fail: "danger-bare", close: "close-bare" };
 // A clip's kind of property and its glyph (section B): what moves, read before its words are.
 const PROP_GLYPH = { opacity: "sun-fog-bold-duotone", position: "move-bold-duotone", size: "maximize-bold-duotone", colour: "palette-bold-duotone", text: "text-bold-duotone", unfold: "sort-vertical-bold-duotone" };
 const PROP_WORD = { opacity: "Opacity", position: "Position", size: "Size", colour: "Colour", text: "Text swap", unfold: "Unfold" };
@@ -1190,9 +1190,9 @@ function buildDock(opts = {}) {
   $("play").onclick = () => (playing ? stopPlay() : play());
   $("loop").onclick = () => { looping = !looping; $("loop").setAttribute("aria-pressed", String(looping)); if (looping && !playing) play(); };
   wireDock(km);
+  mountCtl();
   layoutDock();
   sizeDockRoom();
-  mountCtl();
 }
 // The hover ghost glides under the row the pointer is on (--dur-ghost on ease-in-out); its first showing fades
 // in where it stands.
@@ -1216,6 +1216,16 @@ function fitFacts() {
     f.dataset.drop = "tok";
     if (need() > room + 0.5) f.dataset.drop = "tok word";
   }
+}
+// The timeline's top fade starts under what holds at its top: the ruler, and an open row's head while it is held
+// there under the ruler, so that head stays whole ink.
+function tlFadeFrom() {
+  const t = $("tl"), rrow = t && t.querySelector(".ruler-row");
+  if (!rrow) return;
+  let from = rrow.offsetHeight;
+  const name = $("rows").querySelector(".clip:has(> .ctl-row) > .clip-name");
+  if (name && getComputedStyle(name).position === "sticky") { const top = name.getBoundingClientRect().top - t.getBoundingClientRect().top; if (top <= from + 0.5) from = top + name.offsetHeight; }
+  t.style.setProperty("--tl-fade-from", from + "px");
 }
 // A scroller with more past its top or its foot fades that end by the house edge fade (as the graph's view does):
 // the timeline, under its sticky ruler, and the page under review.
@@ -1318,6 +1328,7 @@ function layoutDock(work) {
   updateTime();
   // The top fade starts under the sticky ruler, so the ruler itself never fades.
   $("tl").style.setProperty("--tl-head", rrow.offsetHeight + "px");
+  tlFadeFrom();
   scrollFade($("tl"));
 }
 // An anchored start draws its tie: a hairline from the anchor's edge to this bar's start, a foot at each end.
@@ -1414,12 +1425,12 @@ function snapTargets(km, clips, skip) {
 }
 function wireDock(km) {
   const rows = $("rows"), tlEl = $("tl");
-  tlEl.onscroll = () => scrollFade(tlEl);
+  tlEl.onscroll = () => { tlFadeFrom(); scrollFade(tlEl); };
   // Scrub: the knob, or anywhere on the ruler row's ruler.
   const scrubAt = (e) => { const g = laneGeo(), tlb = tlEl.getBoundingClientRect(); stopPlayKeepTime(); time = clamp(((e.clientX - tlb.left - g.x0) / g.w) * g.end, 0, playLengthOf(tl.km.r)); drawStage(); updateTime(); };
   const startScrub = (e) => { e.preventDefault(); scrubbing = true; rootEl.dataset.scrubbing = ""; e.currentTarget.setPointerCapture(e.pointerId); scrubAt(e); e.currentTarget.onpointermove = scrubAt; e.currentTarget.onpointerup = e.currentTarget.onpointercancel = (ev) => { ev.currentTarget.onpointermove = null; scrubbing = false; delete rootEl.dataset.scrubbing; updateDash(); }; };
   $("ruler").onpointerdown = startScrub;
-  for (const name of rows.querySelectorAll(".clip-name")) name.onclick = (e) => { if (e.target.closest(".fact")) return; const bar = name.parentNode.querySelector(".bar"); barClick(bar.dataset.key, e, "pointer", { name: true }); };
+  for (const name of rows.querySelectorAll(".clip-name")) name.onclick = (e) => { if (e.target.closest(".fact, .ctl-head")) return; const bar = name.parentNode.querySelector(".bar"); barClick(bar.dataset.key, e, "pointer", { name: true }); };
   // A fact opens its clip's controls (section C); a press on the fact whose controls are open closes them.
   for (const f of rows.querySelectorAll(".fact")) f.onclick = (e) => {
     e.stopPropagation();
@@ -1645,6 +1656,10 @@ function mountCtl() {
   if (ctlMode() === "row") {
     const row = $("rows") && $("rows").querySelector('.clip[data-key="' + ctl.key + '"]');
     if (row && ctl.el.parentNode !== row) row.append(ctl.el);
+    // Its actions: on a narrow dock in the row's head line beside the name (held with it under the ruler); on a
+    // wide one at the controls' own top corner, so the name column keeps its facts and their token badges.
+    const home = stacked() ? row && row.querySelector(".clip-name") : ctl.el;
+    if (home && ctl.headEl && ctl.headEl.parentNode !== home) home.append(ctl.headEl);
   } else if (ctl.el.parentNode !== $("insp")) $("insp").append(ctl.el);
 }
 function openCtl(key, origin, anchor) {
@@ -1690,6 +1705,7 @@ function closeCtl() {
   if (p.ro) p.ro.disconnect();
   if (p.labelRo) p.labelRo.disconnect();
   p.el.remove();
+  if (p.headEl) p.headEl.remove();
   mountCtl();
   if (tl) layoutDock();
 }
@@ -1806,18 +1822,25 @@ function renderCtl(work) {
   const mode = isSpring(c.ease) ? "spring" : SEG_CURVES.includes(c.ease) ? c.ease : "custom";
   const d = msOf(c.dur), narrow = stacked();
   // The head: in the inspector the row's first line, led by the row's own glyph, so the controls say whose they
-  // are; in the row, the row is the head and only its actions stand, trailing. Reset where the clip is edited,
-  // then Close (Back where the inspector stands in the timeline's place), each a bare symbol.
+  // are; in the row, the row's own head line is the head, and the actions stand beside the name on a narrow
+  // dock (held with it under the ruler), at the controls' top corner on a wide one. Reset where the clip is edited, then Close (Back where
+  // the inspector stands in the timeline's place), each a bare symbol.
   const close = narrow && ctl.mode === "inspector" ? '<button class="icon-btn" id="ctlClose" type="button" aria-label="Back to the timeline" data-tip="Back to the timeline">' + icon(ICON.chevronLeft) + "</button>" : '<button class="icon-btn" id="ctlClose" type="button" aria-label="Close the clip\'s controls" data-tip="Close (Esc)">' + icon(ICON.close) + "</button>";
-  let html = '<div class="ctl-head" data-prop="' + (c.kind || "text") + '">';
-  if (narrow && ctl.mode === "inspector") html += close;
-  if (ctl.mode === "inspector") html += '<span class="lead" role="img" aria-label="' + PROP_WORD[c.kind || "text"] + '">' + icon(PROP_GLYPH[c.kind || "text"]) + "</span><p>" + esc(c.of) + " <span>" + esc(c.does) + "</span></p>";
-  html += (isEdited ? '<button class="ghost-btn" id="ctlReset" type="button">Reset</button>' : "") + (narrow && ctl.mode === "inspector" ? "" : close) + "</div>";
-  // Length: the slider and its figure. A spring's length is its perceptual duration: its response.
-  html += '<div class="ctl-sec ctl-len"><div class="ctl-label"><span>' + (mode === "spring" ? "Response" : "Duration") + "</span>" + (adhocDur(c, o) ? adhocBadge : "") + '</div><div class="ctl-line">' + sliderHtml(c, mode) + fieldHtml("dur", fieldVal(d), "ms", (mode === "spring" ? "Response" : "Duration") + ", ms") + "</div></div>";
+  const actions = (isEdited ? '<button class="ghost-btn" id="ctlReset" type="button">Reset</button>' : "") + (narrow && ctl.mode === "inspector" ? "" : close);
+  let html = "";
+  if (ctl.mode === "inspector") html += '<div class="ctl-head" data-prop="' + (c.kind || "text") + '">' + (narrow ? close : "") + '<span class="lead" role="img" aria-label="' + PROP_WORD[c.kind || "text"] + '">' + icon(PROP_GLYPH[c.kind || "text"]) + "</span><p>" + esc(c.of) + " <span>" + esc(c.does) + "</span></p>" + actions + "</div>";
+  else {
+    if (!ctl.headEl) { ctl.headEl = document.createElement("div"); ctl.headEl.className = "ctl-head ctl-head-row"; }
+    ctl.headEl.innerHTML = actions;
+  }
+  // Length: the slider and its figure (a spring's length is its perceptual duration: its response), with the
+  // delta under it in one column, so the length's short section leaves no hole beside the curve.
+  html += '<div class="ctl-col"><div class="ctl-sec ctl-len"><div class="ctl-label"><span>' + (mode === "spring" ? "Response" : "Duration") + "</span>" + (adhocDur(c, o) ? adhocBadge : "") + '</div><div class="ctl-line">' + sliderHtml(c, mode) + fieldHtml("dur", fieldVal(d), "ms", (mode === "spring" ? "Response" : "Duration") + ", ms") + "</div></div>";
   // The curve: past four short segments the list, as the inspector's variant control does (designer's 2C):
   // the house curves as their glyphs with their words, then Spring and Custom, one radio group in two columns.
   const CHOICES = SEG_CURVES.map((t) => [t, glyph(t), CURVE_WORD[t]]).concat([["spring", glyph({ spring: { bounce: 0.3 } }), "Spring"], ["custom", '<svg viewBox="0 0 16 10" aria-hidden="true"><path d="M1 9 C 6 9, 4 1, 15 1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="0"/><circle cx="6" cy="9" r="1.5" fill="currentColor"/><circle cx="4" cy="1" r="1.5" fill="currentColor"/></svg>', "Custom"]]);
+  if (c.from != null) html += '<div class="ctl-sec ctl-delta"><div class="ctl-label"><span><code>' + esc(c.prop) + "</code> from, to</span></div><div class=\"ctl-line\">" + fieldHtml("from", String(c.from), "", c.prop + " from") + '<span class="arrow">→</span>' + fieldHtml("to", String(c.to), c.unit || "", c.prop + " to") + "</div></div>";
+  html += "</div>";
   html += '<div class="ctl-sec ctl-curve"><div class="ctl-label"><span id="curveLabel">Curve</span></div><div class="curve-list" id="curveList" role="radiogroup" aria-labelledby="curveLabel">';
   for (const [t, g, w] of CHOICES) html += '<button class="curve-opt" type="button" role="radio" data-curve="' + t + '" aria-checked="' + (mode === t) + '" tabindex="' + (mode === t ? 0 : -1) + '">' + g + "<span>" + esc(w) + "</span></button>";
   html += "</div>";
@@ -1836,12 +1859,13 @@ function renderCtl(work) {
     for (const [k, w, u] of [["mass", "Mass", ""], ["stiffness", "Stiffness", ""], ["damping", "Damping", ""], ["velocity", "Velocity", "/s"]]) html += '<div class="spring-p"><span class="ctl-label">' + w + "</span>" + fieldHtml(k, f[k], u, w) + "</div>";
     html += "</div></div>";
   }
-  // Delta: from and to, where the property has them.
-  if (c.from != null) html += '<div class="ctl-sec ctl-delta"><div class="ctl-label"><span><code>' + esc(c.prop) + "</code> from, to</span></div><div class=\"ctl-line\">" + fieldHtml("from", String(c.from), "", c.prop + " from") + '<span class="arrow">→</span>' + fieldHtml("to", String(c.to), c.unit || "", c.prop + " to") + "</div></div>";
-  const focused = document.activeElement && el.contains(document.activeElement) ? document.activeElement : null;
+  const inCtl = (n) => !!n && (el.contains(n) || (!!ctl.headEl && ctl.headEl.contains(n)));
+  const q = (sel) => el.querySelector(sel) || (ctl.headEl && ctl.headEl.querySelector(sel));
+  const focused = document.activeElement && inCtl(document.activeElement) ? document.activeElement : null;
   const focusKey = focused ? (focused.type === "range" ? "range-" + focused.dataset.f : focused.dataset.f || focused.dataset.curve || focused.dataset.h || (focused.classList.contains("dslider") ? "slider" : focused.id ? "#" + focused.id : null)) : null;
   const caret = focused && focused.selectionStart;
   body.innerHTML = html;
+  mountCtl();
   ctl.committed = { dur: fieldVal(d), from: String(c.from), to: String(c.to), bez: Array.isArray(c.ease) ? c.ease.map((n) => +(+n).toFixed(3)).join(", ") : "", ...(mode === "spring" ? springFields(c) : {}) };
   wireCtl();
   labelTicks();
@@ -1849,7 +1873,7 @@ function renderCtl(work) {
   const track = el.querySelector(".dslider");
   if (track) { ctl.labelRo = new ResizeObserver(() => requestAnimationFrame(labelTicks)); ctl.labelRo.observe(track); }
   if (focusKey) {
-    const f = focusKey.startsWith("range-") ? el.querySelector('input[type="range"][data-f="' + focusKey.slice(6) + '"]') : focusKey.startsWith("#") ? el.querySelector(focusKey) : el.querySelector('input[data-f="' + focusKey + '"]:not([type="range"]), [data-curve="' + focusKey + '"], [data-h="' + focusKey + '"]') || (focusKey === "slider" ? el.querySelector(".dslider") : null);
+    const f = focusKey.startsWith("range-") ? el.querySelector('input[type="range"][data-f="' + focusKey.slice(6) + '"]') : focusKey.startsWith("#") ? q(focusKey) : el.querySelector('input[data-f="' + focusKey + '"]:not([type="range"]), [data-curve="' + focusKey + '"], [data-h="' + focusKey + '"]') || (focusKey === "slider" ? el.querySelector(".dslider") : null);
     if (f) { f.focus({ preventScroll: true }); if (caret != null && f.setSelectionRange) try { f.setSelectionRange(caret, caret); } catch {} }
   }
 }
@@ -1947,9 +1971,11 @@ function wireCtl() {
     });
     ctlCommit(next, { replay: true });
   };
-  const rs = el.querySelector("#ctlReset");
-  if (rs) rs.onclick = () => { const next = clone(km.e.cur), i = next.findIndex((x) => x.key === ctl.key); next[i] = clone(km.e.orig.find((x) => x.key === ctl.key)); ctlCommit(next, { replay: true }); };
-  el.querySelector("#ctlClose").onclick = () => closeAndFocusSource();
+  const head = ctl.headEl && ctl.headEl.isConnected ? ctl.headEl : el;
+  const rs = head.querySelector("#ctlReset");
+  // In the row the actions stand in the row's head, whose own press opens the controls: theirs stops there.
+  if (rs) rs.onclick = (ev) => { ev.stopPropagation(); const next = clone(km.e.cur), i = next.findIndex((x) => x.key === ctl.key); next[i] = clone(km.e.orig.find((x) => x.key === ctl.key)); ctlCommit(next, { replay: true }); };
+  head.querySelector("#ctlClose").onclick = (ev) => { ev.stopPropagation(); closeAndFocusSource(); };
   wireSlider(el.querySelector(".dslider"));
   for (const k of el.querySelectorAll(".ceditor .knob")) wireKnob(k);
   // A finger's 44px circle round each handle hands its press to the handle.

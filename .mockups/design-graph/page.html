@@ -2280,7 +2280,7 @@ html[data-layout="desk"] .panel[data-open="false"] .panel-shell:active .tab-glyp
 .tl { --fade-t: 0px; --fade-b: 0px; }
 .tl[data-fade~="top"] { --fade-t: var(--c-edge-fade-len); }
 .tl[data-fade~="foot"] { --fade-b: var(--c-edge-fade-len); }
-.tl[data-fade] { mask-image: linear-gradient(#000 var(--tl-head, 0px), transparent var(--tl-head, 0px), #000 calc(var(--tl-head, 0px) + var(--fade-t)), #000 calc(100% - var(--fade-b)), transparent); }
+.tl[data-fade] { mask-image: linear-gradient(#000 var(--tl-fade-from, 0px), transparent var(--tl-fade-from, 0px), #000 calc(var(--tl-fade-from, 0px) + var(--fade-t)), #000 calc(100% - var(--fade-b)), transparent); }
 .tl-row { display: grid; grid-template-columns: var(--dock-name-w) minmax(0, 1fr); }
 .ruler-row { position: sticky; inset-block-start: 0; z-index: 6; align-items: center; min-block-size: var(--c-pill-h); background: var(--surface-raised); padding-block-end: var(--space-1); }
 .ruler-row .ruler { grid-column: 2; }
@@ -2424,7 +2424,13 @@ html[data-kinds="ink"] .tail { --tail-fill: var(--surface-fill-strong); --tail-e
 .clip:has(> .ctl-row) { z-index: 5; }
 .clip > .ctl-row { position: relative; background: linear-gradient(var(--c-chosen-wash), var(--c-chosen-wash)), var(--surface-raised); }
 .ctl-row .ctl-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: var(--space-3) var(--space-5); align-items: start; }
-.ctl-row .ctl-head { grid-column: 1 / -1; justify-content: flex-end; min-block-size: 0; margin-block-end: calc(-1 * var(--space-2)); }
+/* The length and the delta share a column; in the row the actions stand beside the row's name (narrow) or at
+   the controls' top corner (wide). */
+.ctl-col { display: flex; flex-direction: column; gap: var(--space-3); min-inline-size: 0; }
+.clip-name:has(> .ctl-head) { grid-template-columns: var(--c-row-lead) minmax(0, 1fr) auto; }
+.clip-name:has(> .ctl-head) > :is(.l1, .facts) { grid-column: 2; }
+.clip-name > .ctl-head { grid-column: 3; grid-row: 1 / span 2; align-self: start; min-block-size: 0; gap: var(--space-1); cursor: auto; }
+.ctl-row > .ctl-head { position: absolute; z-index: 1; inset-block-start: 0; inset-inline-end: 0; min-block-size: 0; gap: var(--space-1); }
 .dock-grid { flex: 1 1 auto; min-block-size: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); column-gap: var(--space-4); }
 .dock[data-insp] .dock-grid { grid-template-columns: minmax(0, 1fr) var(--c-sheet-inspector-w); }
 .dock-head { grid-column: 1 / -1; }
@@ -2636,10 +2642,8 @@ html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-po
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.var, .region-head, .fact, .fld, .curve-opt) { min-block-size: var(--c-touch-floor); }
 /* A fact cut to its glyph (a narrow facts line gives up its words) still takes a finger: the floor wide, its glyph centred. */
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .fact { min-inline-size: var(--c-touch-floor); justify-content: center; }
-/* The row's open controls stand clear of the lane's 44px bar layer, and their Close keeps its own layer inside
-   the timeline. */
+/* The row's open controls stand clear of the lane's 44px bar layer. */
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .clip > .ctl-row { margin-block-start: calc(var(--c-touch-floor) - var(--c-pill-h)); }
-html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .ctl-head { padding-inline-end: calc((var(--c-touch-floor) - var(--c-btn-h-xs)) / 2); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .var { display: flex; align-items: center; }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .fld { block-size: var(--c-touch-floor); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.dslider, .ctl input[type="range"], .dial input[type="range"]) { min-block-size: var(--c-touch-floor); }
@@ -6007,11 +6011,13 @@ const SOLAR = {
   "text-bold-duotone": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M8 2h-.066c-.886 0-1.65 0-2.262.082c-.655.088-1.284.287-1.793.797c-.51.51-.709 1.138-.797 1.793C3 5.284 3 6.048 3 6.934V7.95a1 1 0 1 0 2 0V7c0-.971.002-1.599.064-2.061c.059-.434.153-.57.229-.646s.212-.17.646-.229C6.4 4.002 7.029 4 8 4h8c.971 0 1.599.002 2.061.064c.434.059.57.153.646.229s.17.212.229.646C18.998 5.4 19 6.029 19 7v.95a1 1 0 1 0 2 0V6.934c0-.886 0-1.65-.082-2.262c-.088-.655-.287-1.284-.797-1.793c-.51-.51-1.138-.709-1.793-.797C17.716 2 16.952 2 16.066 2z" clip-rule="evenodd"/><path fill="currentColor" d="M13 4h-2v16h2z" opacity=".5"/><path fill="currentColor" fill-rule="evenodd" d="M6 21a1 1 0 0 1 1-1h10a1 1 0 1 1 0 2H7a1 1 0 0 1-1-1" clip-rule="evenodd"/></svg>',
   "sort-vertical-bold-duotone": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="currentColor"><path d="M20 10.875C20.3013 10.875 20.5733 10.6948 20.6907 10.4173C20.8081 10.1399 20.7482 9.81916 20.5384 9.60289L16.5384 5.47789C16.3972 5.33222 16.2029 5.25 16 5.25C15.7971 5.25 15.6029 5.33222 15.4616 5.47789L11.4616 9.60289C11.2519 9.81916 11.1919 10.1399 11.3093 10.4173C11.4268 10.6948 11.6988 10.875 12 10.875H15.25V18C15.25 18.4142 15.5858 18.75 16 18.75C16.4142 18.75 16.75 18.4142 16.75 18L16.75 10.875H20Z"/><path d="M12 13.125C12.3013 13.125 12.5733 13.3052 12.6907 13.5827C12.8081 13.8601 12.7482 14.1808 12.5384 14.3971L8.53844 18.5221C8.39719 18.6678 8.20293 18.75 8.00002 18.75C7.79711 18.75 7.60285 18.6678 7.46159 18.5221L3.46159 14.3971C3.25188 14.1808 3.19192 13.8601 3.30934 13.5827C3.42676 13.3052 3.69877 13.125 4.00002 13.125H7.25002L7.25002 6C7.25002 5.58579 7.5858 5.25 8.00002 5.25C8.41423 5.25 8.75002 5.58579 8.75002 6L8.75002 13.125L12 13.125Z" opacity=".5"/></g></svg>',
   "structure-bold-duotone": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="currentColor"><path d="M5 16C6.65685 16 8 17.3431 8 19C8 20.6569 6.65685 22 5 22C3.34315 22 2 20.6569 2 19C2 17.3431 3.34315 16 5 16Z"/><path d="M19 16C20.6569 16 22 17.3431 22 19C22 20.6569 20.6569 22 19 22C17.3431 22 16 20.6569 16 19C16 17.3431 17.3431 16 19 16Z"/><path d="M5 2C6.65685 2 8 3.34315 8 5C8 6.65685 6.65685 8 5 8C3.34315 8 2 6.65685 2 5C2 3.34315 3.34315 2 5 2Z"/><path d="M19 2C20.6569 2 22 3.34315 22 5C22 6.65685 20.6569 8 19 8C17.3431 8 16 6.65685 16 5C16 3.34315 17.3431 2 19 2Z"/><g opacity=".5"><path d="M16.093 4.25572C16.0626 4.25194 16.0315 4.25 16 4.25H8C7.96849 4.25 7.93744 4.25194 7.90695 4.25572C7.9677 4.49371 8 4.74308 8 5C8 5.25692 7.9677 5.50629 7.90695 5.74428C7.93744 5.74806 7.96849 5.75 8 5.75H16C16.0315 5.75 16.0626 5.74805 16.093 5.74428C16.0323 5.50629 16 5.25692 16 5C16 4.74308 16.0323 4.49371 16.093 4.25572Z"/><path d="M19 8C19.2569 8 19.5063 7.96771 19.7443 7.90695C19.7481 7.93744 19.75 7.96849 19.75 8V16C19.75 16.0315 19.7481 16.0626 19.7443 16.0931C19.5063 16.0323 19.2569 16 19 16C18.7431 16 18.4937 16.0323 18.2557 16.0931C18.2519 16.0626 18.25 16.0315 18.25 16V8C18.25 7.96849 18.2519 7.93744 18.2557 7.90695C18.4937 7.96771 18.7431 8 19 8Z"/><path d="M16.0931 18.2557C16.0626 18.2519 16.0315 18.25 16 18.25H8C7.96849 18.25 7.93744 18.2519 7.90695 18.2557C7.9677 18.4937 8 18.7431 8 19C8 19.2569 7.9677 19.5063 7.90695 19.7443C7.93744 19.7481 7.96849 19.75 8 19.75H16C16.0315 19.75 16.0626 19.7481 16.0931 19.7443C16.0323 19.5063 16 19.2569 16 19C16 18.7431 16.0323 18.4937 16.0931 18.2557Z"/><path d="M5 8C4.74308 8 4.49371 7.9677 4.25572 7.90695C4.25194 7.93744 4.25 7.96849 4.25 8V16C4.25 16.0315 4.25194 16.0626 4.25572 16.093C4.49371 16.0323 4.74308 16 5 16C5.25692 16 5.50629 16.0323 5.74428 16.0931C5.74806 16.0626 5.75 16.0315 5.75 16L5.75 8C5.75 7.96849 5.74806 7.93744 5.74428 7.90695C5.50629 7.9677 5.25692 8 5 8Z"/></g></g></svg>',
-  "danger-circle-bold-duotone": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="currentColor"><path d="M22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22C17.5228 22 22 17.5228 22 12Z" opacity=".5"/><path d="M12 6.25C12.4142 6.25 12.75 6.58579 12.75 7V13C12.75 13.4142 12.4142 13.75 12 13.75C11.5858 13.75 11.25 13.4142 11.25 13V7C11.25 6.58579 11.5858 6.25 12 6.25Z"/><path d="M12 17C12.5523 17 13 16.5523 13 16C13 15.4477 12.5523 15 12 15C11.4477 15 11 15.4477 11 16C11 16.5523 11.4477 17 12 17Z"/></g></svg>',
   "list-bold-duotone": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="currentColor"><path fill-rule="evenodd" d="M3.25 7C3.25 6.58579 3.58579 6.25 4 6.25H20C20.4142 6.25 20.75 6.58579 20.75 7C20.75 7.41421 20.4142 7.75 20 7.75H4C3.58579 7.75 3.25 7.41421 3.25 7Z" clip-rule="evenodd"/><g opacity=".5"><path d="M9 16.25C9.41421 16.25 9.75 16.5858 9.75 17C9.75 17.4142 9.41421 17.75 9 17.75H4C3.58579 17.75 3.25 17.4142 3.25 17C3.25 16.5858 3.58579 16.25 4 16.25H9Z"/><path d="M15 11.25C15.4142 11.25 15.75 11.5858 15.75 12C15.75 12.4142 15.4142 12.75 15 12.75H4C3.58579 12.75 3.25 12.4142 3.25 12C3.25 11.5858 3.58579 11.25 4 11.25H15Z"/></g></g></svg>',
   "alt-arrow-right-linear": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5L15 12L9 19"/></svg>',
   "alt-arrow-left-linear": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 5L9 12L15 19"/></svg>',
   "alt-arrow-up-linear": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 15L12 9L5 15"/></svg>',
+  // Not Solar: every danger mark the set ships is enclosed (a circle, a square, an octagon); the bare mark, drawn to the
+  // set's grammar (24px grid, round caps), for a failure state's name.
+  "danger-bare": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2" d="M12 5v9"/><circle cx="12" cy="18.5" r="1.25" fill="currentColor"/></svg>',
   // Not Solar: the set has no bare close, only circled and squared ones; the house's own (apps/dashboard Close.svelte).
   "close-bare": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.5" d="M6 6l12 12M18 6L6 18"/></svg>',
 };
@@ -6022,7 +6028,7 @@ const SOLAR = {
 
 // ---- Glyphs ----
 const icon = (name, cls) => SOLAR[name].replace("<svg ", '<svg aria-hidden="true" focusable="false"' + (cls ? ' class="' + cls + '"' : "") + " ");
-const ICON = { zoomIn: "minimalistic-magnifer-zoom-in-bold-duotone", zoomOut: "minimalistic-magnifer-zoom-out-bold-duotone", play: "play-bold-duotone", pause: "pause-bold-duotone", loop: "repeat-bold-duotone", chevron: "alt-arrow-down-linear", chevronRight: "alt-arrow-right-linear", chevronLeft: "alt-arrow-left-linear", chevronUp: "alt-arrow-up-linear", graph: "structure-bold-duotone", outline: "list-bold-duotone", fail: "danger-circle-bold-duotone", close: "close-bare" };
+const ICON = { zoomIn: "minimalistic-magnifer-zoom-in-bold-duotone", zoomOut: "minimalistic-magnifer-zoom-out-bold-duotone", play: "play-bold-duotone", pause: "pause-bold-duotone", loop: "repeat-bold-duotone", chevron: "alt-arrow-down-linear", chevronRight: "alt-arrow-right-linear", chevronLeft: "alt-arrow-left-linear", chevronUp: "alt-arrow-up-linear", graph: "structure-bold-duotone", outline: "list-bold-duotone", fail: "danger-bare", close: "close-bare" };
 // A clip's kind of property and its glyph (section B): what moves, read before its words are.
 const PROP_GLYPH = { opacity: "sun-fog-bold-duotone", position: "move-bold-duotone", size: "maximize-bold-duotone", colour: "palette-bold-duotone", text: "text-bold-duotone", unfold: "sort-vertical-bold-duotone" };
 const PROP_WORD = { opacity: "Opacity", position: "Position", size: "Size", colour: "Colour", text: "Text swap", unfold: "Unfold" };
@@ -7208,9 +7214,9 @@ function buildDock(opts = {}) {
   $("play").onclick = () => (playing ? stopPlay() : play());
   $("loop").onclick = () => { looping = !looping; $("loop").setAttribute("aria-pressed", String(looping)); if (looping && !playing) play(); };
   wireDock(km);
+  mountCtl();
   layoutDock();
   sizeDockRoom();
-  mountCtl();
 }
 // The hover ghost glides under the row the pointer is on (--dur-ghost on ease-in-out); its first showing fades
 // in where it stands.
@@ -7234,6 +7240,16 @@ function fitFacts() {
     f.dataset.drop = "tok";
     if (need() > room + 0.5) f.dataset.drop = "tok word";
   }
+}
+// The timeline's top fade starts under what holds at its top: the ruler, and an open row's head while it is held
+// there under the ruler, so that head stays whole ink.
+function tlFadeFrom() {
+  const t = $("tl"), rrow = t && t.querySelector(".ruler-row");
+  if (!rrow) return;
+  let from = rrow.offsetHeight;
+  const name = $("rows").querySelector(".clip:has(> .ctl-row) > .clip-name");
+  if (name && getComputedStyle(name).position === "sticky") { const top = name.getBoundingClientRect().top - t.getBoundingClientRect().top; if (top <= from + 0.5) from = top + name.offsetHeight; }
+  t.style.setProperty("--tl-fade-from", from + "px");
 }
 // A scroller with more past its top or its foot fades that end by the house edge fade (as the graph's view does):
 // the timeline, under its sticky ruler, and the page under review.
@@ -7336,6 +7352,7 @@ function layoutDock(work) {
   updateTime();
   // The top fade starts under the sticky ruler, so the ruler itself never fades.
   $("tl").style.setProperty("--tl-head", rrow.offsetHeight + "px");
+  tlFadeFrom();
   scrollFade($("tl"));
 }
 // An anchored start draws its tie: a hairline from the anchor's edge to this bar's start, a foot at each end.
@@ -7432,12 +7449,12 @@ function snapTargets(km, clips, skip) {
 }
 function wireDock(km) {
   const rows = $("rows"), tlEl = $("tl");
-  tlEl.onscroll = () => scrollFade(tlEl);
+  tlEl.onscroll = () => { tlFadeFrom(); scrollFade(tlEl); };
   // Scrub: the knob, or anywhere on the ruler row's ruler.
   const scrubAt = (e) => { const g = laneGeo(), tlb = tlEl.getBoundingClientRect(); stopPlayKeepTime(); time = clamp(((e.clientX - tlb.left - g.x0) / g.w) * g.end, 0, playLengthOf(tl.km.r)); drawStage(); updateTime(); };
   const startScrub = (e) => { e.preventDefault(); scrubbing = true; rootEl.dataset.scrubbing = ""; e.currentTarget.setPointerCapture(e.pointerId); scrubAt(e); e.currentTarget.onpointermove = scrubAt; e.currentTarget.onpointerup = e.currentTarget.onpointercancel = (ev) => { ev.currentTarget.onpointermove = null; scrubbing = false; delete rootEl.dataset.scrubbing; updateDash(); }; };
   $("ruler").onpointerdown = startScrub;
-  for (const name of rows.querySelectorAll(".clip-name")) name.onclick = (e) => { if (e.target.closest(".fact")) return; const bar = name.parentNode.querySelector(".bar"); barClick(bar.dataset.key, e, "pointer", { name: true }); };
+  for (const name of rows.querySelectorAll(".clip-name")) name.onclick = (e) => { if (e.target.closest(".fact, .ctl-head")) return; const bar = name.parentNode.querySelector(".bar"); barClick(bar.dataset.key, e, "pointer", { name: true }); };
   // A fact opens its clip's controls (section C); a press on the fact whose controls are open closes them.
   for (const f of rows.querySelectorAll(".fact")) f.onclick = (e) => {
     e.stopPropagation();
@@ -7663,6 +7680,10 @@ function mountCtl() {
   if (ctlMode() === "row") {
     const row = $("rows") && $("rows").querySelector('.clip[data-key="' + ctl.key + '"]');
     if (row && ctl.el.parentNode !== row) row.append(ctl.el);
+    // Its actions: on a narrow dock in the row's head line beside the name (held with it under the ruler); on a
+    // wide one at the controls' own top corner, so the name column keeps its facts and their token badges.
+    const home = stacked() ? row && row.querySelector(".clip-name") : ctl.el;
+    if (home && ctl.headEl && ctl.headEl.parentNode !== home) home.append(ctl.headEl);
   } else if (ctl.el.parentNode !== $("insp")) $("insp").append(ctl.el);
 }
 function openCtl(key, origin, anchor) {
@@ -7708,6 +7729,7 @@ function closeCtl() {
   if (p.ro) p.ro.disconnect();
   if (p.labelRo) p.labelRo.disconnect();
   p.el.remove();
+  if (p.headEl) p.headEl.remove();
   mountCtl();
   if (tl) layoutDock();
 }
@@ -7824,18 +7846,25 @@ function renderCtl(work) {
   const mode = isSpring(c.ease) ? "spring" : SEG_CURVES.includes(c.ease) ? c.ease : "custom";
   const d = msOf(c.dur), narrow = stacked();
   // The head: in the inspector the row's first line, led by the row's own glyph, so the controls say whose they
-  // are; in the row, the row is the head and only its actions stand, trailing. Reset where the clip is edited,
-  // then Close (Back where the inspector stands in the timeline's place), each a bare symbol.
+  // are; in the row, the row's own head line is the head, and the actions stand beside the name on a narrow
+  // dock (held with it under the ruler), at the controls' top corner on a wide one. Reset where the clip is edited, then Close (Back where
+  // the inspector stands in the timeline's place), each a bare symbol.
   const close = narrow && ctl.mode === "inspector" ? '<button class="icon-btn" id="ctlClose" type="button" aria-label="Back to the timeline" data-tip="Back to the timeline">' + icon(ICON.chevronLeft) + "</button>" : '<button class="icon-btn" id="ctlClose" type="button" aria-label="Close the clip\'s controls" data-tip="Close (Esc)">' + icon(ICON.close) + "</button>";
-  let html = '<div class="ctl-head" data-prop="' + (c.kind || "text") + '">';
-  if (narrow && ctl.mode === "inspector") html += close;
-  if (ctl.mode === "inspector") html += '<span class="lead" role="img" aria-label="' + PROP_WORD[c.kind || "text"] + '">' + icon(PROP_GLYPH[c.kind || "text"]) + "</span><p>" + esc(c.of) + " <span>" + esc(c.does) + "</span></p>";
-  html += (isEdited ? '<button class="ghost-btn" id="ctlReset" type="button">Reset</button>' : "") + (narrow && ctl.mode === "inspector" ? "" : close) + "</div>";
-  // Length: the slider and its figure. A spring's length is its perceptual duration: its response.
-  html += '<div class="ctl-sec ctl-len"><div class="ctl-label"><span>' + (mode === "spring" ? "Response" : "Duration") + "</span>" + (adhocDur(c, o) ? adhocBadge : "") + '</div><div class="ctl-line">' + sliderHtml(c, mode) + fieldHtml("dur", fieldVal(d), "ms", (mode === "spring" ? "Response" : "Duration") + ", ms") + "</div></div>";
+  const actions = (isEdited ? '<button class="ghost-btn" id="ctlReset" type="button">Reset</button>' : "") + (narrow && ctl.mode === "inspector" ? "" : close);
+  let html = "";
+  if (ctl.mode === "inspector") html += '<div class="ctl-head" data-prop="' + (c.kind || "text") + '">' + (narrow ? close : "") + '<span class="lead" role="img" aria-label="' + PROP_WORD[c.kind || "text"] + '">' + icon(PROP_GLYPH[c.kind || "text"]) + "</span><p>" + esc(c.of) + " <span>" + esc(c.does) + "</span></p>" + actions + "</div>";
+  else {
+    if (!ctl.headEl) { ctl.headEl = document.createElement("div"); ctl.headEl.className = "ctl-head ctl-head-row"; }
+    ctl.headEl.innerHTML = actions;
+  }
+  // Length: the slider and its figure (a spring's length is its perceptual duration: its response), with the
+  // delta under it in one column, so the length's short section leaves no hole beside the curve.
+  html += '<div class="ctl-col"><div class="ctl-sec ctl-len"><div class="ctl-label"><span>' + (mode === "spring" ? "Response" : "Duration") + "</span>" + (adhocDur(c, o) ? adhocBadge : "") + '</div><div class="ctl-line">' + sliderHtml(c, mode) + fieldHtml("dur", fieldVal(d), "ms", (mode === "spring" ? "Response" : "Duration") + ", ms") + "</div></div>";
   // The curve: past four short segments the list, as the inspector's variant control does (designer's 2C):
   // the house curves as their glyphs with their words, then Spring and Custom, one radio group in two columns.
   const CHOICES = SEG_CURVES.map((t) => [t, glyph(t), CURVE_WORD[t]]).concat([["spring", glyph({ spring: { bounce: 0.3 } }), "Spring"], ["custom", '<svg viewBox="0 0 16 10" aria-hidden="true"><path d="M1 9 C 6 9, 4 1, 15 1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="0"/><circle cx="6" cy="9" r="1.5" fill="currentColor"/><circle cx="4" cy="1" r="1.5" fill="currentColor"/></svg>', "Custom"]]);
+  if (c.from != null) html += '<div class="ctl-sec ctl-delta"><div class="ctl-label"><span><code>' + esc(c.prop) + "</code> from, to</span></div><div class=\"ctl-line\">" + fieldHtml("from", String(c.from), "", c.prop + " from") + '<span class="arrow">→</span>' + fieldHtml("to", String(c.to), c.unit || "", c.prop + " to") + "</div></div>";
+  html += "</div>";
   html += '<div class="ctl-sec ctl-curve"><div class="ctl-label"><span id="curveLabel">Curve</span></div><div class="curve-list" id="curveList" role="radiogroup" aria-labelledby="curveLabel">';
   for (const [t, g, w] of CHOICES) html += '<button class="curve-opt" type="button" role="radio" data-curve="' + t + '" aria-checked="' + (mode === t) + '" tabindex="' + (mode === t ? 0 : -1) + '">' + g + "<span>" + esc(w) + "</span></button>";
   html += "</div>";
@@ -7854,12 +7883,13 @@ function renderCtl(work) {
     for (const [k, w, u] of [["mass", "Mass", ""], ["stiffness", "Stiffness", ""], ["damping", "Damping", ""], ["velocity", "Velocity", "/s"]]) html += '<div class="spring-p"><span class="ctl-label">' + w + "</span>" + fieldHtml(k, f[k], u, w) + "</div>";
     html += "</div></div>";
   }
-  // Delta: from and to, where the property has them.
-  if (c.from != null) html += '<div class="ctl-sec ctl-delta"><div class="ctl-label"><span><code>' + esc(c.prop) + "</code> from, to</span></div><div class=\"ctl-line\">" + fieldHtml("from", String(c.from), "", c.prop + " from") + '<span class="arrow">→</span>' + fieldHtml("to", String(c.to), c.unit || "", c.prop + " to") + "</div></div>";
-  const focused = document.activeElement && el.contains(document.activeElement) ? document.activeElement : null;
+  const inCtl = (n) => !!n && (el.contains(n) || (!!ctl.headEl && ctl.headEl.contains(n)));
+  const q = (sel) => el.querySelector(sel) || (ctl.headEl && ctl.headEl.querySelector(sel));
+  const focused = document.activeElement && inCtl(document.activeElement) ? document.activeElement : null;
   const focusKey = focused ? (focused.type === "range" ? "range-" + focused.dataset.f : focused.dataset.f || focused.dataset.curve || focused.dataset.h || (focused.classList.contains("dslider") ? "slider" : focused.id ? "#" + focused.id : null)) : null;
   const caret = focused && focused.selectionStart;
   body.innerHTML = html;
+  mountCtl();
   ctl.committed = { dur: fieldVal(d), from: String(c.from), to: String(c.to), bez: Array.isArray(c.ease) ? c.ease.map((n) => +(+n).toFixed(3)).join(", ") : "", ...(mode === "spring" ? springFields(c) : {}) };
   wireCtl();
   labelTicks();
@@ -7867,7 +7897,7 @@ function renderCtl(work) {
   const track = el.querySelector(".dslider");
   if (track) { ctl.labelRo = new ResizeObserver(() => requestAnimationFrame(labelTicks)); ctl.labelRo.observe(track); }
   if (focusKey) {
-    const f = focusKey.startsWith("range-") ? el.querySelector('input[type="range"][data-f="' + focusKey.slice(6) + '"]') : focusKey.startsWith("#") ? el.querySelector(focusKey) : el.querySelector('input[data-f="' + focusKey + '"]:not([type="range"]), [data-curve="' + focusKey + '"], [data-h="' + focusKey + '"]') || (focusKey === "slider" ? el.querySelector(".dslider") : null);
+    const f = focusKey.startsWith("range-") ? el.querySelector('input[type="range"][data-f="' + focusKey.slice(6) + '"]') : focusKey.startsWith("#") ? q(focusKey) : el.querySelector('input[data-f="' + focusKey + '"]:not([type="range"]), [data-curve="' + focusKey + '"], [data-h="' + focusKey + '"]') || (focusKey === "slider" ? el.querySelector(".dslider") : null);
     if (f) { f.focus({ preventScroll: true }); if (caret != null && f.setSelectionRange) try { f.setSelectionRange(caret, caret); } catch {} }
   }
 }
@@ -7965,9 +7995,11 @@ function wireCtl() {
     });
     ctlCommit(next, { replay: true });
   };
-  const rs = el.querySelector("#ctlReset");
-  if (rs) rs.onclick = () => { const next = clone(km.e.cur), i = next.findIndex((x) => x.key === ctl.key); next[i] = clone(km.e.orig.find((x) => x.key === ctl.key)); ctlCommit(next, { replay: true }); };
-  el.querySelector("#ctlClose").onclick = () => closeAndFocusSource();
+  const head = ctl.headEl && ctl.headEl.isConnected ? ctl.headEl : el;
+  const rs = head.querySelector("#ctlReset");
+  // In the row the actions stand in the row's head, whose own press opens the controls: theirs stops there.
+  if (rs) rs.onclick = (ev) => { ev.stopPropagation(); const next = clone(km.e.cur), i = next.findIndex((x) => x.key === ctl.key); next[i] = clone(km.e.orig.find((x) => x.key === ctl.key)); ctlCommit(next, { replay: true }); };
+  head.querySelector("#ctlClose").onclick = (ev) => { ev.stopPropagation(); closeAndFocusSource(); };
   wireSlider(el.querySelector(".dslider"));
   for (const k of el.querySelectorAll(".ceditor .knob")) wireKnob(k);
   // A finger's 44px circle round each handle hands its press to the handle.
