@@ -65,6 +65,11 @@ const LEG = 74;
 /** Follow-through: a child reads its parent this much earlier, at this share. */
 const LAG = { wing: 90, head: 110, tuft: 120 } as const;
 const FOLLOW = 0.45;
+/**
+ * A shoulder sliding out goes down his side this far per unit out: his side
+ * runs nearly straight down, so the wing's root stays on his body.
+ */
+const SHOULDER_DROP = 2;
 /** A pose change: ease-in-out over this long; a prop arrives over the first part of it. */
 export const BLEND_MS = 640;
 
@@ -79,6 +84,8 @@ interface Channels {
   gx: number;
   gy: number;
   lid: number;
+  oL: number;
+  oR: number;
   tilt: number;
   weight: number;
   yaw: number;
@@ -87,6 +94,8 @@ interface Channels {
 function channels(p: Pose): Channels {
   return {
     aL: p.wingL.a,
+    oL: p.wingL.out ?? 0,
+    oR: p.wingR.out ?? 0,
     eL: p.wingL.e,
     aR: p.wingR.a,
     eR: p.wingR.e,
@@ -466,8 +475,16 @@ export function solve(
     idle.wing.curl * sway(t, period / 3, 0.1) +
     FOLLOW * (cWing.aR - c.aR + lag(loop.swayR, LAG.wing)) +
     accentR;
-  const wingL = turn(aL - STILL_WING.L, PIVOT.wingL);
-  const wingR = turn(-(aR - STILL_WING.R), PIVOT.wingR);
+  // A raised wing's shoulder slides down and out along his side, its root still on his body,
+  // before it turns: the wing then lifts beside his head, not across it.
+  const wingL = multiply(
+    move(-c.oL, SHOULDER_DROP * c.oL),
+    turn(aL - STILL_WING.L, PIVOT.wingL)
+  );
+  const wingR = multiply(
+    move(c.oR, SHOULDER_DROP * c.oR),
+    turn(-(aR - STILL_WING.R), PIVOT.wingR)
+  );
   const handL = turn(eL, PIVOT.handL);
   const handR = turn(-eR, PIVOT.handR);
 

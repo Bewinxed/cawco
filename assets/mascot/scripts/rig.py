@@ -387,7 +387,7 @@ def parts(ink: dict[str, np.ndarray]) -> dict:
         # The shoulder: his black wing, and a round root inside his body so it turns without
         # opening a gap.
         # The black's anti-aliased specks at the feathers' gaps join it within 1.5 units.
-        whole = black | (disc(*shoulder, 22) & shrink(S, 3))
+        whole = black | (disc(*shoulder, 12) & shrink(S, 3))
         arm = main_piece(grow(whole, 1.5)) & whole
         # The primaries: every feather, its root running on under the coverts (2 inside the
         # wing's outline, so its edge never lies on the black's).

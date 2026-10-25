@@ -262,8 +262,14 @@
         x="-160"
         y="-160"
       >
+        <!-- A thin feather tip or a beak's open edge is only partly inked at a
+             small size: made solid first, the rim round it is whole, never a
+             faint broken edge. -->
+        <feComponentTransfer in="SourceAlpha" result="solid">
+          <feFuncA slope="6" type="linear" />
+        </feComponentTransfer>
         <feMorphology
-          in="SourceAlpha"
+          in="solid"
           operator="dilate"
           radius={rim}
           result="grown"

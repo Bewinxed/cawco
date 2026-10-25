@@ -12,8 +12,14 @@ import { CAW_ART } from "./art";
 export interface Wing {
   /** The shoulder: 0 hangs down, 90 straight out, 180 straight up. The still holds L at 73, R at 68. */
   a: number;
-  /** The primaries' curl: + turns their tips up, − down. Within ±30 they stay tucked under the coverts. */
+  /** The primaries' curl: + turns their tips up, − down. Within ±40 they stay tucked under the coverts. */
   e: number;
+  /**
+   * The shoulder slid out, units, and down his side twice as far (rig.ts), its
+   * root still on his body: a raised wing then clears his head, two
+   * silhouettes rather than one. 0 when not given.
+   */
+  out?: number;
 }
 
 /**
@@ -90,8 +96,8 @@ export function upright(side: "L" | "R", wing: Wing): number {
   return side === "L" ? -turn : turn;
 }
 
-/** His near wing up, its primaries curled over the phone so their tips hold it. */
-const phoneUp: Wing = { a: 128, e: 24 };
+/** His near wing up beside his head, its primaries curled round the phone's lower half so their tips hold it. */
+const phoneUp: Wing = { a: 124, e: 32, out: 20 };
 
 /** His poses. `ready` is his still, exactly: frame 0 of every other pose's idle is its own pose. */
 export const POSES = {
@@ -133,20 +139,25 @@ export const POSES = {
     prop: {
       prop: "phone",
       on: "handL",
-      at: [32, 270],
+      // Deep in the fan: its lower half under the feathers, its top standing clear of the tips.
+      at: [40, 306],
       rotate: upright("L", phoneUp),
-      scale: 1.08,
+      scale: 1.1,
     },
   },
-  /** Approved: both wings up, a small flutter in the near one, beak open in a happy caw. */
+  /**
+   * Approved: both wings flung up and out from his sides (the done still's
+   * spread, primaries turned up), each clear of his head, a small flutter in
+   * the near one, beak wide in a happy caw.
+   */
   cheer: {
-    wingL: { a: 138, e: 20 },
-    wingR: { a: 124, e: 18 },
-    tilt: 4,
+    wingL: { a: 112, e: 35, out: 22 },
+    wingR: { a: 120, e: 30, out: 22 },
+    tilt: -3,
     yaw: -0.18,
     gaze: [-0.2, -0.45],
     lid: 0,
-    beak: 17,
+    beak: 28,
     breath: 1.3,
     weight: 0,
     accent: { on: "handL", amp: 5, every: 520 },
@@ -174,7 +185,8 @@ export const POSES = {
     beak: 0,
     breath: 0.8,
     weight: 0.2,
-    prop: { prop: "phone", on: "ground", at: [410, 442], rotate: 0 },
+    // Clear of his near foot's toes, so at 64 px neither runs into the other.
+    prop: { prop: "phone", on: "ground", at: [432, 442], rotate: 0 },
   },
 } as const satisfies Record<string, Pose>;
 

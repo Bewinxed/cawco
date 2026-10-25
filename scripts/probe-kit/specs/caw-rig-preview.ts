@@ -30,12 +30,18 @@
  * - nothing runs unseen: a Caw scrolled off screen draws no frame (its rAF
  *   count stands still) while one on screen runs, and a hidden tab stops
  *   every clock;
- * - by night (the house theme) at 64 px every pose's figure is ringed
- *   whole by the paper rim, and by day there is no rim;
+ * - by night (the house theme), at 64 and 96 px on screens of scale 1 and
+ *   2, every pose's figure is ringed whole by the paper rim and the rim is
+ *   solid all round (no clear pixel beside his ink: the beak's open edge,
+ *   every feather tip), and by day there is no rim;
+ * - phoneUp holds the phone (feathers in front of its lower half, its top
+ *   clear); cheer lifts both wings clear of his head with his beak open;
+ *   letGo sets the phone down clear of his feet;
  * - no console error.
  *
  *   bun scripts/probe-kit/run.ts caw-rig-preview
- *   CAW_RIG_ENGINES=chromium CAW_RIG_SHOTS=<dir> …   one engine; each pose at 160 px into <dir>
+ *   CAW_RIG_ENGINES=chromium CAW_RIG_SHOTS=<dir> …   one engine; every pose at 64, 96 and 160 px,
+                                                   day and night, at device scale 2, into <dir>
  */
 import { mkdirSync } from "node:fs";
 import { join, normalize } from "node:path";
@@ -194,13 +200,17 @@ function readLayers(name: string): Record<string, string> {
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: serialised into the page, so every step it reads lives inside it
 async function readFigure({
   name,
-  size,
+  size: cssSize,
   still,
+  scale = 1,
 }: {
   name: string;
   size: number;
   still: string;
+  /** Device pixels per CSS px: the figure is drawn at this many times its size. */
+  scale?: number;
 }) {
+  const size = Math.round(cssSize * scale);
   const box = document.querySelector(
     `[data-rig-name="${name}"] [data-caw-rig]`
   );
@@ -225,9 +235,9 @@ async function readFigure({
     }
     p.removeAttribute("class");
   }
-  const draw = async (url: string) => {
+  const draw = async (source: string) => {
     const img = new Image();
-    img.src = url;
+    img.src = source;
     await img.decode();
     const canvas = document.createElement("canvas");
     canvas.width = size;
@@ -262,13 +272,18 @@ async function readFigure({
     }
     return { left, top, right, bottom, cx: cx / w, cy: cy / w };
   };
-  const rig = await draw(
-    `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(copy))}`
-  );
+  const url = (el: Element) =>
+    `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(el))}`;
+  const rig = await draw(url(copy));
+  // The same figure with no rim: where it has ink, the rim must stand solid all round.
+  const plainCopy = copy.cloneNode(true) as SVGSVGElement;
+  plainCopy.querySelector('[data-part="caw"]')?.removeAttribute("filter");
+  const plain = await draw(url(plainCopy));
   const src = await draw(still);
   let both = 0;
   let either = 0;
   let bare = 0;
+  let gaps = 0;
   const at = (x: number, y: number) => (y * size + x) * 4;
   const rimInk = (i: number) =>
     rig[i] > 200 && rig[i + 1] > 200 && rig[i + 2] > 190;
@@ -279,6 +294,19 @@ async function readFigure({
       const b = src[i + 3] > 127;
       both += a && b ? 1 : 0;
       either += a || b ? 1 : 0;
+      // A gap in the rim: a clear pixel beside one where he has ink.
+      if (
+        x > 0 &&
+        y > 0 &&
+        x < size - 1 &&
+        y < size - 1 &&
+        rig[i + 3] < 128 &&
+        [at(x - 1, y), at(x + 1, y), at(x, y - 1), at(x, y + 1)].some(
+          (n) => plain[n + 3] > 64
+        )
+      ) {
+        gaps += 1;
+      }
       if (
         x > 0 &&
         y > 0 &&
@@ -297,7 +325,13 @@ async function readFigure({
       }
     }
   }
-  return { rig: measure(rig), still: measure(src), iou: both / either, bare };
+  return {
+    rig: measure(rig),
+    still: measure(src),
+    iou: both / either,
+    bare,
+    gaps,
+  };
 }
 
 /** The page's Caws, by the names it gives them. */
@@ -604,6 +638,10 @@ async function blendLegs(kit: Kit, page: Page, engine: Engine) {
     const [a, b] = (m.match(/-?[\d.e]+/g) ?? []).map(Number);
     return (Math.atan2(b, a) * 180) / Math.PI;
   };
+  // Where cheer's near wing stands at its frame 0, read off the rig.
+  const goal = (await api<RigRead>(page, "frameAt", "pose-cheer-160", 0)).m
+    .wingL;
+  const target = (Math.atan2(goal[1], goal[0]) * 180) / Math.PI;
   const before = await turn();
   await api(page, "pose", "cheer");
   await page.evaluate(
@@ -614,15 +652,15 @@ async function blendLegs(kit: Kit, page: Page, engine: Engine) {
   const mid = await turn();
   await wait(page, 700);
   const after = await turn();
-  // Cheer lifts his near wing 65° (73 to 138); idle sway is under 3° either way.
-  const said = `${before.toFixed(1)}° → ${first.toFixed(1)}° one frame on → ${mid.toFixed(1)}° at 200 ms → ${after.toFixed(1)}° at 900 ms`;
+  // Idle sway is under 3° either way.
+  const said = `${before.toFixed(1)}° → ${first.toFixed(1)}° one frame on → ${mid.toFixed(1)}° at 200 ms → ${after.toFixed(1)}° at 900 ms, cheer's ${target.toFixed(1)}°`;
   kit.check(
     `${engine}: a new pose leaves from where he stands: one frame after the switch his near wing has turned 5° or less (${said})`,
     Math.abs(first - before) <= 5
   );
   kit.check(
     `${engine}: it travels: at 200 ms the wing stands between where it was and where it goes, and by 900 ms it has arrived within the idle sway (${said})`,
-    mid > before + 3 && mid < 65 - 3 && Math.abs(after - 65) < 4
+    mid > before + 3 && mid < target - 3 && Math.abs(after - target) < 4
   );
   await api(page, "pose", "ready");
   await wait(page, 900);
@@ -699,6 +737,142 @@ async function beakLegs(kit: Kit, page: Page, engine: Engine) {
   kit.check(
     `${engine}: in phoneUp the phone stands upright (${upright.toFixed(1)}° on the page) and is drawn under his near wing's primaries, their tips over it`,
     phone?.home === "handL" && Math.abs(upright) < 3 && under
+  );
+  // Held, not perched: across its lower half the feathers stand in front of it, its top is clear.
+  await page
+    .locator('[data-rig-name="pose-phoneUp-160"]')
+    .scrollIntoViewIfNeeded();
+  await api(page, "seek", "pose-phoneUp-160", 0);
+  const grip = await page.evaluate(() => {
+    const prop = document.querySelector(
+      '[data-rig-name="pose-phoneUp-160"] [data-part="prop"]'
+    ) as SVGGraphicsElement | null;
+    const ctm = prop?.getScreenCTM();
+    if (!(prop && ctm)) {
+      return { lower: 0, upper: 0, of: 0 };
+    }
+    const hit = (x: number, y: number) => {
+      const p = new DOMPoint(x, y).matrixTransform(ctm);
+      return document.elementFromPoint(p.x, p.y);
+    };
+    // His near wing's feathers, primaries or coverts, not the phone itself.
+    const fan = (el: Element | null) =>
+      Boolean(el?.closest('[data-layer="wingL"]')) &&
+      !el?.closest('[data-part="prop"]');
+    const xs = [-14, -7, 0, 7, 14];
+    const lower = xs.filter((x) => fan(hit(x, 26))).length;
+    const upper = xs.filter((x) =>
+      hit(x, -24)?.closest('[data-part="prop"]')
+    ).length;
+    return { lower, upper, of: xs.length };
+  });
+  await api(page, "release", "pose-phoneUp-160");
+  kit.check(
+    `${engine}: phoneUp holds the phone: across its lower half his feathers stand in front of it at ${grip.lower} of ${grip.of} points, and its top stands clear at ${grip.upper} of ${grip.of}`,
+    grip.lower >= 3 && grip.upper >= 4
+  );
+  // Cheer: both wings raised clear of his head, two silhouettes, his beak wide enough to read.
+  // Read off the drawing's geometry: each wing's outlines sampled along their length, against
+  // his head's fill and outline, in his 512 units.
+  const lift = async (pose: string) => {
+    const name = `pose-${pose}-160`;
+    await api(page, "seek", name, 0);
+    const got = await page.evaluate((rig) => {
+      const root = document.querySelector(
+        `[data-rig-name="${rig}"] [data-caw-rig]`
+      ) as HTMLElement;
+      const head = root.querySelector(
+        '[data-layer="head"] > path'
+      ) as SVGPathElement;
+      const tuft = root.querySelector(
+        '[data-layer="tuft"] > path'
+      ) as SVGPathElement;
+      const { top, width } = root.getBoundingClientRect();
+      const px = width / 512;
+      const onScreen = (el: SVGGeometryElement, n: number) => {
+        const ctm = el.getScreenCTM() as DOMMatrix;
+        const length = el.getTotalLength();
+        return Array.from({ length: n }, (_, i) =>
+          el.getPointAtLength((i / n) * length).matrixTransform(ctm)
+        );
+      };
+      const rim = [...onScreen(head, 400), ...onScreen(tuft, 80)];
+      const inside = (p: DOMPoint) =>
+        [head, tuft].some((el) =>
+          el.isPointInFill(
+            p.matrixTransform((el.getScreenCTM() as DOMMatrix).inverse())
+          )
+        );
+      const wing = (side: "L" | "R") => {
+        const paths = [
+          ...root.querySelectorAll(`[data-layer="wing${side}"] path`),
+        ].filter(
+          (el) => !el.closest('[data-part="prop"]')
+        ) as SVGGeometryElement[];
+        const points = paths.flatMap((el) => onScreen(el, 300));
+        const into = points.filter(inside).length;
+        const clear = Math.min(
+          ...points.map((p) =>
+            Math.min(...rim.map((q) => Math.hypot(p.x - q.x, p.y - q.y)))
+          )
+        );
+        return {
+          clear: into > 0 ? 0 : clear / px,
+          top: (Math.min(...points.map((p) => p.y)) - top) / px,
+        };
+      };
+      return { L: wing("L"), R: wing("R") };
+    }, name);
+    await api(page, "release", name);
+    return got;
+  };
+  // letGo: the phone stands clear of his feet, so at 64 px neither runs into the other.
+  await api(page, "seek", "pose-letGo-160", 0);
+  const apart = await page.evaluate(() => {
+    const root = document.querySelector(
+      '[data-rig-name="pose-letGo-160"] [data-caw-rig]'
+    ) as HTMLElement;
+    const px = root.getBoundingClientRect().width / 512;
+    const set = root
+      .querySelector('[data-part="prop"]')
+      ?.getBoundingClientRect();
+    const feet = [...root.querySelectorAll('[data-part="foot"]')].map((el) =>
+      el.getBoundingClientRect()
+    );
+    if (!set) {
+      return Number.NaN;
+    }
+    return (
+      Math.min(
+        ...feet.map((foot) =>
+          Math.max(
+            set.left - foot.right,
+            foot.left - set.right,
+            set.top - foot.bottom,
+            foot.top - set.bottom
+          )
+        )
+      ) / px
+    );
+  });
+  await api(page, "release", "pose-letGo-160");
+  kit.check(
+    `${engine}: letGo sets the phone down clear of both feet (${apart.toFixed(1)} units between their boxes; one 64 px pixel is 8)`,
+    apart >= 8
+  );
+  const rest = await lift("ready");
+  const up = await lift("cheer");
+  const cheer = await read("cheer");
+  const jaw = angleOf(cheer.jaw);
+  const raisedL = rest.L.top - up.L.top;
+  const raisedR = rest.R.top - up.R.top;
+  kit.check(
+    `${engine}: cheer lifts both wings clear of his head, two silhouettes (near wing ${up.L.clear.toFixed(1)} units off it, far wing ${up.R.clear.toFixed(1)}; their tops ${raisedL.toFixed(0)} and ${raisedR.toFixed(0)} units higher than at rest) and opens his beak ${jaw.toFixed(0)}°`,
+    up.L.clear >= 6 &&
+      up.R.clear >= 6 &&
+      raisedL >= 15 &&
+      raisedR >= 15 &&
+      jaw >= 24
   );
 }
 
@@ -890,36 +1064,56 @@ async function unseenLegs(kit: Kit, page: Page, engine: Engine) {
   await page.evaluate(() => window.scrollTo(0, 0));
 }
 
-/** By night at 64 px his figure is ringed by the paper rim, wing tips and props included; by day, no rim. */
-async function rimLegs(kit: Kit, page: Page, engine: Engine) {
-  const bare: string[] = [];
-  const dayRim: string[] = [];
+/** Every pose's figure at each size, held at frame 0, as the page draws it in its current theme. */
+async function figures(
+  page: Page,
+  sizes: readonly number[],
+  scale: number
+): Promise<{ at: string; bare: number; gaps: number }[]> {
   const still = await api<string>(page, "still");
-  for (const scheme of ["dark", "light"] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one scheme at a time
-    await api(page, "theme", scheme);
-    await twoFrames(page);
-    for (const pose of await api<string[]>(page, "poses")) {
-      const name = `pose-${pose}-64`;
+  const read: { at: string; bare: number; gaps: number }[] = [];
+  for (const pose of await api<string[]>(page, "poses")) {
+    for (const size of sizes) {
+      const name = `pose-${pose}-${size}`;
       // biome-ignore lint/performance/noAwaitInLoops: one Caw held and drawn at a time
       await api(page, "seek", name, 0);
-      const f = await page.evaluate(readFigure, { name, size: 64, still });
+      const f = await page.evaluate(readFigure, { name, size, still, scale });
       await api(page, "release", name);
-      if (scheme === "dark" && f.bare > 0) {
-        bare.push(`${pose}: ${f.bare} figure pixels on clear ground`);
-      }
-      if (scheme === "light" && f.bare === 0) {
-        dayRim.push(pose);
-      }
+      read.push({ at: `${pose} ${size}`, bare: f.bare, gaps: f.gaps });
     }
   }
+  return read;
+}
+
+/** By night at 64 and 96 px his figure is ringed whole by the paper rim, wing tips, beak and props included; by day, no rim. */
+async function rimLegs(kit: Kit, page: Page, engine: Engine, scale: number) {
+  const sizes = [64, 96];
+  await api(page, "theme", "dark");
+  await twoFrames(page);
+  const night = await figures(page, sizes, scale);
+  await api(page, "theme", "light");
+  await twoFrames(page);
+  const day = await figures(page, sizes, scale);
+  const bare = night
+    .filter((f) => f.bare > 0)
+    .map((f) => `${f.at}: ${f.bare} figure pixels on clear ground`);
+  const gaps = night
+    .filter((f) => f.gaps > 0)
+    .map((f) => `${f.at}: ${f.gaps} clear pixels beside his ink`);
+  const dayRim = day.filter((f) => f.bare === 0).map((f) => f.at);
+  const at = `at ${sizes.join(" and ")} px, device scale ${scale}`;
   kit.check(
-    `${engine}: by night at 64 px every pose's figure is ringed whole by the paper rim`,
+    `${engine}: by night ${at}, every pose's figure is ringed whole by the paper rim`,
     bare.length === 0,
     bare.join("; ")
   );
   kit.check(
-    `${engine}: by day no pose wears a rim (his black meets the clear ground)`,
+    `${engine}: by night ${at}, the rim is solid all round, at the beak's open edge and every feather tip (no clear pixel beside his ink)`,
+    gaps.length === 0,
+    gaps.slice(0, 6).join("; ")
+  );
+  kit.check(
+    `${engine}: by day ${at}, no pose wears a rim (his black meets the clear ground)`,
     dayRim.length === 0,
     dayRim.join("; ")
   );
@@ -990,9 +1184,16 @@ const spec: Spec = {
         await propLegs(kit, page, engine);
         await reducedLegs(kit, page, engine);
         await unseenLegs(kit, page, engine);
-        await rimLegs(kit, page, engine);
+        await rimLegs(kit, page, engine, 1);
+        // A second screen at device scale 2: the rim there, and the shots an anatomy reader reads.
+        const twice = await kit.page("desk", { engine, scale: 2 });
+        twice.on("pageerror", (error) => errors.push(String(error)));
+        await twice.goto(url);
+        await twice.waitForSelector("html[data-ready]");
+        await twoFrames(twice);
+        await rimLegs(kit, twice, engine, 2);
         if (process.env.CAW_RIG_SHOTS) {
-          await shots(page, engine, process.env.CAW_RIG_SHOTS);
+          await shots(twice, engine, process.env.CAW_RIG_SHOTS);
         }
         kit.check(
           `${engine}: no console error`,
