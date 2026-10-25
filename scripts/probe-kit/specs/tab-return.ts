@@ -162,6 +162,12 @@ const SPACE_RUN = /\s+/;
 const ROW_ESTIMATE = 21;
 /** How long leg 3 shows each silent session before reading its pane: its read has long landed. */
 const SILENT_MS = 5000;
+/**
+ * What a press restyles past the pane it shows: the strip's tabs, the rail's
+ * rows, the composer's away state: 16 and 67 past it on 2026-10-25 (1a 607
+ * restyled with a 591-element pane, 1c 853 with 786).
+ */
+const PRESS_RESTYLE_ROOM = 100;
 /** A press this soon after the reach comes while the warm pane's rows are still staged (Transcript `parkRows`). */
 const PRESS_IN_STAGING_MS = 40;
 /** An interaction's length in `inputsOf`'s line. */
@@ -197,8 +203,16 @@ interface Back {
   longestWhat: string;
   /** A return to the preview: what its page's own window said of it. */
   page?: PageBack;
+  /** Elements in the pane the press shows, read as the pointer came; 0 where unread. */
+  paneElements: number;
   /** When the switch was pressed, epoch ms. */
   pressAt: number;
+  /** The press's own task (its pointerup), CPU ms; NaN where untraced. */
+  pressCpu: number;
+  /** That task's restyles a `:has()` asked for, anywhere but the pressed tab (`hasAsksOf`). */
+  pressHas: string[];
+  /** The elements that task restyled; NaN where untraced. */
+  pressRestyled: number;
   /**
    * The press's own task (its pointerup) said whole, as `reachWhat`, with
    * its script's sampled self time by the bundle file it ran in.
@@ -605,6 +619,115 @@ async function away(page: Page, id: string): Promise<void> {
         (el as HTMLElement).click();
       }
     });
+}
+
+/**
+ * In the dashboard's own document, from `__hiddenRemovals.start()`: every
+ * node taken out of a pane put away (`[data-pane-hidden]`), counted by
+ * what it was and where it sat (the detached leg's `detached.txt`).
+ */
+function watchHiddenRemovals(): void {
+  if (window.top !== window) {
+    return;
+  }
+  /** Nodes taken out of a pane put away, by what each was and where it sat. */
+  const by = new Map<string, number>();
+  let on = false;
+  const w = window as unknown as {
+    __hiddenRemovals: {
+      read: () => { count: number; what: string }[];
+      start: () => void;
+    };
+  };
+  w.__hiddenRemovals = {
+    start: () => {
+      by.clear();
+      on = true;
+    },
+    read: () =>
+      [...by]
+        .map(([what, count]) => ({ what, count }))
+        .sort((a, b) => b.count - a.count),
+  };
+  /**
+   * A node's mark: its tag and `data-slot`, or `#text` and its first words;
+   * a transcript's list item (virtua's) also says what kind of row it held,
+   * its key's prefix (rows.ts: `tool:` a call in flight, `live:` a turn's
+   * words in flight, `am:` a message, `tools:` a run of calls).
+   */
+  const markOf = (node: Node | null): string => {
+    if (!(node instanceof Element)) {
+      return node
+        ? `${node.nodeName} ${(node.textContent ?? "").slice(0, 24)}`
+        : "";
+    }
+    const slot = node.getAttribute("data-slot");
+    const row = node.hasAttribute("data-item")
+      ? node.querySelector<HTMLElement>(":scope > [data-row]")?.dataset.row
+      : undefined;
+    return `${node.localName}${slot ? `[${slot}]` : ""}${row === undefined ? "" : `{${row.split(":")[0]}}`}`;
+  };
+  const note = (parent: Node | null, child: Node | null) => {
+    if (!(
+      on &&
+      parent instanceof Element &&
+      parent.closest("[data-pane-hidden]")
+    )) {
+      return;
+    }
+    // Where it was: its parent's slots out to the row, and the list's mark.
+    const chain: string[] = [];
+    for (
+      let at: Element | null = parent;
+      at && chain.length < 6 && !at.matches('[data-slot="listing"]');
+      at = at.parentElement
+    ) {
+      if (at.hasAttribute("data-slot") || at.hasAttribute("data-item")) {
+        chain.push(markOf(at));
+      }
+    }
+    const list = parent
+      .closest('[data-slot="listing"]')
+      ?.getAttribute("data-probe");
+    const key = `${markOf(child)} in ${chain.join(" < ")} (${list ?? "no list"})`;
+    by.set(key, (by.get(key) ?? 0) + 1);
+  };
+  const { remove } = Element.prototype;
+  Element.prototype.remove = function (this: Element) {
+    note(this.parentNode, this);
+    remove.call(this);
+  };
+  const { remove: removeText } = CharacterData.prototype;
+  CharacterData.prototype.remove = function (this: CharacterData) {
+    note(this.parentNode, this);
+    removeText.call(this);
+  };
+  const { removeChild } = Node.prototype;
+  Node.prototype.removeChild = function <T extends Node>(this: Node, child: T) {
+    note(this, child);
+    return removeChild.call(this, child) as T;
+  };
+  const { replaceWith } = Element.prototype;
+  Element.prototype.replaceWith = function (
+    this: Element,
+    ...nodes: (Node | string)[]
+  ) {
+    note(this.parentNode, this);
+    replaceWith.apply(this, nodes);
+  };
+  const content = Object.getOwnPropertyDescriptor(
+    Node.prototype,
+    "textContent"
+  );
+  Object.defineProperty(Node.prototype, "textContent", {
+    ...content,
+    set(this: Node, value: string) {
+      if (this.firstChild) {
+        note(this, this.firstChild);
+      }
+      content?.set?.call(this, value);
+    },
+  });
 }
 
 /**
@@ -1318,20 +1441,47 @@ async function checkPaneLookup(
 /** A sampled function's bundle file: `name@file:line:column`, or the engine's own. */
 const FILE_OF = /@([^:@]+):\d+:\d+$/;
 
+/** A trace's naming of the pressed tab's own box (TabItem `group/ff-tab`). */
+const PRESSED_TAB = /^SPAN class='group\/ff-tab /;
+/** Where a restyle ask or a scheduled set names its element: `<why> on <node>`. */
+const ASKED_ON = / on (.*?)(?: \(by [^)]*\))?$/;
+
 /**
- * The press's own task, the first pointerup at or after the press: said
- * whole (`line`), and its script's sampled self time summed by the bundle
- * file each function ran in, the most first.
+ * A task's restyles a `:has()` asked for (a subject "Affected by :has()",
+ * or a non-subject anchor's sets scheduled by `:has`), but those on the
+ * pressed tab's own box: its press fill reads its own hit's `:active`
+ * (`hit-pressed`), a restyle of the tab itself, never of what it holds.
+ */
+function hasAsksOf(task: MainTask): string[] {
+  return [
+    ...task.invalidated.filter(([what]) =>
+      what.startsWith("Affected by :has()")
+    ),
+    ...task.scheduled.filter(([what]) => what.startsWith(":has on ")),
+  ]
+    .filter(([what]) => !PRESSED_TAB.test(ASKED_ON.exec(what)?.[1] ?? ""))
+    .map(([what, n]) => `${what} ${n}x`);
+}
+
+/** The press's own task: the first pointerup at or after the press. */
+function pressTaskOf(tasks: MainTask[], madeMark: number): MainTask | null {
+  return (
+    tasks.find(
+      (one) => one.at >= madeMark && one.ran === "a pointerup event"
+    ) ?? null
+  );
+}
+
+/**
+ * The press's own task said whole (`line`), what asked for its restyle, and
+ * its script's sampled self time summed by the bundle file each function ran
+ * in, the most first.
  */
 function pressLine(
-  tasks: MainTask[],
-  madeMark: number,
+  task: MainTask | null,
   main: MainThread,
   line: (task: MainTask) => string
 ): string {
-  const task = tasks.find(
-    (one) => one.at >= madeMark && one.ran === "a pointerup event"
-  );
   if (!task) {
     return "no pointerup traced";
   }
@@ -1345,7 +1495,43 @@ function pressLine(
     .slice(0, 8)
     .map(([file, ms]) => `${file} ${ms.toFixed(1)}ms`)
     .join(", ");
-  return `${line(task)}; by file: ${files}`;
+  const asked =
+    task.invalidated.map(([what, n]) => `${what} ${n}x`).join("; ") ||
+    "nothing traced";
+  return `${line(task)}; its restyle asked for by: ${asked}; by file: ${files}`;
+}
+
+/** The press's own task as a return reads it: said whole, its CPU, its restyle and what a `:has()` asked of it. */
+function pressTaskRead(
+  task: MainTask | null,
+  main: MainThread,
+  line: (task: MainTask) => string
+): Pick<Read, "pressWhat" | "pressCpu" | "pressRestyled" | "pressHas"> {
+  const pressWhat = pressLine(task, main, line);
+  if (!task) {
+    return {
+      pressWhat,
+      pressCpu: Number.NaN,
+      pressRestyled: Number.NaN,
+      pressHas: [],
+    };
+  }
+  return {
+    pressWhat,
+    pressCpu: task.cpu,
+    pressRestyled: task.restyled,
+    pressHas: hasAsksOf(task),
+  };
+}
+
+/** Elements in pane `pane`, all it holds; 0 while it stands nowhere. */
+function paneElementsOf(page: Page, pane: string): Promise<number> {
+  return page.evaluate((id) => {
+    const box = document.querySelector(
+      `[data-slot="pane"][data-pane="${CSS.escape(id)}"]`
+    );
+    return box ? box.querySelectorAll("*").length : 0;
+  }, pane);
 }
 
 /**
@@ -1394,6 +1580,7 @@ async function measureBack(
   let styleBefore: readonly [number, number] = [0, 0];
   let styleAfter: readonly [number, number] = [0, 0];
   const held = await census(page);
+  const paneElements = await paneElementsOf(page, id);
   const { sizes: sizesBefore, rewritten } = await itemSizesOf(page, id);
   await markWarm(page, id);
   let reachEpoch = 0;
@@ -1496,6 +1683,7 @@ async function measureBack(
   const beforePress = own.filter((task) => task.at < madeMark);
   const reach = longestOf(beforePress);
   const warmed = reachTaskOf(beforePress, markAt("two-pane:warm:0"));
+  const pressTask = pressTaskOf(own, madeMark);
   /** A task said whole: what it ran, when, its CPU and restyle, what scheduled it, its sampled stacks. */
   const taskLine = (task: MainTask) =>
     `${task.ran}, ${Math.round((task.at - madeMark) / 1000)}ms after the press: ${task.cpu.toFixed(1)}ms of CPU, ${task.restyled} elements in ${Math.round(task.styleMs)}ms of style; scheduled by ${
@@ -1591,7 +1779,8 @@ async function measureBack(
     reachWhat: reach ? taskLine(reach) : "nothing",
     warmTask: warmed ? warmed.cpu : Number.NaN,
     warmWhat: warmed ? taskLine(warmed) : "no warm traced",
-    pressWhat: pressLine(own, madeMark, main, taskLine),
+    ...pressTaskRead(pressTask, main, taskLine),
+    paneElements,
     heavy:
       own
         .filter((task) => task.cpu >= HEAVY_MS)
@@ -1868,6 +2057,10 @@ async function pressBack(
     warmTask: Number.NaN,
     warmWhat: "not traced",
     pressWhat: "not traced",
+    pressCpu: Number.NaN,
+    pressRestyled: Number.NaN,
+    pressHas: [],
+    paneElements: 0,
     shown: "not read",
     shownCounts: [],
     staging: "not read",
@@ -1913,6 +2106,29 @@ function checkStaging(kit: Kit, back: Back): void {
     `${back.scene}: the reach task (its warm and the frame laying the pane out) within ${REACH_TASK_MS}ms of CPU (${REACH_TASK_MS * SLOWER}ms ${SLOWER}x slower)`,
     back.warmTask <= REACH_TASK_MS,
     back.warmWhat.slice(0, 600)
+  );
+}
+
+/**
+ * A traced busy return's press, its own task (its pointerup): within the two
+ * frames' budget on the slower CPU, restyling the pane it shows and the
+ * strip and rail it changes, and nothing a `:has()` found by what an element
+ * holds.
+ */
+function checkPress(kit: Kit, back: Back): void {
+  if (!(back.traced && back.kind === "busy")) {
+    return;
+  }
+  kit.check(
+    `${back.scene}: the press's own task (its pointerup) within ${2 * LONG_TASK_MS}ms on a CPU ${SLOWER}x slower`,
+    back.pressCpu * SLOWER <= 2 * LONG_TASK_MS,
+    `${back.pressCpu.toFixed(1)}ms of CPU, ${(back.pressCpu * SLOWER).toFixed(0)}ms slower; ${back.pressWhat.slice(0, 300)}`
+  );
+  kit.check(
+    `${back.scene}: the press restyles at most the ${back.paneElements} elements of the pane it shows and ${PRESS_RESTYLE_ROOM} more (its strip, the rail, the composer), and nothing for a :has() but the pressed tab`,
+    back.pressRestyled <= back.paneElements + PRESS_RESTYLE_ROOM &&
+      back.pressHas.length === 0,
+    `${back.pressRestyled} elements restyled; asked for by a :has(): ${back.pressHas.join("; ") || "nothing"}`
   );
 }
 
@@ -1987,6 +2203,18 @@ const STREAM_TURNS = 12;
 const SWITCHES = 30;
 /** How long each switch is left to land before the next: live-perf's memory leg's. */
 const SWITCH_REST_MS = 1300;
+/**
+ * A settled transcript row taken out of its list (`watchHiddenRemovals`'
+ * mark): virtua's item, the list container's own child, so no slot sits
+ * between, holding any row but one in flight. A call or a turn's words in
+ * flight (`tool:`, `live:`) leave the list as they land, the session's own
+ * change (rows.ts `liveTail`), not the list's cut.
+ */
+const LIST_ROW = /^div\{(?!tool\}|live\})[^}]*\} in {2}\(list \d+/;
+/** A row in flight taken out of its list as it landed (`LIST_ROW`). */
+const IN_FLIGHT_ROW = /^div\{(tool|live)\} in {2}\(list \d+/;
+/** Any node taken out (`watchHiddenRemovals`' mark). */
+const ANY_NODE = /./;
 
 /**
  * What holds each detached node of `DETACHED_KINDS` in `heap` that `before`
@@ -2031,7 +2259,11 @@ function holders(before: Heap, heap: Heap): string[] {
  * away still holds is let go once it is laid out again. What holds each
  * node the later readings find that the first did not, root to node, is
  * written to `detached.txt`, each transcript's list named in the path by
- * its index (`data-probe`).
+ * its index (`data-probe`). On every engine (`PROBE_ENGINE=webkit` for
+ * Safari's, whose heap no protocol reads) it asserts what Chromium held
+ * there: no transcript row taken out of a pane put away over the switches
+ * (`watchHiddenRemovals`; Chromium kept each such row, its boxes and its
+ * text, in the list's last layout until the pane was shown again).
  */
 async function detachedLeg(
   kit: Kit,
@@ -2046,7 +2278,10 @@ async function detachedLeg(
       .filter({ visible: true })
       .first()
       .click();
-  const page = await kit.page("desk");
+  const page = await kit.page("desk", { init: [watchHiddenRemovals] });
+  // The heap is read through the DevTools protocol, Chromium's alone; on
+  // every engine, what is taken out of a pane put away is counted.
+  const engine = page.context().browser()?.browserType().name() ?? "chromium";
   await page.addInitScript(
     ([held, active]) => {
       localStorage.setItem(
@@ -2081,8 +2316,14 @@ async function detachedLeg(
       );
     }
   });
-  const cdp = await page.context().newCDPSession(page);
-  const before = await heapOf(cdp);
+  const cdp =
+    engine === "chromium" ? await page.context().newCDPSession(page) : null;
+  const before = cdp ? await heapOf(cdp) : null;
+  await page.evaluate(() =>
+    (
+      window as unknown as { __hiddenRemovals: { start: () => void } }
+    ).__hiddenRemovals.start()
+  );
   // The busy session streams through the switches, as the owner's fleet does.
   const streaming = stream();
   for (let i = 0; i < SWITCHES; i += 1) {
@@ -2092,7 +2333,14 @@ async function detachedLeg(
   await press(page, tabs[0] as string);
   await streaming;
   await page.waitForTimeout(SWITCH_REST_MS);
-  const after = await heapOf(cdp);
+  const after = cdp ? await heapOf(cdp) : null;
+  const removals = await page.evaluate(() =>
+    (
+      window as unknown as {
+        __hiddenRemovals: { read: () => { count: number; what: string }[] };
+      }
+    ).__hiddenRemovals.read()
+  );
   // Every pane shown once more, each laid out again, the busy one last and
   // left in front; then read a third time.
   for (const id of [...tabs.slice(2), tabs[0], tabs[1]] as string[]) {
@@ -2100,7 +2348,7 @@ async function detachedLeg(
     await page.waitForTimeout(SWITCH_REST_MS);
   }
   await page.waitForTimeout(3000);
-  const shownAgain = await heapOf(cdp);
+  const shownAgain = cdp ? await heapOf(cdp) : null;
   // Where each transcript's list stands: its pane, and whether it is drawn.
   const listings = await page.evaluate(() =>
     [...document.querySelectorAll('[data-slot="listing"]')].map((el) => ({
@@ -2109,17 +2357,46 @@ async function detachedLeg(
       items: el.querySelectorAll("[data-item]").length,
     }))
   );
+  const taken = (pattern: RegExp) =>
+    removals
+      .filter((one) => pattern.test(one.what))
+      .reduce((n, one) => n + one.count, 0);
+  const said = join(
+    kit.out,
+    `detached${engine === "chromium" ? "" : `-${engine}`}.txt`
+  );
   await writeFile(
-    join(kit.out, "detached.txt"),
+    said,
     `${[
-      `# After ${SWITCHES} switches`,
-      ...holders(before, after),
-      "# Once every pane is shown again, the busy one left in front",
-      ...holders(before, shownAgain),
+      ...(before && after && shownAgain
+        ? [
+            `# After ${SWITCHES} switches`,
+            ...holders(before, after),
+            "# Once every pane is shown again, the busy one left in front",
+            ...holders(before, shownAgain),
+          ]
+        : [
+            `# ${engine}: no heap to read (the DevTools protocol is Chromium's)`,
+          ]),
+      `# Taken out of a pane put away over the switches: ${taken(ANY_NODE)}, by what each was and where it sat`,
+      ...removals.slice(0, 20).map((one) => `  ${one.count}× ${one.what}`),
       `# The transcripts' lists (tabs in order: ${tabs.join(", ")}; the busy one second)`,
       ...listings.map((one) => `  ${JSON.stringify(one)}`),
     ].join("\n")}\n`
   );
+  // What Chromium holds until the pane is shown again: every row a
+  // transcript's list takes out of a pane put away (virtua's item, the
+  // list's own child), its text with it.
+  const rows = taken(LIST_ROW);
+  kit.check(
+    `detached (${engine}): ${SWITCHES} switches round ${tabs.length} tabs take no settled transcript row out of a pane put away`,
+    rows === 0,
+    `${rows} settled rows; ${taken(IN_FLIGHT_ROW)} rows in flight that landed meanwhile; ${taken(ANY_NODE)} nodes in all, by what and where in ${said}`
+  );
+  if (!(cdp && before && after && shownAgain)) {
+    await page.close();
+    return;
+  }
   kit.note(
     `detached once every pane is shown again: ${JSON.stringify(Object.fromEntries(DETACHED_KINDS.map((kind) => [kind, shownAgain.detached[kind] ?? 0])))}; lists ${JSON.stringify(listings)}`
   );
@@ -2650,9 +2927,25 @@ const run = async (kit: Kit) => {
     await doubleArrow(webkit, "WebKit");
     await silentLeg(webkit, "WebKit");
   };
-  // TAB_RETURN_LEGS=busy: scene 1 alone, its busy returns.
+  // TAB_RETURN_LEGS=busy: scene 1 alone, its busy returns, then 1a and 1b
+  // again on WebKit, each a person's press.
   if (process.env.TAB_RETURN_LEGS === "busy") {
     await isolated.page.close();
+    const webkit = await desk([front, busy, previewed], front, "webkit");
+    await leg(
+      webkit,
+      `1a (WebKit): busy, back after ${SHORT_MS / 1000}s`,
+      busy,
+      "busy"
+    );
+    await leg(
+      webkit,
+      `1b (WebKit): busy, back after ${BACKLOG_MS / 60_000} min`,
+      busy,
+      "busy",
+      BACKLOG_MS
+    );
+    await webkit.page.close();
   } else {
     await previewLegs();
   }
@@ -2670,6 +2963,16 @@ const run = async (kit: Kit) => {
         `${back.scene}: no task longer than two frames' budget (${2 * LONG_TASK_MS}ms) on a CPU ${SLOWER}x slower`,
         back.longest * SLOWER <= 2 * LONG_TASK_MS,
         `the longest ${back.longest}ms of CPU, ${back.longest * SLOWER}ms slower; ${back.longestWhat.slice(0, 300)}`
+      );
+    }
+    checkPress(kit, back);
+    // An untraced busy return (WebKit's) has no task to read: the frame the
+    // dashboard draws first after the press stands for it, on this CPU.
+    if (!back.traced && back.kind === "busy") {
+      kit.check(
+        `${back.scene}: the dashboard's first frame after the press comes within ${2 * LONG_TASK_MS}ms`,
+        (back.frames[0] ?? Number.POSITIVE_INFINITY) <= 2 * LONG_TASK_MS,
+        `frames ${back.frames.slice(0, 6).join(", ")}ms after the press`
       );
     }
     if (back.traced) {

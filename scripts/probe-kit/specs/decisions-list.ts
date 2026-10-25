@@ -32,6 +32,7 @@ import {
   seedDecisions,
 } from "../../decisions-preview/seed";
 import { MACHINE, type Reply, type Seen } from "../../scratch-fleet";
+import { HouseRules } from "../house-rules";
 import { scan } from "../journeys/scan";
 import {
   type Engine,
@@ -207,6 +208,16 @@ const run = async (kit: Kit) => {
   let spilled = 0;
   const errors: string[] = [];
   for (const engine of ENGINES) {
+    const house = new HouseRules(kit, engine, {
+      except: [
+        {
+          rule: "made-up",
+          text: ".cawco/tmp/",
+          reason:
+            "the scratch fleet's own repository, which lives under the workspace's TMPDIR: the place the hub really holds",
+        },
+      ],
+    });
     for (const view of SIZES) {
       const tag = `${engine} ${view}`;
       const page = await kit.page(view, { engine, theme: "light" });
@@ -249,6 +260,8 @@ const run = async (kit: Kit) => {
             rows: seen.length,
           })
         );
+        await settle(page);
+        await house.at(page, `${tag} ${rows.length} page(s)`);
         const found = await page.evaluate(scan);
         spilled += found.length;
         kit.check(
@@ -316,6 +329,8 @@ const run = async (kit: Kit) => {
           JSON.stringify(back.unlocks) === JSON.stringify([LANDING.name]),
         JSON.stringify(back)
       );
+      await settle(page);
+      await house.at(page, `${tag} the opened page`);
       const found = await page.evaluate(scan);
       spilled += found.length;
       kit.check(
@@ -325,6 +340,7 @@ const run = async (kit: Kit) => {
       );
       await page.close();
     }
+    house.report();
   }
   kit.check(
     "(d) the overflow sweep at 390, 680 and 1440 on Chromium and WebKit totals zero",

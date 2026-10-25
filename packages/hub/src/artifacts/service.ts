@@ -1379,7 +1379,7 @@ export interface ArtifactServiceDeps {
   /** Nothing on the artifact waits on the person: no step of the session waits on it whole (plans.ts `clearArtifactWait`). */
   clearArtifactWait: (instanceId: string, artifactId: string) => void;
   /** Closes session `instanceId`'s panel: it shows nothing, and every view of it hears so. */
-  close: (instanceId: string) => Promise<void>;
+  close: (instanceId: string) => void;
   db: ArtifactsDb;
   /**
    * Whether `workspaceId` holds a work item of the session's delegates: one it
@@ -1682,15 +1682,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * The session a project's page moved from, when another's create took it
    * (placed): its panel lets it go, closed when it showed it.
    */
-  const letGo = async (
-    from: string | undefined,
-    row: ArtifactRow
-  ): Promise<void> => {
+  const letGo = (from: string | undefined, row: ArtifactRow): void => {
     if (from === undefined) {
       return;
     }
     if (deps.showing(from) === row.id) {
-      await deps.close(from);
+      deps.close(from);
       return;
     }
     deps.relist(from);
@@ -6096,7 +6093,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         source,
         machineId,
       });
-      await letGo(movedFrom, row);
+      letGo(movedFrom, row);
       const made = html === null ? [] : writeMade(row, html, program);
       stampMeta(row, pageHashOf(html, program));
       keepProgramDir(row, program, input.dir);
@@ -6942,7 +6939,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       discard(row);
       if (row.instanceId !== instance.id) {
         if (writerShown) {
-          await deps.close(row.instanceId as string);
+          deps.close(row.instanceId as string);
         } else {
           relistOf(row);
         }
@@ -6963,7 +6960,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           showing: { id: next.id, kind: next.kind, name: next.name },
         };
       }
-      await deps.close(instance.id);
+      deps.close(instance.id);
       return { removed, showing: null };
     },
 
@@ -6973,7 +6970,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * browser itself is its project's (or its machine's), shared by every
      * session there, and stays. Nothing when it has none.
      */
-    dropBrowser: async (instanceId: string): Promise<void> => {
+    dropBrowser: (instanceId: string): void => {
       const row = db
         .ofInstance(instanceId)
         .find((one) => one.kind === "browser");
@@ -6983,7 +6980,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const shown = inPanel(row);
       discard(row);
       if (shown) {
-        await deps.close(instanceId);
+        deps.close(instanceId);
       } else {
         deps.relist(instanceId);
       }
@@ -6994,7 +6991,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * (`decisions/<name>/` holds no page.oui or index.html now): it goes,
      * and the panel that showed it closes. Nothing when it has none.
      */
-    sourceGone: async (projectId: string, name: string): Promise<void> => {
+    sourceGone: (projectId: string, name: string): void => {
       const row = db.projectPage(projectId, name);
       if (!row) {
         return;
@@ -7002,7 +6999,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const shown = inPanel(row);
       discard(row);
       if (shown && row.instanceId !== null) {
-        await deps.close(row.instanceId);
+        deps.close(row.instanceId);
       } else {
         relistOf(row);
       }

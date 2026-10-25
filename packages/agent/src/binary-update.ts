@@ -718,15 +718,26 @@ export class BinaryUpdater {
   }
 
   async #load(): Promise<void> {
+    // Fields earlier builds wrote that nothing reads now are not carried on:
     // `keeperOwed`, written by builds whose keeper waited for its sessions to
-    // end: no keeper move is owed now (#advanceKeeper), so it is not carried on.
-    const { keeperOwed: _owed, ...saved } = ((await readUpdateState()) ??
-      this.#state) as BinaryUpdateState & { keeperOwed?: string };
+    // end (no keeper move is owed now, #advanceKeeper), and `unseen`, the
+    // notice's old seen flag (seen is the hub's record of `landed:` ids since
+    // 542c392aa). A state that held either is written back without it, so
+    // the update helper, which lays its writes over the file, does not bring
+    // it back; the hub stores what the agent reports.
+    const { keeperOwed, unseen, ...saved } = ((await readUpdateState()) ??
+      this.#state) as BinaryUpdateState & {
+      keeperOwed?: string;
+      unseen?: boolean;
+    };
     this.#state = {
       ...saved,
       installedVersion: runtimeVersion,
       hostsHub: this.#hostsHub,
     };
+    if (keeperOwed !== undefined || unseen !== undefined) {
+      await writeJsonAtomic(updateStatePath(), this.#state);
+    }
     this.#report(this.#state);
   }
 

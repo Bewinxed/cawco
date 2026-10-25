@@ -43,6 +43,7 @@ import { dirname, join, normalize } from "node:path";
 import type { Page } from "playwright-core";
 import { prepareZXingModule, readBarcodes } from "zxing-wasm/reader";
 import { traceMain } from "../frames";
+import { HouseRules } from "../house-rules";
 import { type Engine, type Kit, ROOT, readMotion, type Spec } from "../kit";
 
 const DIR = join(ROOT, "design-previews", "pairing");
@@ -1063,10 +1064,24 @@ async function endLeg(kit: Kit, page: Page, engine: Engine) {
 /** Each moment's Caw is a drawing of its own: the three network cases are one moment, Checking. */
 async function posesLeg(kit: Kit, page: Page, engine: Engine) {
   const drawn = new Map<string, string[]>();
+  const house = new HouseRules(kit, engine, {
+    scope: "main.frames",
+    views: ".viewport",
+    marks: ".mark",
+    except: [
+      {
+        rule: "contrast",
+        text: "(gradient on section.card)",
+        reason:
+          "impeccable takes the card's gradient edge (a conic ring under its opaque paper fill) for the words' ground; the kit's own read of that paper holds every word at 4.5:1 or more",
+      },
+    ],
+  });
   for (const m of MOMENTS) {
     // biome-ignore lint/performance/noAwaitInLoops: one moment at a time
     await playIn(page, m);
     await settled(page);
+    await house.at(page, m);
     const srcs = await page.evaluate(() =>
       [...document.querySelectorAll<HTMLImageElement>(".stage .caw")].map(
         (img) => new URL(img.src).pathname.split("/").pop() ?? ""
@@ -1082,6 +1097,7 @@ async function posesLeg(kit: Kit, page: Page, engine: Engine) {
       srcs.length !== 1 ||
       each.some(([other, o]) => other !== m && o[0] === srcs[0])
   );
+  house.report();
   kit.check(
     `${engine}: every moment's Caw is its own drawing (${each.map(([m, srcs]) => `${m} ${srcs.join("|")}`).join(", ")})`,
     shared.length === 0,

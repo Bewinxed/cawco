@@ -16,6 +16,14 @@ body {
 #page {
   block-size: 100%;
 }
+.po-today-frame {
+  position: relative;
+  block-size: 100%;
+}
+.po-today-rail {
+  position: absolute;
+  inset: 0 auto auto 0;
+}
 .po-today {
   display: block;
   inline-size: 100%;

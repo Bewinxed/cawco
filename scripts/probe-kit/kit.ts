@@ -331,13 +331,6 @@ export interface PageOptions {
    */
   scrollbars?: boolean;
   theme?: Theme;
-  /**
-   * The WebKit build a WebKit page runs on, by its Playwright revision,
-   * where a spec reads a bug a phone's Safari still has and a newer build
-   * has fixed (`PINNED_WEBKIT`). Unset, the build this playwright-core
-   * expects, or the one `PROBE_WEBKIT` names.
-   */
-  webkit?: string;
 }
 
 /** What a page's context takes of `options` on how it reaches its origins: a certificate of the run's own, a proxy. */
@@ -439,6 +432,15 @@ export interface Kit {
   spec: string;
 }
 
+/** Each kit Chromium's DevTools port on loopback, by its browser. */
+const DEVTOOLS_PORTS = new WeakMap<Browser, number>();
+
+/** The DevTools port of the kit Chromium `page` runs in; none for another engine or a browser the kit did not launch. */
+export const devtoolsPort = (page: Page): number | undefined => {
+  const browser = page.context().browser();
+  return browser ? DEVTOOLS_PORTS.get(browser) : undefined;
+};
+
 const freePort = async (): Promise<number> => {
   const lease = Bun.serve({
     hostname: "127.0.0.1",
@@ -498,6 +500,18 @@ function installRuns(): void {
 const VITE = join(DASHBOARD, "node_modules", ".bin", "vite");
 
 /**
+ * `PROBE_SOURCEMAP=hidden`: the build writes a map beside each chunk and
+ * names none in it, so a long animation frame's script is said at its
+ * source line (live-read.ts `sourceAt`) with the code served unchanged. A
+ * build's key carries it (`treeKey`): one built without maps is not one
+ * built with them.
+ */
+const sourcemapArgs = (): string[] =>
+  process.env.PROBE_SOURCEMAP
+    ? ["--sourcemap", process.env.PROBE_SOURCEMAP]
+    : [];
+
+/**
  * Every vite this process started (a build, a server) that has not ended:
  * each is ended as the process exits, however it exits but a SIGKILL. A stop signal
  * reaches the exit through scratch-fleet.ts's own handlers, which end the
@@ -521,7 +535,7 @@ const viteBuild = async (): Promise<void> => {
   // `PROBE_BUILD_LOCK` names a lock file builds on this host share
   // (`flock`): one build at a time across the workspaces that name it.
   const lock = process.env.PROBE_BUILD_LOCK;
-  const build = [VITE, "build", "--mode", "bench"];
+  const build = [VITE, "build", "--mode", "bench", ...sourcemapArgs()];
   const child = Bun.spawn(lock ? ["flock", lock, ...build] : build, {
     cwd: DASHBOARD,
     // This process's own, git's repository variables gone (scratch-fleet.ts
@@ -612,6 +626,7 @@ const gitSays = async (args: string[], input?: string): Promise<string> => {
  */
 const treeKey = async (): Promise<string> => {
   const hash = new Bun.CryptoHasher("sha256");
+  hash.update(sourcemapArgs().join(" "));
   const [tracked, root] = await Promise.all([
     gitSays(["ls-tree", "-r", "HEAD", "--", ...BUILD_DIRS]),
     gitSays(["ls-tree", "HEAD"]),
@@ -993,34 +1008,38 @@ export class Run {
             return browser;
           }),
       firefox: () => firefox.launch({ env }),
-      chromium: () =>
-        chromium
-          .launch({
-            headless: true,
-            args: [
-              "--no-sandbox",
-              "--disable-gpu",
-              ...(oneProcess
-                ? [
-                    "--disable-site-isolation-trials",
-                    "--disable-features=IsolateOrigins,site-per-process,OriginIsolationHeader",
-                  ]
-                : []),
-              ...(hostRules
-                ? [
-                    `--host-resolver-rules=${hostRules}`,
-                    "--proxy-server=direct://",
-                  ]
-                : []),
-              DESK_POINTER,
-            ],
-            ...(scrollbars ? { ignoreDefaultArgs: ["--hide-scrollbars"] } : {}),
-            env,
-          })
-          .then(async (browser) => {
-            await this.hearRendererEnds(browser);
-            return browser;
-          }),
+      chromium: async () => {
+        const port = await freePort();
+        const browser = await chromium.launch({
+          headless: true,
+          args: [
+            "--no-sandbox",
+            "--disable-gpu",
+            // A DevTools port on loopback beside Playwright's pipe, for a
+            // tool that attaches to a page as it stands (house-rules.ts runs
+            // `impeccable detect --cdp` on it).
+            `--remote-debugging-port=${port}`,
+            ...(oneProcess
+              ? [
+                  "--disable-site-isolation-trials",
+                  "--disable-features=IsolateOrigins,site-per-process,OriginIsolationHeader",
+                ]
+              : []),
+            ...(hostRules
+              ? [
+                  `--host-resolver-rules=${hostRules}`,
+                  "--proxy-server=direct://",
+                ]
+              : []),
+            DESK_POINTER,
+          ],
+          ...(scrollbars ? { ignoreDefaultArgs: ["--hide-scrollbars"] } : {}),
+          env,
+        });
+        DEVTOOLS_PORTS.set(browser, port);
+        await this.hearRendererEnds(browser);
+        return browser;
+      },
     } satisfies Record<Engine, () => Promise<Browser>>;
     const launched = launch[engine]();
     this.browsers.set(key, launched);

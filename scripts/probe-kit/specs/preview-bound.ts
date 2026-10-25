@@ -68,7 +68,7 @@
  *    and, outside that, V8's sampled self time of its functions (and the
  *    natives they called), up to `OPENED_MS` after the frame is ready, is
  *    under `OVERLAY_CPU_MS`; its bytes, decoded and over the wire, are noted.
- * 7. Heavy page, WebKit at a phone (the owner's Brave on iOS), which runs
+ * 7. Heavy page, Playwright WebKit with a phone's viewport and agent, which runs
  *    every frame on the dashboard's thread: its load is noted (the page's
  *    own work is in it); the page settled, the thumbnail asked alone holds
  *    the dashboard's thread under `TASK_MS` at a time (the longest gap in a

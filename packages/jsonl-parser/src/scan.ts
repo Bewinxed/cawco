@@ -108,39 +108,51 @@ export function lineRecords(line: string): TranscriptRecord[] {
  */
 export type BytePrefilter = (buf: Uint8Array, span: LineSpan, base: number) => boolean;
 
+/** A span's bytes as a Buffer over the same memory, for the runtime's substring search. */
+const spanView = (buf: Uint8Array, span: LineSpan, base: number): Buffer =>
+  Buffer.from(buf.buffer, buf.byteOffset + span.offset - base, span.byteLength);
+
 /** Build a prefilter that requires at least one of the given substrings in the line. */
 export function includesAny(...needles: string[]): BytePrefilter {
-  const encoded = needles.map((n) => new TextEncoder().encode(n));
+  const encoded = needles.map((n) => Buffer.from(n));
   return (buf, span, base) => {
-    const local = span.offset - base;
-    const view = buf.subarray(local, local + span.byteLength);
-    return encoded.some((needle) => indexOfBytes(view, needle) !== -1);
+    const view = spanView(buf, span, base);
+    return encoded.some((needle) => view.includes(needle));
   };
 }
 
-/** Prefilter matching the record `type` discriminator, e.g. typeFilter("user", "assistant"). */
-export function typeFilter(...types: string[]): BytePrefilter {
-  return includesAny(...types.map((t) => `"type":"${t}"`));
-}
+const TYPE_KEY = Buffer.from('"type":"');
 
-/** Naive byte search (memchr-accelerated on the first byte). Fine for short needles. */
-function indexOfBytes(haystack: Uint8Array, needle: Uint8Array): number {
-  const first = needle[0];
-  if (first === undefined) {
-    return 0;
-  }
-  const max = haystack.length - needle.length;
-  let i = -1;
-  while ((i = haystack.indexOf(first, i + 1)) !== -1 && i <= max) {
-    let j = 1;
-    while (j < needle.length && haystack[i + j] === needle[j]) {
-      j++;
+/**
+ * Prefilter matching the record `type` discriminator, e.g.
+ * typeFilter("user", "assistant"): a line holding `"type":"<one of them>`.
+ * One pass over the line for the key every needle shares, each place it
+ * stands compared with the types. A search per type, its first byte a quote
+ * that stands every few bytes of JSON, was 630 ms of a 413 MB transcript's
+ * scan.
+ */
+export function typeFilter(...types: string[]): BytePrefilter {
+  const encoded = types.map((t) => Buffer.from(t));
+  return (buf, span, base) => {
+    const view = spanView(buf, span, base);
+    for (
+      let at = view.indexOf(TYPE_KEY);
+      at !== -1;
+      at = view.indexOf(TYPE_KEY, at + TYPE_KEY.length)
+    ) {
+      const value = at + TYPE_KEY.length;
+      if (
+        encoded.some(
+          (type) =>
+            value + type.length <= view.length &&
+            view.compare(type, 0, type.length, value, value + type.length) === 0,
+        )
+      ) {
+        return true;
+      }
     }
-    if (j === needle.length) {
-      return i;
-    }
-  }
-  return -1;
+    return false;
+  };
 }
 
 export interface ScanOptions {

@@ -27,8 +27,13 @@
    *   whole, a long one's words wrapping inside it with its glyph on their
    *   first line (Langdock's and AirOps' chips under the field, Relevance
    *   AI's under its own).
+   * - `row`: the same chips on one line that scrolls sideways (the project
+   *   page options' S2, docked on a composer): each chip at most four fifths
+   *   of the row, a long sentence wrapping inside it, so the next chip
+   *   always peeks past the edge, and the house edge fade (`kit-edge-fade`)
+   *   on whichever edge has more to scroll to.
    */
-  export const SUGGESTION_LOOKS = ["list", "rows", "chips"] as const;
+  export const SUGGESTION_LOOKS = ["list", "rows", "chips", "row"] as const;
   export type SuggestionLook = (typeof SUGGESTION_LOOKS)[number];
 
   /**
@@ -263,14 +268,28 @@
       {/if}
     </ul>
   {:else}
+    <!-- The chips: a wrapping cloud, or (`row`) one line scrolling sideways
+         under the house edge fade, each chip at most four fifths of the row
+         so the next one peeks. -->
     <ul
       aria-busy={waiting || undefined}
       aria-label={label}
-      class={chipsVariants({ class: "m-0 list-none p-0" })}
+      data-row={look === "row" || undefined}
+      class={chipsVariants({
+        class:
+          look === "row"
+            ? "kit-edge-fade m-0 list-none flex-nowrap items-start overflow-x-auto overscroll-x-contain p-0 no-scrollbar"
+            : "m-0 list-none p-0",
+      })}
     >
       {#if waiting}
         {#each slots as slot (slot)}
-          <li class="flex max-w-full">
+          <li
+            class={[
+              "flex",
+              look === "row" ? "max-w-4/5 flex-none" : "max-w-full",
+            ]}
+          >
             <Skeleton
               class="w-c-measure-meta max-w-full"
               height="control-sm"
@@ -282,7 +301,12 @@
       {:else}
         {#each suggestions as suggestion, i (`${i}:${suggestion.text}`)}
           {@const Glyph = glyphOf(suggestion)}
-          <li class="flex max-w-full">
+          <li
+            class={[
+              "flex",
+              look === "row" ? "max-w-4/5 flex-none" : "max-w-full",
+            ]}
+          >
             <!-- The suggestion row's edge on the recess (DESIGN.md, Borders: border-row-outline holds 3:1 there), where the kit's quiet control edge does not. -->
             <button
               data-slot="suggestion"

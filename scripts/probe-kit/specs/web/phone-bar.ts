@@ -24,6 +24,7 @@
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one engine and one width at a time, each on its own page
 import type { Page } from "playwright-core";
+import { HouseRules } from "../../house-rules";
 import { scan } from "../../journeys/scan";
 import { type Engine, type Kit, open, type Spec, settle } from "../../kit";
 
@@ -252,6 +253,10 @@ async function leg(kit: Kit, bench: string, engine: Engine, width: number) {
     `${at}: the sidebar toggle's glyph still stands --c-bar-phone-edge (${toggle.edge}px) in from the leading edge (${toggle.glyphLeft})`,
     toggle.glyphLeft !== null && Math.abs(toggle.glyphLeft - toggle.edge) < 0.5
   );
+  const house = new HouseRules(kit, at);
+  await settle(page);
+  await house.at(page, "the bar at rest");
+  house.report();
   const found = await page.evaluate(scan);
   kit.check(
     `${at}: the overflow sweep totals 0 (${found.length})`,

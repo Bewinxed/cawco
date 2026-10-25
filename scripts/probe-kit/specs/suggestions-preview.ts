@@ -33,6 +33,7 @@
 import { readFileSync } from "node:fs";
 import { join, normalize } from "node:path";
 import type { Page } from "playwright-core";
+import { HouseRules } from "../house-rules";
 import { capture, contrast, off, px, type Rgb } from "../ink";
 import { scan } from "../journeys/scan";
 import type { Engine, Kit, Spec } from "../kit";
@@ -917,6 +918,21 @@ const spec: Spec = {
         await page.goto(base);
         await page.waitForSelector('[data-slot="stage"]');
         await page.evaluate(() => document.fonts.ready);
+        const house = new HouseRules(kit, engine, {
+          scope: '[data-slot="stage"]',
+          allowedText: [
+            {
+              selector: '[data-slot="suggestion-text"]',
+              texts: HIS.texts,
+              source: "app/starters.tsv",
+            },
+            {
+              selector: '[data-slot="suggestion-reason"]',
+              texts: HIS.reasons,
+              source: "app/starters.tsv",
+            },
+          ],
+        });
         let states = 0;
         let spills = 0;
         const bad: string[] = [];
@@ -1018,6 +1034,7 @@ const spec: Spec = {
                     [data.value]: read.around.box,
                   });
                 }
+                await house.at(page, key);
                 const findings = await page.evaluate(scan);
                 spills += findings.length;
                 if (findings.length > 0) {
@@ -1179,6 +1196,7 @@ const spec: Spec = {
           `${engine}: the overflow sweep over all ${states} states totals ${spills}`,
           spills === 0
         );
+        house.report();
         if (engine === "chromium") {
           for (const key of SHOTS) {
             // biome-ignore lint/performance/noAwaitInLoops: one state on the page at a time

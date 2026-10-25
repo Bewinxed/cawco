@@ -64,21 +64,41 @@
  * under `DROPPED_SHARE` of the display's while wheeling; no reading-position
  * jump; every press an interaction within `INTERACTION_MS`; the main
  * thread's own CPU at rest under `IDLE_SHARE`; after thirty switches the
- * DOM's nodes and the heap within `GROWTH_SHARE` of before. Every number is
- * written to `numbers.json` in the spec's out folder.
+ * DOM's nodes and the heap within `GROWTH_SHARE` of before. A hub message
+ * costs what it changed, never the fleet's size: at rest a pulse's handling
+ * within `PULSE_MS` and a board delta's within `DELTA_MS` on average; no
+ * held list's reorder timer (motion/held-order) runs `HELD_ORDER_MS` in a
+ * long frame; and no tab switch's frame (the long frame its press ran in)
+ * handles a hub message before it renders: neither the socket's handler
+ * nor the store's take of what it said. Every number is written to
+ * `numbers.json` in the spec's out folder.
+ *
+ * THE FLEET AT ITS SIZE, WITHOUT THE LIVE HUB. `--fleet` stands up a
+ * scratch fleet at the live board's size instead (fleet-scale.ts: 1763
+ * rows, 1698 asleep, `--rows` and `--asleep` to name others), sessions
+ * streaming and taking turns, and reads the `idle`, `switch` and `nav` legs on it
+ * (`--legs` to name others), its build's source maps beside it. It runs
+ * inside a workspace. `PROBE_ENGINE=webkit` reads it in WebKit, which has
+ * no trace and no long animation frames: there the hub messages' handling
+ * is the reading.
+ *
+ *   bun scripts/probe-kit/run.ts live-perf --fleet
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one session, one tab, one press at a time, as a person makes them
 import { readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { BrowserContext, Page } from "playwright-core";
+import { HUB_TAKE_MEASURE } from "../../../packages/core/src/stream";
+import { LIVE_ASLEEP, LIVE_ROWS, scaleFleet } from "../fleet-scale";
 import { type MainThread, traceMain } from "../frames";
-import type { Kit, Spec } from "../kit";
+import { type Kit, ROOT, type Spec } from "../kit";
 import {
   attributeOn,
   busyMeter,
   installPerf,
   journey,
+  type LoafScript,
   type PerfState,
   pageNow,
   perfRead,
@@ -97,6 +117,7 @@ import {
   scriptsOf,
   sourceAt,
 } from "../live-read";
+import { machineQuiet, quietWords } from "../quiet";
 
 /** A long task: the frame budget a steady wheel stays inside. */
 const LONG_TASK_MS = 50;
@@ -108,6 +129,40 @@ const INTERACTION_MS = 200;
 const IDLE_SHARE = 0.05;
 /** How much thirty switches may grow the DOM's nodes and the heap. Our own call. */
 const GROWTH_SHARE = 0.1;
+/**
+ * A pulse's handling and a board delta's, each on average, ms: the
+ * research's budgets for a message that costs what it changed at the live
+ * board's size (7433e2b3, mechanism 2).
+ */
+const PULSE_MS = 2;
+const DELTA_MS = 5;
+const KIND_BUDGETS = [
+  ["pulse", PULSE_MS],
+  ["instances_delta", DELTA_MS],
+] as const;
+/** A held list's reorder timer in a long frame (7433e2b3, mechanism 7). */
+const HELD_ORDER_MS = 5;
+/** The engine the run's pages open on (kit.ts `RUN_ENGINE`): only Chromium traces. */
+const TRACES = (process.env.PROBE_ENGINE ?? "chromium") === "chromium";
+/** A long frame's script the hub socket's message ran (live-page.ts keeps the page's handler a listener). */
+const SOCKET = /WebSocket/;
+/** A long frame's script a person's press ran: a pointer, a click, a key. */
+const PRESS = /click|pointer|mouse|key/i;
+/** The store's take of what its socket said, a message of its own channel (client.svelte.ts `takeHeld`). */
+const TAKE = /MessagePort/;
+/** The module the store's take runs in, as a source map names it. */
+const CLIENT = /client\.svelte\.ts/;
+
+/** Whether a long frame's script is the hub's messages being handled: the socket's own handler, or the store's take of them. */
+const handlesHub = (script: LoafScript, maps: string | undefined): boolean =>
+  SOCKET.test(script.invoker) ||
+  (TAKE.test(script.invoker) &&
+    maps !== undefined &&
+    CLIENT.test((script.url && sourceAt(maps, script.url, script.pos)) || ""));
+/** A sampled frame of the dashboard's own source, as a source map names it. */
+const OWN_SOURCE = /@src\/lib\//;
+/** The held lists' module, as a source map names it. */
+const HELD_ORDER = /held-order\.svelte\.ts/;
 /** How long a page is left to stand after it opens before it is read. */
 const SETTLE_MS = 12_000;
 /** How long after a press its frames and tasks are its own. */
@@ -169,6 +224,11 @@ declare global {
 }
 
 /** live-page.ts's helpers, put on every page before its own scripts. */
+/** live-page.ts's watcher, given the name of the measure a page makes of each take of its messages. */
+const WATCHER = {
+  content: `(${installPerf.toString()})(${JSON.stringify(HUB_TAKE_MEASURE)});`,
+};
+
 const LIB = {
   content: `window.__pf = {${[
     pageNow,
@@ -243,15 +303,31 @@ const topFunctions = (
     .slice(0, most)
     .map(([fn, ms]) => [atSource(maps, fn), Math.round(ms)]);
 
+/** What an engine with no trace gives: nothing the trace would have read. */
+const UNTRACED: MainThread = {
+  elsewhere: () => [],
+  evaluated: [],
+  inclusive: () => [],
+  marks: [],
+  selfTime: () => [],
+  stacksIn: () => [],
+  tasks: [],
+};
+
 /**
  * Traces `act` on `page` and says how the page's clock maps onto the
- * trace's: a mark made at the start, with the page's time at it.
+ * trace's: a mark made at the start, with the page's time at it. On an
+ * engine with no trace, runs `act` and reads nothing ({@link UNTRACED}).
  */
 async function traced(
   page: Page,
   act: () => Promise<unknown>,
   profile = true
 ): Promise<{ main: MainThread; offsetUs: number }> {
+  if (!TRACES) {
+    await act();
+    return { main: UNTRACED, offsetUs: 0 };
+  }
   let pageAt = 0;
   const main = await traceMain(
     page,
@@ -513,11 +589,7 @@ async function canvasLeg(live: Live, pages: string[]) {
 
 /** A tab of the strip, by its session's title. */
 const tabOf = (live: Live, id: string) =>
-  live.page
-    .locator(
-      `${TAB_STRIP} [role=tab][aria-label^=${JSON.stringify(live.titleOf(id))}]`
-    )
-    .first();
+  live.page.locator(`${TAB_STRIP} [data-session-tab="${id}"]`).first();
 
 /** Presses `id`'s tab in the strip, and reads what followed. */
 async function press(live: Live, id: string) {
@@ -532,10 +604,36 @@ async function press(live: Live, id: string) {
   const [interaction] = interactions(
     state.events.filter((one) => one.at >= at)
   );
+  // The switch's frame: the long animation frame that ran the press's own
+  // handler. A script handling the hub's messages in it, before the press
+  // (its input delay) or between it and the frame's rendering, held the
+  // switch for a message. One after the rendering, while the frame is
+  // still being presented, holds nothing of it.
+  const shown = interaction ? interaction.at + interaction.ms : at;
+  const socketInSwitch = state.loaf
+    .filter((frame) =>
+      frame.scripts.some(
+        (script) =>
+          PRESS.test(script.invoker) && script.at >= at && script.at < shown
+      )
+    )
+    .flatMap((frame) =>
+      frame.scripts.filter(
+        (script) =>
+          handlesHub(script, live.maps) &&
+          (frame.render === 0 || script.at < frame.at + frame.ms - frame.render)
+      )
+    );
   return {
     tab: live.titleOf(id),
     interactionMs: interaction ? round(interaction.ms, 0) : null,
     presentationMs: interaction ? round(interaction.present, 0) : null,
+    socketInSwitch: {
+      count: socketInSwitch.length,
+      ms: round(socketInSwitch.reduce((sum, one) => sum + one.ms, 0)),
+    },
+    /** The switch's frames on the page's clock: its press to its paint. */
+    window: [interaction?.at ?? at, shown] as [number, number],
     long: longWork(state.long, at, at + SWITCH_MS),
     longFrames: longFrames(state.loaf, at, at + SWITCH_MS),
     scripts: scriptsOf(state.loaf, live.maps, at, at + SWITCH_MS).slice(0, 4),
@@ -546,11 +644,27 @@ async function press(live: Live, id: string) {
 
 /** Opens each session as a tab of the pane, then lets the page stand. */
 async function openTabs(live: Live, tabs: string[]) {
+  // The pane's tabs as the workspace keeps them (workspace.svelte.ts), the
+  // first in front: a page opened on a session shows it in the tab in
+  // front, it adds none.
+  await live.page.evaluate(
+    ([held, active]) => {
+      localStorage.setItem(
+        "cawco-workspace",
+        JSON.stringify({
+          v: 1,
+          root: { t: "l", id: "pone", tabs: held, active, opened: null },
+          focusedLeaf: "pone",
+        })
+      );
+    },
+    [tabs, tabs[0]] as const
+  );
+  await live.page.goto(`${live.base}/session/${tabs[0]}`, {
+    waitUntil: "domcontentloaded",
+  });
   for (const id of tabs) {
-    await live.page.goto(`${live.base}/session/${id}`, {
-      waitUntil: "domcontentloaded",
-    });
-    await live.page.waitForSelector(TAB_STRIP, { timeout: 60_000 });
+    await tabOf(live, id).waitFor({ timeout: 60_000 });
   }
   await live.page.waitForTimeout(SETTLE_MS);
   await live.page.evaluate(() => window.__pf.perfReset(true, true));
@@ -561,26 +675,76 @@ async function switchLeg(live: Live, tabs: string[]) {
   const { kit } = live;
   await openTabs(live, tabs);
   const read: Awaited<ReturnType<typeof press>>[] = [];
-  const traceOf = await traced(
-    live.page,
-    async () => {
-      for (const id of [...tabs, ...tabs]) {
-        read.push(await press(live, id));
-      }
-    },
-    false
-  );
+  /** Each press with the trace it was taken under. */
+  const tracedBy: { main: MainThread; offsetUs: number }[] = [];
+  const traceOf = await traced(live.page, async () => {
+    for (const id of [...tabs, ...tabs]) {
+      read.push(await press(live, id));
+    }
+  });
+  tracedBy.push(...read.map(() => traceOf));
   const [first, second] = tabs as [string, string];
-  read.push(await press(live, first));
+  tracedBy.push(
+    await traced(live.page, async () => {
+      read.push(await press(live, first));
+    })
+  );
   await live.page.waitForTimeout(HIDDEN_MS);
-  read.push(await press(live, second));
+  tracedBy.push(
+    await traced(live.page, async () => {
+      read.push(await press(live, second));
+    })
+  );
+  // What the page's takes of its messages ran inside each switch's frames,
+  // by sampled self time: what a take that held a switch was doing.
+  const spans = await live.page.evaluate(
+    () => window.__pf.perfRead().ws.takeSpans
+  );
+  const presses = read.map((one, i) => {
+    const trace = tracedBy[i];
+    const [from, to] = one.window;
+    const inTakes = new Map<string, number>();
+    for (const [start, ms] of spans) {
+      if (!trace || start + ms <= from || start >= to) {
+        continue;
+      }
+      const at = start * 1000 + trace.offsetUs;
+      for (const [fn, self] of trace.main.selfTime(at, at + ms * 1000)) {
+        inTakes.set(fn, (inTakes.get(fn) ?? 0) + self);
+      }
+    }
+    return {
+      ...one,
+      takeFunctions: [...inTakes]
+        .filter(([fn]) => !fn.startsWith("("))
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(([fn, ms]): [string, number] => [
+          atSource(live.maps, fn),
+          round(ms),
+        ]),
+    };
+  });
   live.numbers.switch = {
-    presses: read,
+    presses,
     cpuMs: cpuIn(traceOf.main, traceOf.offsetUs, 0, Number.POSITIVE_INFINITY),
   };
-  for (const one of read) {
+  for (const one of presses) {
     kit.note(
-      `switch to ${one.tab}: interaction ${one.interactionMs}ms (presented ${one.presentationMs}ms after its handlers), ${one.long.count} long tasks (${round(one.long.totalMs, 0)}ms) in the ${SWITCH_MS}ms after, ${one.nodes} nodes`
+      `switch to ${one.tab}: interaction ${one.interactionMs}ms (presented ${one.presentationMs}ms after its handlers), ${one.long.count} long tasks (${round(one.long.totalMs, 0)}ms) in the ${SWITCH_MS}ms after, the hub socket's handler ${one.socketInSwitch.count}× (${one.socketInSwitch.ms}ms) in its frames${one.takeFunctions.length > 0 ? ` (the takes in them ran ${one.takeFunctions.map(([fn, ms]) => `${fn} ${ms}ms`).join(", ")})` : ""}, ${one.nodes} nodes`
+    );
+  }
+  if (TRACES) {
+    const held = read.filter((one) => one.socketInSwitch.count > 0);
+    kit.check(
+      "switch: no switch's frame handles a hub message before it renders",
+      held.length === 0,
+      held
+        .map(
+          (one) =>
+            `${one.tab}: ${one.socketInSwitch.count}× ${one.socketInSwitch.ms}ms`
+        )
+        .join(", ")
     );
   }
   const slow = read.filter(
@@ -593,17 +757,99 @@ async function switchLeg(live: Live, tabs: string[]) {
   );
 }
 
+/** A sampled total per function, its largest first, in ms. */
+const largest = (under: Map<string, number>): [string, number][] =>
+  [...under]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 16)
+    .map(([fn, ms]): [string, number] => [fn, round(ms)]);
+
+/**
+ * What the page's takes of its messages ran, by the trace's samples: each
+ * function's own time in them (`messageFunctions`), all the time under each
+ * of the dashboard's own functions (`messageInclusive`: a derived that walks
+ * the board, whatever it called), and that again in the takes that held a
+ * message of each budgeted kind (`kindInclusive`: what that kind sets off).
+ */
+function takesRan(
+  { main, offsetUs }: { main: MainThread; offsetUs: number },
+  spans: [number, number, string[]][],
+  maps: string | undefined
+) {
+  const inMessages = new Map<string, number>();
+  const underMessages = new Map<string, number>();
+  const underKind = new Map<string, Map<string, number>>(
+    KIND_BUDGETS.map(([kind]) => [kind, new Map()])
+  );
+  for (const [start, ms, kinds] of spans) {
+    const from = start * 1000 + offsetUs;
+    for (const [fn, self] of main.selfTime(from, from + ms * 1000)) {
+      if (!fn.startsWith("(")) {
+        const at = atSource(maps, fn);
+        inMessages.set(at, (inMessages.get(at) ?? 0) + self);
+      }
+    }
+    const alsoUnder = [...new Set(kinds)].flatMap(
+      (kind) => underKind.get(kind) ?? []
+    );
+    for (const [stack, self] of main.stacksIn(from, from + ms * 1000)) {
+      const own = new Set(
+        stack
+          .split(" < ")
+          .map((frame) => atSource(maps, frame))
+          .filter((frame) => OWN_SOURCE.test(frame))
+      );
+      for (const frame of own) {
+        for (const under of [underMessages, ...alsoUnder]) {
+          under.set(frame, (under.get(frame) ?? 0) + self);
+        }
+      }
+    }
+  }
+  return {
+    messageFunctions: largest(inMessages),
+    messageInclusive: largest(underMessages),
+    kindInclusive: Object.fromEntries(
+      [...underKind].map(([kind, under]) => [kind, largest(under)])
+    ),
+  };
+}
+
 /** Idle: a quiet session left open while the fleet runs. */
 async function idleLeg(live: Live, quiet: string) {
   const { kit, page } = live;
   await live.goto(`/session/${quiet}`);
   const at = await page.evaluate(() => window.__pf.perfReset(false, true));
+  // The machine's pressure as the minute begins and ends (quiet.ts): a
+  // message's handling is read by the wall clock, which a busy box
+  // stretches, so each reading says what it was taken under.
+  const pressedBefore = machineQuiet();
   const meter = await page.evaluate((ms) => window.__pf.busyMeter(ms), IDLE_MS);
+  const pressedAfter = machineQuiet();
   const state = await page.evaluate(() => window.__pf.perfRead());
-  const { main } = await traced(page, () => page.waitForTimeout(20_000), false);
+  const traceOf = await traced(page, () => page.waitForTimeout(20_000));
+  const { main } = traceOf;
   const spanMs =
     ((main.tasks.at(-1)?.end ?? 0) - (main.tasks[0]?.at ?? 0)) / 1000 || 1;
   const ownCpu = main.tasks.reduce((sum, task) => sum + task.cpu, 0) / spanMs;
+  // What the page's own time went to at rest, by sampled self time, and
+  // what its message tasks (the hub socket's) ran, the same way.
+  const functions = topFunctions(
+    main,
+    live.maps,
+    traceOf.offsetUs,
+    0,
+    Number.POSITIVE_INFINITY,
+    16
+  );
+  // The page's takes of its messages while the trace ran (live-page.ts
+  // `takeSpans`), each read on the trace's clock.
+  const spans = await page.evaluate(() => window.__pf.perfRead().ws.takeSpans);
+  const { messageFunctions, messageInclusive, kindInclusive } = takesRan(
+    traceOf,
+    spans,
+    live.maps
+  );
   // The meter's floor: the same meter on a blank page, the machine's other
   // turns alone.
   const blank = await live.desk();
@@ -622,6 +868,7 @@ async function idleLeg(live: Live, quiet: string) {
   const total = messages.reduce((sum, one) => sum + one.count, 0);
   live.numbers.idle = {
     session: quiet,
+    pressure: { before: pressedBefore, after: pressedAfter },
     busyShare: round(meter.busyShare, 3),
     floorShare: round(floor.busyShare, 3),
     traceCpuShare: round(ownCpu, 3),
@@ -629,20 +876,78 @@ async function idleLeg(live: Live, quiet: string) {
     messages,
     long: longWork(state.long, at),
     scripts: scriptsOf(state.loaf, live.maps, at).slice(0, 8),
+    functions,
+    messageFunctions,
+    messageInclusive,
+    kindInclusive,
+    // The page's takes of its messages (if it takes them after its frame):
+    // how many, how many messages, their ms all told and the longest.
+    takes: state.ws.takes,
     mutated: state.mutated,
   };
   kit.note(
-    `idle on ${live.titleOf(quiet)}: busy ${round(meter.busyShare * 100)}% (blank page ${round(floor.busyShare * 100)}%), its own CPU by the trace ${round(ownCpu * 100)}%; ${round((total / IDLE_MS) * 1000)} messages a second: ${messages
+    `idle on ${live.titleOf(quiet)} (the machine as the minute began: ${quietWords(pressedBefore)}; as it ended: ${quietWords(pressedAfter)}): busy ${round(meter.busyShare * 100)}% (blank page ${round(floor.busyShare * 100)}%), its own CPU by the trace ${round(ownCpu * 100)}%; ${round((total / IDLE_MS) * 1000)} messages a second: ${messages
       .sort((a, b) => b.msEach * b.count - a.msEach * a.count)
-      .slice(0, 4)
-      .map((one) => `${one.kind} ×${one.count} ${one.msEach}ms each`)
-      .join(", ")}`
+      .slice(0, 6)
+      .map(
+        (one) =>
+          `${one.kind} ×${one.count} ${one.msEach}ms each (longest ${one.longest})`
+      )
+      .join(
+        ", "
+      )}; the page took them in ${state.ws.takes[0]} takes (${state.ws.takes[1]} messages, ${round(state.ws.takes[2])}ms, the longest ${round(state.ws.takes[3])}ms); top functions ${functions
+      .slice(0, 8)
+      .map(([fn, ms]) => `${fn} ${ms}ms`)
+      .join(", ")}; in message tasks ${messageFunctions
+      .slice(0, 8)
+      .map(([fn, ms]) => `${fn} ${ms}ms`)
+      .join(", ")}; under the dashboard's own ${messageInclusive
+      .slice(0, 10)
+      .map(([fn, ms]) => `${fn} ${ms}ms`)
+      .join(", ")}${Object.entries(kindInclusive)
+      .filter(([, top]) => top.length > 0)
+      .map(
+        ([kind, top]) =>
+          `; in the takes that held a ${kind}, under the dashboard's own ${top
+            .slice(0, 12)
+            .map(([fn, ms]) => `${fn} ${ms}ms`)
+            .join(", ")}`
+      )
+      .join("")}`
   );
-  kit.check(
-    `idle: the main thread's own CPU under ${IDLE_SHARE * 100}% while the fleet runs`,
-    ownCpu < IDLE_SHARE,
-    `${round(ownCpu * 100)}% by the trace's thread time`
-  );
+  if (TRACES) {
+    kit.check(
+      `idle: the main thread's own CPU under ${IDLE_SHARE * 100}% while the fleet runs`,
+      ownCpu < IDLE_SHARE,
+      `${round(ownCpu * 100)}% by the trace's thread time`
+    );
+  }
+  for (const [kind, budget] of KIND_BUDGETS) {
+    const heard = messages.find((one) => one.kind === kind);
+    kit.check(
+      `idle: a ${kind}'s handling within ${budget}ms on average`,
+      heard !== undefined && heard.msEach <= budget,
+      heard
+        ? `${heard.count}× ${heard.msEach}ms each, the longest ${heard.longest}ms`
+        : "none heard"
+    );
+  }
+  const { maps } = live;
+  if (TRACES && maps) {
+    const timers = state.loaf
+      .flatMap((frame) => frame.scripts)
+      .filter((script) =>
+        HELD_ORDER.test(
+          (script.url && sourceAt(maps, script.url, script.pos)) || ""
+        )
+      );
+    const longest = Math.max(0, ...timers.map((script) => script.ms));
+    kit.check(
+      `idle: no held list's reorder runs ${HELD_ORDER_MS}ms in a long frame`,
+      longest < HELD_ORDER_MS,
+      `${timers.length} in long frames, the longest ${round(longest)}ms`
+    );
+  }
 }
 
 /** A cold page's load: its first byte, its paints, its long tasks. */
@@ -665,6 +970,25 @@ const coldLoad = async () => {
     long: window.__perf.long.length,
     longMs: Math.round(window.__perf.long.reduce((sum, [, ms]) => sum + ms, 0)),
     nodes: document.getElementsByTagName("*").length,
+  };
+};
+
+/**
+ * What the rail's home lists say: its tabs (each with its count), Recent's
+ * header (its count, and what a shut one says still runs inside), and how
+ * many trees an open Recent draws. Read the same way before a change and
+ * after it, the two say whether a person sees the same lists.
+ */
+const homeSays = () => {
+  const words = (el: Element | null | undefined) =>
+    el?.textContent?.replace(/\s+/g, " ").trim() ?? null;
+  const rail = document.querySelector("aside");
+  return {
+    tabs: [...(rail?.querySelectorAll("[role=tab]") ?? [])].map(words),
+    recent: words(rail?.querySelector('[data-slot="recent"] > button')),
+    recentTrees:
+      rail?.querySelectorAll('[data-slot="home-recent-session-tree"] > *')
+        .length ?? 0,
   };
 };
 
@@ -708,15 +1032,20 @@ async function navLeg(live: Live, sessions: string[]) {
     page.getByRole("tab", { name: "Finished" }).first().click()
   );
   const recent = page.getByRole("button", { name: RECENT }).first();
+  const shut = await page.evaluate(homeSays);
   await pressed("Recent, open", () => recent.click());
+  const open = await page.evaluate(homeSays);
   await pressed("Recent, shut", () => recent.click());
   await pressed("a project", () =>
     page.locator('aside a[href^="/project/"]').first().click()
   );
-  live.numbers.nav = { loads, presses };
+  live.numbers.nav = { loads, presses, home: { shut, open } };
   for (const one of loads) {
     kit.note(`cold ${JSON.stringify(one)}`);
   }
+  kit.note(
+    `nav: the rail's home says, Recent shut ${JSON.stringify(shut)}, Recent open ${JSON.stringify(open)}`
+  );
   const slow = presses.filter(
     (one) => (one.interactionMs ?? Number.POSITIVE_INFINITY) > INTERACTION_MS
   );
@@ -773,103 +1102,148 @@ const boardRead = async (): Promise<unknown> => {
 const spec: Spec = {
   name: "live-perf",
   run: async (kit: Kit) => {
-    const base = option("base")?.replace(TRAILING_SLASH, "");
-    if (!base) {
-      kit.check(
-        "a live dashboard is named",
-        false,
-        "pass --base https://<hub>:3455 (and --storage <state.json> for a hub that pairs its browsers)"
-      );
-      return;
+    const fleetMode = process.argv.includes("--fleet");
+    if (fleetMode) {
+      // The build's maps beside its chunks, read where its frames are said.
+      process.env.PROBE_SOURCEMAP ??= "hidden";
     }
-    const storage = option("storage");
-    const legs = new Set<Leg>(
-      (listed("legs") ?? [...LEGS]).filter((one): one is Leg =>
-        (LEGS as readonly string[]).includes(one)
-      )
-    );
-    const desk = async (): Promise<Page> => {
-      const one = await kit.page("desk", {
-        init: [installPerf, LIB],
-        scale: 1,
-        scrollbars: true,
-      });
-      if (storage) {
-        const state = JSON.parse(readFileSync(storage, "utf8")) as {
-          cookies?: Parameters<BrowserContext["addCookies"]>[0];
-        };
-        await one.context().addCookies(state.cookies ?? []);
-      }
-      return one;
-    };
-    const page = await desk();
-    await page.goto(`${base}/session`, { waitUntil: "domcontentloaded" });
-    const board = await page.evaluate(boardRead);
-    if (!Array.isArray(board)) {
-      kit.check(
-        "the hub's board answers this browser",
-        false,
-        `GET /api/instances answered ${String(board)}: a hub that pairs its browsers wants --storage`
-      );
-      return;
+    const scale = fleetMode
+      ? await scaleFleet(
+          kit,
+          Number(option("rows") ?? LIVE_ROWS),
+          Number(option("asleep") ?? LIVE_ASLEEP)
+        )
+      : null;
+    try {
+      await measureLive(kit, scale);
+    } finally {
+      scale?.stop();
     }
-    const rows = board as Row[];
-    const running = rows
-      .filter((row) => row.status === "running")
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-    const live: Live = {
-      base,
-      desk,
-      kit,
-      maps: option("maps"),
-      numbers: { base, at: new Date().toISOString() },
-      page,
-      slot: displayFrame(await page.evaluate(stillFrames)),
-      titleOf: (id) => {
-        const row = rows.find((one) => one.id === id);
-        return row?.title || row?.derivedTitle || id.slice(0, 8);
-      },
-      goto: async (path, ready = TRANSCRIPT) => {
-        await page.goto(`${base}${path}`, { waitUntil: "domcontentloaded" });
-        await page.waitForSelector(ready, { timeout: 60_000 });
-        await page.waitForTimeout(SETTLE_MS);
-      },
-    };
-    live.numbers.displayFrameMs = round(live.slot);
-    const sessions =
-      listed("sessions") ?? running.slice(0, 3).map((row) => row.id);
-    const tabs = listed("tabs") ?? running.slice(0, 7).map((row) => row.id);
-    const quiet =
-      option("quiet") ??
-      rows
-        .filter((row) => row.status === "stopped")
-        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]?.id;
-    kit.note(
-      `live-perf: ${base}, ${rows.length} sessions on the board, ${running.length} running, the display's frame ${round(live.slot)}ms; legs ${[...legs].join(", ")}`
-    );
-    if (legs.has("scroll")) {
-      await scrollLeg(live, sessions);
-    }
-    if (legs.has("canvas")) {
-      await canvasLeg(live, listed("pages") ?? PAGES);
-    }
-    if (legs.has("switch") && tabs.length > 1) {
-      await switchLeg(live, tabs);
-    }
-    if (legs.has("idle") && quiet) {
-      await idleLeg(live, quiet);
-    }
-    if (legs.has("nav")) {
-      await navLeg(live, sessions);
-    }
-    if (legs.has("memory") && tabs.length > 1) {
-      await memoryLeg(live, tabs);
-    }
-    await writeFile(
-      join(kit.out, "numbers.json"),
-      `${JSON.stringify(live.numbers, null, 2)}\n`
-    );
   },
 };
+
+/**
+ * The sessions the legs open: as the options name them, else the scale
+ * fleet's own, else the board's running ones that have run longest and its
+ * newest stopped one.
+ */
+function chosen(
+  rows: Row[],
+  running: Row[],
+  scale: Awaited<ReturnType<typeof scaleFleet>> | null
+) {
+  const quiet =
+    option("quiet") ??
+    scale?.quiet ??
+    rows
+      .filter((row) => row.status === "stopped")
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]?.id;
+  return {
+    sessions: listed("sessions") ?? running.slice(0, 3).map((row) => row.id),
+    tabs:
+      listed("tabs") ?? scale?.live ?? running.slice(0, 7).map((row) => row.id),
+    quiet,
+  };
+}
+
+/** The legs, on the dashboard `--base` names or on the scale fleet's. */
+async function measureLive(
+  kit: Kit,
+  scale: Awaited<ReturnType<typeof scaleFleet>> | null
+): Promise<void> {
+  const base = (scale?.base ?? option("base"))?.replace(TRAILING_SLASH, "");
+  if (!base) {
+    kit.check(
+      "a live dashboard is named",
+      false,
+      "pass --base https://<hub>:3455 (and --storage <state.json> for a hub that pairs its browsers), or --fleet"
+    );
+    return;
+  }
+  const storage = option("storage");
+  const legs = new Set<Leg>(
+    (listed("legs") ?? (scale ? ["idle", "switch", "nav"] : [...LEGS])).filter(
+      (one): one is Leg => (LEGS as readonly string[]).includes(one)
+    )
+  );
+  const desk = async (): Promise<Page> => {
+    const one = await kit.page("desk", {
+      init: [WATCHER, LIB],
+      scale: 1,
+      scrollbars: true,
+    });
+    if (storage) {
+      const state = JSON.parse(readFileSync(storage, "utf8")) as {
+        cookies?: Parameters<BrowserContext["addCookies"]>[0];
+      };
+      await one.context().addCookies(state.cookies ?? []);
+    }
+    return one;
+  };
+  const page = await desk();
+  await page.goto(`${base}/session`, { waitUntil: "domcontentloaded" });
+  const board = await page.evaluate(boardRead);
+  if (!Array.isArray(board)) {
+    kit.check(
+      "the hub's board answers this browser",
+      false,
+      `GET /api/instances answered ${String(board)}: a hub that pairs its browsers wants --storage`
+    );
+    return;
+  }
+  const rows = board as Row[];
+  const running = rows
+    .filter((row) => row.status === "running")
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const live: Live = {
+    base,
+    desk,
+    kit,
+    maps:
+      option("maps") ??
+      (scale
+        ? join(ROOT, "apps/dashboard/.svelte-kit/output/client")
+        : undefined),
+    numbers: { base, at: new Date().toISOString() },
+    page,
+    slot: displayFrame(await page.evaluate(stillFrames)),
+    titleOf: (id) => {
+      const row = rows.find((one) => one.id === id);
+      return row?.title || row?.derivedTitle || id.slice(0, 8);
+    },
+    goto: async (path, ready = TRANSCRIPT) => {
+      await page.goto(`${base}${path}`, { waitUntil: "domcontentloaded" });
+      await page.waitForSelector(ready, { timeout: 60_000 });
+      await page.waitForTimeout(SETTLE_MS);
+    },
+  };
+  live.numbers.displayFrameMs = round(live.slot);
+  const { sessions, tabs, quiet } = chosen(rows, running, scale);
+  kit.note(
+    `live-perf: ${base}, ${rows.length} sessions on the board, ${running.length} running, the display's frame ${round(live.slot)}ms; legs ${[...legs].join(", ")}`
+  );
+  if (legs.has("scroll")) {
+    await scrollLeg(live, sessions);
+  }
+  if (legs.has("canvas")) {
+    await canvasLeg(live, listed("pages") ?? PAGES);
+  }
+  if (legs.has("idle") && quiet) {
+    await idleLeg(live, quiet);
+  }
+  if (legs.has("switch") && tabs.length > 1) {
+    await switchLeg(live, tabs);
+  }
+  if (legs.has("nav")) {
+    await navLeg(live, sessions);
+  }
+  if (legs.has("memory") && tabs.length > 1) {
+    await memoryLeg(live, tabs);
+  }
+  await writeFile(
+    join(kit.out, "numbers.json"),
+    `${JSON.stringify(live.numbers, null, 2)}\n`
+  );
+}
 
 export default spec;

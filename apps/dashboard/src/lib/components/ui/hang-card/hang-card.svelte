@@ -5,33 +5,28 @@
    * The hanging card's recipe, over the kit's floating surface
    * (`floatingSurface`, motion `hang`).
    *
-   * Its surface is named (`--hang-surface`) so the cut across its edge
-   * facing the anchor is drawn in it; a card on another surface sets that,
-   * not `background` (`surface`). What runs on through the cut
-   * (`--hang-neck`) is the card's own surface. Its edge is drawn by `::after`
-   * rather than its border, so its edge facing the anchor (its top under a
-   * foot, its side beside one: `from`) can be cut across the anchor's span
-   * and its flared foot (`--neck-start`, `--neck-end`, `--neck-flare-start`,
-   * `--neck-flare-end`, in the card's own coordinates along that edge,
-   * written from `hang`); on a flush side (`data-flush`) its corner there is
-   * square and the cut stops one pixel short, so the anchor's flank runs
-   * straight on into the card's side. Beside its anchor, a corner the
-   * anchor stands nearer than `--radius-lg` (and its flare) rounds only as
-   * far as that room (`--neck-room-start`, `--neck-room-end`): the anchor
-   * slides along a side, and the corner gives way to it as it comes. The
-   * cut (`::before`) is the card's edge row drawn again in the neck's
+   * Its surface is named (`--hang-surface`) so the cut across its top edge
+   * is drawn in it; a card on another surface sets that, not `background`
+   * (`surface`). What runs on through the cut (`--hang-neck`) is the card's
+   * own surface. Its edge is drawn by `::after` rather than its border, so
+   * its top can be cut across the anchor's span and its flared foot
+   * (`--neck-start`, `--neck-end`, `--neck-flare-start`, `--neck-flare-end`,
+   * in the card's own coordinates, written from `hang`); on a flush side
+   * (`data-flush`) its top corner is square and the cut stops one pixel
+   * short, so the anchor's flank runs straight on into the card's side. The
+   * cut (`::before`) is the card's top edge row drawn again in the neck's
    * surface, clipped from the flare's outer circle (`--neck-cut`, written by
    * hang's `setNeck`), so the anchor's curve runs on into the card's edge as
    * one stroke. A clip, not a mask: a mask drew the whole card's edge
    * through a buffer of its own on every paint. Its overlay shadow is cut at
-   * that edge (room for the whole shadow past the other three), so none
+   * its top edge (room for the whole shadow past the other three), so none
    * falls on the anchor.
    *
    * `tab`: one silhouette with its folder tab (motion/hang-shape): no edge,
    * cut or shadow of its own (the outline layer, hang-outline, draws them),
    * cut to nothing shut and grown out of the tab's foot, never sliding.
-   * Otherwise it is shut behind its cut, past its own size by the reach of
-   * its shadow (`--hang-reach`), until `hang` says it is shown, and keeps its
+   * Otherwise it is shut up past its own height by the reach of its shadow
+   * under it (`--hang-reach`) until `hang` says it is shown, and keeps its
    * own layer while mounted: WebKit gave the card one for its slide alone
    * and repainted it whole in the frame the slide landed in.
    *
@@ -48,18 +43,12 @@
    * out unseen.
    */
   export const hangCardVariants = tv({
-    base: "relative border-0 bg-(--hang-surface) [--hang-neck:var(--hang-surface)] [--hang-surface:var(--surface-raised)] before:pointer-events-none before:absolute before:z-2 before:bg-(--hang-neck) after:pointer-events-none after:absolute after:inset-0 after:z-1 after:rounded-[inherit] after:border after:border-border-control data-[rehearsing]:invisible before:[--gap-from:calc(var(--neck-start)-var(--neck-flare-start,0px))] before:[--gap-to:calc(var(--neck-end)+var(--neck-flare-end,0px))] before:[clip-path:var(--neck-cut,none)] data-[flush=end]:before:[--gap-to:calc(var(--neck-end)-1px)] data-[flush=start]:before:[--gap-from:1px]",
+    base: "relative border-0 bg-(--hang-surface) [--hang-neck:var(--hang-surface)] [--hang-surface:var(--surface-raised)] [clip-path:inset(0_-120px_-120px_round_0_0_var(--radius-lg)_var(--radius-lg))] before:pointer-events-none before:absolute before:top-0 before:left-(--gap-from) before:z-2 before:h-px before:w-[calc(var(--gap-to)-var(--gap-from))] before:bg-(--hang-neck) after:pointer-events-none after:absolute after:inset-0 after:z-1 after:rounded-[inherit] after:border after:border-border-control data-[rehearsing]:invisible data-[flush=start]:rounded-ss-none data-[flush=end]:rounded-se-none before:[--gap-from:calc(var(--neck-start)-var(--neck-flare-start,0px))] before:[--gap-to:calc(var(--neck-end)+var(--neck-flare-end,0px))] before:[clip-path:var(--neck-cut,none)] data-[flush=end]:before:[--gap-to:calc(var(--neck-end)-1px)] data-[flush=start]:before:[--gap-from:1px]",
     variants: {
-      /** The side of its anchor it hangs from (motion/hang `HangFrom`): the edge it is cut and shadowed on, its row of cut, its square corners. */
-      from: {
-        foot: "[clip-path:inset(0_-120px_-120px_round_0_0_var(--radius-lg)_var(--radius-lg))] before:top-0 before:left-(--gap-from) before:h-px before:w-[calc(var(--gap-to)-var(--gap-from))] data-[flush=start]:rounded-ss-none data-[flush=end]:rounded-se-none",
-        end: "[clip-path:inset(-120px_-120px_-120px_0)] before:left-0 before:top-(--gap-from) before:w-px before:h-[calc(var(--gap-to)-var(--gap-from))] rounded-tl-[min(var(--radius-lg),var(--neck-room-start,var(--radius-lg)))] rounded-bl-[min(var(--radius-lg),var(--neck-room-end,var(--radius-lg)))]",
-        start:
-          "[clip-path:inset(-120px_0_-120px_-120px)] before:right-0 before:top-(--gap-from) before:w-px before:h-[calc(var(--gap-to)-var(--gap-from))] rounded-tr-[min(var(--radius-lg),var(--neck-room-start,var(--radius-lg)))] rounded-br-[min(var(--radius-lg),var(--neck-room-end,var(--radius-lg)))]",
-      },
       tab: {
         true: "translate-none shadow-none will-change-auto [clip-path:path('M_0_0_Z')] before:hidden after:hidden",
-        false: "motion-safe:will-change-[translate]",
+        false:
+          "motion-safe:will-change-[translate] motion-safe:not-data-[shown]:[translate:0_calc(-100%-var(--hang-reach,0px))]",
       },
       glass: {
         true: "@max-desk/shell:rounded-ee-none shadow-none @max-desk/shell:after:border-e-0",
@@ -67,28 +56,7 @@
       /** The tab's menu hangs on the tab's own surface, as the session card's head is. */
       surface: { recess: "[--hang-surface:var(--surface-recess)]" },
     },
-    /** Shut behind its cut: up from a foot, toward the anchor from a side. */
-    compoundVariants: [
-      {
-        tab: false,
-        from: "foot",
-        class:
-          "motion-safe:not-data-[shown]:[translate:0_calc(-100%-var(--hang-reach,0px))]",
-      },
-      {
-        tab: false,
-        from: "end",
-        class:
-          "motion-safe:not-data-[shown]:[translate:calc(-100%-var(--hang-reach,0px))_0]",
-      },
-      {
-        tab: false,
-        from: "start",
-        class:
-          "motion-safe:not-data-[shown]:[translate:calc(100%+var(--hang-reach,0px))_0]",
-      },
-    ],
-    defaultVariants: { tab: false, from: "foot" },
+    defaultVariants: { tab: false },
   });
 </script>
 
@@ -97,32 +65,28 @@
    * A card that hangs from its anchor as one shape with it (DESIGN.md, "A
    * card that hangs from its anchor"): Caw's panel, the machines and the
    * Jump palette from the top bar's glass, the session card and a finger's
-   * tab menu from their tab, a comment's thread from its pin (PinFloat). The
-   * iOS app's HangCard draws the same card.
+   * tab menu from their tab. The iOS app's HangCard draws the same card.
    *
    * It is a kit floating surface (the popover by default, or the context
    * menu's: `as`), so focus, Escape and a press outside are the primitive's.
-   * It stands on the side of its anchor it hangs from (`from`: its foot, the
-   * site giving the primitive side `bottom` at its offset; or its start or
-   * end side, side `left` or `right`) and wears `hangCardVariants`: its edge
-   * drawn inside its box, its edge facing the anchor cut across the
-   * anchor's span and the anchor's flared foot each side of it (the neck),
-   * square on a side it stands flush with. It opens and closes on `hang`
-   * (motion/hang): a slide out of the foot from behind a cut that never
-   * moves, translate alone, interruptible, a fade under Reduce Motion.
+   * It stands on its anchor's foot (the site gives the primitive side
+   * `bottom` at its offset) and wears `hangCardVariants`: its edge drawn
+   * inside its box, its top cut across the anchor's span and the anchor's
+   * flared foot each side of it (the neck), square on a side it stands flush
+   * with. It opens and closes on `hang` (motion/hang): a slide down out of
+   * the foot from behind a cut that never moves, translate alone,
+   * interruptible, a fade under Reduce Motion.
    *
    * The neck is measured here, from where the primitive places the card:
-   * the anchor's span in the card's coordinates along that edge, and on
-   * each side the anchor's `--flare` where the card reaches past the
-   * anchor's edge, none where its edge meets the anchor's (flush, within a
-   * pixel). The anchor's box is read as it is laid out anew (its size, the
-   * window's, a scroll, its own style: a pin's foot moves with its pin),
+   * the anchor's span in the card's coordinates, and on each side the
+   * anchor's `--flare` where the card reaches past the anchor's edge, none
+   * where its edge meets the anchor's (flush, within a pixel). The anchor's
+   * box is read as it is laid out anew (its size, the window's, a scroll),
    * never in a placement, where a read made the page lay itself out again
    * then and there.
    *
    * The anchor draws its own foot while the card stands drawn out of it
-   * (`joined`): Caw's glass its `.join`, a tab its `.neck`, a pin its
-   * PinFoot.
+   * (`joined`): Caw's glass its `.join`, a tab its `.neck`.
    *
    * A card on the bar's glass (`glass`) wears the hung shadow, the picture
    * of `--shadow-overlay-hung` the Shell draws once (motion/hung-shadow),
@@ -138,7 +102,6 @@
   } from "bits-ui";
   import { type Snippet, untrack } from "svelte";
   import {
-    type HangFrom,
     hang,
     type Neck,
     regrow,
@@ -163,8 +126,8 @@
   import { cn } from "#lib/utils.js";
   import { outlineLayer } from "./hang-outline.js";
 
-  /** The glass card's faces (GlassCard's `Card`), the session card, and a comment's thread. */
-  type Frame = "caw" | "machines" | "jump" | "files" | "details" | "thread";
+  /** The glass card's faces (GlassCard's `Card`), and the session card. */
+  type Frame = "caw" | "machines" | "jump" | "files" | "details";
   /**
    * Each face's frame, read off what its custom properties hold (on the card,
    * below): Caw's panel `c-panel-w` wide with its rows `--space-2` in; the
@@ -186,19 +149,12 @@
    * and the safe area. Its screen is the hang layer it is portaled into
    * (hang-layer): a phone is that `shell` container under the phone line
    * (`@max-phone/shell`), and its height the layer's `--shell-h`.
-   *
-   * A comment's thread (`thread`, PinFloat) is the reading card's width,
-   * `--c-pin-card-reading-w` (two fifths of the pin room it stands in, its
-   * size container), never past that room less `--space-2` each side, and
-   * as tall as what it holds up to the tallest its site gives it
-   * (`--float-max`); what it holds pads and scrolls itself.
    */
   const FRAMES: Record<Frame, string> = {
     caw: "w-(--frame-w) @max-desk/shell:w-(--frame-w-narrow) gap-0 p-space-2",
     machines: "w-(--frame-w) gap-0",
     jump: "w-(--frame-w) max-h-(--frame-h) gap-0 p-0 @max-desk/shell:h-(--frame-h) @max-desk/shell:w-(--frame-w-narrow)",
     files: "flex w-(--frame-w) max-h-(--frame-h) flex-col gap-0 p-space-2",
-    thread: "flex w-(--frame-w) max-h-(--float-max) flex-col gap-0 p-0",
     details:
       "flex max-h-[min(var(--c-details-card-max-h),var(--bits-popover-content-available-height,var(--c-sheet-max-h)))] overflow-hidden overscroll-contain p-0 @max-phone/shell:max-h-[min(calc(var(--shell-h)-var(--c-top-bar-h)-2*var(--c-screen-margin)-var(--safe-bottom)),var(--bits-popover-content-available-height,var(--c-sheet-max-h)))]",
   };
@@ -227,9 +183,6 @@
       h: "min(var(--c-caw-panel-h), calc(var(--bits-popover-content-available-height, 85dvh) - 2px))",
     },
     details: {},
-    thread: {
-      w: "min(var(--c-pin-card-reading-w), calc(100cqi - 2 * var(--space-2)))",
-    },
   };
 
   type Props = Omit<
@@ -245,14 +198,8 @@
       | typeof ContextMenuContent;
     /** The anchor's foot flares out into the card (a chosen tab's does; another's meets it square). */
     flared?: boolean;
-    /** The side of its anchor it hangs from: its foot (default), or its start or end side. */
-    from?: HangFrom;
-    /** Where the primitive placed it, on every placement: its floating wrapper's x and y. */
-    onplaced?: (x: number, y: number) => void;
     /** It hangs from the top bar's glass. */
     glass?: boolean;
-    /** It is drawn where it is mounted, never portaled (as the glass's cards are): a pin's, in its pin room. */
-    inPlace?: boolean;
     /**
      * The face it frames: the glass card's (GlassCard: Caw's panel, the
      * machines, Jump or Files, each its own width, padding and height), or
@@ -284,10 +231,7 @@
     anchor,
     as: Content = PopoverContent,
     flared = true,
-    from = "foot",
-    onplaced,
     glass = false,
-    inPlace = false,
     frame,
     surface,
     tab = false,
@@ -307,55 +251,20 @@
     Content === PopoverContent || Content === ContextMenuContent
   );
 
-  /** Its anchor beside it, not over it: the neck runs down the card's side. */
-  const beside = $derived(from !== "foot");
-
-  /**
-   * The anchor's span along the card's edge facing it (across for a foot,
-   * down for a side), in the primitive's own coordinates, and its flare;
-   * re-read once it may have moved. A card placed `fixed` (the glass's) is
-   * placed on the screen's px; one placed `absolute` (a pin's, in its pin
-   * room) in the box it is placed in, drawn scaled where that box is (a
-   * design preview's frame fitted to its window), so the anchor is read
-   * against that box, at its scale.
-   */
-  let span: { start: number; end: number; flare: number } | null = null;
+  /** The anchor's span on the screen and its flare; re-read once it may have moved. */
+  let span: { left: number; right: number; flare: number } | null = null;
   let moved = true;
   function read(at: HTMLElement) {
     const box = at.getBoundingClientRect();
-    const wrapper = card?.parentElement;
-    const holder =
-      wrapper && getComputedStyle(wrapper).position !== "fixed"
-        ? wrapper.offsetParent
-        : null;
-    let origin = 0;
-    let scale = 1;
-    if (holder instanceof HTMLElement) {
-      const room = holder.getBoundingClientRect();
-      scale = holder.offsetWidth > 0 ? room.width / holder.offsetWidth : 1;
-      origin = beside
-        ? room.top + holder.clientTop * scale - holder.scrollTop * scale
-        : room.left + holder.clientLeft * scale - holder.scrollLeft * scale;
-    }
     span = {
-      start: ((beside ? box.top : box.left) - origin) / scale,
-      end: ((beside ? box.bottom : box.right) - origin) / scale,
+      left: box.left,
+      right: box.right,
       flare:
         Number.parseFloat(getComputedStyle(at).getPropertyValue("--flare")) ||
         0,
     };
     moved = false;
   }
-  /** The neck drawn again where the card stands, from the anchor as it stands now. */
-  const again = (at: HTMLElement) => {
-    read(at);
-    if (card && placedAt !== null) {
-      const neck = neckAt(card, placedAt, flared);
-      if (neck) {
-        draw(card, neck);
-      }
-    }
-  };
   $effect(() => {
     const at = anchor;
     if (!at) {
@@ -367,13 +276,16 @@
     // card) gets no placement and no resize of its own: its neck is drawn
     // again from the new span here.
     // biome-ignore lint/style/noRestrictedGlobals: draws the neck only (custom properties, a corner radius, an absolutely placed cut), which resize no box watched; the neck follows its anchor in the frame the anchor grew
-    const sized = new ResizeObserver(() => again(at));
+    const sized = new ResizeObserver(() => {
+      read(at);
+      if (card && placedAt !== null) {
+        const neck = neckAt(card, placedAt, flared);
+        if (neck) {
+          draw(card, neck);
+        }
+      }
+    });
     sized.observe(at);
-    // An anchor its site moves by its own style (a pin's foot, carried with
-    // its pin as the page scrolls under a card that stands still): the neck
-    // follows it along the card's edge in the same frame.
-    const restyled = new MutationObserver(() => again(at));
-    restyled.observe(at, { attributes: true, attributeFilter: ["style"] });
     const away = () => {
       moved = true;
     };
@@ -382,24 +294,21 @@
     addEventListener("scroll", away, options);
     return () => {
       sized.disconnect();
-      restyled.disconnect();
       removeEventListener("resize", away);
       removeEventListener("scroll", away, options);
     };
   });
 
-  /** The card's size along its edge facing the anchor (its width under a foot, its height beside one), kept by its own observer. */
-  let size = 0;
-  /** Where the card's edge stood along the anchor's span at its last placement: its left under a foot, its top beside one. */
+  /** The card's width, kept by its own observer. */
+  let width = 0;
+  /** Where the card's left edge stood at its last placement. */
   let placedAt: number | null = null;
   /** The neck last written onto the card. */
   let drawnNeck: Neck | null = null;
-  /** How far the card is drawn off its placement along the anchor's span (its wrapper's travel, PinFloat): the neck stays on the anchor as drawn. */
-  let shift = 0;
 
   function neckAt(
     node: HTMLElement,
-    placed: number,
+    left: number,
     flaring: boolean
   ): Neck | null {
     const at = anchor;
@@ -412,26 +321,25 @@
     if (!span) {
       return null;
     }
-    const left = placed + shift;
-    const across = size || (beside ? node.offsetHeight : node.offsetWidth);
+    const across = width || node.offsetWidth;
     const right = left + across;
     const flare = flaring ? span.flare : 0;
-    const flushStart = Math.abs(left - span.start) <= 1;
-    const flushEnd = Math.abs(right - span.end) <= 1;
+    const flushStart = Math.abs(left - span.left) <= 1;
+    const flushEnd = Math.abs(right - span.right) <= 1;
     let flush: Neck["flush"] = null;
     if (flushStart) {
       flush = "start";
     } else if (flushEnd) {
       flush = "end";
     }
-    // The cut lies on the card's own edge facing the anchor: the anchor's
-    // span as far as it is over the card, and a flare as far as the card
-    // reaches past the anchor's edge. A card standing anywhere but under it
-    // (Caw's panel shut at the screen's leading margin, the glass at its
-    // trailing edge) had a cut running on past its own side, to the glass
-    // and a flare beyond, and the page scrolled sideways by it.
-    const start = Math.min(Math.max(span.start - left, 0), across);
-    const end = Math.min(Math.max(span.end - left, start), across);
+    // The cut lies on the card's own top edge: the anchor's span as far as
+    // it is over the card, and a flare as far as the card reaches past the
+    // anchor's edge. A card standing anywhere but under it (Caw's panel shut
+    // at the screen's leading margin, the glass at its trailing edge) had a
+    // cut running on past its own side, to the glass and a flare beyond, and
+    // the page scrolled sideways by it.
+    const start = Math.min(Math.max(span.left - left, 0), across);
+    const end = Math.min(Math.max(span.right - left, start), across);
     return {
       start,
       end,
@@ -444,9 +352,7 @@
   /**
    * Writes the neck onto the card's own style, which costs a style change
    * and no render of the primitive's props; again whenever the primitive
-   * wrote the style attribute over it. Beside its anchor, the room each
-   * corner on that edge has before the neck's flare (`--neck-room-start`,
-   * `--neck-room-end`), which its radius gives way to.
+   * wrote the style attribute over it.
    */
   function draw(node: HTMLElement, neck: Neck) {
     const standing =
@@ -454,22 +360,7 @@
       sameNeck(neck, drawnNeck) &&
       node.style.getPropertyValue("--neck-start") === `${neck.start}px`;
     if (!standing) {
-      setNeck(node, neck, from);
-      if (beside && neck.end - neck.start >= 0.5) {
-        const across = size || node.offsetHeight;
-        node.style.setProperty(
-          "--neck-room-start",
-          `${Math.max(0, neck.start - neck.flareStart)}px`
-        );
-        node.style.setProperty(
-          "--neck-room-end",
-          `${Math.max(0, across - neck.end - neck.flareEnd)}px`
-        );
-      } else if (beside) {
-        // The anchor stands past this edge's ends: no neck, round corners.
-        node.style.removeProperty("--neck-room-start");
-        node.style.removeProperty("--neck-room-end");
-      }
+      setNeck(node, neck);
       if (neck.flush) {
         node.dataset.flush = neck.flush;
       } else {
@@ -478,18 +369,6 @@
       drawnNeck = neck;
     }
     onneck?.(neck);
-  }
-
-  /**
-   * The card drawn `by` px off its placement along the anchor's span (its
-   * site moving its wrapper, frame by frame): the neck drawn again where the
-   * anchor stands against it.
-   */
-  export function drawnOff(by: number): void {
-    shift = by;
-    if (anchor) {
-      again(anchor);
-    }
   }
 
   /**
@@ -563,12 +442,9 @@
     // its side. Drawn again from where it stands, with the width it has.
     // biome-ignore lint/style/noRestrictedGlobals: draws the card's cut and neck only (its clip-path, its outline layer, its neck's properties), which resize no box watched; the cut follows the card in the frame it took its width
     const sized = new ResizeObserver(([entry]) => {
-      const box = entry?.borderBoxSize[0];
-      const next =
-        (beside ? box?.blockSize : box?.inlineSize) ??
-        (beside ? node.offsetHeight : node.offsetWidth);
-      const resized = next !== size;
-      size = next;
+      const next = entry?.borderBoxSize[0]?.inlineSize ?? node.offsetWidth;
+      const resized = next !== width;
+      width = next;
       if (layer) {
         regrow(node);
       }
@@ -596,13 +472,11 @@
     });
     glide.observe(node, { attributes: true, attributeFilter: ["data-morph"] });
     const motion = hang({
-      from,
-      neckAt: (along) => {
-        placedAt = along;
-        return neckAt(node, along, flared);
+      neckAt: (left) => {
+        placedAt = left;
+        return neckAt(node, left, flared);
       },
       onneck: (neck) => draw(node, neck),
-      onplaced: (x, y) => onplaced?.(x, y),
       onshown: (shown) => {
         joined = shown;
         layer?.show(shown);
@@ -637,8 +511,6 @@
   });
   const kept = (node: HTMLElement) => {
     card = node;
-    // Read again with the card's own box to place it in (`origin`).
-    moved = true;
     return () => {
       if (card === node) {
         card = null;
@@ -658,15 +530,14 @@
 <Content
   data-glass-card={glass || undefined}
   {...kitSurface ? { motion: "hang" as const } : {}}
-  {...glass || inPlace ? { portalProps: { disabled: true } } : {}}
+  {...glass ? { portalProps: { disabled: true } } : {}}
   {...rest}
   class={cn(
     floatingSurface({ motion: "hang", edge: "drawn" }),
-    hangCardVariants({ tab, glass, surface, from }),
+    hangCardVariants({ tab, glass, surface }),
     frame && FRAMES[frame],
     className
   )}
-  data-hang-from={from}
   forceMount
   bind:ref
 >
@@ -675,7 +546,7 @@
       <div
         {...wrapperProps}
         class="z-(--layer-float)"
-        data-hang={from}
+        data-hang
         style:pointer-events={pressable(open)}
       >
         <div

@@ -1,0 +1,335 @@
+/**
+ * What a delegate leaves in `$TMPDIR/outputs/` reaches its project's folder
+ * under `assets/<item>/` and outlives its workspace (hub work-items.ts
+ * `scratchOutputs`, `keepScratchOutputs`). On 2026-10-25 a delegate's report
+ * written there went with its workspace: the hub copied only outputs named
+ * at delegate time. On a scratch fleet (real hub, agent and sessiond; Claude
+ * Code against the mock model). This spec delegates, so its fleet cuts
+ * workspaces: it runs on the host, outside every boundary.
+ *
+ * - A leaf delegated with no outputs, landing none, is told in its brief that
+ *   `$TMPDIR/outputs/` is copied to `assets/<item>/`.
+ * - It writes `$TMPDIR/outputs/x.md` and `$TMPDIR/outputs/notes/y.md`, then
+ *   finishes: its item is done, and the hub's report names both at
+ *   `assets/<item>/x.md` and `assets/<item>/notes/y.md`.
+ * - Its workspace retires (its own settle, or the archive the hub serves),
+ *   its scratch dir gone.
+ * - The parent's `folder_read` of `assets/<item>/x.md` and of
+ *   `assets/<item>/notes/y.md` returns what the leaf wrote.
+ * - A second leaf writes `$TMPDIR/outputs/z.md` and never finishes: its
+ *   parent stops it, its workspace is archived, and `folder_read` of
+ *   `assets/<item>/z.md` returns what it wrote (copied as the workspace
+ *   closed).
+ *
+ *   bun scripts/probe-kit/run.ts scratch-outputs
+ */
+import { mkdir, stat, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { workWords } from "../../../packages/core/src/words/work";
+import { toolWords } from "../../lib/tool-call";
+import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import type { Kit, Spec } from "../kit";
+
+const TAG = "PROBE-SCRATCH-OUTPUTS";
+const STOPPED_TAG = "PROBE-SCRATCH-OUTPUTS-STOPPED";
+const FINISH = "mcp__cawco__finish_item";
+const X = `x-${crypto.randomUUID()}`;
+const Y = `y-${crypto.randomUUID()}`;
+const Z = `z-${crypto.randomUUID()}`;
+const HEADLINE = "Wrote the report to outputs.";
+
+const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
+const useTool = (name: string, input: object): Reply => ({
+  everyMs: 5,
+  words: [],
+  tool: { name, input },
+});
+/** A deferred tool is found first, then called. */
+const found = (request: Seen, name: string, input: object): Reply => {
+  if (request.toolNames.includes(name)) {
+    return useTool(name, input);
+  }
+  return request.toolNames.includes("ToolSearch")
+    ? useTool("ToolSearch", { query: `select:${name}`, max_results: 1 })
+    : text(`${name} is not offered`);
+};
+
+/** Where each leaf is: the first's files written and its finish_item sent, the second's file written. */
+const leaf: { finished: boolean; stoppedWrote: boolean; wrote: boolean } = {
+  finished: false,
+  stoppedWrote: false,
+  wrote: false,
+};
+
+/**
+ * The first leaf writes its two files, then finishes; the second writes one
+ * and works (short sleeps) until stopped; every other turn answers "ok".
+ */
+const respond = (request: Seen): Reply => {
+  if (!request.tools) {
+    return text("ok");
+  }
+  if (request.all.includes(STOPPED_TAG)) {
+    if (!leaf.stoppedWrote) {
+      leaf.stoppedWrote = true;
+      return useTool("Bash", {
+        command: `mkdir -p "$TMPDIR/outputs" && printf %s ${Z} > "$TMPDIR/outputs/z.md"`,
+        description: "Write an output",
+      });
+    }
+    return useTool("Bash", { command: "sleep 2", description: "Work" });
+  }
+  if (!request.all.includes(TAG) || leaf.finished) {
+    return text("ok");
+  }
+  if (!leaf.wrote) {
+    leaf.wrote = true;
+    return useTool("Bash", {
+      command: `mkdir -p "$TMPDIR/outputs/notes" && printf %s ${X} > "$TMPDIR/outputs/x.md" && printf %s ${Y} > "$TMPDIR/outputs/notes/y.md"`,
+      description: "Write the outputs",
+    });
+  }
+  const reply = found(request, FINISH, {
+    headline: HEADLINE,
+    summary: `${HEADLINE}\n\nThe report is $TMPDIR/outputs/x.md, its notes $TMPDIR/outputs/notes/y.md.`,
+  });
+  if (reply.tool?.name === FINISH) {
+    leaf.finished = true;
+  }
+  return reply;
+};
+
+type Fleet = Awaited<ReturnType<Kit["fleet"]>>;
+
+interface Started {
+  instanceId: string;
+  workItemId: string;
+  workspaceId: string;
+  workspaceTmp: string;
+}
+
+/** The fleet up, a repository in a project, and its parent session running. */
+const setUp = async (
+  kit: Kit
+): Promise<{ fleet: Fleet; parent: string; src: string }> => {
+  const fleet = await kit.fleet(respond);
+  const home = fleet.env.HOME as string;
+  fleet.launch("sessiond");
+  await fleet.sessiondUp();
+  fleet.launch("hub");
+  await fleet.hubUp();
+  fleet.fileAccount();
+  fleet.launch("agent");
+  await fleet.agentUp();
+  await fleet.accountSignedIn();
+  const src = join(fleet.sandbox, "src");
+  await mkdir(src, { recursive: true });
+  await writeFile(
+    join(home, ".gitconfig"),
+    "[user]\n\tname = Owner\n\temail = owner@probe.test\n"
+  );
+  await Bun.$`sh -c ${"git init -q -b main && echo outputs > README.md && git add -A && git commit -qm 'First commit'"}`
+    .cwd(src)
+    .env({ ...process.env, HOME: home })
+    .quiet();
+  const project = await fleet.api<{ id: string }>("/api/projects", {
+    name: "Scratch outputs",
+    machineId: MACHINE,
+    cwd: src,
+  });
+  const parent = await fleet.spawn("claude", "Parent", src, {
+    projectId: project.id,
+  });
+  return { fleet, parent, src };
+};
+
+/** The parent's tools, as it calls the hub with its own credential. */
+const parentTool = async (
+  fleet: Fleet,
+  parent: string,
+  name: string,
+  args: Record<string, unknown>
+) =>
+  await toolWords(
+    {
+      base: fleet.base,
+      id: parent,
+      credential: await fleet.sessionCredential(parent),
+    },
+    name,
+    args
+  );
+
+/**
+ * The workspace retired: its own settle, or, when its session is still kept
+ * awake past the wait, the archive the hub serves (server.ts
+ * `/api/workspaces/:id/archive`), which closes it the same way.
+ */
+const retired = async (fleet: Fleet, started: Started): Promise<string> => {
+  const state = () =>
+    fleet.query<{ state: string }>(
+      "SELECT state FROM workspaces WHERE id = ?",
+      started.workspaceId
+    )[0]?.state ?? "gone";
+  const settled = await until(
+    "the workspace settled",
+    state,
+    (now) => now === "archived",
+    90_000
+  ).catch(() => state());
+  if (settled !== "archived") {
+    await fleet.api(`/api/workspaces/${started.workspaceId}/archive`, {});
+  }
+  return state();
+};
+
+/** What `folder_read` gives the parent for `path`. */
+const readAsset = async (
+  fleet: Fleet,
+  parent: string,
+  path: string
+): Promise<string> => {
+  const read = await parentTool(fleet, parent, "folder_read", { path });
+  return `${read.refused ? `refused ${read.status}: ` : ""}${read.text}`;
+};
+
+/** The scratch dir is gone from the machine. */
+const scratchGone = async (started: Started): Promise<boolean> =>
+  await stat(started.workspaceTmp).then(
+    () => false,
+    () => true
+  );
+
+/** The first leaf: write two files, finish, retire, read them back. */
+const finishedLeg = async (
+  { check }: Kit,
+  fleet: Fleet,
+  parent: string,
+  src: string
+): Promise<void> => {
+  const started = await fleet.api<Started>("/api/work-items", {
+    parentInstanceId: parent,
+    title: "Scratch outputs probe",
+    prompt: `${TAG}: write your report to $TMPDIR/outputs, then finish.`,
+    harness: "claude",
+    model: "claude-haiku-4-5",
+    cwd: src,
+    lands: "none",
+  });
+  const assets = `assets/${started.workItemId.slice(0, 8)}`;
+  const brief = await until(
+    "the leaf's brief",
+    () =>
+      fleet.seen.find(
+        (one) => one.tools && one.all.includes(TAG) && !one.afterTool
+      ),
+    Boolean,
+    180_000
+  );
+  check(
+    "the brief of a leaf with no declared outputs says $TMPDIR/outputs/ is copied to its assets folder",
+    brief.all.includes(workWords.scratchOutputsCopied(assets)),
+    brief.all.slice(0, 1200)
+  );
+  const ended = await until(
+    "the leaf's item ended",
+    () =>
+      fleet.query<{ state: string; result: string | null }>(
+        "SELECT state, result FROM work_items WHERE id = ?",
+        started.workItemId
+      )[0],
+    (row) => ["done", "failed", "cancelled"].includes(row.state),
+    300_000
+  ).catch(() => undefined);
+  const result = ended?.result ?? "";
+  check(
+    "the leaf finishes, and its item, which lands none, is done",
+    ended?.state === "done" && result.includes(HEADLINE),
+    `${ended?.state}: ${result.slice(0, 400)}`
+  );
+  check(
+    "the hub's report names both files at their paths in the item's assets folder",
+    result.includes(`/${assets}/x.md`) &&
+      result.includes(`/${assets}/notes/y.md`),
+    result.slice(-800)
+  );
+  const state = await retired(fleet, started);
+  check(
+    "its workspace retires, its scratch dir gone",
+    state === "archived" && (await scratchGone(started)),
+    `state ${state}, ${started.workspaceTmp} ${(await scratchGone(started)) ? "gone" : "still there"}`
+  );
+  const x = await readAsset(fleet, parent, `${assets}/x.md`);
+  check(
+    `folder_read ${assets}/x.md returns what the leaf wrote, after its workspace retired`,
+    x.includes(X),
+    x.slice(0, 400)
+  );
+  const y = await readAsset(fleet, parent, `${assets}/notes/y.md`);
+  check(
+    `folder_read ${assets}/notes/y.md returns what the leaf wrote, at its path under outputs/`,
+    y.includes(Y),
+    y.slice(0, 400)
+  );
+};
+
+/** The second leaf: write one file, get stopped, its workspace archived, read it back. */
+const stoppedLeg = async (
+  { check }: Kit,
+  fleet: Fleet,
+  parent: string,
+  src: string
+): Promise<void> => {
+  const started = await fleet.api<Started>("/api/work-items", {
+    parentInstanceId: parent,
+    title: "Stopped outputs probe",
+    prompt: `${STOPPED_TAG}: write an output, then keep working.`,
+    harness: "claude",
+    model: "claude-haiku-4-5",
+    cwd: src,
+    lands: "none",
+  });
+  const assets = `assets/${started.workItemId.slice(0, 8)}`;
+  await until(
+    "the stopped leaf wrote its output",
+    () =>
+      stat(join(started.workspaceTmp, "outputs", "z.md")).then(
+        () => true,
+        () => false
+      ),
+    Boolean,
+    180_000
+  );
+  const stopped = await parentTool(fleet, parent, "stop_delegate", {
+    target: started.instanceId,
+  });
+  check(
+    "the parent stops the second leaf before it finishes",
+    !stopped.refused,
+    `${stopped.status} ${stopped.text.slice(0, 300)}`
+  );
+  const state = await retired(fleet, started);
+  check(
+    "the stopped leaf's workspace is archived, its scratch dir gone",
+    state === "archived" && (await scratchGone(started)),
+    `state ${state}`
+  );
+  const z = await readAsset(fleet, parent, `${assets}/z.md`);
+  check(
+    `folder_read ${assets}/z.md returns what the stopped leaf wrote, copied as its workspace closed`,
+    z.includes(Z),
+    z.slice(0, 400)
+  );
+};
+
+const spec: Spec = {
+  name: "scratch-outputs",
+  host: "it delegates, so its fleet cuts workspaces",
+  run: async (kit: Kit) => {
+    const { fleet, parent, src } = await setUp(kit);
+    await finishedLeg(kit, fleet, parent, src);
+    await stoppedLeg(kit, fleet, parent, src);
+  },
+};
+
+export default spec;

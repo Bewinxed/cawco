@@ -25,6 +25,8 @@
 
 /** One script a long animation frame ran (PerformanceScriptTiming). */
 export interface LoafScript {
+  /** When it started, the page's clock. */
+  at: number;
   fn: string;
   /** Style and layout this script forced, ms. */
   forced: number;
@@ -90,18 +92,36 @@ export interface PerfState {
   shifts: [number, number][];
   /**
    * Socket messages by kind, from `since`: count, characters, and the
-   * page's handler's time on each (with the microtasks it set off: the
-   * store's flush), all told and the longest. Work it put off to a later
+   * page's time on each (with the microtasks it set off: the store's
+   * flush), all told and the longest. A page that takes its messages in a
+   * task of its own after its next frame marks each take (`cawco hub
+   * messages`): its time is shared among the messages that arrived before
+   * it, evenly, and added to each one's. Other work it put off to a later
    * task (a part read in a later turn, a frame callback) is not in it.
    */
   ws: {
     kinds: Record<string, [number, number, number, number]>;
+    /** Messages not yet taken: when each arrived, its kind, its handler's ms. */
+    pending: [number, string, number][];
     since: number;
+    /** The page's takes: how many, how many messages, their ms all told and the longest. */
+    takes: [number, number, number, number];
+    /**
+     * Each take's start, ms (the page's clock) and the kinds of the messages
+     * it took, the latest 2000: where a trace's samples are read for what a
+     * take ran, and for which kind.
+     */
+    takeSpans: [number, number, string[]][];
   };
 }
 
-/** The watcher: an init script, or evaluated into a running page (it then sees what it missed only through buffered entries). */
-export function installPerf(): string {
+/**
+ * The watcher: an init script, or evaluated into a running page (it then
+ * sees what it missed only through buffered entries). `takeMeasure` names
+ * the measure a page makes of each take of its messages (core stream.ts
+ * `HUB_TAKE_MEASURE`), handed in: the page has none of this module's scope.
+ */
+export function installPerf(takeMeasure: string): string {
   const w = window as unknown as { __perf?: PerfState };
   if (w.__perf) {
     return "installed already";
@@ -117,7 +137,13 @@ export function installPerf(): string {
     pendingDrive: 0,
     rafs: [],
     shifts: [],
-    ws: { kinds: {}, since: performance.now() },
+    ws: {
+      kinds: {},
+      pending: [],
+      since: performance.now(),
+      takes: [0, 0, 0, 0],
+      takeSpans: [],
+    },
   };
   w.__perf = p;
   const observe = (
@@ -142,6 +168,7 @@ export function installPerf(): string {
     sourceCharPosition: number;
     sourceFunctionName: string;
     sourceURL: string;
+    startTime: number;
   }
   interface LoafEntry extends PerformanceEntry {
     blockingDuration: number;
@@ -159,6 +186,7 @@ export function installPerf(): string {
       render: e.renderStart ? end - e.renderStart : 0,
       styleLayout: e.styleAndLayoutStart ? end - e.styleAndLayoutStart : 0,
       scripts: e.scripts.map((s) => ({
+        at: s.startTime,
         ms: s.duration,
         forced: s.forcedStyleAndLayoutDuration,
         invoker: String(s.invoker).slice(0, 120),
@@ -367,6 +395,40 @@ export function installPerf(): string {
     requestAnimationFrame(loop);
   };
   requestAnimationFrame(loop);
+  // The page's takes of what its socket said (client.svelte.ts `takeHeld`):
+  // each take's time shared evenly among the messages that arrived before
+  // it began, added to each one's kind.
+  interface TakeEntry extends PerformanceEntry {
+    detail: unknown;
+  }
+  observe({ type: "measure", buffered: true }, (entry) => {
+    if (entry.name !== takeMeasure) {
+      return;
+    }
+    const e = entry as TakeEntry;
+    const taken = p.ws.pending.filter(([at]) => at <= e.startTime);
+    p.ws.pending = p.ws.pending.filter(([at]) => at > e.startTime);
+    p.ws.takes[0] += 1;
+    p.ws.takes[1] += typeof e.detail === "number" ? e.detail : taken.length;
+    p.ws.takes[2] += e.duration;
+    p.ws.takes[3] = Math.max(p.ws.takes[3], e.duration);
+    p.ws.takeSpans.push([
+      e.startTime,
+      e.duration,
+      taken.map(([, kind]) => kind),
+    ]);
+    if (p.ws.takeSpans.length > 2000) {
+      p.ws.takeSpans.splice(0, 500);
+    }
+    const share = taken.length > 0 ? e.duration / taken.length : 0;
+    for (const [, kind, handler] of taken) {
+      const row = p.ws.kinds[kind];
+      if (row) {
+        row[2] += share;
+        row[3] = Math.max(row[3], handler + share);
+      }
+    }
+  });
   // Every message off the page's sockets, by kind (the hub's `payload.kind`
   // or `type`, read off the text without parsing it).
   // biome-ignore lint/performance/useTopLevelRegex: serialized into the page, which has none of this module's scope
@@ -397,6 +459,9 @@ export function installPerf(): string {
         row[2] += ms;
         row[3] = Math.max(row[3], ms);
         p.ws.kinds[kind] = row;
+        if (p.ws.pending.length < 10_000) {
+          p.ws.pending.push([began, kind, ms]);
+        }
       };
       socket.addEventListener("message", before);
       socket.addEventListener("message", after);
@@ -475,7 +540,13 @@ export function perfReset(frames: boolean, mutations: boolean): number {
   p.painted = [];
   p.mutated = {};
   p.pendingDrive = 0;
-  p.ws = { kinds: {}, since: performance.now() };
+  p.ws = {
+    kinds: {},
+    pending: [],
+    since: performance.now(),
+    takes: [0, 0, 0, 0],
+    takeSpans: [],
+  };
   p.frames = frames;
   p.mutations = mutations;
   return performance.now();

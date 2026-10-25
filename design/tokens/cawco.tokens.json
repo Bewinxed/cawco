@@ -6039,13 +6039,13 @@
       },
       "$description": "The composer canvas's top grab strip."
     },
-    "c-decision-page-w": {
+    "c-decision-page-max": {
       "$type": "dimension",
       "$value": {
-        "value": 920,
+        "value": 1348,
         "unit": "px"
       },
-      "$description": "A decision page's one centred column (decisions/host): two option columns side by side, each a 60ch line at the label size, and the gap between."
+      "$description": "The widest a decision page's one centred column stands (decisions/host): three option columns at the 60ch label measure (416px each), their two gaps and the page's and card's insets; under it the column is the room."
     },
     "c-decision-meter-w": {
       "$type": "dimension",
@@ -6075,6 +6075,14 @@
           "css": "80vb"
         }
       }
+    },
+    "c-media-words-floor": {
+      "$type": "dimension",
+      "$value": {
+        "value": 10,
+        "unit": "px"
+      },
+      "$description": "The least a scaled design's words stand at: a decision card's Preview of a page-sized design (a page, a dev server's or a folder's preview, a sheet) wider than its card scales down no further than stands the least words the design itself sets (its overlay tells them) at this size. Past it the design scrolls sideways in its well at that scale."
     },
     "c-artifact-card-min": {
       "$type": "dimension",

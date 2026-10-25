@@ -1,13 +1,28 @@
 /**
  * Whether the hub has lost a machine: the one rule a person hears "didn't
- * answer" by (core words/contact.ts). Every frame a machine's registered
- * connection sends is word from it; its heartbeat also says whether
- * sessions run there. A machine heard from during this hub's run, with
- * sessions on it at its last beat, that has sent nothing for
- * {@link MACHINE_LOST_MS} (its link frozen or gone) is lost: said once, in
- * the log, as Needs you's item and as one push. Its next frame ends it, and
- * the item and push come down. The same rule for every machine, the hub's
- * own included.
+ * answer" by (core words/contact.ts). Word from it is what its registered
+ * connection carries, as the hub's socket takes it: every frame as it
+ * arrives, before the socket's inbox works it (wire-socket.ts
+ * `receiveFrame`), and every ping its agent sends each 15 s (agent
+ * daemon.ts, the link's deadline), which waits behind no message on either
+ * side. Its heartbeat also says whether sessions run there. A machine heard
+ * from during this hub's run, with sessions on it at its last beat, that
+ * has sent nothing for {@link MACHINE_LOST_MS} (its agent's loop held, or
+ * its link gone) is lost: said once, in the log, as Needs you's item and as
+ * one push. Its next frame or ping ends it, and the item and push come
+ * down. The same rule for every machine, the hub's own included; its words
+ * for the hub's own name the agent, not the machine (core `contactWords`).
+ *
+ * A heartbeat is not the measure: it is a message, composed from reads of
+ * the machine's sessions and queued behind every message before it, and
+ * worked here behind every frame before it in the socket's inbox. On a
+ * loaded machine it comes late while the agent's loop turns and its pings
+ * arrive on time.
+ *
+ * Silence is judged by a look that ran on time: a look the hub's own loop
+ * held past {@link LOOK_MS} twice over judges nothing, since what the
+ * machines sent meanwhile still lies unread in their sockets (Bun runs a
+ * held loop's timers before it reads them, wire-socket.ts `caughtUp`).
  *
  * Never a read: one ask a machine was slow to answer is said to whoever
  * asked and in the log, and decides nothing here (2026-10-20, obelisk: a
@@ -46,8 +61,14 @@ export const createMachineContact = (deps: MachineContactDeps) => {
   /** Lost machines, by id: since when nothing came from them. */
   const lost = new Map<string, number>();
 
+  let looked = Date.now();
   deps.lifetime.every(LOOK_MS, () => {
     const now = Date.now();
+    const held = now - looked > LOOK_MS * 2;
+    looked = now;
+    if (held) {
+      return;
+    }
     for (const [machineId, last] of heard) {
       if (lost.has(machineId) || !last.holds) {
         continue;
@@ -64,9 +85,9 @@ export const createMachineContact = (deps: MachineContactDeps) => {
 
   return {
     /**
-     * A frame from the machine's registered connection. `holds`, from a
-     * heartbeat: whether sessions run there; other frames keep what the
-     * last beat said.
+     * A frame or a ping from the machine's registered connection. `holds`,
+     * from a heartbeat: whether sessions run there; anything else keeps
+     * what the last beat said.
      */
     heard(machineId: string, holds?: boolean): void {
       const now = Date.now();

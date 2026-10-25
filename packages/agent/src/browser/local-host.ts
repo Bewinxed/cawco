@@ -33,7 +33,7 @@ import {
   spawnedPid,
 } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
-import { browserExecutable } from "../capabilities";
+import { browserExecutable, chromiumSandboxed } from "../capabilities";
 import { resolveBin, toolEnv } from "../tools";
 import {
   type BrowserHost,
@@ -264,6 +264,9 @@ export class LocalHost implements BrowserHost {
         // emulates touch (`Emulation.setTouchEmulationEnabled`) still reads
         // coarse while it does.
         "--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4",
+        // Chromium's own sandbox: the daemon's rule (capabilities.ts), as the
+        // canvas screen and stage renderer launch it.
+        ...(chromiumSandboxed() ? [] : ["--no-sandbox"]),
         "about:blank",
       ],
       { detached: true, env: hostEnvironment(), stdio: ["ignore", log, log] }

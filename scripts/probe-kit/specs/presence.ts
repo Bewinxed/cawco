@@ -49,6 +49,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { waitLine } from "../../../packages/core/src/injected";
 import {
   AWAY_AFTER_DEFAULT_MS,
   type PersonView,
@@ -500,13 +501,17 @@ const lineLegs = async (
       ),
       `plan: ${JSON.stringify(plan?.spec)}; turn: ${seen?.last.slice(-900) ?? "no turn"}`
     );
-    const chip = `[colour-${harness}](cawco:artifact/${pages.get(harness)})`;
+    // The line the hub writes for it (core injected.ts `waitLine`): the step's chip, then its page's.
+    const waiting = waitLine({
+      artifact: { id: pages.get(harness) ?? "none", name: `colour-${harness}` },
+      content: "Pick the colour",
+      session: id,
+      step: "w1",
+    });
     kit.check(
-      `(recap) ${harness}: the step waiting on its page is named by the page's chip, read from the plan`,
-      Boolean(
-        seen?.last.includes(`- step w1 (Pick the colour) waits on ${chip}`)
-      ),
-      seen?.last.slice(-900) ?? "no turn"
+      `(recap) ${harness}: the step waiting on its page is named by its step's chip and the page's chip, read from the plan`,
+      Boolean(seen?.last.includes(waiting)),
+      `want ${waiting}; turn: ${seen?.last.slice(-900) ?? "no turn"}`
     );
     const [record] = fleet.query<{ body: string }>(
       "SELECT body FROM sent_messages WHERE uuid = ?",

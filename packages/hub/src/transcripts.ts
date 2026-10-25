@@ -158,8 +158,13 @@ interface LinePayload {
   message: NeutralMessage;
 }
 
-/** What waits behind a read in flight: a session's frame or record, or one of the hub's lines. */
-type Held = TranscriptPayload | LinePayload;
+/** The session's process went with its turn under way and no frame that ends it ({@link TranscriptsShape.processGone}). */
+interface GonePayload {
+  kind: "gone";
+}
+
+/** What waits behind a read in flight: a session's frame or record, one of the hub's lines, or its process gone. */
+type Held = TranscriptPayload | LinePayload | GonePayload;
 
 /** A frame that paints the reply being written: a partial, or the reply so far re-sent whole. */
 const partial = (message: NeutralMessage): boolean =>
@@ -172,6 +177,9 @@ const partial = (message: NeutralMessage): boolean =>
  * end, or the reply so far re-sent whole.
  */
 const endsPartials = (payload: Held): boolean => {
+  if (payload.kind === "gone") {
+    return true;
+  }
   if (payload.kind !== "frame") {
     return false;
   }
@@ -258,6 +266,13 @@ export interface TranscriptsShape {
     limit: number | undefined,
     before: string | undefined
   ) => Promise<TranscriptPage | HistoryFault | { gone: string }>;
+  /**
+   * The session's process is gone (killed, crashed, ended): a turn it was
+   * running ended with it, with no `result` frame to say so. Its tail stops
+   * saying busy, as its pulse, which the hub forgets with the process, does.
+   * A transcript not built is left unbuilt: one built later starts at rest.
+   */
+  readonly processGone: (instanceId: string) => void;
   /** One of the hub's own lines, `blockId`, taken back out of a built transcript. */
   readonly removeLine: (instanceId: string, blockId: string) => void;
   /**
@@ -288,6 +303,9 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
     entry: Entry,
     payload: Held
   ): TranscriptEvent[] => {
+    if (payload.kind === "gone") {
+      return entry.builder.endTurn();
+    }
     if (payload.kind === "line") {
       const { events, after } = entry.builder.applyLine(
         payload.message,
@@ -599,6 +617,11 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
     page,
     noteInterrupt: (instanceId) =>
       entries.get(instanceId)?.builder.noteInterrupt(),
+    processGone: (instanceId) => {
+      if (entries.has(instanceId)) {
+        ingest(instanceId, { kind: "gone" });
+      }
+    },
     removeLine: (instanceId, blockId) => {
       const entry = entries.get(instanceId);
       if (entry && entry.loading === null) {

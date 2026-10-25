@@ -32,8 +32,11 @@ bun design-previews/project-options/capture/shots.ts              # remake captu
   mounts `capture/Stage.svelte` on the dashboard's dev server: every part
   built from the dashboard's own components (`capture/kit.js`: BarGlass,
   Button, Alert, Checkbox, the Select trigger, the chip and dock-shell
-  recipes, OsMark, TaskRing, Markdown, Suggestions, the house icons) and its
-  token utilities. Generated; never edited by hand.
+  recipes, OsMark, TaskRing, Markdown, EmptyState, Suggestions (its `row`
+  look, added for S2: the chips on one sideways line, the next peeking),
+  the house icons) and its token utilities. Generated; never edited by hand.
+  Caw's column says only what the product writes: the live thread hero's
+  title (ThreadPane, "What’s next for {projectName}?").
 - `data/`: his records, word for word. `tasks.json`: the 63 task records
   (tasks.tgz). `starters.json`: the hub's starters for Cawco-Dev's board
   (`project_starters`). `ask.json`: the one ask the hub has recorded in
@@ -43,7 +46,11 @@ bun design-previews/project-options/capture/shots.ts              # remake captu
 - `shell/`: the Shell's rail and glass group, and the phone's sidebar toggle
   and Caw tab, cut from the live captures. The desk rail is the window
   capture's crisp rail with the room a 900px window adds between its list
-  and its foot (the desk capture's own rail was blurred mid-list).
+  and its foot (the desk capture's own rail was blurred mid-list); Today at
+  1440 stands that same rail over its own. The phone's Caw tab is flush with
+  the screen's edge as DESIGN.md (Top bar's trailing edge) locks it; its
+  crimson arcs are the Shell's needs count (NeedsCaw: an arc per thing
+  waiting, the second lap in the fail ink), as live.
 - `caw/`: this round's poses (below). `captures/`: one picture per option
   per pick at the widths it shows at, DPR 1, and `manifest.json`.
 

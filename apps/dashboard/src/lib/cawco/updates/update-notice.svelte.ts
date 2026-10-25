@@ -101,15 +101,14 @@ export function startUpdateWatch(): () => void {
     // panel on the reloaded tab until the notice's ✕ (or its act).
     watchUpdateToast();
 
-    // "Running on N machines" leaves by itself.
+    // "Running on N machines" leaves by itself. It acknowledges itself, never
+    // the landings: what landed then stands as notice 6, with its notes.
     $effect(() => {
       const notice = updateNotice.current;
       if (notice?.kind !== 3) {
         return;
       }
       const { acks } = notice;
-      // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
-      void notices.acknowledge(acks.filter((id) => id.startsWith("landed:")));
       const timer = setTimeout(() => {
         // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
         void notices.acknowledge(acks);

@@ -966,14 +966,16 @@ public enum Size {
     public static let cBlockRefusedBasis: Double = 288
     /// The composer canvas's top grab strip.
     public static let cCanvasGrabW: Double = 160
-    /// A decision page's one centred column (decisions/host): two option columns side by side, each a 60ch line at the label size, and the gap between.
-    public static let cDecisionPageW: Double = 920
+    /// The widest a decision page's one centred column stands (decisions/host): three option columns at the 60ch label measure (416px each), their two gaps and the page's and card's insets; under it the column is the room.
+    public static let cDecisionPageMax: Double = 1348
     /// The length of a decision page's count bar in its sticky foot, beside "1 of 5 picked".
     public static let cDecisionMeterW: Double = 120
     /// The narrowest a decision card's option column stands before the options stand one under another.
     public static let cDecisionOptionMin: Double = 190
     /// The tallest a decision card's media well draws its piece: a canvas, a frame and a diagram each fit to it (a diagram never under its words' 10px floor).
     public static let cMediaMaxH: Double = 675.2
+    /// The least a scaled design's words stand at: a decision card's Preview of a page-sized design (a page, a dev server's or a folder's preview, a sheet) wider than its card scales down no further than stands the least words the design itself sets (its overlay tells them) at this size. Past it the design scrolls sideways in its well at that scale.
+    public static let cMediaWordsFloor: Double = 10
     /// The artifact masonry's least card width: a thumbnail that still reads beside a dozen-character name.
     public static let cArtifactCardMin: Double = 148
     /// The rail width at and above which the Working/Finished header needs no squeeze: measured, the narrowest rail at which both labels stand whole beside three-digit counts at rest.

@@ -76,6 +76,15 @@ export const sectionName = (
 export const CANVAS_EMBED_SIZE = "cawco:embed-size";
 
 /**
+ * Any page framed by another (a decision page's Preview of a page, a dev
+ * server's or a folder's preview): the message its overlay posts to the
+ * page holding it, `{ type, least }`, the least font size its shown words
+ * are set at in CSS px, told again when it changes. The Preview scales the
+ * design down no further than stands those words at 10px.
+ */
+export const EMBED_WORDS = "cawco:embed-words";
+
+/**
  * A canvas embed's whole module graph has arrived (every `modulepreload`
  * its page carried answered), the message it posts to the page holding it,
  * `{ type }`, before it has evaluated and drawn: the page may let the next

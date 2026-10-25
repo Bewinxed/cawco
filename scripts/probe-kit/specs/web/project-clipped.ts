@@ -39,6 +39,17 @@
  *     folder tab drawn over it; and the page's heads (the rail's head, the
  *     bar, the project's head, the view strip, a column's head, the task's
  *     head) each clear of the others, as drawn.
+ *  3. Wherever the strip stands (640 and wider), its actions are toolbar
+ *     items (DESIGN.md, Title bars follow Liquid Glass): the group drawn
+ *     compact, no word of theirs drawn, none with a fill, edge or shadow
+ *     of its own at rest, each named in its tooltip; it
+ *     stands as many views as tabs as fit beside them, the rest in the ⋯,
+ *     which says its views' count where one of them has one (a decision
+ *     page waiting on picks makes Decisions' 1; JOURNEY.md, every view with
+ *     something in it shows its count in the first view) (`stripFills`);
+ *     from 900, with the rail where it rests, the chosen view is a tab (the
+ *     owner: at 900 it showed only the ⋯). The overflow sweep
+ *     (journeys/scan.ts) totals zero there.
  *
  *   bun scripts/probe-kit/run.ts web project-clipped
  *   PROBE_CLIPPED_ENGINES=chromium bun scripts/probe-kit/run.ts web project-clipped
@@ -48,6 +59,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { MACHINE, type Reply, type Seen, until } from "../../../scratch-fleet";
+import { scan } from "../../journeys/scan";
 import { type Engine, type Kit, open, type Spec, settle } from "../../kit";
 
 const WORK = "WORK";
@@ -65,7 +77,9 @@ const respond = (request: Seen): Reply =>
       }
     : { words: ["Done."], everyMs: 20, limits: limits() };
 
-const WIDTHS = (process.env.PROBE_CLIPPED_WIDTHS ?? "320,390,680,900,1100,1440")
+const WIDTHS = (
+  process.env.PROBE_CLIPPED_WIDTHS ?? "320,390,680,900,1037,1100,1440"
+)
   .split(",")
   .map(Number);
 const ENGINES: Engine[] = (
@@ -148,6 +162,21 @@ const setUp = async (kit: Kit): Promise<Setup> => {
       ...(n % 3 === 0 ? { todos: ["Read the feed", "Write the table"] } : {}),
     });
   }
+  // A decision page waiting on picks: Decisions' count, the ⋯'s once
+  // Decisions is in it.
+  const writer = await fleet.spawn("claude", "Pick the tide source", src, {
+    projectId: project.id,
+  });
+  await fleet.api(`/api/instances/${writer}/artifacts`, {
+    kind: "page",
+    does: "pick",
+    ask: "Pick the tide source",
+    name: "tide-source",
+    program: `root = Decisions("Tide source", [feed])
+feed = Decision("feed", "Which feed do the tide tables read?", [harbour, admiralty], "The harbour feed is in GMT.")
+harbour = Option("harbour", "The harbour's own feed", "Local, every six minutes.", true, [], "Its times are GMT.")
+admiralty = Option("admiralty", "The admiralty tables", "Published a year ahead.", false, [], "No live readings.")`,
+  });
   // The rail: one session working, a dozen finished (two-digit counts).
   const working = await fleet.spawn("claude", "Tide feed rework", src);
   await fleet.send(working, `${WORK} for a while.`);
@@ -705,6 +734,7 @@ const leg = async (
   }
   // The strip stands from 640, over the board (a task under 900 is its own page).
   if (!phone && board) {
+    await stripFills(kit, page, tag, width >= 900 && rail === null);
     await viewsMenu(kit, page, tag, !withTask && rail === null);
   }
   await page.close();
@@ -744,6 +774,228 @@ const readStrip = (page: Page) =>
         strip?.querySelector("[data-views-picker]")?.textContent?.trim() || "⋯",
     };
   });
+
+/**
+ * What the strip gives its views, read off its boxes: the room its own
+ * width leaves beside everything else it holds, the views' box, the next
+ * view in order that is not a tab and its width as a tab (the ruler's), the
+ * count the hidden views hold and the one the ⋯ says, and its actions: the
+ * group's form, and each control's name, tooltip and the words it draws.
+ */
+const readFill = (page: Page) =>
+  page.evaluate(() => {
+    const views = document.querySelector<HTMLElement>('[data-slot="views"]');
+    const strip = views?.parentElement;
+    if (!(views && strip)) {
+      return null;
+    }
+    const px = (value: string) => Number.parseFloat(value) || 0;
+    const style = getComputedStyle(strip);
+    const children = [...strip.children].filter(
+      (child) => getComputedStyle(child).display !== "none"
+    );
+    const room =
+      strip.clientWidth -
+      px(style.paddingInlineStart) -
+      px(style.paddingInlineEnd) -
+      children
+        .filter((child) => child !== views)
+        .reduce((sum, child) => sum + child.getBoundingClientRect().width, 0) -
+      px(style.columnGap) * Math.max(0, children.length - 1);
+    const label = (tab: Element) =>
+      tab.querySelector('[data-slot="text"]')?.textContent?.trim() ?? "";
+    const shown = new Set(
+      [
+        ...views.querySelectorAll(
+          ':scope > div:not([data-views-ruler]) [data-slot="ff-tab"]'
+        ),
+      ].map(label)
+    );
+    const ruled = [
+      ...views.querySelectorAll('[data-views-ruler] [data-slot="ff-tab"]'),
+    ].map((tab) => ({
+      label: label(tab),
+      width: tab.getBoundingClientRect().width,
+      count: Number(
+        tab.querySelector('[data-slot="tab-num"]')?.textContent?.trim() ?? 0
+      ),
+    }));
+    const rest = ruled.filter((one) => !shown.has(one.label));
+    const list = views.querySelector<HTMLElement>(
+      ':scope > div:not([data-views-ruler]) [data-slot="ff-tabs-list"]'
+    );
+    const more = views.querySelector<HTMLElement>("[data-views-more]");
+    // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
+    const WORD = /\p{L}/u;
+    const COLOUR = /(?:rgba?|oklch|oklab|lab|lch|hsla?|color)\([^)]*\)/g;
+    /** A computed colour that draws: its alpha above 0 (`rgba(…, a)`, `… / a)`). */
+    const seen = (colour: string) => {
+      if (colour === "transparent") {
+        return false;
+      }
+      const slash = colour.lastIndexOf("/");
+      if (slash >= 0) {
+        return Number.parseFloat(colour.slice(slash + 1)) > 0;
+      }
+      const parts = colour.slice(colour.indexOf("(") + 1, -1).split(",");
+      return parts.length < 4 || Number.parseFloat(parts[3] ?? "1") > 0;
+    };
+    const group = strip.querySelector<HTMLElement>(
+      ':scope > div:not([data-slot="views"])'
+    );
+    /** The words a control draws: its visible text that holds a letter. */
+    const wordsOf = (one: Element) => {
+      const words: string[] = [];
+      const walker = document.createTreeWalker(one, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const text = (node as Text).data.trim();
+        if (
+          WORD.test(text) &&
+          node.parentElement?.checkVisibility({ visibilityProperty: true })
+        ) {
+          words.push(text);
+        }
+      }
+      return words;
+    };
+    /**
+     * What a control draws of its own at rest: a fill, a gradient with a
+     * stop that shows (the kit button's highlight layer is transparent to
+     * transparent off the coral), an edge that shows, a shadow.
+     */
+    const restOf = (one: Element) => {
+      const look = getComputedStyle(one);
+      const image = look.backgroundImage;
+      const edges = (["Top", "Right", "Bottom", "Left"] as const).filter(
+        (side) =>
+          look[`border${side}Style`] !== "none" &&
+          Number.parseFloat(look[`border${side}Width`]) > 0 &&
+          seen(look[`border${side}Color`])
+      );
+      return {
+        fill: seen(look.backgroundColor) ? look.backgroundColor : "",
+        image:
+          image.includes("url(") || (image.match(COLOUR) ?? []).some(seen)
+            ? image
+            : "",
+        edge: edges.map((side) => `${side} ${look[`border${side}Color`]}`),
+        shadow: look.boxShadow === "none" ? "" : look.boxShadow,
+      };
+    };
+    const actions = [...(group?.querySelectorAll("button") ?? [])]
+      .filter((one) => one.checkVisibility())
+      .map((one) => ({
+        name: one.getAttribute("aria-label") ?? "",
+        title: one.getAttribute("title") ?? "",
+        words: wordsOf(one),
+        ...restOf(one),
+      }));
+    return {
+      room,
+      compact: group?.dataset.form === "compact",
+      actions,
+      box: views.getBoundingClientRect().width,
+      gap: list ? px(getComputedStyle(list).columnGap) : 0,
+      // The ⋯ and the gap before it, which go once the last view is a tab.
+      more: more
+        ? more.getBoundingClientRect().width +
+          px(getComputedStyle(views).columnGap)
+        : 0,
+      held: rest.reduce((sum, one) => sum + one.count, 0),
+      says:
+        more?.querySelector('[data-slot="more-count"]')?.textContent?.trim() ??
+        "",
+      next: rest[0] ?? null,
+      left: rest.length,
+      tabs: shown.size,
+      views: ruled.length,
+    };
+  });
+
+/**
+ * The strip is a toolbar (DESIGN.md, Title bars follow Liquid Glass): its
+ * actions' group is drawn compact, none of them draws a word, and each is
+ * named in its tooltip. It stands as many views as tabs as fit beside them,
+ * and only those that don't go into the ⋯ (owner: at 900px it showed only
+ * the ⋯): the views' box fits its room, and the next view as a tab would
+ * not. The ⋯ says what waits in the views it holds, their counts' sum, and
+ * nothing when none waits. With `chosen` (900px and wider), the chosen view
+ * stands as a tab. Then the overflow sweep (journeys/scan.ts): nothing
+ * spills, no control covers text.
+ */
+const stripFills = async (
+  kit: Kit,
+  page: Page,
+  tag: string,
+  chosen: boolean
+) => {
+  const fill = await readFill(page);
+  const strip = await readStrip(page);
+  if (!fill) {
+    kit.check(`${tag}: the view strip stands`, false, "no [data-slot=views]");
+    return;
+  }
+  const SLACK = 0.5;
+  kit.check(
+    `${tag}: no strip action draws a fill, edge or shadow at rest`,
+    fill.actions.every(
+      (one) =>
+        one.fill === "" &&
+        one.image === "" &&
+        one.edge.length === 0 &&
+        one.shadow === ""
+    ),
+    JSON.stringify(
+      fill.actions.map(({ name, fill: ground, image, edge, shadow }) => ({
+        name,
+        ground,
+        image,
+        edge,
+        shadow,
+      }))
+    )
+  );
+  kit.check(
+    `${tag}: the strip's ${fill.actions.length} actions are bare symbols, each named in its tooltip (${fill.actions.map((one) => one.title).join(", ")})`,
+    fill.compact &&
+      fill.actions.length >= 3 &&
+      fill.actions.every(
+        (one) => one.words.length === 0 && one.title !== "" && one.name !== ""
+      ),
+    JSON.stringify({ compact: fill.compact, actions: fill.actions })
+  );
+  /** The views' box with the next view a tab beside the rest. */
+  const withNext = fill.next
+    ? fill.box + fill.gap + fill.next.width - (fill.left === 1 ? fill.more : 0)
+    : 0;
+  const said = `${fill.tabs} of ${fill.views} tabs in ${fill.box.toFixed(1)}px of ${fill.room.toFixed(1)}px room${fill.next ? `; next, “${fill.next.label}”, ${withNext.toFixed(1)}px` : ""}`;
+  kit.check(
+    `${tag}: the strip stands every view as a tab that fits beside its actions (${said})`,
+    fill.box <= fill.room + SLACK &&
+      (fill.next === null || withNext > fill.room + SLACK),
+    JSON.stringify({ fill, strip })
+  );
+  if (fill.left > 0) {
+    kit.check(
+      `${tag}: the ⋯ says what waits in its ${fill.left} views (${fill.held > 0 ? `“${fill.says}” of ${fill.held}` : "none waits, no count"})`,
+      fill.held > 0 ? fill.says === String(fill.held) : fill.says === "",
+      JSON.stringify({ held: fill.held, says: fill.says, strip })
+    );
+  }
+  if (chosen) {
+    kit.check(
+      `${tag}: the chosen view stands as a tab (“${strip.chosen}”)`,
+      strip.picker === null && strip.chosen !== "" && fill.tabs > 0,
+      JSON.stringify(strip)
+    );
+  }
+  const spills = await page.evaluate(scan);
+  kit.check(
+    `${tag}: the overflow sweep totals ${spills.length}`,
+    spills.length === 0,
+    spills.slice(0, 6).join(" | ")
+  );
+};
 
 /**
  * Every view is reachable from the strip: a tab, or an item of the ⋯ that

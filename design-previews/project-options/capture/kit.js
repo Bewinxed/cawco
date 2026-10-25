@@ -10,6 +10,7 @@ export { default as Suggestions } from "../../../apps/dashboard/src/lib/cawco/su
 export { default as TaskRing } from "../../../apps/dashboard/src/lib/cawco/TaskRing.svelte";
 export { default as NewTaskForm } from "../../../apps/dashboard/src/lib/cawco/tasks/NewTaskForm.svelte";
 export { Alert } from "../../../apps/dashboard/src/lib/components/ui/alert/index.js";
+export { EmptyState } from "../../../apps/dashboard/src/lib/components/ui/empty/index.js";
 export { default as BarGlass } from "../../../apps/dashboard/src/lib/components/ui/bar-glass/bar-glass.svelte";
 export {
   Button,

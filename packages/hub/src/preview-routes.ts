@@ -7,6 +7,7 @@
  * the preview's, so the pane joins the doc and sends here, never on the
  * preview origin.
  */
+import type { PreviewAddress } from "@cawco/core";
 import { PREVIEW_NAMES_PATH, type PreviewNames } from "@cawco/core/browser";
 import { PREVIEW_REACH_API } from "@cawco/core/preview-reach";
 import type { ServerWebSocket } from "bun";
@@ -32,6 +33,12 @@ export const previewRoutes = (deps: {
   hasInstance: (id: string) => boolean;
   /** Whether the hub keeps project `id`. */
   hasProject: (id: string) => boolean;
+  /**
+   * The origin artifact `id` is served on, its listener started when it has
+   * none: a machine's preview or sheet its own, anything else its session's
+   * or its project's. Undefined when no session or project holds it.
+   */
+  artifactAddress: (id: string) => PreviewAddress | undefined;
   /** Whether session `instanceId`'s panel may hold artifact `artifactId`: its own, one it made, or its delegation tree's (artifacts/service.ts `panelSees`). */
   panelSees: (instanceId: string, artifactId: string) => boolean;
   listener: PreviewListenerDeps;
@@ -124,6 +131,26 @@ export const previewRoutes = (deps: {
         }
         return { revoked };
       })
+      // The origin an artifact is served on (a machine's preview its own,
+      // whatever its session's panel shows), its listener started when it
+      // has none. No screen asks it (each frame names its origin), so the
+      // apps' document leaves it out.
+      .post(
+        "/api/artifacts/:artifact/preview-address",
+        hidden,
+        ({ params }) => {
+          try {
+            return (
+              deps.artifactAddress(params.artifact) ??
+              new Response("No session or project holds that artifact.", {
+                status: 404,
+              })
+            );
+          } catch (error) {
+            return refused(error);
+          }
+        }
+      )
       // A project's preview origin, where its pages are served (Projects spec
       // §5.8): one for the project's life, its listener started when it has none.
       .post("/api/projects/:id/preview-address", ({ params }) => {

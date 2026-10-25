@@ -49,6 +49,8 @@ export const SCROLLER = '[aria-label="Session transcript"]';
 const CLASS_ATTRIBUTE = / class='([^' ]*)[^']*'/;
 /** A style invalidation that restyles a container's whole subtree. */
 const SUBTREE = /subtree/i;
+/** A restyle asked for because the element is a `:has()` rule's subject. */
+const HAS_REASON = /:has\(\)/;
 /**
  * A frame's phases besides style and layout, as the trace names them: what
  * a sampled profile counts as "(program)" when no script is on the stack.
@@ -548,6 +550,13 @@ export interface MainThread {
    * its thread time (`tdur`), ms (`scripts` only; empty otherwise).
    */
   evaluated: { at: number; cpu: number; end: number; url: string }[];
+  /**
+   * The script functions the main thread ran between two points of the
+   * trace clock (µs), by the time sampled in each function and everything
+   * it called, ms, the most first (`profile` only; empty otherwise): a
+   * function is counted once a sample however often it stands on the stack.
+   */
+  inclusive: (from: number, to: number) => [string, number][];
   /** Each `performance.mark` made while tracing: its name and when, the trace clock, µs. */
   marks: { at: number; name: string }[];
   /**
@@ -647,7 +656,14 @@ function samplesOf(
   events: TraceEvent[],
   pid: number,
   tid: number
-): { at: number; fn: string; stack: string; us: number }[] {
+): {
+  at: number;
+  /** Every script frame on its stack, each once. */
+  callers: string[];
+  fn: string;
+  stack: string;
+  us: number;
+}[] {
   const head = events.find(
     (event) =>
       event.name === "Profile" && event.pid === pid && event.tid === tid
@@ -700,7 +716,27 @@ function samplesOf(
     stacks.set(id, said);
     return said;
   };
-  const samples: { at: number; fn: string; stack: string; us: number }[] = [];
+  const chains = new Map<number, string[]>();
+  /** Every script frame on the sample's stack, the leaf's first, each once. */
+  const callersOf = (id: number): string[] => {
+    const known = chains.get(id);
+    if (known !== undefined) {
+      return known;
+    }
+    const own = scriptFrame(frames.get(id) ?? {});
+    const up = parents.get(id);
+    const above = up === undefined ? [] : callersOf(up);
+    const chain = own && !above.includes(own) ? [own, ...above] : above;
+    chains.set(id, chain);
+    return chain;
+  };
+  const samples: {
+    at: number;
+    callers: string[];
+    fn: string;
+    stack: string;
+    us: number;
+  }[] = [];
   let at = head.args?.data?.startTime ?? head.ts;
   for (const chunk of events) {
     if (
@@ -723,6 +759,7 @@ function samplesOf(
       at += deltas[i] ?? 0;
       samples.push({
         at,
+        callers: callersOf(id),
         fn: nameOf(id),
         stack: stackOf(id),
         us: deltas[i + 1] ?? 0,
@@ -941,9 +978,11 @@ export async function traceMain(
         (data.changedId && `#${data.changedId}`) ||
         (data.changedPseudo && `:${data.changedPseudo}`) ||
         "?";
-      const node = (data.nodeName ?? "?")
-        .replace(CLASS_ATTRIBUTE, ".$1")
-        .slice(0, 50);
+      // A `:has()` anchor is said with its whole class list, as `askedIn` says a subject.
+      const node =
+        change === ":has"
+          ? (data.nodeName ?? "?").slice(0, 400)
+          : (data.nodeName ?? "?").replace(CLASS_ATTRIBUTE, ".$1").slice(0, 50);
       const key = `${change} on ${node}`;
       counted.set(key, (counted.get(key) ?? 0) + 1);
     }
@@ -969,9 +1008,12 @@ export async function traceMain(
     const counted = new Map<string, number>();
     for (const one of asks) {
       if (one.ts >= from && one.ts < to) {
-        const node = (one.args?.data?.nodeName ?? "?")
-          .replace(CLASS_ATTRIBUTE, ".$1")
-          .slice(0, 60);
+        const name = one.args?.data?.nodeName ?? "?";
+        // A `:has()` subject is said with its whole class list: its first
+        // class (`relative`) names no rule, and the list names the one.
+        const node = HAS_REASON.test(one.args?.data?.reason ?? "")
+          ? name.slice(0, 400)
+          : name.replace(CLASS_ATTRIBUTE, ".$1").slice(0, 60);
         const key = `${one.args?.data?.reason ?? "?"} on ${node}${changeOf(one)}`;
         counted.set(key, (counted.get(key) ?? 0) + 1);
       }
@@ -1033,6 +1075,17 @@ export async function traceMain(
     }
     return [...counted].sort((a, b) => b[1] - a[1]);
   };
+  const inclusive = (from: number, to: number): [string, number][] => {
+    const counted = new Map<string, number>();
+    for (const { at, callers, us } of samples) {
+      if (at >= from && at < to) {
+        for (const fn of callers) {
+          counted.set(fn, (counted.get(fn) ?? 0) + us / 1000);
+        }
+      }
+    }
+    return [...counted].sort((a, b) => b[1] - a[1]);
+  };
   const stacksIn = (from: number, to: number): [string, number][] => {
     const counted = new Map<string, number>();
     for (const { at, stack, us } of samples) {
@@ -1090,6 +1143,7 @@ export async function traceMain(
         cpu: (event.tdur ?? event.dur ?? 0) / 1000,
         url: event.args?.data?.url ?? "",
       })),
+    inclusive,
     marks: marks.map((event) => ({ at: event.ts, name: event.name })),
     selfTime,
     stacksIn,

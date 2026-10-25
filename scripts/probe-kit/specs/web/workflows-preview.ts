@@ -27,6 +27,7 @@
 import { realpathSync } from "node:fs";
 import { join, normalize } from "node:path";
 import type { Page } from "playwright-core";
+import { HouseRules } from "../../house-rules";
 import { scan } from "../../journeys/scan";
 import type { Engine, Kit, Spec, View } from "../../kit";
 import { kitsOwnMessage, ROOT, readMotion, stillWithin } from "../../kit";
@@ -77,7 +78,7 @@ const MOTIONS: Motion[] = [
     option: "C",
     id: "c-add",
     job: "create",
-    probe: '[data-canvas-host] [data-node="2"]',
+    probe: '[data-canvas-host] [data-node="1"]',
     prop: "opacity",
   },
   {
@@ -432,6 +433,24 @@ async function onePage(
     cut.join(" | ")
   );
 
+  const house = new HouseRules(kit, tag, {
+    scope: "#stage",
+    views: "#stage .fit",
+    except: [
+      {
+        rule: "coral",
+        selector: ".nav.on",
+        reason:
+          "the drawn rail's selected nav row, a coral DESIGN.md:596 sanctions beside the act (the mock row carries no aria-current to say so)",
+      },
+      {
+        rule: "glyph",
+        selector: ".composer",
+        reason:
+          "the Split's composer Send, on the composer's recipe (DESIGN.md:919), secondary while the run asks so Answer keeps the coral",
+      },
+    ],
+  });
   for (const option of OPTIONS) {
     // biome-ignore lint/performance/noAwaitInLoops: the page walks one option and job at a time
     await pick(page, "Option", option);
@@ -468,6 +487,7 @@ async function onePage(
         boxed.slice(0, 6).join(" | ")
       );
       await oneCoral(kit, page, `${tag} Day ${option} ${job}`);
+      await house.at(page, `Day ${option} ${job}`);
       if (job === "create") {
         const words = await page.evaluate(
           () => document.querySelector("#stage")?.textContent ?? ""
@@ -507,8 +527,10 @@ async function onePage(
       // biome-ignore lint/performance/noAwaitInLoops: one job at a time, by Night
       await pick(page, "Job", job);
       await oneCoral(kit, page, `${tag} Night ${option} ${job}`);
+      await house.at(page, `Night ${option} ${job}`);
     }
   }
+  house.report();
   await pick(page, "Theme", "light");
 
   // The switch's own glide, and the stage arriving.

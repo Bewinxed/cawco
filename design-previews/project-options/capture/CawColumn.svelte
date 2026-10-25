@@ -4,10 +4,13 @@
   threads leading; Close, new thread, open as a session tab and More
   trailing; no prominent action: the composer's Send is the act, drawn as
   the session composer draws its own (`sendVariants`, disabled while the
-  field is empty). The first thread's line is the copy review's Option 1.
-  The starters are the hub's for Cawco-Dev's board (data/starters.json),
-  word for word, drawn by the house's one suggestions component
-  (`cawco/suggestions/Suggestions.svelte`, pin 15's reusable component).
+  field is empty). The hero is the product's own: the kit's EmptyState on
+  the axis with the title the live thread hero writes (ThreadPane: "What’s
+  next for {projectName}?"), no line (the live hero has one only when Caw is
+  off). The starters are the hub's for Cawco-Dev's board
+  (data/starters.json), word for word, drawn by the house's one suggestions
+  component (`cawco/suggestions/Suggestions.svelte`, pin 15's reusable
+  component).
 
   The hero block is top-anchored where the thread's first row would start
   (DESIGN.md, Empty: "It sits on the column the content would have started
@@ -16,20 +19,20 @@
   - S1: the starters as a stack of sentences under his line (the
     component's `list` look in its `thread` place). Desk only: at 390 the
     stack does not fit the half-height sheet, so the phone draws S2's row.
-  - S2: the starters as one row of the component's chips docked on the
-    composer (its `chips` look in its `composer` place, reasons left out),
-    scrolling sideways with the house edge fade where more stands past the
-    edge, each chip its sentence on one line. The component draws its chips
-    as a wrapping cloud today; this row is the form S2 asks it to gain.
+  - S2: the starters as one row docked on the composer: the component's
+    `row` look in its `composer` place (reasons left out), scrolling
+    sideways under the house edge fade, each chip at most four fifths of the
+    row so the next one peeks, its sentence wrapping inside it.
 
   A desk draws it as a column beside the page; a phone as a sheet at half
   height over the page.
 -->
 <script>
-  import { STARTERS } from "./data.js";
+  import { PROJECT, STARTERS } from "./data.js";
   import {
     BarGlass,
     dockShellVariants,
+    EmptyState,
     IconArrowUp,
     IconClose,
     IconListRows,
@@ -41,7 +44,6 @@
   } from "./kit.js";
 
   let { option, phone = false } = $props();
-  const LINE = "Caw files what you ask as tasks and starts them. Permissions and merges wait for you.";
   const pick = () => undefined;
 </script>
 
@@ -58,16 +60,21 @@
     data-edge-scroller
     class="po-edge-scroller flex min-h-0 flex-auto flex-col overflow-y-auto overscroll-y-contain px-space-5 pt-c-top-bar-h"
   >
-    <div data-hero class="flex flex-col gap-space-4 py-space-6">
-      {#if !phone}
-        <span data-img="caw/hero-1.png" data-axis class="block h-(--po-caw-hero) w-auto self-center"></span>
-      {/if}
-      <p class="m-0 type-body text-pretty text-ink-strong">{LINE}</p>
-      {#if option === "S1"}
-        <div data-starters="stack">
-          <Suggestions label="Things to ask Caw" look="list" onpick={pick} placement="thread" suggestions={STARTERS} />
-        </div>
-      {/if}
+    <div data-hero>
+      <EmptyState actionWidth="fill" axis title="What’s next for {PROJECT.title}?">
+        {#snippet mark()}
+          {#if !phone}
+            <span data-img="caw/hero-1.png" data-axis class="mb-space-3 block h-(--po-caw-hero) w-auto"></span>
+          {/if}
+        {/snippet}
+        {#snippet action()}
+          {#if option === "S1"}
+            <div data-starters="stack" class="w-full">
+              <Suggestions label="Things to ask Caw" look="list" onpick={pick} placement="thread" suggestions={STARTERS} />
+            </div>
+          {/if}
+        {/snippet}
+      </EmptyState>
     </div>
   </div>
   <span aria-hidden="true" class="po-edge po-edge-top" data-edge="bar"></span>
@@ -75,11 +82,8 @@
   <div class="relative flex flex-none flex-col gap-space-2 px-space-3 pt-space-2 pb-space-4">
     <span aria-hidden="true" class="po-edge po-edge-foot" data-edge="foot" style="--po-edge-h: 0px; inset-block-end: 100%"></span>
     {#if option === "S2"}
-      <div
-        data-starters="row"
-        class="kit-edge-fade -mx-space-3 overflow-x-auto overscroll-x-contain px-space-3 [scrollbar-width:none] [&_[data-slot=suggestion-text]]:whitespace-nowrap [&_li]:max-w-none [&_li]:flex-none [&_ul]:flex-nowrap"
-      >
-        <Suggestions label="Things to ask Caw" look="chips" onpick={pick} placement="composer" suggestions={STARTERS} />
+      <div data-starters="row">
+        <Suggestions label="Things to ask Caw" look="row" onpick={pick} placement="composer" suggestions={STARTERS} />
       </div>
     {/if}
     <div class={dockShellVariants({ class: "flex items-center gap-space-2 p-c-composer-inset" })}>

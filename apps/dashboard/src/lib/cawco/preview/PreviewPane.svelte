@@ -165,6 +165,7 @@
   import { loadedPanes } from "./loaded.svelte";
   import CanvasMap from "./map/CanvasMap.svelte";
   import PinFloat from "./PinFloat.svelte";
+  import { markFace, markState } from "./PinMark.svelte";
   import PinPeek from "./PinPeek.svelte";
   import PlacePick from "./PlacePick.svelte";
   import { paneFleet } from "./pane-fleet";
@@ -412,12 +413,14 @@
     writeJson(keepKey, { revision: preview.revision, at: place });
   }
   /**
-   * Where a show starts: a project's page at its own place on its project's
-   * origin (core `projectPagePlace`, the frame naming the project), else the
-   * page the agent named (`path`), else the root.
+   * Where a show starts: a page at its own place on the origin that serves
+   * it (core `projectPagePlace`: its project's, else its session's), which
+   * holds that page whatever the session's panel shows, so an artifact's
+   * own tab never loads another; else, on a machine artifact's own origin,
+   * the page the agent named (`path`), else the root.
    */
   const startAt = $derived.by(() => {
-    if (preview?.project) {
+    if (preview?.project || preview?.artifact.kind === "page") {
       return projectPagePlace(preview.artifact.id);
     }
     return (source && "path" in source ? source.path : undefined) ?? "/";
@@ -4464,13 +4467,10 @@
   <!-- What stands over the page beside a pill (the frame fills the well):
        the composer while a comment is written, the thread once it is, and
        the peek while the pointer rests on one. -->
-  <!-- The size container a card's width reads (`--c-pin-card-reading-w`, two
-       fifths of the well), its own stacking layer over the page (a hanging
-       card's floating layer is held inside it), cut at the well's edges, so
-       a card shut behind its pin's side never reaches past them. -->
+  <!-- The size container a card's width reads (`--c-pin-card-reading-w`, two fifths of the well). -->
   <div
     data-slot="pin-room"
-    class="@container absolute inset-0 z-2 isolate overflow-clip pointer-events-none"
+    class="@container absolute inset-0 pointer-events-none"
     data-mode={mode !== "interact" && !isCanvas ? mode : undefined}
     bind:this={pinRoom}
     {@attach measureRoom}
@@ -4515,14 +4515,13 @@
         <PinFloat
           exit={cardExit}
           box={pinAt?.box ?? null}
-          dot={live.has(cardPin.id)}
+          face={markFace(markState(cardPin))}
           label={`Comment ${cardPin.number}`}
           mark={pinAt?.mark ?? null}
           pin={cardPin.number}
           room={{ w: roomW, h: roomH }}
           sheet={floatSheet}
           slot="pin-card"
-          tail={pinAt?.tail}
           bind:float={cardFloat}
         >
           <Card

@@ -65,6 +65,7 @@
     "./words/decisions": "./src/words/decisions.ts",
     "./words/routines": "./src/words/routines.ts",
     "./words/leaks": "./src/words/leaks.ts",
+    "./words/loop": "./src/words/loop.ts",
     "./words/gate": "./src/words/gate.ts",
     "./words/turns": "./src/words/turns.ts",
     "./words/notices": "./src/words/notices.ts",

@@ -31,8 +31,8 @@
  *    chose for Claude Code on that machine, not on Bypass.
  * 9. A page's `cawco.pickPlace()` opens on no machine, its machine online:
  *    the select says "Choose a machine".
- * 10. An artifact's own tab whose panel is closed while the artifact lives
- *    says so in words with Show it again, which opens the page there again.
+ * 10. An artifact's own tab stays on its page when its session's panel
+ *    closes: the tab shows its own artifact, whatever the panel shows.
  * 11. Fleet's count in the rail is centred on its nav row (±1px).
  * 12. New Session with no mode remembered, here or on the hub, opens on no
  *    mode ("Choose a mode"), Start disabled with why beside it; picking one
@@ -133,9 +133,6 @@ const pageOf = (heading: string) =>
 
 /** A page whose one button asks `cawco.pickPlace()` (check 9). */
 const PICK_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Place</title></head><body><h1>Place</h1><button type="button" data-pick>Choose a machine and folder</button><script>document.querySelector("[data-pick]").addEventListener("click", () => window.cawco.pickPlace().catch(() => null));</script></body></html>`;
-/** The artifact tab's words while its panel is closed (check 10). */
-const CLOSED_TITLE = "This artifact's panel is closed";
-const SHOW_AGAIN = "Show it again";
 /** The hub's address scheme, swapped for its socket's. */
 const HTTP = /^http/;
 
@@ -740,30 +737,19 @@ const tabs = async (kit: Kit, fleet: KitFleet, base: string) => {
     await picker.waitFor({ state: "detached", timeout: 5000 });
   }
 
-  // 10. Its panel closed while the artifact lives.
+  // 10. Its session's panel closed while the artifact lives: the tab stays on it.
   const closed = await fetch(`${fleet.base}/api/instances/${session}/preview`, {
     method: "DELETE",
   });
-  const closedWords = await until(
-    "the tab saying its panel is closed",
-    () => placeTab.page.getByText(CLOSED_TITLE).count(),
-    (count) => count > 0,
-    30_000
-  ).catch(() => 0);
-  const again = placeTab.page.getByRole("button", { name: SHOW_AGAIN });
-  const offered = await again.count();
-  if (offered > 0) {
-    await again.click();
-  }
-  const reopened = await placeTab.page
-    .locator('iframe[title="Preview"]')
-    .waitFor({ timeout: 30_000 })
-    .then(() => true)
-    .catch(() => false);
+  const tabFrame = placeTab.page.locator('iframe[title="Preview"]');
+  // A frame the hub's closed panel would take away goes within a frame or two of its word; a second is many of them.
+  await placeTab.page.waitForTimeout(1000);
+  const stays = await tabFrame.count();
+  const src = stays > 0 ? await tabFrame.first().getAttribute("src") : null;
   kit.check(
-    `10: a tab whose panel is closed while its artifact lives says "${CLOSED_TITLE}", and ${SHOW_AGAIN} opens the page there again`,
-    closed.ok && closedWords > 0 && offered > 0 && reopened,
-    `close ${closed.status}; words ${closedWords}; ${SHOW_AGAIN} ${offered}; page again ${reopened}`
+    "10: its session's panel closed, the artifact's own tab still shows its page",
+    closed.ok && stays === 1 && !!src?.includes("/__cawco/page/"),
+    `close ${closed.status}; frames ${stays}; src ${src}`
   );
 
   // 11. Fleet's count, centred on its nav row.

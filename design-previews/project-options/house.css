@@ -81,7 +81,6 @@ button, input:where([type="button"], [type="reset"], [type="submit"]), ::file-se
 .z-4 { z-index: 4; }
 .col-start-2 { grid-column-start: 2; }
 .m-0 { margin: 0px; }
-.-mx-space-3 { margin-inline: calc(var(--space-3) * -1); }
 .ms-auto { margin-inline-start: auto; }
 .-me-space-1 { margin-inline-end: calc(var(--space-1) * -1); }
 .prose {
@@ -219,7 +218,12 @@ button, input:where([type="button"], [type="reset"], [type="submit"]), ::file-se
   & :where(:is(hr, h2, h3, h4) + :is(p, ul, ol, dl, pre, blockquote, table, figure, img, video, picture, h1, h2, h3, h4, h5, h6, hr)):not(:where([class~="not-prose"], [class~="not-prose"] *)) { margin-top: 0px; }
 }
 .mt-space-2 { margin-top: var(--space-2); }
+.mb-space-3 { margin-bottom: var(--space-3); }
 :where(.mark-cell) { display: grid; flex: 0 0 auto; place-content: center; place-items: center; block-size: 1lh; }
+.no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+}
 .block { display: block; }
 .contents { display: contents; }
 .flex { display: flex; }
@@ -257,6 +261,8 @@ button, input:where([type="button"], [type="reset"], [type="submit"]), ::file-se
 .w-c-pop-w { width: var(--c-pop-w); }
 .w-fit { width: fit-content; }
 .w-full { width: 100%; }
+.max-w-4\/5 { max-width: calc(80%); }
+.max-w-c-measure-short { max-width: var(--c-measure-short); }
 .max-w-full { max-width: 100%; }
 .max-w-none { max-width: none; }
 .min-w-0 { min-width: 0px; }
@@ -274,7 +280,6 @@ button, input:where([type="button"], [type="reset"], [type="submit"]), ::file-se
 :where(.ns-theme .ns-check) { animation: ns-check var(--ns-check-ms) var(--ease-out) both; }
 :where(.ns-theme .ns-panel) { animation: ns-panel var(--dur-fade) var(--ease-out) both; }
 }
-.\[scrollbar-width\:none\] { scrollbar-width: none; }
 .list-none { list-style-type: none; }
 .auto-cols-\(--po-col\) { grid-auto-columns: var(--po-col); }
 .grid-flow-col { grid-auto-flow: column; }
@@ -286,6 +291,7 @@ button, input:where([type="button"], [type="reset"], [type="submit"]), ::file-se
 .grid-cols-lead-fluid { grid-template-columns: var(--c-row-lead) minmax(0, 1fr); }
 .grid-rows-1 { grid-template-rows: repeat(1, minmax(0px, 1fr)); }
 .flex-col { flex-direction: column; }
+.flex-nowrap { flex-wrap: nowrap; }
 .flex-wrap { flex-wrap: wrap; }
 .place-content-center { place-content: center; }
 .place-items-center { place-items: center; }
@@ -305,7 +311,6 @@ button, input:where([type="button"], [type="reset"], [type="submit"]), ::file-se
 .gap-space-1 { gap: var(--space-1); }
 .gap-space-2 { gap: var(--space-2); }
 .gap-space-3 { gap: var(--space-3); }
-.gap-space-4 { gap: var(--space-4); }
 .gap-space-6 { gap: var(--space-6); }
 .gap-space-8 { gap: var(--space-8); }
 .gap-x-space-1 { column-gap: var(--space-1); }
@@ -315,8 +320,8 @@ button, input:where([type="button"], [type="reset"], [type="submit"]), ::file-se
 .gap-y-space-2 { row-gap: var(--space-2); }
 :where(.divide-y > :not(:last-child)) { --tw-divide-y-reverse: 0; border-bottom-style: var(--tw-border-style); border-top-style: var(--tw-border-style); border-top-width: calc(1px * var(--tw-divide-y-reverse)); border-bottom-width: calc(1px * calc(1 - var(--tw-divide-y-reverse))); }
 :where(.divide-border-hairline > :not(:last-child)) { border-color: var(--border-hairline); }
-.self-center { align-self: center; }
 .self-start { align-self: flex-start; }
+.self-stretch { align-self: stretch; }
 .justify-self-end { justify-self: flex-end; }
 .overflow-clip { overflow: clip; }
 .overflow-x-auto { overflow-x: auto; }
@@ -418,6 +423,7 @@ button, input:where([type="button"], [type="reset"], [type="submit"]), ::file-se
 .leading-none { --tw-leading: 1; line-height: 1; }
 .font-medium { --tw-font-weight: var(--weight-strong); font-weight: var(--weight-strong); }
 .tracking-\[-0\.01em\] { --tw-tracking: -0.01em; letter-spacing: -0.01em; }
+.tracking-title { --tw-tracking: var(--track-title); letter-spacing: var(--track-title); }
 .text-balance { text-wrap: balance; }
 .text-pretty { text-wrap: pretty; }
 .wrap-anywhere { overflow-wrap: anywhere; }
@@ -559,11 +565,12 @@ button, input:where([type="button"], [type="reset"], [type="submit"]), ::file-se
 .has-data-\[slot\=alert-action\]\:gap-x-2\.5:has([data-slot="alert-action"]) { column-gap: calc(var(--spacing) * 2.5); }
 .has-\[\>svg\]\:grid-cols-\[auto_1fr\]:has(> svg) { grid-template-columns: auto 1fr; }
 .has-\[\>svg\]\:gap-x-2\.5:has(> svg) { column-gap: calc(var(--spacing) * 2.5); }
-.aria-pressed\:border-brand-solid[aria-pressed="true"] { border-color: var(--brand-solid); }
+.aria-pressed\:border-transparent[aria-pressed="true"] { border-color: transparent; }
+.aria-pressed\:bg-selected-bg[aria-pressed="true"] { background-color: var(--selected-bg); }
 .aria-pressed\:bg-surface-lift[aria-pressed="true"] { background-color: var(--surface-lift); }
 .aria-pressed\:bg-surface-pressed[aria-pressed="true"] { background-color: var(--surface-pressed); }
-.aria-pressed\:bg-surface-recess[aria-pressed="true"] { background-color: var(--surface-recess); }
 .aria-pressed\:text-ink-strong[aria-pressed="true"] { color: var(--ink-strong); }
+.aria-pressed\:text-selected-ink[aria-pressed="true"] { color: var(--selected-ink); }
 .aria-pressed\:shadow-tile[aria-pressed="true"] { --tw-shadow: var(--shadow-tile); box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow); }
 :is(.data-instant\:\*\*\:transition-none[data-instant] *) { transition-property: none; }
 @media (prefers-reduced-motion: no-preference) {
@@ -701,9 +708,6 @@ button, input:where([type="button"], [type="reset"], [type="submit"]), ::file-se
 :where([data-pane-group]:has(> [data-pane-resizer][data-active="keyboard"])) > .motion-safe\:pane-keyed\:duration-\(--dur-control\) { --tw-duration: var(--dur-control); transition-duration: var(--dur-control); }
 :where([data-pane-group]:has(> [data-pane-resizer][data-active="keyboard"])) > .motion-safe\:pane-keyed\:ease-out { --tw-ease: var(--ease-out); transition-timing-function: var(--ease-out); }
 }
-.\[\&_\[data-slot\=suggestion-text\]\]\:whitespace-nowrap [data-slot="suggestion-text"] { white-space: nowrap; }
-.\[\&_li\]\:max-w-none li { max-width: none; }
-.\[\&_li\]\:flex-none li { flex: 0 0 auto; }
 @media (prefers-reduced-motion: no-preference) {
 .motion-safe\:\[\&_path\]\:\[stroke-dasharray\:20_30\] path { stroke-dasharray: 20, 30; }
 .motion-safe\:\[\&_path\]\:\[stroke-dashoffset\:22\] path { stroke-dashoffset: 22; }
@@ -714,7 +718,6 @@ button, input:where([type="button"], [type="reset"], [type="submit"]), ::file-se
 .\[\&_svg\]\:shrink-0 svg { flex-shrink: 0; }
 :is(.data-active\:\[\&_svg\]\:text-selected-icon:where([data-state="active"]), .data-active\:\[\&_svg\]\:text-selected-icon:where([data-active]:not([data-active="false"]))) svg { color: var(--selected-icon); }
 .\[\&_svg\:not\(\[class\*\=\'size-\'\]\)\]\:size-icon-md svg:not([class*="size-"]) { width: var(--icon-md); height: var(--icon-md); }
-.\[\&_ul\]\:flex-nowrap ul { flex-wrap: nowrap; }
 :is(.\*\:\[a\]\:underline > *):is(a) { text-decoration-line: underline; }
 :is(.\*\:\[a\]\:underline-offset-3 > *):is(a) { text-underline-offset: 3px; }
 @media (hover: hover) and (pointer: fine) {
@@ -733,6 +736,8 @@ button, input:where([type="button"], [type="reset"], [type="submit"]), ::file-se
 :is(.data-selected\:\*\:\[svg\]\:text-ink-strong[data-selected] > *):is(svg) { color: var(--ink-strong); }
 :is(.data-\[variant\=destructive\]\:\*\:\[svg\]\:text-error-9[data-variant="destructive"] > *):is(svg) { color: var(--error-9); }
 :is(.\*\:\[svg\:not\(\[class\*\=\'size-\'\]\)\]\:size-icon-md > *):is(svg:not([class*="size-"])) { width: var(--icon-md); height: var(--icon-md); }
+.\[\&\>\:not\(\[data-box\]\)\]\:self-center > :not([data-box]) { align-self: center; }
+.\[\&\>\:not\(\[data-box\]\)\]\:text-center > :not([data-box]) { text-align: center; }
 .\[\&\>\:not\(svg\,\[data-slot\=alert-action\]\)\]\:col-start-\[-2\] > :not(svg, [data-slot="alert-action"]) { grid-column-start: -2; }
 .\[\&\>svg\]\:size-icon-sm > svg { width: var(--icon-sm); height: var(--icon-sm); }
 @media (pointer: coarse) {

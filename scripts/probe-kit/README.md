@@ -16,11 +16,59 @@ one line over every spec it ran, `ALL PASS (N specs, …)` or `N FAILED: <spec>,
 and exits 0 only when every assertion passed. A spec
 that needs a hub gets a scratch fleet (`kit.fleet`, `scripts/scratch-fleet.ts`):
 a real hub, agent and sessiond with their own HOME, against a mock model.
+Its teardown ends every process whose environment still names one of its
+folders (its HOME, runtime dir, sandbox), however far it forked away: a
+session's MCP server's daemon included (`fleet-leaves-nothing`).
 
 Leave the dashboard's source alone while a run is going: a spec that serves
 it with the dev server (`/motion/` benches, canvas-design's panel) hot-reloads
 every edit into its open pages, which reloads them mid-read and fails legs
 the edit never touched.
+
+## House rules
+
+Every preview spec and every live UI spec that reads a rendered screen
+holds it to the house rules with `house-rules.ts`, the same way everywhere,
+so a screenshot review is left with what a person must judge:
+
+```ts
+const house = new HouseRules(kit, engine, { scope: '[data-slot="stage"]' });
+await house.at(page, "state name"); // at each state, once the spec has settled it
+house.report();                      // one PASS/FAIL line per rule over every state
+```
+
+`settle(page)` (fonts in, then kit.ts `settle`: one-shot runs landed,
+loops paused at their start) gets a page ready for a read; a page still
+moving in the surface is the `settled` rule's finding.
+
+| Rule | Read by | What it reads |
+| --- | --- | --- |
+| `overflow` | `journeys/scan.ts` + impeccable `text-occlusion` | text past the screen, out of its control or box; a control out of the row, card or panel it is laid out in (`specs/web/scan-control-box`); text under a control or an opaque box |
+| `coral` | own code | per view (`views`), controls and worded chips whose fill, edge or (a control's) ink is a coral token from tokens.css: at most one; a checked checkbox, switch or radio is named, not counted; a bare link is link ink |
+| `glyph` | own code | a control whose only content is a glyph sits on no fill, edge or shadow, nor does a wrapper holding it alone; its svg holds no solid disc, tile or rounded shape spanning 70% of its viewBox (`marks` adds standalone status glyphs) |
+| `bar-ground` | own code | `header`, toolbars, the bar and foot data-slots paint nothing; a folder-tab shelf (DESIGN.md:665) and a group's capsule are named |
+| `head` | own code | a bar's title and controls on one row (centres within 4px), no second line in the bar, the title not repeated by the next heading |
+| `back-close` | own code | no control's words say Back or Close |
+| `hidden-cue` | own code + ink | a scroller cut at an edge has a mask there that draws (the band drawn with the mask, without it, and without the scroller), or an item peeking 16px |
+| `contrast` | own code + impeccable `low-contrast` | each text run on the ground under it, 4.5:1 (3:1 from 24px); the lowest is printed |
+| `settled` | own code | no finite animation running, fonts loaded |
+| `made-up` | own code | no `PROBE-`, `JOURNEY-`, `/tmp/`, `.cawco/tmp`, `probe-kit`, `Lorem`, `Test item`, lone “Body”; `allowedText` slots hold only their source's words |
+
+Impeccable runs as `impeccable detect --json --cdp <port>` on the page as it
+stands: every kit Chromium carries a DevTools port (`devtoolsPort(page)`),
+and the launcher is `$IMPECCABLE`, else the impeccable skill's. It reads
+Chromium only; on WebKit the report says so and the kit's own contrast and
+overflow reads stand alone. Its findings outside the house rules (line
+length, nested cards…) print as a NOTE, never a failure. A Chromium read
+where it could not run fails.
+
+Exempt only with a reason, which the report prints: `exempt: { rule: "why" }`
+drops a rule for the spec; `except: [{ rule, selector, reason }]` (or
+`text` for a sweep line) excuses findings one element at a time;
+`noImpeccable: "why"` keeps impeccable off a read whose side effects the
+spec's later legs would see (it scrolls what it measures: thinking-traffic's
+transcript lost its pin to the foot). A rule that
+fails for real on main is fixed, not exempted.
 
 ## User journeys
 
@@ -37,8 +85,9 @@ asserting the outcome the flow promises on the hub or the machine and on what
 the page says, never that a control exists. Every journey runs on Chromium,
 WebKit and Firefox at 390×844 and 768×1024 (touch) and 1440×900, with normal
 data and stretched (titles three times longer, twice as many items), the same
-steps everywhere. After every step the page is held to two rules
-(`journeys/scan.ts`: nothing spills, no control covers text) and to no
+steps everywhere. After every step the page is held to three rules
+(`journeys/scan.ts`: nothing spills, no control runs out of its row, card
+or panel, no control covers text) and to no
 console error. Locators are roles, labels and the person's words only.
 
 It prints one line per journey × engine × size × data, `PASS`, or `FAIL` with

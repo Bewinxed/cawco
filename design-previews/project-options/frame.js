@@ -161,7 +161,10 @@ function shellRoom(root) {
 
 function build(c) {
   if (c.today === "1") {
-    return `<img class="po-today" src="${TODAY[c.w]}" alt="The live project page as captured at ${c.w}">`;
+    // The desk capture caught its rail mid-list in a blur; Today at 1440 stands its rail in the crisp one the options use (shell/desk-rail.png, from the window capture).
+    const rail =
+      c.w === "1440" ? '<span data-img="shell/desk-rail.png" data-natural data-today-rail class="po-today-rail"></span>' : "";
+    return `<div class="po-today-frame"><img class="po-today" src="${TODAY[c.w]}" alt="The live project page as captured at ${c.w}">${rail}</div>`;
   }
   return c.w === "390" ? phone(c) : desk(c);
 }
@@ -194,7 +197,9 @@ function pictures(root) {
 function seatAskCaw(root, c) {
   for (const holder of root.querySelectorAll("[data-askcaw]")) {
     for (const slot of holder.querySelectorAll('[data-slot-part="askcaw"]')) {
-      slot.innerHTML = part(`askcaw:${holder.dataset.askcaw}:${seatOf(c)}:${c.w === "390" ? "phone" : "desk"}`);
+      // A docked foot bar (the phone's, a narrow page's) takes the dock's drawing; a title bar the bar's.
+      const size = slot.closest("[data-phone-bar='foot']") ? "phone" : "desk";
+      slot.innerHTML = part(`askcaw:${holder.dataset.askcaw}:${seatOf(c)}:${size}`);
     }
   }
 }

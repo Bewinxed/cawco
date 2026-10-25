@@ -62,6 +62,7 @@ import { PASS_DOMAIN, PASS_HOSTS, storeHostMode } from "../pass-legs";
 
 const CREATE = "mcp__cawco__artifact_create";
 const COMMAND = /PROBE-CALL:(\d+)/g;
+const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
 const TITLE = "Socket probe page";
 /** How long a socket has to echo after a load or a restart. Our call: the page retries every 300 ms, a register takes a few seconds. */
 const ECHO_MS = 30_000;
@@ -152,6 +153,9 @@ const VITE = join(ROOT, "apps/dashboard/node_modules/vite/bin/vite.js");
 const viteModule = (mark: string) =>
   `document.body.dataset.mark=${JSON.stringify(mark)};window.__hot=import.meta.hot;window.__pongs??=[];import.meta.hot.on("probe:pong",(d)=>window.__pongs.push(d));import.meta.hot.accept();`;
 
+/** Every Vite this spec started, ended as it ends. */
+const vites = new Set<Bun.Subprocess>();
+
 /**
  * A real Vite dev server on `port`, its app in `dir`: an editor script that
  * writes each launch to `marks`, and a plugin that answers `probe:ping` with
@@ -193,6 +197,8 @@ export default { plugins: [{ name: "probe", configureServer(server) {
       stderr: "ignore",
     }
   );
+  // Ended as the spec ends, whatever its legs did (`run`).
+  vites.add(proc);
   await until(
     "Vite answering",
     () =>
@@ -316,10 +322,17 @@ const probe = async (kit: Kit) => {
     },
   });
   await fleet.send(session, "PROBE-CALL:1");
-  await until("the preview made", () => answered.get("1"), Boolean, 180_000);
+  const made = await until(
+    "the preview made",
+    () => answered.get("1"),
+    Boolean,
+    180_000
+  );
+  // The preview's own origin (hub server.ts `frameAddress`).
+  const id = made.match(ANSWERED_ID)?.[1] ?? "";
   const address = async () =>
     (await (
-      await fetch(`${fleet.base}/api/instances/${session}/preview-address`, {
+      await fetch(`${fleet.base}/api/artifacts/${id}/preview-address`, {
         method: "POST",
       })
     ).json()) as { origin?: string; port?: number };
@@ -441,13 +454,12 @@ const probe = async (kit: Kit) => {
 
   // 7. A real Vite dev server: before (straight), then through the preview,
   // in port mode again: host mode's listener took the range's first port,
-  // so the session's port is read again.
+  // so the preview's own port is read once it is made.
   await fetch(`${fleet.base}/api/preview-settings`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ mode: "port" }),
   });
-  const viteOrigin = `http://127.0.0.1:${(await address()).port ?? 0}`;
   const free = Bun.serve({ port: 0, fetch: () => new Response() });
   const vitePort = free.port as number;
   free.stop(true);
@@ -505,12 +517,18 @@ const probe = async (kit: Kit) => {
   });
   const wildcards = await listeningOnAll();
   await fleet.send(session, "PROBE-CALL:2");
-  await until(
+  const viteMade = await until(
     "the Vite preview made",
     () => answered.get("2"),
     Boolean,
     180_000
   );
+  // The Vite preview's own origin (hub server.ts `frameAddress`).
+  const viteAddress = await fleet.api<{ port?: number }>(
+    `/api/artifacts/${viteMade.match(ANSWERED_ID)?.[1] ?? ""}/preview-address`,
+    {}
+  );
+  const viteOrigin = `http://127.0.0.1:${viteAddress.port ?? 0}`;
   // The agent's listener for it: the one 0.0.0.0 port the start opened.
   const opened = [...(await listeningOnAll())].filter(
     (port) => !wildcards.has(port)
@@ -648,5 +666,16 @@ const probe = async (kit: Kit) => {
   await app.stop(true);
 };
 
-const spec: Spec = { name: "preview-socket", run: probe };
+const spec: Spec = {
+  name: "preview-socket",
+  run: async (kit) => {
+    try {
+      await probe(kit);
+    } finally {
+      for (const vite of vites) {
+        vite.kill();
+      }
+    }
+  },
+};
 export default spec;

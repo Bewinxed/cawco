@@ -1588,7 +1588,12 @@
         ]}
       ></span>
     {/if}
-    <div class="flex flex-none items-center gap-space-2">
+    <!-- The strip is a toolbar: its actions are bare symbols, each named in
+         its tooltip and for a screen reader, a count where one says
+         something (DESIGN.md, Title bars follow Liquid Glass: "Its items are
+         bare symbols … each named for the screen reader and in its
+         tooltip"), so the views keep the room. -->
+    <div data-form="compact" class="flex flex-none items-center gap-space-2">
       <!-- Filter, on the views of the tasks: whole in the bar; on a phone,
            where the row has no room for it, its glyph and count stand while
            a filter does, and the head's ⋯ opens it. -->
@@ -1612,6 +1617,7 @@
       {/if}
       {#if strippedNewTask}
         <Button
+          aria-label="New task"
           data-wide
           layout="wide"
           press="pressable"
@@ -1622,23 +1628,26 @@
             adding = true;
           }}
           size="sm"
-          variant="outline"
+          title="New task"
+          variant="ghost"
         >
           <IconPlus />
-          <span>New task</span>
+          <span class="in-form-compact:hidden">New task</span>
         </Button>
       {/if}
       {#if canTalk}
         <Button
+          aria-label={viewsWords.ask}
           data-wide
           layout="wide"
           press="pressable"
           onclick={(event) => ask(event.currentTarget as HTMLElement)}
           size="sm"
+          title={viewsWords.ask}
           variant="ghost"
         >
           <IconSparkles />
-          <span>{viewsWords.ask}</span>
+          <span class="in-form-compact:hidden">{viewsWords.ask}</span>
         </Button>
       {/if}
     </div>

@@ -63,7 +63,7 @@ export const delegateTypesWords = {
   reachNote:
     "Comma-separated. Both are optional narrowings — empty means the delegate has the harness's ordinary defaults.",
   skills: "Skills",
-  skillsPlaceholder: "svelte-foundations:coding, ui-observer",
+  skillsPlaceholder: "svelte-foundations:coding, impeccable",
   denied: "Tools denied",
   deniedPlaceholder: "Write, Edit, NotebookEdit",
   mayDelegate: "May delegate",

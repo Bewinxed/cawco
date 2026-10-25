@@ -13,6 +13,9 @@
  * so the hub and the machine verify them against the release key embedded
  * in this checkout, exactly as they verify any release. In order:
  *
+ * 0. The machine's update state is an earlier build's, carrying the old
+ *    `unseen` flag: once the agent runs, neither the hub's record of the
+ *    machine nor the state file carries it.
  * 1. The mirror publishes N; a check (`POST /api/binary-updates/check`)
  *    finds N, and the machine polls it: nothing newer.
  * 2. The mirror publishes N+1; a check finds N+1.
@@ -29,6 +32,8 @@
  *
  *   bun scripts/probe-kit/run.ts binary-update-found
  */
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { MACHINE } from "../../scratch-fleet";
 import {
   checkoutSchema,
@@ -74,6 +79,26 @@ const spec: Spec = {
         hubUrl: fleet.base,
         releaseHost: mirror.url,
       });
+      // 0. The update state as an earlier build left it: carrying `unseen`,
+      // the notice's seen flag before the hub kept a record of landings
+      // (542c392aa), which a hub machine's state still held on 10-25.
+      const statePath = join(
+        fleet.env.XDG_DATA_HOME ?? "",
+        "cawco",
+        "binary",
+        "update-state.json"
+      );
+      await writeFile(
+        statePath,
+        `${JSON.stringify({
+          phase: "installed",
+          installedVersion: n.manifest.version,
+          channel: "nightly",
+          hostsHub: false,
+          updatedAt: Date.now(),
+          unseen: true,
+        })}\n`
+      );
 
       fleet.launch("sessiond");
       await fleet.sessiondUp();
@@ -112,6 +137,15 @@ const spec: Spec = {
         polled?.channel === "nightly" &&
           polled.availableVersion !== n.manifest.version,
         JSON.stringify(polled)
+      );
+      const stored = JSON.parse(await readFile(statePath, "utf8")) as Record<
+        string,
+        unknown
+      >;
+      check(
+        "0: the agent carries no `unseen` from an earlier build's state: the hub's record of the machine holds none, and neither does the state file",
+        polled !== undefined && !("unseen" in polled) && !("unseen" in stored),
+        JSON.stringify({ hub: polled, file: stored })
       );
 
       // 2. N+1 published: the check finds it.

@@ -73,8 +73,9 @@
  *    story, all five Previews of one canvas, and the same cards in words
  *    alone, at 1900, 1440, 1100, 820 and 640 under a mouse with a desk's
  *    scrollbars and 390 and 320 under a finger, light and dark: the column
- *    the largest of 742, 1417 or 2092px its room holds, never under 920
- *    and never past its room (a worded page 920); each card's options per
+ *    the largest of 742, 1417 or 2092px its room holds, never under 1348
+ *    (`--c-decision-page-max`) and never past its room (a worded page the
+ *    room up to 1348); each card's options per
  *    row on their stories' pitch (190px on a worded page; one per row
  *    under the phone's line), a pictured option alone on its last row
  *    spanning it; at 1440 and 1900 a card's two phone stories side by side
@@ -127,8 +128,8 @@
  *    none, runs none. On the stage's own port (as the daemon draws), and on
  *    the dashboard's own stage, the same.
  * 16. An embed asks no origin for what it doesn't serve: a page of the
- *    dashboard's three connect asks (transcripts with their tool rows over
- *    the real composer), on the dashboard's own stage, in Chromium and
+ *    dashboard's three hub readers (the real composer, the routine form,
+ *    Needs you), on the dashboard's own stage, in Chromium and
  *    WebKit: every canvas draws, no frame requests `/api/*`, and nothing
  *    logs a console error, answers 400 or more or fails.
  *
@@ -835,7 +836,7 @@ const PICTURED_PROGRAM = [
   `pcalmP = Preview("${BOARD_ID}", "Calm on a phone", ["PhoneCalm"], ${PHONE_STORY})`,
   `pdenseP = Preview("${BOARD_ID}", "Dense on a phone", ["PhoneDense"], ${PHONE_STORY})`,
 ].join("\n");
-/** The same cards in words alone: a page with no pictures keeps its 920px column and its 190px options. */
+/** The same cards in words alone: a page with no pictures keeps its column (the room up to 1348px) and its 190px options. */
 const WORDED_PROGRAM = [
   `root = Decisions("Pick the board's look", [look, phone])`,
   `look = Decision("look", "${LONG_QUESTION}", [calm, dense, split], "Calm keeps the morning short.")`,
@@ -1267,6 +1268,9 @@ interface WidthLeg {
   w: number;
 }
 
+/** The widest a decision page's column stands, `--c-decision-page-max`: three 416px option columns, their gaps and the insets. */
+const PAGE_MAX = 1348;
+
 /** The chrome round a story at 1:1, px: the page's and the card's insets each side, a well's edge and inset each side, the gap between options. */
 const CHROME = {
   gap: 11,
@@ -1277,8 +1281,8 @@ const CHROME = {
 /**
  * The page's column in a room of `room` px whose widest picture is
  * `widest` px (0: none): the largest step of pictures abreast at 1:1 the
- * room holds, never under 920, the room's whole width where not one fits;
- * 920 on a page with no pictures; never past the room.
+ * room holds, never under the page's cap, the room's whole width where not
+ * one fits; the cap on a page with no pictures; never past the room.
  */
 function columnFor(
   room: number,
@@ -1286,7 +1290,7 @@ function columnFor(
   view: "desk" | "phone"
 ): number {
   if (widest <= 0) {
-    return Math.min(room, 920);
+    return Math.min(room, PAGE_MAX);
   }
   const insets = CHROME.insets[view];
   const pitch = widest + 2 * CHROME.well;
@@ -1295,7 +1299,7 @@ function columnFor(
   );
   const step =
     abreast > 0 ? abreast * (pitch + CHROME.gap) - CHROME.gap + insets : room;
-  return Math.min(room, Math.max(920, step));
+  return Math.min(room, Math.max(PAGE_MAX, step));
 }
 
 /**
@@ -1361,7 +1365,7 @@ function checkLayout(
   { leg, pictured, view }: WidthLeg
 ) {
   const { gap, well } = CHROME;
-  // The column: on a pictured page the largest step of 640px stories abreast its room holds, never under 920, the room where none fits; else 920; never past its room.
+  // The column: on a pictured page the largest step of 640px stories abreast its room holds, never under the cap, the room where none fits; else the cap; never past its room.
   const want = columnFor(read.room, pictured ? DESK_STORY : 0, view);
   kit.check(
     `${leg}: the column is ${want}px (its room ${read.room}px; got ${read.column}px)`,
@@ -2252,30 +2256,42 @@ async function oneYjsOnDashboard(kit: Kit): Promise<void> {
   }
 }
 
-/** The dashboard's connect asks: transcripts whose tool rows (ToolGroup) name each MCP server's site, over the real composer. */
+/**
+ * The dashboard's surfaces that read the hub where they run in the app: the
+ * real composer, the routine form (`POST /api/routines`) and the Needs you
+ * card, each under its stories' stand-in hub. (The connect asks' three
+ * states files this leg drew went with their cutover, 36d97303a.)
+ */
 const CONNECT = [
-  "src/lib/cawco/transcript/ConnectAsk.stories.ts",
-  "src/lib/cawco/transcript/ConnectCard.stories.ts",
-  "src/lib/cawco/transcript/ConnectStrip.stories.ts",
+  "src/lib/cawco/canvas/CanvasStages.stories.ts",
+  "src/lib/cawco/routines/RoutineForm.stories.ts",
+  "src/lib/cawco/home/NeedsCard.stories.ts",
 ] as const;
-const CONNECT_IDS = CONNECT.map((_, i) => idOf(`connect-${i}`));
-const CONNECT_PAGE = "connect";
+/** The stories each Preview names, in `CONNECT`'s order: every one is drawn. */
+const CONNECT_STORIES = [
+  ["Composer"],
+  ["Filled", "FailedSave"],
+  ["Issue", "Budget"],
+] as const;
+const CONNECT_IDS = CONNECT.map((_, i) => idOf(`hubless-${i}`));
+const CONNECT_PAGE = "hub-readers";
 const CONNECT_PROGRAM = [
-  `root = Decisions("The connect ask", [ask])`,
-  `ask = Decision("ask", "How should the agent ask for a sign-in?", [a, b, c], "Each is drawn by the dashboard's own components.")`,
-  `a = Option("ask", "On the composer", "The ask grows out of it.", true, [pa], "It covers the composer.")`,
-  `b = Option("card", "In the transcript", "A card where the agent asked.", false, [pb], "It can scroll away.")`,
-  `c = Option("strip", "A strip", "One line on the composer.", false, [pc], "Little room for why.")`,
-  `pa = Preview("${CONNECT_IDS[0]}", "On the composer", ["Asking", "Connected"])`,
-  `pb = Preview("${CONNECT_IDS[1]}", "In the transcript", ["Asking", "Connected"])`,
-  `pc = Preview("${CONNECT_IDS[2]}", "A strip", ["Asking", "Connected"])`,
+  `root = Decisions("The hub's readers", [ask])`,
+  `ask = Decision("ask", "Which surface leads the release notes?", [a, b, c], "Each is drawn by the dashboard's own components.")`,
+  `a = Option("composer", "The composer", "Where every turn starts.", true, [pa], "Seen all day.")`,
+  `b = Option("routine", "The routine form", "Work that runs by itself.", false, [pb], "Used once a week.")`,
+  `c = Option("needs", "The waiting card", "What waits on the person.", false, [pc], "Empty on a quiet day.")`,
+  ...["The composer", "The routine form", "The waiting card"].map(
+    (caption, i) =>
+      `p${"abc"[i]} = Preview("${CONNECT_IDS[i]}", "${caption}", ${JSON.stringify(CONNECT_STORIES[i])})`
+  ),
 ].join("\n");
 const API_PATH = /^\/api(?:\/|$)/;
 
 /**
  * 16. An embed asks no origin for what it doesn't serve: a decision page
- * of the dashboard's three connect asks (each a transcript with its tool
- * rows over the real composer, under the stories' stand-in hub), on the
+ * of three of the dashboard's hub readers (the real composer, the routine
+ * form, Needs you, under their stories' stand-in hub), on the
  * dashboard's own stage, in Chromium and WebKit: every canvas draws, no
  * frame requests `/api/*` of any origin (an embed's origin is a stage, which
  * serves components, not the hub's API), and the page and its frames log
@@ -2325,8 +2341,12 @@ async function hublessOnDashboard(kit: Kit): Promise<void> {
           embeds.length === CONNECT.length &&
           embeds.every(
             (one) =>
-              one.frames.length === 2 &&
-              one.frames.every((f) => f.state === "drawn")
+              one.frames.length ===
+                (CONNECT_STORIES[
+                  CONNECT.findIndex((file) =>
+                    file.endsWith(`/${one.file}.stories.ts`)
+                  )
+                ]?.length ?? -1) && one.frames.every((f) => f.state === "drawn")
           ),
         undrawn.join("\n    ")
       );

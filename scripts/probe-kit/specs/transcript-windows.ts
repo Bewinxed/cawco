@@ -18,6 +18,8 @@
  *     back past what it holds (as the hub's `transcripts.page` reads), holds
  *     the blocks and branches a builder fed the whole read holds, in order,
  *     and its pages, newest first, walk them all;
+ * (e) a transcript deleted while it is paged reads as none, and no read
+ *     throws;
  * (d) (a) and (b) hold for pi sessions pi itself wrote (pi-transcripts.ts:
  *     tool calls, retried failures, compactions, background commands'
  *     notices, a branch left behind);
@@ -29,7 +31,7 @@
  *
  *   bun scripts/probe-kit/run.ts transcript-windows
  */
-import { mkdir, readdir, rm, stat } from "node:fs/promises";
+import { copyFile, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { monitorEventLoopDelay } from "node:perf_hooks";
@@ -224,6 +226,13 @@ const transcriptsUnder = async (dir: string): Promise<string[]> =>
     .filter((name) => name.endsWith(".jsonl") && !name.includes("subagents"))
     .map((name) => join(dir, name));
 
+/** A file's size and change time, or "gone". */
+const stampOf = (path: string): Promise<string> =>
+  stat(path).then(
+    (found) => `${found.size}:${found.mtimeMs}`,
+    () => "gone"
+  );
+
 const rssMb = (): number => process.memoryUsage().rss / 1024 / 1024;
 
 /** `read`, timed, with the loop's longest hold and the reader's memory growth while it ran. */
@@ -243,6 +252,72 @@ const measured = async <T>(read: () => Promise<T>) => {
   loop.disable();
   peak = Math.max(peak, rssMb());
   return { value, ms, grewMb: peak - before, loopMs: loop.max / 1e6 };
+};
+
+/**
+ * (a) and (b) on each of `paths`. A live corpus changes under the read: a
+ * session goes on, a workspace retires with its transcripts. A transcript
+ * that changed between its whole read and its windows is compared on the
+ * next run; one deleted reads as none, which the reader must survive.
+ */
+const claudeParity = async (
+  { check, note }: Kit,
+  dir: string,
+  paths: string[]
+): Promise<void> => {
+  for (const path of paths) {
+    for (const limit of SIZES) {
+      // biome-ignore lint/performance/noAwaitInLoops: one transcript at a time
+      const before = await stampOf(path);
+      const found = await parity(claudeReader(path), limit);
+      const after = await stampOf(path);
+      if (before !== after) {
+        note(
+          `a, b: ${path} ${after === "gone" ? "was deleted" : "changed"} while it was read (${found.entries} entries read whole)`
+        );
+        break;
+      }
+      check(
+        `a, b: ${path.replace(dir, "written")} (${found.entries} entries, ${found.blocks} blocks) read in ${found.windows} window(s) of ${limit} builds the rows, branches and pages a whole read builds`,
+        found.wrong === undefined,
+        found.wrong
+      );
+    }
+  }
+};
+
+/** (e) A copy of `source`, paged (its line index built), then deleted: every read answers empty, none throws. */
+const deletedReadsAsNone = async (
+  { check }: Kit,
+  dir: string,
+  source: string
+): Promise<void> => {
+  const doomed = join(dir, "deleted.jsonl");
+  await copyFile(source, doomed);
+  const opened = await readSaidWindow(doomed, { end: "newest", limit: PAGE });
+  if (opened.older !== null) {
+    await readSaidWindow(doomed, { before: opened.older, limit: PAGE });
+  }
+  await rm(doomed);
+  const asks: WindowAsk[] = [
+    { end: "newest", limit: PAGE },
+    ...(opened.older === null ? [] : [{ before: opened.older, limit: PAGE }]),
+    { start: null, limit: PAGE },
+  ];
+  const empty = await Promise.all(
+    asks.map((ask) => readSaidWindow(doomed, ask))
+  ).then(
+    (windows) =>
+      windows.every(
+        (window) => window.messages.length === 0 && window.older === null
+      ),
+    (error: unknown) => String(error)
+  );
+  check(
+    `e: a transcript deleted while it is paged (its index built) reads as none: ${asks.length} windows asked of it answer empty`,
+    empty === true,
+    typeof empty === "string" ? empty : undefined
+  );
 };
 
 export default {
@@ -275,17 +350,8 @@ export default {
       }
       const named = process.env.CAWCO_TRANSCRIPTS;
       const real = named ? await transcriptsUnder(named) : [];
-      for (const path of [...written, ...real]) {
-        for (const limit of SIZES) {
-          // biome-ignore lint/performance/noAwaitInLoops: one transcript at a time
-          const found = await parity(claudeReader(path), limit);
-          check(
-            `a, b: ${path.replace(dir, "written")} (${found.entries} entries, ${found.blocks} blocks) read in ${found.windows} window(s) of ${limit} builds the rows, branches and pages a whole read builds`,
-            found.wrong === undefined,
-            found.wrong
-          );
-        }
-      }
+      await claudeParity(kit, dir, [...written, ...real]);
+      await deletedReadsAsNone(kit, dir, written[1] as string);
 
       // (d) pi: sessions pi itself wrote, read through the agent's pi reader.
       process.env.PI_CODING_AGENT_DIR = join(dir, "pi-agent");

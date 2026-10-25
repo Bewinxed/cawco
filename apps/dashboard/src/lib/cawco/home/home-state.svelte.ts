@@ -50,13 +50,13 @@ import {
   unreachable,
   unreachedAnswer,
 } from "#lib/cawco/hub-read.js";
+import { epochOf, unlessSame } from "../board.svelte";
 import {
   type BlockedRequest,
   type BoardRow,
   cawco,
   type HubState,
   isFailed,
-  isStale,
   type ProjectRow,
 } from "../client.svelte";
 import { connect, INSTALL_PARAM } from "../connect/installs.svelte";
@@ -112,33 +112,43 @@ interface SeenMark {
 }
 
 /**
- * What this dashboard marked seen and the hub has not yet echoed back. A
- * look is marked in the moment it happens; an archive once the hub has
- * taken it, so the row leaves Finished on the hub's answer rather than a
- * frame later. Each goes once the row's `seenAt` reaches the hub's stamp of
- * it, so a later change on the hub (an unarchive on another device) is never
- * masked.
+ * The marks this dashboard made that the hub has not yet echoed back, held
+ * as one value replaced on every change: a mark comes and goes with a
+ * person's look or archive, never with the hub's traffic, and `seenAt` is
+ * asked of every listed row, so each row reads this one signal rather than
+ * a signal of its own per mark kind.
+ *
+ * - `seen`: what this dashboard marked seen. A look is marked in the moment
+ *   it happens; an archive once the hub has taken it, so the row leaves
+ *   Finished on the hub's answer rather than a frame later. Each goes once
+ *   the row's `seenAt` reaches the hub's stamp of it, so a later change on
+ *   the hub (an unarchive on another device) is never masked.
+ * - `cleared`: what this dashboard unarchived: the `seenAt` the row still
+ *   carried. The row counts as never seen while its `seenAt` is that; once
+ *   the hub's frame changes it, the entry lapses.
  */
-const seenHere = $state<Record<string, SeenMark>>({});
+let marks = $state.raw({
+  seen: new Map<string, SeenMark>(),
+  cleared: new Map<string, number>(),
+});
 let seenMarks = 0;
 
-/**
- * What this dashboard unarchived and the hub has not yet echoed back: the
- * `seenAt` the row still carried. The row counts as never seen while its
- * `seenAt` is that; once the hub's frame changes it, the entry lapses.
- */
-const clearedHere = $state<Record<string, number>>({});
-
-const epochOf = (value: string | number | Date | null | undefined): number => {
-  const at = value ? new Date(value).getTime() : 0;
-  return Number.isNaN(at) ? 0 : at;
-};
+/** The marks after `change`, as a new value: what reads them wakes. */
+function moveMarks(
+  change: (seen: Map<string, SeenMark>, cleared: Map<string, number>) => void
+): void {
+  const { seen, cleared } = marks;
+  change(seen, cleared);
+  marks = { seen, cleared };
+}
 
 /** When the owner last looked at it or archived it, on any device. */
-export const seenAt = (row: BoardRow): number =>
-  clearedHere[row.id] === epochOf(row.seenAt)
+export const seenAt = (row: BoardRow): number => {
+  const seen = epochOf(row, "seenAt");
+  return marks.cleared.get(row.id) === seen
     ? 0
-    : Math.max(epochOf(row.seenAt), seenHere[row.id]?.through ?? 0);
+    : Math.max(seen, marks.seen.get(row.id)?.through ?? 0);
+};
 
 /**
  * Drops each mark the hub has echoed: the row's `seenAt` has reached the
@@ -146,14 +156,19 @@ export const seenAt = (row: BoardRow): number =>
  * on every change to the rows (`HomeState`'s effect).
  */
 function settleSeen(): void {
-  for (const [id, mark] of Object.entries(seenHere)) {
+  const echoed = [...marks.seen].filter(([id, mark]) => {
     if (mark.at === undefined) {
-      continue;
+      return false;
     }
     const row = cawco.instanceIndex.byId.get(id);
-    if (!row || epochOf(row.seenAt) >= mark.at) {
-      delete seenHere[id];
-    }
+    return !row || epochOf(row, "seenAt") >= mark.at;
+  });
+  if (echoed.length > 0) {
+    moveMarks((seen) => {
+      for (const [id] of echoed) {
+        seen.delete(id);
+      }
+    });
   }
 }
 
@@ -193,10 +208,14 @@ async function postSeen(
  */
 export function markOpened(id: string): void {
   seenMarks += 1;
+  const mark = seenMarks;
   const row = cawco.instanceIndex.byId.get(id);
-  seenHere[id] = { mark: seenMarks, through: (row && endedAt(row)) ?? 0 };
-  delete clearedHere[id];
-  sendLook(id, seenMarks);
+  const through = (row && endedAt(row)) ?? 0;
+  moveMarks((seen, cleared) => {
+    seen.set(id, { mark, through });
+    cleared.delete(id);
+  });
+  sendLook(id, mark);
 }
 
 /**
@@ -210,19 +229,28 @@ export function markOpened(id: string): void {
  * is a fault, said once.
  */
 function sendLook(id: string, mark: number): void {
-  const ours = () => seenHere[id]?.mark === mark;
+  /** The mark, while it is still this look's. */
+  const ours = (): SeenMark | undefined => {
+    const held = marks.seen.get(id);
+    return held?.mark === mark ? held : undefined;
+  };
   postSeen([id], "look").then(
     (at) => {
-      if (ours() && at !== null) {
-        (seenHere[id] as SeenMark).at = at;
+      const held = ours();
+      if (held && at !== null) {
+        moveMarks((seen) => {
+          seen.set(id, { mark, through: held.through, at });
+        });
       }
       settleSeen();
     },
     (error: unknown) => {
-      if (!ours()) {
+      const held = ours();
+      if (!held) {
         return;
       }
-      (seenHere[id] as SeenMark).unsent = true;
+      // Read by `sendUnsent` alone, so set in place: no row wakes for it.
+      held.unsent = true;
       if (!unreachable(error)) {
         console.error("[cawco] marking seen failed:", error);
       }
@@ -232,10 +260,10 @@ function sendLook(id: string, mark: number): void {
 
 /** Every look the hub did not answer, sent again: called as the hub is connected again. */
 function sendUnsent(): void {
-  for (const [id, mark] of Object.entries(seenHere)) {
-    if (mark.unsent) {
-      mark.unsent = false;
-      sendLook(id, mark.mark);
+  for (const [id, held] of marks.seen) {
+    if (held.unsent) {
+      held.unsent = false;
+      sendLook(id, held.mark);
     }
   }
 }
@@ -259,8 +287,11 @@ export function archive(ids: string[]): void {
       async () => {
         const at = await postSeen([id], "archive");
         seenMarks += 1;
-        seenHere[id] = { mark: seenMarks, through, at: at ?? undefined };
-        delete clearedHere[id];
+        const mark = seenMarks;
+        moveMarks((seen, cleared) => {
+          seen.set(id, { mark, through, at: at ?? undefined });
+          cleared.delete(id);
+        });
         settleSeen();
       },
       () => archive([id])
@@ -280,10 +311,12 @@ export function unarchive(rows: BoardRow[]): void {
       row.id,
       "Unarchiving…",
       async () => {
-        const was = epochOf(row.seenAt);
+        const was = epochOf(row, "seenAt");
         await postSeen([row.id], "unarchive");
-        clearedHere[row.id] = was;
-        delete seenHere[row.id];
+        moveMarks((seen, cleared) => {
+          cleared.set(row.id, was);
+          seen.delete(row.id);
+        });
       },
       () => unarchive([row])
     );
@@ -510,6 +543,8 @@ export interface AdmissionItem {
  * machine does, and the item leaves once it answers.
  */
 export interface LostMachineItem {
+  /** The hub runs on it: what stopped is its agent (core `contactWords`). */
+  hub: boolean;
   key: string;
   kind: "machine";
   /** How long it has been silent, in whole minutes, as the hub said it lost. */
@@ -902,12 +937,47 @@ function namesAlike(
 
 /** When a session last moved: its pulse, else the hub's own update time. */
 export function lastAt(row: BoardRow): number {
-  const pulse = cawco.pulseAt(row.id);
-  if (pulse !== undefined) {
-    return pulse;
+  return cawco.pulseAt(row.id) ?? epochOf(row, "updatedAt");
+}
+
+/**
+ * `rows` newest first by {@link lastAt}, ties by id: each row's time read
+ * once, never twice per comparison.
+ */
+function newestFirst(rows: BoardRow[]): BoardRow[] {
+  return rows
+    .map((row) => ({ row, at: lastAt(row) }))
+    .sort((a, b) => b.at - a.at || compareIds(a.row.id, b.row.id))
+    .map((one) => one.row);
+}
+
+/**
+ * A row says what Recent's membership reads as it said it before: the same
+ * row, or one with the same id, parent, origin and status (its place in a
+ * tree, whether it runs). Its time, title and counts are read afresh where
+ * it is drawn ({@link freshRow}).
+ */
+const standsAsItWas = (was: BoardRow | undefined, row: BoardRow): boolean =>
+  was === row ||
+  (was !== undefined &&
+    was.id === row.id &&
+    was.parentInstanceId === row.parentInstanceId &&
+    was.origin === row.origin &&
+    was.status === row.status);
+
+/** The board's row as it is now, by its id: one key's read. */
+const freshRow = (row: BoardRow): BoardRow =>
+  cawco.instanceIndex.byId.get(row.id) ?? row;
+
+/**
+ * When a session's last turn ended, or it failed, whatever it is doing now:
+ * the end {@link endedAt} says once it is idle.
+ */
+function endOf(row: BoardRow): number | undefined {
+  if (isFailed(row)) {
+    return epochOf(row, "updatedAt");
   }
-  const at = row.updatedAt ? new Date(row.updatedAt).getTime() : 0;
-  return Number.isNaN(at) ? 0 : at;
+  return row.turnEndedAt ? epochOf(row, "turnEndedAt") : undefined;
 }
 
 /**
@@ -927,12 +997,11 @@ function endedAt(row: BoardRow): number | undefined {
       ? cawco.pulseAt(row.id)
       : undefined;
   }
-  if (isFailed(row)) {
-    return epochOf(row.updatedAt);
+  const end = endOf(row);
+  if (end === undefined) {
+    return;
   }
-  return cawco.activityOf(row.id) === "idle" && row.turnEndedAt
-    ? epochOf(row.turnEndedAt)
-    : undefined;
+  return isFailed(row) || cawco.activityOf(row.id) === "idle" ? end : undefined;
 }
 
 /**
@@ -955,12 +1024,37 @@ export function archivedRow(row: BoardRow): boolean {
  * the owner is marked seen exactly when it is one of these.
  */
 export function endedUnseen(row: BoardRow): boolean {
+  // A session seen through its last end is no news, whatever it is doing
+  // now: asked first, so the board's hundreds of rows at rest never ask
+  // what their sessions are doing, and held per row while the row and the
+  // marks are the ones it was asked of.
+  if (!threadIdOf(row.id)) {
+    const marksThen = seenThrough.get(row);
+    if (marksThen === marks) {
+      return false;
+    }
+    const end = endOf(row);
+    if (end === undefined || end <= seenAt(row)) {
+      seenThrough.set(row, marks);
+      return false;
+    }
+  }
   const ended = endedAt(row);
   return ended !== undefined && ended > seenAt(row);
 }
 
+/**
+ * Each session row found seen through its last end, with the marks it was
+ * read against: a row is replaced whole when it moves, and the marks when
+ * any of them does, so either one moving asks again.
+ */
+const seenThrough = new WeakMap<BoardRow, typeof marks>();
+
 /** When each working session joined Working this stint (see `working`). */
 const enteredWorking = new Map<string, number>();
+
+/** A list with nothing in it, the same one each time. */
+const NONE: BoardRow[] = [];
 
 /**
  * Work another session started: a delegate, Caw's work or an agent's
@@ -1076,10 +1170,12 @@ class Home {
     const children = new Map<string, string[]>();
     for (const row of cawco.instanceIndex.byId.values()) {
       if (row.parentInstanceId) {
-        children.set(row.parentInstanceId, [
-          ...(children.get(row.parentInstanceId) ?? []),
-          row.id,
-        ]);
+        const held = children.get(row.parentInstanceId);
+        if (held) {
+          held.push(row.id);
+        } else {
+          children.set(row.parentInstanceId, [row.id]);
+        }
       }
     }
     return children;
@@ -1224,9 +1320,7 @@ class Home {
       (machine) =>
         machine.status !== "online" ||
         !cawco.catalogRead(machine.machineId) ||
-        cawco.listedInstances.some(
-          (row) => row.machineId === machine.machineId && isStale(row)
-        )
+        cawco.staleInstances.some((row) => row.machineId === machine.machineId)
     )
   );
 
@@ -1430,8 +1524,12 @@ class Home {
               kind: "machine" as const,
               key: `machine:${machine.machineId}`,
               name: machineName(machine.machineId),
+              hub: machine.hostsHub === true,
               minutes: Math.round(MACHINE_LOST_MS / 60_000),
-              title: contactWords.lostTitle(machineName(machine.machineId)),
+              title: contactWords.lostTitle(
+                machineName(machine.machineId),
+                machine.hostsHub === true
+              ),
               place: contactWords.lostMeta,
               raisedAt: machine.lostAt,
             },
@@ -1547,7 +1645,18 @@ class Home {
    * switch says: work handed off is still work, and Caw only says "all
    * quiet" when nothing at all is working.
    */
+  #workingWas: BoardRow[] | undefined;
   readonly working = $derived.by(() => {
+    this.#workingWas = unlessSame(this.#workingWas, this.#workingNow());
+    return this.#workingWas;
+  });
+
+  /**
+   * Working's rows, in its order. `working` hands back the array it handed
+   * back before while they are the same rows in the same order, so a row's
+   * turn moving on or a row outside it changing wakes nothing past it.
+   */
+  #workingNow(): BoardRow[] {
     const rows = cawco.runningRows.filter(
       (row) => cawco.activityOf(row.id) === "working"
     );
@@ -1572,7 +1681,7 @@ class Home {
         (enteredWorking.get(b.id) ?? at) - (enteredWorking.get(a.id) ?? at) ||
         a.id.localeCompare(b.id)
     );
-  });
+  }
 
   /**
    * Every session that has ended since it was last opened, delegates
@@ -1582,16 +1691,14 @@ class Home {
    */
   readonly finished = $derived.by<BoardRow[]>(() => {
     if (choices.finished === "a") {
-      return [];
+      return NONE;
     }
     return heldOrder(
       "home:finished",
-      cawco.listedRows
-        .filter(endedUnseen)
-        // The latest to end first. A failure says so on its own row (its
-        // mark, its line, the tab's numeral), not by jumping the queue. Two
-        // that ended together go by id, so every device lists them alike.
-        .sort((a, b) => lastAt(b) - lastAt(a) || compareIds(a.id, b.id)),
+      // The latest to end first. A failure says so on its own row (its
+      // mark, its line, the tab's numeral), not by jumping the queue. Two
+      // that ended together go by id, so every device lists them alike.
+      newestFirst(cawco.listedRows.filter(endedUnseen)),
       (row) => row.id
     );
   });
@@ -1608,14 +1715,28 @@ class Home {
     if (rail.delegates) {
       return all;
     }
-    const kept = new Set(rooted(all).map((row) => row.id));
-    return all.filter((row) => kept.has(row.id) || isFailed(row));
+    const tops = new Set(rooted(all).map((row) => row.id));
+    return all.filter((row) => tops.has(row.id) || isFailed(row));
   }
 
+  #workingListedWas: BoardRow[] | undefined;
+  #finishedListedWas: BoardRow[] | undefined;
   /** What the Working tab lists of `working`, by the Delegates switch. */
-  readonly workingListed = $derived(this.#listedIn(this.working));
+  readonly workingListed = $derived.by(() => {
+    this.#workingListedWas = unlessSame(
+      this.#workingListedWas,
+      this.#listedIn(this.working)
+    );
+    return this.#workingListedWas;
+  });
   /** What the Finished tab lists of `finished`, by the Delegates switch. */
-  readonly finishedListed = $derived(this.#listedIn(this.finished));
+  readonly finishedListed = $derived.by(() => {
+    this.#finishedListedWas = unlessSame(
+      this.#finishedListedWas,
+      this.#listedIn(this.finished)
+    );
+    return this.#finishedListedWas;
+  });
 
   /**
    * Nothing to list anywhere: no session the hub lists, and no transcript
@@ -1649,16 +1770,21 @@ class Home {
       .join("\n")
   );
 
-  /** The listed sessions' ids, as text: the same text while the set is. */
-  readonly #runningKey = $derived(
-    cawco.listedInstances
-      .flatMap((row) => (row.sessionId ? [row.sessionId] : []))
-      .sort()
-      .join("\n")
-  );
-  readonly #running = $derived<ReadonlySet<string>>(
-    new Set(this.#runningKey.split("\n"))
-  );
+  /** The listed sessions' keys: the same set while they are the same keys. */
+  #runningWas: ReadonlySet<string> = new Set();
+  readonly #running = $derived.by<ReadonlySet<string>>(() => {
+    const keys = new Set<string>();
+    for (const row of cawco.listedInstances) {
+      if (row.sessionId) {
+        keys.add(row.sessionId);
+      }
+    }
+    const was = this.#runningWas;
+    if (keys.size !== was.size || [...keys].some((key) => !was.has(key))) {
+      this.#runningWas = keys;
+    }
+    return this.#runningWas;
+  });
 
   /** Every stored transcript not behind a listed session, placed and in order. */
   readonly #storedEntries = $derived.by<StoredEntry[]>(() => {
@@ -1733,15 +1859,44 @@ class Home {
   });
 
   /**
-   * The listed sessions Recent holds, newest first: every one no other
-   * group shows, whatever its status or activity. Recent is the list of last
-   * resort, so it asks nothing more of a row. Asking that it be idle, asleep
-   * or failed left two with no row anywhere, and so no menu to stop or
-   * remove them by: a live session whose pulse says it waits on the reader
-   * while no ask of its own is parked (a delegate's ask its parent answers),
-   * and one stopped before it had a transcript whose pulse or delegates
-   * still say working.
+   * The listed rows as Recent's membership reads them: `cawco.listedRows`,
+   * or the very array it was while every row stands as it was
+   * ({@link standsAsItWas}). A turn moving on in a session changes its row
+   * and nothing Recent holds, so nothing below walks the board for it: the
+   * walks (a filter, the trees' roots and tops of two thousand rows) ran on
+   * every board delta.
    */
+  #standingWas: BoardRow[] | undefined;
+  readonly #standing = $derived.by<BoardRow[]>(() => {
+    const next = cawco.listedRows;
+    const was = this.#standingWas;
+    if (
+      was?.length === next.length &&
+      next.every((row, i) => standsAsItWas(was[i], row))
+    ) {
+      return was;
+    }
+    this.#standingWas = next;
+    return next;
+  });
+  /** {@link #standing} by id. */
+  readonly #standingById = $derived(
+    new Map(this.#standing.map((row) => [row.id, row] as const))
+  );
+
+  /**
+   * The listed sessions Recent holds: every one no other group shows,
+   * whatever its status or activity. Recent is the list of last resort, so
+   * it asks nothing more of a row. Asking that it be idle, asleep or failed
+   * left two with no row anywhere, and so no menu to stop or remove them
+   * by: a live session whose pulse says it waits on the reader while no ask
+   * of its own is parked (a delegate's ask its parent answers), and one
+   * stopped before it had a transcript whose pulse or delegates still say
+   * working. Which rows, not their order: it reads no row's time, so a
+   * pulse moving one wakes none of what counts them, and it hands back the
+   * array it handed back before while it holds the same rows.
+   */
+  #recentRowsWas: BoardRow[] | undefined;
   readonly #recentRows = $derived.by<BoardRow[]>(() => {
     // What the tabs list, not all they hold: with the Delegates switch off
     // a tab holds a delegate it does not draw (one that ended unseen under a
@@ -1752,14 +1907,21 @@ class Home {
       ...this.finishedListed.map((row) => row.id),
       ...cawco.blocked.map((item) => item.instanceId),
     ]);
-    const rows = cawco.listedRows.filter((row) => !shown.has(row.id));
+    const rows = this.#standing.filter((row) => !shown.has(row.id));
     // What the Delegates switch means in every home list (WorkTabs
     // `rowsOf`): off, a delegate is held only under a parent the list holds
     // too, in that parent's tree; on, every one is held, under its parent.
-    return (rail.delegates ? rows : rooted(rows)).sort(
-      (a, b) => lastAt(b) - lastAt(a) || compareIds(a.id, b.id)
+    this.#recentRowsWas = unlessSame(
+      this.#recentRowsWas,
+      rail.delegates ? rows : rooted(rows)
     );
+    return this.#recentRowsWas;
   });
+
+  /** Recent's sessions newest first, ties by id: read only where Recent is open. */
+  readonly #recentInOrder = $derived(
+    newestFirst(this.#recentRows.map(freshRow))
+  );
 
   /**
    * Recent's sessions as their trees (tree.ts), newest first: each one
@@ -1768,7 +1930,7 @@ class Home {
    * as Working and Finished draw theirs. Read only where Recent is open.
    */
   readonly recentLines = $derived.by(() =>
-    tree(this.#recentRows, {
+    tree(this.#recentInOrder, {
       context: rail.delegates
         ? (id) => cawco.instanceIndex.byId.get(id)
         : undefined,
@@ -1787,15 +1949,24 @@ class Home {
   );
 
   /**
-   * Recent's own rows among the sessions, in order: the top of each tree.
-   * A delegate is in its parent's tree, never a row of the list, so the
+   * Recent's own rows among the sessions: the top of each tree, as the
+   * lists have them (a delegate of Caw's work is under its thread). A
+   * delegate is in its parent's tree, never a row of the list, so the
    * list's count and its cap are of these.
    */
-  readonly #recentLive = $derived.by<RecentItem[]>(() => {
-    // Tops as the lists have them: a delegate of Caw's work is under its thread.
-    const topOf = topsIn(new Map(cawco.listedRows.map((row) => [row.id, row])));
-    const tops = new Set(this.#recentRows.map(topOf));
-    return [...tops]
+  readonly #recentTops = $derived.by<ReadonlySet<BoardRow>>(() => {
+    const topOf = topsIn(this.#standingById);
+    return new Set(this.#recentRows.map(topOf));
+  });
+
+  /**
+   * Recent's own rows as the list draws them, newest first: built only
+   * where Recent is open (its count is {@link recentCount}'s, which never
+   * builds one).
+   */
+  readonly #recentLive = $derived.by<RecentItem[]>(() =>
+    [...this.#recentTops]
+      .map(freshRow)
       .map((row): RecentItem => ({
         key: row.id,
         instance: row,
@@ -1806,12 +1977,12 @@ class Home {
         href: conversationHref(row.id, cawco.instanceIndex),
         at: lastAt(row),
       }))
-      .sort(byRecency);
-  });
+      .sort(byRecency)
+  );
 
   /** How many Recent lists: what its closed disclosure says, without the list. */
   readonly recentCount = $derived(
-    this.#recentLive.length + this.#storedEntries.length
+    this.#recentTops.size + this.#storedEntries.length
   );
 
   /** Everything else that can be opened, latest first: read only where it is shown. */
@@ -1844,9 +2015,17 @@ class Home {
         .filter((job) => job.stage === "cancelled")
         .map((job) => job.targetInstanceId)
     );
-    const [latest] = [...cawco.runningRows]
-      .filter((row) => listed(row) && !cancelled.has(row.id))
-      .sort((a, b) => lastAt(b) - lastAt(a));
+    // The one that moved last; of two that moved together, the first listed.
+    let latest: { at: number; id: string } | null = null;
+    for (const row of cawco.runningRows) {
+      if (!listed(row) || cancelled.has(row.id)) {
+        continue;
+      }
+      const at = lastAt(row);
+      if (latest === null || at > latest.at) {
+        latest = { at, id: row.id };
+      }
+    }
     return latest?.id ?? null;
   });
 }

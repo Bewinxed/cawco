@@ -10,9 +10,12 @@
  *     answers the hub for it (the newest window the hub asks,
  *     server.ts `HISTORY_WINDOW`) is at most {@link FIRST_SOCKET_MB} MB, and
  *     neither the agent nor the hub grew by {@link FIRST_RSS_MB} MB or more.
- * (b) Paging back {@link PAGES} pages, each answers within {@link PAGE_MS}
- *     once the agent's line index is built, and the pages walk back through
- *     the conversation without a block twice.
+ * (b) Paging back {@link PAGES} pages, the pages walk back through the
+ *     conversation without a block twice. One of them reads past the
+ *     newest window the hub holds and has the agent build the file's line
+ *     index (which page depends on how many pages that window holds): it
+ *     answers within {@link SCAN_MS}, and every other within
+ *     {@link PAGE_MS}.
  * (c) Meanwhile the hub's loop answers `/health` within {@link HEALTH_MS},
  *     and the agent says no stall of its loop (loop-watch.ts).
  *
@@ -25,7 +28,7 @@
  *   bun scripts/probe-kit/run.ts transcript-pages
  *   CAWCO_TRANSCRIPT=<copy of a session .jsonl> bun scripts/probe-kit/run.ts transcript-pages
  */
-import { copyFile, mkdir, readdir, readFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
   CONTROL_READ_TRANSCRIPT_WINDOW,
@@ -45,6 +48,8 @@ const FIRST_SOCKET_MB = 32;
 const FIRST_RSS_MB = 200;
 const PAGES = 12;
 const PAGE_MS = 1500;
+/** The page whose read builds the agent's line index: a scan of the whole file, yielding as it goes. */
+const SCAN_MS = 3000;
 const HEALTH_MS = 250;
 /** The OpenCode session's turns. */
 const OC_TURNS = 7;
@@ -56,6 +61,8 @@ const HISTORY_WINDOW = 300;
 const PID = /^\d+$/;
 /** Its resident memory, in /proc's status. */
 const VM_RSS = /VmRSS:\s+(\d+)/;
+/** The agent's first memory line, said once its first usage scan and search sync end (daemon.ts `logMemory`). */
+const FIRST_SCANS_ENDED = "memory rss=";
 /** The agent's line for a stall (loop-watch.ts). */
 const STALL = "[loop] the agent's loop was held";
 
@@ -257,6 +264,21 @@ export default {
       );
       return;
     }
+    // An agent's start reads every transcript on its machine whole, once:
+    // its usage scan and its search index's first sync (daemon.ts), each
+    // the file's every byte, and the page that builds the line index ran
+    // beside both (r347: 3.2 s, the index alone 1.2 s). They end with its
+    // first memory line; what is measured here is paging after them.
+    const started = performance.now();
+    await until(
+      "the agent's first usage scan and search sync ended",
+      () => agentLog.since(),
+      (log) => log.includes(FIRST_SCANS_ENDED),
+      300_000
+    );
+    note(
+      `the agent's first usage scan and search sync of the stored ${Math.round((await stat(file)).size / 1024 / 1024)} MB ended ${Math.round(performance.now() - started)} ms after it was up`
+    );
     const pageOf = (cursor?: string) =>
       fleet.api<TranscriptPage>(
         `/api/instances/${key}/transcript?limit=60${cursor ? `&before=${encodeURIComponent(cursor)}` : ""}`
@@ -293,7 +315,7 @@ export default {
     const seen = new Set(first.value.blocks.map((block) => block.id));
     let before = first.value.cursor;
     let twice = 0;
-    let slowest = 0;
+    const times: number[] = [];
     let pages = 0;
     let health = first.healthMs;
     for (let at = 0; at < PAGES && before !== null; at += 1) {
@@ -301,9 +323,7 @@ export default {
       // biome-ignore lint/performance/noAwaitInLoops: each page names the next
       const older = await watched(fleet, agent, hub, () => pageOf(cursor));
       note(`b: page ${at + 2}: ${said(older)}`);
-      if (at > 0) {
-        slowest = Math.max(slowest, older.ms);
-      }
+      times.push(older.ms);
       health = Math.max(health, older.healthMs);
       for (const block of older.value.blocks) {
         twice += seen.has(block.id) ? 1 : 0;
@@ -312,9 +332,11 @@ export default {
       pages += 1;
       before = older.value.cursor;
     }
+    // The index is built once, so one page at most pays for it: the slowest.
+    const [scan = 0, slowest = 0] = times.toSorted((x, y) => y - x);
     check(
-      `b: ${pages} older pages walk back with no block twice, each after the line index's first in ${Math.round(slowest)} ms or less (≤ ${PAGE_MS})`,
-      pages > 0 && twice === 0 && slowest <= PAGE_MS,
+      `b: ${pages} older pages walk back with no block twice; the one that built the line index answered in ${Math.round(scan)} ms (≤ ${SCAN_MS}), every other in ${Math.round(slowest)} ms or less (≤ ${PAGE_MS})`,
+      pages > 0 && twice === 0 && scan <= SCAN_MS && slowest <= PAGE_MS,
       `${twice} block(s) twice`
     );
     const stalls = (await agentLog.since())

@@ -19,7 +19,6 @@ import {
   type SheetOnPage,
   type Story,
 } from "@cawco/core/stage";
-import type { PinTail } from "./pin-foot";
 
 const ERROR_MAX = 300;
 /** A base64 PNG this long is ~3 MB: a page's thumbnail, a pin's picture. */
@@ -165,25 +164,14 @@ export function previewBox(value: unknown): ViewBox | null {
 export interface PreviewPinAt {
   box: ViewBox;
   mark: ViewBox;
-  /** The pill's tail corner as the page draws it (overlay pins.ts `Tail`): the foot its card hangs from keeps it. */
-  tail?: PinTail;
 }
 
-const TAILS = [
-  "bottom-start",
-  "bottom-end",
-  "top-start",
-  "top-end",
-  "none",
-] as const satisfies readonly PinTail[];
-
-/** Where a pin's pill (or the comment being written) stands in the page's viewport, its tail corner, and the box of what it stands on, px; null when it is not on the page. */
+/** Where a pin's pill (or the comment being written) stands in the page's viewport, and the box of what it stands on, px; null when it is not on the page. */
 export function previewPinAt(value: unknown): PreviewPinAt | null {
   const raw = record(value);
   const mark = previewBox(raw?.mark);
   const box = previewBox(raw?.box);
-  const tail = TAILS.find((one) => one === raw?.tail);
-  return mark && box ? { mark, box, ...(tail ? { tail } : {}) } : null;
+  return mark && box ? { mark, box } : null;
 }
 
 /** The most of a press's chain the page may offer (overlay page.ts `CHAIN_MOST` and the page as a whole). */

@@ -34,7 +34,7 @@
    * under the head at a time: the details or a forget.
    *
    * Under 640px the head carries no button but `⋯`: Ask Caw is the
-   * coral "+" of the page's views bar (ViewBar), which opens Caw's panel as
+   * "+" of the page's views bar (ViewBar), which opens Caw's panel as
    * this one does, and Spin off is in `⋯` (Apple HIG,
    * Toolbars: "Prioritize only the most important items for inclusion in
    * the main toolbar area … Create a More menu to include additional
@@ -470,12 +470,16 @@
       </div>
     {/if}
     <!-- New work starts by telling Caw (PRD §5.6): his panel on a new
-         thread, the caret in his composer. -->
+         thread, the caret in his composer. Not on the coral: no view of a
+         project is for asking him, and Ask Caw takes the coral only on one
+         that is (DESIGN.md, One prominent action, trailing); his panel's
+         Send and a decision page's next step keep it. -->
     <Button
       layout="wide"
       press="pressable"
       data-new-session
-      onclick={() => lead.newThread()}>Ask Caw</Button
+      onclick={() => lead.newThread()}
+      variant="outline">Ask Caw</Button
     >
     {#if primary}
       <Button

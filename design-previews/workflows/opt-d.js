@@ -120,7 +120,7 @@ const editPhone = () => [
 ];
 
 /** Run 8 beside the kept run, said on the run's own root row. */
-const against = `vs kept run ${KEPT_RUN}: 1 step added, 0 missed, 1 answer still to give`;
+const against = `vs kept run ${KEPT_RUN}: 1 step added, 0 missed`;
 
 const runDesk = () =>
   desk({
@@ -130,7 +130,6 @@ const runDesk = () =>
       title: "Reply shortlist",
       label: `Reply shortlist, run ${LIVE}`,
       facts: liveFacts(),
-      asking: true,
       acts: [["stop", "Stop run"]],
       body: runTree({ drift: true, ask: askTile(), against }),
     }),

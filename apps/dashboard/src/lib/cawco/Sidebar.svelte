@@ -59,7 +59,7 @@
   import { forgetAtRail } from "./forget.svelte";
   import Home from "./home/Home.svelte";
   import HomeRecent from "./home/HomeRecent.svelte";
-  import { home } from "./home/home-state.svelte";
+  import { home, lastAt } from "./home/home-state.svelte";
   import { rowHref } from "./links";
   import { machinesOnline } from "./MachinesButton.svelte";
   import MachinesList from "./MachinesList.svelte";
@@ -259,10 +259,75 @@
    * under the thread it works for (thread-tabs.ts `inLists`), the threads
    * you have not archived among them.
    */
-  const railRows = $derived(
-    new Map(cawco.listedRows.map((row) => [row.id, row] as const))
-  );
-  const topOf = $derived(topsIn(railRows));
+  const railRows = $derived(cawco.listedById);
+
+  /** The rows the projects' lists are built from (`built`). */
+  interface Built {
+    /** `rows` by id. */
+    byId: ReadonlyMap<string, BoardRow>;
+    notRunning: BoardRow[];
+    /** Every row the lists hold (client `listedRows`). */
+    rows: BoardRow[];
+    running: BoardRow[];
+  }
+  /**
+   * A row stands where it stood: the same row, or, for a session running
+   * now, one with the same place in its tree and project. Nothing else of a
+   * running session's row is read to build the lists: it is pressing, so it
+   * and its whole tree list as recent (older.ts), whose rows `splitOf`
+   * reads afresh.
+   */
+  const standsAsBefore = (
+    was: BoardRow | undefined,
+    row: BoardRow,
+    live: ReadonlySet<string>
+  ): boolean =>
+    was === row ||
+    (was !== undefined &&
+      live.has(row.id) &&
+      was.id === row.id &&
+      was.parentInstanceId === row.parentInstanceId &&
+      was.projectId === row.projectId &&
+      was.origin === row.origin &&
+      was.status === row.status);
+  const sameBuild = (
+    was: Built,
+    next: Built,
+    live: ReadonlySet<string>
+  ): boolean => {
+    // Position by position: `byId` is `rows` keyed, so the same rows in
+    // the same places are the same map.
+    const same = (from: BoardRow[], to: BoardRow[]): boolean =>
+      from.length === to.length &&
+      to.every((row, i) => standsAsBefore(from[i], row, live));
+    return (
+      same(was.running, next.running) &&
+      same(was.notRunning, next.notRunning) &&
+      same(was.rows, next.rows)
+    );
+  };
+  let builtWas: Built | undefined;
+  /**
+   * What the projects' lists are built from: the rows by id and the running
+   * and resting ones, kept as they were while every row stands where it
+   * stood (`standsAsBefore`). A turn moving on in a running session (its
+   * time, its counts) builds nothing again: the build read every row of
+   * the board, two thousand of them, for each one.
+   */
+  const built = $derived.by((): Built => {
+    const next: Built = {
+      byId: railRows,
+      rows: cawco.listedRows,
+      running,
+      notRunning,
+    };
+    if (builtWas && sameBuild(builtWas, next, liveNow)) {
+      return builtWas;
+    }
+    builtWas = next;
+    return next;
+  });
+  const topOf = $derived(topsIn(built.byId));
   /** The top a row's tree stands under, when it stands in the rail at all. */
   const placedTop = (row: BoardRow): BoardRow | undefined => {
     const top = topOf(row);
@@ -302,7 +367,8 @@
       }
       return list;
     };
-    const liveIds = new Set(running.map((row) => row.id));
+    const { byId, running: live, notRunning: resting } = built;
+    const liveIds = new Set(live.map((row) => row.id));
     /** Puts a row in its project's list, live or resting, with every row it hangs from. */
     const place = (row: BoardRow): void => {
       const top = placedTop(row);
@@ -310,13 +376,13 @@
         return;
       }
       const list = listOf(top.projectId);
-      const seen = new Set<string>();
+      // Every row walked is held at once, so a chain that comes back on
+      // itself stops at the row it held: no set of its own per row.
       for (
         let at: BoardRow | undefined = row;
-        at && !seen.has(at.id) && !list.held.has(at.id);
-        at = at.parentInstanceId ? railRows.get(at.parentInstanceId) : undefined
+        at && !list.held.has(at.id);
+        at = at.parentInstanceId ? byId.get(at.parentInstanceId) : undefined
       ) {
-        seen.add(at.id);
         list.held.add(at.id);
         (liveIds.has(at.id) ? list.live : list.resting).push(at);
         if (at === top) {
@@ -324,10 +390,10 @@
         }
       }
     };
-    for (const row of running) {
+    for (const row of live) {
       place(row);
     }
-    for (const row of notRunning) {
+    for (const row of resting) {
       if (!liveIds.has(row.id)) {
         place(row);
       }
@@ -377,18 +443,31 @@
   /** The splits the last derivation handed out, by project. */
   let lastSplits = new Map<string, Split>();
 
+  /** Every project's recent and older lists as built (`built`). */
+  const builtSplits = $derived(
+    new Map(
+      [...listed].map(([id, { live, resting }]) => [
+        id,
+        splitRows(live, resting),
+      ])
+    )
+  );
+
   /**
-   * Every project's recent and older lists. A project whose rows did not
-   * change keeps the very arrays it had — and the split object holding them
-   * — so its lists' `{#each}` have nothing to do on a turn that ended
-   * somewhere else.
+   * Every project's recent and older lists, each recent row read afresh by
+   * id: the build keeps a running session's row as it stood (`built`), and
+   * those are all recent. A project whose rows did not change keeps the
+   * very arrays it had — and the split object holding them — so its lists'
+   * `{#each}` have nothing to do on a turn that ended somewhere else.
    */
   const splits = $derived.by(() => {
     const next = new Map<string, Split>();
-    for (const [id, { live, resting }] of listed) {
-      const split = splitRows(live, resting);
+    for (const [id, split] of builtSplits) {
       const was = lastSplits.get(id);
-      const recent = keep(split.recent, was?.recent);
+      const recent = keep(
+        split.recent.map((row) => railRows.get(row.id) ?? row),
+        was?.recent
+      );
       const older = keep(split.older, was?.older);
       next.set(
         id,
@@ -469,24 +548,13 @@
    * sort the reader picks once and the rail remembers.
    */
 
-  /**
-   * When a session last moved. The daemon's pulse is the freshest signal a
-   * rail has (it is broadcast for every session, subscribed or not); a row
-   * with no pulse yet falls back to the hub's own `updatedAt`, and one with
-   * neither sorts to the bottom rather than pretending to be new.
+  /*
+   * When a session last moved (home-state `lastAt`): the daemon's pulse is
+   * the freshest signal a rail has (it is broadcast for every session,
+   * subscribed or not); a row with no pulse yet falls back to the hub's own
+   * `updatedAt`, read once per row, and one with neither sorts to the
+   * bottom rather than pretending to be new.
    */
-  function lastAt(row: BoardRow): number {
-    const pulse = cawco.pulseAt(row.id);
-    if (pulse !== undefined) {
-      return pulse;
-    }
-    const moved = row.updatedAt;
-    if (moved === null || moved === undefined) {
-      return 0;
-    }
-    const at = new Date(moved).getTime();
-    return Number.isNaN(at) ? 0 : at;
-  }
 
   const SORT_LABEL: Record<RailSort, string> = {
     recent: sidebarWords.lastActivity,
@@ -515,28 +583,36 @@
 
   function sorted(rows: BoardRow[]): BoardRow[] {
     const by = rail.sort;
-    return [...rows].sort((a, b) => {
-      // A project's threads with Caw come first, then its sessions (picks.md).
-      const thread = Number(isThreadTab(b.id)) - Number(isThreadTab(a.id));
-      if (thread !== 0) {
-        return thread;
-      }
-      if (by === "name") {
-        const cmp = sessionName(a).localeCompare(sessionName(b));
-        if (cmp !== 0) {
-          return cmp;
+    // Each row's keys read once, not twice per comparison.
+    return rows
+      .map((row) => ({
+        row,
+        thread: Number(isThreadTab(row.id)),
+        name: by === "name" ? sessionName(row) : "",
+        state: by === "state" ? STATE_ORDER[cawco.activityOf(row.id)] : 0,
+        at: lastAt(row),
+      }))
+      .sort((a, b) => {
+        // A project's threads with Caw come first, then its sessions (picks.md).
+        const thread = b.thread - a.thread;
+        if (thread !== 0) {
+          return thread;
         }
-      }
-      if (by === "state") {
-        const cmp =
-          STATE_ORDER[cawco.activityOf(a.id)] -
-          STATE_ORDER[cawco.activityOf(b.id)];
-        if (cmp !== 0) {
-          return cmp;
+        if (by === "name") {
+          const cmp = a.name.localeCompare(b.name);
+          if (cmp !== 0) {
+            return cmp;
+          }
         }
-      }
-      return lastAt(b) - lastAt(a);
-    });
+        if (by === "state") {
+          const cmp = a.state - b.state;
+          if (cmp !== 0) {
+            return cmp;
+          }
+        }
+        return b.at - a.at;
+      })
+      .map((one) => one.row);
   }
 
   /**
@@ -615,11 +691,26 @@
     }, 30_000);
     return () => clearInterval(timer);
   });
+  /**
+   * The sessions running now, the very set it was while they are the same
+   * ones: a turn moving on in one changes its row, not this.
+   */
+  let liveWere: ReadonlySet<string> = new Set();
+  const liveNow = $derived.by(() => {
+    const ids = runningIds();
+    if (
+      ids.size !== liveWere.size ||
+      [...ids].some((id) => !liveWere.has(id))
+    ) {
+      liveWere = ids;
+    }
+    return liveWere;
+  });
   /** What the older rule reads of the fleet, once for every list in the rail. */
   const reading = $derived<Reading>({
     lastAt,
     now,
-    running: runningIds(),
+    running: liveNow,
   });
 
   /** The age column, and the full sentence behind it on hover. */

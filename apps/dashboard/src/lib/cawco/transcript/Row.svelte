@@ -1,3 +1,97 @@
+<script lang="ts" module>
+  import {
+    deliverWithRoot,
+    type FrameObserver,
+    frameObserver,
+  } from "#lib/cawco/frame-observer.js";
+
+  /**
+   * What rows ask of the next frame's callbacks (whether virtua has drawn
+   * them, `look`; an arrival's first report, `onFirstLayout`), run together
+   * in one: a scroll mounts rows by the dozen, and a frame request of each
+   * one's own was a dozen requests a wheel.
+   */
+  const due = new Set<() => void>();
+  let dueFrame = 0;
+  function nextFrame(run: () => void): () => void {
+    due.add(run);
+    if (dueFrame === 0) {
+      dueFrame = requestAnimationFrame(() => {
+        dueFrame = 0;
+        const now = [...due];
+        due.clear();
+        for (const each of now) {
+          each();
+        }
+      });
+    }
+    return () => due.delete(run);
+  }
+
+  /**
+   * THE ARRIVAL OPENS FROM THE HEIGHT THE FRAME LAID THE ROW OUT AT. A row
+   * that arrives is heard in the shared size observer's delivery, on the
+   * layout the frame has just done, and its opening is set going there,
+   * before the frame paints: read in the frame's callbacks instead, its
+   * height laid the page out under the rows the update had just written
+   * (`open@Row.svelte`, a reply's long frames). The opening resizes the row
+   * and its list item after their depth was delivered, so the root reports
+   * in that delivery (`deliverWithRoot`): what it resized is delivered
+   * again in the same frame, virtua measures the row at its opening height
+   * and the pin follows, all before the paint. Both are asked for in the
+   * frame's callbacks, as motion/rows' `heard` asks: a row mounted inside a
+   * delivery (the pin's flush) that asked for the root there left it
+   * undelivered, the root being shallower than what that delivery reached.
+   */
+  const arriving = new Map<Element, (height: number) => void>();
+  let arrivalSizes: FrameObserver | null = null;
+  function onFirstLayout(
+    row: HTMLElement,
+    start: (height: number) => void
+  ): () => void {
+    let asked = false;
+    const unask = nextFrame(() => {
+      asked = true;
+      firstLayoutOf(row, start);
+    });
+    return () => {
+      unask();
+      if (asked && arriving.delete(row)) {
+        arrivalSizes?.unobserve(row);
+      }
+    };
+  }
+  function firstLayoutOf(
+    row: HTMLElement,
+    start: (height: number) => void
+  ): void {
+    arrivalSizes ??= frameObserver(() => undefined, {
+      inside: (entries) => {
+        const writes: (() => void)[] = [];
+        for (const entry of entries) {
+          const take = arriving.get(entry.target);
+          const height = entry.borderBoxSize[0]?.blockSize;
+          if (take && height !== undefined) {
+            arriving.delete(entry.target);
+            arrivalSizes?.unobserve(entry.target);
+            writes.push(() => take(height));
+          }
+        }
+        return writes.length > 0
+          ? () => {
+              for (const write of writes) {
+                write();
+              }
+            }
+          : undefined;
+      },
+    });
+    arriving.set(row, start);
+    arrivalSizes.observe(row, { box: "border-box" });
+    deliverWithRoot();
+  }
+</script>
+
 <script lang="ts">
   /**
    * One row of the transcript — or one call inside a run of them — and the only
@@ -62,6 +156,7 @@
     onleft,
     marked,
     measured,
+    heightOf,
     children,
   }: {
     /**
@@ -89,6 +184,8 @@
     marked?: "on" | "off";
     /** Hears the row's box as each frame lays it out (Transcript's `measureRow`): a row of the list. */
     measured?: Attachment<HTMLElement>;
+    /** The row's height as the last frame laid it out, from what `measured` heard; none before any frame has. */
+    heightOf?: (row: HTMLElement) => number | undefined;
     children: Snippet<[Ticket | null]>;
   } = $props();
 
@@ -115,8 +212,11 @@
       ? ticket.lead - ((document.timeline.currentTime as number) - ticket.start)
       : 0;
   let node = $state<HTMLElement>();
-  /** The height tween running on the row, if any: a fold takes over from it. */
-  let growing: Animation | null = null;
+  /**
+   * The height tween running on the row, if any, and the heights it runs
+   * between: a fold takes over from where it has the row.
+   */
+  let growing: { animation: Animation; from: number; to: number } | null = null;
 
   /**
    * The list has drawn this row where it stands: virtua has measured it, so
@@ -149,12 +249,12 @@
     if (!(row && rowKey !== undefined)) {
       return;
     }
-    let frame = 0;
+    let unlook: () => void = () => undefined;
     // Its item's style changed: looked at in the next frame's callbacks, as
     // the first look is.
     const styled = new MutationObserver(() => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(look);
+      unlook();
+      unlook = nextFrame(look);
     });
     // Read in the frame's callbacks: an inline style, no layout.
     const look = (): void => {
@@ -170,9 +270,9 @@
       }
       item?.setAttribute("data-drawn", "");
     };
-    frame = requestAnimationFrame(look);
+    unlook = nextFrame(look);
     return () => {
-      cancelAnimationFrame(frame);
+      unlook();
       styled.disconnect();
     };
   });
@@ -220,28 +320,30 @@
     from: number;
     /** The duration token the place opens over. */
     over: "--dur-rail" | "--dur-control";
+    /** The row's own height, as the frame laid it out (`onFirstLayout`). */
+    own: number;
   }
 
-  /** The row's place from `from` to its own height. */
+  /** The row's place from `from` to `own`, its own height. */
   function open(
     row: HTMLElement,
     from: number,
+    own: number,
     timing: KeyframeAnimationOptions,
     clip: boolean
   ): Animation | null {
-    const own = row.getBoundingClientRect().height;
     if (Math.abs(own - from) <= 0.5) {
       return null;
     }
-    growing?.cancel();
+    growing?.animation.cancel();
     row.style.overflow = clip ? "hidden" : "";
     const tween = row.animate(
       [{ blockSize: `${from}px` }, { blockSize: `${own}px` }],
       timing
     );
-    growing = tween;
+    growing = { animation: tween, from, to: own };
     const done = () => {
-      if (growing === tween) {
+      if (growing?.animation === tween) {
         growing = null;
         row.style.overflow = "";
       }
@@ -251,12 +353,24 @@
   }
 
   /**
+   * Where the height tween running on the row has it now, read off its
+   * clock and its two heights: no layout read. Null when none applies.
+   */
+  function grownTo(): number | null {
+    const progress = growing?.animation.effect?.getComputedTiming().progress;
+    if (!growing || progress === null || progress === undefined) {
+      return null;
+    }
+    return growing.from + (growing.to - growing.from) * progress;
+  }
+
+  /**
    * The one arrival: the place opens, then the content fades up into it.
    * Resolves with the last of its animations, or null when nothing plays.
    */
   function draw(
     row: HTMLElement,
-    { from, delay, content, clip, over }: Draw
+    { from, own, delay, content, clip, over }: Draw
   ): Animation | null {
     const easing = ease("--ease-out");
     const moving = motionOk.current;
@@ -265,6 +379,7 @@
       ? open(
           row,
           from,
+          own,
           { duration: opening, easing, delay, fill: "backwards" },
           clip
         )
@@ -326,8 +441,7 @@
    * in over that place once it has opened; a row that was already the object
    * on screen (a settled answer, a run taking its call in) only resizes.
    */
-  function takePlace(row: HTMLElement, given: Handoff): void {
-    given.taken = true;
+  function takePlace(row: HTMLElement, given: Handoff, own: number): void {
     const arrives = toDraw;
     toDraw = false;
     if (!ledger?.watched) {
@@ -339,6 +453,7 @@
     }
     const played = draw(row, {
       from: given.from,
+      own,
       delay: 0,
       content: arrives,
       clip: true,
@@ -355,10 +470,11 @@
   }
 
   /** Its own entrance, from nothing. */
-  function arrive(row: HTMLElement): void {
+  function arrive(row: HTMLElement, own: number): void {
     toDraw = false;
     const played = draw(row, {
       from: 0,
+      own,
       delay: lead,
       content: !emerges,
       clip: !emerges,
@@ -373,27 +489,30 @@
     }
   }
 
-  // Measured and set going in the next frame's callbacks, never in the
-  // update that drew the row: that update is a socket message's, and a
-  // height read there laid out (and restyled) the transcript inside it, once
-  // a row. The callbacks run before that frame's layout and paint, so the row
-  // is never drawn at its own height before its entrance holds it.
+  // Set going in the delivery of the frame that first lays the row out
+  // (`onFirstLayout`), never in the update that drew it (a socket message's:
+  // a height read there laid the transcript out inside it, once a row) nor
+  // in the frame's callbacks (read there, it laid out what the update had
+  // just written). The opening is written before that frame paints, so the
+  // row is never drawn at its own height before its entrance holds it. A row
+  // with nothing to play waits on nothing.
   $effect(() => {
     const row = node;
     const given = handoff;
-    if (!row) {
+    const handing = given && !given.taken ? given : null;
+    if (!(row && (handing || toDraw))) {
       return;
     }
-    const frame = requestAnimationFrame(() =>
+    return onFirstLayout(row, (own) =>
       untrack(() => {
-        if (given && !given.taken) {
-          takePlace(row, given);
+        if (handing && !handing.taken) {
+          handing.taken = true;
+          takePlace(row, handing, own);
         } else if (toDraw) {
-          arrive(row);
+          arrive(row, own);
         }
       })
     );
-    return () => cancelAnimationFrame(frame);
   });
 
   $effect(() => {
@@ -410,12 +529,20 @@
       report?.();
       return;
     }
-    // Measured where any tween still running has it, then the fold takes
-    // the row over from there: in the next frame's callbacks, as the
-    // entrance above is.
+    const drawnAt = untrack(() => heightOf);
+    // From where any tween still running has it (its clock), else the
+    // height the last frame laid it out at (the list's size observer,
+    // `heightOf`), the fold takes the row over, in the next frame's
+    // callbacks. Read off the row there, its box laid out what the update
+    // that let it go had just written (Row.svelte:413, a reply's frames). A
+    // row no frame has laid out has nothing on screen to fold.
     const frame = requestAnimationFrame(() => {
-      const { height } = row.getBoundingClientRect();
-      growing?.cancel();
+      const height = grownTo() ?? drawnAt?.(row);
+      if (height === undefined) {
+        report?.();
+        return;
+      }
+      growing?.animation.cancel();
       growing = null;
       row.style.overflow = "hidden";
       fold = row.animate(

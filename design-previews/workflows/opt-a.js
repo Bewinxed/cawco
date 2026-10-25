@@ -101,7 +101,6 @@ const runSplit = () =>
     title: "Reply shortlist",
     label: `Reply shortlist, run ${LIVE}`,
     facts: liveFacts(),
-    asking: true,
     acts: [["stop", "Stop run"]],
     body: `${shapeView(PLAN, { lit: true, caption: "Lit by its work items", w: 150 })}${askTile()}`,
   });

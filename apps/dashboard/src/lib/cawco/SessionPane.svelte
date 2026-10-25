@@ -267,7 +267,7 @@
    * wrong for every live session opened from the sidebar, which arrived with a
    * context and so was never opened at all.
    */
-  const isLive = $derived(cawco.instances.some((row) => row.id === viewId));
+  const isLive = $derived(cawco.rowOf(viewId) !== undefined);
 
   /** Asks the hub holds under this id with no session behind it (a project's memory proposal, hub memory.ts). */
   const rowless = $derived(
@@ -582,10 +582,8 @@
    */
   const continuedTo = $derived.by((): { id: string; title: string } | null => {
     // The rows while the board lists them; else its newest page's word.
-    const next = cawco.instances.find(
-      (one) => one.id === viewId
-    )?.continuedInto;
-    const to = next && cawco.instances.find((one) => one.id === next);
+    const next = cawco.rowOf(viewId)?.continuedInto;
+    const to = next && cawco.rowOf(next);
     if (to) {
       return { id: to.id, title: instanceTitle(to) };
     }
@@ -778,7 +776,7 @@
   // back (`machineConnected`): across a hub restart the page reconnects first.
   const liveForCommands = $derived(
     !!session &&
-      cawco.runningInstances.some((row) => row.id === viewId) &&
+      cawco.liveId(viewId) &&
       !!machineId &&
       machineConnected(machineId)
   );

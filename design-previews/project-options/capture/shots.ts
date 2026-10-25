@@ -13,6 +13,11 @@
  * picture another pick's option already is (the default page is H1, D2 and
  * Caw idle at once) is not written twice: its entry names the one file and
  * says so in its caption.
+ *
+ *   SHOTS_ONLY='^(s-s|today-1440)' bun design-previews/project-options/capture/shots.ts
+ *
+ * re-shoots only the files whose names match, keeps the others as they are,
+ * and writes the whole manifest again (every caption from views.ts).
  */
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -50,9 +55,13 @@ const server = Bun.serve({
     return (await body.exists()) ? new Response(body) : new Response("not found", { status: 404 });
   },
 });
+const only = process.env.SHOTS_ONLY ? new RegExp(process.env.SHOTS_ONLY) : null;
+const shoots = (file: string) => !only || only.test(file);
 const browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
 try {
-  await rm(OUT, { recursive: true, force: true });
+  if (!only) {
+    await rm(OUT, { recursive: true, force: true });
+  }
   await mkdir(OUT, { recursive: true });
   const manifest: {
     caption: string;
@@ -66,6 +75,19 @@ try {
   let n = 0;
   for (const view of OPTION_VIEWS) {
     for (const width of view.widths) {
+      const file = `${slug(view.part)}-${slug(view.option)}-${width}.png`;
+      const entry = {
+        part: view.part,
+        option: view.option,
+        width: Number(width),
+        file,
+        caption: view.caption[width] ?? "",
+        frame: JSON.stringify(Object.entries({ ...FRAME_DEFAULTS, ...view.choice, w: width }).sort()),
+      };
+      manifest.push(entry);
+      if (!shoots(file)) {
+        continue;
+      }
       // biome-ignore lint/performance/noAwaitInLoops: one frame captured at a time
       const page = await browser.newPage({
         viewport: { width: Number(width), height: HEIGHT[width] ?? 900 },
@@ -76,25 +98,18 @@ try {
       n += 1;
       await page.goto(`http://127.0.0.1:${server.port}/frame.html?n=${n}#${hash}`);
       await page.waitForFunction(() => "ready" in document.documentElement.dataset);
-      const file = `${slug(view.part)}-${slug(view.option)}-${width}.png`;
       // The retry clock and the live dots settle to one moment before the picture.
       await page.waitForTimeout(400);
       await page.screenshot({ path: join(OUT, file) });
       await page.close();
-      manifest.push({
-        part: view.part,
-        option: view.option,
-        width: Number(width),
-        file,
-        caption: view.caption[width] ?? "",
-        frame: JSON.stringify(
-          Object.entries({ ...FRAME_DEFAULTS, ...view.choice, w: width }).sort()
-        ),
-      });
     }
   }
   for (const width of TODAY_WIDTHS) {
     const file = `today-${width}.png`;
+    manifest.push({ part: "Today", option: "Today", width: Number(width), file, caption: TODAY_CAPTION[width] });
+    if (!shoots(file)) {
+      continue;
+    }
     // The live captures are 2×: shown at the page's own size, the screen alone at DPR 1.
     // biome-ignore lint/performance/noAwaitInLoops: a few pictures in turn
     const page = await browser.newPage({
@@ -105,7 +120,6 @@ try {
     await page.waitForFunction(() => "ready" in document.documentElement.dataset);
     await page.screenshot({ path: join(OUT, file) });
     await page.close();
-    manifest.push({ part: "Today", option: "Today", width: Number(width), file, caption: TODAY_CAPTION[width] });
   }
   const seen = new Map<string, (typeof manifest)[number]>();
   for (const one of manifest) {
@@ -118,7 +132,7 @@ try {
         .digest("hex");
     const twin = seen.get(sum);
     if (twin) {
-      await rm(join(OUT, one.file));
+      await rm(join(OUT, one.file), { force: true });
       one.file = twin.file;
       one.sameAs = `${twin.part} ${twin.option}`;
       one.caption = `${one.caption} (The same picture as ${twin.part} ${twin.option} at ${twin.width}.)`;

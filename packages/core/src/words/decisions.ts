@@ -73,6 +73,8 @@ export const decisionsWords = {
   builds: (builds: string) => `Builds: ${builds}`,
   /** The writer's mark on the option that stands today. */
   current: "Current",
+  /** A Preview of a page-sized design: it at the front of the session's panel, at the panel's whole size. */
+  openFull: "Open full size",
   /** A decided card's fold: the options turned down. */
   others: (count: number) =>
     `${count} other ${count === 1 ? "option" : "options"}`,

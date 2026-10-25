@@ -5,7 +5,7 @@
     "option": "Plain, like the other peers",
     "width": 1440,
     "file": "grant-prompt-grant-after-desk.png",
-    "caption": "The standing grant drawn like the other peers: the recessed fill, one neutral outline, ink-strong, its shield glyph and its sentence kept."
+    "caption": "The standing grant drawn like the other peers: the recessed fill, one neutral outline, ink-strong; its shield and its sentence kept."
   },
   {
     "card": "grant",
@@ -13,7 +13,7 @@
     "option": "Plain, like the other peers",
     "width": 390,
     "file": "grant-prompt-grant-after-phone.png",
-    "caption": "The standing grant drawn like the other peers: the recessed fill, one neutral outline, ink-strong, its shield glyph and its sentence kept."
+    "caption": "The standing grant drawn like the other peers: the recessed fill, one neutral outline, ink-strong; its shield and its sentence kept."
   },
   {
     "card": "grant",
@@ -21,7 +21,7 @@
     "option": "Keep the warning fill",
     "width": 1440,
     "file": "grant-prompt-grant-today-desk.png",
-    "caption": "The standing grant (\"Always allow …\") in the warning fill, warning ink and edge. Deny and Approve are drawn untinted, as DESIGN.md has them, so only the grant differs."
+    "caption": "The standing grant (\"Always allow Bash(bun run *)\") in the warning fill, ink and edge. Deny and Approve are drawn untinted, as DESIGN.md has them, so only the grant differs."
   },
   {
     "card": "grant",
@@ -29,7 +29,7 @@
     "option": "Keep the warning fill",
     "width": 390,
     "file": "grant-prompt-grant-today-phone.png",
-    "caption": "The standing grant (\"Always allow …\") in the warning fill, warning ink and edge. Deny and Approve are drawn untinted, as DESIGN.md has them, so only the grant differs."
+    "caption": "The standing grant (\"Always allow Bash(bun run *)\") in the warning fill, ink and edge. Deny and Approve are drawn untinted, as DESIGN.md has them, so only the grant differs."
   },
   {
     "card": "needs-you",
@@ -37,7 +37,7 @@
     "option": "Now, everywhere",
     "width": 1440,
     "file": "needs-you-connect-card-after-desk.png",
-    "caption": "The same ask with Connect drawn as the untinted peer of Not now."
+    "caption": "Connect drawn as the untinted peer of Not now."
   },
   {
     "card": "needs-you",
@@ -45,7 +45,7 @@
     "option": "Now, everywhere",
     "width": 390,
     "file": "needs-you-connect-card-after-phone.png",
-    "caption": "The same ask with Connect drawn as the untinted peer of Not now."
+    "caption": "Connect drawn as the untinted peer of Not now."
   },
   {
     "card": "needs-you",
@@ -53,7 +53,7 @@
     "option": "With each redesign",
     "width": 1440,
     "file": "needs-you-connect-card-today-desk.png",
-    "caption": "A connect ask in the transcript: Connect outlined in green."
+    "caption": "The connect ask for GitHub in the transcript: Connect outlined green."
   },
   {
     "card": "needs-you",
@@ -61,7 +61,7 @@
     "option": "With each redesign",
     "width": 390,
     "file": "needs-you-connect-card-today-phone.png",
-    "caption": "A connect ask in the transcript: Connect outlined in green."
+    "caption": "The connect ask for GitHub in the transcript: Connect outlined green."
   },
   {
     "card": "needs-you",
@@ -69,7 +69,7 @@
     "option": "Now, everywhere",
     "width": 1440,
     "file": "needs-you-needs-card-after-desk.png",
-    "caption": "The same rows with Deny and Approve as untinted peers (the recessed fill, one outline, ink-strong), Deny at the text's start and Approve at the trailing edge."
+    "caption": "Deny and Approve untinted and one size, 120 by 30 (recessed fill, one outline, ink-strong), Deny at the text's start and Approve at the trailing edge; counts lose their fill."
   },
   {
     "card": "needs-you",
@@ -77,7 +77,7 @@
     "option": "Now, everywhere",
     "width": 390,
     "file": "needs-you-needs-card-after-phone.png",
-    "caption": "The same rows with Deny and Approve as untinted peers (the recessed fill, one outline, ink-strong), Deny at the text's start and Approve at the trailing edge."
+    "caption": "Deny and Approve untinted and one size, 120 by 30 (recessed fill, one outline, ink-strong), Deny at the text's start and Approve at the trailing edge; counts lose their fill."
   },
   {
     "card": "needs-you",
@@ -85,7 +85,7 @@
     "option": "With each redesign",
     "width": 1440,
     "file": "needs-you-needs-card-today-desk.png",
-    "caption": "Caw's Needs you list: Deny filled red and Approve filled green, side by side at the row's end."
+    "caption": "Caw's Needs you list: Deny filled red and Approve filled green, side by side at the row's end; the counts filled in yellow."
   },
   {
     "card": "needs-you",
@@ -93,7 +93,7 @@
     "option": "With each redesign",
     "width": 390,
     "file": "needs-you-needs-card-today-phone.png",
-    "caption": "Caw's Needs you list: Deny filled red and Approve filled green, side by side at the row's end."
+    "caption": "Caw's Needs you list: Deny filled red and Approve filled green, side by side at the row's end; the counts filled in yellow."
   },
   {
     "card": "needs-you",
@@ -101,7 +101,7 @@
     "option": "Now, everywhere",
     "width": 1440,
     "file": "needs-you-peek-ask-after-desk.png",
-    "caption": "The same ask on the peek's own ground inside a hairline, its Needs you mark in the state line above, Deny and Approve untinted peers."
+    "caption": "The ask on the peek's own ground inside a hairline, its Needs you mark in the state line above; Deny and Approve untinted."
   },
   {
     "card": "needs-you",
@@ -109,7 +109,7 @@
     "option": "With each redesign",
     "width": 1440,
     "file": "needs-you-peek-ask-today-desk.png",
-    "caption": "The peek's ask: a yellow-filled block holding red- and green-outlined Deny and Approve."
+    "caption": "The peek's ask: a yellow block holding Deny and Approve outlined red and green."
   },
   {
     "card": "needs-you",
@@ -117,7 +117,7 @@
     "option": "Now, everywhere",
     "width": 1440,
     "file": "needs-you-prompt-after-desk.png",
-    "caption": "The same card with Approve and Deny as untinted peers: the same fill and one neutral outline, told apart by glyph, word and place."
+    "caption": "Approve and Deny as untinted peers of one size: the same fill, one neutral outline, one width, told apart by glyph, word and place."
   },
   {
     "card": "needs-you",
@@ -125,7 +125,7 @@
     "option": "Now, everywhere",
     "width": 390,
     "file": "needs-you-prompt-after-phone.png",
-    "caption": "The same card with Approve and Deny as untinted peers: the same fill and one neutral outline, told apart by glyph, word and place."
+    "caption": "Approve and Deny as untinted peers of one size: the same fill, one neutral outline, one width, told apart by glyph, word and place."
   },
   {
     "card": "needs-you",
@@ -133,7 +133,7 @@
     "option": "With each redesign",
     "width": 1440,
     "file": "needs-you-prompt-today-desk.png",
-    "caption": "The transcript's permission card: Approve outlined in green and Deny in red."
+    "caption": "The transcript's permission card for bun run check --all: Approve outlined green, Deny outlined red, each as wide as its own label."
   },
   {
     "card": "needs-you",
@@ -141,7 +141,7 @@
     "option": "With each redesign",
     "width": 390,
     "file": "needs-you-prompt-today-phone.png",
-    "caption": "The transcript's permission card: Approve outlined in green and Deny in red."
+    "caption": "The transcript's permission card for bun run check --all: Approve outlined green, Deny outlined red, each as wide as its own label."
   },
   {
     "card": "needs-you",
@@ -149,7 +149,7 @@
     "option": "Now, everywhere",
     "width": 1440,
     "file": "needs-you-task-needs-after-desk.png",
-    "caption": "The same action on the task's own ground inside a hairline, its Needs you mark and words kept, Deny and Approve untinted peers at opposite ends."
+    "caption": "The same request on the task's own ground inside a hairline, its mark and words kept; Deny and Approve untinted and apart; the pill and count lose their fill."
   },
   {
     "card": "needs-you",
@@ -157,7 +157,7 @@
     "option": "Now, everywhere",
     "width": 390,
     "file": "needs-you-task-needs-after-phone.png",
-    "caption": "The same action on the task's own ground inside a hairline, its Needs you mark and words kept, Deny and Approve untinted peers at opposite ends."
+    "caption": "The same request on the task's own ground inside a hairline, its mark and words kept; Deny and Approve untinted and apart; the pill and count lose their fill."
   },
   {
     "card": "needs-you",
@@ -165,7 +165,7 @@
     "option": "With each redesign",
     "width": 1440,
     "file": "needs-you-task-needs-today-desk.png",
-    "caption": "A task's approved action: a yellow-ground, yellow-edged card holding red and green Deny and Approve."
+    "caption": "The task's pull request filed for approval: a yellow card with red and green Deny and Approve; the Needs you pill and the Fleet count filled."
   },
   {
     "card": "needs-you",
@@ -173,7 +173,39 @@
     "option": "With each redesign",
     "width": 390,
     "file": "needs-you-task-needs-today-phone.png",
-    "caption": "A task's approved action: a yellow-ground, yellow-edged card holding red and green Deny and Approve."
+    "caption": "The task's pull request filed for approval: a yellow card with red and green Deny and Approve; the Needs you pill and the Fleet count filled."
+  },
+  {
+    "card": "title-bars",
+    "surface": "browser-view",
+    "option": "Now, all of them",
+    "width": 1440,
+    "file": "title-bars-browser-view-after-desk.png",
+    "caption": "No band: the origin and the control mark (its words in the tooltip) stand in the head's centre glass group; the local host's line moves to the well's foot."
+  },
+  {
+    "card": "title-bars",
+    "surface": "browser-view",
+    "option": "Now, all of them",
+    "width": 390,
+    "file": "title-bars-browser-view-after-phone.png",
+    "caption": "No band: the origin and the control mark (its words in the tooltip) stand in the head's centre glass group; the local host's line moves to the well's foot."
+  },
+  {
+    "card": "title-bars",
+    "surface": "browser-view",
+    "option": "Today",
+    "width": 1440,
+    "file": "title-bars-browser-view-today-desk.png",
+    "caption": "The project's browser in the artifact panel: a raised band with a hairline under the head, the origin and \"You have control\" with the Private chip."
+  },
+  {
+    "card": "title-bars",
+    "surface": "browser-view",
+    "option": "Today",
+    "width": 390,
+    "file": "title-bars-browser-view-today-phone.png",
+    "caption": "The project's browser in the artifact panel: a raised band with a hairline under the head, the origin and \"You have control\" with the Private chip."
   },
   {
     "card": "title-bars",
@@ -181,7 +213,7 @@
     "option": "Now, all of them",
     "width": 1440,
     "file": "title-bars-configure-crumb-after-desk.png",
-    "caption": "The same page: no title on the desk (the rail says where you are); on the phone, Back is the chevron alone (\"Back to Configure\") and the section's own name is the title."
+    "caption": "No title in the bar (the rail shows where you are); the card's purpose and its action share one row."
   },
   {
     "card": "title-bars",
@@ -189,7 +221,7 @@
     "option": "Now, all of them",
     "width": 390,
     "file": "title-bars-configure-crumb-after-phone.png",
-    "caption": "The same page: no title on the desk (the rail says where you are); on the phone, Back is the chevron alone (\"Back to Configure\") and the section's own name is the title."
+    "caption": "Back is the chevron alone (\"Back to Configure\") and the section's name, Skills, is the bar's title; the card's purpose and its action share one row."
   },
   {
     "card": "title-bars",
@@ -197,7 +229,7 @@
     "option": "Today",
     "width": 1440,
     "file": "title-bars-configure-crumb-today-desk.png",
-    "caption": "A Configure page (MCP servers): the bar says \"Configure\" beside the rail that already shows it; on the phone, Back is a chevron and the word \"Configure\"."
+    "caption": "Configure, Skills: the bar says \"Configure\" though the rail already shows it, and the card opens with its title over its purpose."
   },
   {
     "card": "title-bars",
@@ -205,7 +237,7 @@
     "option": "Today",
     "width": 390,
     "file": "title-bars-configure-crumb-today-phone.png",
-    "caption": "A Configure page (MCP servers): the bar says \"Configure\" beside the rail that already shows it; on the phone, Back is a chevron and the word \"Configure\"."
+    "caption": "Configure, Skills on a phone: Back is a chevron and the word \"Configure\", and the card opens with its title over its purpose."
   },
   {
     "card": "title-bars",
@@ -213,7 +245,7 @@
     "option": "Now, all of them",
     "width": 1440,
     "file": "title-bars-decision-page-after-desk.png",
-    "caption": "The same head with no band: Back is the chevron alone (\"Back to Decisions\"), then the title; the count is left to the page and its Send."
+    "caption": "Coral only on the decision, Send picks in the page; Ask Caw and I'm done picking are outlined."
   },
   {
     "card": "title-bars",
@@ -221,7 +253,7 @@
     "option": "Now, all of them",
     "width": 390,
     "file": "title-bars-decision-page-after-phone.png",
-    "caption": "The same head with no band: Back is the chevron alone (\"Back to Decisions\"), then the title; the count is left to the page and its Send."
+    "caption": "Coral only on the decision, Send picks in the page; Ask Caw and I'm done picking are outlined."
   },
   {
     "card": "title-bars",
@@ -229,7 +261,7 @@
     "option": "Today",
     "width": 1440,
     "file": "title-bars-decision-page-today-desk.png",
-    "caption": "A decision page's head: a filled, edged band with Back as a chevron and the word, the title, and the pick count beside it."
+    "caption": "\"Two questions from today\" in the project: Ask Caw, Send picks and I'm done picking are all coral."
   },
   {
     "card": "title-bars",
@@ -237,7 +269,7 @@
     "option": "Today",
     "width": 390,
     "file": "title-bars-decision-page-today-phone.png",
-    "caption": "A decision page's head: a filled, edged band with Back as a chevron and the word, the title, and the pick count beside it."
+    "caption": "\"Two questions from today\" in the project: Ask Caw, Send picks and I'm done picking are all coral."
   },
   {
     "card": "title-bars",
@@ -245,7 +277,7 @@
     "option": "Now, all of them",
     "width": 1440,
     "file": "title-bars-folder-file-after-desk.png",
-    "caption": "The same file named by its name: on the desk the controls float in a glass group; on the phone Back is the chevron alone, then the file's name."
+    "caption": "The same file, its controls in one glass group with Close last; Ask Caw is no longer coral (the page isn't for asking him)."
   },
   {
     "card": "title-bars",
@@ -253,7 +285,7 @@
     "option": "Now, all of them",
     "width": 390,
     "file": "title-bars-folder-file-after-phone.png",
-    "caption": "The same file named by its name: on the desk the controls float in a glass group; on the phone Back is the chevron alone, then the file's name."
+    "caption": "Back is the chevron alone, then the file's name."
   },
   {
     "card": "title-bars",
@@ -261,7 +293,7 @@
     "option": "Today",
     "width": 1440,
     "file": "title-bars-folder-file-today-desk.png",
-    "caption": "A project file: on the desk the side panel names it by its path; on the phone Back is a chevron and a word, with the path at the row's end."
+    "caption": "gate.md from the project's folder in the side panel, its controls loose; Ask Caw coral in the project head."
   },
   {
     "card": "title-bars",
@@ -269,7 +301,39 @@
     "option": "Today",
     "width": 390,
     "file": "title-bars-folder-file-today-phone.png",
-    "caption": "A project file: on the desk the side panel names it by its path; on the phone Back is a chevron and a word, with the path at the row's end."
+    "caption": "gate.md on a phone: Back is a chevron and a word, the path at the row's end."
+  },
+  {
+    "card": "title-bars",
+    "surface": "new-session",
+    "option": "Now, all of them",
+    "width": 1440,
+    "file": "title-bars-new-session-after-desk.png",
+    "caption": "The same step: no change on the desk."
+  },
+  {
+    "card": "title-bars",
+    "surface": "new-session",
+    "option": "Now, all of them",
+    "width": 390,
+    "file": "title-bars-new-session-after-phone.png",
+    "caption": "Back is the chevron alone (\"Back to the form\")."
+  },
+  {
+    "card": "title-bars",
+    "surface": "new-session",
+    "option": "Today",
+    "width": 1440,
+    "file": "title-bars-new-session-today-desk.png",
+    "caption": "New session's move step: Back is already the chevron alone in the dialog's head."
+  },
+  {
+    "card": "title-bars",
+    "surface": "new-session",
+    "option": "Today",
+    "width": 390,
+    "file": "title-bars-new-session-today-phone.png",
+    "caption": "New session's move step on a phone: Back is a chevron and the word \"Back\"."
   },
   {
     "card": "title-bars",
@@ -277,7 +341,7 @@
     "option": "Now, all of them",
     "width": 1440,
     "file": "title-bars-peek-after-desk.png",
-    "caption": "The peek's head as DESIGN.md writes it: one row, the title by its folder in its hue, the machine's mark (its name in the tooltip), and Open as the maximize symbol in its glass group. No path."
+    "caption": "One row: the title by its folder in its colour, the machine's mark (its name in the tooltip), then Open (maximize) and Close as bare symbols in one glass group. No path."
   },
   {
     "card": "title-bars",
@@ -285,7 +349,7 @@
     "option": "Today",
     "width": 1440,
     "file": "title-bars-peek-today-desk.png",
-    "caption": "The peek's head: the title over a line with the machine and the folder's path, and Open as a word."
+    "caption": "The peek: Close on a row of its own, then the title over the machine and the folder's path, and Open as a word."
   },
   {
     "card": "title-bars",
@@ -293,7 +357,7 @@
     "option": "Now, all of them",
     "width": 1440,
     "file": "title-bars-preview-pane-after-desk.png",
-    "caption": "The artifact panel in one row: the ask moves to the name's menu and tooltip, the mode stands in its own glass group, Comments is its glyph and count, and the rest float in one trailing group with Close last."
+    "caption": "One row: the ask moves into the name's menu and tooltip, the mode stands in its own glass group (bare when it folds to one glyph), the rest float in one trailing group with Close last."
   },
   {
     "card": "title-bars",
@@ -301,7 +365,7 @@
     "option": "Now, all of them",
     "width": 390,
     "file": "title-bars-preview-pane-after-phone.png",
-    "caption": "The artifact panel in one row: the ask moves to the name's menu and tooltip, the mode stands in its own glass group, Comments is its glyph and count, and the rest float in one trailing group with Close last."
+    "caption": "One row: the ask moves into the name's menu and tooltip, the mode stands in its own glass group (bare when it folds to one glyph), the rest float in one trailing group with Close last."
   },
   {
     "card": "title-bars",
@@ -309,7 +373,7 @@
     "option": "Today",
     "width": 1440,
     "file": "title-bars-preview-pane-today-desk.png",
-    "caption": "The artifact panel: the page's name with its ask on a line under it where the head has room, and Comments as a glyph and a word among the controls."
+    "caption": "The artifact panel holding the GitHub decision page: its ask on a line under the name where there is room, the mode's segments loose among the controls."
   },
   {
     "card": "title-bars",
@@ -317,7 +381,7 @@
     "option": "Today",
     "width": 390,
     "file": "title-bars-preview-pane-today-phone.png",
-    "caption": "The artifact panel: the page's name with its ask on a line under it where the head has room, and Comments as a glyph and a word among the controls."
+    "caption": "The artifact panel holding the GitHub decision page: its ask on a line under the name where there is room, the mode's segments loose among the controls."
   },
   {
     "card": "title-bars",
@@ -325,7 +389,7 @@
     "option": "Now, all of them",
     "width": 1440,
     "file": "title-bars-section-head-after-desk.png",
-    "caption": "The same section with no head of its own: its actions float in one glass group at the trailing end, and its purpose is the first line of the content."
+    "caption": "No title in the card: one row holds the purpose and New rule, and the rows start under it; the bar loses its section title too (a phone's shows Rules)."
   },
   {
     "card": "title-bars",
@@ -333,7 +397,7 @@
     "option": "Now, all of them",
     "width": 390,
     "file": "title-bars-section-head-after-phone.png",
-    "caption": "The same section with no head of its own: its actions float in one glass group at the trailing end, and its purpose is the first line of the content."
+    "caption": "No title in the card: one row holds the purpose and New rule, and the rows start under it; the bar loses its section title too (a phone's shows Rules)."
   },
   {
     "card": "title-bars",
@@ -341,7 +405,7 @@
     "option": "Today",
     "width": 1440,
     "file": "title-bars-section-head-today-desk.png",
-    "caption": "A Configure section (Rules): its card opens with the title over its one-line purpose, the actions beside them."
+    "caption": "Configure, Rules: the card opens with its title over its one-line purpose, New rule beside them."
   },
   {
     "card": "title-bars",
@@ -349,7 +413,7 @@
     "option": "Today",
     "width": 390,
     "file": "title-bars-section-head-today-phone.png",
-    "caption": "A Configure section (Rules): its card opens with the title over its one-line purpose, the actions beside them."
+    "caption": "Configure, Rules: the card opens with its title over its one-line purpose, New rule beside them."
   },
   {
     "card": "title-bars",
@@ -357,7 +421,7 @@
     "option": "Now, all of them",
     "width": 1440,
     "file": "title-bars-side-surface-after-desk.png",
-    "caption": "The same head: the id line is gone from the bar, the file is named by its name (its path in the tooltip), and the controls float in one trailing glass group with Close last."
+    "caption": "The same heads: the file named by its name (its path in the tooltip), Open in canvas as its symbol, the controls in one glass group with Close last; no id line under the to-dos."
   },
   {
     "card": "title-bars",
@@ -365,7 +429,7 @@
     "option": "Now, all of them",
     "width": 390,
     "file": "title-bars-side-surface-after-phone.png",
-    "caption": "The same head: the id line is gone from the bar, the file is named by its name (its path in the tooltip), and the controls float in one trailing glass group with Close last."
+    "caption": "The same heads: the file named by its name (its path in the tooltip), Open in canvas as its symbol, the controls in one glass group with Close last; no id line under the to-dos."
   },
   {
     "card": "title-bars",
@@ -373,7 +437,7 @@
     "option": "Today",
     "width": 1440,
     "file": "title-bars-side-surface-today-desk.png",
-    "caption": "The side panel's shared head (the bench's three kinds of name): a plan, to-dos with the task's id on a line under the title, and a file named by its whole path."
+    "caption": "The shared side-panel head on three of the project's records (the landing gate as a plan, tsk-16's to-dos, the projects plan file): the file named by its path, Open in canvas as a word, the controls loose."
   },
   {
     "card": "title-bars",
@@ -381,7 +445,7 @@
     "option": "Today",
     "width": 390,
     "file": "title-bars-side-surface-today-phone.png",
-    "caption": "The side panel's shared head (the bench's three kinds of name): a plan, to-dos with the task's id on a line under the title, and a file named by its whole path."
+    "caption": "The shared side-panel head on three of the project's records (the landing gate as a plan, tsk-16's to-dos, the projects plan file): the file named by its path, Open in canvas as a word, the controls loose."
   },
   {
     "card": "title-bars",
@@ -389,7 +453,7 @@
     "option": "Now, all of them",
     "width": 1440,
     "file": "title-bars-top-bar-after-desk.png",
-    "caption": "The top bar with no ground or hairline of its own; the tabs keep their shelf, and a section the rail shows chosen gets no title."
+    "caption": "The same bar: the shelf is the tab strip's own ground, which the rule keeps, so the bar itself does not change here."
   },
   {
     "card": "title-bars",
@@ -397,7 +461,7 @@
     "option": "Now, all of them",
     "width": 390,
     "file": "title-bars-top-bar-after-phone.png",
-    "caption": "The top bar with no ground or hairline of its own; the tabs keep their shelf, and a section the rail shows chosen gets no title."
+    "caption": "The same home: the bar has no ground or hairline of its own; the page runs to the top."
   },
   {
     "card": "title-bars",
@@ -405,7 +469,7 @@
     "option": "Today",
     "width": 1440,
     "file": "title-bars-top-bar-today-desk.png",
-    "caption": "The top bar over a conversation as it ships: a raised ground with a hairline under it on every page, the session's tabs on its shelf."
+    "caption": "The top bar over a conversation: it hosts the session's tabs on their shelf."
   },
   {
     "card": "title-bars",
@@ -413,7 +477,7 @@
     "option": "Today",
     "width": 390,
     "file": "title-bars-top-bar-today-phone.png",
-    "caption": "The top bar over a conversation as it ships: a raised ground with a hairline under it on every page, the session's tabs on its shelf."
+    "caption": "The Fleet home on a phone: the top bar has a raised ground with a hairline under it."
   },
   {
     "card": "title-bars",
@@ -421,7 +485,7 @@
     "option": "Now, all of them",
     "width": 1440,
     "file": "title-bars-usage-after-desk.png",
-    "caption": "Usage with no page head: on the desk the range and the project picker with Export (a symbol) stand in the bar as two glass groups; on the phone they are the page's first row."
+    "caption": "No page head: the range stands in the bar's centre glass group, the project picker and Export (its download symbol) in a trailing glass group."
   },
   {
     "card": "title-bars",
@@ -429,7 +493,7 @@
     "option": "Now, all of them",
     "width": 390,
     "file": "title-bars-usage-after-phone.png",
-    "caption": "Usage with no page head: on the desk the range and the project picker with Export (a symbol) stand in the bar as two glass groups; on the phone they are the page's first row."
+    "caption": "No page head: the picker and Export lead, the range takes the row under them whole."
   },
   {
     "card": "title-bars",
@@ -437,7 +501,7 @@
     "option": "Today",
     "width": 1440,
     "file": "title-bars-usage-today-desk.png",
-    "caption": "Usage: \"Usage\" in the bar, then the page's own head (title over a line), with the project picker, range and Export beside it."
+    "caption": "Usage: \"Usage\" in the bar, then a page head (the title over a line) with the project picker, the range and Export CSV."
   },
   {
     "card": "title-bars",
@@ -445,7 +509,7 @@
     "option": "Today",
     "width": 390,
     "file": "title-bars-usage-today-phone.png",
-    "caption": "Usage: \"Usage\" in the bar, then the page's own head (title over a line), with the project picker, range and Export beside it."
+    "caption": "Usage: \"Usage\" in the bar, then a page head (the title over a line) with the project picker, the range and Export CSV."
   },
   {
     "card": "warnings",
@@ -453,7 +517,7 @@
     "option": "A mark and words, no filled row",
     "width": 1440,
     "file": "warnings-alert-warning-after-desk.png",
-    "caption": "The same warning as a mark and words: the shield in the warning's mark colour, its words in the warning ink, no filled row."
+    "caption": "The same warning as a mark and words: the shield in the warning's mark colour, the words in the warning ink, no filled row."
   },
   {
     "card": "warnings",
@@ -461,7 +525,7 @@
     "option": "A mark and words, no filled row",
     "width": 390,
     "file": "warnings-alert-warning-after-phone.png",
-    "caption": "The same warning as a mark and words: the shield in the warning's mark colour, its words in the warning ink, no filled row."
+    "caption": "The same warning as a mark and words: the shield in the warning's mark colour, the words in the warning ink, no filled row."
   },
   {
     "card": "warnings",
@@ -469,7 +533,7 @@
     "option": "Keep the yellow row",
     "width": 1440,
     "file": "warnings-alert-warning-today-desk.png",
-    "caption": "A warning alert (New session's \"Full Send is on\"): a yellow-filled row."
+    "caption": "New session's \"Full Send is on\" warning: a yellow-filled row."
   },
   {
     "card": "warnings",
@@ -477,7 +541,7 @@
     "option": "Keep the yellow row",
     "width": 390,
     "file": "warnings-alert-warning-today-phone.png",
-    "caption": "A warning alert (New session's \"Full Send is on\"): a yellow-filled row."
+    "caption": "New session's \"Full Send is on\" warning: a yellow-filled row."
   },
   {
     "card": "warnings",
@@ -485,7 +549,7 @@
     "option": "A mark and words, no filled row",
     "width": 1440,
     "file": "warnings-hub-band-after-desk.png",
-    "caption": "The same band as a mark and words: the warning triangle and the sentence, no filled row, Reconnect now kept."
+    "caption": "The warning triangle then the sentence on one line, no filled row, Reconnect now kept."
   },
   {
     "card": "warnings",
@@ -493,7 +557,7 @@
     "option": "A mark and words, no filled row",
     "width": 390,
     "file": "warnings-hub-band-after-phone.png",
-    "caption": "The same band as a mark and words: the warning triangle and the sentence, no filled row, Reconnect now kept."
+    "caption": "The warning triangle then the sentence on one line, no filled row, Reconnect now kept."
   },
   {
     "card": "warnings",
