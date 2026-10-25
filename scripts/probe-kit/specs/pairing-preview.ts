@@ -35,6 +35,7 @@ import { dirname, join, normalize } from "node:path";
 import type { Page } from "playwright-core";
 import { prepareZXingModule, readBarcodes } from "zxing-wasm/reader";
 import { HouseRules } from "../house-rules";
+import { capture, off, px } from "../ink";
 import { type Engine, type Kit, ROOT, readMotion, type Spec } from "../kit";
 
 const DIR = join(ROOT, "design-previews", "pairing");
@@ -56,7 +57,7 @@ prepareZXingModule({
 });
 
 const LEGS = new Set(
-  (process.env.PAIRING_LEGS ?? "frames,rest,leads,qr").split(",")
+  (process.env.PAIRING_LEGS ?? "frames,rest,leads,qr,strike").split(",")
 );
 
 /** Every moment at rest, with the owner's picks it is read in. */
@@ -75,6 +76,7 @@ const RESTS: { m: string; picks?: [string, string][] }[] = [
   { m: "nomatch-spent" },
   { m: "nomatch-foreign" },
   { m: "failed" },
+  { m: "retrying" },
   { m: "removed", picks: [["removed", "kept"]] },
 ];
 
@@ -105,20 +107,27 @@ function holdsOf(m: string): string {
   if (mark) {
     return `.device .screen-mark .${mark}`;
   }
-  return ["expired", "failed"].includes(m) ? ".paper" : ".paper .head";
+  return ["expired", "failed", "retrying"].includes(m)
+    ? ".paper"
+    : ".paper .head";
 }
 
 /** Every board (spec §7), from → to, with the owner's picks it needs and what leads it. */
 const BOARDS: {
+  /** Beats the rulings set, each a run by its name (and element) starting at `at`, `dur` long. */
+  beats?: { at: number; dur: number; name: string; target?: string }[];
   from: string;
-  to: string;
   lead: string;
   picks?: [string, string][];
+  /** The lead is Caw's own drawn enter, which no Web Animation carries: nothing drawn starts at 0. */
+  rive?: boolean;
+  to: string;
 }[] = [
   {
     from: "open",
     to: "asking",
     lead: "Caw's loading enter (Rive, no Web Animation)",
+    rive: true,
   },
   { from: "asking", to: "waiting", lead: "the dots lock on, ink 0.3 → 1" },
   {
@@ -126,28 +135,60 @@ const BOARDS: {
     to: "lastminute",
     lead: '"Expires in 0:59" enters; the ping warms',
   },
-  { from: "waiting", to: "checking-tailnet", lead: "the pour, the eyes last" },
+  {
+    from: "waiting",
+    to: "checking-tailnet",
+    lead: "the pour, inner first from 0, the eyes last",
+    // The run's row folds away with the letters' travel (ruling 1).
+    beats: [{ name: "run-row", at: 840, dur: 400 }],
+  },
   { from: "waiting", to: "checking-public", lead: "the pour, the eyes last" },
   {
     from: "checking-tailnet",
     to: "approved",
-    lead: "Deny exits; Approve morphs to Done",
+    lead: "Deny exits with the hint; Approve morphs to Done",
+    // The hint leaves with Deny; the facts and Done move up into its place in the hold (ruling 5).
+    beats: [
+      { name: "lead:exit", target: "p[data-line", at: 0, dur: 160 },
+      { name: "follow", at: 160, dur: 280 },
+    ],
   },
   {
     from: "checking-tailnet",
     to: "denied",
-    lead: "Deny exits, Approve 60ms later",
+    lead: "Deny exits with the hint, Approve 60ms later",
+    // The hint leaves with the buttons; the facts move down as the two lines arrive (ruling 6).
+    beats: [
+      { name: "lead:exit", target: "p[data-line", at: 0, dur: 160 },
+      { name: "follow", at: 960, dur: 280 },
+    ],
   },
   { from: "lastminute", to: "expired", lead: "the figure ticks 0:01 → 0:00" },
   { from: "expired", to: "asking", lead: "New code exits" },
-  { from: "denied", to: "asking", lead: "New code exits; the lock leaves" },
+  {
+    from: "denied",
+    to: "asking",
+    lead: "New code exits; the lock leaves",
+    // The run's row grows back with the paper (ruling 1).
+    beats: [{ name: "run-row", at: 160, dur: 400 }],
+  },
   {
     from: "waiting",
     to: "nomatch-spent",
     lead: "the ⚠ arrives in the mark cell",
   },
   { from: "asking", to: "failed", lead: "the cloud coasts to a stop" },
-  { from: "failed", to: "asking", lead: "Retry exits" },
+  {
+    from: "failed",
+    to: "retrying",
+    lead: "Retry exits; Caw's reconnecting loop runs while the request is out",
+  },
+  {
+    from: "retrying",
+    to: "asking",
+    lead: "on the hub's answer, Caw's loading enter (Rive, no Web Animation)",
+    rive: true,
+  },
   {
     from: "approved",
     to: "removed",
@@ -341,6 +382,8 @@ interface RestRead {
   empty: string[];
   /** What the object slot draws: the paper (and the head on it), or the device with its screen's one thing. */
   holds: string;
+  /** The letter run's row: its height, and the kpi line (1.2 × the run's size) plus space-4. */
+  runRow: { h: number; line: number };
   slot: string;
   starts: { edges: number[]; misaligned: string[] };
   tiles: number;
@@ -436,8 +479,8 @@ function readRest(): RestRead {
   const first = edges[0] ?? 0;
   const misaligned = rows.flatMap((el, i) => {
     const align = getComputedStyle(el).textAlign;
-    const off = Math.abs((edges[i] ?? 0) - first);
-    return off > 1 || !["start", "left"].includes(align)
+    const shift = Math.abs((edges[i] ?? 0) - first);
+    return shift > 1 || !["start", "left"].includes(align)
       ? [`${describe(el)} at ${edges[i]} (${align})`]
       : [];
   });
@@ -488,7 +531,17 @@ function readRest(): RestRead {
     }
     ink = lit / (copy.width * copy.height);
   }
+  const run = stage.querySelector(".run") as HTMLElement;
+  const space4 = Number.parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue("--space-4")
+  );
   return {
+    runRow: {
+      h: (
+        stage.querySelector(".run-row") as HTMLElement
+      ).getBoundingClientRect().height,
+      line: 1.2 * Number.parseFloat(getComputedStyle(run).fontSize) + space4,
+    },
     holds,
     boxes,
     empty,
@@ -522,7 +575,9 @@ async function restLeg(kit: Kit, page: Page, engine: Engine) {
     const layout = width >= 900 ? "Desk" : "Phone";
     const slots = new Set<string>();
     const inks: number[] = [];
+    const rows = new Set<string>();
     const faults: Record<string, string[]> = {
+      row: [],
       holds: [],
       box: [],
       empty: [],
@@ -537,10 +592,20 @@ async function restLeg(kit: Kit, page: Page, engine: Engine) {
       const name = `${m}${picks ? ` (${picks.map(([n, v]) => `${n} ${v}`).join(", ")})` : ""}`;
       const r = await page.evaluate(readRest);
       slots.add(r.slot);
+      const rowWant = holdsOf(m).startsWith(".paper") ? r.runRow.line : 0;
+      rows.add(
+        `${m.startsWith("checking") || ["approved", "denied", "removed"].includes(m) ? "device" : "code"} ${r.runRow.h.toFixed(1)}`
+      );
+      if (Math.abs(r.runRow.h - rowWant) > 0.5) {
+        faults.row.push(
+          `${name}: ${r.runRow.h.toFixed(1)}px, want ${rowWant.toFixed(1)}px`
+        );
+      }
       if (r.holds !== holdsOf(m)) {
         faults.holds.push(`${name}: ${r.holds}, want ${holdsOf(m)}`);
       }
       const wantBoxes = [
+        "retrying",
         "asking",
         "waiting",
         "lastminute",
@@ -580,6 +645,11 @@ async function restLeg(kit: Kit, page: Page, engine: Engine) {
     kit.check(
       `${tag}: a constant object slot in all ${RESTS.length} moments (${[...slots].join(" | ")})`,
       slots.size === 1
+    );
+    kit.check(
+      `${tag}: the letter run's row on the code's moments only, the kpi line and space-4 (${[...rows].join(", ")})`,
+      faults.row.length === 0,
+      faults.row.slice(0, 4).join("; ")
     );
     kit.check(
       `${tag}: the slot holds its one object in every moment: the paper (its head on it while the code is good), or the device with the icon and the code on its screen or one outcome's mark`,
@@ -658,27 +728,51 @@ async function leadsLeg(kit: Kit, page: Page, engine: Engine) {
     const t0 = starts.length ? Math.min(...starts) : 0;
     const at = (run: (typeof drawnRuns)[number]) =>
       run.delay + (run.start === null ? 0 : run.start - t0);
-    const rive = b.from === "open";
-    // Opening, the lead is Caw's own drawn enter at 0, which no Web Animation carries.
-    const lead =
-      rive || drawnRuns.length === 0 ? 0 : Math.min(...drawnRuns.map(at));
-    const first = drawnRuns.filter((run) => at(run) - lead < 17);
-    const others = first.filter((run) => !run.name.startsWith("lead"));
+    const rive = Boolean(b.rive);
+    // The lead moves at 0 (ruling 12 normalised the pour so its innermost dot does).
+    const lead = drawnRuns.length === 0 ? 0 : Math.min(...drawnRuns.map(at));
+    const first = drawnRuns.filter((run) => at(run) < 17);
+    // Where Caw leads, the dashboard's Caw component's own runs on his canvas (his leave, his
+    // fade in) are the lead's: the file he leaves fades out as the next one's enter begins.
+    const ofLead = (run: (typeof drawnRuns)[number]) =>
+      run.name.startsWith("lead") ||
+      (rive && run.target.startsWith("canvas[data-caw"));
+    const others = first.filter((run) => !ofLead(run));
     const leads = [
       ...new Set(
         first
-          .filter((run) => run.name.startsWith("lead"))
-          .map((run) => `${run.name} on ${run.target}`)
+          .filter(ofLead)
+          .map((run) => `${run.name || "Caw"} on ${run.target}`)
       ),
     ];
     kit.check(
-      `${engine} ${b.from} → ${b.to}: the lead alone in its frame (${b.lead}, first moving at ${lead.toFixed(0)}ms): ${leads.length ? leads.slice(0, 4).join(", ") : "no Web Animation"}; nothing else starts in that frame (${drawnRuns.length} runs, by ${read.by})`,
-      others.length === 0 && (rive || leads.length > 0),
+      `${engine} ${b.from} → ${b.to}: the lead alone at 0 (${b.lead}): ${leads.length ? leads.slice(0, 4).join(", ") : "no Web Animation"}; nothing else starts in that frame, the first other run at ${nextAt(drawnRuns.filter((run) => !ofLead(run)).map(at))} (${drawnRuns.length} runs, by ${read.by})`,
+      others.length === 0 && (rive || (leads.length > 0 && lead < 17)),
       others
         .slice(0, 6)
         .map((run) => `${run.name} on ${run.target} at ${at(run).toFixed(0)}ms`)
         .join("; ")
     );
+    for (const beat of b.beats ?? []) {
+      const hit = drawnRuns.find(
+        (run) =>
+          run.name === beat.name &&
+          (!beat.target || run.target.includes(beat.target)) &&
+          Math.abs(at(run) - beat.at) < 17 &&
+          Math.abs(run.end - run.delay - beat.dur) < 1
+      );
+      const named = drawnRuns
+        .filter((run) => run.name === beat.name)
+        .map(
+          (run) =>
+            `${run.target} at ${at(run).toFixed(0)}ms for ${(run.end - run.delay).toFixed(0)}ms`
+        );
+      kit.check(
+        `${engine} ${b.from} → ${b.to}: ${beat.name}${beat.target ? ` on ${beat.target}` : ""} at ${beat.at}ms for ${beat.dur}ms`,
+        Boolean(hit),
+        named.slice(0, 4).join("; ") || "no such run"
+      );
+    }
     kit.check(
       `${engine} ${b.from} → ${b.to}: every run played to its end once let go`,
       read.runs.every((run) => run.ended),
@@ -692,6 +786,10 @@ async function leadsLeg(kit: Kit, page: Page, engine: Engine) {
   }
   await picksTo(page);
 }
+
+/** When the first of `times` falls, said; "none" where there is none. */
+const nextAt = (times: number[]) =>
+  times.length ? `${Math.min(...times).toFixed(0)}ms` : "none";
 
 /* ---------------------------------------------------------------- qr */
 
@@ -743,6 +841,67 @@ async function qrLeg(kit: Kit, page: Page, engine: Engine) {
   }
 }
 
+/* ------------------------------------------------------------ strike */
+
+/**
+ * Expired's strike runs through the caps' middle (ruling 14): its centre
+ * against the middle of a capital H's ink, read from the drawing with the
+ * strike lifted.
+ */
+async function strikeLeg(kit: Kit, page: Page, engine: Engine) {
+  for (const width of [1440, 390]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one frame at a time
+    await setWidth(page, width);
+    await restIn(page, "expired");
+    // The run stands under the fold on the phone frame: in view, so the capture holds its whole ink.
+    await page.evaluate(() =>
+      (document.querySelector(".run") as HTMLElement).scrollIntoView({
+        block: "center",
+      })
+    );
+    const boxes = await page.evaluate(() => {
+      const strike = document.querySelector(".run .strike") as HTMLElement;
+      const r = strike.getBoundingClientRect();
+      strike.style.visibility = "hidden";
+      const h = [...document.querySelectorAll<HTMLElement>(".run .g")].find(
+        (one) => one.textContent === "H"
+      ) as HTMLElement;
+      const g = h.getBoundingClientRect();
+      const bg = getComputedStyle(document.body).backgroundColor;
+      return {
+        strike: r.top + r.height / 2,
+        pen: r.height,
+        glyph: { x: g.left, y: g.top, width: g.width, height: g.height },
+        bg,
+      };
+    });
+    const raster = await capture(page, boxes.glyph);
+    const ground = px(raster, 0, 0);
+    const inked: number[] = [];
+    for (let y = 0; y < raster.height; y += 1) {
+      for (let x = 0; x < raster.width; x += 1) {
+        if (off(px(raster, x, y), ground) > 60) {
+          inked.push(y);
+          break;
+        }
+      }
+    }
+    await page.evaluate(() => {
+      (document.querySelector(".run .strike") as HTMLElement).style.visibility =
+        "";
+    });
+    const top = Math.min(...inked) / raster.scale + raster.y;
+    const bottom = (Math.max(...inked) + 1) / raster.scale + raster.y;
+    const middle = (top + bottom) / 2;
+    kit.check(
+      `${engine} at ${width}: the strike (${boxes.pen}px) runs through the caps' middle: its centre ${boxes.strike.toFixed(2)}, the H's ink ${top.toFixed(1)}–${bottom.toFixed(1)}, middle ${middle.toFixed(2)}`,
+      inked.length > 0 &&
+        Math.abs(boxes.strike - middle) <= 0.75 &&
+        boxes.pen === 1.5
+    );
+  }
+}
+
 /* ---------------------------------------------------------- captures */
 
 const LABEL: Record<string, string> = {
@@ -758,6 +917,7 @@ const LABEL: Record<string, string> = {
   "nomatch-spent": "Wrong code scanned, an expired code",
   "nomatch-foreign": "Wrong code scanned, not this hub's",
   failed: "The hub didn't answer",
+  retrying: "The hub didn't answer, Retry's request out",
   removed: "Removed",
 };
 
@@ -911,6 +1071,9 @@ const spec: Spec = {
         }
         if (LEGS.has("qr")) {
           await qrLeg(kit, page, engine);
+        }
+        if (LEGS.has("strike")) {
+          await strikeLeg(kit, page, engine);
         }
         if (LEGS.has("rest")) {
           await restLeg(kit, page, engine);

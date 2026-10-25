@@ -221,13 +221,29 @@
   .object {
     display: block grid;
     justify-items: center;
-    row-gap: var(--space-4);
     min-inline-size: 0;
   }
 
   .caw-slot {
     inline-size: var(--caw);
     block-size: var(--caw);
+    margin-block-end: var(--space-4);
+  }
+
+  /* The letter run's row: on the code's moments only, the kpi line and
+     space-4 under the paper; folded away on the device's (the Checking
+     board folds it as the letters travel, New code grows it back). */
+  .run-row {
+    display: block flow-root;
+    justify-self: stretch;
+    block-size: calc(1.2 * var(--text-kpi) + var(--space-4));
+    overflow: clip;
+    > .run {
+      margin-block-start: var(--space-4);
+    }
+    [data-kind="device"] & {
+      block-size: 0;
+    }
   }
 
   /* The one object slot: the paper's footprint in every moment. */
@@ -391,6 +407,7 @@
     font: var(--type-kpi);
     font-family: var(--font-mono);
     font-variant-ligatures: none;
+    line-height: 1.2;
     letter-spacing: 0.12em;
     .group {
       display: inline flex;
@@ -402,7 +419,8 @@
     .g {
       display: inline flow-root;
     }
-    /* Expired's strike: one line across the run, drawn from its start. */
+    /* Expired's strike: one line across the run through the caps' middle
+       (preview.js places it from the face's metrics), drawn from its start. */
     .strike {
       position: absolute;
       inset-inline: -0.1em;
@@ -581,11 +599,12 @@
     [data-skel] {
       color: transparent;
     }
+    /* The kit's skeleton: a surface-fill block the size of what it stands for, 8px radius. */
     .skel {
       position: absolute;
-      inset: 0.2lh 0;
-      border-radius: var(--radius-pill);
-      background: var(--surface-recess-deep);
+      inset: 0;
+      border-radius: var(--radius-sm);
+      background: var(--surface-fill);
     }
   }
 

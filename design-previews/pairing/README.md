@@ -34,9 +34,15 @@ New code, Retry, Remove device) play the flow on from where it stands. The
 owner has two picks, and the bar gives each a switch and nothing more:
 
 - Denied's New code: quiet (the spec's build) or coral.
-- Removed: retired (the spec's build; Remove device lives in Configure ›
-  Devices) or kept. Kept, Paired gains Remove device as a ghost act and
-  Removed becomes a moment.
+- "Paired" (the spec's build: Done alone; Remove device lives in Configure ›
+  Devices) or "Paired · with Remove device", which adds Remove device as a
+  ghost act and Removed as a moment.
+
+Retry sends a request and the surface waits on the hub's answer: Caw's
+reconnecting loop runs for as long as the request is out, and the head, the
+words and Caw change when the hub answers, never on a timer of their own. The
+preview's pretend hub answers after `--dur-hold`; the proof answers by hand
+(`preview.answer()`).
 
 ## The records
 

@@ -93,8 +93,8 @@ const PICKS = {
     ["coral", "Denied: New code coral"],
   ],
   removed: [
-    ["retired", "Removed: retired"],
-    ["kept", "Removed: kept"],
+    ["retired", "Paired"],
+    ["kept", "Paired · with Remove device"],
   ],
 };
 const pick = { denied: "quiet", removed: "retired" };
@@ -179,6 +179,15 @@ function restOf(m) {
         acts: { primary: { label: "New code", act: "again", tone: "primary" } },
         code: "dim",
         run: "struck",
+      };
+    case "retrying":
+      // Retry's request is out: the stopped cloud, the same words, Caw's reconnecting loop, no act.
+      return {
+        ...base,
+        caw: { status: "reconnecting", still: false },
+        title: "The hub didn't answer",
+        line1: { mark: "question", text: "No code was made. Retry asks the hub again." },
+        code: "held",
       };
     case "failed":
       return {
@@ -455,6 +464,10 @@ function dotsOf() {
   });
 }
 const DOTS = dotsOf();
+/** The innermost dot's distance from the head: the pour is timed from it, so the first dot moves at 0. */
+const FAR_MIN = Math.min(...DOTS.map((dot) => dot.far));
+/** A dot's (or an eye's) delay in the pour: inner first, the outermost at --dur-panel (280). */
+const pourDelay = (far) => (Math.max(0, far - FAR_MIN) / (1 - FAR_MIN)) * D.panel;
 
 /** A CSS `linear` or `cubic-bezier()` curve as a function of progress. */
 function curve(spec) {
@@ -584,6 +597,7 @@ function build() {
     head: $(".head"),
     faceOpen: null,
     faceShut: null,
+    runRow: $(".run-row"),
     run: $(".run"),
     runGlyphs: [],
     strike: $(".run .strike"),
@@ -712,7 +726,7 @@ function build() {
         deny: "denied",
         approve: "approved",
         again: "asking",
-        retry: "asking",
+        retry: "retrying",
         remove: "removed",
         done: null,
       }[event.currentTarget.dataset.act];
@@ -723,6 +737,25 @@ function build() {
   }
 }
 
+/**
+ * The strike through the caps' middle (not the line box's): the run's
+ * baseline in its line box, from its face's metrics, less half a capital's
+ * height, read off the face itself.
+ */
+function placeStrike() {
+  const cs = getComputedStyle(S.run);
+  const pen = document.createElement("canvas").getContext("2d");
+  pen.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+  const face = pen.measureText(CODE);
+  const cap = pen.measureText("H").actualBoundingBoxAscent;
+  const size = Number.parseFloat(cs.fontSize);
+  const line = Number.parseFloat(cs.lineHeight);
+  const baseline = (line - (face.fontBoundingBoxAscent + face.fontBoundingBoxDescent)) / 2 + face.fontBoundingBoxAscent;
+  // In em, so it follows the run's fluid size; the pen's own half in px.
+  const middle = (baseline - cap / 2) / size;
+  S.strike.style.insetBlockStart = `calc(${middle.toFixed(4)}em - ${Number.parseFloat(getComputedStyle(S.strike).blockSize) / 2}px)`;
+}
+
 /** Puts the frame's sizes on the window's width: Desk at 900px and wider, Phone under it. */
 function applyLayout() {
   const layout = deskQuery.matches ? "desk" : "phone";
@@ -731,6 +764,7 @@ function applyLayout() {
   S.m = layout === "desk" ? 10 : 9;
   caw.size = layout === "desk" ? 128 : 96;
   placeDots();
+  placeStrike();
 }
 
 /* ------------------------------------------------------- the dots */
@@ -1501,7 +1535,7 @@ const BOARDS = {
       playDots(
         DOTS.map((dot) =>
           track(
-            { delay: dot.far * D.panel, duration: D.pop },
+            { delay: pourDelay(dot.far), duration: D.pop },
             {
               x: { ease: pour, frames: [kf(0, 0), kf(1, MIDDLE - (dot.x + 0.5))] },
               y: { ease: pour, frames: [kf(0, 0), kf(1, MIDDLE - (dot.y + 0.5))] },
@@ -1521,7 +1555,7 @@ const BOARDS = {
             { transform: "none", opacity: 1 },
             { transform: `translate(${into.x}px, ${into.y}px) scale(${V["pop-scale"]})`, opacity: 0 },
           ],
-          { duration: D.pop, easing: E.crossfade, delay: far * D.panel, id: far * D.panel < 1 ? "lead:eyes" : "pour" }
+          { duration: D.pop, easing: E.crossfade, delay: pourDelay(far), id: pourDelay(far) < 1 ? "lead:eyes" : "pour" }
         );
       }
       // The head pulses as the last of the code pours in, then holds it alone on the paper.
@@ -1541,6 +1575,13 @@ const BOARDS = {
       // The letter run follows 60ms later onto the screen under it, landing at the screen's size.
       S.runGlyphs.forEach((g, i) => {
         flipGlyph(S.screenGlyphs[i], was.glyphs[i], 900, D.settle, E.drawer);
+      });
+      // The run's row empties with the letters' travel and folds away on the same clock; the phone's words ride up with it.
+      part(S.runRow, [{ blockSize: `${was.runRow}px` }, { blockSize: "0px" }], {
+        delay: 840,
+        duration: D.settle,
+        easing: E.out,
+        id: "run-row",
       });
       // The phone's outline draws itself round them.
       for (const path of S.strokes) {
@@ -1571,12 +1612,13 @@ const BOARDS = {
   // Approve. LEAD the press; Deny exits; Approve's words morph to "Done" in place.
   "checking>approved": {
     w: {
-      exits: { second: 0, line1: 960 },
+      // The hint is about a decision already made: it leaves with Deny; what stays moves up into its place in the hold.
+      exits: { second: 0, line1: 0 },
       morph: 0,
       title: 960,
       when: [1420, 210],
       enters: { after: [1480, "pop"], ghost: [1480, "pop"] },
-      follow: 1120,
+      follow: 160,
     },
     object() {
       lingerScreenLetters(400);
@@ -1588,7 +1630,7 @@ const BOARDS = {
   // Deny. LEAD the press; Deny exits, Approve 60ms later.
   "checking>denied": {
     w: {
-      exits: { second: 0, primary: 60, line1: 700 },
+      exits: { second: 0, primary: 60, line1: 0 },
       exitIds: { primary: "lead:exit" },
       title: 700,
       when: [960, 180],
@@ -1745,20 +1787,30 @@ const BOARDS = {
       headShuts(400, 880, was.head);
     },
   },
-  // Retry: Caw plays reconnecting's loop while the request is out, then Asking's board from where the cloud stood.
-  "failed>asking": {
-    w: { exits: { primary: 0, line1: 1200 }, exitIds: { line1: "exit" }, enters: { line1: [1410, "swap", 210] }, title: 1200 },
+  // Retry. LEAD the press; Retry exits. Caw plays reconnecting's loop for as long as the request is out;
+  // nothing else changes until the hub answers.
+  "failed>retrying": {
+    w: { exits: { primary: 0 } },
     object() {
       setCaw({ status: "reconnecting", still: false });
+    },
+  },
+  // The hub answers with a code: Asking's board from 0, on the answer. LEAD Caw arrives by his loading
+  // file's enter; the head returns, the title and the line change, the cloud drifts on from where it stood.
+  "retrying>asking": {
+    w: { exits: { line1: 420 }, exitIds: { line1: "exit" }, enters: { line1: [580, "pop"] }, title: 520 },
+    object() {
+      setCaw({ status: "loading" });
       stopDrift();
       S.dotRun = heldAt(driftTracks(), S.heldTime ?? 0);
       S.dotsDrawn = null;
       drawSoon();
-      pop(S.head, 1200, "head");
-      cue(1200, () => {
-        setCaw({ status: "loading" });
-        startDrift(S.heldTime ?? 0);
-      }, "request");
+      pop(S.head, 460, "head");
+      cue(toBreath(700), () => {
+        if (S.dotRun?.held) {
+          startDrift(S.heldTime ?? 0);
+        }
+      }, "drift");
     },
   },
   // Remove device (only where the owner keeps Removed here): Denied's board on Paired.
@@ -1857,6 +1909,13 @@ function deviceToCloud(was, mark) {
     S.device.style.opacity = "1";
   });
   pop(S.paper, 160, "paper");
+  // The run's row grows back with the paper: the code's moments have it, the device's do not.
+  part(S.runRow, [{ blockSize: "0px" }, { blockSize: `${S.runRow.getBoundingClientRect().height}px` }], {
+    delay: 160,
+    duration: D.settle,
+    easing: E.out,
+    id: "run-row",
+  });
   fadeCloudIn(220);
   pop(S.head, 280, "head");
   cue(400, () => setCaw({ status: "loading" }), "caw");
@@ -1970,6 +2029,7 @@ function readObject() {
       return { x: r.left, y: r.top, h: r.height };
     }),
     pingInk: getComputedStyle(S.ping).borderColor,
+    runRow: S.runRow.getBoundingClientRect().height,
   };
 }
 
@@ -2015,11 +2075,31 @@ const BOARD_END = {
   "removed>asking": 820,
   "waiting>nomatch": 480,
   "asking>failed": 1560,
-  "failed>asking": 1620,
+  "failed>retrying": 160,
+  "retrying>asking": 840,
   "approved>removed": 1660,
 };
 
 /** Plays the board from where the surface stands to `to`. */
+/**
+ * Retry's request to the hub. The surface changes on the hub's answer
+ * (`hubAnswers`), never on a timer of its own: the preview's pretend hub
+ * answers after --dur-hold, or, with the hub in the proof's hands, when the
+ * proof says so.
+ */
+function askHub() {
+  if (settings.hub === "auto") {
+    S.timers.push(setTimeout(hubAnswers, D.hold));
+  }
+}
+
+/** The hub answered Retry with a code: Asking's board plays from where the surface stands. */
+function hubAnswers() {
+  if (S.moment === "retrying") {
+    go("asking");
+  }
+}
+
 function go(to) {
   const from = S.moment;
   const board = boardOf(from, to);
@@ -2032,6 +2112,9 @@ function go(to) {
     finishPing();
   }
   rest(to, { keepPing: board?.keepPing, keepTail: true, recordIn: board?.recordIn ?? true });
+  if (to === "retrying") {
+    askHub();
+  }
   if (!board || reduced.matches) {
     // Less motion, or no board: the surface lands and fades in over --dur-fade; Caw follows at once.
     setCaw(restOf(to).caw);
@@ -2058,7 +2141,7 @@ function go(to) {
  */
 async function snap(m, { figure } = {}) {
   S.figure0 = figure ?? "0:42";
-  S.heldTime = m === "failed" ? D.breath * 0.1 : 0;
+  S.heldTime = m === "failed" || m === "retrying" ? D.breath * 0.1 : 0;
   rest(m);
   markMoment(m);
   if (m === "open") {
@@ -2161,6 +2244,7 @@ export async function start() {
     }
   }
   await document.fonts.ready;
+  placeStrike();
   await snap("open");
   await play("asking", "waiting");
   root.dataset.ready = "";
@@ -2177,6 +2261,8 @@ window.preview = {
   /** Puts the surface in `m` at rest, Caw afresh, the hub's record landed. */
   rest: (m) => snap(m),
   landRecord,
+  /** The hub answers Retry's request (the hub in the proof's hands). */
+  answer: () => hubAnswers(),
   manualHub(on) {
     settings.hub = on ? "manual" : "auto";
   },
