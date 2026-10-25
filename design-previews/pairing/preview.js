@@ -80,20 +80,20 @@ const cawSrc = (pose) => `./caw/${pose}${night.matches ? "-night" : ""}.png`;
 
 const TITLE = {
   code: "Scan with the CawCo app",
-  device: "A phone wants in",
+  device: "Is this you?",
   approved: "Paired",
   removed: "Removed",
-  denied: "Not let in",
-  expired: "That code expired",
-  nomatch: "That scan didn't match",
-  failed: "Pairing didn't start",
-  "failed-down": "Pairing didn't start",
+  denied: "Denied",
+  expired: "The code expired",
+  nomatch: "Wrong code",
+  failed: "Pairing is off",
+  "failed-down": "The hub didn't answer",
 };
 
+/** The line under the code: words while asking and in the last minute, none while waiting. */
 const READOUT = {
   asking: "Getting a code…",
-  waiting: "Or approve it in Needs you, or Configure › Devices.",
-  lastminute: "This code ends in 0:42",
+  lastminute: "Expires in 0:42",
 };
 
 /** The device the phone's record names, as the endings say it (the public case). */
@@ -102,9 +102,10 @@ const RECORD = ["iPhone", "iOS 26.1", "203.0.113.7", "Riyadh, Saudi Arabia"];
 const RECORD_ADDR = 2;
 
 /**
- * Each ending's words, verbatim from report a8f73fdb §3, in its note 2's
- * shape: the glyph, its tone, the verdict (`{code}` is Expired's struck
- * code), the record (null where none), what it means, the acts (one coral).
+ * Each ending in report a8f73fdb §3's shape (its note 2): the glyph, its
+ * tone, the verdict (`{code}` is Expired's struck code), the record (null
+ * where none), what it means (null where none), the acts (one coral). Every
+ * word on the screen is the copy report 24b5859f wrote, verbatim.
  * "removed" is Paired after Remove device (§3 A), "failed-down" Failed's
  * second sample cause.
  */
@@ -113,10 +114,10 @@ const OUTCOME = {
   approved: {
     glyph: "check",
     tone: "done",
-    said: "Bewin's iPhone can run the fleet.",
+    said: "Bewin's iPhone is paired.",
     record: RECORD,
     means:
-      "Its push answers permissions and questions from the lock screen, and it sees every machine, project and session. It's listed in Configure › Devices.",
+      "You can answer permissions and questions from its lock screen. It shows every machine, project and session.",
     acts: [
       { label: "Remove device", tone: "ghost", act: "remove" },
       { label: "Open Devices", tone: "primary", act: "devices" },
@@ -135,33 +136,31 @@ const OUTCOME = {
     tone: "fail",
     said: "Bewin's iPhone was denied.",
     record: RECORD,
-    means:
-      "Nothing reached it, and this code is spent. If that was your phone, make a new code and scan it again.",
+    means: "That code no longer works.",
     acts: [NEW_CODE],
   },
   expired: {
     glyph: "clock",
     tone: "",
-    said: "No phone scanned {code} in its five minutes.",
+    said: "No one scanned {code} in five minutes.",
     record: null,
-    means: "Nothing was paired. A new code lasts another five.",
+    means: null,
     acts: [NEW_CODE],
   },
   nomatch: {
     glyph: "close",
     tone: "fail",
-    said: "A phone scanned a code this hub isn't showing.",
+    said: "A phone scanned a code that isn't this one.",
     record: null,
-    means:
-      "It was an old code, or another hub's. Only the code on this screen pairs here. Make a new one and scan that.",
+    means: "It was an old code, or one from another hub.",
     acts: [NEW_CODE],
   },
   failed: {
     glyph: "close",
     tone: "fail",
-    said: "Pairing is off on this hub, so no code was made (403).",
+    said: "Turn it on in Configure › Devices to get a code.",
     record: null,
-    means: "Turn it on in Configure › Devices, then retry.",
+    means: null,
     acts: [
       { label: "Retry", tone: "ghost", act: "again" },
       { label: "Open Devices", tone: "primary", act: "devices" },
@@ -170,9 +169,9 @@ const OUTCOME = {
   "failed-down": {
     glyph: "close",
     tone: "fail",
-    said: "The hub didn't answer (502). Nothing was changed.",
+    said: "No code was made (502).",
     record: null,
-    means: "Retry once it's back; the code is made then.",
+    means: null,
     acts: [{ label: "Retry", tone: "primary", act: "again" }],
   },
 };
@@ -195,7 +194,7 @@ const NETWORK = {
   },
   lan: {
     addr: "192.168.1.42",
-    tag: "your network",
+    tag: "on this network",
     second: "",
     mono: false,
     late: false,
@@ -1014,7 +1013,7 @@ function tick(S, m) {
     S.timers.push(
       setInterval(() => {
         left = left > 1 ? left - 1 : 42;
-        S.words.put(`This code ends in 0:${String(left).padStart(2, "0")}`);
+        S.words.put(`Expires in 0:${String(left).padStart(2, "0")}`);
       }, 1000)
     );
   }
@@ -1082,7 +1081,7 @@ function rest(S, m, { still = false, keepPing = false, ping = true } = {}) {
   S.letters.style.opacity = kind === "code" ? "1" : "0";
   S.badge.src = "./caw/badge.png";
   S.live.style.opacity = asking ? "1" : "0";
-  S.words.put(READOUT[m] ?? READOUT.waiting);
+  S.words.put(READOUT[m] ?? "");
   S.cardWrap.toggleAttribute("data-warm", m === "lastminute");
 
   // The device.
@@ -1519,7 +1518,7 @@ function plan(S, m) {
     S.title.prepare(TITLE[kind === "outcome" ? m : kind], { ...morph, delay: flat ? 0 : titleAt }),
   ];
   if (m === "waiting" || m === "lastminute") {
-    jobs.push(S.words.prepare(READOUT[m], { ...swap, delay: 0 }));
+    jobs.push(S.words.prepare(READOUT[m] ?? "", { ...swap, delay: 0 }));
   }
   if (m === "removed" && was.moment === "approved") {
     jobs.push(
