@@ -187,6 +187,7 @@ import {
   type FolderCommits,
   FolderRefusal,
   folderPath,
+  makeProjectFolder,
   projectRoot,
   writeFolderFiles,
 } from "./project-folder";
@@ -4563,6 +4564,36 @@ export const createWorkItems = ({
     return `its workspace ${handle(workspace.id)} retired with no word of the commit its clone was on, so it is not cut again: a cut anywhere else could leave its commits behind.`;
   };
 
+  /**
+   * Cuts a workspace on `machineId` ({@link CONTROL_WORKSPACE_CREATE}, its
+   * `[cwd, id, projectId, account, at, first]`). The project's folder is made
+   * first (project-folder.ts `makeProjectFolder`), so the boundary has it from
+   * its first start, and the folder's first use does not hand the boundary
+   * over to a second one. Every cut, new ({@link openWorkspace}) or again
+   * ({@link recut}), goes through here.
+   */
+  const cutOn = async (
+    machineId: string,
+    args: [
+      cwd: string,
+      id: string,
+      projectId: string | null,
+      account: string | null,
+      at: WorkspaceCut | null,
+      first: WorkspaceFirstSession | null,
+    ]
+  ): Promise<WorkspaceCheckout> => {
+    const [, , projectId] = args;
+    if (projectId) {
+      await makeProjectFolder(projectId);
+    }
+    return (await call(
+      machineId,
+      CONTROL_WORKSPACE_CREATE,
+      args
+    )) as WorkspaceCheckout;
+  };
+
   /** Each workspace's cut under way ({@link recut}): one at a time. */
   const recutting = new Map<string, Promise<WorkspaceRow>>();
 
@@ -4621,18 +4652,14 @@ export const createWorkItems = ({
             resume: session.sessionId ?? null,
           }
         : null;
-      const checkout = (await call(
-        workspace.machineId,
-        CONTROL_WORKSPACE_CREATE,
-        [
-          workspace.repoRoot,
-          workspace.id,
-          projectId,
-          session?.accountId ?? null,
-          head,
-          first,
-        ]
-      )) as WorkspaceCheckout;
+      const checkout = await cutOn(workspace.machineId, [
+        workspace.repoRoot,
+        workspace.id,
+        projectId,
+        session?.accountId ?? null,
+        head,
+        first,
+      ]);
       const path = cutPath(workspace.machineId, checkout.path);
       if (path !== workspace.path) {
         throw new Error(
@@ -4834,7 +4861,8 @@ export const createWorkItems = ({
 
   /**
    * A new workspace: the project's place made a git repository first when it
-   * is a plain folder ({@link WorkItemDeps.beforeCut}), then its machine cuts
+   * is a plain folder ({@link WorkItemDeps.beforeCut}) and the project's
+   * folder made ({@link cutOn}), then its machine cuts
    * the clone and starts its boundary, and the hub files it. A place that
    * cannot be made one refuses the workspace in the machine's words, before
    * anything is cut. `checksFor` makes it the gate workspace of that one;
@@ -4867,14 +4895,14 @@ export const createWorkItems = ({
     opening.add(id);
     const started = Date.now();
     try {
-      const checkout = (await call(machineId, CONTROL_WORKSPACE_CREATE, [
+      const checkout = await cutOn(machineId, [
         cwd,
         id,
         projectId,
         account ?? null,
         null,
         first ?? null,
-      ])) as WorkspaceCheckout;
+      ]);
       return db.createWorkspace({
         id,
         machineId,
