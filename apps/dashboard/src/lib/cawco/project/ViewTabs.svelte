@@ -22,7 +22,8 @@
    * room their glyphs and counts don't take. The ⋯ says what waits in the
    * views it holds: the sum of their counts (Decisions' pages waiting on
    * picks; JOURNEY.md, every view with something in it shows its count in
-   * the first view), as a side head's More says its count, and it is taken
+   * the first view), a Needs you count drawn as the attn badge (its Status
+   * dot before the figure, no fill), and it is taken
    * at the width it will be drawn at, counted while a counted view is still
    * to go in it. Each tab's width is
    * read off a ruler, every view drawn as a tab out of sight (inert, hidden,
@@ -246,6 +247,9 @@
   const menu = $derived(rest.length === 0 ? null : (placed?.menu ?? null));
   /** What waits in the views the ⋯ holds. */
   const held = $derived(rest.reduce((sum, view) => sum + countOf(view), 0));
+  const moreName = $derived(
+    held > 0 ? viewsWords.moreNeedsYou(held) : viewsWords.more
+  );
   const currentLabel = $derived(
     views.find((view) => view.value === current)?.label ?? ""
   );
@@ -339,20 +343,20 @@
         {#snippet child({ props })}
           <Button
             {...props}
-            aria-label={held > 0
-              ? `${viewsWords.more}, ${held} waiting`
-              : viewsWords.more}
+            aria-label={moreName}
             class="touch-hit flex-none"
             data-views-more
             size={held > 0 ? "sm" : "icon-sm"}
-            title={viewsWords.more}
+            title={moreName}
             variant="ghost"
           >
             <IconMore />
             {#if held > 0}
-              <!-- What waits in the views it holds, as each one's tab says it. -->
-              <span data-slot="more-count" class="type-meta num text-ink-muted"
-                >{held}</span
+              <!-- The pages waiting on picks in the views it holds: a Needs
+                   you count (JOURNEY.md), the attn badge's Status dot before
+                   its figure. -->
+              <Badge data-box data-slot="more-count" size="count" variant="attn"
+                ><span>{held}</span></Badge
               >
             {/if}
           </Button>
@@ -395,7 +399,9 @@
       <span class="inline-flex w-max" data-ruler-more-counted>
         <Button size="sm" variant="ghost">
           <IconMore />
-          <span class="type-meta num">{total}</span>
+          <Badge data-box size="count" variant="attn"
+            ><span>{total}</span></Badge
+          >
         </Button>
       </span>
     {/if}

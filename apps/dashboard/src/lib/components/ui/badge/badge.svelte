@@ -12,7 +12,10 @@
         ghost: "bg-transparent text-ink-muted",
         destructive: "bg-status-fail-bg text-status-fail-ink",
         live: "bg-status-live-bg text-status-live-ink",
-        attn: "bg-status-attn-bg text-status-attn-ink",
+        /* Needs you is a mark, never a surface (DESIGN.md, Badges: "`attn`
+           has no fill, its Status dot before its word in
+           `status-attn-ink`"): the dot is drawn before its children. */
+        attn: "bg-transparent text-status-attn-ink",
         done: "bg-status-done-bg text-status-done-ink",
         fail: "bg-status-fail-bg text-status-fail-ink",
         /* A release note's section (DESIGN.md, Update notice: "New in
@@ -108,5 +111,13 @@
   bind:this={ref}
   {...restProps}
 >
+  {#if variant === "attn"}
+    <span
+      aria-hidden="true"
+      class="size-(--status-dot-size) shrink-0 rounded-pill bg-status-attn-glyph"
+      data-box
+      data-slot="badge-dot"
+    ></span>
+  {/if}
   {@render children?.()}
 </svelte:element>

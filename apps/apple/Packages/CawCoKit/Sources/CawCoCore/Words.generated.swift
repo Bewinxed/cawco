@@ -2473,6 +2473,11 @@ public enum Words {
         /// The strip's ⋯ after its tabs, holding the views with no room to stand as one.
         public static let more = "More views"
 
+        /// The same ⋯ while the views it holds have pages waiting on picks (Needs you).
+        public static func moreNeedsYou(count: Int) -> String {
+            "More views, \(count) needs you"
+        }
+
         /// The strip's one menu where no tab has room, named for the view on screen.
         public static func pick(view: String) -> String {
             "View: \(view)"

@@ -12,6 +12,8 @@ export const viewsWords = {
   ask: "Ask Caw for a view",
   /** The strip's ⋯ after its tabs, holding the views with no room to stand as one. */
   more: "More views",
+  /** The same ⋯ while the views it holds have pages waiting on picks (Needs you). */
+  moreNeedsYou: (count: number) => `More views, ${count} needs you`,
   /** The strip's one menu where no tab has room, named for the view on screen. */
   pick: (view: string) => `View: ${view}`,
   /** The ask's composer, a view in a sentence. */

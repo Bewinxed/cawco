@@ -44,7 +44,9 @@
  *     compact, no word of theirs drawn, none with a fill, edge or shadow
  *     of its own at rest, each named in its tooltip; it
  *     stands as many views as tabs as fit beside them, the rest in the ⋯,
- *     which says its views' count where one of them has one (a decision
+ *     which says its views' count where one of them has one, as a Needs
+ *     you mark (the attn badge: its Status dot before the figure in
+ *     status-attn-ink, no fill; its name says "needs you") (a decision
  *     page waiting on picks makes Decisions' 1; JOURNEY.md, every view with
  *     something in it shows its count in the first view) (`stripFills`);
  *     from 900, with the rail where it rests, the chosen view is a tab (the
@@ -68,6 +70,7 @@ import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { commonWords } from "../../../../packages/core/src/words/common";
 import { projectWords } from "../../../../packages/core/src/words/project";
+import { viewsWords } from "../../../../packages/core/src/words/views";
 import { MACHINE, type Reply, type Seen, until } from "../../../scratch-fleet";
 import { scan } from "../../journeys/scan";
 import { type Engine, type Kit, open, type Spec, settle } from "../../kit";
@@ -1058,6 +1061,33 @@ const readFill = (page: Page) =>
         shadow: look.boxShadow === "none" ? "" : look.boxShadow,
       };
     };
+    /** A token's colour as the engine computes it, read off a probe of it. */
+    const tokenColour = (token: string) => {
+      const probe = document.createElement("span");
+      probe.style.color = `var(${token})`;
+      document.body.append(probe);
+      const { color } = getComputedStyle(probe);
+      probe.remove();
+      return color;
+    };
+    /** The ⋯'s count as drawn: its name and tooltip, its ink, its fill, its dot. */
+    const markOf = (one: Element | null) => {
+      const count = one?.querySelector<HTMLElement>('[data-slot="more-count"]');
+      const dot = count?.querySelector<HTMLElement>('[data-slot="badge-dot"]');
+      const words = count?.lastElementChild;
+      return {
+        name: one?.getAttribute("aria-label") ?? "",
+        title: one?.getAttribute("title") ?? "",
+        ink: words ? getComputedStyle(words).color : "",
+        fill: count && seen(getComputedStyle(count).backgroundColor),
+        dot: dot ? getComputedStyle(dot).backgroundColor : "",
+        dotFirst:
+          dot !== null && dot !== undefined && count?.firstElementChild === dot,
+        dotDrawn: dot ? dot.getBoundingClientRect().width > 0 : false,
+        attnInk: tokenColour("--status-attn-ink"),
+        attnGlyph: tokenColour("--status-attn-glyph"),
+      };
+    };
     const actions = [...(group?.querySelectorAll("button") ?? [])]
       .filter((one) => one.checkVisibility())
       .map((one) => ({
@@ -1081,6 +1111,7 @@ const readFill = (page: Page) =>
       says:
         more?.querySelector('[data-slot="more-count"]')?.textContent?.trim() ??
         "",
+      mark: markOf(more),
       next: rest[0] ?? null,
       left: rest.length,
       tabs: shown.size,
@@ -1157,6 +1188,20 @@ const stripFills = async (
       fill.held > 0 ? fill.says === String(fill.held) : fill.says === "",
       JSON.stringify({ held: fill.held, says: fill.says, strip })
     );
+    if (fill.held > 0) {
+      const { mark } = fill;
+      kit.check(
+        `${tag}: the ⋯'s count is a Needs you mark: its Status dot first in status-attn-glyph, its figure in status-attn-ink, no fill, named “${mark.name}”`,
+        mark.dotFirst &&
+          mark.dotDrawn &&
+          mark.dot === mark.attnGlyph &&
+          mark.ink === mark.attnInk &&
+          mark.fill === false &&
+          mark.name === viewsWords.moreNeedsYou(fill.held) &&
+          mark.title === mark.name,
+        JSON.stringify(mark)
+      );
+    }
   }
   if (chosen) {
     kit.check(
