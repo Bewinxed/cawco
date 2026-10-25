@@ -8,16 +8,12 @@
     />
     <title>Pick</title>
     <link href="data:," rel="icon" />
+    <!-- The house tokens, copied from apps/dashboard/src/lib/tokens/tokens.css
+         (generated from design/tokens/cawco.tokens.json). -->
+    <link href="tokens.css" rel="stylesheet" />
     <style>
       :root {
-        color-scheme: dark;
-        --bg: #111214;
-        --card: #1b1c20;
-        --line: #2b2d33;
-        --text: #ececef;
-        --dim: #9a9ba3;
-        --accent: #5b8def;
-        --pick: #3fb37f;
+        color-scheme: light dark;
       }
       * {
         box-sizing: border-box;
@@ -25,208 +21,350 @@
       html,
       body {
         margin: 0;
-        background: var(--bg);
-        color: var(--text);
-        font:
-          16px / 1.4 system-ui,
-          -apple-system,
-          sans-serif;
+        background: var(--surface-recess);
+        color: var(--ink-strong);
+        font-family: var(--font-sans);
+        font-size: var(--text-body);
+        line-height: var(--leading-body);
+        -webkit-tap-highlight-color: transparent;
+      }
+      button {
+        font: inherit;
+        color: inherit;
+      }
+      :focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
       }
       main {
-        max-width: 560px;
+        /* Wide enough for three options side by side (3 × 342 + 2 gaps + pads). */
+        max-width: 1100px;
         margin: 0 auto;
-        padding: calc(16px + env(safe-area-inset-top)) 14px
-          calc(24px + env(safe-area-inset-bottom));
+        padding: calc(var(--space-3) + env(safe-area-inset-top))
+          var(--space-4) calc(var(--space-7) + env(safe-area-inset-bottom));
+      }
+      /* One row: Back, a bare chevron in its glass, then where he is. */
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-height: 36px;
+        margin: 0 0 var(--space-2);
+      }
+      .back {
+        display: grid;
+        place-items: center;
+        inline-size: 36px;
+        block-size: 36px;
+        flex: none;
+        padding: 0;
+        border: 0;
+        border-radius: var(--radius-pill);
+        background: var(--surface-raised);
+        color: var(--ink-strong);
+        position: relative;
+      }
+      @media (pointer: coarse) {
+        .back::after {
+          content: "";
+          position: absolute;
+          inset: -4px;
+        }
+      }
+      @media (hover: hover) {
+        .back:hover {
+          background: var(--surface-hover);
+        }
+      }
+      .back svg {
+        inline-size: 20px;
+        block-size: 20px;
       }
       .step {
-        color: var(--dim);
-        font-size: 13px;
-        margin: 0 0 6px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-      .step button {
-        background: none;
-        border: 0;
-        color: var(--accent);
-        font-size: 14px;
-        padding: 8px 0;
+        margin: 0;
+        color: var(--ink-muted);
+        font-size: var(--text-label);
+        line-height: var(--leading-label);
+        font-variant-numeric: tabular-nums;
       }
       h1 {
-        font-size: 21px;
-        line-height: 1.25;
-        margin: 0 0 6px;
-        font-weight: 650;
+        font-size: var(--text-title);
+        line-height: var(--leading-tight);
+        font-weight: var(--weight-strong);
+        margin: 0 0 var(--space-2);
+        overflow-wrap: anywhere;
       }
       .how {
-        color: var(--dim);
-        font-size: 14px;
-        margin: 0 0 16px;
+        color: var(--ink-muted);
+        font-size: var(--text-label);
+        line-height: var(--leading-label);
+        margin: 0 0 var(--space-4);
+        max-width: 68ch;
       }
-      .opt {
-        background: var(--card);
-        border: 2px solid var(--line);
-        border-radius: 14px;
-        margin: 0 0 16px;
-        overflow: hidden;
+      /* How many options there are, each one a press away, before any picture. */
+      .count {
+        margin: 0 0 var(--space-1);
+        color: var(--ink-muted);
+        font-size: var(--text-meta);
+        line-height: var(--leading-meta);
       }
-      .opt.chosen {
-        border-color: var(--pick);
+      .ways {
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(0, 1fr);
+        gap: 2px;
+        padding: 2px;
+        margin: 0 0 var(--space-4);
+        border-radius: var(--radius-md);
+        background: var(--surface-recess-deep);
+        max-width: 560px;
       }
-      .head {
-        padding: 12px 14px 10px;
-      }
-      .name {
-        font-size: 17px;
-        font-weight: 650;
-        margin: 0;
+      .way {
         display: flex;
-        gap: 8px;
+        flex-direction: column;
         align-items: center;
-        flex-wrap: wrap;
+        justify-content: center;
+        min-height: 44px;
+        min-width: 0;
+        padding: var(--space-1) var(--space-2);
+        border: 0;
+        border-radius: calc(var(--radius-md) - 2px);
+        background: transparent;
+        color: var(--ink-muted);
+        font-size: var(--text-label);
+        line-height: var(--leading-label);
+        text-align: center;
       }
-      .badge {
-        font-size: 12px;
-        font-weight: 600;
-        color: #0b1530;
-        background: var(--accent);
-        border-radius: 6px;
-        padding: 2px 7px;
+      .way:focus-visible {
+        outline-offset: -2px;
       }
-      .why {
-        color: var(--dim);
-        font-size: 13px;
-        margin: 4px 0 0;
+      @media (hover: hover) {
+        .way:hover {
+          color: var(--ink-strong);
+        }
       }
+      .way[aria-current="true"] {
+        background: var(--surface-lift);
+        color: var(--ink-strong);
+        box-shadow: var(--shadow-xs);
+      }
+      .way .n {
+        font-variant-numeric: tabular-nums;
+      }
+      .way .w {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+        max-width: 100%;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        font-weight: var(--weight-strong);
+      }
+      .way .r {
+        font-size: var(--text-meta);
+        line-height: var(--leading-meta);
+        color: var(--ink-muted);
+      }
+      .way svg,
+      .pick svg {
+        inline-size: 16px;
+        block-size: 16px;
+        flex: none;
+      }
+      /* The options, side by side: all of them at a desk, the next one at the
+         edge on a phone, a swipe or a press on its number away. */
       .strip {
         display: flex;
+        align-items: flex-start;
+        gap: var(--space-3);
         overflow-x: auto;
+        overscroll-behavior-x: contain;
         scroll-snap-type: x mandatory;
+        scroll-padding-inline: var(--space-4);
+        margin-inline: calc(-1 * var(--space-4));
+        padding-inline: var(--space-4);
         scrollbar-width: none;
       }
       .strip::-webkit-scrollbar {
         display: none;
       }
-      .shot {
-        flex: 0 0 100%;
+      @media (prefers-reduced-motion: no-preference) {
+        .strip {
+          scroll-behavior: smooth;
+        }
+      }
+      .opt {
+        /* A picture is drawn at 1 CSS px to 1 px: 340 plus the card's edges. */
+        flex: 0 0 342px;
         scroll-snap-align: start;
+        background: var(--surface-raised);
+        border: 1px solid var(--border-hairline);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+      }
+      .opt.chosen {
+        border-color: var(--brand-solid);
+      }
+      .head {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: var(--space-1) var(--space-3);
+        align-items: start;
+        padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+      }
+      .name {
+        font-size: var(--text-body);
+        line-height: var(--leading-ui);
+        font-weight: var(--weight-strong);
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+      .badge {
+        display: inline-block;
+        margin: var(--space-1) 0 0;
+        padding: 1px var(--space-2);
+        border-radius: var(--radius-xs);
+        background: var(--surface-recess);
+        color: var(--ink-muted);
+        font-size: var(--text-meta);
+        line-height: var(--leading-meta);
+        font-weight: var(--weight-body);
+      }
+      .why {
+        grid-column: 1 / -1;
+        color: var(--ink-muted);
+        font-size: var(--text-label);
+        line-height: var(--leading-label);
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+      /* The kit's outline button. */
+      .pick {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-height: 36px;
+        min-inline-size: 72px;
+        justify-content: center;
+        padding: 0 var(--space-4);
+        border: 1px solid var(--border-button-outline);
+        border-radius: var(--radius-md);
+        background: var(--surface-raised);
+        color: var(--ink-strong);
+        font-size: var(--text-body);
+        font-weight: var(--weight-strong);
+        white-space: nowrap;
+        transition: scale 150ms ease-out;
+      }
+      @media (pointer: coarse) {
+        .pick {
+          min-height: 44px;
+        }
+      }
+      @media (hover: hover) {
+        .pick:hover {
+          background: var(--surface-hover);
+        }
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .pick:active {
+          scale: 0.97;
+        }
+      }
+      .opt.chosen .pick {
+        border-color: var(--brand-solid);
+        background: var(--surface-recess);
+      }
+      .shots {
+        display: grid;
+        gap: var(--space-1);
+        padding: 0 0 var(--space-1);
+      }
+      .shot {
         position: relative;
         user-select: none;
         -webkit-user-select: none;
         -webkit-touch-callout: none;
-        touch-action: pan-x pan-y;
       }
       /* Icons at the size they ship: a picture is drawn at 1 CSS px to 1 px, never stretched. */
       .shot img {
         display: block;
-        width: auto;
-        max-width: 100%;
+        width: 340px;
+        max-width: none;
         height: auto;
-        margin-inline: auto;
-        background: #0b0b0c;
-      }
-      .shot {
-        padding-bottom: 30px;
       }
       .lbl {
-        position: absolute;
-        left: 8px;
-        bottom: 8px;
-        background: rgba(0, 0, 0, 0.66);
-        font-size: 12px;
-        padding: 3px 8px;
-        border-radius: 6px;
+        margin: 0;
+        padding: var(--space-1) var(--space-4) var(--space-2);
+        color: var(--ink-muted);
+        font-size: var(--text-meta);
+        line-height: var(--leading-meta);
       }
       .orig {
         position: absolute;
-        left: 8px;
-        top: 8px;
-        background: var(--accent);
-        color: #fff;
-        font-size: 12px;
-        font-weight: 600;
-        padding: 3px 8px;
-        border-radius: 6px;
+        inset-inline-end: var(--space-2);
+        top: var(--space-2);
+        padding: 1px var(--space-2);
+        border-radius: var(--radius-xs);
+        background: var(--ink-solid);
+        color: var(--on-ink);
+        font-size: var(--text-meta);
+        line-height: var(--leading-meta);
         display: none;
       }
       .shot.held .orig {
         display: block;
       }
-      .dots {
-        display: flex;
-        justify-content: center;
-        gap: 6px;
-        padding: 8px 0 2px;
-      }
-      .dots i {
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-        background: #3a3c43;
-      }
-      .dots i.on {
-        background: var(--text);
-      }
-      .hint {
-        text-align: center;
-        color: var(--dim);
-        font-size: 12px;
-        margin: 0 0 10px;
-      }
-      .pickbtn {
-        display: block;
-        width: calc(100% - 28px);
-        margin: 4px 14px 14px;
-        min-height: 52px;
-        border: 0;
-        border-radius: 11px;
-        background: var(--accent);
-        color: #fff;
-        font-size: 17px;
-        font-weight: 650;
-      }
-      .opt.chosen .pickbtn {
-        background: var(--pick);
-        color: #06140c;
-      }
-      .done li {
-        margin: 0 0 12px;
-        list-style: none;
-      }
       .done ul {
         padding: 0;
-        margin: 0 0 20px;
+        margin: 0 0 var(--space-6);
+        max-width: 560px;
+      }
+      .done li {
+        margin: 0 0 var(--space-3);
+        list-style: none;
       }
       .done .q {
-        color: var(--dim);
-        font-size: 13px;
+        color: var(--ink-muted);
+        font-size: var(--text-label);
       }
       .done .a {
-        font-size: 17px;
-        font-weight: 600;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2);
+        font-weight: var(--weight-strong);
       }
       .done .a button {
-        background: none;
-        border: 0;
-        color: var(--accent);
-        font-size: 14px;
-        margin-left: 8px;
-        padding: 6px;
+        min-height: 30px;
+        padding: 0 var(--space-3);
+        border: 1px solid var(--border-button-outline);
+        border-radius: var(--radius-md);
+        background: var(--surface-raised);
+        font-size: var(--text-label);
+        font-weight: var(--weight-body);
       }
+      /* The page's one prominent act: the coral action. */
       .big {
         display: block;
         width: 100%;
-        min-height: 56px;
+        max-width: 560px;
+        min-height: 44px;
         border: 0;
-        border-radius: 12px;
-        background: var(--pick);
-        color: #06140c;
-        font-size: 18px;
-        font-weight: 700;
+        border-radius: var(--radius-md);
+        background: var(--action-surface, var(--action-solid));
+        color: var(--on-action);
+        font-size: var(--text-body);
+        font-weight: var(--weight-strong);
+      }
+      @media (hover: hover) {
+        .big:hover {
+          background: var(--action-surface-hover, var(--action-hover));
+        }
       }
       .err {
-        color: #e0565b;
+        color: var(--status-fail-ink);
       }
     </style>
   </head>
@@ -234,9 +372,12 @@
     <main id="main"><p class="how">Loading…</p></main>
     <script>
       "use strict";
-      // One decision per screen. Each option is a card: its pictures (swipe), hold a
-      // picture to see the original, and one "Pick" button that records the choice
-      // and moves to the next decision. The last screen copies the picks for chat.
+      // One decision per screen. Its options stand side by side under a count
+      // and one press each on their numbers: every option is in the first view
+      // at a desk, and on a phone the count says how many and the next one
+      // shows at the edge. Each option holds its pictures (hold one to see
+      // today's) and its own Pick, which records the choice and moves on. The
+      // last screen copies the picks for chat.
       // Manifest schema: scripts/probe-review/README.md.
       const main = document.getElementById("main");
       let manifest;
@@ -245,16 +386,20 @@
       const storeKey = () => `probe-review:${manifest.id ?? manifest.title}`;
       const save = () =>
         localStorage.setItem(storeKey(), JSON.stringify(picks));
+      // Solar's linear chevron, and the house tick (24px grid, 1.5 stroke, round caps).
+      const chevronLeft = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5L9 12L15 19" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+      const tick = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12.5L9.5 17L19 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+      const words = ["", "one", "two", "three", "four", "five", "six"];
 
-      function shot(item, total, index) {
-        const el = document.createElement("div");
+      function shot(item) {
+        const el = document.createElement("figure");
         el.className = "shot";
-        el.innerHTML = `<img alt=""><span class="orig">Original</span><span class="lbl"></span>`;
+        el.style.margin = "0";
+        el.innerHTML = `<img alt="" width="340"><span class="orig">Today</span><figcaption class="lbl"></figcaption>`;
         const img = el.querySelector("img");
         img.src = item.after;
-        img.loading = index === 0 ? "eager" : "lazy";
-        el.querySelector(".lbl").textContent =
-          `${item.label}${total > 1 ? ` · ${index + 1}/${total}` : ""}`;
+        img.alt = item.label;
+        el.querySelector(".lbl").textContent = item.label;
         if (item.before && item.before !== item.after) {
           let timer;
           const show = () => {
@@ -279,54 +424,32 @@
         return el;
       }
 
-      function option(d, c) {
+      function option(d, c, i) {
         const el = document.createElement("section");
         el.className = `opt${picks[d.id] === c.id ? " chosen" : ""}`;
-        el.innerHTML = `<div class="head"><p class="name"></p><p class="why"></p></div><div class="strip"></div><div class="dots"></div><p class="hint"></p><button class="pickbtn" type="button"></button>`;
-        const name = el.querySelector(".name");
-        name.textContent = c.label;
+        el.id = `opt-${c.id}`;
+        el.dataset.option = c.id;
+        el.setAttribute("aria-label", `Option ${i + 1}: ${c.label}`);
+        el.innerHTML = `<div class="head"><div><p class="name"></p></div><button class="pick" type="button"></button><p class="why"></p></div><div class="shots"></div>`;
+        el.querySelector(".name").textContent = c.label;
         if (d.recommended === c.id) {
           const b = document.createElement("span");
           b.className = "badge";
           b.textContent = "Recommended";
-          name.append(b);
+          el.querySelector(".head > div").append(b);
         }
         el.querySelector(".why").textContent = c.result ?? "";
-        const strip = el.querySelector(".strip");
-        const dots = el.querySelector(".dots");
-        c.items.forEach((item, i) => {
-          strip.append(shot(item, c.items.length, i));
-          const dot = document.createElement("i");
-          if (i === 0) {
-            dot.className = "on";
-          }
-          dots.append(dot);
-        });
-        if (c.items.length < 2) {
-          dots.remove();
+        const shots = el.querySelector(".shots");
+        for (const item of c.items) {
+          shots.append(shot(item));
         }
-        strip.addEventListener(
-          "scroll",
-          () => {
-            const i = Math.round(strip.scrollLeft / strip.clientWidth);
-            for (const [j, dot] of dots.querySelectorAll("i").entries()) {
-              dot.classList.toggle("on", i === j);
-            }
-          },
-          { passive: true }
+        const btn = el.querySelector(".pick");
+        const chosen = picks[d.id] === c.id;
+        btn.innerHTML = chosen ? `${tick}<span>Picked</span>` : "<span>Pick</span>";
+        btn.setAttribute(
+          "aria-label",
+          chosen ? `Picked ${c.label}` : `Pick ${c.label}`
         );
-        const hasOriginal = c.items.some(
-          (it) => it.before && it.before !== it.after
-        );
-        el.querySelector(".hint").textContent = [
-          c.items.length > 1 ? "Swipe for more" : "",
-          hasOriginal ? "hold to see the original" : "",
-        ]
-          .filter(Boolean)
-          .join(" · ");
-        const btn = el.querySelector(".pickbtn");
-        btn.textContent =
-          picks[d.id] === c.id ? `✓ Picked ${c.label}` : `Pick ${c.label}`;
         btn.onclick = () => {
           picks[d.id] = c.id;
           save();
@@ -342,27 +465,90 @@
 
       function decisionScreen(d) {
         const n = manifest.decisions.length;
-        main.innerHTML = `<p class="step"><span></span><button type="button" class="back"></button></p><h1></h1><p class="how"></p>`;
-        main.querySelector(".step span").textContent =
+        const k = d.candidates.length;
+        main.innerHTML = `<div class="bar"><p class="step"></p></div><h1></h1><p class="how"></p><p class="count"></p><div class="ways"></div><div class="strip"></div>`;
+        main.querySelector(".step").textContent =
           n > 1 ? `Question ${at + 1} of ${n}` : manifest.title;
-        const back = main.querySelector(".back");
         if (at > 0) {
-          back.textContent = "‹ Back";
+          const back = document.createElement("button");
+          back.type = "button";
+          back.className = "back";
+          back.innerHTML = chevronLeft;
+          const where = `Back to question ${at}`;
+          back.setAttribute("aria-label", where);
+          back.title = where;
           back.onclick = () => {
             at -= 1;
             render();
             window.scrollTo(0, 0);
           };
-        } else {
-          back.remove();
+          main.querySelector(".bar").prepend(back);
         }
         main.querySelector("h1").textContent = d.question;
         main.querySelector(".how").textContent = d.bar
           ? `Tap the one that looks best. ${d.bar}`
           : "Tap the one that looks best.";
-        for (const c of d.candidates) {
-          main.append(option(d, c));
+        main.querySelector(".count").textContent =
+          `${words[k] ? words[k][0].toUpperCase() + words[k].slice(1) : k} options, side by side`;
+        const ways = main.querySelector(".ways");
+        ways.setAttribute("aria-label", `${k} options`);
+        const strip = main.querySelector(".strip");
+        const cards = d.candidates.map((c, i) => option(d, c, i));
+        d.candidates.forEach((c, i) => {
+          const w = document.createElement("button");
+          w.type = "button";
+          w.className = "way";
+          w.dataset.option = c.id;
+          w.setAttribute("aria-controls", `opt-${c.id}`);
+          const picked = picks[d.id] === c.id;
+          w.innerHTML = `<span class="w">${picked ? tick : ""}<span class="n"></span></span>`;
+          w.querySelector(".n").textContent = `${i + 1} ${c.short ?? c.label}`;
+          if (d.recommended === c.id) {
+            const r = document.createElement("span");
+            r.className = "r";
+            r.textContent = "Recommended";
+            w.append(r);
+          }
+          w.setAttribute(
+            "aria-label",
+            `Option ${i + 1}: ${c.label}${d.recommended === c.id ? ", recommended" : ""}${picked ? ", picked" : ""}`
+          );
+          w.onclick = () => {
+            strip.scrollTo({
+              left: cards[i].offsetLeft - strip.offsetLeft - Number.parseFloat(getComputedStyle(strip).scrollPaddingInlineStart || "0"),
+            });
+            cards[i].querySelector(".pick").focus({ preventScroll: true });
+          };
+          ways.append(w);
+        });
+        for (const card of cards) {
+          strip.append(card);
         }
+        // The option in front, where the options are wider than the view.
+        const mark = () => {
+          const overflows = strip.scrollWidth > strip.clientWidth + 1;
+          const pad = Number.parseFloat(getComputedStyle(strip).scrollPaddingInlineStart) || 0;
+          const left = strip.getBoundingClientRect().left + pad;
+          let near = 0;
+          let best = Number.POSITIVE_INFINITY;
+          cards.forEach((card, i) => {
+            const dx = Math.abs(card.getBoundingClientRect().left - left);
+            if (dx < best) {
+              best = dx;
+              near = i;
+            }
+          });
+          for (const [i, w] of [...ways.children].entries()) {
+            if (overflows && i === near) {
+              w.setAttribute("aria-current", "true");
+            } else {
+              w.removeAttribute("aria-current");
+            }
+          }
+        };
+        strip.addEventListener("scroll", mark, { passive: true });
+        new ResizeObserver(mark).observe(strip);
+        mark();
       }
 
       function doneScreen() {

@@ -11,6 +11,7 @@
         {
           "id": "today",
           "label": "Today (in its container)",
+          "short": "Today",
           "result": "What ships now: each glyph on a half-ink disc.",
           "items": [
             {
@@ -26,6 +27,7 @@
         {
           "id": "bare",
           "label": "Without its container",
+          "short": "Bare",
           "result": "Discs gone; Needs you and Sleeping stay filled, so the row reads uneven.",
           "items": [
             {
@@ -43,6 +45,7 @@
         {
           "id": "line",
           "label": "The whole row in Solar's line cut",
+          "short": "Line cut",
           "result": "Line cut, even ink: i, ! and ? with heavier stems and real dots; Sleeping's moon in full ink. Stopped and Idle: the next question.",
           "items": [
             {
@@ -68,6 +71,7 @@
         {
           "id": "filled",
           "label": "Both filled, Solar's size",
+          "short": "Filled",
           "result": "Reads as pause and stop, at the row's ink (0.90–1.37×); smaller than their neighbours (5.3px at 16px).",
           "items": [
             {
@@ -83,6 +87,7 @@
         {
           "id": "outlined",
           "label": "Both outlined",
+          "short": "Outlined",
           "result": "The row's size and ink, but Stopped reads as an empty checkbox.",
           "items": [
             {
@@ -108,6 +113,7 @@
         {
           "id": "today",
           "label": "Today (in its container)",
+          "short": "Today",
           "result": "What ships now: every glyph on a raised tile; four also on a disc or square.",
           "items": [
             {
@@ -123,6 +129,7 @@
         {
           "id": "bare",
           "label": "Without its container",
+          "short": "Bare",
           "result": "No tiles; the bare four read lighter than the filled shield and bolt. Bare, the identity hues darken in Day across the app (rail, editors, New session's chips, machine tiles): on the page 1.78–2.99:1 before, 3.08–4.02:1 after; on raised surfaces 1.92–3.23 → 3.33–4.35 (amber and cyan-400 set the floors).",
           "items": [
             {
@@ -140,6 +147,7 @@
         {
           "id": "line",
           "label": "The whole row in Solar's line cut",
+          "short": "Line cut",
           "result": "Every row in the line cut, even ink as cut; MCP's plug head is an outline. Picking this darkens the identity hues across the app in Day (rail, editors, New session's chips, machine tiles): on the page 1.78–2.99:1 before, 3.08–4.02:1 after; on raised surfaces 1.92–3.23 → 3.33–4.35 (amber and cyan-400 set the floors).",
           "items": [
             {
@@ -165,6 +173,7 @@
         {
           "id": "today",
           "label": "Today (in its container)",
+          "short": "Today",
           "result": "What ships now: five of these in a rounded square.",
           "items": [
             {
@@ -180,6 +189,7 @@
         {
           "id": "bare",
           "label": "Without its container",
+          "short": "Bare",
           "result": "Squares gone; Fork reads lighter than the filled pencil and split view.",
           "items": [
             {
@@ -197,6 +207,7 @@
         {
           "id": "line",
           "label": "The whole row in Solar's line cut",
+          "short": "Line cut",
           "result": "Every row in the line cut, even ink as cut; Split view stands heavier (1.7–1.85×).",
           "items": [
             {
@@ -222,6 +233,7 @@
         {
           "id": "today",
           "label": "Today (in its container)",
+          "short": "Today",
           "result": "What ships now: a white sprite on a hued tile.",
           "items": [
             {
@@ -233,6 +245,7 @@
         {
           "id": "bare",
           "label": "Without its container",
+          "short": "Bare",
           "result": "The sprite alone, drawn in the hue the tile had.",
           "items": [
             {
@@ -253,6 +266,7 @@
         {
           "id": "today",
           "label": "Today (in its container)",
+          "short": "Today",
           "result": "What ships now: T in a square; done and remove on discs.",
           "items": [
             {
@@ -264,6 +278,7 @@
         {
           "id": "bare",
           "label": "Without its container",
+          "short": "Bare",
           "result": "The T, tick and cross alone.",
           "items": [
             {
@@ -284,6 +299,7 @@
         {
           "id": "today",
           "label": "Today (in its container)",
+          "short": "Today",
           "result": "What ships now, top to bottom: add, read, task list, away, improved, sort, MCP, spend, terminal, key, play.",
           "items": [
             {
@@ -295,6 +311,7 @@
         {
           "id": "bare",
           "label": "Without its container",
+          "short": "Bare",
           "result": "The same eleven without their containers.",
           "items": [
             {
@@ -315,6 +332,7 @@
         {
           "id": "today",
           "label": "Today (in its container)",
+          "short": "Today",
           "result": "What ships now: the sprite on a hued tile, which also carries the row's count, its deck of rows and the status dot.",
           "items": [
             {
@@ -326,6 +344,7 @@
         {
           "id": "bare",
           "label": "Without its container",
+          "short": "Bare",
           "result": "The sprite alone in its hue. The count, deck and status dot each need a new place: a TreeMark redesign, which comes back to you as its own page before any build.",
           "items": [
             {
@@ -346,6 +365,7 @@
         {
           "id": "today",
           "label": "Keep as it is",
+          "short": "Keep",
           "result": "Kept as it is: its circle is the clock's face.",
           "items": [
             {
@@ -357,6 +377,7 @@
         {
           "id": "bare",
           "label": "Without its container",
+          "short": "Bare",
           "result": "Hands alone, the face taken as a container.",
           "items": [
             {
@@ -377,6 +398,7 @@
         {
           "id": "today",
           "label": "Keep as it is",
+          "short": "Keep",
           "result": "Kept as it is: the square is the server's chassis.",
           "items": [
             {
@@ -388,6 +410,7 @@
         {
           "id": "bare",
           "label": "Without its container",
+          "short": "Bare",
           "result": "The unit marks alone, the chassis taken as a container.",
           "items": [
             {

@@ -1,0 +1,5332 @@
+{
+  "preview": "icons-r4",
+  "captures": [
+    {
+      "file": "q1-status-1440-light-first.png",
+      "question": "Status glyphs: bare, and in which cut?",
+      "width": 1440,
+      "scheme": "light",
+      "what": "first view"
+    },
+    {
+      "file": "q1-status-today-1440-light.png",
+      "question": "Status glyphs: bare, and in which cut?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 1440,
+      "scheme": "light"
+    },
+    {
+      "file": "q1-status-bare-1440-light.png",
+      "question": "Status glyphs: bare, and in which cut?",
+      "option": "Without its container",
+      "recommended": false,
+      "width": 1440,
+      "scheme": "light"
+    },
+    {
+      "file": "q1-status-line-1440-light.png",
+      "question": "Status glyphs: bare, and in which cut?",
+      "option": "The whole row in Solar's line cut",
+      "recommended": true,
+      "width": 1440,
+      "scheme": "light"
+    },
+    {
+      "file": "q2-stop-idle-1440-light-first.png",
+      "question": "Line cut: Stopped and Idle, outlined or filled?",
+      "width": 1440,
+      "scheme": "light",
+      "what": "first view"
+    },
+    {
+      "file": "q2-stop-idle-filled-1440-light.png",
+      "question": "Line cut: Stopped and Idle, outlined or filled?",
+      "option": "Both filled, Solar's size",
+      "recommended": true,
+      "width": 1440,
+      "scheme": "light"
+    },
+    {
+      "file": "q2-stop-idle-outlined-1440-light.png",
+      "question": "Line cut: Stopped and Idle, outlined or filled?",
+      "option": "Both outlined",
+      "recommended": false,
+      "width": 1440,
+      "scheme": "light"
+    },
+    {
+      "file": "q3-configure-1440-light-first.png",
+      "question": "Configure rail: tiles off, and in which cut?",
+      "width": 1440,
+      "scheme": "light",
+      "what": "first view"
+    },
+    {
+      "file": "q3-configure-today-1440-light.png",
+      "question": "Configure rail: tiles off, and in which cut?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 1440,
+      "scheme": "light"
+    },
+    {
+      "file": "q3-configure-bare-1440-light.png",
+      "question": "Configure rail: tiles off, and in which cut?",
+      "option": "Without its container",
+      "recommended": false,
+      "width": 1440,
+      "scheme": "light"
+    },
+    {
+      "file": "q3-configure-line-1440-light.png",
+      "question": "Configure rail: tiles off, and in which cut?",
+      "option": "The whole row in Solar's line cut",
+      "recommended": true,
+      "width": 1440,
+      "scheme": "light"
+    },
+    {
+      "file": "q4-menus-1440-light-first.png",
+      "question": "Menus and tabs: bare, and in which cut?",
+      "width": 1440,
+      "scheme": "light",
+      "what": "first view"
+    },
+    {
+      "file": "q4-menus-today-1440-light.png",
+      "question": "Menus and tabs: bare, and in which cut?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 1440,
+      "scheme": "light"
+    },
+    {
+      "file": "q4-menus-bare-1440-light.png",
+      "question": "Menus and tabs: bare, and in which cut?",
+      "option": "Without its container",
+      "recommended": false,
+      "width": 1440,
+      "scheme": "light"
+    },
+    {
+      "file": "q4-menus-line-1440-light.png",
+      "question": "Menus and tabs: bare, and in which cut?",
+      "option": "The whole row in Solar's line cut",
+      "recommended": true,
+      "width": 1440,
+      "scheme": "light"
+    },
+    {
+      "file": "q5-chips-1440-light-first.png",
+      "question": "Delegate chips: sprite without its tile?",
+      "width": 1440,
+      "scheme": "light",
+      "what": "first view"
+    },
+    {
+      "file": "q5-chips-today-1440-light.png",
+      "question": "Delegate chips: sprite without its tile?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 1440,
+      "scheme": "light"
+    },
+    {
+      "file": "q5-chips-bare-1440-light.png",
+      "question": "Delegate chips: sprite without its tile?",
+      "option": "Without its container",
+      "recommended": true,
+      "width": 1440,
+      "scheme": "light"
+    },
+    {
+      "file": "q6-canvas-1440-light-first.png",
+      "question": "Canvas tools: bare?",
+      "width": 1440,
+      "scheme": "light",
+      "what": "first view"
+    },
+    {
+      "file": "q6-canvas-today-1440-light.png",
+      "question": "Canvas tools: bare?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 1440,
+      "scheme": "light"
+    },
+    {
+      "file": "q6-canvas-bare-1440-light.png",
+      "question": "Canvas tools: bare?",
+      "option": "Without its container",
+      "recommended": true,
+      "width": 1440,
+      "scheme": "light"
+    },
+    {
+      "file": "q7-others-1440-light-first.png",
+      "question": "Everything else: bare?",
+      "width": 1440,
+      "scheme": "light",
+      "what": "first view"
+    },
+    {
+      "file": "q7-others-today-1440-light.png",
+      "question": "Everything else: bare?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 1440,
+      "scheme": "light"
+    },
+    {
+      "file": "q7-others-bare-1440-light.png",
+      "question": "Everything else: bare?",
+      "option": "Without its container",
+      "recommended": true,
+      "width": 1440,
+      "scheme": "light"
+    },
+    {
+      "file": "q8-tree-1440-light-first.png",
+      "question": "Session rows: the sprite without its tile?",
+      "width": 1440,
+      "scheme": "light",
+      "what": "first view"
+    },
+    {
+      "file": "q8-tree-today-1440-light.png",
+      "question": "Session rows: the sprite without its tile?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 1440,
+      "scheme": "light"
+    },
+    {
+      "file": "q8-tree-bare-1440-light.png",
+      "question": "Session rows: the sprite without its tile?",
+      "option": "Without its container",
+      "recommended": true,
+      "width": 1440,
+      "scheme": "light"
+    },
+    {
+      "file": "q9-clock-1440-light-first.png",
+      "question": "Clock: keep its face?",
+      "width": 1440,
+      "scheme": "light",
+      "what": "first view"
+    },
+    {
+      "file": "q9-clock-today-1440-light.png",
+      "question": "Clock: keep its face?",
+      "option": "Keep as it is",
+      "recommended": true,
+      "width": 1440,
+      "scheme": "light"
+    },
+    {
+      "file": "q9-clock-bare-1440-light.png",
+      "question": "Clock: keep its face?",
+      "option": "Without its container",
+      "recommended": false,
+      "width": 1440,
+      "scheme": "light"
+    },
+    {
+      "file": "q10-server-1440-light-first.png",
+      "question": "Server: keep its box?",
+      "width": 1440,
+      "scheme": "light",
+      "what": "first view"
+    },
+    {
+      "file": "q10-server-today-1440-light.png",
+      "question": "Server: keep its box?",
+      "option": "Keep as it is",
+      "recommended": true,
+      "width": 1440,
+      "scheme": "light"
+    },
+    {
+      "file": "q10-server-bare-1440-light.png",
+      "question": "Server: keep its box?",
+      "option": "Without its container",
+      "recommended": false,
+      "width": 1440,
+      "scheme": "light"
+    },
+    {
+      "file": "q1-status-390-light-first.png",
+      "question": "Status glyphs: bare, and in which cut?",
+      "width": 390,
+      "scheme": "light",
+      "what": "first view"
+    },
+    {
+      "file": "q1-status-today-390-light.png",
+      "question": "Status glyphs: bare, and in which cut?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 390,
+      "scheme": "light"
+    },
+    {
+      "file": "q1-status-bare-390-light.png",
+      "question": "Status glyphs: bare, and in which cut?",
+      "option": "Without its container",
+      "recommended": false,
+      "width": 390,
+      "scheme": "light"
+    },
+    {
+      "file": "q1-status-line-390-light.png",
+      "question": "Status glyphs: bare, and in which cut?",
+      "option": "The whole row in Solar's line cut",
+      "recommended": true,
+      "width": 390,
+      "scheme": "light"
+    },
+    {
+      "file": "q2-stop-idle-390-light-first.png",
+      "question": "Line cut: Stopped and Idle, outlined or filled?",
+      "width": 390,
+      "scheme": "light",
+      "what": "first view"
+    },
+    {
+      "file": "q2-stop-idle-filled-390-light.png",
+      "question": "Line cut: Stopped and Idle, outlined or filled?",
+      "option": "Both filled, Solar's size",
+      "recommended": true,
+      "width": 390,
+      "scheme": "light"
+    },
+    {
+      "file": "q2-stop-idle-outlined-390-light.png",
+      "question": "Line cut: Stopped and Idle, outlined or filled?",
+      "option": "Both outlined",
+      "recommended": false,
+      "width": 390,
+      "scheme": "light"
+    },
+    {
+      "file": "q3-configure-390-light-first.png",
+      "question": "Configure rail: tiles off, and in which cut?",
+      "width": 390,
+      "scheme": "light",
+      "what": "first view"
+    },
+    {
+      "file": "q3-configure-today-390-light.png",
+      "question": "Configure rail: tiles off, and in which cut?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 390,
+      "scheme": "light"
+    },
+    {
+      "file": "q3-configure-bare-390-light.png",
+      "question": "Configure rail: tiles off, and in which cut?",
+      "option": "Without its container",
+      "recommended": false,
+      "width": 390,
+      "scheme": "light"
+    },
+    {
+      "file": "q3-configure-line-390-light.png",
+      "question": "Configure rail: tiles off, and in which cut?",
+      "option": "The whole row in Solar's line cut",
+      "recommended": true,
+      "width": 390,
+      "scheme": "light"
+    },
+    {
+      "file": "q4-menus-390-light-first.png",
+      "question": "Menus and tabs: bare, and in which cut?",
+      "width": 390,
+      "scheme": "light",
+      "what": "first view"
+    },
+    {
+      "file": "q4-menus-today-390-light.png",
+      "question": "Menus and tabs: bare, and in which cut?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 390,
+      "scheme": "light"
+    },
+    {
+      "file": "q4-menus-bare-390-light.png",
+      "question": "Menus and tabs: bare, and in which cut?",
+      "option": "Without its container",
+      "recommended": false,
+      "width": 390,
+      "scheme": "light"
+    },
+    {
+      "file": "q4-menus-line-390-light.png",
+      "question": "Menus and tabs: bare, and in which cut?",
+      "option": "The whole row in Solar's line cut",
+      "recommended": true,
+      "width": 390,
+      "scheme": "light"
+    },
+    {
+      "file": "q5-chips-390-light-first.png",
+      "question": "Delegate chips: sprite without its tile?",
+      "width": 390,
+      "scheme": "light",
+      "what": "first view"
+    },
+    {
+      "file": "q5-chips-today-390-light.png",
+      "question": "Delegate chips: sprite without its tile?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 390,
+      "scheme": "light"
+    },
+    {
+      "file": "q5-chips-bare-390-light.png",
+      "question": "Delegate chips: sprite without its tile?",
+      "option": "Without its container",
+      "recommended": true,
+      "width": 390,
+      "scheme": "light"
+    },
+    {
+      "file": "q6-canvas-390-light-first.png",
+      "question": "Canvas tools: bare?",
+      "width": 390,
+      "scheme": "light",
+      "what": "first view"
+    },
+    {
+      "file": "q6-canvas-today-390-light.png",
+      "question": "Canvas tools: bare?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 390,
+      "scheme": "light"
+    },
+    {
+      "file": "q6-canvas-bare-390-light.png",
+      "question": "Canvas tools: bare?",
+      "option": "Without its container",
+      "recommended": true,
+      "width": 390,
+      "scheme": "light"
+    },
+    {
+      "file": "q7-others-390-light-first.png",
+      "question": "Everything else: bare?",
+      "width": 390,
+      "scheme": "light",
+      "what": "first view"
+    },
+    {
+      "file": "q7-others-today-390-light.png",
+      "question": "Everything else: bare?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 390,
+      "scheme": "light"
+    },
+    {
+      "file": "q7-others-bare-390-light.png",
+      "question": "Everything else: bare?",
+      "option": "Without its container",
+      "recommended": true,
+      "width": 390,
+      "scheme": "light"
+    },
+    {
+      "file": "q8-tree-390-light-first.png",
+      "question": "Session rows: the sprite without its tile?",
+      "width": 390,
+      "scheme": "light",
+      "what": "first view"
+    },
+    {
+      "file": "q8-tree-today-390-light.png",
+      "question": "Session rows: the sprite without its tile?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 390,
+      "scheme": "light"
+    },
+    {
+      "file": "q8-tree-bare-390-light.png",
+      "question": "Session rows: the sprite without its tile?",
+      "option": "Without its container",
+      "recommended": true,
+      "width": 390,
+      "scheme": "light"
+    },
+    {
+      "file": "q9-clock-390-light-first.png",
+      "question": "Clock: keep its face?",
+      "width": 390,
+      "scheme": "light",
+      "what": "first view"
+    },
+    {
+      "file": "q9-clock-today-390-light.png",
+      "question": "Clock: keep its face?",
+      "option": "Keep as it is",
+      "recommended": true,
+      "width": 390,
+      "scheme": "light"
+    },
+    {
+      "file": "q9-clock-bare-390-light.png",
+      "question": "Clock: keep its face?",
+      "option": "Without its container",
+      "recommended": false,
+      "width": 390,
+      "scheme": "light"
+    },
+    {
+      "file": "q10-server-390-light-first.png",
+      "question": "Server: keep its box?",
+      "width": 390,
+      "scheme": "light",
+      "what": "first view"
+    },
+    {
+      "file": "q10-server-today-390-light.png",
+      "question": "Server: keep its box?",
+      "option": "Keep as it is",
+      "recommended": true,
+      "width": 390,
+      "scheme": "light"
+    },
+    {
+      "file": "q10-server-bare-390-light.png",
+      "question": "Server: keep its box?",
+      "option": "Without its container",
+      "recommended": false,
+      "width": 390,
+      "scheme": "light"
+    },
+    {
+      "file": "q1-status-1440-dark-first.png",
+      "question": "Status glyphs: bare, and in which cut?",
+      "width": 1440,
+      "scheme": "dark",
+      "what": "first view"
+    },
+    {
+      "file": "q1-status-today-1440-dark.png",
+      "question": "Status glyphs: bare, and in which cut?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 1440,
+      "scheme": "dark"
+    },
+    {
+      "file": "q1-status-bare-1440-dark.png",
+      "question": "Status glyphs: bare, and in which cut?",
+      "option": "Without its container",
+      "recommended": false,
+      "width": 1440,
+      "scheme": "dark"
+    },
+    {
+      "file": "q1-status-line-1440-dark.png",
+      "question": "Status glyphs: bare, and in which cut?",
+      "option": "The whole row in Solar's line cut",
+      "recommended": true,
+      "width": 1440,
+      "scheme": "dark"
+    },
+    {
+      "file": "q2-stop-idle-1440-dark-first.png",
+      "question": "Line cut: Stopped and Idle, outlined or filled?",
+      "width": 1440,
+      "scheme": "dark",
+      "what": "first view"
+    },
+    {
+      "file": "q2-stop-idle-filled-1440-dark.png",
+      "question": "Line cut: Stopped and Idle, outlined or filled?",
+      "option": "Both filled, Solar's size",
+      "recommended": true,
+      "width": 1440,
+      "scheme": "dark"
+    },
+    {
+      "file": "q2-stop-idle-outlined-1440-dark.png",
+      "question": "Line cut: Stopped and Idle, outlined or filled?",
+      "option": "Both outlined",
+      "recommended": false,
+      "width": 1440,
+      "scheme": "dark"
+    },
+    {
+      "file": "q3-configure-1440-dark-first.png",
+      "question": "Configure rail: tiles off, and in which cut?",
+      "width": 1440,
+      "scheme": "dark",
+      "what": "first view"
+    },
+    {
+      "file": "q3-configure-today-1440-dark.png",
+      "question": "Configure rail: tiles off, and in which cut?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 1440,
+      "scheme": "dark"
+    },
+    {
+      "file": "q3-configure-bare-1440-dark.png",
+      "question": "Configure rail: tiles off, and in which cut?",
+      "option": "Without its container",
+      "recommended": false,
+      "width": 1440,
+      "scheme": "dark"
+    },
+    {
+      "file": "q3-configure-line-1440-dark.png",
+      "question": "Configure rail: tiles off, and in which cut?",
+      "option": "The whole row in Solar's line cut",
+      "recommended": true,
+      "width": 1440,
+      "scheme": "dark"
+    },
+    {
+      "file": "q4-menus-1440-dark-first.png",
+      "question": "Menus and tabs: bare, and in which cut?",
+      "width": 1440,
+      "scheme": "dark",
+      "what": "first view"
+    },
+    {
+      "file": "q4-menus-today-1440-dark.png",
+      "question": "Menus and tabs: bare, and in which cut?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 1440,
+      "scheme": "dark"
+    },
+    {
+      "file": "q4-menus-bare-1440-dark.png",
+      "question": "Menus and tabs: bare, and in which cut?",
+      "option": "Without its container",
+      "recommended": false,
+      "width": 1440,
+      "scheme": "dark"
+    },
+    {
+      "file": "q4-menus-line-1440-dark.png",
+      "question": "Menus and tabs: bare, and in which cut?",
+      "option": "The whole row in Solar's line cut",
+      "recommended": true,
+      "width": 1440,
+      "scheme": "dark"
+    },
+    {
+      "file": "q5-chips-1440-dark-first.png",
+      "question": "Delegate chips: sprite without its tile?",
+      "width": 1440,
+      "scheme": "dark",
+      "what": "first view"
+    },
+    {
+      "file": "q5-chips-today-1440-dark.png",
+      "question": "Delegate chips: sprite without its tile?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 1440,
+      "scheme": "dark"
+    },
+    {
+      "file": "q5-chips-bare-1440-dark.png",
+      "question": "Delegate chips: sprite without its tile?",
+      "option": "Without its container",
+      "recommended": true,
+      "width": 1440,
+      "scheme": "dark"
+    },
+    {
+      "file": "q6-canvas-1440-dark-first.png",
+      "question": "Canvas tools: bare?",
+      "width": 1440,
+      "scheme": "dark",
+      "what": "first view"
+    },
+    {
+      "file": "q6-canvas-today-1440-dark.png",
+      "question": "Canvas tools: bare?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 1440,
+      "scheme": "dark"
+    },
+    {
+      "file": "q6-canvas-bare-1440-dark.png",
+      "question": "Canvas tools: bare?",
+      "option": "Without its container",
+      "recommended": true,
+      "width": 1440,
+      "scheme": "dark"
+    },
+    {
+      "file": "q7-others-1440-dark-first.png",
+      "question": "Everything else: bare?",
+      "width": 1440,
+      "scheme": "dark",
+      "what": "first view"
+    },
+    {
+      "file": "q7-others-today-1440-dark.png",
+      "question": "Everything else: bare?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 1440,
+      "scheme": "dark"
+    },
+    {
+      "file": "q7-others-bare-1440-dark.png",
+      "question": "Everything else: bare?",
+      "option": "Without its container",
+      "recommended": true,
+      "width": 1440,
+      "scheme": "dark"
+    },
+    {
+      "file": "q8-tree-1440-dark-first.png",
+      "question": "Session rows: the sprite without its tile?",
+      "width": 1440,
+      "scheme": "dark",
+      "what": "first view"
+    },
+    {
+      "file": "q8-tree-today-1440-dark.png",
+      "question": "Session rows: the sprite without its tile?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 1440,
+      "scheme": "dark"
+    },
+    {
+      "file": "q8-tree-bare-1440-dark.png",
+      "question": "Session rows: the sprite without its tile?",
+      "option": "Without its container",
+      "recommended": true,
+      "width": 1440,
+      "scheme": "dark"
+    },
+    {
+      "file": "q9-clock-1440-dark-first.png",
+      "question": "Clock: keep its face?",
+      "width": 1440,
+      "scheme": "dark",
+      "what": "first view"
+    },
+    {
+      "file": "q9-clock-today-1440-dark.png",
+      "question": "Clock: keep its face?",
+      "option": "Keep as it is",
+      "recommended": true,
+      "width": 1440,
+      "scheme": "dark"
+    },
+    {
+      "file": "q9-clock-bare-1440-dark.png",
+      "question": "Clock: keep its face?",
+      "option": "Without its container",
+      "recommended": false,
+      "width": 1440,
+      "scheme": "dark"
+    },
+    {
+      "file": "q10-server-1440-dark-first.png",
+      "question": "Server: keep its box?",
+      "width": 1440,
+      "scheme": "dark",
+      "what": "first view"
+    },
+    {
+      "file": "q10-server-today-1440-dark.png",
+      "question": "Server: keep its box?",
+      "option": "Keep as it is",
+      "recommended": true,
+      "width": 1440,
+      "scheme": "dark"
+    },
+    {
+      "file": "q10-server-bare-1440-dark.png",
+      "question": "Server: keep its box?",
+      "option": "Without its container",
+      "recommended": false,
+      "width": 1440,
+      "scheme": "dark"
+    },
+    {
+      "file": "q1-status-390-dark-first.png",
+      "question": "Status glyphs: bare, and in which cut?",
+      "width": 390,
+      "scheme": "dark",
+      "what": "first view"
+    },
+    {
+      "file": "q1-status-today-390-dark.png",
+      "question": "Status glyphs: bare, and in which cut?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 390,
+      "scheme": "dark"
+    },
+    {
+      "file": "q1-status-bare-390-dark.png",
+      "question": "Status glyphs: bare, and in which cut?",
+      "option": "Without its container",
+      "recommended": false,
+      "width": 390,
+      "scheme": "dark"
+    },
+    {
+      "file": "q1-status-line-390-dark.png",
+      "question": "Status glyphs: bare, and in which cut?",
+      "option": "The whole row in Solar's line cut",
+      "recommended": true,
+      "width": 390,
+      "scheme": "dark"
+    },
+    {
+      "file": "q2-stop-idle-390-dark-first.png",
+      "question": "Line cut: Stopped and Idle, outlined or filled?",
+      "width": 390,
+      "scheme": "dark",
+      "what": "first view"
+    },
+    {
+      "file": "q2-stop-idle-filled-390-dark.png",
+      "question": "Line cut: Stopped and Idle, outlined or filled?",
+      "option": "Both filled, Solar's size",
+      "recommended": true,
+      "width": 390,
+      "scheme": "dark"
+    },
+    {
+      "file": "q2-stop-idle-outlined-390-dark.png",
+      "question": "Line cut: Stopped and Idle, outlined or filled?",
+      "option": "Both outlined",
+      "recommended": false,
+      "width": 390,
+      "scheme": "dark"
+    },
+    {
+      "file": "q3-configure-390-dark-first.png",
+      "question": "Configure rail: tiles off, and in which cut?",
+      "width": 390,
+      "scheme": "dark",
+      "what": "first view"
+    },
+    {
+      "file": "q3-configure-today-390-dark.png",
+      "question": "Configure rail: tiles off, and in which cut?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 390,
+      "scheme": "dark"
+    },
+    {
+      "file": "q3-configure-bare-390-dark.png",
+      "question": "Configure rail: tiles off, and in which cut?",
+      "option": "Without its container",
+      "recommended": false,
+      "width": 390,
+      "scheme": "dark"
+    },
+    {
+      "file": "q3-configure-line-390-dark.png",
+      "question": "Configure rail: tiles off, and in which cut?",
+      "option": "The whole row in Solar's line cut",
+      "recommended": true,
+      "width": 390,
+      "scheme": "dark"
+    },
+    {
+      "file": "q4-menus-390-dark-first.png",
+      "question": "Menus and tabs: bare, and in which cut?",
+      "width": 390,
+      "scheme": "dark",
+      "what": "first view"
+    },
+    {
+      "file": "q4-menus-today-390-dark.png",
+      "question": "Menus and tabs: bare, and in which cut?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 390,
+      "scheme": "dark"
+    },
+    {
+      "file": "q4-menus-bare-390-dark.png",
+      "question": "Menus and tabs: bare, and in which cut?",
+      "option": "Without its container",
+      "recommended": false,
+      "width": 390,
+      "scheme": "dark"
+    },
+    {
+      "file": "q4-menus-line-390-dark.png",
+      "question": "Menus and tabs: bare, and in which cut?",
+      "option": "The whole row in Solar's line cut",
+      "recommended": true,
+      "width": 390,
+      "scheme": "dark"
+    },
+    {
+      "file": "q5-chips-390-dark-first.png",
+      "question": "Delegate chips: sprite without its tile?",
+      "width": 390,
+      "scheme": "dark",
+      "what": "first view"
+    },
+    {
+      "file": "q5-chips-today-390-dark.png",
+      "question": "Delegate chips: sprite without its tile?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 390,
+      "scheme": "dark"
+    },
+    {
+      "file": "q5-chips-bare-390-dark.png",
+      "question": "Delegate chips: sprite without its tile?",
+      "option": "Without its container",
+      "recommended": true,
+      "width": 390,
+      "scheme": "dark"
+    },
+    {
+      "file": "q6-canvas-390-dark-first.png",
+      "question": "Canvas tools: bare?",
+      "width": 390,
+      "scheme": "dark",
+      "what": "first view"
+    },
+    {
+      "file": "q6-canvas-today-390-dark.png",
+      "question": "Canvas tools: bare?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 390,
+      "scheme": "dark"
+    },
+    {
+      "file": "q6-canvas-bare-390-dark.png",
+      "question": "Canvas tools: bare?",
+      "option": "Without its container",
+      "recommended": true,
+      "width": 390,
+      "scheme": "dark"
+    },
+    {
+      "file": "q7-others-390-dark-first.png",
+      "question": "Everything else: bare?",
+      "width": 390,
+      "scheme": "dark",
+      "what": "first view"
+    },
+    {
+      "file": "q7-others-today-390-dark.png",
+      "question": "Everything else: bare?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 390,
+      "scheme": "dark"
+    },
+    {
+      "file": "q7-others-bare-390-dark.png",
+      "question": "Everything else: bare?",
+      "option": "Without its container",
+      "recommended": true,
+      "width": 390,
+      "scheme": "dark"
+    },
+    {
+      "file": "q8-tree-390-dark-first.png",
+      "question": "Session rows: the sprite without its tile?",
+      "width": 390,
+      "scheme": "dark",
+      "what": "first view"
+    },
+    {
+      "file": "q8-tree-today-390-dark.png",
+      "question": "Session rows: the sprite without its tile?",
+      "option": "Today (in its container)",
+      "recommended": false,
+      "width": 390,
+      "scheme": "dark"
+    },
+    {
+      "file": "q8-tree-bare-390-dark.png",
+      "question": "Session rows: the sprite without its tile?",
+      "option": "Without its container",
+      "recommended": true,
+      "width": 390,
+      "scheme": "dark"
+    },
+    {
+      "file": "q9-clock-390-dark-first.png",
+      "question": "Clock: keep its face?",
+      "width": 390,
+      "scheme": "dark",
+      "what": "first view"
+    },
+    {
+      "file": "q9-clock-today-390-dark.png",
+      "question": "Clock: keep its face?",
+      "option": "Keep as it is",
+      "recommended": true,
+      "width": 390,
+      "scheme": "dark"
+    },
+    {
+      "file": "q9-clock-bare-390-dark.png",
+      "question": "Clock: keep its face?",
+      "option": "Without its container",
+      "recommended": false,
+      "width": 390,
+      "scheme": "dark"
+    },
+    {
+      "file": "q10-server-390-dark-first.png",
+      "question": "Server: keep its box?",
+      "width": 390,
+      "scheme": "dark",
+      "what": "first view"
+    },
+    {
+      "file": "q10-server-today-390-dark.png",
+      "question": "Server: keep its box?",
+      "option": "Keep as it is",
+      "recommended": true,
+      "width": 390,
+      "scheme": "dark"
+    },
+    {
+      "file": "q10-server-bare-390-dark.png",
+      "question": "Server: keep its box?",
+      "option": "Without its container",
+      "recommended": false,
+      "width": 390,
+      "scheme": "dark"
+    }
+  ],
+  "measures": [
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 1440,
+      "question": 1,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 184,
+      "fold": 900,
+      "ways": [
+        "1 Today@190-234",
+        "2 Bare@190-234",
+        "3 Line cutRecommended@190-234"
+      ],
+      "optionTops": [
+        "today@x184,y250 head-bottom 328",
+        "bare@x537,y250 head-bottom 343",
+        "line@x890,y250 head-bottom 357"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "line:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": null,
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 1440,
+      "question": 2,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 169,
+      "fold": 900,
+      "ways": [
+        "1 FilledRecommended@175-219",
+        "2 Outlined@175-219"
+      ],
+      "optionTops": [
+        "filled@x184,y235 head-bottom 328",
+        "outlined@x537,y235 head-bottom 328"
+      ],
+      "pick": [
+        "filled:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "outlined:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 1",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 1440,
+      "question": 3,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 184,
+      "fold": 900,
+      "ways": [
+        "1 Today@190-234",
+        "2 Bare@190-234",
+        "3 Line cutRecommended@190-234"
+      ],
+      "optionTops": [
+        "today@x184,y250 head-bottom 343",
+        "bare@x537,y250 head-bottom 402",
+        "line@x890,y250 head-bottom 402"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "line:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 2",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 1440,
+      "question": 4,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 184,
+      "fold": 900,
+      "ways": [
+        "1 Today@190-234",
+        "2 Bare@190-234",
+        "3 Line cutRecommended@190-234"
+      ],
+      "optionTops": [
+        "today@x184,y250 head-bottom 328",
+        "bare@x537,y250 head-bottom 343",
+        "line@x890,y250 head-bottom 343"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "line:oklch(0.92 0.011 83)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 3",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 1440,
+      "question": 5,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 140,
+      "fold": 900,
+      "ways": [
+        "1 Today@146-190",
+        "2 BareRecommended@146-190"
+      ],
+      "optionTops": [
+        "today@x184,y206 head-bottom 284",
+        "bare@x537,y206 head-bottom 284"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 4",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 1440,
+      "question": 6,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 140,
+      "fold": 900,
+      "ways": [
+        "1 Today@146-190",
+        "2 BareRecommended@146-190"
+      ],
+      "optionTops": [
+        "today@x184,y206 head-bottom 284",
+        "bare@x537,y206 head-bottom 284"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.92 0.011 83)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 5",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 1440,
+      "question": 7,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 140,
+      "fold": 900,
+      "ways": [
+        "1 Today@146-190",
+        "2 BareRecommended@146-190"
+      ],
+      "optionTops": [
+        "today@x184,y206 head-bottom 298",
+        "bare@x537,y206 head-bottom 284"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.92 0.011 83)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 6",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 1440,
+      "question": 8,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 140,
+      "fold": 900,
+      "ways": [
+        "1 Today@146-190",
+        "2 BareRecommended@146-190"
+      ],
+      "optionTops": [
+        "today@x184,y206 head-bottom 298",
+        "bare@x537,y206 head-bottom 313"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.92 0.011 83)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 7",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 1440,
+      "question": 9,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 140,
+      "fold": 900,
+      "ways": [
+        "1 KeepRecommended@146-190",
+        "2 Bare@146-190"
+      ],
+      "optionTops": [
+        "today@x184,y206 head-bottom 284",
+        "bare@x537,y206 head-bottom 284"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.92 0.011 83)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 8",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 1440,
+      "question": 10,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 140,
+      "fold": 900,
+      "ways": [
+        "1 KeepRecommended@146-190",
+        "2 Bare@146-190"
+      ],
+      "optionTops": [
+        "today@x184,y206 head-bottom 284",
+        "bare@x537,y206 head-bottom 284"
+      ],
+      "pick": [
+        "today:oklch(0.92 0.011 83)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 9",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 680,
+      "question": 1,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 183,
+      "fold": 900,
+      "ways": [
+        "1 Today@189-233",
+        "2 Bare@189-233",
+        "3 Line cutRecommended@189-233"
+      ],
+      "optionTops": [
+        "today@x14,y249 head-bottom 327",
+        "bare@x367,y249 head-bottom 342",
+        "line@x720,y249 head-bottom 357"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "line:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": null,
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 680,
+      "question": 2,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 168,
+      "fold": 900,
+      "ways": [
+        "1 FilledRecommended@174-218",
+        "2 Outlined@174-218"
+      ],
+      "optionTops": [
+        "filled@x14,y234 head-bottom 327",
+        "outlined@x367,y234 head-bottom 327"
+      ],
+      "pick": [
+        "filled:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "outlined:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 1",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 680,
+      "question": 3,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 183,
+      "fold": 900,
+      "ways": [
+        "1 Today@189-233",
+        "2 Bare@189-233",
+        "3 Line cutRecommended@189-233"
+      ],
+      "optionTops": [
+        "today@x14,y249 head-bottom 342",
+        "bare@x367,y249 head-bottom 401",
+        "line@x720,y249 head-bottom 401"
+      ],
+      "pick": [
+        "today:oklch(0.92 0.011 83)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "line:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 2",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 680,
+      "question": 4,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 183,
+      "fold": 900,
+      "ways": [
+        "1 Today@189-233",
+        "2 Bare@189-233",
+        "3 Line cutRecommended@189-233"
+      ],
+      "optionTops": [
+        "today@x14,y249 head-bottom 327",
+        "bare@x367,y249 head-bottom 342",
+        "line@x720,y249 head-bottom 342"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "line:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 3",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 680,
+      "question": 5,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 139,
+      "fold": 900,
+      "ways": [
+        "1 Today@145-189",
+        "2 BareRecommended@145-189"
+      ],
+      "optionTops": [
+        "today@x14,y205 head-bottom 283",
+        "bare@x367,y205 head-bottom 283"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 4",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 680,
+      "question": 6,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 139,
+      "fold": 900,
+      "ways": [
+        "1 Today@145-189",
+        "2 BareRecommended@145-189"
+      ],
+      "optionTops": [
+        "today@x14,y205 head-bottom 283",
+        "bare@x367,y205 head-bottom 283"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 5",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 680,
+      "question": 7,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 139,
+      "fold": 900,
+      "ways": [
+        "1 Today@145-189",
+        "2 BareRecommended@145-189"
+      ],
+      "optionTops": [
+        "today@x14,y205 head-bottom 297",
+        "bare@x367,y205 head-bottom 283"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 6",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 680,
+      "question": 8,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 139,
+      "fold": 900,
+      "ways": [
+        "1 Today@145-189",
+        "2 BareRecommended@145-189"
+      ],
+      "optionTops": [
+        "today@x14,y205 head-bottom 297",
+        "bare@x367,y205 head-bottom 312"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 7",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 680,
+      "question": 9,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 139,
+      "fold": 900,
+      "ways": [
+        "1 KeepRecommended@145-189",
+        "2 Bare@145-189"
+      ],
+      "optionTops": [
+        "today@x14,y205 head-bottom 283",
+        "bare@x367,y205 head-bottom 283"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 8",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 680,
+      "question": 10,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 139,
+      "fold": 900,
+      "ways": [
+        "1 KeepRecommended@145-189",
+        "2 Bare@145-189"
+      ],
+      "optionTops": [
+        "today@x14,y205 head-bottom 283",
+        "bare@x367,y205 head-bottom 283"
+      ],
+      "pick": [
+        "today:oklch(0.92 0.011 83)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 9",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 390,
+      "question": 1,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 212,
+      "fold": 844,
+      "ways": [
+        "1 Today@218-262",
+        "2 Bare@218-262",
+        "3 Line cutRecommended@218-262"
+      ],
+      "optionTops": [
+        "today@x14,y278 head-bottom 364",
+        "bare@x367,y278 head-bottom 378",
+        "line@x720,y278 head-bottom 393"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "line:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": null,
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 390,
+      "question": 2,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 182,
+      "fold": 844,
+      "ways": [
+        "1 FilledRecommended@188-232",
+        "2 Outlined@188-232"
+      ],
+      "optionTops": [
+        "filled@x14,y248 head-bottom 349",
+        "outlined@x367,y248 head-bottom 349"
+      ],
+      "pick": [
+        "filled:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "outlined:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 1",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 390,
+      "question": 3,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 212,
+      "fold": 844,
+      "ways": [
+        "1 Today@218-262",
+        "2 Bare@218-262",
+        "3 Line cutRecommended@218-262"
+      ],
+      "optionTops": [
+        "today@x14,y278 head-bottom 378",
+        "bare@x367,y278 head-bottom 437",
+        "line@x720,y278 head-bottom 437"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "line:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 2",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 390,
+      "question": 4,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 212,
+      "fold": 844,
+      "ways": [
+        "1 Today@218-262",
+        "2 Bare@218-262",
+        "3 Line cutRecommended@218-262"
+      ],
+      "optionTops": [
+        "today@x14,y278 head-bottom 364",
+        "bare@x367,y278 head-bottom 378",
+        "line@x720,y278 head-bottom 378"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "line:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 3",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 390,
+      "question": 5,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 138,
+      "fold": 844,
+      "ways": [
+        "1 Today@144-188",
+        "2 BareRecommended@144-188"
+      ],
+      "optionTops": [
+        "today@x14,y204 head-bottom 290",
+        "bare@x367,y204 head-bottom 290"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 4",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 390,
+      "question": 6,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 138,
+      "fold": 844,
+      "ways": [
+        "1 Today@144-188",
+        "2 BareRecommended@144-188"
+      ],
+      "optionTops": [
+        "today@x14,y204 head-bottom 290",
+        "bare@x367,y204 head-bottom 290"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 5",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 390,
+      "question": 7,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 138,
+      "fold": 844,
+      "ways": [
+        "1 Today@144-188",
+        "2 BareRecommended@144-188"
+      ],
+      "optionTops": [
+        "today@x14,y204 head-bottom 304",
+        "bare@x367,y204 head-bottom 290"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 6",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 390,
+      "question": 8,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 138,
+      "fold": 844,
+      "ways": [
+        "1 Today@144-188",
+        "2 BareRecommended@144-188"
+      ],
+      "optionTops": [
+        "today@x14,y204 head-bottom 304",
+        "bare@x367,y204 head-bottom 319"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 7",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 390,
+      "question": 9,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 138,
+      "fold": 844,
+      "ways": [
+        "1 KeepRecommended@144-188",
+        "2 Bare@144-188"
+      ],
+      "optionTops": [
+        "today@x14,y204 head-bottom 290",
+        "bare@x367,y204 head-bottom 290"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 8",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "light",
+      "width": 390,
+      "question": 10,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 138,
+      "fold": 844,
+      "ways": [
+        "1 KeepRecommended@144-188",
+        "2 Bare@144-188"
+      ],
+      "optionTops": [
+        "today@x14,y204 head-bottom 290",
+        "bare@x367,y204 head-bottom 290"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 9",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 1,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 184,
+      "fold": 900,
+      "ways": [
+        "1 Today@190-234",
+        "2 Bare@190-234",
+        "3 Line cutRecommended@190-234"
+      ],
+      "optionTops": [
+        "today@x184,y250 head-bottom 328",
+        "bare@x537,y250 head-bottom 343",
+        "line@x890,y250 head-bottom 357"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "line:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": null,
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 2,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 169,
+      "fold": 900,
+      "ways": [
+        "1 FilledRecommended@175-219",
+        "2 Outlined@175-219"
+      ],
+      "optionTops": [
+        "filled@x184,y235 head-bottom 328",
+        "outlined@x537,y235 head-bottom 328"
+      ],
+      "pick": [
+        "filled:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "outlined:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 1",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 3,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 184,
+      "fold": 900,
+      "ways": [
+        "1 Today@190-234",
+        "2 Bare@190-234",
+        "3 Line cutRecommended@190-234"
+      ],
+      "optionTops": [
+        "today@x184,y250 head-bottom 343",
+        "bare@x537,y250 head-bottom 402",
+        "line@x890,y250 head-bottom 402"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "line:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 2",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 4,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 184,
+      "fold": 900,
+      "ways": [
+        "1 Today@190-234",
+        "2 Bare@190-234",
+        "3 Line cutRecommended@190-234"
+      ],
+      "optionTops": [
+        "today@x184,y250 head-bottom 328",
+        "bare@x537,y250 head-bottom 343",
+        "line@x890,y250 head-bottom 343"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "line:oklch(0.282 0.007 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 3",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 5,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 140,
+      "fold": 900,
+      "ways": [
+        "1 Today@146-190",
+        "2 BareRecommended@146-190"
+      ],
+      "optionTops": [
+        "today@x184,y206 head-bottom 284",
+        "bare@x537,y206 head-bottom 284"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 4",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 6,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 140,
+      "fold": 900,
+      "ways": [
+        "1 Today@146-190",
+        "2 BareRecommended@146-190"
+      ],
+      "optionTops": [
+        "today@x184,y206 head-bottom 284",
+        "bare@x537,y206 head-bottom 284"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "bare:oklch(0.282 0.007 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 5",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 7,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 140,
+      "fold": 900,
+      "ways": [
+        "1 Today@146-190",
+        "2 BareRecommended@146-190"
+      ],
+      "optionTops": [
+        "today@x184,y206 head-bottom 298",
+        "bare@x537,y206 head-bottom 284"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "bare:oklch(0.282 0.007 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 6",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 8,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 140,
+      "fold": 900,
+      "ways": [
+        "1 Today@146-190",
+        "2 BareRecommended@146-190"
+      ],
+      "optionTops": [
+        "today@x184,y206 head-bottom 298",
+        "bare@x537,y206 head-bottom 313"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "bare:oklch(0.282 0.007 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 7",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 9,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 140,
+      "fold": 900,
+      "ways": [
+        "1 KeepRecommended@146-190",
+        "2 Bare@146-190"
+      ],
+      "optionTops": [
+        "today@x184,y206 head-bottom 284",
+        "bare@x537,y206 head-bottom 284"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "bare:oklch(0.282 0.007 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 8",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 10,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 140,
+      "fold": 900,
+      "ways": [
+        "1 KeepRecommended@146-190",
+        "2 Bare@146-190"
+      ],
+      "optionTops": [
+        "today@x184,y206 head-bottom 284",
+        "bare@x537,y206 head-bottom 284"
+      ],
+      "pick": [
+        "today:oklch(0.282 0.007 70)/oklab(0.5458 0.00373317 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 9",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 680,
+      "question": 1,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 183,
+      "fold": 900,
+      "ways": [
+        "1 Today@189-233",
+        "2 Bare@189-233",
+        "3 Line cutRecommended@189-233"
+      ],
+      "optionTops": [
+        "today@x14,y249 head-bottom 327",
+        "bare@x367,y249 head-bottom 342",
+        "line@x720,y249 head-bottom 357"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "line:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": null,
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 680,
+      "question": 2,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 168,
+      "fold": 900,
+      "ways": [
+        "1 FilledRecommended@174-218",
+        "2 Outlined@174-218"
+      ],
+      "optionTops": [
+        "filled@x14,y234 head-bottom 327",
+        "outlined@x367,y234 head-bottom 327"
+      ],
+      "pick": [
+        "filled:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "outlined:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 1",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 680,
+      "question": 3,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 183,
+      "fold": 900,
+      "ways": [
+        "1 Today@189-233",
+        "2 Bare@189-233",
+        "3 Line cutRecommended@189-233"
+      ],
+      "optionTops": [
+        "today@x14,y249 head-bottom 342",
+        "bare@x367,y249 head-bottom 401",
+        "line@x720,y249 head-bottom 401"
+      ],
+      "pick": [
+        "today:oklch(0.282 0.007 70)/oklab(0.5458 0.00373317 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "line:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 2",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 680,
+      "question": 4,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 183,
+      "fold": 900,
+      "ways": [
+        "1 Today@189-233",
+        "2 Bare@189-233",
+        "3 Line cutRecommended@189-233"
+      ],
+      "optionTops": [
+        "today@x14,y249 head-bottom 327",
+        "bare@x367,y249 head-bottom 342",
+        "line@x720,y249 head-bottom 342"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "line:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 3",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 680,
+      "question": 5,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 139,
+      "fold": 900,
+      "ways": [
+        "1 Today@145-189",
+        "2 BareRecommended@145-189"
+      ],
+      "optionTops": [
+        "today@x14,y205 head-bottom 283",
+        "bare@x367,y205 head-bottom 283"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 4",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 680,
+      "question": 6,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 139,
+      "fold": 900,
+      "ways": [
+        "1 Today@145-189",
+        "2 BareRecommended@145-189"
+      ],
+      "optionTops": [
+        "today@x14,y205 head-bottom 283",
+        "bare@x367,y205 head-bottom 283"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 5",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 680,
+      "question": 7,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 139,
+      "fold": 900,
+      "ways": [
+        "1 Today@145-189",
+        "2 BareRecommended@145-189"
+      ],
+      "optionTops": [
+        "today@x14,y205 head-bottom 297",
+        "bare@x367,y205 head-bottom 283"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 6",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 680,
+      "question": 8,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 139,
+      "fold": 900,
+      "ways": [
+        "1 Today@145-189",
+        "2 BareRecommended@145-189"
+      ],
+      "optionTops": [
+        "today@x14,y205 head-bottom 297",
+        "bare@x367,y205 head-bottom 312"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 7",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 680,
+      "question": 9,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 139,
+      "fold": 900,
+      "ways": [
+        "1 KeepRecommended@145-189",
+        "2 Bare@145-189"
+      ],
+      "optionTops": [
+        "today@x14,y205 head-bottom 283",
+        "bare@x367,y205 head-bottom 283"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 8",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 680,
+      "question": 10,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 139,
+      "fold": 900,
+      "ways": [
+        "1 KeepRecommended@145-189",
+        "2 Bare@145-189"
+      ],
+      "optionTops": [
+        "today@x14,y205 head-bottom 283",
+        "bare@x367,y205 head-bottom 283"
+      ],
+      "pick": [
+        "today:oklch(0.282 0.007 70)/oklab(0.5458 0.00373317 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 9",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 390,
+      "question": 1,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 212,
+      "fold": 844,
+      "ways": [
+        "1 Today@218-262",
+        "2 Bare@218-262",
+        "3 Line cutRecommended@218-262"
+      ],
+      "optionTops": [
+        "today@x14,y278 head-bottom 364",
+        "bare@x367,y278 head-bottom 378",
+        "line@x720,y278 head-bottom 393"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "line:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": null,
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 390,
+      "question": 2,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 182,
+      "fold": 844,
+      "ways": [
+        "1 FilledRecommended@188-232",
+        "2 Outlined@188-232"
+      ],
+      "optionTops": [
+        "filled@x14,y248 head-bottom 349",
+        "outlined@x367,y248 head-bottom 349"
+      ],
+      "pick": [
+        "filled:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "outlined:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 1",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 390,
+      "question": 3,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 212,
+      "fold": 844,
+      "ways": [
+        "1 Today@218-262",
+        "2 Bare@218-262",
+        "3 Line cutRecommended@218-262"
+      ],
+      "optionTops": [
+        "today@x14,y278 head-bottom 378",
+        "bare@x367,y278 head-bottom 437",
+        "line@x720,y278 head-bottom 437"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "line:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 2",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 390,
+      "question": 4,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 212,
+      "fold": 844,
+      "ways": [
+        "1 Today@218-262",
+        "2 Bare@218-262",
+        "3 Line cutRecommended@218-262"
+      ],
+      "optionTops": [
+        "today@x14,y278 head-bottom 364",
+        "bare@x367,y278 head-bottom 378",
+        "line@x720,y278 head-bottom 378"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "line:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 3",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 390,
+      "question": 5,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 138,
+      "fold": 844,
+      "ways": [
+        "1 Today@144-188",
+        "2 BareRecommended@144-188"
+      ],
+      "optionTops": [
+        "today@x14,y204 head-bottom 290",
+        "bare@x367,y204 head-bottom 290"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 4",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 390,
+      "question": 6,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 138,
+      "fold": 844,
+      "ways": [
+        "1 Today@144-188",
+        "2 BareRecommended@144-188"
+      ],
+      "optionTops": [
+        "today@x14,y204 head-bottom 290",
+        "bare@x367,y204 head-bottom 290"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 5",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 390,
+      "question": 7,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 138,
+      "fold": 844,
+      "ways": [
+        "1 Today@144-188",
+        "2 BareRecommended@144-188"
+      ],
+      "optionTops": [
+        "today@x14,y204 head-bottom 304",
+        "bare@x367,y204 head-bottom 290"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 6",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 390,
+      "question": 8,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 138,
+      "fold": 844,
+      "ways": [
+        "1 Today@144-188",
+        "2 BareRecommended@144-188"
+      ],
+      "optionTops": [
+        "today@x14,y204 head-bottom 304",
+        "bare@x367,y204 head-bottom 319"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 7",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 390,
+      "question": 9,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 138,
+      "fold": 844,
+      "ways": [
+        "1 KeepRecommended@144-188",
+        "2 Bare@144-188"
+      ],
+      "optionTops": [
+        "today@x14,y204 head-bottom 290",
+        "bare@x367,y204 head-bottom 290"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 8",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "chromium",
+      "scheme": "dark",
+      "width": 390,
+      "question": 10,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 138,
+      "fold": 844,
+      "ways": [
+        "1 KeepRecommended@144-188",
+        "2 Bare@144-188"
+      ],
+      "optionTops": [
+        "today@x14,y204 head-bottom 290",
+        "bare@x367,y204 head-bottom 290"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.00373317 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 9",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 1440,
+      "question": 1,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 184,
+      "fold": 900,
+      "ways": [
+        "1 Today@190-234",
+        "2 Bare@190-234",
+        "3 Line cutRecommended@190-234"
+      ],
+      "optionTops": [
+        "today@x184,y250 head-bottom 328",
+        "bare@x537,y250 head-bottom 343",
+        "line@x890,y250 head-bottom 357"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "line:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": null,
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 1440,
+      "question": 2,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 169,
+      "fold": 900,
+      "ways": [
+        "1 FilledRecommended@175-219",
+        "2 Outlined@175-219"
+      ],
+      "optionTops": [
+        "filled@x184,y235 head-bottom 328",
+        "outlined@x537,y235 head-bottom 328"
+      ],
+      "pick": [
+        "filled:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "outlined:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 1",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 1440,
+      "question": 3,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 184,
+      "fold": 900,
+      "ways": [
+        "1 Today@190-234",
+        "2 Bare@190-234",
+        "3 Line cutRecommended@190-234"
+      ],
+      "optionTops": [
+        "today@x184,y250 head-bottom 343",
+        "bare@x537,y250 head-bottom 402",
+        "line@x890,y250 head-bottom 402"
+      ],
+      "pick": [
+        "today:oklch(0.92 0.011 83)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "line:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 2",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 1440,
+      "question": 4,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 184,
+      "fold": 900,
+      "ways": [
+        "1 Today@190-234",
+        "2 Bare@190-234",
+        "3 Line cutRecommended@190-234"
+      ],
+      "optionTops": [
+        "today@x184,y250 head-bottom 328",
+        "bare@x537,y250 head-bottom 343",
+        "line@x890,y250 head-bottom 343"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "line:oklch(0.92 0.011 83)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 3",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 1440,
+      "question": 5,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 140,
+      "fold": 900,
+      "ways": [
+        "1 Today@146-190",
+        "2 BareRecommended@146-190"
+      ],
+      "optionTops": [
+        "today@x184,y206 head-bottom 284",
+        "bare@x537,y206 head-bottom 284"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 4",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 1440,
+      "question": 6,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 140,
+      "fold": 900,
+      "ways": [
+        "1 Today@146-190",
+        "2 BareRecommended@146-190"
+      ],
+      "optionTops": [
+        "today@x184,y206 head-bottom 284",
+        "bare@x537,y206 head-bottom 284"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.92 0.011 83)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 5",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 1440,
+      "question": 7,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 140,
+      "fold": 900,
+      "ways": [
+        "1 Today@146-190",
+        "2 BareRecommended@146-190"
+      ],
+      "optionTops": [
+        "today@x184,y206 head-bottom 298",
+        "bare@x537,y206 head-bottom 284"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.92 0.011 83)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 6",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 1440,
+      "question": 8,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 140,
+      "fold": 900,
+      "ways": [
+        "1 Today@146-190",
+        "2 BareRecommended@146-190"
+      ],
+      "optionTops": [
+        "today@x184,y206 head-bottom 298",
+        "bare@x537,y206 head-bottom 313"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.92 0.011 83)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 7",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 1440,
+      "question": 9,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 140,
+      "fold": 900,
+      "ways": [
+        "1 KeepRecommended@146-190",
+        "2 Bare@146-190"
+      ],
+      "optionTops": [
+        "today@x184,y206 head-bottom 284",
+        "bare@x537,y206 head-bottom 284"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.92 0.011 83)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 8",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 1440,
+      "question": 10,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 140,
+      "fold": 900,
+      "ways": [
+        "1 KeepRecommended@146-190",
+        "2 Bare@146-190"
+      ],
+      "optionTops": [
+        "today@x184,y206 head-bottom 284",
+        "bare@x537,y206 head-bottom 284"
+      ],
+      "pick": [
+        "today:oklch(0.92 0.011 83)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 9",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 680,
+      "question": 1,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 183,
+      "fold": 900,
+      "ways": [
+        "1 Today@189-233",
+        "2 Bare@189-233",
+        "3 Line cutRecommended@189-233"
+      ],
+      "optionTops": [
+        "today@x14,y249 head-bottom 327",
+        "bare@x367,y249 head-bottom 342",
+        "line@x720,y249 head-bottom 357"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "line:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": null,
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 680,
+      "question": 2,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 168,
+      "fold": 900,
+      "ways": [
+        "1 FilledRecommended@174-218",
+        "2 Outlined@174-218"
+      ],
+      "optionTops": [
+        "filled@x14,y234 head-bottom 327",
+        "outlined@x367,y234 head-bottom 327"
+      ],
+      "pick": [
+        "filled:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "outlined:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 1",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 680,
+      "question": 3,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 183,
+      "fold": 900,
+      "ways": [
+        "1 Today@189-233",
+        "2 Bare@189-233",
+        "3 Line cutRecommended@189-233"
+      ],
+      "optionTops": [
+        "today@x14,y249 head-bottom 342",
+        "bare@x367,y249 head-bottom 401",
+        "line@x720,y249 head-bottom 401"
+      ],
+      "pick": [
+        "today:oklch(0.92 0.011 83)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "line:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 2",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 680,
+      "question": 4,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 183,
+      "fold": 900,
+      "ways": [
+        "1 Today@189-233",
+        "2 Bare@189-233",
+        "3 Line cutRecommended@189-233"
+      ],
+      "optionTops": [
+        "today@x14,y249 head-bottom 327",
+        "bare@x367,y249 head-bottom 342",
+        "line@x720,y249 head-bottom 342"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "line:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 3",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 680,
+      "question": 5,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 139,
+      "fold": 900,
+      "ways": [
+        "1 Today@145-189",
+        "2 BareRecommended@145-189"
+      ],
+      "optionTops": [
+        "today@x14,y205 head-bottom 283",
+        "bare@x367,y205 head-bottom 283"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 4",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 680,
+      "question": 6,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 139,
+      "fold": 900,
+      "ways": [
+        "1 Today@145-189",
+        "2 BareRecommended@145-189"
+      ],
+      "optionTops": [
+        "today@x14,y205 head-bottom 283",
+        "bare@x367,y205 head-bottom 283"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 5",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 680,
+      "question": 7,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 139,
+      "fold": 900,
+      "ways": [
+        "1 Today@145-189",
+        "2 BareRecommended@145-189"
+      ],
+      "optionTops": [
+        "today@x14,y205 head-bottom 297",
+        "bare@x367,y205 head-bottom 283"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 6",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 680,
+      "question": 8,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 139,
+      "fold": 900,
+      "ways": [
+        "1 Today@145-189",
+        "2 BareRecommended@145-189"
+      ],
+      "optionTops": [
+        "today@x14,y205 head-bottom 297",
+        "bare@x367,y205 head-bottom 312"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 7",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 680,
+      "question": 9,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 139,
+      "fold": 900,
+      "ways": [
+        "1 KeepRecommended@145-189",
+        "2 Bare@145-189"
+      ],
+      "optionTops": [
+        "today@x14,y205 head-bottom 283",
+        "bare@x367,y205 head-bottom 283"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 8",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 680,
+      "question": 10,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 139,
+      "fold": 900,
+      "ways": [
+        "1 KeepRecommended@145-189",
+        "2 Bare@145-189"
+      ],
+      "optionTops": [
+        "today@x14,y205 head-bottom 283",
+        "bare@x367,y205 head-bottom 283"
+      ],
+      "pick": [
+        "today:oklch(0.92 0.011 83)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 9",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 390,
+      "question": 1,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 212,
+      "fold": 844,
+      "ways": [
+        "1 Today@218-262",
+        "2 Bare@218-262",
+        "3 Line cutRecommended@218-262"
+      ],
+      "optionTops": [
+        "today@x14,y278 head-bottom 363",
+        "bare@x367,y278 head-bottom 378",
+        "line@x720,y278 head-bottom 393"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "line:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": null,
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 390,
+      "question": 2,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 182,
+      "fold": 844,
+      "ways": [
+        "1 FilledRecommended@188-232",
+        "2 Outlined@188-232"
+      ],
+      "optionTops": [
+        "filled@x14,y248 head-bottom 349",
+        "outlined@x367,y248 head-bottom 349"
+      ],
+      "pick": [
+        "filled:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "outlined:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 1",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 390,
+      "question": 3,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 212,
+      "fold": 844,
+      "ways": [
+        "1 Today@218-262",
+        "2 Bare@218-262",
+        "3 Line cutRecommended@218-262"
+      ],
+      "optionTops": [
+        "today@x14,y278 head-bottom 378",
+        "bare@x367,y278 head-bottom 437",
+        "line@x720,y278 head-bottom 437"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "line:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 2",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 390,
+      "question": 4,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 212,
+      "fold": 844,
+      "ways": [
+        "1 Today@218-262",
+        "2 Bare@218-262",
+        "3 Line cutRecommended@218-262"
+      ],
+      "optionTops": [
+        "today@x14,y278 head-bottom 363",
+        "bare@x367,y278 head-bottom 378",
+        "line@x720,y278 head-bottom 378"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "line:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 3",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 390,
+      "question": 5,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 138,
+      "fold": 844,
+      "ways": [
+        "1 Today@144-188",
+        "2 BareRecommended@144-188"
+      ],
+      "optionTops": [
+        "today@x14,y204 head-bottom 290",
+        "bare@x367,y204 head-bottom 290"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 4",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 390,
+      "question": 6,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 138,
+      "fold": 844,
+      "ways": [
+        "1 Today@144-188",
+        "2 BareRecommended@144-188"
+      ],
+      "optionTops": [
+        "today@x14,y204 head-bottom 290",
+        "bare@x367,y204 head-bottom 290"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 5",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 390,
+      "question": 7,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 138,
+      "fold": 844,
+      "ways": [
+        "1 Today@144-188",
+        "2 BareRecommended@144-188"
+      ],
+      "optionTops": [
+        "today@x14,y204 head-bottom 304",
+        "bare@x367,y204 head-bottom 290"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 6",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 390,
+      "question": 8,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 138,
+      "fold": 844,
+      "ways": [
+        "1 Today@144-188",
+        "2 BareRecommended@144-188"
+      ],
+      "optionTops": [
+        "today@x14,y204 head-bottom 304",
+        "bare@x367,y204 head-bottom 319"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 7",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 390,
+      "question": 9,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 138,
+      "fold": 844,
+      "ways": [
+        "1 KeepRecommended@144-188",
+        "2 Bare@144-188"
+      ],
+      "optionTops": [
+        "today@x14,y204 head-bottom 290",
+        "bare@x367,y204 head-bottom 290"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 8",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "light",
+      "width": 390,
+      "question": 10,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 138,
+      "fold": 844,
+      "ways": [
+        "1 KeepRecommended@144-188",
+        "2 Bare@144-188"
+      ],
+      "optionTops": [
+        "today@x14,y204 head-bottom 290",
+        "bare@x367,y204 head-bottom 290"
+      ],
+      "pick": [
+        "today:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)",
+        "bare:oklch(0.993 0.004 85)/oklab(0.649 0.003669 0.016187)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 9",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 1,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 184,
+      "fold": 900,
+      "ways": [
+        "1 Today@190-234",
+        "2 Bare@190-234",
+        "3 Line cutRecommended@190-234"
+      ],
+      "optionTops": [
+        "today@x184,y250 head-bottom 328",
+        "bare@x537,y250 head-bottom 343",
+        "line@x890,y250 head-bottom 357"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "line:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": null,
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 2,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 169,
+      "fold": 900,
+      "ways": [
+        "1 FilledRecommended@175-219",
+        "2 Outlined@175-219"
+      ],
+      "optionTops": [
+        "filled@x184,y235 head-bottom 328",
+        "outlined@x537,y235 head-bottom 328"
+      ],
+      "pick": [
+        "filled:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "outlined:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 1",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 3,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 184,
+      "fold": 900,
+      "ways": [
+        "1 Today@190-234",
+        "2 Bare@190-234",
+        "3 Line cutRecommended@190-234"
+      ],
+      "optionTops": [
+        "today@x184,y250 head-bottom 343",
+        "bare@x537,y250 head-bottom 402",
+        "line@x890,y250 head-bottom 402"
+      ],
+      "pick": [
+        "today:oklch(0.282 0.007 70)/oklab(0.5458 0.003733 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "line:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 2",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 4,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 184,
+      "fold": 900,
+      "ways": [
+        "1 Today@190-234",
+        "2 Bare@190-234",
+        "3 Line cutRecommended@190-234"
+      ],
+      "optionTops": [
+        "today@x184,y250 head-bottom 328",
+        "bare@x537,y250 head-bottom 343",
+        "line@x890,y250 head-bottom 343"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "line:oklch(0.282 0.007 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 3",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 5,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 140,
+      "fold": 900,
+      "ways": [
+        "1 Today@146-190",
+        "2 BareRecommended@146-190"
+      ],
+      "optionTops": [
+        "today@x184,y206 head-bottom 284",
+        "bare@x537,y206 head-bottom 284"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 4",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 6,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 140,
+      "fold": 900,
+      "ways": [
+        "1 Today@146-190",
+        "2 BareRecommended@146-190"
+      ],
+      "optionTops": [
+        "today@x184,y206 head-bottom 284",
+        "bare@x537,y206 head-bottom 284"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "bare:oklch(0.282 0.007 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 5",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 7,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 140,
+      "fold": 900,
+      "ways": [
+        "1 Today@146-190",
+        "2 BareRecommended@146-190"
+      ],
+      "optionTops": [
+        "today@x184,y206 head-bottom 298",
+        "bare@x537,y206 head-bottom 284"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "bare:oklch(0.282 0.007 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 6",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 8,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 140,
+      "fold": 900,
+      "ways": [
+        "1 Today@146-190",
+        "2 BareRecommended@146-190"
+      ],
+      "optionTops": [
+        "today@x184,y206 head-bottom 298",
+        "bare@x537,y206 head-bottom 313"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "bare:oklch(0.282 0.007 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 7",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 9,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 140,
+      "fold": 900,
+      "ways": [
+        "1 KeepRecommended@146-190",
+        "2 Bare@146-190"
+      ],
+      "optionTops": [
+        "today@x184,y206 head-bottom 284",
+        "bare@x537,y206 head-bottom 284"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "bare:oklch(0.282 0.007 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 8",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 1440,
+      "question": 10,
+      "allOptionsInFirstView": true,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 140,
+      "fold": 900,
+      "ways": [
+        "1 KeepRecommended@146-190",
+        "2 Bare@146-190"
+      ],
+      "optionTops": [
+        "today@x184,y206 head-bottom 284",
+        "bare@x537,y206 head-bottom 284"
+      ],
+      "pick": [
+        "today:oklch(0.282 0.007 70)/oklab(0.5458 0.003733 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 9",
+        "box": [
+          184,
+          11,
+          220,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 680,
+      "question": 1,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 183,
+      "fold": 900,
+      "ways": [
+        "1 Today@189-233",
+        "2 Bare@189-233",
+        "3 Line cutRecommended@189-233"
+      ],
+      "optionTops": [
+        "today@x14,y249 head-bottom 327",
+        "bare@x367,y249 head-bottom 342",
+        "line@x720,y249 head-bottom 357"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "line:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": null,
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 680,
+      "question": 2,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 168,
+      "fold": 900,
+      "ways": [
+        "1 FilledRecommended@174-218",
+        "2 Outlined@174-218"
+      ],
+      "optionTops": [
+        "filled@x14,y234 head-bottom 327",
+        "outlined@x367,y234 head-bottom 327"
+      ],
+      "pick": [
+        "filled:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "outlined:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 1",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 680,
+      "question": 3,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 183,
+      "fold": 900,
+      "ways": [
+        "1 Today@189-233",
+        "2 Bare@189-233",
+        "3 Line cutRecommended@189-233"
+      ],
+      "optionTops": [
+        "today@x14,y249 head-bottom 342",
+        "bare@x367,y249 head-bottom 401",
+        "line@x720,y249 head-bottom 401"
+      ],
+      "pick": [
+        "today:oklch(0.282 0.007 70)/oklab(0.5458 0.003733 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "line:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 2",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 680,
+      "question": 4,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 183,
+      "fold": 900,
+      "ways": [
+        "1 Today@189-233",
+        "2 Bare@189-233",
+        "3 Line cutRecommended@189-233"
+      ],
+      "optionTops": [
+        "today@x14,y249 head-bottom 327",
+        "bare@x367,y249 head-bottom 342",
+        "line@x720,y249 head-bottom 342"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "line:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 3",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 680,
+      "question": 5,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 139,
+      "fold": 900,
+      "ways": [
+        "1 Today@145-189",
+        "2 BareRecommended@145-189"
+      ],
+      "optionTops": [
+        "today@x14,y205 head-bottom 283",
+        "bare@x367,y205 head-bottom 283"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 4",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 680,
+      "question": 6,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 139,
+      "fold": 900,
+      "ways": [
+        "1 Today@145-189",
+        "2 BareRecommended@145-189"
+      ],
+      "optionTops": [
+        "today@x14,y205 head-bottom 283",
+        "bare@x367,y205 head-bottom 283"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 5",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 680,
+      "question": 7,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 139,
+      "fold": 900,
+      "ways": [
+        "1 Today@145-189",
+        "2 BareRecommended@145-189"
+      ],
+      "optionTops": [
+        "today@x14,y205 head-bottom 297",
+        "bare@x367,y205 head-bottom 283"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 6",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 680,
+      "question": 8,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 139,
+      "fold": 900,
+      "ways": [
+        "1 Today@145-189",
+        "2 BareRecommended@145-189"
+      ],
+      "optionTops": [
+        "today@x14,y205 head-bottom 297",
+        "bare@x367,y205 head-bottom 312"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 7",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 680,
+      "question": 9,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 139,
+      "fold": 900,
+      "ways": [
+        "1 KeepRecommended@145-189",
+        "2 Bare@145-189"
+      ],
+      "optionTops": [
+        "today@x14,y205 head-bottom 283",
+        "bare@x367,y205 head-bottom 283"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 8",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 680,
+      "question": 10,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 139,
+      "fold": 900,
+      "ways": [
+        "1 KeepRecommended@145-189",
+        "2 Bare@145-189"
+      ],
+      "optionTops": [
+        "today@x14,y205 head-bottom 283",
+        "bare@x367,y205 head-bottom 283"
+      ],
+      "pick": [
+        "today:oklch(0.282 0.007 70)/oklab(0.5458 0.003733 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 9",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 390,
+      "question": 1,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 212,
+      "fold": 844,
+      "ways": [
+        "1 Today@218-262",
+        "2 Bare@218-262",
+        "3 Line cutRecommended@218-262"
+      ],
+      "optionTops": [
+        "today@x14,y278 head-bottom 363",
+        "bare@x367,y278 head-bottom 378",
+        "line@x720,y278 head-bottom 393"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "line:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": null,
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 390,
+      "question": 2,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 182,
+      "fold": 844,
+      "ways": [
+        "1 FilledRecommended@188-232",
+        "2 Outlined@188-232"
+      ],
+      "optionTops": [
+        "filled@x14,y248 head-bottom 349",
+        "outlined@x367,y248 head-bottom 349"
+      ],
+      "pick": [
+        "filled:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "outlined:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 1",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 390,
+      "question": 3,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 212,
+      "fold": 844,
+      "ways": [
+        "1 Today@218-262",
+        "2 Bare@218-262",
+        "3 Line cutRecommended@218-262"
+      ],
+      "optionTops": [
+        "today@x14,y278 head-bottom 378",
+        "bare@x367,y278 head-bottom 437",
+        "line@x720,y278 head-bottom 437"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "line:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 2",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 390,
+      "question": 4,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Three options, side by side",
+      "countBottom": 212,
+      "fold": 844,
+      "ways": [
+        "1 Today@218-262",
+        "2 Bare@218-262",
+        "3 Line cutRecommended@218-262"
+      ],
+      "optionTops": [
+        "today@x14,y278 head-bottom 363",
+        "bare@x367,y278 head-bottom 378",
+        "line@x720,y278 head-bottom 378"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "line:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 3",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 390,
+      "question": 5,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 138,
+      "fold": 844,
+      "ways": [
+        "1 Today@144-188",
+        "2 BareRecommended@144-188"
+      ],
+      "optionTops": [
+        "today@x14,y204 head-bottom 290",
+        "bare@x367,y204 head-bottom 290"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 4",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 390,
+      "question": 6,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 138,
+      "fold": 844,
+      "ways": [
+        "1 Today@144-188",
+        "2 BareRecommended@144-188"
+      ],
+      "optionTops": [
+        "today@x14,y204 head-bottom 290",
+        "bare@x367,y204 head-bottom 290"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 5",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 390,
+      "question": 7,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 138,
+      "fold": 844,
+      "ways": [
+        "1 Today@144-188",
+        "2 BareRecommended@144-188"
+      ],
+      "optionTops": [
+        "today@x14,y204 head-bottom 304",
+        "bare@x367,y204 head-bottom 290"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 6",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 390,
+      "question": 8,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 138,
+      "fold": 844,
+      "ways": [
+        "1 Today@144-188",
+        "2 BareRecommended@144-188"
+      ],
+      "optionTops": [
+        "today@x14,y204 head-bottom 304",
+        "bare@x367,y204 head-bottom 319"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 7",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 390,
+      "question": 9,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 138,
+      "fold": 844,
+      "ways": [
+        "1 KeepRecommended@144-188",
+        "2 Bare@144-188"
+      ],
+      "optionTops": [
+        "today@x14,y204 head-bottom 290",
+        "bare@x367,y204 head-bottom 290"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 8",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    },
+    {
+      "engine": "webkit",
+      "scheme": "dark",
+      "width": 390,
+      "question": 10,
+      "allOptionsInFirstView": false,
+      "countAndNumbersInFirstView": true,
+      "sideBySide": true,
+      "count": "Two options, side by side",
+      "countBottom": 138,
+      "fold": 844,
+      "ways": [
+        "1 KeepRecommended@144-188",
+        "2 Bare@144-188"
+      ],
+      "optionTops": [
+        "today@x14,y204 head-bottom 290",
+        "bare@x367,y204 head-bottom 290"
+      ],
+      "pick": [
+        "today:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)",
+        "bare:oklch(0.248 0.006 70)/oklab(0.5458 0.003733 0.015146)"
+      ],
+      "back": {
+        "text": "",
+        "label": "Back to question 9",
+        "box": [
+          14,
+          11,
+          50,
+          47
+        ],
+        "svg": true
+      },
+      "docOverflowX": 0
+    }
+  ],
+  "failures": []
+}
