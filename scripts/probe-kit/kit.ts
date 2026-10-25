@@ -331,13 +331,6 @@ export interface PageOptions {
    */
   scrollbars?: boolean;
   theme?: Theme;
-  /**
-   * The WebKit build a WebKit page runs on, by its Playwright revision,
-   * where a spec reads a bug a phone's Safari still has and a newer build
-   * has fixed (`PINNED_WEBKIT`). Unset, the build this playwright-core
-   * expects, or the one `PROBE_WEBKIT` names.
-   */
-  webkit?: string;
 }
 
 /** What a page's context takes of `options` on how it reaches its origins: a certificate of the run's own, a proxy. */
