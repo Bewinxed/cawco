@@ -75,6 +75,7 @@ import { join, relative } from "node:path";
 import { type CDPSession, type Page, webkit } from "playwright-core";
 import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
 import { readWithin } from "../../../packages/core/src/bounded";
+import { signalGroup, spawnedPid } from "../../../packages/core/src/signal";
 import { until } from "../../scratch-fleet";
 import { scratchCertificate } from "../cloudflare-front";
 import {
@@ -964,36 +965,40 @@ function noInspectorWebKit(
   cpu: () => number;
   end: () => void;
   memory: () => number;
-  /** What the browser's processes wrote to stderr, newest last (JSC's GC log where `JSC_logGC` asks for it). */
-  said: () => string[];
+  /** Each collection JSC's GC log said (where `JSC_logGC` asks for it), in order: its heap, and the live size it left, KB. */
+  collections: () => readonly { heap: string; kb: number }[];
 } {
+  // Its own process group's leader, so the whole browser (its web and network processes) ends with one signal to the group.
   const browser = spawn(
     webkit.executablePath(),
     ["--headless", "--size=1440x900", url],
-    { stdio: ["ignore", "ignore", "pipe"], env: { ...process.env, ...env } }
+    {
+      stdio: ["ignore", "ignore", "pipe"],
+      env: { ...process.env, ...env },
+      detached: true,
+    }
   );
-  const lines: string[] = [];
+  const collections: { heap: string; kb: number }[] = [];
   let partial = "";
   browser.stderr?.on("data", (chunk: Buffer) => {
     const all = (partial + chunk.toString("utf8")).split("\n");
     partial = all.pop() ?? "";
-    lines.push(...all);
-    if (lines.length > 4000) {
-      lines.splice(0, lines.length - 4000);
+    for (const line of all) {
+      const m = line.match(GC_LEFT);
+      if (m) {
+        collections.push({ heap: m[1] as string, kb: Number(m[2]) });
+      }
     }
   });
   const tree = () => treeOf([browser.pid as number]);
   return {
-    said: () => lines,
+    collections: () => collections,
     memory: () => memoryMb(pageProcesses(tree())),
     cpu: () => cpuMs(tree()),
     end: () => {
-      for (const pid of tree().reverse()) {
-        try {
-          process.kill(pid, "SIGTERM");
-        } catch {
-          // ended
-        }
+      const leader = spawnedPid(browser);
+      if (leader) {
+        signalGroup(leader, "SIGTERM");
       }
     },
   };
@@ -2928,7 +2933,8 @@ const memoryProgram = (picks: { id: string; story: string }[]): string => {
       `${card}b = Option("${card}b", "Second", "That canvas.", false, [p${at * 2 + 1}], "The first.")`,
     ]),
     ...picks.map(
-      (one, at) => `p${at} = Preview("${one.id}", "Canvas ${at + 1}", ["${one.story}"])`
+      (one, at) =>
+        `p${at} = Preview("${one.id}", "Canvas ${at + 1}", ["${one.story}"])`
     ),
   ].join("\n");
 };
@@ -2958,9 +2964,10 @@ type MemoryPage =
   | "control"
   | `probe-${keyof typeof PROBES}`;
 /** The pages `--memory-page` names (comma-separated), each read in a browser of its own: decision by default. */
-const MEMORY_PAGES = (arg("memory-page") ?? "decision").split(
-  ","
-) as Exclude<MemoryPage, "control">[];
+const MEMORY_PAGES = (arg("memory-page") ?? "decision").split(",") as Exclude<
+  MemoryPage,
+  "control"
+>[];
 
 /**
  * One engine feature or one of the stage's resources each, in the control's
@@ -2980,7 +2987,8 @@ const PROBES = {
     "new MutationObserver(() => void held.length).observe(document, { subtree: true, childList: true, attributes: true }); setInterval(() => document.documentElement.toggleAttribute('data-x'), 500); ready();",
   animation: () =>
     "document.documentElement.held = held; document.documentElement.animate([{ opacity: 1 }, { opacity: 0.5 }], { duration: 1000, iterations: Infinity }); ready();",
-  message: () => "addEventListener('message', () => void held.length); ready();",
+  message: () =>
+    "addEventListener('message', () => void held.length); ready();",
   fonts: () => "document.fonts.ready.then(() => void held.length); ready();",
   // A big sheet of width rules, as the kit's Tailwind sheet is, never written to.
   "css-big": () => `${BIG_SHEET} ready();`,
@@ -3100,7 +3108,9 @@ const CUTS = {
       )
     ),
   "boot-nofaces": (html: string, entry: EntryParts) =>
-    bootOf(html, entry, (source) => source.replace(ENTRY_FACES, 'faces: "",\n')),
+    bootOf(html, entry, (source) =>
+      source.replace(ENTRY_FACES, 'faces: "",\n')
+    ),
   "boot-nomount": (html: string, entry: EntryParts) =>
     bootOf(html, entry, (source) =>
       source.replace(
@@ -3113,8 +3123,8 @@ const CUTS = {
 const ENTRY_FACES = /faces: "(?:[^"\\]|\\.)*",\n/;
 /** A source line's trailing comma and newline. */
 const TRAILING_COMMA = /,\n$/;
-/** The entry's adapter (stage-host host.ts `entryModule`). */
-const ENTRY_ADAPTER = /adapter: \{ mountStory \},/;
+/** The entry's adapter option, by its shape (stage-host host.ts `entryModule`). */
+const ENTRY_ADAPTER = /adapter: \{[^}\n]*\},/;
 /** A canvas page's preload of its graph (stage-host host.ts `graphPreloads`). */
 const PRELOAD_LINK = /<link rel="modulepreload" href="[^"]*">/g;
 /** The script counting them (`__cawcoGraph`). */
@@ -3213,15 +3223,20 @@ const MEMORY_HOLDER = `<!doctype html><meta charset="utf-8"><style>body{margin:0
 
 /** One browser the memory leg reads: the page opened and taken away, the facts it states, its web process's memory, and a full collection where the browser takes one. */
 interface MemoryBrowser {
+  /** How many collections the browser has said (JSC's GC log); 0 where it says none. */
+  collections: () => number;
   end: () => Promise<void>;
   facts: () => Promise<unknown>;
   gc: (() => Promise<void>) | null;
   /** The page taken away, the holder going on {@link GONE_S} s. */
   gone: () => Promise<void>;
-  /** The JS heap the latest collection left, MB, where the browser says it (JSC's GC log); null where it doesn't. */
-  jsHeap: () => number | null;
+  /** The JS heap the latest collection since collection `since` left, MB, where the browser says it (JSC's GC log); null where none has run since, or it says none. */
+  jsHeap: (since?: number) => number | null;
   memory: () => number;
-  open: (url: string, kind: MemoryPage) => Promise<{ drawn: boolean; ms: number }>;
+  open: (
+    url: string,
+    kind: MemoryPage
+  ) => Promise<{ drawn: boolean; ms: number }>;
 }
 
 /** The holder's calls in WebKit with no inspector ({@link noInspectorWebKit}), run by the kit's bridge. */
@@ -3232,12 +3247,10 @@ async function uninspectedWebKit(
   const bridge = safariBridge();
   const url = new URL(holder);
   url.searchParams.set("agent", bridge.origin);
-  // JSC's own GC log, for what of the JS heap each collection leaves (`jsHeap`).
+  // Every collection full, JSC's own GC log too, for what of the JS heap each leaves (`jsHeap`). Not with the default collector: its eden collections, logged a line each many times a second, stalled the page's main thread past the gone window's answer.
   const browser = noInspectorWebKit(
     url.href,
-    everyCollectionFull
-      ? { JSC_useGenerationalGC: "0", JSC_logGC: "1" }
-      : { JSC_logGC: "1" }
+    everyCollectionFull ? { JSC_useGenerationalGC: "0", JSC_logGC: "1" } : {}
   );
   const end = (): Promise<void> => {
     browser.end();
@@ -3269,7 +3282,8 @@ async function uninspectedWebKit(
     facts: () => page.run(() => (window as unknown as Holder).memoryFacts()),
     gc: null,
     memory: browser.memory,
-    jsHeap: () => jsHeapOf(browser.said()),
+    collections: () => browser.collections().length,
+    jsHeap: (since = 0) => jsHeapOf(browser.collections(), since),
     end,
   };
 }
@@ -3277,14 +3291,14 @@ async function uninspectedWebKit(
 /** A collection's line in JSC's GC log (`JSC_logGC`): its heap, and the live size it leaves (`=> 1669kb`). */
 const GC_LEFT = /^\[GC<(0x[0-9a-f]+)>: M .* => (\d+)kb, p=/;
 
-/** The JS heap the latest collection of each of the process's heaps left, MB; null before any. */
-const jsHeapOf = (said: string[]): number | null => {
+/** The JS heap the latest collection since collection `since` of each of the process's heaps left, MB; null where none has run since. */
+const jsHeapOf = (
+  collections: readonly { heap: string; kb: number }[],
+  since: number
+): number | null => {
   const left = new Map<string, number>();
-  for (const line of said) {
-    const m = line.match(GC_LEFT);
-    if (m) {
-      left.set(m[1] as string, Number(m[2]));
-    }
+  for (const one of collections.slice(since)) {
+    left.set(one.heap, one.kb);
   }
   return left.size === 0
     ? null
@@ -3329,6 +3343,7 @@ async function playwrightWebKit(
     facts: () =>
       page.evaluate(() => (window as unknown as Holder).memoryFacts()),
     gc: () => page.requestGC(),
+    collections: () => 0,
     jsHeap: () => null,
     memory: () =>
       memoryMb(
@@ -3350,7 +3365,9 @@ interface MemoryRead {
     drawnMb: number;
     gcMb: number | null;
     goneMb: number;
-    /** The JS heap the latest collection left once the page went, MB (null where the browser says none). */
+    /** The JS heap the latest collection left while the page stood drawn, MB (null where the browser says none). */
+    drawnJsMb: number | null;
+    /** The JS heap the latest collection after the page went left, MB (null where none ran after, or the browser says none). */
     goneJsMb: number | null;
     /** The stage's module key as the round's page was drawn (`/@cawco/m/<key>/`). */
     key: string;
@@ -3380,6 +3397,7 @@ async function memoryRounds(
   for (let round = 1; round <= MEMORY_ROUNDS; round += 1) {
     const opened = await browser.open(url, kind);
     const drawnMb = browser.memory();
+    const drawnJsMb = browser.jsHeap();
     const key = await stageKey();
     const stands = round === 1 ? IDLE_S : MEMORY_REST_S;
     const from = Date.now();
@@ -3391,8 +3409,11 @@ async function memoryRounds(
         await Bun.sleep(Math.max(0, from + (at + 20) * 1000 - Date.now()));
       }
     }
+    // What the page's JS left is read off a collection that ran after it went, never one from before.
+    const before = browser.collections();
     await browser.gone();
     const goneMb = browser.memory();
+    const goneJsMb = browser.jsHeap(before);
     let gcMb: number | null = null;
     if (browser.gc) {
       await browser.gc();
@@ -3404,7 +3425,8 @@ async function memoryRounds(
       drawnMb,
       goneMb,
       gcMb,
-      goneJsMb: browser.jsHeap(),
+      drawnJsMb,
+      goneJsMb,
       key,
     });
   }
@@ -3413,7 +3435,7 @@ async function memoryRounds(
 
 /** A reading in words: alone, drawn, after the idle, and each round's drawn → gone (→ after a full collection). */
 const memoryWords = (read: MemoryRead): string =>
-  `keys ${[...new Set(read.rounds.map((one) => one.key))].join(" → ")};${read.aloneJsMb === null ? "" : ` JS heap ${read.aloneJsMb} MB alone, after each page went ${read.rounds.map((one) => one.goneJsMb).join(", ")} MB;`} ${read.aloneMb} MB alone, ${read.idleMb[0]?.[1]} MB drawn, ${read.idleMb.at(-1)?.[1]} MB after ${IDLE_S} s untouched; each round drawn → ${GONE_S} s after the page went${read.rounds[0]?.gcMb === null ? "" : " → after a full collection"}: ${read.rounds.map((one) => [one.drawnMb, one.goneMb, ...(one.gcMb === null ? [] : [one.gcMb])].join(" → ")).join(", ")} MB (${JSON.stringify(read.facts)})`;
+  `keys ${[...new Set(read.rounds.map((one) => one.key))].join(" → ")}; ${read.aloneMb} MB alone, ${read.idleMb[0]?.[1]} MB drawn, ${read.idleMb.at(-1)?.[1]} MB after ${IDLE_S} s untouched; each round drawn → ${GONE_S} s after the page went${read.rounds[0]?.gcMb === null ? "" : " → after a full collection"}: ${read.rounds.map((one) => [one.drawnMb, one.goneMb, ...(one.gcMb === null ? [] : [one.gcMb])].join(" → ")).join(", ")} MB (${JSON.stringify(read.facts)})`;
 
 /**
  * A decision page of ten canvas Previews served as the hub serves one (the
@@ -3583,7 +3605,11 @@ async function memoryLeg(kit: Kit): Promise<void> {
         read = await memoryRounds(browser, addressOf[kind], kind, async () => {
           const page = await (
             await fetch(
-              embedUrl(`http://127.0.0.1:${stage.stagePort}`, LOOP_FILE, "Spins")
+              embedUrl(
+                `http://127.0.0.1:${stage.stagePort}`,
+                LOOP_FILE,
+                "Spins"
+              )
             )
           ).text();
           return page.match(STAGE_KEY)?.[1] ?? "";
@@ -3612,8 +3638,8 @@ async function memoryLeg(kit: Kit): Promise<void> {
 
 /** How much of what the page took it may grow by, left untouched `--idle` s. Our own call: a collection's swing. */
 const IDLE_GROWTH_SHARE = 0.1;
-/** How far over the holder's own JS heap a gone page's may leave it, MB: the holder's own work (its bridge's calls, its allocations) between. Our own call. */
-const JS_LEFT_MB = 5;
+/** How much of the JS heap a page stood drawn on may stay once it is gone: the holder's own (its bridge's calls, the objects it makes going on) is in both. Our own call: a page kept stays whole. */
+const JS_LEFT_SHARE = 0.1;
 
 /** The least-squares slope of `ys` over their places, a round apart. */
 const slopeOf = (ys: number[]): number => {
@@ -3635,8 +3661,8 @@ const slopeOf = (ys: number[]): number => {
  * person runs it (`uninspected`), the hub's page left untouched `--idle` s
  * grows by no more than {@link IDLE_GROWTH_SHARE} of what it took. With
  * every collection full (`collected`), each time it goes its JS goes with
- * it: the heap a collection leaves is back within {@link JS_LEFT_MB} of the
- * holder alone's, every round. What the web process keeps natively past
+ * it: the heap a collection leaves once it is gone is no more than
+ * {@link JS_LEFT_SHARE} of the heap it stood drawn on, every round. What the web process keeps natively past
  * that is said beside it: WebKit's own caches, which its memory-pressure
  * handler sheds past its threshold (WTF MemoryPressureHandler.cpp:
  * `baseThreshold(std::min(3 * GB, ramSize()))`, conservative at 0.33 of it
@@ -3662,13 +3688,14 @@ function memoryCheck(
     return;
   }
   if (label === "collected" && kind === "decision") {
-    const alone = read.aloneJsMb;
-    const left = read.rounds.map((one) => one.goneJsMb);
-    const released =
-      alone !== null &&
-      left.every((one) => one !== null && one <= alone + JS_LEFT_MB);
+    const released = read.rounds.every(
+      (one) =>
+        one.drawnJsMb !== null &&
+        one.goneJsMb !== null &&
+        one.goneJsMb <= JS_LEFT_SHARE * one.drawnJsMb
+    );
     kit.check(
-      `memory collected: with every collection full, each time the hub's page of ${MEMORY_PREVIEWS} canvases went its JS went with it, the heap a collection left back within ${JS_LEFT_MB} MB of the holder alone's ${alone} MB every round (${left.join(", ")} MB); what its web process kept natively over the holder alone each round: ${read.rounds.map((one) => one.goneMb - read.aloneMb).join(", ")} MB (WebKit's caches, shed past its memory-pressure threshold); ${said}`,
+      `memory collected: with every collection full, each time the hub's page of ${MEMORY_PREVIEWS} canvases went its JS went with it, the heap a collection left no more than ${JS_LEFT_SHARE * 100}% of the heap it stood drawn on, every round (drawn → gone ${read.rounds.map((one) => `${one.drawnJsMb} → ${one.goneJsMb}`).join(", ")} MB); what its web process kept natively over the holder alone each round: ${read.rounds.map((one) => one.goneMb - read.aloneMb).join(", ")} MB (WebKit's caches, shed past its memory-pressure threshold); ${said}`,
       allDrawn && released
     );
     return;
