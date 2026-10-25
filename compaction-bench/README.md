@@ -261,6 +261,10 @@ systemd-run --user --same-dir --unit bench-pace -E PATH="$PATH" python3 -I pace.
 #    PI_ACCOUNT_DIR in its environment)
 # 4. judge, cost, the arithmetic, report
 ./unit.sh bench-judge $S $Z $J judge.py --runs out/runs          # model calls; --engine-only: the engine readings alone
+#    scoped, as run on 2026-10-25 for the move question (price first with --estimate, which calls nothing; --budget stops
+#    new judgments once the calls made report that many USD):
+#    judge.py --runs out/runs --only-cuts c01,c17,c18,c20,c23 --pairs A1:A0,A1:A2 --abs-arms A0,A1,A2 \
+#        --no-probes --no-rules --budget 25 [--estimate --cockpit-root $COCKPIT]
 python3 -I cost.py --runs out/runs --cockpit-root $COCKPIT --db out/cawco.db
 python3 -I arith.py --out out --cockpit-root $COCKPIT          # no model call: every situation × band × method
 python3 -I report.py --out out --paper PAPER.md --eval-report <the eval's out/report.md>

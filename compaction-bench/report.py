@@ -52,6 +52,7 @@ class Data:
         self.out = out
         self.cuts = {c["id"]: c for c in common.load(cuts_path or os.path.join(out, "cuts.json"))["cuts"]}
         self.results, self.q, self.engine, self.pair, self.probe, self.rules = {}, {}, {}, {}, {}, {}
+        self.pair_vs, self.abs_raw = {}, {}
         for cid in self.cuts:
             root = os.path.join(out, "runs", cid)
             for arm in os.listdir(root) if os.path.isdir(root) else []:
@@ -64,12 +65,19 @@ class Data:
                         a = common.load(os.path.join(jd, f"abs-{j}.json"))
                         if a:
                             self.q[(cid, arm, int(run), j)] = statistics.fmean(a[d] for d in DIMS)
-                        ps = [common.load(os.path.join(jd, f"pair-{j}-{o}.json")) for o in ("arm-first", "control-first")]
-                        if all(ps):
-                            out_ = {p["outcome"] for p in ps}
-                            self.pair[(cid, arm, int(run), j)] = {
-                                "outcome": out_.pop() if len(out_) == 1 else "tie",
-                                "asked_back": sum(p["asked_back_arm"] for p in ps) / 2}
+                            self.abs_raw[(cid, arm, int(run), j)] = a
+                        # pairwise against A0 in the run's own dir, against any other arm under vs-<control>
+                        for ctl, pdir in [("A0", jd)] + [(x[3:], os.path.join(jd, x)) for x in (
+                                sorted(os.listdir(jd)) if os.path.isdir(jd) else []) if x.startswith("vs-")]:
+                            ps = [common.load(os.path.join(pdir, f"pair-{j}-{o}.json")) for o in ("arm-first", "control-first")]
+                            if all(ps):
+                                out_ = {p["outcome"] for p in ps}
+                                v = {"outcome": out_.pop() if len(out_) == 1 else "tie",
+                                     "orders": [p["outcome"] for p in ps],
+                                     "asked_back": sum(p["asked_back_arm"] for p in ps) / 2}
+                                self.pair_vs[(cid, arm, int(run), ctl, j)] = v
+                                if ctl == "A0":
+                                    self.pair[(cid, arm, int(run), j)] = v
                         rl = common.load(os.path.join(jd, f"rules-{j}.json"))
                         if rl:
                             self.rules[(cid, arm, int(run), j)] = (rl["rule1"], rl["rule2"])
@@ -188,7 +196,10 @@ def main(argv=None):
     bands = {b: {c for c in single if d.cuts[c]["band"] == b} for b, _, _ in common.BANDS}
 
     # ---- noise floor
-    floor_cuts = [c for c, v in d.cuts.items() if v.get("floor")]
+    # every cut where A0 has a judged repeat: the floor cuts' five runs, and the three runs of any other cut (the drawn
+    # floor cuts never got their five runs on 2026-10-25)
+    floor_cuts = sorted(c for c in d.cuts if any((c, "A0", r, "opus") in d.q for r in range(2, 6))
+                        or os.path.isdir(os.path.join(out, "judge", c, "floor")))
     spreads, floor_pairs = [], []
     for c in floor_cuts:
         base = d.q.get((c, "A0", 1, "opus"))
@@ -270,13 +281,14 @@ def main(argv=None):
         return (f"by cost alone (§7b): {name[best]} (" + ", ".join(f"{name[m]} ${t:.2f}" for m, t in tot.items()) + ")",
                 setting[best]) if best else ("", None)
     for b, cs in bands.items():
-        pick, why, _ = choose(d, [x for x in ["A0", "A1"] + SUMMARY_ARMS if x in arms_present], floor, cs)
+        pick, why, cands = choose(d, [x for x in ["A0", "A1"] + SUMMARY_ARMS if x in arms_present], floor, cs)
         act = compare(d, pick, "A2", floor, cs) if pick and pick != "A2" and pick in arms_present and "A2" in arms_present else None
         note = "" if not act else (" (actionable)" if act["actionable"] else f" (not actionable: {'; '.join(act['why_not'])})")
         for sit, label in (("cold or cross-org", "cold / cross-org / no cache"), ("limit gone early", "limit gone early")):
             if pick:
                 overfloor = {"A0": "whole", "A1": "compact"}.get(pick, "summarize")
-                cell = f"E1: {pick} {NAMES.get(pick, '')}{note}"
+                cell = (f"E1: {pick} {NAMES.get(pick, '')}{note}; among " + ", ".join(
+                    f"{a} ({len(d.quality(a, cuts=cs))} cuts)" for a, _, _ in cands) + " with both readings")
             else:
                 txt, s = by_cost(sit, b)
                 overfloor = f"{s} (cost alone; quality unmeasured)" if s else "undecided"
@@ -296,7 +308,10 @@ def main(argv=None):
                      f"{ci_txt(c['opus']['ci'])}, cost {usd_signed(c['cost']['median'])} "
                      f"{ci_txt(c['cost']['ci'], 4)}; {'actionable' if c['actionable'] else 'not actionable: ' + '; '.join(c['why_not'])} | "
                      f"`summarizer.model`; the extract and prompt in `continuation.ts` |")
-    e7, why7, _ = choose(d, [x for x in ("A1", "A2", "A6") if x in arms_present], floor, chained)
+    e7, why7, c7 = choose(d, [x for x in ("A1", "A2", "A6") if x in arms_present], floor, chained)
+    if e7 and "A6" not in {a for a, _, _ in c7}:
+        # E7 is merge (A6, Factory) against restate (A2): without an A6 reading there is nothing to decide
+        e7, why7 = None, "the Factory merge (A6) has no quality reading"
     L.append(f"| chained | — | {('E7: ' + e7 + ' ' + NAMES.get(e7, '')) if e7 else 'undecided: ' + why7} | whether the summarizer merges the prior summary (Factory) or restates it |")
 
     # ---- 1b. the move question: compact on the warm account first, or move whole
@@ -350,6 +365,54 @@ def main(argv=None):
             L += ["", f"Moving whole was not possible at all at {len({c for c, _ in tl})} cuts: every A0 run there stopped on "
                   "\"Prompt is too long\" (" + ", ".join(f"{c} {d.cuts[c]['pre_tokens'] // 1000}k" for c in sorted({c for c, _ in tl}))
                   + "); the real sessions compacted there."]
+
+    # ---- 1c. the judged pairs: each pair of arms judged at the same run index, both orders, both judges
+    S["judged"] = len(L)
+    kinds = sorted({(k[1], k[3]) for k in d.pair_vs})
+    if kinds:
+        L += ["", "## 1c. Judged pairs (both orders, both judges; a win or loss counts only when both orders agree)", "",
+              f"Noise: the A0 runs of one cut against each other (§4): 0-5 spread, Opus, "
+              f"{', '.join(f'{s:.2f}' for s in spreads) or 'none'}; the floor used is {floor:.2f}.", "",
+              "| pair | cut | run | Opus (arm-first, control-first) | Opus | Sonnet (arm-first, control-first) | Sonnet | judges agree |",
+              "|---|---|---|---|---|---|---|---|"]
+        for arm, ctl in kinds:
+            for pk in sorted(k[:4] for k in d.pair_vs if k[1] == arm and k[3] == ctl and k[4] == "opus"):
+                po, ps_ = d.pair_vs[pk + ("opus",)], d.pair_vs.get(pk + ("sonnet",))
+                L.append(f"| {arm} vs {ctl} | {pk[0]} | {pk[2]} | {', '.join(po['orders'])} | {po['outcome']} | "
+                         f"{', '.join(ps_['orders']) if ps_ else '–'} | {ps_['outcome'] if ps_ else '–'} | "
+                         f"{'yes' if ps_ and ps_['outcome'] == po['outcome'] else 'no' if ps_ else '–'} |")
+        L += ["", "| pair | judged pairs | Opus win/tie/loss | Sonnet win/tie/loss | judges agree | both judges say the arm lost |",
+              "|---|---|---|---|---|---|"]
+        for arm, ctl in kinds:
+            keys = sorted({k[:4] for k in d.pair_vs if k[1] == arm and k[3] == ctl})
+            cnt = {j: collections.Counter(d.pair_vs[k + (j,)]["outcome"] for k in keys if k + (j,) in d.pair_vs)
+                   for j in ("opus", "sonnet")}
+            both = [k for k in keys if k + ("opus",) in d.pair_vs and k + ("sonnet",) in d.pair_vs]
+            agree = sum(1 for k in both if d.pair_vs[k + ("opus",)]["outcome"] == d.pair_vs[k + ("sonnet",)]["outcome"])
+            lost = sum(1 for k in both if d.pair_vs[k + ("opus",)]["outcome"] == d.pair_vs[k + ("sonnet",)]["outcome"] == "loss")
+            L.append(f"| {arm} vs {ctl} | {len(keys)} | {cnt['opus']['win']}/{cnt['opus']['tie']}/{cnt['opus']['loss']} | "
+                     f"{cnt['sonnet']['win']}/{cnt['sonnet']['tie']}/{cnt['sonnet']['loss']} | {agree} of {len(both)} | {lost} |")
+        # 0-5: per cut, the median over runs of the four dimensions' mean, by judge
+        judged_arms = sorted({k[1] for k in d.q}, key=lambda x: common.ALL_ARMS.index(x))
+        judged_cuts = sorted({k[0] for k in d.q})
+        L += ["", "0-5 (mean of the four dimensions; median over runs) per cut, Opus / Sonnet:", "",
+              "| cut | " + " | ".join(judged_arms) + " | " + " | ".join(f"{ja} − A0" for ja in judged_arms if ja != "A0") + " |",
+              "|---|" + "---|" * (2 * len(judged_arms) - 1)]
+        for c in judged_cuts:
+            m = {(ja, j): med([v for (cc, aa, r, jj), v in d.q.items() if cc == c and aa == ja and jj == j])
+                 for ja in judged_arms for j in ("opus", "sonnet")}
+            cells = [f"{fmt(m[(ja, 'opus')])} / {fmt(m[(ja, 'sonnet')])}" for ja in judged_arms]
+            diffs = [(f"{m[(ja, 'opus')] - m[('A0', 'opus')]:+.2f} / {m[(ja, 'sonnet')] - m[('A0', 'sonnet')]:+.2f}"
+                      if None not in (m[(ja, 'opus')], m[('A0', 'opus')], m[(ja, 'sonnet')], m[('A0', 'sonnet')]) else "–")
+                     for ja in judged_arms if ja != "A0"]
+            L.append(f"| {c} | " + " | ".join(cells + diffs) + " |")
+        L += ["", "Per dimension, median over every judged run, Opus / Sonnet:", "",
+              "| arm | runs | " + " | ".join(DIMS) + " |", "|---|---|" + "---|" * len(DIMS)]
+        for ja in judged_arms:
+            ks = [k for k in d.abs_raw if k[1] == ja]
+            L.append(f"| {ja} | {len({k[:3] for k in ks})} | " + " | ".join(
+                f"{fmt(med(d.abs_raw[k][dim] for k in ks if k[3] == 'opus'), 1)} / "
+                f"{fmt(med(d.abs_raw[k][dim] for k in ks if k[3] == 'sonnet'), 1)}" for dim in DIMS) + " |")
 
     # ---- 2. per-arm quality
     S["quality"] = len(L)
@@ -434,7 +497,7 @@ def main(argv=None):
 
     # ---- 4. noise floor
     S["floor"] = len(L)
-    L += ["", "## 4. Noise floor (A0 run 1 against A0 runs 2-5 at the floor cuts)", "",
+    L += ["", "## 4. Noise floor (A0 run 1 against the other A0 runs of the same cut, wherever A0 has repeats)", "",
           f"Floor cuts: {', '.join(floor_cuts) or 'none'}. Absolute spreads (Opus): {', '.join(f'{s:.2f}' for s in spreads) or 'none'}; "
           f"95th percentile {fmt(p95)}; floor used {floor:.2f}.", "", "| cut | run | judge | outcome(s) |", "|---|---|---|---|"]
     L += [f"| {c} | {r} | {j} | {', '.join(sorted(o))} |" for c, r, j, o in floor_pairs] or ["| – | – | – | – |"]
@@ -511,7 +574,7 @@ def main(argv=None):
 START, END = "<!-- results:start (written by report.py --paper; do not edit by hand) -->", "<!-- results:end -->"
 # Aggregates only: the cut counts, the decision table, quality and cost per arm and stratum, the noise floor, judge
 # disagreements, E5 with its calibration, E6, and stopped runs by class. No transcript text, no error text.
-PAPER_SECTIONS = ["cuts", "decision", "move", "quality", "strata", "cost", "floor", "disagree", "e5", "e6", "arith", "stopped"]
+PAPER_SECTIONS = ["cuts", "decision", "move", "judged", "quality", "strata", "cost", "floor", "disagree", "e5", "e6", "arith", "stopped"]
 
 
 def write_paper(path, L, S, title, written):

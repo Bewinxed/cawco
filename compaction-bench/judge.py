@@ -14,9 +14,13 @@ Per arm × run (the arm's continued turn against the real one):
   probes    run 1 only: the anchors' questions answered from the arm's carried state (Sonnet 5.5, no tools), each
             question's answers from every arm scored 0/1/2 under the eval's own rubric (pipeline.JUDGE_SYSTEM),
             shuffled under letters, by each judge
-Noise floor: A0 run 1 against A0 runs 2..5 at the floor cuts, pairwise and absolute.
+Noise floor: A0 run 1 against A0's other runs at every cut where A0 has repeats, pairwise and absolute.
 Judges: Opus 5.5 primary, Sonnet 5.5 second; the judge never sees arm names. Every judgment is a file; a rerun skips it.
 A judgment whose reply is not the asked JSON stops that judgment (listed in out/judge/stopped.jsonl), never retried.
+
+Scope: --only-cuts, --pairs ARM:CONTROL (default *:A0), --abs-arms, --no-noise, --no-probes, --no-rules; --estimate
+prices the judgments not yet saved and calls nothing; --budget stops new judgments once the calls made report that many
+USD.
 
 Usage: python -I compaction-bench/judge.py --runs out/runs   (BENCH_JUDGE_CONFIG_DIR: the account judges run on)
 """
@@ -122,12 +126,28 @@ def stopped(where, error):
 
 
 def judged(path, key, system, user, model, kind, parse):
-    """One judgment, cached in `path`; None when its call or its reply stopped."""
+    """One judgment, cached in `path`; None when its call or its reply stopped. With --estimate the call is only
+    recorded (its model, kind and prompt sizes) for pricing, and nothing is saved."""
     have = common.load(path)
     if have is not None:
         return have
+    if O.estimate is not None:
+        with _stop_lock:
+            O.estimate.append({"key": key, "model": model, "kind": kind, "system_chars": len(system or ""),
+                               "user_chars": len(user)})
+        return None
+    with _stop_lock:
+        if O.budget is not None and O.spent >= O.budget:
+            over = True
+        else:
+            over = False
+    if over:
+        stopped(key, f"budget: ${O.spent:.2f} spent by this judging, the limit is ${O.budget:.2f}")
+        return None
     try:
         r = llm.call(key, "judge", system, user, model, O.judge_config_dir, kind)
+        with _stop_lock:
+            O.spent += r.get("cost_reported") or 0
         val = parse(r["text"])
     except (common.RunStopped, ValueError, KeyError, TypeError) as e:
         stopped(key, e)
@@ -146,9 +166,19 @@ def anchors_for(cut):
     _, M, _ = common.eval_modules(O.out)
     text = ("[earlier summary]\n" + prior + "\n\n" if prior else "") + M.render_conv(common.to_eval_entries(scope))
     raw_text = "\n".join(([prior] if prior else []) + [e["text"] for e in common.to_eval_entries(recs)])
+    if O.estimate is not None:
+        # priced, not made: the judgments that need anchors are sized with ten anchors of a typical length
+        O.estimate.append({"key": f"judge/{cut['id']}/anchors", "model": common.OPUS, "kind": "anchors",
+                           "system_chars": len(ANCHOR_SYSTEM), "user_chars": len(text) + len(ANCHOR_ASK) + 26})
+        return {"kept": [{"id": f"F{k:02d}", "gold": "x" * 160, "key": "\0"} for k in range(10)], "estimate": True}
+    if O.budget is not None and O.spent >= O.budget:
+        stopped(f"{cut['id']}/anchors", f"budget: ${O.spent:.2f} spent by this judging, the limit is ${O.budget:.2f}")
+        return None
     try:
         r = llm.call(f"judge/{cut['id']}/anchors", "anchors", ANCHOR_SYSTEM, f"<transcript>\n{text}\n</transcript>\n\n{ANCHOR_ASK}",
                      common.OPUS, O.judge_config_dir, "anchors")
+        with _stop_lock:
+            O.spent += r.get("cost_reported") or 0
         facts = _json(r["text"])
     except (common.RunStopped, ValueError) as e:
         stopped(f"{cut['id']}/anchors", e)
@@ -195,38 +225,49 @@ def judge_cut(cut, pool):
             cwd = (res.get("sandbox") or {}).get("session_cwd")
             carried = open(os.path.join(rd, "carried.md")).read() if os.path.exists(os.path.join(rd, "carried.md")) else ""
             edit, cmd, reads = readings(turn, cwd)
-            common.save(os.path.join(jd, arm, run, "engine.json"), {
-                "files_jaccard": jaccard(edit, r_edit), "commands_jaccard": jaccard(cmd, r_cmd),
-                "refetch": sum(1 for x in reads if x in pre_reads), "edited": sorted(edit), "real_edited": sorted(r_edit),
-                "keys_present": [f["id"] for f in anchors["kept"] if f["key"] in carried],
-                "keys_total": None if O.engine_only else len(anchors["kept"]), "carried_chars": len(carried),
-                "turn_tool_calls": len(common.tool_calls(turn)), "real_tool_calls": len(common.tool_calls(real))})
+            if O.estimate is None:  # an estimate's stand-in anchors must not reach the engine readings
+                common.save(os.path.join(jd, arm, run, "engine.json"), {
+                    "files_jaccard": jaccard(edit, r_edit), "commands_jaccard": jaccard(cmd, r_cmd),
+                    "refetch": sum(1 for x in reads if x in pre_reads), "edited": sorted(edit), "real_edited": sorted(r_edit),
+                    "keys_present": [f["id"] for f in anchors["kept"] if f["key"] in carried],
+                    "keys_total": None if O.engine_only else len(anchors["kept"]), "carried_chars": len(carried),
+                    "turn_tool_calls": len(common.tool_calls(turn)), "real_tool_calls": len(common.tool_calls(real))})
             done[(arm, int(run))] = (render(turn), carried)
             summaries[(arm, int(run))] = summary_of(rd, arm, carried)
     if O.engine_only:
         return
     jobs = []
-    for (arm, run), text in summaries.items():
-        if not text:
-            continue
-        for jn, model in JUDGES.items():
-            jobs.append(lambda arm=arm, run=run, text=text, jn=jn, model=model: judged(
-                os.path.join(jd, arm, str(run), f"rules-{jn}.json"), f"judge/{cut['id']}/{arm}/{run}/rules-{jn}",
-                RULES_SYSTEM, f"<summary>\n{text}\n</summary>\n\n{RULES_ASK}", model, "rules", _rules))
+    if O.rules:
+        for (arm, run), text in summaries.items():
+            if not text:
+                continue
+            for jn, model in JUDGES.items():
+                jobs.append(lambda arm=arm, run=run, text=text, jn=jn, model=model: judged(
+                    os.path.join(jd, arm, str(run), f"rules-{jn}.json"), f"judge/{cut['id']}/{arm}/{run}/rules-{jn}",
+                    RULES_SYSTEM, f"<summary>\n{text}\n</summary>\n\n{RULES_ASK}", model, "rules", _rules))
     head = f"{anchor_block(anchors)}\n\n<next_message>\n{nxt}\n</next_message>\n\n<real_turn>\n{real_txt}\n</real_turn>"
     for (arm, run), (txt, _) in done.items():
-        for jn, model in JUDGES.items():
-            jobs.append(lambda arm=arm, run=run, txt=txt, jn=jn, model=model: judged(
-                os.path.join(jd, arm, str(run), f"abs-{jn}.json"), f"judge/{cut['id']}/{arm}/{run}/abs-{jn}", ABS_SYSTEM,
-                f"{head}\n\n<continuation>\n{txt}\n</continuation>\n\n{ABS_ASK}", model, "absolute", _abs))
-        if arm != "A0" and ("A0", run) in done:
-            jobs += pair_jobs(cut, jd, os.path.join(jd, arm, str(run)), head, txt, done[("A0", run)][0], f"{arm}/{run}")
-    if cut.get("floor"):
-        for run in range(2, 6):
-            if ("A0", 1) in done and ("A0", run) in done:
+        if O.abs_arms is None or arm in O.abs_arms:
+            for jn, model in JUDGES.items():
+                jobs.append(lambda arm=arm, run=run, txt=txt, jn=jn, model=model: judged(
+                    os.path.join(jd, arm, str(run), f"abs-{jn}.json"), f"judge/{cut['id']}/{arm}/{run}/abs-{jn}", ABS_SYSTEM,
+                    f"{head}\n\n<continuation>\n{txt}\n</continuation>\n\n{ABS_ASK}", model, "absolute", _abs))
+        # each pair of arms asked for, at the same run index; against A0 in the arm's own dir (the design's pairwise),
+        # against any other arm under vs-<control>
+        for ctl in sorted({c for a, c in O.pairs if a in (arm, "*") and c != arm}):
+            if (ctl, run) in done:
+                d = os.path.join(jd, arm, str(run)) if ctl == "A0" else os.path.join(jd, arm, str(run), f"vs-{ctl}")
+                tag = f"{arm}/{run}" if ctl == "A0" else f"{arm}/{run}/vs-{ctl}"
+                jobs += pair_jobs(cut, jd, d, head, txt, done[(ctl, run)][0], tag)
+    # the noise: A0 run 1 against every other A0 run of the cut, wherever A0 has repeats (the floor cuts' five runs,
+    # and the three runs of any other cut)
+    if O.noise:
+        for run in sorted(r for a, r in done if a == "A0" and r > 1):
+            if ("A0", 1) in done:
                 jobs += pair_jobs(cut, jd, os.path.join(jd, "floor", str(run)), head, done[("A0", run)][0],
                                   done[("A0", 1)][0], f"floor/{run}")
-    jobs += probe_jobs(cut, jd, anchors, {k: v[1] for k, v in done.items() if k[1] == 1})
+    if O.probes:
+        jobs += probe_jobs(cut, jd, anchors, {k: v[1] for k, v in done.items() if k[1] == 1})
     list(pool.map(lambda f: f(), jobs))
 
 
@@ -256,6 +297,15 @@ def _abs(text):
         {"why": d.get("why", "")}
 
 
+def _count(v):
+    """asked_back as the judge gives it. PAIR_ASK asks for "<questions X asks the person that the anchors already
+    answer>", and judges answer with a number or with the questions themselves (45 of 92 pairwise replies on 2026-10-25
+    gave lists): a list counts its items; a number is the count; nothing is 0."""
+    if isinstance(v, list):
+        return len(v)
+    return int(v or 0)
+
+
 def pair_jobs(cut, jd, d, head, arm_txt, ctl_txt, tag):
     jobs = []
     for jn, model in JUDGES.items():
@@ -268,9 +318,11 @@ def pair_jobs(cut, jd, d, head, arm_txt, ctl_txt, tag):
                 if w not in ("X", "Y", "tie"):
                     raise ValueError(f"winner {w}")
                 arm_is = "X" if order == "arm-first" else "Y"
+                ab = v.get("asked_back") or {}
                 return {"order": order, "outcome": "tie" if w == "tie" else ("win" if w == arm_is else "loss"),
-                        "asked_back_arm": int((v.get("asked_back") or {}).get(arm_is, 0)),
-                        "asked_back_control": int((v.get("asked_back") or {}).get("Y" if arm_is == "X" else "X", 0)),
+                        "asked_back_arm": _count(ab.get(arm_is)),
+                        "asked_back_control": _count(ab.get("Y" if arm_is == "X" else "X")),
+                        "asked_back_text": {k: ab.get(k) for k in ("X", "Y") if isinstance(ab.get(k), list)} or None,
                         "why": v.get("why", "")}
             jobs.append(lambda jn=jn, model=model, order=order, x=x, y=y, parse=parse: judged(
                 os.path.join(d, f"pair-{jn}-{order}.json"), f"judge/{cut['id']}/{tag}/pair-{jn}-{order}", PAIR_SYSTEM,
@@ -329,18 +381,77 @@ def main(argv=None):
     ap.add_argument("--parallel", type=int, default=4)
     ap.add_argument("--dry", action="store_true")
     ap.add_argument("--engine-only", action="store_true", help="the engine readings alone: no model call")
+    ap.add_argument("--only-cuts", help="comma list of cut ids (default every cut)")
+    ap.add_argument("--pairs", default="*:A0",
+                    help="comma list ARM:CONTROL of pairwise judgments at the same run index (default *:A0, every arm "
+                         "against the control); a CONTROL other than A0 is saved under vs-<CONTROL>")
+    ap.add_argument("--abs-arms", help="comma list of arms scored 0-5 (default every arm)")
+    ap.add_argument("--no-noise", action="store_true", help="skip A0 run 1 against A0's other runs")
+    ap.add_argument("--no-probes", action="store_true")
+    ap.add_argument("--no-rules", action="store_true")
+    ap.add_argument("--estimate", action="store_true",
+                    help="make no call: count the judgments not yet saved and price them (out/judge/estimate.json)")
+    ap.add_argument("--output-tokens", type=int, default=2000, help="--estimate: output per judgment (thinking included)")
+    ap.add_argument("--anchor-output-tokens", type=int, default=6000, help="--estimate: output per anchors call")
+    ap.add_argument("--budget", type=float, help="no judgment starts once the calls made have reported this many USD")
     a = ap.parse_args(argv)
     out = os.path.abspath(a.out or os.path.dirname(os.path.abspath(a.runs)))
-    O.__dict__.update(out=out, judge_config_dir=a.judge_config_dir, dry=a.dry, engine_only=a.engine_only)
-    if not a.dry and not a.engine_only and not a.judge_config_dir:
+    O.__dict__.update(out=out, judge_config_dir=a.judge_config_dir, dry=a.dry, engine_only=a.engine_only,
+                      estimate=[] if a.estimate else None, noise=not a.no_noise, probes=not a.no_probes,
+                      rules=not a.no_rules, abs_arms=set(a.abs_arms.split(",")) if a.abs_arms else None,
+                      pairs=[tuple(p.split(":")) for p in a.pairs.split(",")], budget=a.budget, spent=0.0)
+    if not a.dry and not a.engine_only and not a.estimate and not a.judge_config_dir:
         raise SystemExit("BENCH_JUDGE_CONFIG_DIR (or --judge-config-dir) names the account the judges run on")
     llm.setup(out, a.dry)
     cuts = common.load(a.cuts or os.path.join(out, "cuts.json"))["cuts"]
+    if a.only_cuts:
+        cuts = [c for c in cuts if c["id"] in a.only_cuts.split(",")]
     with cf.ThreadPoolExecutor(a.parallel) as pool:
         for cut in cuts:
             judge_cut(cut, pool)
+    if a.estimate:
+        return estimate(out, a)
     n_stopped = len(common.read_jsonl(os.path.join(out, "judge", "stopped.jsonl")))
-    print(f"judge: {len(cuts)} cuts read; {n_stopped} judgments stopped (out/judge/stopped.jsonl)", flush=True)
+    print(f"judge: {len(cuts)} cuts read; {n_stopped} judgments stopped (out/judge/stopped.jsonl); "
+          f"${O.spent:.2f} reported by this judging's calls", flush=True)
+    return 0
+
+
+def estimate(out, a):
+    """The recorded calls priced: prompt tokens from the ledger's own calls (a straight-line fit of each request's prompt
+    tokens to the characters it was sent, Claude Code's fixed overhead in the intercept), output as --output-tokens;
+    each call priced alone by the product's costForUsage, uncached (claude_call's DISABLE_PROMPT_CACHING)."""
+    rows = [r for r in common.read_jsonl(os.path.join(out, "ledger.jsonl"))
+            if r.get("ok") and r.get("requests") and "claude" in r["requests"][0]["model"] and r.get("user_chars")]
+    xs = [r["user_chars"] + (r.get("system_chars") or 0) for r in rows]
+    ys = [sum(q["input"] + q["cacheCreation"] + q["cacheRead"] for q in r["requests"]) for r in rows]
+    n = len(xs)
+    mx, my = sum(xs) / n, sum(ys) / n
+    slope = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / sum((x - mx) ** 2 for x in xs)
+    icpt = my - slope * mx
+    at = common.ts_ms(common.now_iso())
+    calls = O.estimate
+    reqs = [{"model": c["model"], "at": at, "input": round(icpt + slope * (c["system_chars"] + c["user_chars"])),
+             "cacheCreation": 0, "cacheWrite1h": 0, "cacheRead": 0,
+             "output": a.anchor_output_tokens if c["kind"] == "anchors" else a.output_tokens} for c in calls]
+    priced = common.cockpit("price", a.cockpit_root, {"requests": reqs})["priced"] if reqs else []
+    for c, r, p in zip(calls, reqs, priced):
+        c.update(input_tokens=r["input"], output_tokens=r["output"], usd=p["usd"])
+    by = {}
+    for c in calls:
+        k = (c["kind"], c["model"])
+        b = by.setdefault(k, {"calls": 0, "input_tokens": 0, "usd": 0.0})
+        b["calls"] += 1
+        b["input_tokens"] += c["input_tokens"]
+        b["usd"] += c["usd"]
+    res = {"fit": {"rows": n, "tokens_per_char": slope, "overhead_tokens": icpt}, "output_tokens": a.output_tokens,
+           "anchor_output_tokens": a.anchor_output_tokens, "calls": len(calls), "usd": sum(c["usd"] for c in calls),
+           "by": [{"kind": k, "model": m, **v} for (k, m), v in sorted(by.items())], "each": calls}
+    common.save(os.path.join(out, "judge", "estimate.json"), res)
+    print(f"estimate: {len(calls)} calls, ${res['usd']:.2f} (fit over {n} ledger calls: {slope:.3f} tokens a "
+          f"character + {icpt:,.0f}; output {a.output_tokens:,} a judgment, {a.anchor_output_tokens:,} an anchors call)")
+    for b in res["by"]:
+        print(f"  {b['kind']:10s} {b['model']:20s} {b['calls']:4d} calls  {b['input_tokens']:>12,} input tokens  ${b['usd']:.2f}")
     return 0
 
 

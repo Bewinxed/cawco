@@ -25,9 +25,10 @@ score:
 
 The decision rule is the owner's: the cheapest method whose quality is not below the best by more than the noise floor.
 
-**Status (2026-10-25).** The model runs were stopped after 57 runs, before any judge call. The cost of every situation
-and band is settled by arithmetic over all 24 drawn cuts (§4.10, §8 7b). Quality is not measured, so every decision
-below is "by cost alone" until judged runs exist.
+**Status (2026-10-25).** The model runs were stopped after 57 runs. The cost of every situation and band is settled by
+arithmetic over all 24 drawn cuts (§4.10, §8 7b). Quality was then judged at the smallest scope that answers the move
+question, on finished runs only: A1 against A0 at the three cuts where both exist, A1 against A2 at five, the 0–5
+scores of those arms, and A0's repeat runs for the noise (§8 1c, §8a). The other decisions stay "by cost alone".
 
 ## 1. Motivation
 
@@ -615,6 +616,9 @@ Who made each methodology choice, why, and its source.
 | Transcripts snapshotted at the draw; every later step reads the copies | runner | live files move and grow; a moved file emptied a placement | c24, 2026-10-25 |
 | Horizon from the first real turn that made a request | runner | a turn with none carries no context | c09, c21 |
 | Engine readings without anchors (`judge.py --engine-only`) | runner | the anchors need a model call | orchestrator: no judge calls |
+| Quality judged only for the move question: A1 vs A0, A1 vs A2, their 0–5, A0 repeats as noise; under $25 | orchestrator | the smallest scope that answers the pending decision | orchestrator, 2026-10-25 |
+| Noise from every cut where A0 has repeats, not only the flagged floor cuts | runner | the floor cuts never got their five runs | 2026-10-25 |
+| asked_back taken as a count or a list's length; the 45 lost judgments made again, prompt unchanged | runner | Opus answered with lists, Sonnet with counts | judge replies |
 | No retries, no fallbacks, no other model standing in | owner | standing rule | owner |
 | No unit tests; proof is a dry run on a synthetic fixture | owner | standing rule | owner |
 
@@ -622,7 +626,7 @@ Who made each methodology choice, why, and its source.
 
 <!-- results:start (written by report.py --paper; do not edit by hand) -->
 
-_Written 2026-10-25T10:35:47.847Z. Cuts: 24 (2 chained). Runs: 57 done, 9 stopped. Noise floor: 0.30 (the larger of Nous's 0.3 and the 95th percentile of A0-vs-A0 spread, –)._ 
+_Written 2026-10-25T11:01:36.026Z. Cuts: 24 (2 chained). Runs: 57 done, 9 stopped. Noise floor: 0.75 (the larger of Nous's 0.3 and the 95th percentile of A0-vs-A0 spread, 0.75)._ 
 
 ### 0. Cut points
 
@@ -692,15 +696,15 @@ Excluded 2148:
 | limit gone early | 100-300k | undecided on quality (no arm has both a quality and a cost reading here); by cost alone (§7b): Sonnet summary (whole $11.86, native /compact $9.37, Sonnet summary $8.39) (ahead-of-limit unavailable) | `overFloor` = summarize (cost alone; quality unmeasured) |
 | cold / cross-org / no cache | 300-600k | undecided on quality (no arm has both a quality and a cost reading here); by cost alone (§7b): Sonnet summary (whole $23.15, native /compact $16.01, Sonnet summary $12.77) | `overFloor` = summarize (cost alone; quality unmeasured) |
 | limit gone early | 300-600k | undecided on quality (no arm has both a quality and a cost reading here); by cost alone (§7b): Sonnet summary (whole $23.15, native /compact $16.01, Sonnet summary $12.77) (ahead-of-limit unavailable) | `overFloor` = summarize (cost alone; quality unmeasured) |
-| cold / cross-org / no cache | 600k+ | undecided on quality (no arm has both a quality and a cost reading here); by cost alone (§7b): Sonnet summary (whole $30.24, native /compact $14.47, Sonnet summary $9.99) | `overFloor` = summarize (cost alone; quality unmeasured) |
-| limit gone early | 600k+ | undecided on quality (no arm has both a quality and a cost reading here); by cost alone (§7b): Sonnet summary (whole $30.24, native /compact $14.47, Sonnet summary $9.99) (ahead-of-limit unavailable) | `overFloor` = summarize (cost alone; quality unmeasured) |
+| cold / cross-org / no cache | 600k+ | E1: A2 summarize · Sonnet · extract · CawCo; among A1 (2 cuts), A2 (2 cuts) with both readings | `overFloor` = summarize |
+| limit gone early | 600k+ | E1: A2 summarize · Sonnet · extract · CawCo; among A1 (2 cuts), A2 (2 cuts) with both readings (ahead-of-limit unavailable) | `overFloor` = summarize |
 | warm, same org (by cost) | 100-300k | by cost alone (§7b): native /compact (whole $9.96, native /compact $8.10, Sonnet summary $8.39); quality unmeasured | — |
 | warm, same org (by cost) | 300-600k | by cost alone (§7b): Sonnet summary (whole $17.42, native /compact $12.98, Sonnet summary $12.77); quality unmeasured | — |
 | warm, same org (by cost) | 600k+ | by cost alone (§7b): native /compact (whole $22.91, native /compact $9.95, Sonnet summary $9.99); quality unmeasured | — |
 | (E1 = summarize) | E2 model | A3 − A2: quality – –, cost −$0.5411 [-0.9523, -0.1298]; not actionable: fewer than 2 shared cuts; no quality judgment | `summarizer.model`; the extract and prompt in `continuation.ts` |
 | (E1 = summarize) | E3 input | A4 − A2: quality – –, cost +$0.4569 [+0.2733, +0.6406]; not actionable: fewer than 2 shared cuts; no quality judgment | `summarizer.model`; the extract and prompt in `continuation.ts` |
 | (E1 = summarize) | E4 shape | A5 − A4: quality – –, cost −$0.3183 [-0.4564, -0.1802]; not actionable: fewer than 2 shared cuts; no quality judgment | `summarizer.model`; the extract and prompt in `continuation.ts` |
-| chained | — | undecided: no arm has both a quality and a cost reading here | whether the summarizer merges the prior summary (Factory) or restates it |
+| chained | — | undecided: the Factory merge (A6) has no quality reading | whether the summarizer merges the prior summary (Factory) or restates it |
 
 ### 1b. Before a move to another organization: compact on the warm account first (A1 warm), or move whole (A0 cold)
 
@@ -708,10 +712,10 @@ A1 warm: `/compact` priced with its read of the context from the warm cache (the
 
 | band | cuts | A0 cold total K | A1 warm total K | median Δ (A1w − A0c) | CI | A1 cheaper at | quality Δ A1 − A0 Opus | quality Δ A1 − A0 Sonnet | A1 vs A0 pairwise Opus w/t/l |
 |---|---|---|---|---|---|---|---|---|---|
-| 100-300k | 0 | – | – | – | – | 0 of 0 | – – | – – | 0/0/0 |
+| 100-300k | 0 | – | – | – | – | 0 of 0 | – – | – – | 1/0/0 |
 | 300-600k | 0 | – | – | – | – | 0 of 0 | – – | – – | 0/0/0 |
 | 600k+ | 0 | – | – | – | – | 0 of 0 | – – | – – | 0/0/0 |
-| all | 0 | – | – | – | – | 0 of 0 | – – | – – | 0/0/0 |
+| all | 0 | – | – | – | – | 0 of 0 | – – | – – | 1/0/0 |
 
 Per cut (context at the cut → A1 warm, A0 cold, Δ): –
 
@@ -726,38 +730,85 @@ By arithmetic over every drawn cut (§7b): compact warm, then move = native `/co
 
 Moving whole was not possible at all at 2 cuts: every A0 run there stopped on "Prompt is too long" (c20 958k, c23 965k); the real sessions compacted there.
 
+### 1c. Judged pairs (both orders, both judges; a win or loss counts only when both orders agree)
+
+Noise: the A0 runs of one cut against each other (§4): 0-5 spread, Opus, 0.00, 0.00, 1.25, 0.75; the floor used is 0.75.
+
+| pair | cut | run | Opus (arm-first, control-first) | Opus | Sonnet (arm-first, control-first) | Sonnet | judges agree |
+|---|---|---|---|---|---|---|---|
+| A1 vs A0 | c01 | 1 | win, win | win | win, win | win | yes |
+| A1 vs A0 | c17 | 1 | loss, loss | loss | win, win | win | no |
+| A1 vs A0 | c17 | 2 | win, loss | tie | loss, loss | loss | no |
+| A1 vs A0 | c17 | 3 | loss, loss | loss | loss, loss | loss | yes |
+| A1 vs A0 | c18 | 1 | win, win | win | win, loss | tie | no |
+| A1 vs A0 | c18 | 2 | loss, loss | loss | win, win | win | no |
+| A1 vs A0 | c18 | 3 | win, win | win | win, win | win | yes |
+| A1 vs A2 | c01 | 1 | win, win | win | win, win | win | yes |
+| A1 vs A2 | c17 | 1 | loss, loss | loss | win, win | win | no |
+| A1 vs A2 | c17 | 2 | loss, loss | loss | loss, loss | loss | yes |
+| A1 vs A2 | c17 | 3 | loss, loss | loss | loss, loss | loss | yes |
+| A1 vs A2 | c18 | 1 | win, win | win | win, win | win | yes |
+| A1 vs A2 | c18 | 3 | win, win | win | win, win | win | yes |
+| A1 vs A2 | c20 | 1 | win, win | win | win, win | win | yes |
+| A1 vs A2 | c20 | 2 | loss, loss | loss | loss, loss | loss | yes |
+| A1 vs A2 | c20 | 3 | win, win | win | win, win | win | yes |
+| A1 vs A2 | c23 | 1 | win, win | win | win, win | win | yes |
+| A1 vs A2 | c23 | 2 | win, win | win | win, win | win | yes |
+| A1 vs A2 | c23 | 3 | win, win | win | loss, loss | loss | no |
+
+| pair | judged pairs | Opus win/tie/loss | Sonnet win/tie/loss | judges agree | both judges say the arm lost |
+|---|---|---|---|---|---|
+| A1 vs A0 | 7 | 3/1/3 | 4/1/2 | 3 of 7 | 1 |
+| A1 vs A2 | 12 | 8/0/4 | 8/0/4 | 10 of 12 | 3 |
+
+0-5 (mean of the four dimensions; median over runs) per cut, Opus / Sonnet:
+
+| cut | A0 | A1 | A2 | A1 − A0 | A2 − A0 |
+|---|---|---|---|---|---|
+| c01 | 3.00 / 1.25 | 3.25 / 2.00 | 1.00 / 0.75 | +0.25 / +0.75 | -2.00 / -0.50 |
+| c17 | 2.50 / 1.50 | 1.25 / 1.25 | 1.75 / 1.75 | -1.25 / -0.25 | -0.75 / +0.25 |
+| c18 | 3.25 / 1.50 | 2.50 / 1.25 | 2.38 / 1.25 | -0.75 / -0.25 | -0.88 / -0.25 |
+| c20 | – / – | 2.75 / 2.50 | 2.25 / 1.75 | – | – |
+| c23 | – / – | 3.50 / 3.25 | 3.00 / 2.75 | – | – |
+
+Per dimension, median over every judged run, Opus / Sonnet:
+
+| arm | runs | decision_fidelity | artifact_fidelity | continuation_fidelity | no_repetition |
+|---|---|---|---|---|---|
+| A0 | 7 | 3.0 / 2.0 | 3.0 / 2.0 | 1.0 / 1.0 | 4.0 / 2.0 |
+| A1 | 13 | 3.0 / 2.0 | 3.0 / 2.0 | 2.0 / 2.0 | 3.0 / 3.0 |
+| A2 | 12 | 2.0 / 2.0 | 2.5 / 1.5 | 2.0 / 1.5 | 3.0 / 2.5 |
+
 ### 2. Quality per arm (median over runs, then over cuts)
 
 | arm | what | cuts | abs 0-5 Opus | abs 0-5 Sonnet | win/tie/loss vs A0 Opus | win/tie/loss vs A0 Sonnet | asked back | files J | commands J | re-fetches | anchor keys carried | probe score Opus | probe score Sonnet | summary rules 1 / 2 Opus | summary rules 1 / 2 Sonnet |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| A0 | whole (control) | 3 | – | – | — | — | – | 0.00 | 0.00 | 0.0 | – | – | – | – | – |
-| A1 | native /compact | 5 | – | – | 0/0/0 | 0/0/0 | – | 0.00 | 0.00 | 0.0 | – | – | – | – | – |
-| A2 | summarize · Sonnet · extract · CawCo | 5 | – | – | 0/0/0 | 0/0/0 | – | 0.00 | 0.00 | 0.0 | – | – | – | – | – |
-| A3 | summarize · Haiku · extract · CawCo | 3 | – | – | 0/0/0 | 0/0/0 | – | 1.00 | 0.00 | 0.0 | – | – | – | – | – |
-| A4 | summarize · Sonnet · full-clipped · CawCo | 3 | – | – | 0/0/0 | 0/0/0 | – | 1.00 | 0.00 | 0.0 | – | – | – | – | – |
-| A5 | summarize · Sonnet · full-clipped · Claude Code shape | 3 | – | – | 0/0/0 | 0/0/0 | – | 1.00 | 0.00 | 0.0 | – | – | – | – | – |
-| A6 | Factory anchored merge (chained) | 2 | – | – | 0/0/0 | 0/0/0 | – | 0.00 | 0.00 | 0.0 | – | – | – | – | – |
+| A0 | whole (control) | 3 | 2.88 | 1.50 | — | — | – | 0.00 | 0.00 | 0.0 | 1.00 | – | – | – | – |
+| A1 | native /compact | 5 | 2.62 | 1.88 | 3/1/3 | 4/1/2 | 0.0 | 0.00 | 0.00 | 0.0 | 0.36 | – | – | – | – |
+| A2 | summarize · Sonnet · extract · CawCo | 5 | 2.31 | 1.75 | 0/0/0 | 0/0/0 | – | 0.00 | 0.00 | 0.0 | 0.29 | – | – | – | – |
+| A3 | summarize · Haiku · extract · CawCo | 3 | – | – | 0/0/0 | 0/0/0 | – | 1.00 | 0.00 | 0.0 | 0.09 | – | – | – | – |
+| A4 | summarize · Sonnet · full-clipped · CawCo | 3 | – | – | 0/0/0 | 0/0/0 | – | 1.00 | 0.00 | 0.0 | 0.36 | – | – | – | – |
+| A5 | summarize · Sonnet · full-clipped · Claude Code shape | 3 | – | – | 0/0/0 | 0/0/0 | – | 1.00 | 0.00 | 0.0 | 0.36 | – | – | – | – |
+| A6 | Factory anchored merge (chained) | 2 | – | – | 0/0/0 | 0/0/0 | – | 0.00 | 0.00 | 0.0 | 0.46 | – | – | – | – |
 
 Summary rules: the owner's rules for a compaction summary (2026-10-21), 0-5 each, on the summary the arm carried (A1: Claude Code's; A2-A7: the summariser's): 1, the person's messages carried as meaning, never quoted; 2, only what the next turns need. Median over runs, then over cuts. Secondary: it enters no decision.
 
 Cuts: those with at least one finished run. Files J and commands J are Jaccard similarities with the real turn's edited files and commands; two empty sets count as 1 (neither turn edited a file), and a command matches only verbatim, so commands J is near 0 wherever wording differs. A blank judge column means no judgment was made.
 
-**No quality judgment exists**: the run was stopped before any judge call (out/not_run.json). The only readings are the engine's above, which cannot separate the arms on this sample.
-
 ### 2b. Quality and cost by stratum (Opus absolute 0-5; cold total at K)
 
 | arm | stratum | value | cuts | abs 0-5 Opus | total K (USD) |
 |---|---|---|---|---|---|
-| A0 | next message | agent | 2 | – | 20.8591 |
-| A0 | kind | native-midturn | 2 | – | 20.8591 |
-| A1 | next message | agent | 3 | – | 22.6370 |
-| A1 | next message | person | 1 | – | 30.3828 |
-| A1 | kind | continued | 1 | – | 30.3828 |
-| A1 | kind | native-midturn | 3 | – | 22.6370 |
-| A2 | next message | agent | 3 | – | 23.3527 |
-| A2 | next message | person | 1 | – | 26.4339 |
-| A2 | kind | continued | 1 | – | 26.4339 |
-| A2 | kind | native-midturn | 3 | – | 23.3527 |
+| A0 | next message | agent | 2 | 2.88 | 20.8591 |
+| A0 | kind | native-midturn | 2 | 2.88 | 20.8591 |
+| A1 | next message | agent | 3 | 2.50 | 22.6370 |
+| A1 | next message | person | 1 | 2.75 | 30.3828 |
+| A1 | kind | continued | 1 | 2.75 | 30.3828 |
+| A1 | kind | native-midturn | 3 | 2.50 | 22.6370 |
+| A2 | next message | agent | 3 | 2.38 | 23.3527 |
+| A2 | next message | person | 1 | 2.25 | 26.4339 |
+| A2 | kind | continued | 1 | 2.25 | 26.4339 |
+| A2 | kind | native-midturn | 3 | 2.38 | 23.3527 |
 | A3 | next message | agent | 1 | – | 55.1294 |
 | A3 | next message | person | 1 | – | 26.3041 |
 | A3 | kind | continued | 1 | – | 26.3041 |
@@ -870,19 +921,36 @@ Window percent of the cold total at K, where the account's readings measure it:
 | c23 | A5 | 2 | session 21.215, weekly_all 4.884, weekly_scoped/Fable 1.090 |
 | c23 | A5 | 3 | session 20.394, weekly_all 4.695, weekly_scoped/Fable 1.048 |
 
-### 4. Noise floor (A0 run 1 against A0 runs 2-5 at the floor cuts)
+### 4. Noise floor (A0 run 1 against the other A0 runs of the same cut, wherever A0 has repeats)
 
-Floor cuts: c01, c09, c19. Absolute spreads (Opus): none; 95th percentile –; floor used 0.30.
+Floor cuts: c17, c18. Absolute spreads (Opus): 0.00, 0.00, 1.25, 0.75; 95th percentile 0.75; floor used 0.75.
 
 | cut | run | judge | outcome(s) |
 |---|---|---|---|
-| – | – | – | – |
+| c17 | 2 | opus | loss, win |
+| c17 | 2 | sonnet | win |
+| c17 | 3 | opus | win |
+| c17 | 3 | sonnet | win |
+| c18 | 2 | opus | loss, win |
+| c18 | 2 | sonnet | loss |
+| c18 | 3 | opus | win |
+| c18 | 3 | sonnet | loss, win |
 
 ### 5. Judge disagreements (Opus vs Sonnet)
 
 | cut | arm | run | reading | Opus | Sonnet |
 |---|---|---|---|---|---|
-| – | – | – | – | – | – |
+| c01 | A0 | 1 | absolute | 3.00 | 1.25 |
+| c01 | A1 | 1 | absolute | 3.25 | 2.00 |
+| c17 | A0 | 1 | absolute | 2.50 | 1.25 |
+| c17 | A1 | 1 | pairwise | loss | win |
+| c17 | A1 | 2 | pairwise | tie | loss |
+| c18 | A0 | 2 | absolute | 3.75 | 1.25 |
+| c18 | A1 | 1 | absolute | 2.50 | 1.25 |
+| c18 | A1 | 1 | pairwise | win | tie |
+| c18 | A1 | 2 | pairwise | loss | win |
+| c18 | A2 | 1 | absolute | 2.50 | 1.25 |
+| c23 | A2 | 2 | absolute | 3.75 | 2.50 |
 
 ### 6. E5: warm native compaction, window cost
 
@@ -1128,12 +1196,39 @@ both well under whole. E5 puts a warm native compaction at a few tenths of a per
 `compactAtPct` rule gives 99.5); its formula underestimates the measured manual compactions by a factor of 0.50–0.86,
 the measured output including thinking.
 
-**What these numbers do not say.** Quality. No judgment exists: the model runs stopped before any judge call, and
-the engine readings (files and commands against the real turn, re-fetches) cannot separate the arms on 57 runs. The
-design's rule is the cheapest arm whose quality is within the noise floor of the best, so every choice above is the
-cost half of it. The prior one-chat evaluation (§3) found native compaction keeping fewer probe facts than CawCo's
-summary (16–22 % against 29–35 %), on one session and one run. The arithmetic also assumes the session's next 20 turns
+**Does compacting first lose anything a judge can see? Not beyond the noise, on this sample.** The judging was scoped
+to that question (§8 1c): 161 calls, then 45 Opus pairwise judgments again after a parsing fault (below), $24.86 as
+Claude Code reported.
+- **Pairwise, A1 against A0** (7 pairs at c01, c17 and c18, same run index, both orders, both judges). Opus: 3 wins,
+  1 tie, 3 losses for compacting first. Sonnet: 4 wins, 1 tie, 2 losses. The judges agree on 3 of the 7: 2 wins
+  (c01, c18 run 3) and 1 loss (c17 run 3).
+- **The same verdict on the control against itself.** A0's run 1 against its runs 2 and 3, at c17 and c18, draws the
+  same kind of split. At c17, run 1 against run 3 was a win in both orders for both judges, between two runs of one
+  arm. A single pairwise verdict at this sample size is at the noise.
+- **0–5 scores.** Compacting first against whole, median over the three cuts: Opus −0.75 (95 % CI −1.25 to +0.25),
+  Sonnet −0.25 (−0.25 to +0.75). A0's own repeats spread by 0, 0, 1.25 and 0.75 (Opus), so the floor is 0.75. Both
+  intervals contain zero, the Opus median only reaches the floor, and the Sonnet median is under it. By the design's
+  rule (CI excluding zero, at least the floor, both judges agreeing) there is no actionable loss.
+- **Native against a Sonnet summary** (12 pairs at five cuts). Native compaction was preferred 8 times by each judge,
+  the judges agreeing on 10 of 12; its 0–5 lead (+0.50 for both judges) has intervals that just include zero
+  (Opus −0.10 to +1.48, Sonnet −0.15 to +0.90).
+
+So the cheaper move, compacting on the warm account first, showed no quality loss the judges could separate from the
+control's own noise. That is a statement about three cuts and seven pairs, all from orchestrator sessions at 118k and
+about 915–960k: it rules out a large loss, not a small one.
+
+**What else these numbers do not say.** The other quality questions (the summariser's model, input and shape, and
+merge against restate on chained cuts) were not judged; their rows stay "by cost alone". The engine readings (files
+and commands against the real turn, re-fetches) cannot separate the arms on 57 runs. The prior one-chat evaluation
+(§3) found native compaction keeping fewer probe facts than CawCo's summary (16–22 % against 29–35 %), on one session
+and one run; the continued turns judged here do not show that gap. The arithmetic assumes the session's next 20 turns
 go as they really did, so a method that changes what the agent does next is priced as if it had not.
+
+**A judge reply that broke the parser.** The pairwise prompt asks for "questions X asks the person that the anchors
+already answer". Sonnet always answered with a count; Opus answered 45 of its 46 pairwise judgments with a list of the
+questions, usually an empty one, which the parser rejected whatever it held. The parser now counts a list's items,
+and the 45 were judged again with the prompt unchanged. On that second pass, 44 of Opus's 46 saved judgments are
+lists: 37 empty and 7 naming re-asked questions.
 
 ## 9. Reproducing
 
