@@ -221,8 +221,6 @@
   );
   let needsOnly = $state(false);
   let adding = $state(false);
-  /** The view strip's actions stand by their glyphs, so more views stand as tabs (ViewTabs `fold`). */
-  let actionsFold = $state(false);
   /** Moves the hub has not answered yet: the card already stands in its new column. */
   let moving = $state<Record<string, string>>({});
 
@@ -1577,7 +1575,6 @@
       hrefOf={(view) => hrefOf(null, view)}
       onchoose={choose}
       views={barViews}
-      bind:fold={actionsFold}
     />
     {#if trailing}
       <!-- Under 640px New task and Ask Caw are in the head's ⋯: the rule
@@ -1591,14 +1588,12 @@
         ]}
       ></span>
     {/if}
-    <!-- The actions, whole while their words cost no tab; in their narrow
-         form, each by its glyph and count, where that stands more views
-         (ViewTabs `fold`). -->
-    <div
-      data-strip-actions
-      data-form={actionsFold ? "compact" : undefined}
-      class="flex flex-none items-center gap-space-2"
-    >
+    <!-- The strip is a toolbar: its actions are bare symbols, each named in
+         its tooltip and for a screen reader, a count where one says
+         something (DESIGN.md, Title bars follow Liquid Glass: "Its items are
+         bare symbols … each named for the screen reader and in its
+         tooltip"), so the views keep the room. -->
+    <div data-form="compact" class="flex flex-none items-center gap-space-2">
       <!-- Filter, on the views of the tasks: whole in the bar; on a phone,
            where the row has no room for it, its glyph and count stand while
            a filter does, and the head's ⋯ opens it. -->
@@ -1633,7 +1628,7 @@
             adding = true;
           }}
           size="sm"
-          title={actionsFold ? "New task" : undefined}
+          title="New task"
           variant="outline"
         >
           <IconPlus />
@@ -1648,7 +1643,7 @@
           press="pressable"
           onclick={(event) => ask(event.currentTarget as HTMLElement)}
           size="sm"
-          title={actionsFold ? viewsWords.ask : undefined}
+          title={viewsWords.ask}
           variant="ghost"
         >
           <IconSparkles />

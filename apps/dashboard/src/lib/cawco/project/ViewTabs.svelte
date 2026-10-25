@@ -16,14 +16,15 @@
    *
    * The room is the strip's own width less everything else it holds (the
    * hairline, the filter, Needs you, New task, Ask Caw: none of them sized
-   * by the tabs), so it is known whatever the tabs show. The strip's actions
-   * (`data-strip-actions`) have a narrow form, each by its glyph and count
-   * alone (`data-form="compact"`, as a side surface's head draws its
-   * controls): they take it (`fold`) whenever it lets more views stand as
-   * tabs than their words do, so a tab never goes into the menu to keep a
-   * button's words (at 900px with the rail beside the strip, their words
-   * left the views 60px, room for no tab). Both forms are read each time,
-   * whichever stands, so the choice never feeds back. Each tab's width is
+   * by the tabs), so it is known whatever the tabs show. Those actions are
+   * the strip's toolbar items, bare symbols named in their tooltips
+   * (DESIGN.md, Title bars follow Liquid Glass), so they leave the views the
+   * room their glyphs and counts don't take. The ⋯ says what waits in the
+   * views it holds: the sum of their counts (Decisions' pages waiting on
+   * picks; JOURNEY.md, every view with something in it shows its count in
+   * the first view), as a side head's More says its count, and it is taken
+   * at the width it will be drawn at, counted while a counted view is still
+   * to go in it. Each tab's width is
    * read off a ruler, every view drawn as a tab out of sight (inert, hidden,
    * in a box of no size), so a view in the menu is measured as it would
    * stand. Both are read in the frame a size changes (frameObserver).
@@ -49,7 +50,6 @@
     current,
     hrefOf,
     onchoose,
-    fold = $bindable(false),
   }: {
     /** Every view, in the strip's order: Decisions with the pages waiting on picks, Caw's drafts marked. */
     views: BarView[];
@@ -57,17 +57,14 @@
     /** A view's own address: a tab is a link. */
     hrefOf: (view: string) => string;
     onchoose: (view: string) => void;
-    /** The strip's actions stand in their narrow form, so more views stand as tabs. */
-    fold?: boolean;
   } = $props();
 
   interface Measures {
-    /** What the actions' narrow form gives back to the views. */
-    folds: number;
     /** The list's own pad at its two ends, and the gap between two tabs. */
     gap: number;
-    /** The ⋯'s width, and the gap before it. */
+    /** The ⋯'s width, and the gap before it: alone, and saying the views' whole count. */
     more: number;
+    moreCounted: number;
     pad: number;
     /** The one menu's trigger, saying the chosen view. */
     picker: number;
@@ -85,26 +82,6 @@
   const EDGE = 0.5;
   const px = (value: string) => Number.parseFloat(value) || 0;
 
-  /**
-   * The width `el` lays out at in its narrow form (`compact`) or whole, its
-   * own form put back before anything paints.
-   */
-  function widthAs(el: HTMLElement, compact: boolean): number {
-    const was = el.dataset.form;
-    if (compact) {
-      el.dataset.form = "compact";
-    } else {
-      delete el.dataset.form;
-    }
-    const { width } = el.getBoundingClientRect();
-    if (was === undefined) {
-      delete el.dataset.form;
-    } else {
-      el.dataset.form = was;
-    }
-    return width;
-  }
-
   /** The room the strip leaves its views, the tabs' widths, the list's own. */
   function measure(): Measures | null {
     const strip = root?.parentElement;
@@ -112,6 +89,9 @@
       '[data-slot="ff-tabs-list"]'
     );
     const dots = ruler?.querySelector<HTMLElement>("[data-ruler-more]");
+    const counted = ruler?.querySelector<HTMLElement>(
+      "[data-ruler-more-counted]"
+    );
     const named = ruler?.querySelector<HTMLElement>("[data-ruler-picker]");
     if (!(root && strip && list && dots && named)) {
       return null;
@@ -120,21 +100,9 @@
     const others = [...strip.children].filter(
       (child) => getComputedStyle(child).display !== "none"
     );
-    // The actions are counted whole; their narrow form gives back `folds`.
-    let beside = 0;
-    let folds = 0;
-    for (const child of others) {
-      if (child === root) {
-        continue;
-      }
-      if (child instanceof HTMLElement && "stripActions" in child.dataset) {
-        const whole = widthAs(child, false);
-        beside += whole;
-        folds = Math.max(0, whole - widthAs(child, true));
-      } else {
-        beside += child.getBoundingClientRect().width;
-      }
-    }
+    const beside = others
+      .filter((child) => child !== root)
+      .reduce((sum, child) => sum + child.getBoundingClientRect().width, 0);
     const room =
       strip.clientWidth -
       px(style.paddingInlineStart) -
@@ -149,15 +117,17 @@
     for (const [i, view] of views.entries()) {
       widths.set(view.value, tabs[i]?.getBoundingClientRect().width ?? 0);
     }
+    const before = px(getComputedStyle(root).columnGap);
+    const more = dots.getBoundingClientRect().width + before;
     return {
-      folds,
       room,
       widths,
       pad: px(own.paddingInlineStart) + px(own.paddingInlineEnd),
       gap: px(own.columnGap),
-      more:
-        dots.getBoundingClientRect().width +
-        px(getComputedStyle(root).columnGap),
+      more,
+      moreCounted: counted
+        ? counted.getBoundingClientRect().width + before
+        : more,
       picker: named.getBoundingClientRect().width,
     };
   }
@@ -189,7 +159,7 @@
         sized.observe(child);
       }
       for (const tab of list.querySelectorAll(
-        '[data-slot="ff-tab"], [data-ruler-picker]'
+        '[data-slot="ff-tab"], [data-ruler-picker], [data-ruler-more-counted]'
       )) {
         sized.observe(tab);
       }
@@ -220,13 +190,20 @@
     menu: "named" | "dots" | null;
   }
 
+  /** What a view holds that waits: Decisions' pages waiting on picks; a draft counts none. */
+  const countOf = (view: BarView) => (view.draft ? 0 : view.count);
+  /** The views' whole count, as the ⋯ would say it holding them all. */
+  const total = $derived(views.reduce((sum, view) => sum + countOf(view), 0));
+
   /**
-   * The views that stand as tabs in `room`: all of them where they fit;
-   * otherwise the chosen one, then each before or after it in order while
-   * it fits beside the ⋯, the first that does not ending the run.
+   * The views that stand as tabs: all of them where they fit; otherwise the
+   * chosen one, then each before or after it in order while it fits beside
+   * the ⋯, the first that does not ending the run. The ⋯ is taken at the
+   * width it will be drawn at: counted while a view still to go in it has a
+   * count, alone otherwise.
    */
-  function place(m: Measures, room: number): Placed {
-    const { widths, gap, pad, more, picker } = m;
+  function place(m: Measures): Placed {
+    const { widths, gap, pad, room, picker } = m;
     const width = (value: string) => widths.get(value) ?? 0;
     const whole =
       pad +
@@ -235,61 +212,40 @@
     if (whole <= room + EDGE) {
       return { kept: new Set(views.map((view) => view.value)), menu: null };
     }
-    const kept = new Set<string>();
-    let left = room - more - pad + EDGE;
     const chosen = views.find((view) => view.value === current);
+    const others = views.filter((view) => view !== chosen);
+    /** The ⋯ beside the tabs, holding `inside`. */
+    const moreOf = (inside: BarView[]) =>
+      inside.some((view) => countOf(view) > 0) ? m.moreCounted : m.more;
+    const kept = new Set<string>();
+    let left = room - pad + EDGE;
     if (chosen) {
       kept.add(chosen.value);
       left -= width(chosen.value);
     }
-    for (const view of views) {
-      if (view === chosen) {
-        continue;
-      }
+    if (left < moreOf(others)) {
+      return { kept, menu: picker <= room + EDGE ? "named" : "dots" };
+    }
+    for (const [at, view] of others.entries()) {
       const takes = width(view.value) + gap;
-      if (takes > left) {
+      if (takes + moreOf(others.slice(at + 1)) > left) {
         break;
       }
       kept.add(view.value);
       left -= takes;
     }
-    if (pad + width(current) + more <= room + EDGE) {
-      return { kept, menu: null };
-    }
-    return { kept, menu: picker <= room + EDGE ? "named" : "dots" };
+    return { kept, menu: null };
   }
 
-  /** What a placing shows of the views: its tabs, and the named menu over the ⋯ alone. */
-  const worth = (one: Placed) => {
-    if (one.menu === null) {
-      return one.kept.size;
-    }
-    return one.menu === "named" ? 0.5 : 0;
-  };
-
-  /** Beside the actions whole, and beside them narrow; the narrow form only where it stands more views. */
-  const placing = $derived.by(
-    (): { folded: boolean; placed: Placed } | null => {
-      if (!measures) {
-        return null;
-      }
-      const whole = place(measures, measures.room);
-      const narrow = place(measures, measures.room + measures.folds);
-      return worth(narrow) > worth(whole)
-        ? { folded: true, placed: narrow }
-        : { folded: false, placed: whole };
-    }
-  );
-  const placed = $derived(placing?.placed ?? null);
-  $effect(() => {
-    fold = placing?.folded ?? false;
-  });
+  const placed = $derived(measures ? place(measures) : null);
   const shown = $derived(
     placed?.kept ?? new Set(views.map((view) => view.value))
   );
   const tabs = $derived(views.filter((view) => shown.has(view.value)));
   const rest = $derived(views.filter((view) => !shown.has(view.value)));
   const menu = $derived(rest.length === 0 ? null : (placed?.menu ?? null));
+  /** What waits in the views the ⋯ holds. */
+  const held = $derived(rest.reduce((sum, view) => sum + countOf(view), 0));
   const currentLabel = $derived(
     views.find((view) => view.value === current)?.label ?? ""
   );
@@ -383,13 +339,22 @@
         {#snippet child({ props })}
           <Button
             {...props}
-            aria-label={viewsWords.more}
+            aria-label={held > 0
+              ? `${viewsWords.more}, ${held} waiting`
+              : viewsWords.more}
             class="touch-hit flex-none"
             data-views-more
-            size="icon-sm"
+            size={held > 0 ? "sm" : "icon-sm"}
+            title={viewsWords.more}
             variant="ghost"
           >
             <IconMore />
+            {#if held > 0}
+              <!-- What waits in the views it holds, as each one's tab says it. -->
+              <span data-slot="more-count" class="type-meta num text-ink-muted"
+                >{held}</span
+              >
+            {/if}
           </Button>
         {/snippet}
       </DropdownMenu.Trigger>
@@ -426,6 +391,14 @@
       </TabsList>
     </Tabs>
     <span class="block size-c-btn-h-sm" data-ruler-more></span>
+    {#if total > 0}
+      <span class="inline-flex w-max" data-ruler-more-counted>
+        <Button size="sm" variant="ghost">
+          <IconMore />
+          <span class="type-meta num">{total}</span>
+        </Button>
+      </span>
+    {/if}
     <span class="inline-flex w-max" data-ruler-picker>
       <Button size="sm" variant="ghost">
         <span>{currentLabel}</span>

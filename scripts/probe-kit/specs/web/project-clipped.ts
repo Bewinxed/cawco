@@ -39,10 +39,14 @@
  *     folder tab drawn over it; and the page's heads (the rail's head, the
  *     bar, the project's head, the view strip, a column's head, the task's
  *     head) each clear of the others, as drawn.
- *  3. Wherever the strip stands, it stands as many views as tabs as fit
- *     beside its actions, the rest in the ⋯, its actions in their narrow
- *     form exactly where that stands more tabs (`stripFills`); from 900,
- *     with the rail where it rests, the chosen view is one of them (the
+ *  3. Wherever the strip stands (640 and wider), its actions are toolbar
+ *     items (DESIGN.md, Title bars follow Liquid Glass): the group drawn
+ *     compact, no word of theirs drawn, each named in its tooltip; it
+ *     stands as many views as tabs as fit beside them, the rest in the ⋯,
+ *     which says its views' count where one of them has one (a decision
+ *     page waiting on picks makes Decisions' 1; JOURNEY.md, every view with
+ *     something in it shows its count in the first view) (`stripFills`);
+ *     from 900, with the rail where it rests, the chosen view is a tab (the
  *     owner: at 900 it showed only the ⋯). The overflow sweep
  *     (journeys/scan.ts) totals zero there.
  *
@@ -157,6 +161,21 @@ const setUp = async (kit: Kit): Promise<Setup> => {
       ...(n % 3 === 0 ? { todos: ["Read the feed", "Write the table"] } : {}),
     });
   }
+  // A decision page waiting on picks: Decisions' count, the ⋯'s once
+  // Decisions is in it.
+  const writer = await fleet.spawn("claude", "Pick the tide source", src, {
+    projectId: project.id,
+  });
+  await fleet.api(`/api/instances/${writer}/artifacts`, {
+    kind: "page",
+    does: "pick",
+    ask: "Pick the tide source",
+    name: "tide-source",
+    program: `root = Decisions("Tide source", [feed])
+feed = Decision("feed", "Which feed do the tide tables read?", [harbour, admiralty], "The harbour feed is in GMT.")
+harbour = Option("harbour", "The harbour's own feed", "Local, every six minutes.", true, [], "Its times are GMT.")
+admiralty = Option("admiralty", "The admiralty tables", "Published a year ahead.", false, [], "No live readings.")`,
+  });
   // The rail: one session working, a dozen finished (two-digit counts).
   const working = await fleet.spawn("claude", "Tide feed rework", src);
   await fleet.send(working, `${WORK} for a while.`);
@@ -758,9 +777,9 @@ const readStrip = (page: Page) =>
 /**
  * What the strip gives its views, read off its boxes: the room its own
  * width leaves beside everything else it holds, the views' box, the next
- * view in order that is not a tab and its width as a tab (the ruler's), and
- * what the actions' narrow form (`data-form="compact"`) gives back, read by
- * drawing them in it for the read and back.
+ * view in order that is not a tab and its width as a tab (the ruler's), the
+ * count the hidden views hold and the one the ⋯ says, and its actions: the
+ * group's form, and each control's name, tooltip and the words it draws.
  */
 const readFill = (page: Page) =>
   page.evaluate(() => {
@@ -774,28 +793,6 @@ const readFill = (page: Page) =>
     const children = [...strip.children].filter(
       (child) => getComputedStyle(child).display !== "none"
     );
-    const actions = strip.querySelector<HTMLElement>(
-      ":scope > [data-strip-actions]"
-    );
-    const widthAs = (el: HTMLElement, form: string | undefined) => {
-      const was = el.dataset.form;
-      if (form === undefined) {
-        delete el.dataset.form;
-      } else {
-        el.dataset.form = form;
-      }
-      const { width } = el.getBoundingClientRect();
-      if (was === undefined) {
-        delete el.dataset.form;
-      } else {
-        el.dataset.form = was;
-      }
-      return width;
-    };
-    const folded = actions?.dataset.form === "compact";
-    const folds = actions
-      ? widthAs(actions, undefined) - widthAs(actions, "compact")
-      : 0;
     const room =
       strip.clientWidth -
       px(style.paddingInlineStart) -
@@ -818,16 +815,45 @@ const readFill = (page: Page) =>
     ].map((tab) => ({
       label: label(tab),
       width: tab.getBoundingClientRect().width,
+      count: Number(
+        tab.querySelector('[data-slot="tab-num"]')?.textContent?.trim() ?? 0
+      ),
     }));
     const rest = ruled.filter((one) => !shown.has(one.label));
     const list = views.querySelector<HTMLElement>(
       ':scope > div:not([data-views-ruler]) [data-slot="ff-tabs-list"]'
     );
     const more = views.querySelector<HTMLElement>("[data-views-more]");
+    // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
+    const WORD = /\p{L}/u;
+    const group = strip.querySelector<HTMLElement>(
+      ':scope > div:not([data-slot="views"])'
+    );
+    const actions = [...(group?.querySelectorAll("button") ?? [])]
+      .filter((one) => one.checkVisibility())
+      .map((one) => {
+        const words: string[] = [];
+        const walker = document.createTreeWalker(one, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          const text = (node as Text).data.trim();
+          const holder = node.parentElement;
+          if (
+            WORD.test(text) &&
+            holder?.checkVisibility({ visibilityProperty: true })
+          ) {
+            words.push(text);
+          }
+        }
+        return {
+          name: one.getAttribute("aria-label") ?? "",
+          title: one.getAttribute("title") ?? "",
+          words,
+        };
+      });
     return {
       room,
-      folded,
-      folds,
+      compact: group?.dataset.form === "compact",
+      actions,
       box: views.getBoundingClientRect().width,
       gap: list ? px(getComputedStyle(list).columnGap) : 0,
       // The ⋯ and the gap before it, which go once the last view is a tab.
@@ -835,6 +861,10 @@ const readFill = (page: Page) =>
         ? more.getBoundingClientRect().width +
           px(getComputedStyle(views).columnGap)
         : 0,
+      held: rest.reduce((sum, one) => sum + one.count, 0),
+      says:
+        more?.querySelector('[data-slot="more-count"]')?.textContent?.trim() ??
+        "",
       next: rest[0] ?? null,
       left: rest.length,
       tabs: shown.size,
@@ -843,14 +873,15 @@ const readFill = (page: Page) =>
   });
 
 /**
- * The strip stands as many views as tabs as fit beside its actions, and
- * only those that don't go into the ⋯ (owner: at 900px it showed only the
- * ⋯): the views' box fits its room, and the next view as a tab would not.
- * The actions take their narrow form exactly where it stands more views:
- * narrow, their words would have cost a tab standing now; whole, their
- * narrow form would have stood no more. With `chosen` (900px and wider),
- * the chosen view stands as a tab. Then the overflow sweep
- * (journeys/scan.ts): nothing spills, no control covers text.
+ * The strip is a toolbar (DESIGN.md, Title bars follow Liquid Glass): its
+ * actions' group is drawn compact, none of them draws a word, and each is
+ * named in its tooltip. It stands as many views as tabs as fit beside them,
+ * and only those that don't go into the ⋯ (owner: at 900px it showed only
+ * the ⋯): the views' box fits its room, and the next view as a tab would
+ * not. The ⋯ says what waits in the views it holds, their counts' sum, and
+ * nothing when none waits. With `chosen` (900px and wider), the chosen view
+ * stands as a tab. Then the overflow sweep (journeys/scan.ts): nothing
+ * spills, no control covers text.
  */
 const stripFills = async (
   kit: Kit,
@@ -865,20 +896,33 @@ const stripFills = async (
     return;
   }
   const SLACK = 0.5;
+  kit.check(
+    `${tag}: the strip's ${fill.actions.length} actions are bare symbols, each named in its tooltip (${fill.actions.map((one) => one.title).join(", ")})`,
+    fill.compact &&
+      fill.actions.length >= 3 &&
+      fill.actions.every(
+        (one) => one.words.length === 0 && one.title !== "" && one.name !== ""
+      ),
+    JSON.stringify({ compact: fill.compact, actions: fill.actions })
+  );
   /** The views' box with the next view a tab beside the rest. */
   const withNext = fill.next
     ? fill.box + fill.gap + fill.next.width - (fill.left === 1 ? fill.more : 0)
     : 0;
-  const said = `${fill.tabs} of ${fill.views} tabs in ${fill.box.toFixed(1)}px of ${fill.room.toFixed(1)}px room${fill.next ? `; next, “${fill.next.label}”, ${withNext.toFixed(1)}px` : ""}; actions ${fill.folded ? "narrow" : "whole"}, narrow gives ${fill.folds.toFixed(1)}px back`;
+  const said = `${fill.tabs} of ${fill.views} tabs in ${fill.box.toFixed(1)}px of ${fill.room.toFixed(1)}px room${fill.next ? `; next, “${fill.next.label}”, ${withNext.toFixed(1)}px` : ""}`;
   kit.check(
     `${tag}: the strip stands every view as a tab that fits beside its actions (${said})`,
     fill.box <= fill.room + SLACK &&
-      (fill.next === null || withNext > fill.room + SLACK) &&
-      (fill.folded
-        ? fill.box > fill.room - fill.folds + SLACK
-        : fill.next === null || withNext > fill.room + fill.folds + SLACK),
+      (fill.next === null || withNext > fill.room + SLACK),
     JSON.stringify({ fill, strip })
   );
+  if (fill.left > 0) {
+    kit.check(
+      `${tag}: the ⋯ says what waits in its ${fill.left} views (${fill.held > 0 ? `“${fill.says}” of ${fill.held}` : "none waits, no count"})`,
+      fill.held > 0 ? fill.says === String(fill.held) : fill.says === "",
+      JSON.stringify({ held: fill.held, says: fill.says, strip })
+    );
+  }
   if (chosen) {
     kit.check(
       `${tag}: the chosen view stands as a tab (“${strip.chosen}”)`,

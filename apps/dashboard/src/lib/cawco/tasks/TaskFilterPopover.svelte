@@ -103,7 +103,7 @@
           {look}
           press="pressable"
           size={compact ? "icon-sm" : "sm"}
-          title={find.problem ?? undefined}
+          title={find.problem ?? compactName}
           variant={active > 0 ? "secondary" : "ghost"}
         >
           {#if find.problem}
