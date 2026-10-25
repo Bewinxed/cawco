@@ -40,3 +40,46 @@ index e0242e4d0f5678062eafc6516e894bee4a7fa063..f0bbc8a5cfc135cfd52d3d3047ae6828
              e && e.disconnect();
          }
      };
+diff --git a/lib/svelte/Virtualizer.svelte b/lib/svelte/Virtualizer.svelte
+--- a/lib/svelte/Virtualizer.svelte
++++ b/lib/svelte/Virtualizer.svelte
+@@ -85,25 +85,34 @@
+   let indexes = $derived.by(() => {
+     const len = data.length;
+ 
++    // cawco: with experimental.async the each block runs before the
++    // $effect.pre that tells the store of a new length
++    // (svelte.dev/docs/svelte/await-expressions#Breaking-changes), so the
++    // range is still the last length's. Items added or removed in front
++    // (`shift`) stand that many indexes further on in `data`: the range is
++    // read there, so every item it holds keeps its key, and none is taken
++    // down and built again for that one pass (a page put in front of a
++    // transcript rebuilt every row on screen twice, 44ms of its task).
++    const storeLen = stateVersion && layout.$getLength();
++    const moved = shift && storeLen !== len ? len - storeLen : 0;
+     const [start, end] = range;
+     const arr: number[] = [];
+     if (keepMounted) {
+       const mounted = new Set(keepMounted);
+-      for (let i = start; i <= end; i++) {
++      for (let i = start + moved; i <= end + moved; i++) {
+         mounted.add(i);
+       }
+       // The store may still have the previous length in async mode, as the range does
+-      const storeLen = stateVersion && layout.$getLength();
+       for (const index of sort([...mounted])) {
+-        if (index < len && index < storeLen) {
++        if (index >= 0 && index < len && (moved !== 0 || index < storeLen)) {
+           arr.push(index);
+         }
+       }
+     } else {
+-      for (let i = start; i <= end; i++) {
++      for (let i = start + moved; i <= end + moved; i++) {
+         // Guard for experimental.async: true, which runs the each block before $effect.pre
+         // https://github.com/inokawa/virtua/pull/847
+-        if (i < len) {
++        if (i >= 0 && i < len) {
+           arr.push(i);
+         }
+       }

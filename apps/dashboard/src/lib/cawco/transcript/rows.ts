@@ -836,7 +836,9 @@ function ownRow(
  * is where the speakers stood before `from`, and is advanced past these rows.
  * `said` is the answers this view streamed, by message key, each with the
  * live row's key it keeps. `callsPerRow` is how many calls of a run one row
- * holds.
+ * holds. It stops at the first row that begins at or past `until` (all of
+ * them by default), and says where (`end`): folded on from there with the
+ * same `voices`, the rows are the ones one fold would have made.
  */
 function foldRange(
   messages: Message[],
@@ -844,13 +846,15 @@ function foldRange(
   from: number,
   voices: Voices,
   said: ReadonlyMap<string, string>,
-  callsPerRow: number
-): { rows: Row[]; starts: number[] } {
+  callsPerRow: number,
+  until = messages.length
+): { end: number; rows: Row[]; starts: number[] } {
   const rows: Row[] = [];
   const starts: number[] = [];
+  const stop = Math.min(until, messages.length);
 
   let i = from;
-  while (i < messages.length) {
+  while (i < stop) {
     const m = messages[i];
     starts.push(i);
 
@@ -917,7 +921,7 @@ function foldRange(
   }
 
   markVoices(rows, voices);
-  return { rows, starts };
+  return { end: i, rows, starts };
 }
 
 /** Group a fold's own rows, not yet seen by anyone, in place. */
@@ -1656,6 +1660,112 @@ function stillDrawn(
     : null;
 }
 
+/**
+ * A fold made a step at a time (`step`) rather than in the task its messages
+ * came in: a page of older blocks put in front of a long conversation folded
+ * every message in the task its page landed in (109–432ms of script on
+ * Safari), and a tab caught up after a long absence folded everything its
+ * session said meanwhile in the task behind the switch's paint.
+ */
+export interface StepFold {
+  /** A page put in front (true), or messages added at the end (false). */
+  front: boolean;
+  /** The store's list it folds: a fold for another list is no longer wanted. */
+  list: Message[];
+  /** The fold, once every message is folded: the memo the next build folds onto. */
+  memo: () => FoldMemo;
+  /** Folds on for about `ms`; true once every message is folded. */
+  step: (ms: number) => boolean;
+}
+
+/** How many messages a stepped fold folds between two looks at its clock; fewer to fold than this, and it is folded at once. */
+const STEP_MESSAGES = 24;
+
+/**
+ * The session's messages folded a step at a time, when they are the memo's
+ * with a page put in front of them and nothing else changed (the same
+ * messages at the same end, the same branches), or, with `appended` (a tab
+ * catching up), the memo's with more after them than `STEP_MESSAGES`. Null
+ * for any other change, which the build folds as it always has. A page in
+ * front is folded from the first message, as one fold would (`foldRange`
+ * with an end, the voices carried on); messages after are folded from the
+ * memo's cut, the rows before it kept (`foldOnto`). The memo they make folds
+ * onto it at once (`foldOnto`'s nothing new), and the rows the last fold had
+ * the same are its rows (`keptFrom`).
+ */
+export function stepFold(
+  session: SessionState,
+  memo: FoldMemo | null,
+  appended: boolean
+): StepFold | null {
+  const list = session.messages;
+  if (!memo || memo.count === 0) {
+    return null;
+  }
+  const messages = drawnOf(session);
+  const branches = Object.keys(session.subagents).length;
+  if (branches !== memo.branches) {
+    return null;
+  }
+  const added = messages.length - memo.count;
+  const front =
+    memo.drawn.list !== list &&
+    added > 0 &&
+    sameMessage(messages[added], memo.first) &&
+    sameMessage(messages.at(-1), memo.last);
+  const cut = !front && appended ? cutFor(messages, memo, branches) : -1;
+  if (!front && (cut < 0 || messages.length - cut < STEP_MESSAGES)) {
+    return null;
+  }
+  let keep = front ? 0 : memo.starts.length;
+  for (let r = memo.starts.length - 1; !front && r >= 0; r -= 1) {
+    if (memo.starts[r] < cut) {
+      break;
+    }
+    keep = r;
+  }
+  const kept = memo.rows.slice(0, keep);
+  const voices = front ? { ...NO_VOICE } : voicesAfter(kept);
+  const rows: Row[] = [];
+  const starts = memo.starts.slice(0, keep);
+  let at = front ? 0 : cut;
+  return {
+    front,
+    list,
+    step: (ms) => {
+      const until = performance.now() + ms;
+      while (at < messages.length && performance.now() < until) {
+        const part = foldRange(
+          messages,
+          session.subagents,
+          at,
+          voices,
+          memo.said,
+          LISTED_CALLS_PER_ROW,
+          at + STEP_MESSAGES
+        );
+        rows.push(...part.rows);
+        starts.push(...part.starts);
+        at = part.end;
+      }
+      return at >= messages.length;
+    },
+    memo: () => ({
+      ...memo,
+      rows: kept.concat(keptFrom(rows, memo.rows)),
+      starts,
+      voices,
+      count: messages.length,
+      first: messages[0],
+      last: messages.at(-1),
+      branches,
+      // Drawn again by the build that takes this memo (`stillDrawn` never
+      // holds for a list it was not drawn from).
+      drawn: { ...memo.drawn, list: [], rev: -1 },
+    }),
+  };
+}
+
 /** The drawn messages folded again: on from the memo's cut where it holds, else whole. */
 function foldAgain(
   session: SessionState,
@@ -1674,8 +1784,58 @@ function foldAgain(
   return {
     messages,
     appended: false,
-    folded: foldAll(messages, session.subagents, memo?.said ?? NO_SAID),
+    folded: foldAll(
+      messages,
+      session.subagents,
+      memo?.said ?? NO_SAID,
+      memo?.rows ?? NO_ROWS
+    ),
   };
+}
+
+const NO_ROWS: readonly Row[] = [];
+
+/**
+ * A FOLD AGAIN KEEPS THE ROWS IT DID NOT CHANGE. A page put in front, or a
+ * read that replaced the list, folds every message again, and every row was
+ * a new object: every row on screen drew its component again with what it
+ * already showed, and the transcript read every row's ids again (its
+ * ledger). A row that comes out field for field the same as the row the
+ * last fold had under its key is that row: the same object.
+ */
+function keptFrom(rows: Row[], before: readonly Row[]): Row[] {
+  if (before.length === 0) {
+    return rows;
+  }
+  const was = new Map(before.map((row) => [row.key, row]));
+  for (let i = 0; i < rows.length; i += 1) {
+    const old = was.get(rows[i].key);
+    if (old && sameFields(old, rows[i])) {
+      rows[i] = old;
+    }
+  }
+  return rows;
+}
+
+/** Whether two rows hold the same things: every field the same value, a list the same values in order. */
+function sameFields(a: Row, b: Row): boolean {
+  const left = a as unknown as Record<string, unknown>;
+  const right = b as unknown as Record<string, unknown>;
+  const keys = Object.keys(left);
+  return (
+    keys.length === Object.keys(right).length &&
+    keys.every((key) => {
+      const x = left[key];
+      const y = right[key];
+      return (
+        x === y ||
+        (Array.isArray(x) &&
+          Array.isArray(y) &&
+          x.length === y.length &&
+          x.every((each, i) => each === y[i]))
+      );
+    })
+  );
 }
 
 /**
@@ -1713,17 +1873,23 @@ interface Settled {
   voices: Voices;
 }
 
-/** Every message, folded from the start. */
+/** Every message, folded from the start; a row the last fold had the same (`before`) is that row. */
 function foldAll(
   messages: Message[],
   subagents: Record<string, SubagentState>,
-  said: ReadonlyMap<string, string>
+  said: ReadonlyMap<string, string>,
+  before: readonly Row[]
 ): Settled {
   const voices = { ...NO_VOICE };
-  return {
-    ...foldRange(messages, subagents, 0, voices, said, LISTED_CALLS_PER_ROW),
+  const { rows, starts } = foldRange(
+    messages,
+    subagents,
+    0,
     voices,
-  };
+    said,
+    LISTED_CALLS_PER_ROW
+  );
+  return { rows: keptFrom(rows, before), starts, voices };
 }
 
 /** The memo's rows, with only the turn at the cut and what follows it folded again. */

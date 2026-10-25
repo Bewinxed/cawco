@@ -104,6 +104,8 @@
     type FoldMemo,
     queuedFrom,
     type Row,
+    type StepFold,
+    stepFold,
     wellRunsFrom,
   } from "./rows";
   import Subagent from "./Subagent.svelte";
@@ -273,13 +275,22 @@
    * the rows after them each build: a streamed word moves the tail alone.
    */
   interface Built {
+    /**
+     * Whether the conversation had a page before these rows as they were
+     * built: the strip before the list says so (the markup) for these rows,
+     * and goes with the page that ends it in the flush that puts it in front.
+     */
+    before: boolean;
     ended: Fold["ended"];
     rows: Row[];
     settled: Row[];
     shifted: boolean;
   }
+  /** Whether the rows on screen were built with a page before them (`Built.before`). */
+  let frozenBefore = false;
   /** The rows already on screen, handed back unchanged: nothing moved, nothing ended. */
   const STILL_BUILD = (): Built => ({
+    before: frozenBefore,
     rows: frozen,
     settled: frozenSettled,
     shifted: false,
@@ -466,7 +477,7 @@
     return (
       `${arrayOf(session.messages)}:${session.messages.length}:${settled}:${last?.id ?? ""}:${session.streaming.length}:` +
       `${session.thinkingStream.length}:${session.busy ? 1 : 0}:${session.pending.map((ask) => `${ask.requestId}${ask.routedTo ?? ""}`).join(",")}:` +
-      `${session.openBlock}:${session.thinkingClosing}:${session.currentTool?.toolId ?? ""}:${session.sdkStatus}:${session.lastCompaction?.at ?? ""}:` +
+      `${session.openBlock}:${session.thinkingClosing}:${session.currentTool?.toolId ?? ""}:${session.sdkStatus}:${session.lastCompaction?.at ?? ""}:${session.cursor === null ? 0 : 1}:` +
       `${last?.metadata?.sendFailed ?? ""}:${session.rev}`
     );
   };
@@ -485,6 +496,8 @@
   const built = $derived.by<Built>(() => {
     // biome-ignore lint/complexity/noVoid: the bump that hands over a two-step change's second step.
     void secondStep;
+    // biome-ignore lint/complexity/noVoid: the bump that hands over a page folded in front (`foldInFront`).
+    void fronted;
     // The switch flush paints what is already there; the catch-up comes
     // after the paint, through the hold letting go.
     if (risen !== builtRises) {
@@ -531,11 +544,14 @@
    * built afresh from the first.
    */
   function rebuild(): Built {
+    const caught = catchUp;
+    catchUp = false;
     const current = printOf() === builtPrint;
     const next = pending;
     pending = null;
     if (next && current) {
       return {
+        before: session.cursor !== null,
         rows: next.rows,
         settled: next.settled,
         shifted: frontOnly(frozen, next.rows),
@@ -545,7 +561,7 @@
     if (primed && current) {
       return STILL_BUILD();
     }
-    return run();
+    return run(caught);
   }
 
   /**
@@ -581,15 +597,123 @@
     requestAnimationFrame(() => {
       setTimeout(() => {
         held = false;
+        catchUp = true;
         released += 1;
       }, 0);
     });
   }
+  /** The next build is the catch-up behind a switch's paint (`hold`): what it appends is folded in steps (`foldInSteps`). */
+  let catchUp = false;
 
-  function run(): Built {
+  function run(caught = false): Built {
+    if (stepping) {
+      if (stepping.list === session.messages) {
+        return STILL_BUILD();
+      }
+      // The list moved on under the fold (another page in front, a read):
+      // what it is now decides.
+      stepping = null;
+    }
+    const steps = primed ? stepFold(session, memo, caught) : null;
+    if (steps) {
+      foldInSteps(steps);
+      return STILL_BUILD();
+    }
     countBuild();
     builtPrint = printOf();
     return build();
+  }
+
+  /**
+   * A PAGE IN FRONT, AND A LONG CATCH-UP, ARE FOLDED A STEP A TASK, AND
+   * HANDED OVER IN ONE.
+   *
+   * A page of older blocks put in front of a long conversation folded every
+   * message in the task its page landed in (109–432ms of script on Safari,
+   * a 188ms task on Chromium's trace: transcript-holds' wheel); a tab caught
+   * up after a long absence folded all its session said meanwhile in the
+   * task behind the switch's paint (`hold`: 64–77ms frames on Safari). So
+   * the rows on screen stay as they are (`STILL_BUILD`), and the fold runs
+   * `STEP_MS` a task, each step once a frame has painted (web.dev,
+   * "Optimize long tasks"; `requestAnimationFrame` then `setTimeout`, the
+   * yield every engine has: `scheduler.yield` is not in Safari, MDN
+   * "Limited availability"). The build after the last step takes its memo,
+   * draws the rows from it at once, and hands a page in front to virtua with
+   * its `shift` in that one flush: rows added in front only, the one change
+   * `shift` is for (inokawa/virtua#284).
+   */
+  let stepping: StepFold | null = null;
+  /**
+   * The rows mounted as a page in front is handed over, by key, kept
+   * mounted while the buffer steps back up (`keepMounted`). Handed over
+   * with virtua's buffer, the screen above the view filled at once with
+   * rows it had never measured, at `ROW_ESTIMATE` each: 40 rows mounted in
+   * the hand-over's task, 80ms of its 185 (transcript-holds' wheel).
+   */
+  let frontHeld = $state<string[]>([]);
+  /** Bumped when a page in front is folded: the build's dependency on it. */
+  let fronted = $state(0);
+  /** How long a step of a stepped fold runs, ms: a quarter of a frame here, a frame on a CPU four times slower. Our own call. */
+  const STEP_MS = 4;
+  function foldInSteps(steps: StepFold): void {
+    stepping = steps;
+    let folded = false;
+    const step = () =>
+      requestAnimationFrame(() =>
+        setTimeout(() => {
+          if (stepping !== steps) {
+            return;
+          }
+          // The hand-over in a task of its own: behind the last step, it
+          // was that step and the drawing of the rows in one.
+          if (!folded) {
+            folded = steps.step(STEP_MS);
+            step();
+            return;
+          }
+          handOver(steps);
+        })
+      );
+    step();
+  }
+  /** The stepped fold's rows, handed to the build (`fronted`). */
+  function handOver(steps: StepFold): void {
+    memo = steps.memo();
+    stepping = null;
+    if (steps.front) {
+      // Handed over with nothing mounted past what is (`frontHeld`): the
+      // screen above fills a step a task (`buffer`).
+      frontHeld = [...onList()];
+      buffer = 0;
+    }
+    // The page that ends the conversation's pages takes the strip before
+    // the list with it (`Built.before`).
+    const strip =
+      steps.front && frozenBefore && session.cursor === null && !atBottom
+        ? olderRoom
+        : 0;
+    fronted += 1;
+    if (strip > 0 && scroller) {
+      stripGone(scroller, strip);
+    }
+  }
+  onDestroy(() => {
+    stepping = null;
+  });
+  /**
+   * THE STRIP GOES WITH THE PAGE THAT ENDS IT, AND MOVES NOTHING. Left to
+   * its own observer (`keepPlace`), WebKit delivered its shrink a frame
+   * after the rows came in under it (transcript-holds, webkit 390: the
+   * row at the view's top painted 53.375px up for a frame). So the flush
+   * that hands the page over is run now, and the view moved up by the
+   * strip's height in the same task, behind virtua's own jump (whose write
+   * laid the page out): the observer then hears nothing left to move.
+   */
+  function stripGone(node: HTMLElement, strip: number): void {
+    flushSync();
+    olderRoom = 0;
+    node.scrollTop -= strip;
+    lastWrite = node.scrollTop;
   }
 
   function build(): Built {
@@ -643,6 +767,7 @@
           secondStep += 1;
         });
         return {
+          before: session.cursor !== null,
           rows: [...frozen.slice(0, was), ...next.slice(now)],
           // The last build's settled rows, still in front: a tail never
           // holds a settled row (rows.ts `tailRows`).
@@ -652,7 +777,13 @@
         };
       }
     }
-    return { rows: next, settled, shifted, ended: folded.ended };
+    return {
+      before: session.cursor !== null,
+      rows: next,
+      settled,
+      shifted,
+      ended: folded.ended,
+    };
   }
 
   /**
@@ -1040,13 +1171,14 @@
   // $derived). An $effect runs after the derived is read but before the DOM
   // renders, so the bookkeeping stays in sync with what the Virtualizer sees.
   $effect(() => {
-    const { rows: next, settled } = built;
+    const { rows: next, settled, before } = built;
     frozen = next;
     frozenSettled = settled;
+    frozenBefore = before;
     primed = true;
     // The append has landed: the rows on screen are the session's again, and
     // the indicator under them has nothing left to wait for.
-    if (!held && untrack(() => catching)) {
+    if (!(held || stepping) && untrack(() => catching)) {
       catching = false;
     }
     // The update is in: what it moved starts where it was drawn.
@@ -1370,6 +1502,9 @@
     };
   };
   onDestroy(() => rowSizes?.disconnect());
+  /** A row's height as the last frame laid it out (`drawnHeights`): what its fold starts from (Row's `heightOf`). */
+  const heightOfRow = (row: HTMLElement): number | undefined =>
+    drawnHeights.get(row);
 
   /**
    * A TAIL ROW HANDS ITS PLACE TO THE ROW THAT TAKES IT.
@@ -1586,8 +1721,8 @@
    * How far either side of the view virtua mounts rows (its `bufferSize`):
    * none at once for a far landing (`narrow`), and otherwise stepped an
    * eighth of a screen (`viewHeight`) a task, each step once a frame has
-   * painted: up to a screen while the pane is seen, down to none once it is
-   * put away (`unseen`). Back up in one task, the screens either side of a
+   * painted: up to `BUFFER_SCREENS` of one while the pane is seen, down to
+   * none once it is put away (`unseen`). Back up in one task, the screens either side of a
    * pane just shown mounted together, 1,189 elements and 23ms of style in
    * one 46ms task 73ms after the switch; a quarter a step, the frame after
    * each step still styled 626 of them (a 36ms frame, two-pane-perf's one
@@ -1595,9 +1730,23 @@
    * rows in a 42ms timer (its two pane point switch).
    */
   const BUFFER_STEPS = 8;
+  /**
+   * How many screens either side virtua mounts when the pane is seen: half
+   * of one. virtua's own word for it: "A smaller value gives better
+   * performance, and a larger value avoids showing blank items in fast
+   * scrolling" (its `bufferSize`, 0.53.4). A whole screen mounted a screen
+   * of rows above the view each time a wheel came to rest (virtua lets go
+   * of the buffer behind a scroll while it runs, and takes it back at rest:
+   * 612 elements styled in one frame as a page landed under a still
+   * reader), and as much again as a wheel began. Half a screen still
+   * measures a row well before a wheel's notch (120px) brings it into view.
+   */
+  const BUFFER_SCREENS = 0.5;
   let buffer = $state(0);
   $effect(() => {
-    const full = viewHeight;
+    const full = viewHeight * BUFFER_SCREENS;
+    // biome-ignore lint/complexity/noVoid: a page handed over in front steps the buffer up from nothing (`foldInFront`)
+    void fronted;
     if (narrow) {
       buffer = 0;
       return;
@@ -1621,6 +1770,8 @@
             to > buffer ? Math.min(to, buffer + by) : Math.max(to, buffer - by);
           if (buffer !== to) {
             grow();
+          } else if (untrack(() => frontHeld.length) > 0) {
+            frontHeld = [];
           }
         });
       });
@@ -1863,6 +2014,16 @@
         kept.push(index);
       }
     }
+    // The rows mounted as a page in front was handed over, held while the
+    // buffer steps back up (`frontHeld`).
+    if (frontHeld.length > 0) {
+      const mountedKeys = new Set(frontHeld);
+      renderedRows.forEach((row, index) => {
+        if (mountedKeys.has(row.key)) {
+          kept.push(index);
+        }
+      });
+    }
     // The rows a pane held as it was laid out again, held while they stage (`heldRows`).
     if (heldRows.length > 0) {
       const warmKeys = new Set(heldRows);
@@ -2089,8 +2250,9 @@
 
   let scroller = $state<HTMLElement | undefined>();
   /**
-   * The scroller's height: how far past the view virtua mounts rows (its
-   * `bufferSize`), so a row is measured a screen before the reader reaches it.
+   * The scroller's height: what sets how far past the view virtua mounts
+   * rows (its `bufferSize`, `BUFFER_SCREENS` of it), so a row is measured
+   * well before the reader reaches it.
    * virtua takes up a row's change of size for the reader only while the row
    * is wholly above the view; scrolling up, a row it had only estimated
    * (`ROW_ESTIMATE`) that came into view unmeasured — any page put in front,
@@ -2149,10 +2311,12 @@
     const inner = listing?.firstElementChild as HTMLElement | null | undefined;
     return Number.parseFloat(inner?.style.height ?? "");
   }
+
   /**
-   * Puts `spare` on the tail's range as it stands, and the padding on the
-   * page; says whether it moved. The pin calls it before it reads the height,
-   * so a list that grew is whole in the frame it grew.
+   * Puts `spare` on the tail's range as it stands; says whether it moved.
+   * Its padding goes on the page with the flush it is set in, which the pin
+   * reads behind (`pinNext`), so a list that grew is whole in the frame it
+   * grew.
    *
    * The range is where the tail stands (`tailTop`): virtua's viewport (the
    * box's content height, `getViewportSize`) against the strip before the
@@ -2179,7 +2343,6 @@
       return false;
     }
     spare = next;
-    flushSync();
     return true;
   }
   /**
@@ -2226,7 +2389,7 @@
       }
       rooms.measured = true;
       if (keepWhole() && pinned()) {
-        pinBottom();
+        pinNext();
       }
     });
     sizes.observe(footNode);
@@ -2247,16 +2410,15 @@
       const now = list?.getScrollSize() ?? 0;
       const shrank = now < size;
       size = now;
-      if (keepWhole() && pinned()) {
-        pinBottom();
-      }
-      if (
-        shrank &&
-        scroller &&
-        scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop <=
-          0.5
-      ) {
-        lastWrite = scroller.scrollTop;
+      // A list that got shorter under a view pinned at its end is the
+      // pin's: it reads where the clamp leaves the view, and tags it
+      // (`pinBottom`). Read here as well, behind the pin, the scroller's
+      // height was a second read of the microtask (`(anonymous)` at
+      // Transcript.svelte:2417 compiled, a reply's long frames); a view the
+      // reader holds is told from a clamp by the scroll that comes
+      // (`readScroll`).
+      if ((keepWhole() || shrank) && pinned()) {
+        pinNext();
       }
     });
     watch.observe(inner, { attributes: true, attributeFilter: ["style"] });
@@ -2480,12 +2642,12 @@
           top >= 0 && blockOf(renderedRows[top]) === place.block
             ? top
             : rowHolding(renderedRows, place.block);
-        const wrote = index >= 0 && scrollToRow(index, place.into);
-        if (wrote) {
+        const put = index >= 0 && scrollToRow(index, place.into);
+        if (put) {
           frames += 1;
           keptPlace = place;
         }
-        if ((wrote && frames < KEEP_FRAMES) || performance.now() < holdUntil) {
+        if ((put && frames < KEEP_FRAMES) || performance.now() < holdUntil) {
           step();
         }
       });
@@ -2708,10 +2870,10 @@
    * never for a pane off screen, and not again for a page that failed: that
    * one is asked for by its own Try again (the strip above the list).
    */
-  function askOlder(above?: number): void {
+  function askOlder(above: number): void {
     const store = paged();
     if (
-      !(scroller && listing && list && shown && visible && store?.cursor) ||
+      !(list && shown && visible && store?.cursor) ||
       store.hydrating ||
       store.loading ||
       store.olderFault
@@ -2720,11 +2882,7 @@
     }
     // A front shift virtua is holding until a touch scroll comes to rest is
     // not in the scroll offset yet: it stands in the first row's own offset.
-    const before =
-      (above ??
-        scroller.getBoundingClientRect().top -
-          listing.getBoundingClientRect().top) - list.getItemOffset(0);
-    if (before < scroller.clientHeight) {
+    if (above - list.getItemOffset(0) < list.getViewportSize()) {
       // biome-ignore lint/complexity/noVoid: fire-and-forget; the page lands in the store the rows are built from
       void readOlderPage(store.instanceId);
     }
@@ -2736,9 +2894,49 @@
    * cares only when a page has changed how many there are.
    */
   const rowCount = $derived(rows.length);
+  /**
+   * The list's place in the view, heard in the shared size observer's
+   * delivery (frame-observer.ts): the listing is observed again in the
+   * frame's callbacks, so it reports in that frame's delivery, and is read
+   * there, on the layout the frame has just done (as motion/rows' `heard`
+   * reads its containers). Read in the frame's callbacks, its boxes laid out
+   * what the update had just written (`askOlder`, 15.6ms of style in a
+   * reply's 51ms frame).
+   */
+  let nearStart: FrameObserver | null = null;
+  /** Asked for in the frame's callbacks: the listing reports in that frame's delivery. */
+  let nearFrame = 0;
+  function askOlderInFrame(): () => void {
+    cancelAnimationFrame(nearFrame);
+    nearFrame = requestAnimationFrame(() => {
+      nearFrame = 0;
+      const node = listing;
+      if (!node) {
+        return;
+      }
+      nearStart ??= frameObserver(() => undefined, {
+        read: (entries) => {
+          const target = entries.at(-1)?.target;
+          nearStart?.unobserve(target as Element);
+          if (target && scroller) {
+            askOlder(
+              scroller.getBoundingClientRect().top -
+                target.getBoundingClientRect().top
+            );
+          }
+        },
+      });
+      nearStart.observe(node);
+    });
+    return () => {
+      cancelAnimationFrame(nearFrame);
+      nearFrame = 0;
+    };
+  }
+  onDestroy(() => nearStart?.disconnect());
   // What can bring the first rows near without a scroll: the list drawn, a
-  // page landed with few rows in it, the pane coming on screen. Measured in
-  // the next frame, once virtua has moved the view by what the page added.
+  // page landed with few rows in it, the pane coming on screen. Read in the
+  // next frame, once virtua has moved the view by what the page added.
   $effect(() => {
     const store = paged();
     if (
@@ -2751,8 +2949,7 @@
     }
     // biome-ignore lint/complexity/noVoid: a page landing changes the rows without moving the cursor's truthiness
     void rowCount;
-    const frame = requestAnimationFrame(() => askOlder());
-    return () => cancelAnimationFrame(frame);
+    return askOlderInFrame();
   });
 
   /**
@@ -2861,28 +3058,37 @@
     cancelAnimationFrame(heldFrame);
     clearTimeout(heldTask);
   });
-  function onscroll(): void {
+  /**
+   * A scroll, as virtua's own scroll handler hands it on (its `onscroll`):
+   * the offset it has just read off the scroller. That read is virtua's,
+   * and it lays out whatever the tasks before the event wrote; read here
+   * behind it, the scroller's height and boxes are that same layout, read
+   * again for nothing. Read as the event's own listener instead, ahead of
+   * virtua's, they were the read that laid it out (`readScroll`, Layout
+   * 17.1ms in a 107ms task: a reply's long frames).
+   */
+  function onListScroll(offset: number): void {
     awayScroll = 0;
     if (!showing) {
-      readScroll();
+      readScroll(offset);
       return;
     }
     if (heldFrame === 0) {
       heldFrame = requestAnimationFrame(() => {
         heldTask = setTimeout(() => {
           heldFrame = 0;
-          readScroll();
+          readScroll(list?.getScrollOffset() ?? offset);
         });
       });
     }
   }
-  /** What a scroll did, read off the scroller (`onscroll`). */
-  function readScroll(): void {
-    if (!(scroller && listing && landed)) {
+  /** What a scroll to `offset` did (`onListScroll`). */
+  function readScroll(offset: number): void {
+    if (!(scroller && list && landed)) {
       return;
     }
-    lastTop = scroller.scrollTop;
-    giveRoomBack(scroller);
+    lastTop = offset;
+    giveRoomBack(scroller, offset);
     // A far landing's scroll: what it left and the screen above follow.
     if (narrow) {
       catchUpRest();
@@ -2891,9 +3097,9 @@
     const shrank = height < lastHeight;
     lastHeight = height;
     listStart =
-      listing.getBoundingClientRect().top -
+      (listing?.getBoundingClientRect().top ?? 0) -
       scroller.getBoundingClientRect().top +
-      lastTop;
+      offset;
     const was = onScreen;
     onScreen = rowAt(lastTop);
     // Until the reveal the list is laid out but not painted: nothing on it
@@ -2929,13 +3135,9 @@
     // 2,800px short for good. Anything
     // that moves what is on screen is the READER: wheel, scrollbar drag,
     // keyboard, a finger, its momentum and its bounce.
-    const clamped =
-      shrank && scroller.scrollTop >= height - scroller.clientHeight - 1;
+    const clamped = shrank && offset >= height - scroller.clientHeight - 1;
 
-    if (
-      (lastWrite !== null && Math.abs(scroller.scrollTop - lastWrite) <= 1) ||
-      clamped
-    ) {
+    if ((lastWrite !== null && Math.abs(offset - lastWrite) <= 1) || clamped) {
       return;
     }
     if (was && stillAt(was, lastTop)) {
@@ -2957,7 +3159,7 @@
     // only there (`onscrollend`).
     atBottom = false;
     const tail = tailTop(scroller);
-    const distance = tail - scroller.scrollTop;
+    const distance = tail - offset;
     // Reaching the end marks where it stood; the reader is at the tail for
     // as long as they stay at or past that mark (into the parked room
     // included). Rows arriving while the scroll bounces off the end move the
@@ -2965,10 +3167,7 @@
     // reached.
     if (distance <= TAIL_SLACK) {
       tailMark = tail;
-    } else if (
-      tailMark !== null &&
-      scroller.scrollTop < tailMark - TAIL_SLACK
-    ) {
+    } else if (tailMark !== null && offset < tailMark - TAIL_SLACK) {
       tailMark = null;
     }
     restsAtTail = tailMark !== null;
@@ -3091,10 +3290,10 @@
       heldRoom = into > next ? into : 0;
     });
   });
-  /** A room held open under a reader gives itself back as they scroll out of it, never under them. */
-  function giveRoomBack(node: HTMLElement): void {
+  /** A room held open under a reader gives itself back as they scroll out of it (to `offset`), never under them. */
+  function giveRoomBack(node: HTMLElement, offset: number): void {
     if (heldRoom > 0) {
-      const into = node.scrollTop - tailTop(node);
+      const into = offset - tailTop(node);
       heldRoom = into > parkedHeight ? into : 0;
     }
   }
@@ -3109,30 +3308,34 @@
       return;
     }
     const bottom = tailTop(scroller);
-    // Short of the tail, it is put there. Past it is the parked room the
-    // reader scrolled into to read the last row over a parked card: theirs.
-    if (bottom - scroller.scrollTop > 0.5) {
-      const was = scroller.scrollTop;
-      if (bottom - was > scroller.clientHeight) {
-        // Drawn already: its rows are built first (`stageFar`), and the
-        // pin lands once they are.
-        if (list && shown && renderedRows.length > 0 && !stagedReady) {
-          stageFar();
-          return;
-        }
-        landFar(was);
-      }
-      scroller.scrollTop = bottom;
+    // At the tail already, or past it in the parked room: where the view
+    // stands is the pin's, and its scroll (the browser clamping a list that
+    // got shorter under it) is told from the reader's by it (`lastWrite`).
+    if (bottom - scroller.scrollTop <= 0.5) {
       lastWrite = scroller.scrollTop;
-      // A send landing at the tail is carried through the pin. The pin runs
-      // once the list has measured the row it drew, a frame after that row
-      // was first drawn and its flight begun; lifted with the list in that
-      // one frame, the flight lost most of its way on a phone, where the tail
-      // sits right over the composer (33px of flight, 114px of jump on iOS).
-      if (listing) {
-        carry(listing, was - scroller.scrollTop);
-        carrySlides(scroller.scrollTop - was);
+      return;
+    }
+    // Short of the tail, it is put there.
+    const was = scroller.scrollTop;
+    if (bottom - was > scroller.clientHeight) {
+      // Drawn already: its rows are built first (`stageFar`), and the
+      // pin lands once they are.
+      if (list && shown && renderedRows.length > 0 && !stagedReady) {
+        stageFar();
+        return;
       }
+      landFar(was);
+    }
+    scroller.scrollTop = bottom;
+    lastWrite = scroller.scrollTop;
+    // A send landing at the tail is carried through the pin. The pin runs
+    // once the list has measured the row it drew, a frame after that row
+    // was first drawn and its flight begun; lifted with the list in that
+    // one frame, the flight lost most of its way on a phone, where the tail
+    // sits right over the composer (33px of flight, 114px of jump on iOS).
+    if (listing) {
+      carry(listing, was - scroller.scrollTop);
+      carrySlides(scroller.scrollTop - was);
     }
   }
 
@@ -3217,7 +3420,9 @@
       landingAway = undefined;
       if (awayAtTail()) {
         const was = scroller?.scrollTop;
-        keepWhole();
+        if (keepWhole()) {
+          flushSync();
+        }
         pinBottom();
         if (scroller && scroller.scrollTop !== was) {
           awayScroll = 2;
@@ -3237,15 +3442,20 @@
    * ResizeObserver, and virtua says so through `onresize` (virtua 0.53.2,
    * made for "stay at the bottom": inokawa/virtua#301, #408). That call comes
    * inside virtua's observer, after the frame's layout and before its paint.
-   * The list's new height is still Svelte state there, so the pin flushes it
-   * into virtua's container first, keeps the list whole (`keepWhole`), and
-   * reads the height the frame will paint. A row that flush mounts (the
+   * The list's new height is still Svelte state there: the pin keeps the
+   * list whole (`keepWhole`) and asks for the delivery after the layout
+   * that state is written to (`pinNext`), where it reads the height the
+   * frame will paint off that layout and writes the tail before the paint.
+   * It used to flush the state into virtua's container in the call and read
+   * the height there, which laid the page out under that flush's writes:
+   * the rows it mounted styled inside the pin (`tailTop`, 10.1ms of style
+   * in one reply frame at 4x CPU throttle). A row that flush mounts (the
    * range grown with the view) is observed at the next frame, not inside
    * the delivery (patches/virtua@0.53.4.patch): observed there, WebKit
    * reported "ResizeObserver loop completed with undelivered notifications"
    * as an ask left under a reader at the tail (composer-layers).
    *
-   * It pins in the call itself. It used to wait two microtasks: the landing
+   * It pins in the frame virtua measured in. It used to wait two microtasks: the landing
    * asked virtua to `scrollToIndex` the last row, and virtua aims such a
    * scroll again at every measurement, in a microtask it queues behind this
    * call, at the row that was last when it was asked, for as long as rows
@@ -3269,10 +3479,48 @@
       }
       return;
     }
-    flushSync();
     keepWhole();
-    pinBottom();
+    pinNext();
   }
+
+  /**
+   * THE PIN READS ON THE FRAME'S OWN LAYOUT. What the pin has to follow is
+   * written by the flush behind the delivery that asked for it (virtua's
+   * sizes, the spare), and the frame lays it out before it delivers again,
+   * to every box deeper than the shallowest it has delivered. The pin's
+   * mark (the markup, under the foot) is deeper than any row of the list, so
+   * observed again here it is delivered in the frame's next round, on that
+   * layout: the pin reads the tail there, with nothing to lay out, and its
+   * write lands before the paint. Asked for outside a delivery (a flush in a
+   * task), it is delivered in the next frame's first round.
+   */
+  let pinMark = $state<HTMLElement>();
+  let pinSizes: FrameObserver | null = null;
+  let pinAsked = false;
+  function pinNext(): void {
+    const mark = pinMark;
+    if (!mark) {
+      return;
+    }
+    pinAsked = true;
+    pinSizes ??= frameObserver(() => undefined, {
+      read: () => {
+        if (!pinAsked) {
+          return;
+        }
+        pinAsked = false;
+        if (pinMark) {
+          pinSizes?.unobserve(pinMark);
+        }
+        if (pinned()) {
+          keepWhole();
+          pinBottom();
+        }
+      },
+    });
+    pinSizes.observe(mark);
+  }
+  onDestroy(() => pinSizes?.disconnect());
 
   /**
    * THE REVEAL. A transcript opening draws its rows once, where they stay.
@@ -4153,7 +4401,6 @@
   aria-label={transcriptWords.transcript}
   style:--foot-room={"max(calc(var(--space-8) * 3), var(--composer-clearance, 0px))"}
   class="flex-auto overflow-y-auto anchor-none scroll-timeline-transcript-head py-0 ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5 min-h-0 relative tx-columns"
-  {onscroll}
   role="log"
   bind:this={scroller}
   {@attach measureView}
@@ -4226,7 +4473,7 @@
       >
         {commonWords.tryAgain}
       </Button>
-    {:else if renderedRows.length > 0 && session.cursor !== null}
+    {:else if renderedRows.length > 0 && built.before}
       <p
         data-slot="transcript-empty"
         class="mark-line flex items-center gap-space-2 text-size-meta font-normal text-ink-muted py-space-5"
@@ -4264,6 +4511,7 @@
       itemProps={itemAttrs}
       itemSize={ROW_ESTIMATE}
       {keepMounted}
+      onscroll={onListScroll}
       {onresize}
       {onscrollend}
       scrollRef={scroller}
@@ -4281,6 +4529,7 @@
         <TranscriptRow
           continues={continued.has(row.key)}
           handoff={presentation.handed.get(row.key)}
+          heightOf={heightOfRow}
           id={row.kind === "tools" ? undefined : row.key}
           leaving={presentation.leaving.has(row.key)}
           marked={marked?.key === row.key ? marked.state : undefined}
@@ -4405,7 +4654,20 @@
     aria-hidden="true"
     class="isolate h-(--foot-room) pointer-events-none"
     bind:this={foot}
-  ></div>
+  >
+    <!-- The pin's mark (`pinNext`): a pixel, deeper than any row of the
+         list, so it reports in the round after the one a row's resize is
+         delivered in. -->
+    <span class="block size-px"
+      ><span class="block size-px"
+        ><span class="block size-px"
+          ><span class="block size-px"
+            ><span class="block size-px" bind:this={pinMark}></span></span
+          ></span
+        ></span
+      ></span
+    >
+  </div>
   <!-- Floating above the composer column, at zero height in the flow, so
        nothing here coming or going moves a row: the catch-up, from the switch
        until it has appended, and — scrolled away from the tail — the way back.

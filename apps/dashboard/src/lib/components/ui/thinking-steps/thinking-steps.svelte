@@ -2,6 +2,7 @@
   // Native port of fluidfunctionalism.com/r/base/thinking-steps.json.
   import { Collapsible } from "bits-ui";
   import { untrack } from "svelte";
+  import { provideRootOpen } from "../collapsible/opened";
   import {
     getSizeContext,
     type SizeVariant,
@@ -24,6 +25,9 @@
   const inherited = getSizeContext();
   const resolvedSize = $derived(size ?? inherited?.() ?? "default");
   setSizeContext(() => resolvedSize);
+  // Its steps are built the first time it is open (collapsible-content): a
+  // transcript's every Reasoning row built and measured its markdown shut.
+  provideRootOpen(() => open ?? internalOpen);
 </script>
 
 <Collapsible.Root
