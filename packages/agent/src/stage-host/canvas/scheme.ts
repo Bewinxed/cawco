@@ -1,7 +1,7 @@
 /**
  * The canvas page's scheme, one source for all that draws on it: the frames
- * drawn in the page's own scheme and the page's sheet (its tokens'
- * `light-dark()`, through the root's `color-scheme`).
+ * drawn in the page's own scheme, the page's chrome (its tokens'
+ * `light-dark()`, through the root's `color-scheme`) and DialKit's roots.
  * The host's theme when the overlay said one (`html[data-theme]`, which it
  * keeps in step with the dashboard's), else the system's.
  */

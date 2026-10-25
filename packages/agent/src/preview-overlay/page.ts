@@ -27,13 +27,6 @@ import {
   resolvePin,
   withdrawPin,
 } from "@cawco/core/comments";
-import {
-  type ClipRun,
-  MOVE_LIMITS,
-  type MoveAsk,
-  STAGE_PATH_MAX,
-  type TunedClip,
-} from "@cawco/core/design-graph";
 import type { DocMap } from "@cawco/core/doc-maps";
 import type { InkGroup } from "@cawco/core/ink";
 import { pinName } from "@cawco/core/pin-name";
@@ -75,7 +68,6 @@ import {
 } from "./pins";
 import { inkChrome } from "./radial";
 import { drawInScheme, type Scheme } from "./schemes";
-import { keepStagePath, stagePath } from "./stage-path";
 
 const INSPECTOR_PATH = /^(.*):(\d+):(\d+)$/;
 /** A page hash: sha256, hex. */
@@ -2312,11 +2304,7 @@ async function writeDraft(message: HostMessage) {
   // Its title is what it stands on now: a later revision's words are what changed there, never its name.
   const pin = commentOn(
     artifact.doc(),
-    {
-      ...target,
-      title: pinName(target as unknown as Pin),
-      ...(stagePath() ? { state: stagePath() } : {}),
-    },
+    { ...target, title: pinName(target as unknown as Pin) },
     said
   );
   if (typeof pin === "string") {
@@ -2748,24 +2736,9 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       if (onPage) {
         post("cawco:sheet", { sheet: onPage });
       }
-      // And a component canvas's design graph, its kept move and its dials, said before the pane listened.
-      const said = window as {
-        __cawcoDials?: object;
-        __cawcoDesignGraph?: object;
-        __cawcoMove?: object | null;
-      };
-      if (said.__cawcoDesignGraph) {
-        post("cawco:graph", { graph: said.__cawcoDesignGraph });
-      }
-      if (said.__cawcoMove !== undefined) {
-        post("cawco:move", { move: said.__cawcoMove });
-      }
-      if (said.__cawcoDials) {
-        post("cawco:dials", { dials: said.__cawcoDials });
-      }
     },
     "cawco:place": (message) => takeInset(message.inset),
-    // A sheet's inspector: a story mounted again with the pane's args (null lets them go).
+    // A sheet's inspector: a story mounted again with the pane's args (null lets them go), and the story it shows.
     "cawco:story-args": (message) => {
       dispatchEvent(
         new CustomEvent("cawco:story-args", {
@@ -2779,55 +2752,12 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
         })
       );
     },
-    // The design graph's ask (core design-graph.ts `StageAsk`): the state kept, its path for a pin, the one a hover previews, the room the graph leaves.
-    "cawco:stage": (message) => {
-      const keptPoint = stagePoint(message.kept);
-      const room = message.room as { bottom?: unknown; end?: unknown } | null;
-      const roomOf = (value: unknown) =>
-        typeof value === "number" && Number.isFinite(value) && value >= 0
-          ? Math.min(value, STAGE_ROOM_MAX)
-          : 0;
-      if (!keptPoint) {
-        return;
-      }
-      const path =
-        typeof message.path === "string"
-          ? message.path.slice(0, STAGE_PATH_MAX)
-          : "";
-      keepStagePath(path);
+    "cawco:story-select": (message) => {
       dispatchEvent(
-        new CustomEvent("cawco:stage", {
-          detail: {
-            kept: keptPoint,
-            path,
-            peek: stagePoint(message.peek),
-            room: { end: roomOf(room?.end), bottom: roomOf(room?.bottom) },
-          },
+        new CustomEvent("cawco:story-select", {
+          detail: { story: message.story },
         })
       );
-    },
-    // The dock's ask of the kept move (core design-graph.ts `MoveAsk`): play, hold at a moment, rest, or keep the person's timing.
-    "cawco:move-ask": (message) => {
-      const ask = moveAskOf(message.ask);
-      if (ask) {
-        dispatchEvent(new CustomEvent("cawco:move-ask", { detail: ask }));
-      }
-    },
-    // A dial the person moved on the design graph.
-    "cawco:dial": (message) => {
-      const { name, value } = message;
-      if (
-        typeof name === "string" &&
-        name.length <= DIAL_NAME_MAX &&
-        (typeof value === "number"
-          ? Number.isFinite(value)
-          : typeof value === "boolean" ||
-            (typeof value === "string" && value.length <= DIAL_VALUE_MAX))
-      ) {
-        dispatchEvent(
-          new CustomEvent("cawco:dial", { detail: { name, value } })
-        );
-      }
     },
     // A component canvas's view from the pane's head: scheme, widths, motion, every permutation, zoom.
     "cawco:canvas-view": (message) => {
@@ -3055,167 +2985,6 @@ window.addEventListener("cawco:element-press", (event) => {
 window.addEventListener("cawco:sheet", (event) => {
   post("cawco:sheet", { sheet: (event as CustomEvent<object>).detail });
 });
-
-/* A component canvas's design graph: its sections and stories as its page says them on each change (stage-host runtime.ts `sayGraph`). */
-window.addEventListener("cawco:graph", (event) => {
-  post("cawco:graph", { graph: (event as CustomEvent<object>).detail });
-});
-/* Its kept move as the stage played it (stage-host moves.ts), null when the kept state has none that animates. */
-window.addEventListener("cawco:move", (event) => {
-  post("cawco:move", { move: (event as CustomEvent<object | null>).detail });
-});
-/* The agent's dials and the values its frames draw with (stage-host runtime.ts `sayDials`). */
-window.addEventListener("cawco:dials", (event) => {
-  post("cawco:dials", { dials: (event as CustomEvent<object>).detail });
-});
-
-/** The longest dial name and string value the pane may set. Ours: a CSS value. */
-const DIAL_NAME_MAX = 200;
-const DIAL_VALUE_MAX = 1000;
-/** The longest CSS easing a clip's run carries: a spring's `linear()` of 61 stops. Ours, with room. */
-const EASING_MAX = 4000;
-/** The longest a clip's run starts or lasts, ms. Ours: past any preview. */
-const RUN_MAX_MS = 600_000;
-
-const runMs = (value: unknown): number | null =>
-  typeof value === "number" &&
-  Number.isFinite(value) &&
-  value >= 0 &&
-  value <= RUN_MAX_MS
-    ? value
-    : null;
-
-/** A clip's run the pane said, bounded (core design-graph.ts `ClipRun`); null when it is not one. */
-function clipRunOf(said: unknown): ClipRun | null {
-  const run = said as Partial<Record<keyof ClipRun, unknown>> | null;
-  const id = run?.id;
-  const start = runMs(run?.start);
-  const duration = runMs(run?.duration);
-  if (
-    typeof id !== "number" ||
-    !Number.isInteger(id) ||
-    id < 0 ||
-    id >= MOVE_LIMITS.clips ||
-    start === null ||
-    duration === null ||
-    typeof run?.easing !== "string" ||
-    run.easing.length > EASING_MAX
-  ) {
-    return null;
-  }
-  return { id, start, duration, easing: run.easing };
-}
-
-/** A tuned clip the pane said, bounded (core design-graph.ts `TunedClip`); null when it is not one. */
-function tunedOf(said: unknown): TunedClip | null {
-  const one = said as Partial<Record<keyof TunedClip, unknown>> | null;
-  const text = (value: unknown, most: number) =>
-    typeof value === "string" ? value.slice(0, most) : null;
-  const token = (value: unknown) =>
-    value === null ? null : text(value, DIAL_NAME_MAX);
-  const delay = runMs(one?.delay);
-  const duration = runMs(one?.duration);
-  const move = text(one?.move, DIAL_VALUE_MAX);
-  const animation = text(one?.animation, DIAL_VALUE_MAX);
-  const easing = text(one?.easing, EASING_MAX);
-  const spring = one?.spring as Record<string, unknown> | null | undefined;
-  if (
-    delay === null ||
-    duration === null ||
-    move === null ||
-    animation === null ||
-    easing === null
-  ) {
-    return null;
-  }
-  return {
-    move,
-    animation,
-    delay,
-    duration,
-    easing,
-    durationToken: token(one?.durationToken ?? null),
-    easingToken: token(one?.easingToken ?? null),
-    spring:
-      spring &&
-      [spring.bounce, spring.response, spring.mass, spring.velocity].every(
-        (value) => typeof value === "number" && Number.isFinite(value)
-      )
-        ? {
-            bounce: spring.bounce as number,
-            response: spring.response as number,
-            mass: spring.mass as number,
-            velocity: spring.velocity as number,
-          }
-        : null,
-  };
-}
-
-/** The dock's ask the pane said, bounded (core design-graph.ts `MoveAsk`); null when it is not one. */
-function moveAskOf(said: unknown): MoveAsk | null {
-  const ask = said as {
-    op?: unknown;
-    runs?: unknown;
-    time?: unknown;
-    tuned?: unknown;
-  } | null;
-  const runs = () =>
-    Array.isArray(ask?.runs)
-      ? ask.runs
-          .slice(0, MOVE_LIMITS.clips)
-          .flatMap((one) => clipRunOf(one) ?? [])
-      : [];
-  switch (ask?.op) {
-    case "play":
-      return { op: "play", runs: runs() };
-    case "seek": {
-      const time = runMs(ask.time);
-      return time === null ? null : { op: "seek", runs: runs(), time };
-    }
-    case "rest":
-      return { op: "rest" };
-    case "tune":
-      return Array.isArray(ask.tuned)
-        ? {
-            op: "tune",
-            tuned: ask.tuned
-              .slice(0, MOVE_LIMITS.clips)
-              .flatMap((one) => tunedOf(one) ?? []),
-          }
-        : null;
-    default:
-      return null;
-  }
-}
-
-/** The most room a pane says its design graph takes from the page, in CSS px. Ours: past any screen. */
-const STAGE_ROOM_MAX = 10_000;
-/** The interactions a stage point may force (core stage.ts `Interaction`). */
-const STAGE_INTERACTIONS = new Set(["rest", "hover", "focus", "pressed"]);
-/** A stage point the pane said, bounded (core design-graph.ts `StagePoint`); null when it is not one. */
-function stagePoint(
-  said: unknown
-): { file: string; interaction: string; story: string } | null {
-  const point = said as
-    | { file?: unknown; interaction?: unknown; story?: unknown }
-    | null
-    | undefined;
-  if (
-    typeof point?.file !== "string" ||
-    typeof point.story !== "string" ||
-    typeof point.interaction !== "string" ||
-    !STAGE_INTERACTIONS.has(point.interaction) ||
-    point.file.length > 1000 ||
-    point.story.length > 200
-  ) {
-    return null;
-  }
-  return {
-    file: point.file,
-    story: point.story,
-    interaction: point.interaction,
-  };
-}
 
 /** What this page reads of one of its elements for a page that frames it from another origin (embeds.ts). */
 function remoteOf(el: Element): Remote {

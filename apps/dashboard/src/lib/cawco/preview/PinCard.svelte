@@ -1,9 +1,5 @@
 <script lang="ts">
-  import {
-    designGraphWords,
-    commentWords as said,
-    artifactWords as words,
-  } from "@cawco/core";
+  import { commentWords as said, artifactWords as words } from "@cawco/core";
   /**
    * A comment's thread, as a card beside its pin (the owner's pick; DESIGN.md,
    * A thread beside its pin). Its head's first row: the pin's pill, only
@@ -566,15 +562,6 @@
       </li>
     {/each}
   </ol>
-  {#if pin.state}
-    <!-- The design graph's kept state when it was placed, under the person's words (the owner's pick "pins"). -->
-    <p
-      class="mt-space-1 mx-0 mb-0 min-w-0 text-ink-muted type-meta text-pretty wrap-anywhere"
-      data-slot="pin-state"
-    >
-      {designGraphWords.pinKept(pin.state)}
-    </p>
-  {/if}
   {#if changes}
     <div class="mt-space-2" data-slot="pin-changes">{@render changes(pin)}</div>
   {/if}

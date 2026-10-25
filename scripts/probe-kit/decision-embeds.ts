@@ -586,13 +586,20 @@ function embedRead() {
   };
   const words = (el: Element) =>
     (el.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 48);
+  const shadow = document.getElementById("cawco-chrome")?.shadowRoot;
   const chrome = [
-    ...document.querySelectorAll(
-      ".cawco-section-head, .cawco-colhead, .cawco-frame-label, .cawco-frame-status"
-    ),
-  ]
-    .filter(seen)
-    .map((el) => `.${el.classList[0]} "${words(el)}"`);
+    ...[".head", ".foot", ".steps", ".outline"].flatMap((selector) => {
+      const el = shadow?.querySelector(selector);
+      return seen(el) ? [`${selector} "${words(el)}"`] : [];
+    }),
+    ...[
+      ...document.querySelectorAll(
+        ".cawco-section-head, .cawco-colhead, .cawco-frame-label, .cawco-frame-status"
+      ),
+    ]
+      .filter(seen)
+      .map((el) => `.${el.classList[0]} "${words(el)}"`),
+  ];
   const world = document.querySelector<HTMLElement>(".cawco-world");
   const scale = world
     ? world.getBoundingClientRect().width / (world.offsetWidth || 1)

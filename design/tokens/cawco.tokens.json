@@ -2295,55 +2295,6 @@
         "alpha": 0
       },
       "$description": "At night every raised shadow adds a 1px inner ring of ink."
-    },
-    "c-graph-slab": {
-      "$type": "color",
-      "$value": "{color.surface-recess-deep}",
-      "$description": "A state machine's slab on the design graph: one step down from the well by day; at night, where the well is already the deepest step, the recess (Projects spec §5.10, \"The design graph\"; mockup round 29)."
-    },
-    "c-graph-edge-ink": {
-      "$type": "color",
-      "$value": "{color.border-contrast}",
-      "$description": "An edge's ink on the design graph, 3:1 on its slab: the contrast edge by day, the row outline at night (Projects spec §5.10, \"The design graph\"; mockup round 29)."
-    },
-    "c-graph-edge-chosen": {
-      "$type": "color",
-      "$value": "{color.brand-ink-strong}",
-      "$description": "The move into the kept state, drawn stronger: the strong coral ink by day (3:1 on the slab), coral itself at night (Projects spec §5.10, \"The design graph\"; mockup round 29)."
-    },
-    "c-graph-label-bg": {
-      "$type": "color",
-      "$value": "{color.surface-recess}",
-      "$description": "An edge label's badge on the design graph: one step off the slab either way (Projects spec §5.10, \"The design graph\"; mockup round 29)."
-    },
-    "c-chosen-wash": {
-      "$type": "color",
-      "$value": {
-        "colorSpace": "oklab",
-        "components": [0.946, 0.02364, 0.01847],
-        "alpha": 0.4
-      },
-      "$description": "A chosen clip row's ground in the dock: the house wash at 40% by day, so a choice reads as chosen and not as a failure's red; the wash itself at night (Projects spec §5.10, \"The design graph\"; mockup round 29).",
-      "$extensions": {
-        "dev.cawco": {
-          "css": "color-mix(in oklab, {color.brand-wash} 40%, transparent)"
-        }
-      }
-    },
-    "c-clip-enter": {
-      "$type": "color",
-      "$value": "{color.data-ok}",
-      "$description": "A clip that brings its element in: its glyph and its bar's hue (pin 27, \"color things differently\") (Projects spec §5.10, \"The design graph\"; mockup round 29)."
-    },
-    "c-clip-change": {
-      "$type": "color",
-      "$value": "{color.status-live-glyph}",
-      "$description": "A clip that changes its element where it stands: its glyph and its bar's hue (Projects spec §5.10, \"The design graph\"; mockup round 29)."
-    },
-    "c-clip-exit": {
-      "$type": "color",
-      "$value": "{color.data-bad}",
-      "$description": "A clip that takes its element away: its glyph and its bar's hue (Projects spec §5.10, \"The design graph\"; mockup round 29)."
     }
   },
   "shadow": {
@@ -4335,19 +4286,6 @@
       },
       "$description": "An edge's stroke on a graph canvas: a component canvas's map, from one card to the next (DESIGN.md Artifact panel, canvas and ink)."
     },
-    "c-graph-edge-lit": {
-      "$type": "dimension",
-      "$value": {
-        "value": 3,
-        "unit": "px"
-      },
-      "$description": "The design graph's chosen edge, the move into the kept state: twice an edge's stroke, so the path reads from the rest at a glance (Projects spec §5.10, \"The design graph\"; mockup round 29).",
-      "$extensions": {
-        "dev.cawco": {
-          "css": "calc(2 * {size.c-graph-edge})"
-        }
-      }
-    },
     "c-map-node-w": {
       "$type": "dimension",
       "$value": {
@@ -4355,51 +4293,6 @@
         "unit": "px"
       },
       "$description": "A component on a canvas's map: its name, file and counts over its frames at 16:10, live when chosen; the widest that keeps five across a desk pane at the map's fit (DESIGN.md Artifact panel, canvas and ink)."
-    },
-    "c-graph-panel-w": {
-      "$type": "dimension",
-      "$value": {
-        "value": 448,
-        "unit": "px"
-      },
-      "$description": "The design graph's panel beside a component under review on a desk (Projects spec §5.10, \"The design graph\"; mockup round 28): two 168px states side by side in a machine's region with its padding, and the panel's own. A pane narrower than twice it holds the graph as a drawer at its foot instead."
-    },
-    "c-graph-node-w": {
-      "$type": "dimension",
-      "$value": {
-        "value": 168,
-        "unit": "px"
-      },
-      "$description": "A state on the design graph: its name over its variations' chips, two to a region's row in the 448px panel (mockup round 28)."
-    },
-    "c-graph-node-min-w": {
-      "$type": "dimension",
-      "$value": {
-        "value": 120,
-        "unit": "px"
-      },
-      "$description": "The narrowest a state on the design graph is drawn, in a phone's single column (mockup round 22's floor)."
-    },
-    "c-graph-region-band-h": {
-      "$type": "dimension",
-      "$value": {
-        "value": 24,
-        "unit": "px"
-      },
-      "$description": "A machine's header band on the design graph: its name in the label role across the top of its region (mockup round 27, pin 30)."
-    },
-    "c-graph-drawer-stop": {
-      "$type": "dimension",
-      "$value": {
-        "value": 379.8,
-        "unit": "px"
-      },
-      "$description": "The design graph's drawer at its first stop on a phone or a narrow pane: the graph in view, the component above it (mockup round 22).",
-      "$extensions": {
-        "dev.cawco": {
-          "css": "45dvh"
-        }
-      }
     },
     "c-pin-list-share": {
       "$type": "number",
@@ -7472,125 +7365,6 @@
         "unit": "px"
       },
       "$description": "The flex basis of a marketplace plugin offer's words before its Install button wraps under them (the skills page)."
-    },
-    "c-edge-head-leg": {
-      "$type": "dimension",
-      "$value": {
-        "value": 7,
-        "unit": "px"
-      },
-      "$description": "An edge's open chevron on the design graph: two legs this long at a right angle, meeting at the tip, in the edge's stroke (Projects spec §5.10, \"The design graph\"; mockup round 29)."
-    },
-    "c-handle-arc-gap": {
-      "$type": "dimension",
-      "$value": {
-        "value": 1.952,
-        "unit": "px"
-      },
-      "$description": "The resize handle's arc stands this far in from the panel's edge: 0.122 of the panel's radius, as iPadOS 26's corner handle stands (Projects spec §5.10, \"The design graph\"; mockup round 29).",
-      "$extensions": {
-        "dev.cawco": {
-          "css": "calc({radius.radius-panel} * 0.122)"
-        }
-      }
-    },
-    "c-handle-stroke": {
-      "$type": "dimension",
-      "$value": "{size.c-corner-grip-stroke}",
-      "$description": "The resize handle's stroke at rest: the house grip's (Projects spec §5.10, \"The design graph\"; mockup round 29)."
-    },
-    "c-handle-stroke-held": {
-      "$type": "dimension",
-      "$value": {
-        "value": 3,
-        "unit": "px"
-      },
-      "$description": "The resize handle's stroke reached or held: twice the grip's, so its run reads against the panel's 1px edge beside it (Projects spec §5.10, \"The design graph\"; mockup round 29).",
-      "$extensions": {
-        "dev.cawco": {
-          "css": "calc(2 * {size.c-corner-grip-stroke})"
-        }
-      }
-    },
-    "c-handle-reach": {
-      "$type": "dimension",
-      "$value": {
-        "value": 24,
-        "unit": "px"
-      },
-      "$description": "How far past the pointer the resize handle's leg reaches along the edge it points at, and its run's taper (Projects spec §5.10, \"The design graph\"; mockup round 29)."
-    },
-    "c-handle-band": {
-      "$type": "dimension",
-      "$value": {
-        "value": 8,
-        "unit": "px"
-      },
-      "$description": "A resizable edge's hit band on the design graph's panel and dock, taking no room; 44px under a finger (c-side-divider-hit) (Projects spec §5.10, \"The design graph\"; mockup round 29)."
-    },
-    "c-handle-corner": {
-      "$type": "dimension",
-      "$value": {
-        "value": 24,
-        "unit": "px"
-      },
-      "$description": "The resize handle's corner square: the one separator a key reaches (Projects spec §5.10, \"The design graph\"; mockup round 29)."
-    },
-    "c-tucked-tab": {
-      "$type": "dimension",
-      "$value": {
-        "value": 36,
-        "unit": "px"
-      },
-      "$description": "The tab the design graph's panel folds into at the pane's trailing edge, the graph's glyph in it (Projects spec §5.10, \"The design graph\"; mockup round 29)."
-    },
-    "c-curve-editor-w": {
-      "$type": "dimension",
-      "$value": {
-        "value": 120,
-        "unit": "px"
-      },
-      "$description": "A clip's curve drawn large in its controls: its plot and a bézier's two handles (Projects spec §5.10, \"The design graph\"; mockup round 29)."
-    },
-    "c-curve-editor-h": {
-      "$type": "dimension",
-      "$value": {
-        "value": 72,
-        "unit": "px"
-      },
-      "$description": "The curve editor's height: its plot, with room above and below for a curve that overshoots (Projects spec §5.10, \"The design graph\"; mockup round 29)."
-    },
-    "c-detent-snap": {
-      "$type": "dimension",
-      "$value": {
-        "value": 6,
-        "unit": "px"
-      },
-      "$description": "How near a duration token a drag or a slider lands before it snaps to it (the owner's pick \"snap\") (Projects spec §5.10, \"The design graph\"; mockup round 29)."
-    },
-    "c-dock-name-w": {
-      "$type": "dimension",
-      "$value": {
-        "value": 280,
-        "unit": "px"
-      },
-      "$description": "The dock's name column: a clip's element, its property and its facts beside its lane; a dock narrower than twice it stacks each row (Projects spec §5.10, \"The design graph\"; mockup round 29)."
-    },
-    "c-bar-handle-zone": {
-      "$type": "dimension",
-      "$value": {
-        "value": 8,
-        "unit": "px"
-      },
-      "$description": "A clip's bar's end zones: a press there drags that end, elsewhere the bar whole (Projects spec §5.10, \"The design graph\"; mockup round 29)."
-    },
-    "c-page-h-floor": {
-      "$type": "dimension",
-      "$value": {
-        "value": 240,
-        "unit": "px"
-      },
-      "$description": "What the dock's ceiling leaves the page under review, so its head and first field stay readable (Projects spec §5.10, \"The design graph\"; mockup round 29)."
     }
   },
   "layer": {

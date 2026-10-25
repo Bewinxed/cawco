@@ -2,7 +2,6 @@
 # site/biome.json's `files.includes` left out, each for the reason given there.
 mocks/
 design-previews/
-.mockups/
 .design-foundations/
 .mcp.json
 packages/jsonl-parser/

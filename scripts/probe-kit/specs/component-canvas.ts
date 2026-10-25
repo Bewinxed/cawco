@@ -21,14 +21,11 @@
  * 3. The rewrite reaches nested `&:hover`, `@layer`, `@scope` and
  *    Tailwind's `hover:`, nothing left unforced.
  * 4. A flow move's animations are listed (Svelte's transitions, React's
- *    CSS transitions); kept as the design graph asks it (`cawco:stage`),
- *    the move plays in its frame and says its clips (`cawco:move`), a seek
- *    (`cawco:move-ask`) holds the engine's own replays at that moment with
- *    the pane's timing, and a tuned duration goes to the artifact as
- *    `tuned`.
- * 5. A dial on `--radius` (`cawco:dial`, as the graph's dials move it) sets
- *    every frame's computed `border-radius`. (The agent's edges are the
- *    graph's to draw: canvas-design G6.)
+ *    CSS transitions); its timeline scrubs the engine's own animations and
+ *    a tuned duration goes to the artifact as `tuned`.
+ * 5. A dial on `--radius` sets every frame's computed `border-radius`.
+ * 6. A declared edge is drawn from just outside one frame's box to just
+ *    outside the other's, standing on neither.
  * 7. A story with no doc comment is reported `unnamed`.
  * 8. Sections load one states file at a time: the far one's modules are
  *    requested only once the canvas is moved to it.
@@ -40,20 +37,23 @@
  * 10. A mount that throws is `failed`, with its message and its place in
  *     the source, mapped through Vite's sourcemap (the throw's own line, not
  *     the compiled one).
- * 11. At 1440 and 390, light and dark: both schemes drawn side by side; at
- *     390 every frame reports `drawn`, never `empty`; the stage stands the
- *     kept state alone, Waiting and then Approved, and keeping Approved
- *     plays the move into it; after it, the stage still keeps every frame
- *     drawn and the design map still counts them.
+ * 11. At 1440 and 390, light and dark: both schemes drawn side by side; a
+ *     phone shows one frame with its state strip, and a step plays the move;
+ *     the phone's report says the frame it shows `drawn` and every other
+ *     `unshown`, never `empty`; after it, the stage still keeps every frame
+ *     drawn and the design map still counts them (an unshown frame keeps
+ *     the desk's draw of the same content).
  * 12. No console errors (the throwing story's page aside).
  * 13. With no panel open, the daemon's render (stage-render.ts) draws the
  *     canvas in the machine's own Chromium through a bridge socket shaped
  *     as preview-bridge.ts makes it (socat, unix to the stage's port): the
  *     stage's report says `by: "stage"`, every frame drawn, the move read,
  *     and a frame's picture.
- * 14. A section on its way (a states file whose helper takes 4 s): the
- *     page names no canvas (its name and ask are the panel head's:
- *     canvas-design 8i); the section is named in words (its title's last part) in the title
+ * 14. A section on its way (a states file whose helper takes 4 s): opened
+ *     alone, the band names the canvas once and draws no line under it (the
+ *     ask is the panel head's alone; framed, the band says neither:
+ *     canvas-design 8i);
+ *     the section is named in words (its title's last part) in the title
  *     role over its file in meta ink, never link-styled; one status line
  *     ("Drawing 2 stories"), the column's head and a skeleton frame per
  *     story stand from the first, unseen until `--dur-wait-grace` (their
@@ -81,7 +81,8 @@
  *     hover's background alone, no opacity read mid-breath.
  * 18. In Comment mode a canvas marks one thing, the element under the
  *     pointer: framed with the overlay, the overlay's one target over the
- *     button pointed at; no frame's label is marked in any mode.
+ *     button pointed at, and the frame in view's label no fill of its own
+ *     (in Interact it says the frame is in view, in `selected-bg`).
  * 19. A request no page makes is no canvas's error: a component's `.riv`
  *     asked for as `?import&amp;url` is answered with its error, the stage
  *     keeps none for the canvas and sends none to its open page (no
@@ -137,10 +138,6 @@ import type { Page } from "playwright-core";
 import { browserExecutable } from "../../../packages/agent/src/capabilities";
 import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
 import { renderCanvas } from "../../../packages/agent/src/stage-render";
-import type {
-  MoveModel,
-  StageAsk,
-} from "../../../packages/core/src/design-graph";
 import {
   type CanvasSpec,
   type DesignMap,
@@ -336,17 +333,8 @@ function errorsOf(page: Page): string[] {
   return errors;
 }
 
-/** The pane's design graph keeping Pairing's Approved at rest, as its `cawco:stage` asks the page. */
-const PAIRING_KEPT: StageAsk = {
-  kept: {
-    file: "src/Pairing.stories.js",
-    story: "Approved",
-    interaction: "rest",
-  },
-  path: "Pairing › Approved",
-  peek: null,
-  room: { bottom: 0, end: 0 },
-};
+/** A timeline clip's duration key in DialKit's store: `<clip>.duration`. */
+const DURATION_KEY = /\.duration$/;
 
 const KIT_SPEC: CanvasSpec = {
   name: "Kit",
@@ -451,88 +439,119 @@ async function svelteKit(kit: Kit, stage: Stage): Promise<void> {
     JSON.stringify(move)
   );
 
-  // The move kept, as the pane's design graph asks it (`cawco:stage`): the page plays it in its frame and says its clips (`cawco:move`); the pane's asks hold it at a moment (`seek`), play it, and keep a timing as `tuned`.
-  const heardMove = page.evaluate(
+  // The move's timeline: open it, seek, tune.
+  await page.click('text[data-cawco-move="src/Pairing.stories.js|Approved"]');
+  await page.waitForFunction(
     () =>
-      new Promise<MoveModel | null>((done) => {
-        addEventListener(
-          "cawco:move",
-          (event) =>
-            done((event as CustomEvent<MoveModel | null>).detail ?? null),
-          { once: true }
-        );
-        // No word in 15 s is none: the check below says so.
-        setTimeout(() => done(null), 15_000);
-      })
+      (
+        window as unknown as {
+          DialKit?: { TimelineStore: { getTimelines: () => unknown[] } };
+        }
+      ).DialKit?.TimelineStore.getTimelines().length === 1,
+    null,
+    { timeout: 15_000 }
   );
-  await page.evaluate((ask) => {
-    dispatchEvent(new CustomEvent("cawco:stage", { detail: ask }));
-  }, PAIRING_KEPT);
-  const played = await heardMove;
-  const face = played?.clips.find((one) => one.property.includes("transform"));
-  const runs = (played?.clips ?? []).map((one) => ({
-    id: one.id,
-    start: one.start,
-    duration: one.id === face?.id ? 600 : one.duration,
-    easing: one.easing,
-  }));
-  await page.evaluate(
-    (ask) => dispatchEvent(new CustomEvent("cawco:move-ask", { detail: ask })),
-    { op: "seek", runs, time: 160 }
-  );
+  await page.waitForTimeout(800);
+  const scrub = await page.evaluate(() => {
+    const dialKit = (
+      window as unknown as {
+        DialKit: {
+          TimelineStore: {
+            getTimelines: () => { id: string }[];
+            seek: (id: string, t: number) => void;
+          };
+          DialStore: {
+            getValues: (id: string) => Record<string, unknown>;
+            updateValues: (id: string, v: Record<string, unknown>) => void;
+          };
+        };
+      }
+    ).DialKit;
+    const id = dialKit.TimelineStore.getTimelines()[0]?.id as string;
+    const paused = document
+      .getAnimations()
+      .filter((one) => one.playState === "paused");
+    dialKit.TimelineStore.seek(id, 0.16);
+    return {
+      id,
+      keys: Object.keys(dialKit.DialStore.getValues(id)),
+      paused: paused.length,
+    };
+  });
   await page.waitForTimeout(300);
   const seeked = await page.evaluate(() =>
     document
       .getAnimations()
       .filter((one) => one.playState === "paused")
-      .map((one) => ({
-        at: Math.round(Number(one.currentTime)),
-        length: Number(one.effect?.getTiming().duration),
-      }))
+      .map((one) => Math.round(Number(one.currentTime)))
   );
-  const tunedClip = face
-    ? {
-        animation: `${face.element} ${face.property}`,
-        delay: face.start,
-        duration: 600,
-        durationToken: null,
-        easing: face.easing,
-        easingToken: null,
-        move: `${played?.from} → ${played?.to}`,
-        spring: null,
-      }
-    : null;
+  // The face's clip: its element stands after the move, so its replay previews (the code's fade is an outro, gone with its element).
+  const clip =
+    scrub.keys
+      .find((one) => one.endsWith(".duration") && one.includes("face"))
+      ?.replace(DURATION_KEY, "") ?? "";
   await page.evaluate(
-    (ask) => dispatchEvent(new CustomEvent("cawco:move-ask", { detail: ask })),
-    { op: "tune", tuned: tunedClip ? [tunedClip] : [] }
+    ({ id, clip: key }) => {
+      const dialKit = (
+        window as unknown as {
+          DialKit: {
+            DialStore: {
+              updateValues: (id: string, v: Record<string, unknown>) => void;
+            };
+          };
+        }
+      ).DialKit;
+      dialKit.DialStore.updateValues(id, { [`${key}.duration`]: 0.6 });
+    },
+    { id: scrub.id, clip }
   );
-  await page.waitForTimeout(400);
-  const tuned = await page.evaluate(
-    () =>
-      (window as unknown as { __sets: [string, unknown][] }).__sets
-        .filter(([key]) => key === "tuned")
-        .at(-1)?.[1] as { duration: number; move: string }[] | undefined
-  );
+  await page.waitForTimeout(1200);
+  const tuned = await page.evaluate(() => {
+    const sets = (window as unknown as { __sets: [string, unknown][] }).__sets;
+    return {
+      tuned: sets.filter(([key]) => key === "tuned").at(-1)?.[1] as
+        { animation: string; duration: number; move: string }[] | undefined,
+      durations: document
+        .getAnimations()
+        .filter((one) => one.playState === "paused")
+        .map((one) => Number(one.effect?.getTiming().duration)),
+    };
+  });
   kit.check(
-    "4b: played, the move into Approved plays in its frame and says its clips; a seek holds the engine's own replays at that moment with the pane's timing, and a tuned duration goes to the artifact as tuned",
-    !!played &&
-      played.from === "Waiting" &&
-      played.to === "Approved" &&
-      !!face &&
-      seeked.some((one) => one.at === 160) &&
-      seeked.some((one) => one.length === 600) &&
-      !!tuned?.some(
+    "4b: the move's timeline scrubs the engine's own animations, and a tuned duration previews on them and goes to the artifact as tuned",
+    scrub.paused > 0 &&
+      seeked.includes(160) &&
+      tuned.durations.includes(600) &&
+      !!tuned.tuned?.some(
         (one) => one.duration === 600 && one.move === "Waiting → Approved"
       ),
-    `move ${JSON.stringify(played?.clips.map((one) => `${one.id} ${one.kind} ${one.property} ${one.duration}`))}; seeked ${JSON.stringify(seeked)}; tuned ${JSON.stringify(tuned)}`
+    `timeline ${scrub.id}: ${scrub.paused} paused replays, seeked to ${JSON.stringify(seeked)} ms; durations after tuning ${JSON.stringify(tuned.durations)}; tuned ${JSON.stringify(tuned.tuned)}`
   );
 
-  // The radius dial, as the pane's dials move it (`cawco:dial`): every frame draws it, and the artifact keeps it.
-  await page.evaluate(() =>
-    dispatchEvent(
-      new CustomEvent("cawco:dial", { detail: { name: "radius", value: 20 } })
-    )
+  // The radius dial.
+  await page.waitForFunction(
+    () =>
+      (
+        window as unknown as {
+          DialKit?: {
+            DialStore: { getValues: (id: string) => Record<string, unknown> };
+          };
+        }
+      ).DialKit?.DialStore.getValues("cawco-dials")?.radius !== undefined,
+    null,
+    { timeout: 15_000 }
   );
+  await page.evaluate(() => {
+    (
+      window as unknown as {
+        DialKit: {
+          DialStore: {
+            updateValues: (id: string, v: Record<string, unknown>) => void;
+          };
+        };
+      }
+    ).DialKit.DialStore.updateValues("cawco-dials", { radius: 20 });
+  });
   await page.waitForTimeout(800);
   const radii = await page.evaluate(() =>
     [...document.querySelectorAll(".cawco-world .cawco-frame-body")].map(
@@ -554,6 +573,61 @@ async function svelteKit(kit: Kit, stage: Stage): Promise<void> {
       radii.filter((one) => one !== "none").every((one) => one === "20px") &&
       JSON.stringify(dialSet) === JSON.stringify({ radius: 20 }),
     `${radii.length} frames' radius: ${[...new Set(radii)].join(", ")}; dials set ${JSON.stringify(dialSet)}`
+  );
+
+  // The agent's edge.
+  const edge = await page.evaluate(() => {
+    const path = document.querySelector<SVGPathElement>(".cawco-edge-edge");
+    if (!path) {
+      return null;
+    }
+    const length = path.getTotalLength();
+    const start = path.getPointAtLength(0);
+    const end = path.getPointAtLength(length);
+    const svg = path.ownerSVGElement?.getBoundingClientRect();
+    const { z } = (
+      window as unknown as { __cawcoCanvas: { world: () => { z: number } } }
+    ).__cawcoCanvas.world();
+    const box = (key: string) =>
+      document
+        .querySelector(`[data-cawco-key="${CSS.escape(key)}"]`)
+        ?.getBoundingClientRect();
+    const from = box(path.dataset.cawcoFrom ?? "");
+    const to = box(path.dataset.cawcoTo ?? "");
+    const at = (point: DOMPoint) => ({
+      x: (svg?.x ?? 0) + point.x * z,
+      y: (svg?.y ?? 0) + point.y * z,
+    });
+    return {
+      from: path.dataset.cawcoFrom,
+      to: path.dataset.cawcoTo,
+      start: at(start),
+      end: at(end),
+      fromBox: from?.toJSON(),
+      toBox: to?.toJSON(),
+    };
+  });
+  // Each end stands just clear of its frame's left side (runtime.ts
+  // `EDGE_CLEAR`, 4px at zoom 1), level with the frame, never on it: a
+  // frame's picture holds none of the canvas's lines.
+  const besideLeft = (
+    point: { x: number; y: number } | undefined,
+    box: DOMRect | undefined
+  ) =>
+    !!point &&
+    !!box &&
+    point.x <= box.x - 1 &&
+    point.x >= box.x - 8 &&
+    point.y >= box.y &&
+    point.y <= box.y + box.height;
+  kit.check(
+    "6: the declared edge is drawn from just outside Primary's frame box to just outside Quiet's, standing on neither",
+    !!edge &&
+      edge.from?.includes("|Primary|rest") === true &&
+      edge.to?.includes("|Quiet|rest") === true &&
+      besideLeft(edge.start, edge.fromBox as DOMRect) &&
+      besideLeft(edge.end, edge.toBox as DOMRect),
+    JSON.stringify(edge)
   );
 
   const unnamedLabel = await page
@@ -613,9 +687,7 @@ async function views(kit: Kit, stage: Stage): Promise<void> {
     const deskErrors = errorsOf(desk);
     await desk.goto(canvasUrl(stage, KIT_FILES, KIT_SPEC));
     await reportOn(desk, 2500);
-    await desk.evaluate((ask) => {
-      dispatchEvent(new CustomEvent("cawco:stage", { detail: ask }));
-    }, PAIRING_KEPT);
+    await desk.click('text[data-cawco-move="src/Pairing.stories.js|Approved"]');
     await desk.waitForTimeout(1500);
     if (theme === "dark") {
       const scheme = await desk.evaluate(
@@ -649,11 +721,15 @@ async function views(kit: Kit, stage: Stage): Promise<void> {
       (one) => `${one.story}/${one.interaction}:${one.state}`
     );
     kit.check(
-      `11d: at 390 (${theme}) every Pairing frame reports drawn, none empty (a frame the stage doesn't stand is drawn out of sight, never "reads like a failure")`,
-      states.length > 0 && states.every((one) => one.endsWith(":drawn")),
+      `11d: at 390 (${theme}) the frame on screen reports drawn and every frame the phone does not show reports unshown, none empty (the plan-view builder: "reads like a failure")`,
+      states.filter((one) => one.endsWith(":drawn")).length === 1 &&
+        states.some((one) => one.endsWith(":unshown")) &&
+        states.every(
+          (one) => one.endsWith(":drawn") || one.endsWith(":unshown")
+        ),
       states.join(", ")
     );
-    // What the stage keeps and the design map counts after the phone looked.
+    // What the stage keeps and the design map counts after the phone looked: the desk's draw of the same content still stands.
     const stageKept = (await (
       await fetch(
         `${stage.base}/__cawco/report?file=${encodeURIComponent("src/Pairing.stories.js")}`
@@ -669,54 +745,52 @@ async function views(kit: Kit, stage: Stage): Promise<void> {
       (one) => `${one.story}/${one.interaction}:${one.state}`
     );
     kit.check(
-      `11e: after the 390 view (${theme}) the stage still keeps every Pairing frame drawn and the design map still counts them drawn`,
+      `11e: after the 390 view (${theme}) the stage still keeps every Pairing frame drawn and the design map still counts them drawn (an unshown frame keeps the desk's draw of the same content)`,
       keptStates.length > 0 &&
         keptStates.every((one) => one.endsWith(":drawn")) &&
         card?.drawn === keptStates.length &&
         (card?.stories ?? []).every((one) => one.drawn),
       `kept ${keptStates.join(", ")}; design map ${card?.name} drawn ${card?.drawn}, stories ${JSON.stringify(card?.stories?.map((one) => `${one.name}:${one.drawn}`))}`
     );
-    // The stage on a phone, as the graph's drawer asks it: Waiting alone, then Approved alone with its move played.
-    const standing = () =>
-      phone.evaluate(() =>
-        [
-          ...document.querySelectorAll<HTMLElement>(
-            ".cawco-world .cawco-frame[data-cawco-on-stage]"
-          ),
-        ].map((one) => one.dataset.cawcoStory)
-      );
-    await phone.evaluate(
-      (ask) => {
-        dispatchEvent(new CustomEvent("cawco:stage", { detail: ask }));
-      },
-      { ...PAIRING_KEPT, kept: { ...PAIRING_KEPT.kept, story: "Waiting" } }
-    );
-    await phone.waitForTimeout(800);
-    const before = await standing();
-    const played = phone.evaluate(
-      () =>
-        new Promise<number>((done) => {
-          addEventListener(
-            "cawco:move",
-            (event) =>
-              done(
-                (event as CustomEvent<{ clips: unknown[] } | null>).detail
-                  ?.clips.length ?? 0
-              ),
-            { once: true }
-          );
-          setTimeout(() => done(-1), 15_000);
-        })
-    );
-    await phone.evaluate((ask) => {
-      dispatchEvent(new CustomEvent("cawco:stage", { detail: ask }));
-    }, PAIRING_KEPT);
-    const clips = await played;
-    const after = await standing();
+    const shown = await phone.evaluate(() => ({
+      phone: document.documentElement.hasAttribute("data-cawco-phone"),
+      visible: [
+        ...document.querySelectorAll<HTMLElement>(".cawco-world .cawco-frame"),
+      ]
+        .filter((one) => getComputedStyle(one).display !== "none")
+        .map((one) => one.dataset.cawcoStory),
+      strip: !!document
+        .getElementById("cawco-chrome")
+        ?.shadowRoot?.querySelector(".strip select"),
+    }));
+    const next = phone.locator("#cawco-chrome .steps button", {
+      hasText: "Approved",
+    });
+    await next.click();
+    await phone.waitForTimeout(1800);
+    const after = await phone.evaluate(() => ({
+      visible: [
+        ...document.querySelectorAll<HTMLElement>(".cawco-world .cawco-frame"),
+      ]
+        .filter((one) => getComputedStyle(one).display !== "none")
+        .map((one) => one.dataset.cawcoStory),
+      timelines:
+        (
+          window as unknown as {
+            DialKit?: { TimelineStore: { getTimelines: () => unknown[] } };
+          }
+        ).DialKit?.TimelineStore.getTimelines().length ?? 0,
+    }));
     kit.check(
-      `11c: at 390 (${theme}) the stage stands the kept state alone, Waiting and then Approved, and keeping Approved plays the move into it`,
-      before.join() === "Waiting" && after.join() === "Approved" && clips > 0,
-      `before ${JSON.stringify(before)}; after ${JSON.stringify(after)}; ${clips} clips`
+      `11c: at 390 (${theme}) one frame stands with its state strip, and the step to the next story plays the move`,
+      shown.phone &&
+        shown.visible.length === 1 &&
+        shown.visible[0] === "Waiting" &&
+        shown.strip &&
+        after.visible.length === 1 &&
+        after.visible[0] === "Approved" &&
+        after.timelines === 1,
+      `before ${JSON.stringify(shown)}; after ${JSON.stringify(after)}`
     );
     kit.check(
       `12c: no console errors at 390, ${theme}`,
@@ -999,7 +1073,16 @@ async function waiting(kit: Kit, stage: Stage): Promise<void> {
   });
   await page.waitForSelector(".cawco-section-status", { state: "attached" });
   const seen = await page.evaluate(() => ({
-    page: document.body.innerText,
+    band:
+      document
+        .getElementById("cawco-chrome")
+        ?.shadowRoot?.querySelector(".band")?.textContent ?? "",
+    lines:
+      document
+        .getElementById("cawco-chrome")
+        ?.shadowRoot?.querySelectorAll(".band > div:not(.name, .crumb, .tools)")
+        .length ?? -1,
+    page: `${document.body.innerText}\n${document.getElementById("cawco-chrome")?.shadowRoot?.textContent ?? ""}`,
     title: document.querySelector(".cawco-section-title")?.textContent,
     file: document.querySelector(".cawco-section-file")?.textContent,
     status: document.querySelector(".cawco-section-status")?.textContent,
@@ -1023,14 +1106,16 @@ async function waiting(kit: Kit, stage: Stage): Promise<void> {
     own.decoration === "none" &&
     own.tag !== "A";
   kit.check(
-    "14a: the page names no canvas (its name and ask are the panel head's); the section is named in words in the title role over its file in meta ink, never link-styled, and no text holds a route",
-    !seen.page.includes(spec.name) &&
+    "14a: alone (not framed), the band names the canvas once and draws no line under it, nothing else naming it; the section is named in words in the title role over its file in meta ink, never link-styled, and no text holds a route",
+    seen.band.includes(spec.name) &&
+      seen.lines === 0 &&
+      seen.page.split(spec.name).length - 1 === 1 &&
       seen.title === "Late badge" &&
       seen.file === "src/Slow.stories.js" &&
       same(title, titleWant) &&
       same(file, fileWant) &&
       !seen.page.includes("/@cawco/"),
-    `page ${JSON.stringify(seen.page.slice(0, 200))}; head ${JSON.stringify(seen.title)} ${JSON.stringify(title)} (title role ${JSON.stringify(titleWant)}) over ${JSON.stringify(seen.file)} ${JSON.stringify(file)} (meta ${JSON.stringify(fileWant)})`
+    `band ${JSON.stringify(seen.band)}; head ${JSON.stringify(seen.title)} ${JSON.stringify(title)} (title role ${JSON.stringify(titleWant)}) over ${JSON.stringify(seen.file)} ${JSON.stringify(file)} (meta ${JSON.stringify(fileWant)})`
   );
 
   // The wait's grace and fade, as the page's tokens resolve them.
@@ -1741,7 +1826,7 @@ async function commentMarksOne(kit: Kit, stage: Stage): Promise<void> {
       () =>
         !!document.querySelector("cawco-overlay") &&
         !!document.querySelector(
-          '.cawco-frame[data-cawco-story="Primary"][data-cawco-interaction="rest"] .cawco-frame-body button'
+          ".cawco-frame[data-cawco-current] .cawco-frame-body button"
         ) &&
         !!(window as unknown as { __cawcoCanvas?: { report: unknown } })
           .__cawcoCanvas?.report,
@@ -1769,13 +1854,9 @@ async function commentMarksOne(kit: Kit, stage: Stage): Promise<void> {
             const box = one.getBoundingClientRect();
             return { x: box.x, y: box.y, w: box.width, h: box.height };
           });
-        // Primary's frame at rest, the button the pointer goes to; and every frame's label, which no mode marks.
         const current = document.querySelector<HTMLElement>(
-          '.cawco-frame[data-cawco-story="Primary"][data-cawco-interaction="rest"]'
+          ".cawco-frame[data-cawco-current]"
         );
-        const labels = [
-          ...document.querySelectorAll<HTMLElement>(".cawco-frame-label"),
-        ].map((one) => getComputedStyle(one).backgroundColor);
         const label = current?.querySelector<HTMLElement>(
           ":scope > .cawco-frame-label"
         );
@@ -1785,6 +1866,9 @@ async function commentMarksOne(kit: Kit, stage: Stage): Promise<void> {
           ?.getBoundingClientRect();
         return {
           key: current?.dataset.cawcoKey ?? null,
+          commenting: document.documentElement.hasAttribute(
+            "data-cawco-commenting"
+          ),
           rects,
           button: button && {
             x: button.x,
@@ -1794,9 +1878,6 @@ async function commentMarksOne(kit: Kit, stage: Stage): Promise<void> {
           },
           fill: label ? getComputedStyle(label).backgroundColor : null,
           ink: words ? getComputedStyle(words).color : null,
-          filled: labels.filter(
-            (one) => one !== "rgba(0, 0, 0, 0)" && one !== "transparent"
-          ).length,
         };
       });
     const resting = await read();
@@ -1813,6 +1894,8 @@ async function commentMarksOne(kit: Kit, stage: Stage): Promise<void> {
     await tell({ type: "cawco:mode", mode: "interact" });
     await page.waitForTimeout(400);
     const back = await read();
+    const clear = (colour: string | null) =>
+      colour === "rgba(0, 0, 0, 0)" || colour === "transparent";
     const [over] = commenting.rects;
     const onButton =
       !!over &&
@@ -1822,14 +1905,20 @@ async function commentMarksOne(kit: Kit, stage: Stage): Promise<void> {
       Math.abs(over.w - button.w) <= 8 &&
       Math.abs(over.h - button.h) <= 8;
     kit.check(
-      `18: in Comment a canvas marks one thing, the button under the pointer: one target over it (${commenting.rects.length} standing); no frame's label is marked in any mode (filled labels: ${resting.filled} at rest, ${commenting.filled} commenting, ${back.filled} back), and back in Interact no target stands`,
+      `18: in Comment a canvas marks one thing, the button under the pointer: one target over it (${commenting.rects.length} standing), the frame in view's label no fill (${commenting.fill}) and its words out of the selected ink (${commenting.ink}, in view ${resting.ink}); at rest in Interact its label says it is in view (${resting.fill}), and back in Interact it does again (${back.fill}) with no target standing`,
       !!resting.key &&
+        commenting.key === resting.key &&
+        back.key === resting.key &&
+        !clear(resting.fill) &&
         resting.rects.length === 0 &&
+        commenting.commenting &&
         commenting.rects.length === 1 &&
         onButton &&
-        resting.filled === 0 &&
-        commenting.filled === 0 &&
-        back.filled === 0 &&
+        clear(commenting.fill) &&
+        commenting.ink !== resting.ink &&
+        back.ink === resting.ink &&
+        !back.commenting &&
+        back.fill === resting.fill &&
         back.rects.length === 0,
       JSON.stringify({ resting, commenting, back })
     );

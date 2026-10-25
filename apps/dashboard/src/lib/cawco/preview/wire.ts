@@ -7,22 +7,10 @@
  */
 
 import {
-  type Bezier,
-  type ClipKind,
-  type DialsModel,
-  type GraphModel,
-  type GraphSection,
-  type GraphStory,
-  MOVE_LIMITS,
-  type MoveClip,
-  type MoveModel,
-} from "@cawco/core/design-graph";
-import {
   type ShellShortcut,
   shellShortcutNamed,
 } from "@cawco/core/shell-shortcuts";
 import {
-  CANVAS_SPEC_LIMITS,
   type ComponentDoc,
   FORMS,
   type Form,
@@ -406,213 +394,6 @@ export function previewSheet(value: unknown): SheetOnPage | null {
   };
 }
 
-/** The interactions a story's CSS may reach past rest (core stage.ts `Interaction`). */
-const GRAPH_INTERACTIONS = new Set(["hover", "focus", "pressed"]);
-
-const graphStoryOf = (value: unknown): GraphStory | null => {
-  const raw = record(value);
-  const name = text(raw?.name, SHEET_BOUNDS.name);
-  if (!(raw && name)) {
-    return null;
-  }
-  return {
-    name,
-    label: text(raw.label, SHEET_BOUNDS.text),
-    from: text(raw.from, SHEET_BOUNDS.name),
-    interactions: list(raw.interactions, 3).filter(
-      (one): one is GraphStory["interactions"][number] =>
-        typeof one === "string" && GRAPH_INTERACTIONS.has(one)
-    ),
-  };
-};
-
-const graphSectionOf = (value: unknown): GraphSection | null => {
-  const raw = record(value);
-  const file = text(raw?.file, SHEET_BOUNDS.text);
-  const name = text(raw?.name, SHEET_BOUNDS.text);
-  if (!(raw && file && name)) {
-    return null;
-  }
-  return {
-    file,
-    name,
-    state:
-      raw.state === "drawn" || raw.state === "failed" ? raw.state : "waiting",
-    stories: list(raw.stories, SHEET_BOUNDS.stories).flatMap(
-      (one) => graphStoryOf(one) ?? []
-    ),
-  };
-};
-
-/** A component canvas's design graph as its page says it (`cawco:graph`, core design-graph.ts `GraphModel`). */
-export function previewGraph(value: unknown): GraphModel | null {
-  const raw = record(value);
-  if (!raw) {
-    return null;
-  }
-  const group = record(raw.group) ?? {};
-  return {
-    sections: list(raw.sections, CANVAS_SPEC_LIMITS.files).flatMap(
-      (one) => graphSectionOf(one) ?? []
-    ),
-    group: Object.fromEntries(
-      Object.entries(group)
-        .slice(0, SHEET_BOUNDS.stories * CANVAS_SPEC_LIMITS.files)
-        .flatMap(([child, parent]) => {
-          const to = text(parent, SHEET_BOUNDS.text);
-          return to ? [[child.slice(0, SHEET_BOUNDS.text), to]] : [];
-        })
-    ),
-    edges: list(raw.edges, CANVAS_SPEC_LIMITS.edges).flatMap((one) => {
-      const edge = record(one);
-      const from = text(edge?.from, SHEET_BOUNDS.text);
-      const to = text(edge?.to, SHEET_BOUNDS.text);
-      const label = text(edge?.label, CANVAS_SPEC_LIMITS.label);
-      return from && to ? [{ from, to, ...(label ? { label } : {}) }] : [];
-    }),
-  };
-}
-
-const CLIP_KINDS = new Set<ClipKind>(["enter", "change", "exit"]);
-/** The longest words a clip's element, property or easing is said in. Ours. */
-const CLIP_BOUNDS = { words: 200, easing: 4000, ms: 600_000 } as const;
-
-const clipMs = (value: unknown): number | null => {
-  const ms = finite(value);
-  return ms !== null && ms >= 0 && ms <= CLIP_BOUNDS.ms ? ms : null;
-};
-
-const clipOf = (value: unknown, id: number): MoveClip | null => {
-  const raw = record(value);
-  const start = clipMs(raw?.start);
-  const duration = clipMs(raw?.duration);
-  const element = text(raw?.element, CLIP_BOUNDS.words);
-  const property = text(raw?.property, CLIP_BOUNDS.words);
-  const easing = text(raw?.easing, CLIP_BOUNDS.easing);
-  if (
-    !raw ||
-    start === null ||
-    duration === null ||
-    element === null ||
-    property === null ||
-    easing === null ||
-    !CLIP_KINDS.has(raw.kind as ClipKind)
-  ) {
-    return null;
-  }
-  return {
-    id,
-    kind: raw.kind as ClipKind,
-    element,
-    property,
-    easing,
-    start,
-    duration,
-    source: text(raw.source, CLIP_BOUNDS.words),
-  };
-};
-
-const bezierPoints = (value: unknown): Bezier | null => {
-  const points = list(value, 4).map(finite);
-  return points.length === 4 && points.every((one) => one !== null)
-    ? (points as Bezier)
-    : null;
-};
-
-/** A component canvas's kept move as its page says it (`cawco:move`, core design-graph.ts `MoveModel`); null when the kept state has none. */
-export function previewMove(value: unknown): MoveModel | null {
-  const raw = record(value);
-  const file = text(raw?.file, SHEET_BOUNDS.text);
-  const from = text(raw?.from, SHEET_BOUNDS.name);
-  const to = text(raw?.to, SHEET_BOUNDS.name);
-  if (!(raw && file && from && to)) {
-    return null;
-  }
-  const tokens = record(raw.tokens);
-  return {
-    file,
-    from,
-    to,
-    error: text(raw.error, SHEET_BOUNDS.text),
-    clips: list(raw.clips, MOVE_LIMITS.clips).flatMap(
-      (one, id) => clipOf(one, id) ?? []
-    ),
-    tokens: {
-      durations: list(tokens?.durations, MOVE_LIMITS.durations).flatMap(
-        (one) => {
-          const token = record(one);
-          const name = text(token?.name, SHEET_BOUNDS.name);
-          const ms = clipMs(token?.ms);
-          return name && ms ? [{ name, ms }] : [];
-        }
-      ),
-      easings: list(tokens?.easings, MOVE_LIMITS.easings).flatMap((one) => {
-        const token = record(one);
-        const name = text(token?.name, SHEET_BOUNDS.name);
-        const points = bezierPoints(token?.points);
-        return name && points ? [{ name, points }] : [];
-      }),
-    },
-  };
-}
-
-const DIAL_KINDS = new Set(["number", "color", "select", "toggle"]);
-
-/** A component canvas's dials as its page says them (`cawco:dials`, core design-graph.ts `DialsModel`). */
-export function previewDials(value: unknown): DialsModel {
-  const raw = record(value);
-  const values: DialsModel["values"] = {};
-  for (const [name, one] of Object.entries(record(raw?.values) ?? {}).slice(
-    0,
-    CANVAS_SPEC_LIMITS.dials
-  )) {
-    if (
-      typeof one === "boolean" ||
-      (typeof one === "number" && Number.isFinite(one)) ||
-      typeof one === "string"
-    ) {
-      values[name.slice(0, SHEET_BOUNDS.name)] =
-        typeof one === "string" ? one.slice(0, SHEET_BOUNDS.text) : one;
-    }
-  }
-  return {
-    values,
-    dials: list(raw?.dials, CANVAS_SPEC_LIMITS.dials).flatMap((one) => {
-      const dial = record(one);
-      const name = text(dial?.name, SHEET_BOUNDS.name);
-      const target = record(dial?.target);
-      const cssVar = text(target?.cssVar, SHEET_BOUNDS.name);
-      const arg = text(target?.arg, SHEET_BOUNDS.name);
-      if (!(
-        dial &&
-        name &&
-        DIAL_KINDS.has(String(dial.kind)) &&
-        (cssVar || arg)
-      )) {
-        return [];
-      }
-      const number = (key: string) => finite(dial[key]) ?? undefined;
-      return [
-        {
-          name,
-          kind: dial.kind as "number" | "color" | "select" | "toggle",
-          target: cssVar ? { cssVar } : { arg: arg as string },
-          label: text(dial.label, SHEET_BOUNDS.text) ?? undefined,
-          min: number("min"),
-          max: number("max"),
-          step: number("step"),
-          unit: text(dial.unit, 20) ?? undefined,
-          options: Array.isArray(dial.options)
-            ? list(dial.options, SHEET_BOUNDS.options).flatMap(
-                (option) => text(option, SHEET_BOUNDS.text) ?? []
-              )
-            : undefined,
-        },
-      ];
-    }),
-  };
-}
-
 /** The pane's keys: V, C and D its modes, `C` (⇧C) its pins shown or hidden, J and K a step, Enter and Esc. */
 export type PaneKey =
   "v" | "c" | "d" | "C" | "j" | "k" | "/" | "Enter" | "Escape";
@@ -666,9 +447,6 @@ const PAGE_MESSAGES = [
   "cawco:error",
   "cawco:resolved",
   "cawco:sheet",
-  "cawco:graph",
-  "cawco:move",
-  "cawco:dials",
 ] as const;
 
 /** A message the pane answers by its `type`; each field besides is checked by what reads it. */

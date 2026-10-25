@@ -535,12 +535,8 @@ const started = (): Worker | null => {
     const url = URL.createObjectURL(
       new Blob([__CAWCO_DOC_WORKER__], { type: "text/javascript" })
     );
-    const made = new Worker(url, { name: "cawco-doc" });
-    // Let go once the worker has loaded (its first word, or its error), never as it is made: WebKit may not have read the blob yet, and its worker then never starts ("WebKitBlobResource error 1"; "It is only safe to revoke the URL after receiving a message or an error from the worker", microsoft/playwright#33794).
-    const letGo = () => URL.revokeObjectURL(url);
-    made.addEventListener("message", letGo, { once: true });
-    made.addEventListener("error", letGo, { once: true });
-    worker = made;
+    worker = new Worker(url, { name: "cawco-doc" });
+    URL.revokeObjectURL(url);
   } catch {
     workerless = true;
     return null;
