@@ -358,7 +358,12 @@ export interface AwayWait {
 }
 
 /** A waiting step as the recap names it: the step's chip, labelled by its words, then its page's chip. */
-const waitLine = ({ artifact, content, session, step }: AwayWait): string =>
+export const waitLine = ({
+  artifact,
+  content,
+  session,
+  step,
+}: AwayWait): string =>
   `- ${stepLink(session, step, content)} waits on ${artifactLink(artifact.id, artifact.name)}`;
 
 /** The heading a session's away notes open with in its plan's spec: `## Since 12:18 (you were away)`. */
