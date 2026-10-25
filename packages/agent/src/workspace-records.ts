@@ -17,7 +17,7 @@ import {
 } from "@cawco/core/state-file";
 import { isPlace } from "@cawco/core/workspace-policy";
 import { reportDamaged } from "./damaged-records";
-import { overlaySync } from "./layer";
+import { ownFolderSync } from "./layer";
 
 interface Scan {
   refs: WorkspaceRef[];
@@ -135,7 +135,9 @@ const insideCloneOf = async (at: string, id: string): Promise<boolean> => {
  * the deepest. A Linux view of a folder (layer.ts) is no copy of its own:
  * its path is the person's folder, which any number of workspaces and the
  * person's own sessions share, so it holds no path here, and a session
- * there is a workspace's only when its spawn names it. The bridge plugin's
+ * there is a workspace's only when its spawn names it; nor does a workspace
+ * whose layer is gone and whose path is no clone of its own (layer.ts
+ * `ownFolderSync`). A place holds its folder. The bridge plugin's
  * `workspaceOf` (harnesses/opencode.ts) answers by the same rule inside
  * OpenCode's server.
  *
@@ -167,7 +169,10 @@ const holding = async (
   const { refs, unread } = await scan();
   const clones = await Promise.all(
     refs
-      .filter((ref) => take(ref) && !overlaySync(ref.id))
+      .filter(
+        (ref) =>
+          take(ref) && (isPlace(ref.id) || ownFolderSync(ref.id, ref.path))
+      )
       .map(async (ref) => ({ ref, root: await realOf(ref.path) }))
   );
   const held = clones
