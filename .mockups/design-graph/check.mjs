@@ -732,7 +732,8 @@ async function captures(browser) {
     await page.waitForTimeout(300);
     await pick(page, "ctlChoice", "ctl", "row"); await openReveal(page);
     await shot(page, "Clip controls", "In the row", w, w + "-controls-row.jpg", phone ? "The reason line's controls open inside its own row, under its facts; the timeline scrolls on past them." : "The reason line's controls open inside its own row, across the timeline, its spring marked ad hoc.");
-    await page.keyboard.press("Escape"); await page.waitForTimeout(200);
+    // Esc gives the pressed fact the focus (and, being a key, its ring): the next capture starts with none.
+    await page.keyboard.press("Escape"); await page.evaluate(() => document.activeElement && document.activeElement.blur()); await page.waitForTimeout(200);
     await pick(page, "ctlChoice", "ctl", "inspector"); await openReveal(page);
     await shot(page, "Clip controls", "In an inspector", w, w + "-controls-inspector.jpg", phone ? "On a phone the inspector takes the timeline's place, Back leading its head." : "The reason line's controls in an inspector beside the timeline, headed by the clip's line.");
     await page.keyboard.press("Escape"); await page.waitForTimeout(200);

@@ -1217,14 +1217,18 @@ function fitFacts() {
     if (need() > room + 0.5) f.dataset.drop = "tok word";
   }
 }
-// The timeline's top fade starts under what holds at its top: the ruler, and an open row's head while it is held
-// there under the ruler, so that head stays whole ink.
+// The timeline's top fade starts under what holds at its top: the ruler, and an open row's head wherever it stands
+// within the fade's reach under the ruler (held there, or just opened a row's padding below it), so that head
+// stays whole ink and the fade runs under it.
 function tlFadeFrom() {
   const t = $("tl"), rrow = t && t.querySelector(".ruler-row");
   if (!rrow) return;
   let from = rrow.offsetHeight;
   const name = $("rows").querySelector(".clip:has(> .ctl-row) > .clip-name");
-  if (name && getComputedStyle(name).position === "sticky") { const top = name.getBoundingClientRect().top - t.getBoundingClientRect().top; if (top <= from + 0.5) from = top + name.offsetHeight; }
+  if (name && getComputedStyle(name).position === "sticky") {
+    const top = name.getBoundingClientRect().top - t.getBoundingClientRect().top, bottom = top + name.offsetHeight;
+    if (top < from + px("--c-edge-fade-len") && bottom > from) from = bottom;
+  }
   t.style.setProperty("--tl-fade-from", from + "px");
 }
 // A scroller with more past its top or its foot fades that end by the house edge fade (as the graph's view does):
