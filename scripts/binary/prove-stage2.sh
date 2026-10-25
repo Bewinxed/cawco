@@ -2572,11 +2572,17 @@ ws_served_pid() { as_user "$joinerc" pgrep -o -f "^socat TCP-LISTEN:$WS_SERVED_P
 # answer is kept in $rigdir/ws-preview-open: its record (`--record`, the hub's record as one line of JSON, core
 # tool-answer.ts), whose id closes it. The hub's preview port for it is read as the dashboard learns it.
 ws_preview_open() { ws_exec_as_session "/home/cawco/.local/bin/cawco tool artifact_create --record '{\"kind\":\"preview\",\"does\":\"try\",\"ask\":\"Try the served page and say whether it answers\",\"name\":\"proof-served\",\"port\":$WS_SERVED_PORT,\"serve\":{\"command\":\"socat TCP-LISTEN:\$PORT,fork,reuseaddr EXEC:\$TMPDIR/served.sh\"}}'" > "$rigdir/ws-preview-open"; cat "$rigdir/ws-preview-open"; }
+# The preview's artifact id, from the record its create answered.
+ws_preview_artifact() {
+  local id
+  id=$(grep -E '^[{]' "$rigdir/ws-preview-open" | tail -n 1 | json '(d) => d.id')
+  [[ $id =~ ^[0-9a-f-]{36}$ ]] || { echo "the preview's create answered no record with an id: $(cat "$rigdir/ws-preview-open")" >&2; return 1; }
+  echo "$id"
+}
 # The delegate removes that preview (artifact_delete): its server's last artifact, so the stage stops it.
 ws_preview_close() {
   local id
-  id=$(grep -E '^[{]' "$rigdir/ws-preview-open" | tail -n 1 | json '(d) => d.id')
-  [[ $id =~ ^[0-9a-f-]{36}$ ]] || { echo "the preview's create answered no record with an id: $(cat "$rigdir/ws-preview-open")"; return 1; }
+  id=$(ws_preview_artifact) || return 1
   # tool answer: words (it only has to succeed)
   ws_exec_as_session "/home/cawco/.local/bin/cawco tool artifact_delete '{\"id\":\"$id\"}'"
 }
@@ -2597,7 +2603,20 @@ ws_preview_mode() {
   as_user "$hubc" curl -sS -w '\nHTTP %{http_code}' -X PUT http://127.0.0.1:3456/api/preview-settings -H 'content-type: application/json' -d "$body"
 }
 # The preview's host-mode name (`p-<port>.localtest.me:<listener port>`): the host of the origin the hub gives a client.
-ws_preview_host() { ws_post "/api/instances/$(cat "$rigdir/ws-delegate")/preview-address" '{}' | sed '$d' | json 'd => d.origin ? new URL(d.origin).host : ""'; }
+# A machine's preview is served on its artifact's own origin, never its session's (hub server.ts frameAddress, f536f2675).
+ws_preview_host() { ws_post "/api/artifacts/$(ws_preview_artifact)/preview-address" '{}' | sed '$d' | json 'd => d.origin ? new URL(d.origin).host : ""'; }
+# The session's own host-mode name, where the hub serves what it holds for the session.
+ws_session_host() { ws_post "/api/instances/$(cat "$rigdir/ws-delegate")/preview-address" '{}' | sed '$d' | json 'd => d.origin ? new URL(d.origin).host : ""'; }
+# Every one of $2 requests (8 if not given) to host-mode name $1 without a pass gets the lock's 401 page. Each request is a
+# connection of its own, so a second socket bound to the listener's port with `reusePort`, which the kernel hands a
+# share of the connections, is met (f536f2675's run: one of them served the preview with no pass).
+ws_preview_locked() {
+  local host=$1 times=${2:-8} answer i
+  for ((i = 0; i < times; i++)); do
+    answer=$(ws_preview_by_host "$host")
+    [[ "$answer" == *"HTTP 401" && "$answer" == *cawco-preview-locked* ]] || { echo "ASSERTION FAILED: request $((i + 1)) of $times to $host without a pass got: $answer"; return 1; }
+  done
+}
 # One request to the preview's host-mode name ($1), with the pass cookie $2 or none: its body, then `HTTP <status>`.
 ws_preview_by_host() {
   local host=$1 cookie=${2:-}
@@ -2881,7 +2900,9 @@ workspace_across_update() {
   answer=$(ws_exec_reach)
   [[ "$answer" == *gen-old* ]] || { echo "ASSERTION FAILED: with the job gone the next command reached no listener: $answer"; ws_listener_why "$old_inner"; return 1; }
   wait_until 60 '[[ "$(ws_preview_says)" == *"served '"$old_ns"'"* ]]' || { echo "the preview answered: $(ws_preview_says)"; ws_listener_why "$old_inner"; return 1; }
-  # The same in host mode, the owner's: a request without a pass gets the lock's 401 page; one with the pass a
+  # The same in host mode, the owner's, switched to live as Settings › Previews does: the preview's own origin, which
+  # held the range's first port in port mode, moves off it, since that port is host mode's listener's alone; every
+  # request without a pass, to the preview's name and to its session's, gets the lock's 401 page; one with the pass a
   # ticket bought reaches the listener in the generation kept for it.
   answer=$(ws_preview_mode host)
   echo "the hub answered host mode: $answer"
@@ -2889,8 +2910,10 @@ workspace_across_update() {
   on_exit 'ws_preview_mode port > /dev/null'
   ws_preview_host > "$rigdir/ws-preview-host"
   [[ "$(cat "$rigdir/ws-preview-host")" == p-*.localtest.me:* ]] || { echo "the preview's host-mode name: '$(cat "$rigdir/ws-preview-host")'"; return 1; }
-  answer=$(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")")
-  [[ "$answer" == *"HTTP 401" && "$answer" == *cawco-preview-locked* ]] || { echo "ASSERTION FAILED: a request without a pass got: $answer"; return 1; }
+  [[ "$(cat "$rigdir/ws-preview-host")" != "p-$preview_first."* ]] || { echo "ASSERTION FAILED: in host mode the preview's own origin still holds host mode's port: $(cat "$rigdir/ws-preview-host")"; return 1; }
+  echo "in host mode the preview is served at $(cat "$rigdir/ws-preview-host")"
+  ws_preview_locked "$(cat "$rigdir/ws-preview-host")" || return 1
+  ws_preview_locked "$(ws_session_host)" || return 1
   ws_preview_enter "$(cat "$rigdir/ws-preview-host")" > "$rigdir/ws-preview-pass"
   [[ "$(cat "$rigdir/ws-preview-pass")" == __Secure-cawco-pass=* ]] || { echo "the entry set no pass: '$(cat "$rigdir/ws-preview-pass")'"; return 1; }
   wait_until 60 '[[ "$(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")" == *"served '"$old_ns"'"*"HTTP 200" ]]' || { echo "host mode answered: $(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")"; return 1; }
@@ -2926,18 +2949,21 @@ workspace_across_update() {
   ws_descends "$(ws_listener_pid gen-new)" "$new_inner" || return 1
   answer=$(ws_exec_reach)
   [[ "$answer" == *gen-new* ]] || { echo "ASSERTION FAILED: the next command reached no listener in the new generation: $answer"; ws_listener_why "$new_inner"; return 1; }
-  # The delegate shows its server again, and the stage runs it in the new generation. The session's preview reaches it
-  # there: in host mode with the same pass, then by port once the fleet is back in port mode.
+  # The delegate shows its server again, and the stage runs it in the new generation. The new preview's own origin
+  # reaches it there: in host mode with the same pass (it covers every name under the domain), never without one, then
+  # by port once the fleet is back in port mode.
   ws_preview_open
   [[ "$(ws_served_pid)" =~ ^[0-9]+$ ]] || { echo "ASSERTION FAILED: no served listener runs once its preview was made again: $(cat "$rigdir/ws-preview-open")"; return 1; }
   ws_descends "$(ws_served_pid)" "$new_inner" || return 1
+  ws_preview_host > "$rigdir/ws-preview-host"
+  [[ "$(cat "$rigdir/ws-preview-host")" == p-*.localtest.me:* && "$(cat "$rigdir/ws-preview-host")" != "p-$preview_first."* ]] || { echo "ASSERTION FAILED: the new preview's host-mode name: '$(cat "$rigdir/ws-preview-host")'"; return 1; }
   wait_until 60 '[[ "$(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")" == *"served '"$(ns_of "$new_inner")"'"*"HTTP 200" ]]' || { echo "host mode answered: $(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")"; ws_listener_why "$new_inner"; return 1; }
-  [[ "$(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")")" == *"HTTP 401" ]] || { echo "ASSERTION FAILED: host mode answered a request without a pass"; return 1; }
+  ws_preview_locked "$(cat "$rigdir/ws-preview-host")" || return 1
   answer=$(ws_preview_mode port)
   echo "the hub answered port mode: $answer"
   [[ "$answer" == *"HTTP 200" ]]
-  # The session's port is read again, as a dashboard learns it: host mode bars the range's first port to sessions, so
-  # a session that kept it moved to another as host mode began, and keeps that one (packages/hub/src/preview.ts
+  # The preview's port is read again, as a dashboard learns it: host mode bars the range's first port to every origin,
+  # so one that kept it moved to another as host mode began, and keeps that one (packages/hub/src/preview.ts
   # `barred`, `portFor`).
   wait_until 60 'ws_preview_port > "$rigdir/ws-preview-port" 2> "$rigdir/ws-preview-port.err"' || { cat "$rigdir/ws-preview-port.err"; return 1; }
   echo "back in port mode the preview is served on the hub's port $(cat "$rigdir/ws-preview-port")"
@@ -3029,7 +3055,7 @@ workspace_archive_ends_all() {
   [[ -z "$(ws_served_pid)" ]] || { echo "ASSERTION FAILED: a served listener $(ws_served_pid) runs after the archive"; return 1; }
   wait_until 60 '[[ -z "$(child_pids "$joinerc" "boundary-'"$id"'-'"$gen"'")" ]] && ! as_user "$joinerc" test -e "$(ws_state)"'
 }
-export -f ws_state ws_json ws_gen ws_decisions ws_decisions_said ws_kept_listening ws_exec ws_session_env ws_exec_as_session ws_place ws_same_sandbox ns_of ws_listener_start ws_listener_pid ws_exec_reach ws_listener_why ws_served_script ws_served_pid ws_preview_open ws_preview_close ws_preview_port ws_preview_says ws_preview_mode ws_preview_host ws_preview_by_host ws_preview_enter ws_tree ws_ancestry ws_descends ws_post json_string ws_item ws_item_says ws_item_live ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered ws_hook_calls_clean ws_hook_calls_after ws_judge_answers_after_update workspace_opens workspace_across_update workspace_updated_serving workspace_archive_ends_all
+export -f ws_state ws_json ws_gen ws_decisions ws_decisions_said ws_kept_listening ws_exec ws_session_env ws_exec_as_session ws_place ws_same_sandbox ns_of ws_listener_start ws_listener_pid ws_exec_reach ws_listener_why ws_served_script ws_served_pid ws_preview_open ws_preview_artifact ws_preview_close ws_preview_port ws_preview_says ws_preview_mode ws_preview_host ws_session_host ws_preview_locked ws_preview_by_host ws_preview_enter ws_tree ws_ancestry ws_descends ws_post json_string ws_item ws_item_says ws_item_live ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered ws_hook_calls_clean ws_hook_calls_after ws_judge_answers_after_update workspace_opens workspace_across_update workspace_updated_serving workspace_archive_ends_all
 export WS_LISTENER_PORT WS_SERVED_PORT WS_SERVED_ANSWER
 rig_workspace() {
   # Check names are written out in full: the rig's check list (rig_checks) reads them from
