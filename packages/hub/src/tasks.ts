@@ -3228,16 +3228,22 @@ export const createTasks = (store: TaskStore) => {
      * history shows it. Listeners hear of a move that happened. Your move
      * that passes a task on out of a stage of kind `you` is its approval:
      * its commit's reason says `approved`, and its event says so, for the
-     * agent that filed it (task-approval.ts).
+     * agent that filed it (task-approval.ts). `tickCriteria`: a close whose
+     * acceptance criteria were shown met (dispatch.ts `settle`) ticks them
+     * in the same commit as the move.
      */
     async move(
       projectId: string,
       ref: string,
       stage: string,
       actor: TaskActor,
-      reason?: string
+      reason?: string,
+      options?: { tickCriteria?: boolean }
     ): Promise<TaskView> {
       const why = reasonOf(reason);
+      const tick = options?.tickCriteria
+        ? (doc: TaskDoc) => doc.tickCriteria()
+        : () => 0;
       let moved: { from: string; to: string } | undefined;
       let approved = false;
       const task = await change(projectId, ref, actor, async (doc, id) => {
@@ -3247,6 +3253,7 @@ export const createTasks = (store: TaskStore) => {
         if (!moved) {
           return `stage ${to}`;
         }
+        tick(doc);
         approved =
           actor.mover === "you" &&
           kindIn(stages, moved.from) === "you" &&

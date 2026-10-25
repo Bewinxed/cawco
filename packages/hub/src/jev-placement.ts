@@ -641,21 +641,7 @@ export const eventsRecap = (events: string[]): string =>
 
 /** A noul at or above this meets a criterion. Our own call, as a meaning rule fires. */
 export const JUDGED_THRESHOLD = 0.8;
-/** The most criteria one task is judged on. */
-export const CRITERIA_MAX = 20;
-const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?(.+)$/;
-
-/** A task's acceptance criteria, one each: its list items, else the whole text as one. */
-export const criteriaOf = (acceptance: string): string[] => {
-  const items = acceptance
-    .split("\n")
-    .map((line) => LIST_ITEM.exec(line)?.[1]?.trim())
-    .filter((item): item is string => Boolean(item));
-  const all = items.length > 0 ? items : [acceptance.trim()].filter(Boolean);
-  return all.slice(0, CRITERIA_MAX);
-};
-
-/** Judged checks with Jev on: one yes/no per criterion, over the attempt's report. */
+/** Judged checks with Jev on: one yes/no per criterion (task-file.ts `criteriaOf`), over the attempt's report. */
 export async function jevJudged(
   access: JevAccess,
   projectId: string,

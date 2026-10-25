@@ -1110,6 +1110,10 @@ export interface WorkItemDeps {
 const PLAN_TODO = /\[(td-\d{1,6})\]/;
 /** Plan items one attempt may leave behind as proposed to-dos. */
 const PROPOSALS_LIMIT = 20;
+const RUNS_OF_SPACE = /\s+/g;
+/** A plan item's or to-do's words as they are matched: spaces folded, lowercase. */
+const planWords = (text: string): string =>
+  text.replace(RUNS_OF_SPACE, " ").trim().toLowerCase();
 /**
  * How often the hub looks at every live item's budget, between turns, and
  * for items whose session is gone or asleep: the first look comes this long
@@ -3297,8 +3301,10 @@ export const createWorkItems = ({
 
   /**
    * Ticks each open to-do of the item's task whose id a completed plan item
-   * carries (`[td-3] …`). One read of the ledger and, when something is to
-   * tick, one commit.
+   * carries (`[td-3] …`), and each open proposed to-do whose words one
+   * without an id has: a step left open when the attempt ended once
+   * ({@link proposeLeftovers}) and completed after it went on. One read of
+   * the ledger and, when something is to tick, one commit.
    */
   const syncPlan = async (item: WorkItemRow): Promise<void> => {
     const task = taskOf(item);
@@ -3306,17 +3312,26 @@ export const createWorkItems = ({
     if (!(task && todos && plan?.length)) {
       return;
     }
+    const done = plan.filter((entry) => entry.status === "completed");
     const completed = new Set(
-      plan
-        .filter((entry) => entry.status === "completed")
+      done
         .map((entry) => PLAN_TODO.exec(entry.content)?.[1])
         .filter((id): id is string => id !== undefined)
     );
-    if (completed.size === 0) {
+    const said = new Set(
+      done
+        .filter((entry) => !PLAN_TODO.test(entry.content))
+        .map((entry) => planWords(entry.content))
+    );
+    if (completed.size === 0 && said.size === 0) {
       return;
     }
     const open = (await todos.read(task.projectId, task.taskId)).filter(
-      (todo) => !todo.done && todo.id && completed.has(todo.id)
+      (todo) =>
+        !todo.done &&
+        todo.id &&
+        (completed.has(todo.id) ||
+          (todo.proposed && said.has(planWords(todo.text))))
     );
     if (open.length > 0) {
       await todos.write(
@@ -3354,7 +3369,7 @@ export const createWorkItems = ({
     await syncPlan(item);
     const known = new Set(
       (await todos.read(task.projectId, task.taskId)).map((todo) =>
-        todo.text.trim().toLowerCase()
+        planWords(todo.text)
       )
     );
     const left = plan
@@ -3362,8 +3377,8 @@ export const createWorkItems = ({
         (entry) =>
           entry.status !== "completed" && !PLAN_TODO.test(entry.content)
       )
-      .map((entry) => entry.content.replace(/\s+/g, " ").trim())
-      .filter((text) => text && !known.has(text.toLowerCase()))
+      .map((entry) => entry.content.replace(RUNS_OF_SPACE, " ").trim())
+      .filter((text) => text && !known.has(planWords(text)))
       .slice(0, PROPOSALS_LIMIT);
     if (left.length > 0) {
       await todos.write(

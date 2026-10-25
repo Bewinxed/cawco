@@ -99,7 +99,6 @@ import type { Origin, WorkBudget } from "./db/schema";
 import { needsDesignSystem } from "./design-offers";
 import type { JevAccess } from "./jev";
 import {
-  criteriaOf,
   DISPATCH_ASKED_MAX,
   type DispatchJudgement,
   JevFailed,
@@ -115,7 +114,7 @@ import type { HubLifetimeShape } from "./lifetime";
 import { FolderRefusal, type FolderRefusalStatus } from "./project-folder";
 import { fits, type MachineFacts, runsOnValue, runsOnWords } from "./runs-on";
 import type { Stage } from "./stages";
-import type { TaskComment } from "./task-file";
+import { criteriaOf, type TaskComment } from "./task-file";
 import {
   BUDGET,
   hubActor,
@@ -1669,11 +1668,14 @@ export const createDispatcher = ({
       return;
     }
     if (target && target.name !== task.stage) {
+      // Closed because Jev showed its criteria met: the same write ticks them.
       await tasks.move(
         projectId,
         taskId,
         target.name,
-        hubActor(movedBecause(item, judged, kind, criteria.length))
+        hubActor(movedBecause(item, judged, kind, criteria.length)),
+        undefined,
+        { tickCriteria: closedMet(judged, kind, criteria.length) }
       );
     }
   };
@@ -1694,6 +1696,16 @@ export const createDispatcher = ({
       ? await judgeCriteria(projectId, task, criteria, item)
       : kind;
   };
+
+  /**
+   * A close because Jev showed every acceptance criterion met: its reason
+   * says so ({@link movedBecause}) and its move ticks them (tasks.ts `move`).
+   */
+  const closedMet = (
+    judged: "done" | "todo" | "you",
+    kind: "done" | "todo" | "you",
+    criteria: number
+  ): boolean => judged === "done" && kind === "done" && criteria > 0;
 
   /**
    * Why the hub moved a task after its attempt ended, as its commit says:
@@ -1718,7 +1730,7 @@ export const createDispatcher = ({
     if (kind === "you") {
       return `attempt ${short(item.id)} ${item.state}; its acceptance criteria wait for you`;
     }
-    return criteria > 0 && kind === "done"
+    return closedMet(judged, kind, criteria)
       ? `attempt ${short(item.id)} ${item.state}; Jev shows its ${criteria} acceptance criteria met`
       : `attempt ${short(item.id)} ${item.state}`;
   };

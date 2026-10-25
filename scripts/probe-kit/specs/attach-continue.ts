@@ -28,17 +28,26 @@
  *    on its running item is continued through the dashboard's continue
  *    route; the item's session is the new one, which finishes it, and the
  *    old session holds no item.
+ * f. Closed as criteria met (hub dispatch.ts `settle`, task-file.ts
+ *    `tickCriteria`): a task with two acceptance criteria and a proposed
+ *    to-do (a step an earlier end of its attempt left open) is attempted;
+ *    the attempt's plan completes that step and it finishes, Jev shows both
+ *    criteria met, and the task is in done with its close reason saying so,
+ *    both criteria ticked, ticked by the move's own commit, and every to-do
+ *    ticked. (cockpit tsk-16 in Cawco-Dev read Done, "Jev shows its 2
+ *    acceptance criteria met", over unticked criteria and 0 of 2 to-dos.)
  *
  *   bun scripts/probe-kit/run.ts attach-continue
  */
 import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { jevMock, jevOn } from "../jev-mock";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 const FINISH = "mcp__cawco__finish_item";
 const WAIT = "mcp__cawco__wait_item";
+const TODO = "mcp__cawco__todo_write";
 /** What wait_item answers once the wait is declared (work-items.ts `waitItem`). */
 const WAITING = " is waiting until ";
 /** Only leg e's delegate's brief carries this. */
@@ -59,7 +68,18 @@ const TASKS = {
   b: "PROBE-AC-B attach me",
   c: "PROBE-AC-C start me fresh",
   d: "PROBE-AC-D compress me with Jev off",
+  f: "PROBE-AC-F close me as criteria met",
 } as const;
+/** Leg f's acceptance criteria, and the step its plan completes (its proposed to-do's words). */
+const CRITERIA_F = [
+  "PROBE-AC-F the first criterion holds",
+  "PROBE-AC-F the second criterion holds",
+] as const;
+const STEP_F = "PROBE-AC-F run the full check";
+/** A judged check's question id: one per criterion, `c0`, `c1`. */
+const CRITERION_ID = /^c\d+$/;
+/** The close reason a criteria-met close writes (dispatch.ts `movedBecause`). */
+const MET = `Jev shows its ${CRITERIA_F.length} acceptance criteria met`;
 const COMMENT = {
   a: "PROBE-AC-COMMENT-A go on from where you stopped",
   b: "PROBE-AC-COMMENT-B go on in your own session",
@@ -77,6 +97,7 @@ const HEADLINE = {
   freshC: "PROBE-AC-FRESH-C",
   continuedD: "PROBE-AC-CONTINUED-D",
   continuedE: "PROBE-AC-CONTINUED-E",
+  metF: "PROBE-AC-MET-F",
 } as const;
 const STAGES =
   "---\nready      todo\nworking    active\nreview     you\ndone       done\ndropped    dropped\nmoves\n  * → *    you, session\nviews\n  board      by stage\n---\n";
@@ -107,12 +128,13 @@ const found = (request: Seen, name: string, input: object): Reply => {
 };
 
 /**
- * Fails the session's item as blocked, once per headline. A session whose
+ * Fails the session's item as blocked, once per headline; with `blocked`
+ * false, finishes it with a report. A session whose
  * tools do not list finish_item yet (one handed its item after it listed
  * them, told again by `list_changed`) looks for it, waiting a beat between
  * looks, and after {@link LOOKS_MAX} says it is not offered.
  */
-const finishOnce = (request: Seen, headline: string): Reply => {
+const finishOnce = (request: Seen, headline: string, blocked = true): Reply => {
   if (finished.has(headline)) {
     return text("Stopped.");
   }
@@ -127,11 +149,35 @@ const finishOnce = (request: Seen, headline: string): Reply => {
       : useTool("Bash", { command: "sleep 2", description: "Probe beat" });
   }
   finished.add(headline);
-  return useTool(FINISH, {
-    headline,
-    summary: headline,
-    blocked: { command: "probe", error: "the probe ends this item here" },
+  return useTool(
+    FINISH,
+    blocked
+      ? {
+          headline,
+          summary: headline,
+          blocked: { command: "probe", error: "the probe ends this item here" },
+        }
+      : {
+          headline,
+          summary: `${headline}: ${CRITERIA_F.join("; ")}. Proof: PASS lines.`,
+        }
+  );
+};
+
+let plannedF = false;
+
+/** Leg f's attempt: its plan completes the proposed step, then it finishes with a report. */
+const attemptF = (request: Seen): Reply => {
+  if (plannedF) {
+    return finishOnce(request, HEADLINE.metF, false);
+  }
+  const reply = found(request, TODO, {
+    steps: [{ id: "s1", content: STEP_F, status: "completed" }],
   });
+  if (reply.tool?.name === TODO) {
+    plannedF = true;
+  }
+  return reply;
 };
 
 /** Each first attempt's headline, by its task's title. */
@@ -149,6 +195,9 @@ const attempt = (request: Seen): Reply => {
   }
   if (request.all.includes(COMMENT.c)) {
     return finishOnce(request, HEADLINE.freshC);
+  }
+  if (request.all.includes(TASKS.f)) {
+    return attemptF(request);
   }
   const first = FIRST.find(([title]) => request.all.includes(title));
   return first ? finishOnce(request, first[1]) : text("ok");
@@ -481,6 +530,105 @@ const freshStarts = async (
   );
 };
 
+interface TaskRead {
+  acceptance: string;
+  closeReason: string | null;
+  kind: string;
+  path: string;
+  todos: { done: boolean; proposed: boolean; text: string }[];
+}
+
+interface HistoryRead {
+  events: {
+    commit: string;
+    path: string;
+    reason: string | null;
+    stage: { from: string | null; to: string } | null;
+    what: string;
+  }[];
+}
+
+/** (f) Closed as criteria met: the criteria and the to-dos read ticked. */
+const metTicks = async (
+  { check }: Kit,
+  fleet: KitFleet,
+  projectId: string,
+  parent: string
+): Promise<void> => {
+  const task = await fleet.api<{ id: string }>(
+    `/api/projects/${projectId}/tasks`,
+    {
+      title: TASKS.f,
+      stage: "ready",
+      lands: "none",
+      acceptance: CRITERIA_F.map((each) => `- ${each}`).join("\n"),
+      todos: [`(proposed) ${STEP_F}`],
+    }
+  );
+  const at = `/api/projects/${projectId}/tasks/${task.id}`;
+  const before = await fleet.api<TaskRead>(at);
+  check(
+    "f: the task stands with its two criteria unticked and one proposed to-do open",
+    !before.acceptance.includes("[x]") &&
+      before.todos.length === 1 &&
+      before.todos[0]?.proposed === true &&
+      before.todos[0]?.done === false,
+    JSON.stringify(before)
+  );
+  await fleet.api(`${at}/attempts`, { parentInstanceId: parent });
+  const item = await until(
+    "f: its attempt finished",
+    () => itemsOf(fleet, task.id)[0],
+    (row) => row?.state === "done" || row?.state === "failed",
+    300_000
+  ).catch(() => undefined);
+  const closed = await until(
+    "f: the task is in done",
+    () => fleet.api<TaskRead>(at),
+    (one) => one.kind === "done",
+    120_000
+  ).catch(() => undefined);
+  const after = closed ?? (await fleet.api<TaskRead>(at));
+  check(
+    "f: the attempt finished done and the task closed as criteria met",
+    item?.state === "done" &&
+      after.kind === "done" &&
+      !!after.closeReason?.includes(MET),
+    `${JSON.stringify({ item, kind: after.kind, closeReason: after.closeReason })} ${after.kind === "done" ? "" : await trail(fleet, task.id, item?.id ?? task.id)}`
+  );
+  check(
+    "f: both acceptance criteria read ticked",
+    after.acceptance === CRITERIA_F.map((each) => `- [x] ${each}`).join("\n"),
+    JSON.stringify(after.acceptance)
+  );
+  const history = await fleet.api<HistoryRead>(`${at}/history`);
+  const close = history.events.find(
+    (event) => event.stage?.to === "done" && event.reason?.includes(MET)
+  );
+  const folder = join(
+    dirname(fleet.env.CAWCO_DB_PATH ?? ""),
+    "projects",
+    projectId
+  );
+  const atClose = close
+    ? await Bun.$`git show ${`${close.commit}:${close.path}`}`
+        .cwd(folder)
+        .quiet()
+        .nothrow()
+        .text()
+    : "";
+  check(
+    "f: the move into done ticked them in its own commit",
+    CRITERIA_F.every((each) => atClose.includes(`- [x] ${each}`)),
+    `${JSON.stringify(history.events.map((event) => [event.what, event.reason]))} ${atClose.slice(0, 600)}`
+  );
+  check(
+    "f: every to-do reads ticked: the plan's completed step ticked the proposed one",
+    after.todos.length > 0 && after.todos.every((todo) => todo.done),
+    JSON.stringify(after.todos)
+  );
+};
+
 /** (d) Jev off, cold, idle, same task: the rule continues it compressed. */
 const offContinues = async (
   { check }: Kit,
@@ -595,9 +743,13 @@ const routeCarries = async (
 };
 
 const run = async (kit: Kit) => {
-  const jev = jevMock(undefined, (_call, id) =>
-    id === "attach" ? attachNoul : 0.05
-  );
+  const jev = jevMock(undefined, (call, id) => {
+    if (id === "attach") {
+      return attachNoul;
+    }
+    // Leg f's criteria, as judged checks ask them (jev-placement.ts `jevJudged`).
+    return "attempt_report" in call.state && CRITERION_ID.test(id) ? 0.9 : 0.05;
+  });
   try {
     const fleet = await kit.fleet(respond);
     fleet.standIns.typesafeUrl = jev.url;
@@ -643,6 +795,7 @@ const run = async (kit: Kit) => {
     await coldContinues(kit, fleet, project.id, parent);
     await warmAttaches(kit, fleet, project.id, parent);
     await freshStarts(kit, fleet, project.id, parent);
+    await metTicks(kit, fleet, project.id, parent);
     await offContinues(kit, fleet, project.id, parent);
     await routeCarries(kit, fleet, parent, repo);
   } finally {
