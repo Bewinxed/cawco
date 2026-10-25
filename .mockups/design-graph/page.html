@@ -2275,7 +2275,7 @@ html[data-layout="desk"] .panel[data-open="false"] .panel-shell:active .tab-glyp
 .ghost-btn { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; block-size: var(--c-btn-h-sm); padding: 0 var(--space-3); border-radius: var(--radius-md); font: var(--type-label); color: var(--ink-strong); cursor: pointer; transition: var(--transition-control); }
 @media (hover: hover) { .ghost-btn:hover { background: var(--surface-hover); } }
 .ghost-btn:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
-.tl { position: relative; min-inline-size: 0; overflow: hidden auto; overscroll-behavior: contain; min-block-size: 0; margin-inline: calc(-1 * var(--space-2)); padding: 0 var(--space-2) var(--space-3); }
+.tl { position: relative; flex: 1 1 auto; overflow: hidden auto; overscroll-behavior: contain; min-block-size: 0; margin-inline: calc(-1 * var(--space-2)); padding: 0 var(--space-2) var(--space-3); }
 /* The house edge fade where more rows are past the timeline's top (under its sticky ruler) or its foot. */
 .tl { --fade-t: 0px; --fade-b: 0px; }
 .tl[data-fade~="top"] { --fade-t: var(--c-edge-fade-len); }
@@ -2410,54 +2410,28 @@ html[data-kinds="ink"] .tail { --tail-fill: var(--surface-fill-strong); --tail-e
 .drag-pill { position: absolute; z-index: 4; pointer-events: none; translate: -50% 0; }
 .drag-pill .badge { background: var(--surface-raised); box-shadow: var(--shadow-tile); }
 
-/* ---- A clip's controls (round 29, section C): in its row, or in an inspector ----
-   The two answers to the owner's note on the popover, switched by html[data-ctl] on the review bar. In the
-   row: the row's last part, across both its columns under its facts and lane, inside the row's chosen wash;
-   on a wide dock its sections stand side by side. In an inspector: a --c-sheet-inspector-w column beside the
-   timeline, a hairline between, its head the row's first line; on a dock too narrow for both it takes the
-   timeline's place, Back leading its head. Neither floats over anything, so neither is a dialog. */
-.ctl { font: var(--type-label); color: var(--ink-strong); }
-.ctl-body { display: flex; flex-direction: column; gap: var(--space-3); }
-.clip > .ctl-row { grid-column: 1 / -1; min-inline-size: 0; margin-block-start: var(--space-2); padding-block-end: var(--space-1); cursor: auto; }
+/* ---- A clip's controls (round 29, section C): in the clip's own row ----
+   The owner's pick: the row's last part, across both its columns under its facts and lane, inside the row's
+   chosen wash; on a wide dock its sections stand side by side. It floats over nothing, so it is no dialog. */
 /* An open row stands over the playhead's line and the anchor ties that run down through the rows, its controls
    on an opaque face of the row's chosen wash, so no line strikes a figure. */
-.clip:has(> .ctl-row) { z-index: 5; }
-.clip > .ctl-row { position: relative; background: linear-gradient(var(--c-chosen-wash), var(--c-chosen-wash)), var(--surface-raised); }
-.ctl-row .ctl-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: var(--space-3) var(--space-5); align-items: start; }
-/* The length and the delta share a column; in the row the actions stand beside the row's name (narrow) or at
-   the controls' top corner (wide). */
+.clip:has(> .ctl) { z-index: 5; }
+.ctl { position: relative; grid-column: 1 / -1; min-inline-size: 0; margin-block-start: var(--space-2); padding-block-end: var(--space-1); font: var(--type-label); color: var(--ink-strong); background: linear-gradient(var(--c-chosen-wash), var(--c-chosen-wash)), var(--surface-raised); cursor: auto; }
+.ctl-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: var(--space-3) var(--space-5); align-items: start; }
+/* The length and the delta share a column; the actions stand beside the row's name (narrow) or at the
+   controls' top corner (wide). */
 .ctl-col { display: flex; flex-direction: column; gap: var(--space-3); min-inline-size: 0; }
 .clip-name:has(> .ctl-head) { grid-template-columns: var(--c-row-lead) minmax(0, 1fr) auto; }
 .clip-name:has(> .ctl-head) > :is(.l1, .facts) { grid-column: 2; }
 .clip-name > .ctl-head { grid-column: 3; grid-row: 1 / span 2; align-self: start; min-block-size: 0; gap: var(--space-1); cursor: auto; }
-.ctl-row > .ctl-head { position: absolute; z-index: 1; inset-block-start: 0; inset-inline-end: 0; min-block-size: 0; gap: var(--space-1); }
-.dock-grid { flex: 1 1 auto; min-block-size: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); column-gap: var(--space-4); }
-.dock[data-insp] .dock-grid { grid-template-columns: minmax(0, 1fr) var(--c-sheet-inspector-w); }
-.dock-head { grid-column: 1 / -1; }
-.tl { grid-column: 1; grid-row: 2; }
-.insp { grid-column: 2; grid-row: 2; min-block-size: 0; overflow: hidden auto; overscroll-behavior: contain; padding: var(--space-1) 0 var(--space-3) var(--space-4); border-inline-start: 1px solid var(--border-hairline); }
-.insp:empty { display: none; }
-.insp[data-fade~="top"] { --insp-fade-t: var(--c-edge-fade-len); }
-.insp[data-fade~="foot"] { --insp-fade-b: var(--c-edge-fade-len); }
-.insp[data-fade] { mask-image: linear-gradient(transparent, #000 var(--insp-fade-t, 0px), #000 calc(100% - var(--insp-fade-b, 0px)), transparent); }
+.ctl > .ctl-head { position: absolute; z-index: 1; inset-block-start: 0; inset-inline-end: 0; min-block-size: 0; gap: var(--space-1); }
 @container dock (width < 440px) {
   /* Stacked, an open row is a column whose head (its name and facts) holds under the ruler while its controls
      scroll on beneath it. */
-  .clip:has(> .ctl-row) { display: flex; flex-direction: column; align-items: stretch; }
-  .clip:has(> .ctl-row) > .clip-name { position: sticky; z-index: 2; inset-block-start: var(--tl-head, 0px); margin-inline: calc(-1 * var(--space-2)); padding-inline-start: var(--space-2); padding-block-end: var(--space-1); background: linear-gradient(var(--c-chosen-wash), var(--c-chosen-wash)), var(--surface-raised); }
-  .dock[data-insp] .dock-grid { grid-template-columns: minmax(0, 1fr); }
-  .dock[data-insp] .tl { display: none; }
-  .dock[data-insp] .insp { grid-column: 1; padding-inline-start: 0; border-inline-start: 0; }
+  .clip:has(> .ctl) { display: flex; flex-direction: column; align-items: stretch; }
+  .clip:has(> .ctl) > .clip-name { position: sticky; z-index: 2; inset-block-start: var(--tl-head, 0px); margin-inline: calc(-1 * var(--space-2)); padding-inline-start: var(--space-2); padding-block-end: var(--space-1); background: linear-gradient(var(--c-chosen-wash), var(--c-chosen-wash)), var(--surface-raised); }
 }
-.ctl-head { --kind: var(--prop-text); display: flex; align-items: center; gap: var(--space-2); min-block-size: var(--c-btn-h); }
-.ctl-head[data-prop="opacity"] { --kind: var(--prop-opacity); }
-.ctl-head[data-prop="position"] { --kind: var(--prop-position); }
-.ctl-head[data-prop="size"] { --kind: var(--prop-size); }
-.ctl-head[data-prop="colour"] { --kind: var(--prop-colour); }
-.ctl-head[data-prop="unfold"] { --kind: var(--prop-unfold); }
-.ctl-head .lead { flex: none; inline-size: var(--icon-md); block-size: auto; }
-.ctl-head p { flex: 1 1 auto; min-inline-size: 0; margin: 0; font: var(--type-label); color: var(--ink-row); text-wrap: pretty; }
-.ctl-head p span { font-weight: var(--weight-body); color: var(--ink-strong); }
+.ctl-head { display: flex; align-items: center; gap: var(--space-2); min-block-size: var(--c-btn-h); }
 .ctl-sec { display: flex; flex-direction: column; gap: var(--space-2); min-inline-size: 0; }
 .ctl-label { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); font: var(--type-meta); color: var(--ink-muted); }
 .ctl-line { display: flex; align-items: center; gap: var(--space-3); min-inline-size: 0; }
@@ -2643,7 +2617,7 @@ html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-po
 /* A fact cut to its glyph (a narrow facts line gives up its words) still takes a finger: the floor wide, its glyph centred. */
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .fact { min-inline-size: var(--c-touch-floor); justify-content: center; }
 /* The row's open controls stand clear of the lane's 44px bar layer. */
-html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .clip > .ctl-row { margin-block-start: calc(var(--c-touch-floor) - var(--c-pill-h)); }
+html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .clip > .ctl { margin-block-start: calc(var(--c-touch-floor) - var(--c-pill-h)); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .var { display: flex; align-items: center; }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) .fld { block-size: var(--c-touch-floor); }
 html:is([data-input="touch"], [data-input="touch-hover"], [data-screen="phone-portrait"], [data-screen="phone-landscape"]) :is(.dslider, .ctl input[type="range"], .dial input[type="range"]) { min-block-size: var(--c-touch-floor); }
@@ -2708,19 +2682,14 @@ html[data-layout="sheet"][data-tools="hidden"] .page { inset-inline-end: var(--c
 </head>
 <body>
   <!-- The pages under review: one per component, drawn by app.js. Below the line where they all fit, the tabs
-       show one; from there they stand in one row (all-components-design.md). Over them, the round's two open
-       choices for the owner (round 29): how a clip's kind is dressed, and where a clip's controls open. -->
+       show one; from there they stand in one row (all-components-design.md). Over them, the round's open
+       choice for the owner (round 29): how a clip's kind is dressed. -->
   <main class="page" id="page">
     <div class="review-bar" role="group" aria-labelledby="kindsLabel">
       <span class="review-label" id="kindsLabel">Clip kinds</span>
       <div class="t-tabs" id="kinds" role="tablist" aria-labelledby="kindsLabel"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" type="button" data-kinds="hue" aria-selected="true" aria-describedby="kindsNote" title="In their own hue"><span class="t-label">In their own hue</span><span class="badge proposal">Proposed</span></button><button class="t-tab" role="tab" type="button" data-kinds="ink" aria-selected="false" title="In ink only"><span class="t-label">In ink only</span></button></div>
       <!-- The six kind hues are the mockup's own, not the house's: picking hue is picking them too. -->
       <p class="review-note" id="kindsNote">Own hue uses six proposed colours, one per kind. Picking it adds them to the design tokens.</p>
-    </div>
-    <!-- The round's other open choice: where a clip's controls open (the owner's note on the popover). -->
-    <div class="review-bar" role="group" aria-labelledby="ctlLabel">
-      <span class="review-label" id="ctlLabel">Clip controls</span>
-      <div class="t-tabs" id="ctlChoice" role="tablist" aria-labelledby="ctlLabel"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" type="button" data-ctl="row" aria-selected="true" title="In the row"><span class="t-label">In the row</span></button><button class="t-tab" role="tab" type="button" data-ctl="inspector" aria-selected="false" title="In an inspector"><span class="t-label">In an inspector</span></button></div>
     </div>
     <div class="pages" id="pages"></div>
   </main>
@@ -2764,8 +2733,7 @@ html[data-layout="sheet"][data-tools="hidden"] .page { inset-inline-end: var(--c
       <div class="sash sash-d" id="sashD" aria-hidden="true" data-edge="d"></div>
       <div class="sash sash-dc" id="sashDC" role="separator" aria-orientation="horizontal" aria-label="Resize the timeline" tabindex="0" data-edge="d"></div>
       <svg class="arc" id="arcD" data-corner="tr" aria-hidden="true" focusable="false"><defs><linearGradient id="arcD-a" gradientUnits="userSpaceOnUse"></linearGradient><linearGradient id="arcD-b" gradientUnits="userSpaceOnUse"></linearGradient></defs><g transform="scale(-1 -1)"><path class="arc-leg" data-leg="a" stroke="url(#arcD-a)"/><path class="arc-body"/><path class="arc-leg" data-leg="b" stroke="url(#arcD-b)"/></g></svg>
-      <!-- Its head and timeline (dockBody), and the inspector beside them when a clip's controls open there. -->
-      <div class="dock-grid"><div class="dock-body" id="dockBody"></div><div class="insp" id="insp"></div></div>
+      <div class="dock-body" id="dockBody"></div>
     </section>
   </div>
   <!-- The side sheet's way back once folded: the same tucked tab, at the screen's trailing edge. -->
@@ -7241,17 +7209,21 @@ function fitFacts() {
     if (need() > room + 0.5) f.dataset.drop = "tok word";
   }
 }
-// The timeline's top fade starts under what holds at its top: the ruler, and an open row's head wherever it stands
-// within the fade's reach under the ruler (held there, or just opened a row's padding below it), so that head
-// stays whole ink and the fade runs under it.
+// The timeline's top fade starts under what holds at its top: the ruler, then an open row's head and its lane,
+// each wherever it stands within the fade's reach under what is above it (the head held under the ruler or just
+// opened a row's padding below it; the lane under the head, until it scrolls in behind the held head). So the
+// head and the lane stay whole ink and the fade runs on under them, over the controls.
 function tlFadeFrom() {
   const t = $("tl"), rrow = t && t.querySelector(".ruler-row");
   if (!rrow) return;
   let from = rrow.offsetHeight;
-  const name = $("rows").querySelector(".clip:has(> .ctl-row) > .clip-name");
+  const name = $("rows").querySelector(".clip:has(> .ctl) > .clip-name");
   if (name && getComputedStyle(name).position === "sticky") {
-    const top = name.getBoundingClientRect().top - t.getBoundingClientRect().top, bottom = top + name.offsetHeight;
-    if (top < from + px("--c-edge-fade-len") && bottom > from) from = bottom;
+    const tt = t.getBoundingClientRect().top, reach = px("--c-edge-fade-len");
+    for (const part of [name, name.parentElement.querySelector(".lane")]) {
+      const r = part.getBoundingClientRect(), top = r.top - tt, bottom = r.bottom - tt;
+      if (top < from + reach && bottom > from) from = bottom;
+    }
   }
   t.style.setProperty("--tl-fade-from", from + "px");
 }
@@ -7653,18 +7625,13 @@ function barKey(bar, e) {
   if (commit(km.e, next)) afterEdit(km, { replay: false });
 }
 
-// ---- A clip's controls (round 29, section C): in its row, or in the dock's inspector ----
-// The owner's note on the popover ("popover? lol..") left two answers on the decision card, and both are drawn
-// here (html[data-ctl], the review bar's switch): "row" opens the controls inside the clip's own row, under its
-// facts, the row's chosen wash round both; "inspector" opens them in an inspector beside the timeline, and on a
-// dock too narrow for both, in the timeline's place with Back to return to it.
-// One thing at a time: the clip's controls and nothing else. The inspector's head is the row's first line (in
-// the row the row itself is the head); then the length (a slider with a detent at every --dur-* token, and a
+// ---- A clip's controls (round 29, section C): in the clip's own row ----
+// The owner's pick: a clip's controls open inside its row, under its facts and lane, the row's chosen wash round
+// both. One thing at a time: the clip's controls and nothing else. The row itself is their head; then the length (a slider with a detent at every --dur-* token, and a
 // figure that takes any number), the curve (the house curves as glyphs, Spring, Custom, the chosen one drawn
 // large with its handles), a spring's every parameter as a figure, and the delta. A change applies at once and
 // the stage replays; there is no foot and no Save.
 let ctl = null;
-const ctlMode = () => (rootEl.dataset.ctl === "inspector" ? "inspector" : "row");
 const floatInset = () => (compact() ? px("--c-screen-margin") : px("--space-5"));
 function clipNow(key, work) { const km = keptMove(); return (work || km.e.cur).find((x) => x.key === key); }
 // The pressed thing, found again by what it is (a fact by its field, the name, or the bar), so a redrawn row
@@ -7675,40 +7642,36 @@ function anchorEl(p = ctl) {
   const a = p.anchor;
   return (a && a.open && row.querySelector('.fact[data-open="' + a.open + '"]')) || (a && a.name && row.querySelector(".l1")) || row.querySelector(".bar");
 }
-// Its home: the clip's own row (its last child, across both columns), or the inspector. A redraw of the rows
-// patches each row in place and leaves the controls standing, so a held slider keeps its pointer.
+// Its home: the clip's own row (its last child, across both columns). A redraw of the rows patches each row in
+// place and leaves the controls standing, so a held slider keeps its pointer.
 function mountCtl() {
-  const dock = $("dock");
-  dock.toggleAttribute("data-insp", !!ctl && ctlMode() === "inspector");
   if (!ctl) return;
-  if (ctlMode() === "row") {
-    const row = $("rows") && $("rows").querySelector('.clip[data-key="' + ctl.key + '"]');
-    if (row && ctl.el.parentNode !== row) row.append(ctl.el);
-    // Its actions: on a narrow dock in the row's head line beside the name (held with it under the ruler); on a
-    // wide one at the controls' own top corner, so the name column keeps its facts and their token badges.
-    const home = stacked() ? row && row.querySelector(".clip-name") : ctl.el;
-    if (home && ctl.headEl && ctl.headEl.parentNode !== home) home.append(ctl.headEl);
-  } else if (ctl.el.parentNode !== $("insp")) $("insp").append(ctl.el);
+  const row = $("rows") && $("rows").querySelector('.clip[data-key="' + ctl.key + '"]');
+  if (row && ctl.el.parentNode !== row) row.append(ctl.el);
+  // Its actions: on a narrow dock in the row's head line beside the name (held with it under the ruler); on a
+  // wide one at the controls' own top corner, so the name column keeps its facts and their token badges.
+  const home = stacked() ? row && row.querySelector(".clip-name") : ctl.el;
+  if (home && ctl.headEl && ctl.headEl.parentNode !== home) home.append(ctl.headEl);
 }
 function openCtl(key, origin, anchor) {
   const km = keptMove();
   if (!km || km.e.view === "original") return;
   // The same clip, open: it stays, and a key's press puts the focus in it.
-  if (ctl && ctl.key === key && ctl.mode === ctlMode()) { ctl.anchor = anchor || null; if (origin === "key") focusFirst(); return; }
+  if (ctl && ctl.key === key) { ctl.anchor = anchor || null; if (origin === "key") focusFirst(); return; }
   closeCtl();
-  const mode = ctlMode(), el = document.createElement(mode === "row" ? "div" : "section"), c = clipNow(key);
-  el.className = "ctl ctl-" + mode; el.dataset.key = key;
+  const el = document.createElement("div"), c = clipNow(key);
+  el.className = "ctl"; el.dataset.key = key;
   el.setAttribute("role", "region"); el.setAttribute("aria-label", "Controls, " + c.of + " " + c.does);
   el.innerHTML = '<div class="ctl-body"></div>';
-  ctl = { key, el, mode, origin, committed: {}, anchor: anchor || null };
+  ctl = { key, el, origin, committed: {}, anchor: anchor || null };
   mountCtl();
   renderCtl();
   // The rows under an opened row move down: their ties follow, and the timeline shows the controls whole.
-  ctl.ro = new ResizeObserver(() => requestAnimationFrame(() => { if (tl) layoutDock(); scrollFade($("insp")); }));
+  ctl.ro = new ResizeObserver(() => requestAnimationFrame(() => { if (tl) layoutDock(); }));
   ctl.ro.observe(el);
-  // Scrolled into the timeline's view as far as it fits, its head never under the sticky ruler.
-  // Stacked, the row's head holds under the ruler, so the row opens with its head there and its controls under it.
-  if (mode === "row") {
+  // Scrolled into the timeline's view as far as it fits, its head never under the sticky ruler. Stacked, the
+  // row's head holds under the ruler, so the row opens with its head there and its controls under it.
+  {
     const t = $("tl"), b = el.getBoundingClientRect(), tb = t.getBoundingClientRect(), ruler = t.querySelector(".ruler-row").offsetHeight;
     if (stacked()) {
       t.scrollTop += el.parentElement.getBoundingClientRect().top - tb.top - ruler;
@@ -7723,9 +7686,8 @@ function openCtl(key, origin, anchor) {
   playLive();
 }
 function focusFirst() { const i = ctl.el.querySelector(".dslider") || ctl.el.querySelector("input, button"); if (i) i.focus({ preventScroll: true }); }
-// Closed by Esc, its Close (Back on a narrow dock), a press outside the dock, a press on its own fact again, or
-// another clip's: it goes at once and the timeline is whole again.
-$("insp").onscroll = () => scrollFade($("insp"));
+// Closed by Esc, its Close, a press outside the dock, a press on its own fact again, or another clip's: it goes
+// at once and the timeline is whole again.
 function closeCtl() {
   closeMenu();
   if (!ctl) return;
@@ -7759,9 +7721,8 @@ function labelTicks() {
   const box = (n) => { const x = (parseFloat(n.style.left) / 100) * W, w = n.offsetWidth; return [x - w / 2, x + w / 2]; };
   const taken = [];
   const fits = ([a, b]) => a >= 0 && b <= W && taken.every(([c, d]) => b + gap <= c || a >= d + gap);
-  // One set of names on every width and wherever the controls open, so the scale reads the same in the row, in
-  // the inspector and on a phone: ghost, fade, panel and settle (the house spring's length), spaced to stand
-  // whole on the narrowest track; the chosen detent's own name first, where a value stands on one. A name that
+  // One set of names on every width, so the scale reads the same at a desk and on a phone: ghost, fade, panel
+  // and settle (the house spring's length), spaced to stand whole on the narrowest track; the chosen detent's own name first, where a value stands on one. A name that
   // still can't stand whole keeps its tick alone.
   const named = ["ghost", "fade", "panel", "settle"], rank = (n) => (n.hasAttribute("data-on") ? -1 : named.indexOf(n.textContent));
   const order = names.filter((n) => rank(n) !== -1 || n.hasAttribute("data-on")).sort((a, b) => rank(a) - rank(b));
@@ -7848,19 +7809,14 @@ function renderCtl(work) {
   const el = ctl.el, body = el.querySelector(".ctl-body"), c = clipNow(ctl.key, work), km = keptMove(), e = km.e;
   const o = e.orig.find((x) => x.key === c.key), isEdited = !same(c, o);
   const mode = isSpring(c.ease) ? "spring" : SEG_CURVES.includes(c.ease) ? c.ease : "custom";
-  const d = msOf(c.dur), narrow = stacked();
-  // The head: in the inspector the row's first line, led by the row's own glyph, so the controls say whose they
-  // are; in the row, the row's own head line is the head, and the actions stand beside the name on a narrow
-  // dock (held with it under the ruler), at the controls' top corner on a wide one. Reset where the clip is edited, then Close (Back where
-  // the inspector stands in the timeline's place), each a bare symbol.
-  const close = narrow && ctl.mode === "inspector" ? '<button class="icon-btn" id="ctlClose" type="button" aria-label="Back to the timeline" data-tip="Back to the timeline">' + icon(ICON.chevronLeft) + "</button>" : '<button class="icon-btn" id="ctlClose" type="button" aria-label="Close the clip\'s controls" data-tip="Close (Esc)">' + icon(ICON.close) + "</button>";
-  const actions = (isEdited ? '<button class="ghost-btn" id="ctlReset" type="button">Reset</button>' : "") + (narrow && ctl.mode === "inspector" ? "" : close);
+  const d = msOf(c.dur);
+  // The head: the row's own head line, its actions standing beside the name on a narrow dock (held with it under
+  // the ruler) and at the controls' top corner on a wide one: Reset where the clip is edited, then Close, each a
+  // bare symbol.
+  const close = '<button class="icon-btn" id="ctlClose" type="button" aria-label="Close the clip\'s controls" data-tip="Close (Esc)">' + icon(ICON.close) + "</button>";
   let html = "";
-  if (ctl.mode === "inspector") html += '<div class="ctl-head" data-prop="' + (c.kind || "text") + '">' + (narrow ? close : "") + '<span class="lead" role="img" aria-label="' + PROP_WORD[c.kind || "text"] + '">' + icon(PROP_GLYPH[c.kind || "text"]) + "</span><p>" + esc(c.of) + " <span>" + esc(c.does) + "</span></p>" + actions + "</div>";
-  else {
-    if (!ctl.headEl) { ctl.headEl = document.createElement("div"); ctl.headEl.className = "ctl-head ctl-head-row"; }
-    ctl.headEl.innerHTML = actions;
-  }
+  if (!ctl.headEl) { ctl.headEl = document.createElement("div"); ctl.headEl.className = "ctl-head ctl-head-row"; }
+  ctl.headEl.innerHTML = (isEdited ? '<button class="ghost-btn" id="ctlReset" type="button">Reset</button>' : "") + close;
   // Length: the slider and its figure (a spring's length is its perceptual duration: its response), with the
   // delta under it in one column, so the length's short section leaves no hole beside the curve.
   html += '<div class="ctl-col"><div class="ctl-sec ctl-len"><div class="ctl-label"><span>' + (mode === "spring" ? "Response" : "Duration") + "</span>" + (adhocDur(c, o) ? adhocBadge : "") + '</div><div class="ctl-line">' + sliderHtml(c, mode) + fieldHtml("dur", fieldVal(d), "ms", (mode === "spring" ? "Response" : "Duration") + ", ms") + "</div></div>";
@@ -8645,22 +8601,14 @@ if (layoutIs("drawer")) setStop("peek");
 labelSheetHide();
 setFace("graph");
 
-// ---- The round's open choices (the owner's): clip kinds in their own hue or in ink only, and a clip's
-// controls in its row or in an inspector ----
+// ---- The round's open choice (the owner's): clip kinds in their own hue or in ink only ----
 rootEl.dataset.kinds = "hue";
-rootEl.dataset.ctl = "row";
-function reviewSwitch(id, attr, then) {
-  for (const b of $(id).querySelectorAll(".t-tab")) b.onclick = () => {
-    rootEl.dataset[attr] = b.dataset[attr];
-    for (const x of $(id).querySelectorAll(".t-tab")) x.setAttribute("aria-selected", String(x === b));
-    slidePill($(id), !reduced());
-    if (then) then();
-  };
-  requestAnimationFrame(() => slidePill($(id), false));
-}
-reviewSwitch("kinds", "kinds");
-// A clip's controls open stay open across the switch, in their new home.
-reviewSwitch("ctlChoice", "ctl", () => { if (!ctl) return; const { key, anchor } = ctl; closeCtl(); openCtl(key, "pointer", anchor); });
+for (const b of $("kinds").querySelectorAll(".t-tab")) b.onclick = () => {
+  rootEl.dataset.kinds = b.dataset.kinds;
+  for (const x of $("kinds").querySelectorAll(".t-tab")) x.setAttribute("aria-selected", String(x === b));
+  slidePill($("kinds"), !reduced());
+};
+requestAnimationFrame(() => slidePill($("kinds"), false));
 
 render();
 document.fonts.ready.then(() => { if (layoutIs("drawer")) setStop(stop); render(); });

@@ -21,13 +21,6 @@
     "caption": "The reason line's controls open inside its own row, across the timeline, its spring marked ad hoc."
   },
   {
-    "card": "Clip controls",
-    "option": "In an inspector",
-    "width": 1440,
-    "file": "1440-controls-inspector.jpg",
-    "caption": "The reason line's controls in an inspector beside the timeline, headed by the clip's line."
-  },
-  {
     "card": "Resize handle",
     "option": "The corner arc",
     "width": 1440,
@@ -54,13 +47,6 @@
     "width": 390,
     "file": "390-controls-row.jpg",
     "caption": "The reason line's controls open inside its own row, under its facts; the timeline scrolls on past them."
-  },
-  {
-    "card": "Clip controls",
-    "option": "In an inspector",
-    "width": 390,
-    "file": "390-controls-inspector.jpg",
-    "caption": "On a phone the inspector takes the timeline's place, Back leading its head."
   },
   {
     "card": "Resize handle",

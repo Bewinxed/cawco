@@ -1,18 +1,13 @@
 <body>
   <!-- The pages under review: one per component, drawn by app.js. Below the line where they all fit, the tabs
-       show one; from there they stand in one row (all-components-design.md). Over them, the round's two open
-       choices for the owner (round 29): how a clip's kind is dressed, and where a clip's controls open. -->
+       show one; from there they stand in one row (all-components-design.md). Over them, the round's open
+       choice for the owner (round 29): how a clip's kind is dressed. -->
   <main class="page" id="page">
     <div class="review-bar" role="group" aria-labelledby="kindsLabel">
       <span class="review-label" id="kindsLabel">Clip kinds</span>
       <div class="t-tabs" id="kinds" role="tablist" aria-labelledby="kindsLabel"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" type="button" data-kinds="hue" aria-selected="true" aria-describedby="kindsNote" title="In their own hue"><span class="t-label">In their own hue</span><span class="badge proposal">Proposed</span></button><button class="t-tab" role="tab" type="button" data-kinds="ink" aria-selected="false" title="In ink only"><span class="t-label">In ink only</span></button></div>
       <!-- The six kind hues are the mockup's own, not the house's: picking hue is picking them too. -->
       <p class="review-note" id="kindsNote">Own hue uses six proposed colours, one per kind. Picking it adds them to the design tokens.</p>
-    </div>
-    <!-- The round's other open choice: where a clip's controls open (the owner's note on the popover). -->
-    <div class="review-bar" role="group" aria-labelledby="ctlLabel">
-      <span class="review-label" id="ctlLabel">Clip controls</span>
-      <div class="t-tabs" id="ctlChoice" role="tablist" aria-labelledby="ctlLabel"><span class="t-tabs-pill" aria-hidden="true"></span><button class="t-tab" role="tab" type="button" data-ctl="row" aria-selected="true" title="In the row"><span class="t-label">In the row</span></button><button class="t-tab" role="tab" type="button" data-ctl="inspector" aria-selected="false" title="In an inspector"><span class="t-label">In an inspector</span></button></div>
     </div>
     <div class="pages" id="pages"></div>
   </main>
@@ -56,8 +51,7 @@
       <div class="sash sash-d" id="sashD" aria-hidden="true" data-edge="d"></div>
       <div class="sash sash-dc" id="sashDC" role="separator" aria-orientation="horizontal" aria-label="Resize the timeline" tabindex="0" data-edge="d"></div>
       <svg class="arc" id="arcD" data-corner="tr" aria-hidden="true" focusable="false"><defs><linearGradient id="arcD-a" gradientUnits="userSpaceOnUse"></linearGradient><linearGradient id="arcD-b" gradientUnits="userSpaceOnUse"></linearGradient></defs><g transform="scale(-1 -1)"><path class="arc-leg" data-leg="a" stroke="url(#arcD-a)"/><path class="arc-body"/><path class="arc-leg" data-leg="b" stroke="url(#arcD-b)"/></g></svg>
-      <!-- Its head and timeline (dockBody), and the inspector beside them when a clip's controls open there. -->
-      <div class="dock-grid"><div class="dock-body" id="dockBody"></div><div class="insp" id="insp"></div></div>
+      <div class="dock-body" id="dockBody"></div>
     </section>
   </div>
   <!-- The side sheet's way back once folded: the same tucked tab, at the screen's trailing edge. -->
