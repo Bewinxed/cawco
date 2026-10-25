@@ -61,6 +61,7 @@ import {
   COMPACT_RELAUNCH,
   CONTAINERS_ENDED,
   CONTAINERS_UNTRACKED,
+  CONTROL_ABANDON,
   CONTROL_CARRY_SESSIONS,
   CONTROL_FLEET_SETTINGS,
   CONTROL_FORGET_CREDENTIALS,
@@ -585,6 +586,9 @@ interface SpinOff {
 
 /** A control reached by name through `control`. */
 type ControlMethod = (...args: unknown[]) => unknown;
+
+/** How many requests the hub let go before they began here are kept, to refuse each as it begins. */
+const LET_GO_KEPT = 256;
 
 /** The end of a command's output: enough to name what happened, not a wall of it. */
 const TAIL_LINES = 4;
@@ -1209,6 +1213,71 @@ export class SessionSupervisor {
     this.#daemonFunctions[name] = fn;
   }
 
+  /**
+   * Machine-scoped reads the hub may stop waiting for ({@link CONTROL_ABANDON}):
+   * each runs in a lane of its own and is handed a signal that aborts when
+   * the hub says it let its request go.
+   */
+  readonly #abandonable: Record<
+    string,
+    (signal: AbortSignal, ...args: unknown[]) => unknown
+  > = {};
+  /** Each abandonable read running, by the hub's request id. */
+  readonly #reads = new Map<string, AbortController>();
+  /** Requests the hub let go before they began here, oldest first: each refused as it begins. */
+  readonly #letGo = new Set<string>();
+
+  /** Register a machine-scoped read the hub can stop waiting for, and so stop here ({@link CONTROL_ABANDON}). */
+  registerAbandonable(
+    name: string,
+    fn: (signal: AbortSignal, ...args: unknown[]) => unknown
+  ): void {
+    this.#abandonable[name] = fn;
+  }
+
+  /** Read `method`, stopped when the hub lets `requestId` go. */
+  async #abandonableRead(
+    method: string,
+    requestId: string | undefined,
+    args: unknown[]
+  ): Promise<unknown> {
+    const read = this.#abandonable[method];
+    if (!read) {
+      throw new Error(`${method} is no read the hub can let go`);
+    }
+    if (requestId && this.#letGo.delete(requestId)) {
+      throw new Error("the hub let this read go before it began");
+    }
+    const stop = new AbortController();
+    if (requestId) {
+      this.#reads.set(requestId, stop);
+    }
+    try {
+      return await read(stop.signal, ...args);
+    } finally {
+      if (requestId) {
+        this.#reads.delete(requestId);
+      }
+    }
+  }
+
+  /** The hub let read `requestId` go: stopped where it runs, or refused when it begins. */
+  #abandon(requestId: string): { stopped: boolean } {
+    const read = this.#reads.get(requestId);
+    if (read) {
+      read.abort(new Error("the hub stopped waiting for it"));
+      return { stopped: true };
+    }
+    this.#letGo.add(requestId);
+    if (this.#letGo.size > LET_GO_KEPT) {
+      const oldest = this.#letGo.values().next().value;
+      if (oldest !== undefined) {
+        this.#letGo.delete(oldest);
+      }
+    }
+    return { stopped: false };
+  }
+
   /** What a deleted transcript's words are forgotten by: the transcript index (daemon.ts). */
   #transcriptDeleted: (sessionId: string) => Promise<void> = () =>
     Promise.resolve();
@@ -1399,6 +1468,10 @@ export class SessionSupervisor {
       // A move's steps queue per job: two jobs never wait on each other, and
       // a hub asking again for a step in flight waits on that one run.
       key = `move:${(control.args?.[0] as { jobId?: string } | undefined)?.jobId}`;
+    } else if (control && control.method in this.#abandonable) {
+      // A read the hub may let go runs beside every other: one search never
+      // waits on another, nor the hub's word that it let one go on it.
+      key = `read:${control.requestId}`;
     } else if (control?.method === CONTROL_CARRY_SESSIONS) {
       // Each carry in a lane of its own: one session's carry never waits on
       // another's. A second carry of a conversation one is still carrying is
@@ -5691,11 +5764,16 @@ export class SessionSupervisor {
       // An interrupted session is idle: nothing it started in its workspace
       // runs on, to end later and wake it, whether or not its process was
       // there to hear the interrupt.
-      const result = await this.#call(instanceId, kind, method, args).finally(
-        () =>
-          method === CONTROL_INTERRUPT && instanceId
-            ? this.#endWork(instanceId, "interrupted")
-            : undefined
+      const result = await this.#call(
+        instanceId,
+        kind,
+        method,
+        args,
+        requestId
+      ).finally(() =>
+        method === CONTROL_INTERRUPT && instanceId
+          ? this.#endWork(instanceId, "interrupted")
+          : undefined
       );
       this.sink({
         kind: "control_result",
@@ -6435,12 +6513,19 @@ export class SessionSupervisor {
     instanceId: string | undefined,
     kind: HarnessKind | undefined,
     method: string,
-    args: unknown[]
+    args: unknown[],
+    requestId?: string
   ): Promise<unknown> {
     if (instanceId === undefined) {
       const daemonFn = this.#daemonFunctions[method];
       if (daemonFn) {
         return await daemonFn(...args);
+      }
+      if (method in this.#abandonable) {
+        return await this.#abandonableRead(method, requestId, args);
+      }
+      if (method === CONTROL_ABANDON) {
+        return this.#abandon(String(args[0]));
       }
 
       if (method === CONTROL_RESTLESS) {

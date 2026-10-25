@@ -1,10 +1,12 @@
 /**
- * The agent's stores thread (packages/agent/src/stores/), asked inside the
- * compiled binary as `cawco proof-stores` (proof-runtime.ts): the thread
- * starts from the binary's embedded entry (build-binary.ts,
- * ./scripts/binary/stores-worker.js), and the transcript index it holds
- * parses new transcripts on worker threads of its own, started from inside
- * it (jsonl-parser pool.ts `workerUrl`), as in a shipped agent.
+ * The agent's stores thread (packages/agent/src/stores/) and its search
+ * process (packages/agent/src/search/process.ts), asked inside the compiled
+ * binary as `cawco proof-stores` (proof-runtime.ts): the thread starts from
+ * the binary's embedded entry (build-binary.ts,
+ * ./scripts/binary/stores-worker.js), the search process as the binary's own
+ * `search-host` verb (entry.ts), and the transcript index it holds parses new
+ * transcripts on worker threads of its own, started from inside it
+ * (jsonl-parser pool.ts `workerUrl`), as in a shipped agent.
  *
  * In its scratch HOME: {@link FILES} stored Claude transcripts, each saying
  * {@link WORD}. Asked: OpenCode's own sign-ins (none here: "absent"), the
@@ -13,6 +15,7 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { SearchProcess } from "../../packages/agent/src/search/process";
 import { storeRead, storeWork } from "../../packages/agent/src/stores/client";
 import { claudeHome } from "../../packages/core/src/paths";
 
@@ -55,18 +58,18 @@ export const proveStores = async (): Promise<void> => {
     ids.map((id) => writeFile(join(project, `${id}.jsonl`), transcript(id)))
   );
   const rows = await storeRead("opencode.ownRows", undefined, 10_000);
-  const through = await storeWork("search.open", undefined);
-  await storeWork("search.sync", Date.now());
-  const found = await storeRead(
-    "search.search",
-    { query: WORD, options: { limit: 20 } },
-    10_000
-  );
+  let through: number | undefined;
+  const index = new SearchProcess((opened) => {
+    through ??= opened;
+  });
+  await index.work("sync", Date.now());
+  const found = await index.read("search", {
+    query: WORD,
+    options: { limit: 20 },
+  });
+  index.close();
   const usage = await storeWork("usage.scan", Date.now());
-  const sessions =
-    found.kind === "answered"
-      ? new Set(found.value.map((hit) => hit.sessionId))
-      : new Set<string>();
+  const sessions = new Set(found.map((hit) => hit.sessionId));
   const said = {
     signIns: rows.kind === "answered" ? rows.value : rows,
     indexedThroughBefore: through,

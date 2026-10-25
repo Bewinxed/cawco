@@ -183,6 +183,11 @@ export interface FindRequest {
   /** Only words said by this author (`by=me`: the person's own). */
   author?: MomentAuthor;
   /**
+   * Who asks, in a few words ("the dashboard's Find", "the find tool of
+   * session …"): what the hub's log names a machine's slow answer by.
+   */
+  caller: string;
+  /**
    * Each moment carries the words around it ({@link HeldMoment}): the
    * person's Find asks while it hides secrets (find-secrets.ts), and an
    * agent's find always, its excerpts cut from them once the secret filter
@@ -193,6 +198,11 @@ export interface FindRequest {
   kinds?: FindKind[];
   limit?: number;
   q: string;
+  /**
+   * Aborts once the asker no longer waits (the person typed on, closed
+   * Find): the machines are told to stop the search (core `CONTROL_ABANDON`).
+   */
+  signal?: AbortSignal;
   /**
    * The machines match what tools answered too (core `TranscriptQuery`
    * `toolOutput`): an agent's `find` asks it (find-tool.ts); the person's
@@ -290,12 +300,17 @@ export interface FindDeps {
    * lists them by.
    */
   artifactNeeds: () => ArtifactNeedsRead;
-  /** One machine's transcript answer, or why it gave none. */
+  /**
+   * One machine's transcript answer, or why it gave none: given `timeoutMs`,
+   * and the machine told to stop the search once that passes or `ask.signal`
+   * aborts.
+   */
   askMachine: (
     machineId: string,
     query: string,
     options: TranscriptQuery & { limit: number },
-    timeoutMs: number
+    timeoutMs: number,
+    ask: Pick<FindRequest, "caller" | "signal">
   ) => Promise<TranscriptAnswer | { error: string }>;
   db: DbShape;
   /**
@@ -972,7 +987,8 @@ export const createFind = (deps: FindDeps) => {
   const askOne = async (
     machine: AgentRow,
     query: string,
-    options: TranscriptQuery & { limit: number }
+    options: TranscriptQuery & { limit: number },
+    ask: Pick<FindRequest, "caller" | "signal">
   ): Promise<Asked> => {
     const base = {
       machineId: machine.machineId,
@@ -997,7 +1013,8 @@ export const createFind = (deps: FindDeps) => {
       machine.machineId,
       query,
       options,
-      TRANSCRIPT_ANSWER_MS
+      TRANSCRIPT_ANSWER_MS,
+      ask
     );
     const tookMs = Math.round(performance.now() - started);
     if ("error" in answer) {
@@ -1207,7 +1224,7 @@ export const createFind = (deps: FindDeps) => {
     const asked = await askMachines(
       query.words.join(" "),
       request.author,
-      { context: request.context, toolOutput: request.toolOutput },
+      request,
       request.where,
       matched.held,
       limit
@@ -1235,7 +1252,7 @@ export const createFind = (deps: FindDeps) => {
   const askMachines = (
     words: string,
     author: TranscriptQuery["author"],
-    asks: Pick<FindRequest, "context" | "toolOutput">,
+    asks: Pick<FindRequest, "caller" | "context" | "signal" | "toolOutput">,
     where: FindWhere | undefined,
     held: Names,
     limit: number
@@ -1253,23 +1270,28 @@ export const createFind = (deps: FindDeps) => {
       );
     return Promise.all(
       machines.map((machine) =>
-        askOne(machine, words, {
-          limit,
-          ...(author ? { author } : {}),
-          ...(asks.toolOutput ? { toolOutput: true } : {}),
-          ...(asks.context ? { context: true } : {}),
-          ...(where?.projectId
-            ? { sessions: sessionsOn(machine.machineId) }
-            : {}),
-          // A listing reads its window from the index; a search keeps its
-          // own `since` at the hub, over what it ranked.
-          ...(words === "" && where?.since !== undefined
-            ? { since: new Date(where.since).toISOString() }
-            : {}),
-          ...(where?.before === undefined
-            ? {}
-            : { before: new Date(where.before).toISOString() }),
-        })
+        askOne(
+          machine,
+          words,
+          {
+            limit,
+            ...(author ? { author } : {}),
+            ...(asks.toolOutput ? { toolOutput: true } : {}),
+            ...(asks.context ? { context: true } : {}),
+            ...(where?.projectId
+              ? { sessions: sessionsOn(machine.machineId) }
+              : {}),
+            // A listing reads its window from the index; a search keeps its
+            // own `since` at the hub, over what it ranked.
+            ...(words === "" && where?.since !== undefined
+              ? { since: new Date(where.since).toISOString() }
+              : {}),
+            ...(where?.before === undefined
+              ? {}
+              : { before: new Date(where.before).toISOString() }),
+          },
+          asks
+        )
       )
     );
   };
@@ -1346,7 +1368,11 @@ export const createFind = (deps: FindDeps) => {
       ? await askMachines(
           "",
           author,
-          { context: request.context },
+          {
+            caller: request.caller,
+            context: request.context,
+            signal: request.signal,
+          },
           where,
           held,
           LISTED_DOCS
@@ -1793,11 +1819,14 @@ export const answerFind = async (
     transcripts?: "0" | "1";
   },
   /** Each moment carries the words around it, for the secret filter (find-secrets.ts). */
-  context: boolean
+  context: boolean,
+  /** Who asks, and the request's signal, which aborts once its asker goes (a newer keystroke). */
+  ask: Pick<FindRequest, "caller" | "signal">
 ): Promise<FindAnswer> => {
   try {
     const { total: _total, ...answer } = await find.find({
       q: query.q ?? "",
+      ...ask,
       ...(context ? { context: true as const } : {}),
       ...(query.limit ? { limit: Number(query.limit) || DEFAULT_LIMIT } : {}),
       ...(query.cursor ? { cursor: query.cursor } : {}),

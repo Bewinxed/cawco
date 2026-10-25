@@ -170,6 +170,7 @@ import {
   CONFIGURE_BINARY_UPDATES,
   CONTAINERS_ENDED,
   CONTAINERS_UNTRACKED,
+  CONTROL_ABANDON,
   CONTROL_ACCOUNT_LENT,
   CONTROL_BEGIN_ACCOUNT_LOGIN,
   CONTROL_BEGIN_PROVIDER_LOGIN,
@@ -1072,6 +1073,21 @@ const GH_ASK_MS = 20_000;
  * search/index.ts `SYNC_WAIT_MS`). Our call.
  */
 const FIND_TURNS_MS = 5000;
+/** How long a machine is given to hear that the hub let a read go (core `CONTROL_ABANDON`): one map lookup there. */
+const ABANDON_MS = 5000;
+
+/**
+ * Who asks `GET /api/find`, as the hub's log names a slow machine's search
+ * by: the app's Jump (its URLSession says CFNetwork and Darwin, no browser)
+ * or the dashboard's Find (⌘K; the composer's `@` asks names alone,
+ * `transcripts=0`, so no machine).
+ */
+const findCaller = (request: Request): string => {
+  const agent = request.headers.get("user-agent") ?? "";
+  return agent.includes("Darwin") && !agent.includes("Mozilla")
+    ? "the app's Jump"
+    : "the dashboard's Find (⌘K)";
+};
 /** How long a states file's read in its workspace may take before a handed input is refused: a `cat` of one source file. Our call. */
 const WORKSPACE_READ_MS = 15_000;
 /** How often the hub reads every skill's and plugin's source for an update. */
@@ -10502,6 +10518,87 @@ export const createServer = (
   ): Promise<Bounded<ControlResult>> => asRead(await callAgent(...ask));
 
   /**
+   * {@link readAgent} for a read the machine stops once the hub stops
+   * waiting for it (core `CONTROL_ABANDON`, agent session.ts
+   * `registerAbandonable`): when `timeoutMs` passes with no answer, or
+   * `ask.signal` aborts (its asker typed on), the machine is told under the
+   * read's own request id, and stops it where it runs. A deadline that
+   * passes is logged with who asked, so a late answer's line (`lateAnswer`,
+   * by the same id) is read back to its caller. Answers `null` when its asker
+   * let it go.
+   */
+  const readStoppable = async (
+    machineId: string,
+    method: string,
+    args: unknown[],
+    timeoutMs: number,
+    ask: { caller: string; signal?: AbortSignal | undefined }
+  ): Promise<Bounded<ControlResult> | null> => {
+    if (
+      !registry.agent(machineId) &&
+      machinePresence(machineId).kind !== "reconnecting"
+    ) {
+      return { kind: "unanswered", reason: "dead", after: 0 };
+    }
+    if (ask.signal?.aborted) {
+      return null;
+    }
+    const requestId = crypto.randomUUID();
+    const stop = () =>
+      detach(
+        callAgent(machineId, CONTROL_ABANDON, [requestId], ABANDON_MS).then(
+          (answer) => {
+            if (answer.kind === "unanswered") {
+              console.warn(
+                `[find] ${silentWords(machineId, answer)}, so it did not hear that ${method} (request ${requestId}) was let go`
+              );
+            }
+          }
+        ),
+        "a let-go read"
+      );
+    try {
+      const answer = asRead(
+        await awaitReply(
+          machineId,
+          requestId,
+          timeoutMs,
+          () => {
+            const agent = registry.agent(machineId);
+            const frame = {
+              verb: "control",
+              machineId,
+              payload: {
+                requestId,
+                method,
+                args,
+              } satisfies ControlPayload,
+            } satisfies Envelope<ControlPayload>;
+            if (agent) {
+              sendFrame(agent, frame);
+            }
+            return frame;
+          },
+          ask.signal
+        )
+      );
+      if (answer.kind === "unanswered" && answer.reason === "timeout") {
+        console.warn(
+          `[find] ${machineName(machineId)} didn't answer ${method} for ${ask.caller} within ${timeoutMs / 1000} s (request ${requestId}); it is told to stop it`
+        );
+        stop();
+      }
+      return answer;
+    } catch (error) {
+      if (!ask.signal?.aborted) {
+        throw error;
+      }
+      stop();
+      return null;
+    }
+  };
+
+  /**
    * Sends something a machine answers under `requestId`, and waits for that
    * answer, until `timeoutMs`. `send` sends it and gives the frame it sent:
    * the one sent again, under the same id, if the link drops before the
@@ -10513,7 +10610,9 @@ export const createServer = (
     machineId: string,
     requestId: string,
     timeoutMs: number,
-    send: () => Envelope | undefined
+    send: () => Envelope | undefined,
+    /** Aborts once its asker stops waiting: the wait ends there, thrown as the abort. */
+    letGo?: AbortSignal
   ): Promise<Bounded<ControlResult>> => {
     let answered: ControlResult | undefined;
     const forget = () => {
@@ -10523,8 +10622,20 @@ export const createServer = (
     const sentAt = Date.now();
     const reply = await readWithin(
       timeoutMs,
-      () =>
-        new Promise<ControlResult>((resolve) => {
+      (signal) =>
+        new Promise<ControlResult>((resolve, reject) => {
+          if (letGo) {
+            signal.addEventListener(
+              "abort",
+              () => {
+                if (letGo.aborted) {
+                  forget();
+                  reject(letGo.reason);
+                }
+              },
+              { once: true }
+            );
+          }
           waitOn(requestId, machineId);
           waiting.set(requestId, (frame) => {
             answered = frame;
@@ -10542,7 +10653,8 @@ export const createServer = (
             forget();
             throw error;
           }
-        })
+        }),
+      letGo ? { signal: letGo } : {}
     );
     if (reply.kind === "answered") {
       return reply;
@@ -24414,13 +24526,17 @@ export const createServer = (
           throw unreachable(answer);
       }
     },
-    askMachine: async (machineId, query, options, timeoutMs) => {
-      const answer = await readAgent(
+    askMachine: async (machineId, query, options, timeoutMs, ask) => {
+      const answer = await readStoppable(
         machineId,
         CONTROL_SEARCH_TRANSCRIPTS,
         [query, options],
-        timeoutMs
+        timeoutMs,
+        ask
       );
+      if (answer === null) {
+        return { error: "its asker asked something newer first" };
+      }
       switch (answer.kind) {
         case "unanswered":
           return { error: searchMiss(answer) };
@@ -25602,12 +25718,16 @@ export const createServer = (
         name: project.name,
       })),
     indexedTurns: async (machineId, query) => {
-      const answer = await readAgent(
+      const answer = await readStoppable(
         machineId,
         CONTROL_TRANSCRIPT_TURNS,
         [query],
-        FIND_TURNS_MS
+        FIND_TURNS_MS,
+        { caller: "an agent's find, reading a hit's turns" }
       );
+      if (answer === null) {
+        return { error: "its asker let it go" };
+      }
       if (answer.kind === "unanswered" || !answer.value.ok) {
         return { error: searchMiss(answer) };
       }
@@ -30433,9 +30553,15 @@ export const createServer = (
       // (`/api/seen`) and the `shown` acks the screens already send.
       // While "Hide secrets in Find" is on, each answer names where its
       // secrets stand (find-secrets.ts), for every screen to draw as dots.
-      .get("/api/find", { query: FIND_QUERY }, async ({ query }) => {
+      .get("/api/find", { query: FIND_QUERY }, async ({ query, request }) => {
         const hide = db.findSettings.hideSecrets();
-        return forScreens(await answerFind(find, query, hide), hide);
+        return forScreens(
+          await answerFind(find, query, hide, {
+            caller: findCaller(request),
+            signal: request.signal,
+          }),
+          hide
+        );
       })
       .get("/api/find/waiting", () => find.waiting())
       // The person's Find settings, the same on every screen: kept at the hub.

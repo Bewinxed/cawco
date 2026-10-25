@@ -1971,6 +1971,16 @@ export interface SpinOffHeld {
 export const CONTROL_SEARCH_TRANSCRIPTS = "searchTranscripts";
 
 /**
+ * The hub stopped waiting for a read it asked a machine (its deadline
+ * passed, or the person's Find asked something newer): args `[requestId]`,
+ * the read's own. The machine stops that read where it runs (agent
+ * session.ts `registerAbandonable`: {@link CONTROL_SEARCH_TRANSCRIPTS} and
+ * {@link CONTROL_TRANSCRIPT_TURNS}), and answers `{ stopped }`, whether it
+ * held it. Machine-scoped.
+ */
+export const CONTROL_ABANDON = "abandon";
+
+/**
  * A conversation's turns as a machine's transcript index holds them
  * (daemon-scoped): args `[TranscriptTurnsQuery]` (core find.ts), answers
  * `TranscriptTurns`.

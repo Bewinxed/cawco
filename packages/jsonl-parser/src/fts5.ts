@@ -103,6 +103,18 @@ CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `;
 
 /**
+ * Where a search marks its moments' words ({@link TranscriptIndex.#marked}):
+ * a table of the connection's own, in memory (`temp_store`), with the
+ * index's columns and tokenizer, holding the moments of one search at a time.
+ */
+const MARKING = `
+CREATE VIRTUAL TABLE IF NOT EXISTS temp.marking USING fts5(
+  text, thinking, tools, output,
+  tokenize='porter unicode61'
+);
+`;
+
+/**
  * How many of FTS5's segments on one level are merged together: its most
  * ("the minimum number of b-tree segments that will be merged together by a
  * 'merge' command with a positive parameter … The default value … is 4. The
@@ -411,13 +423,117 @@ export interface ConversationHit {
   moments: Moment[];
 }
 
-/** One pass of a search: what it matches, in which rowids, and how its excerpts are read. */
+/** One pass of a search: what it matches, in which rowids, and which words its excerpts mark. */
 interface Pass {
+  /** Its MATCH expression: every word required, in the columns searched. */
   match: string;
-  /** Excerpts seek each id (a pass of whole words); else they read the pass's matches once. */
-  seek: boolean;
+  /** What its excerpts mark: any of its words, in the same columns. */
+  mark: string;
   /** The rowids it ranks in, as SQL on `docs_fts.rowid`. */
   within: string;
+  /** Its words, lowercase: what a long column's marked stretch is chosen by. */
+  words: readonly string[];
+}
+
+/**
+ * How many characters of each column of a moment's document its excerpt and
+ * context are marked in, at most: the stretch where the most of the query's
+ * different words stand together, {@link CONTEXT_CHARS} before it and the
+ * rest after. FTS5's `snippet()` scores each match of the query's words in a
+ * column against every other one (fts5_aux.c `fts5SnippetScore` walks every
+ * instance for each instance), so its cost grows with the square of the
+ * matches: a fifteen-word query from an agent's `find`, every word required,
+ * ranks the longest documents first (only they hold every word), and on
+ * obelisk's 1.47M-document index its excerpts took 13.5 s of a 17 s search,
+ * 1.7 s for one 738 KB document; a 33-word one took 87 s; four in a row held
+ * its agent 26 minutes (2026-10-25). Cut to this, each costs what this many
+ * characters cost.
+ */
+const MARKED_CHARS = 4 * CONTEXT_CHARS;
+/**
+ * How many places of one word a column's stretch is chosen among: a word
+ * found more often than this is taken to stand everywhere in the column (a
+ * word as common as "the"), and the stretch is chosen by the rarer ones.
+ */
+const PLACES_PER_WORD = 512;
+const WORD_CHAR = /[\p{L}\p{N}]/u;
+
+
+/**
+ * Where in `column` its marked stretch starts ({@link MARKED_CHARS}): the
+ * column's start when it is that short or holds none of `words` (lowercase);
+ * else {@link CONTEXT_CHARS} before the place where the most of them start a
+ * word within {@link CONTEXT_CHARS} of each other, the one with the most of
+ * their places among equals, the first among those (as FTS5's `snippet`
+ * weighs a window: each phrase it holds first, its repeats after). Found by
+ * the words as written, not by the index's stemmer: a word only its stem
+ * finds leaves the stretch where the others stand, and the stretch's marks
+ * are the index's own.
+ */
+function stretchOf(column: string, words: readonly string[]): number {
+  const lower = column.toLowerCase();
+  let everywhere = 0;
+  const places: { at: number; term: number }[] = [];
+  for (const [term, word] of [...new Set(words)].entries()) {
+    const found: { at: number; term: number }[] = [];
+    for (let at = lower.indexOf(word); at >= 0; at = lower.indexOf(word, at + word.length)) {
+      if (at > 0 && WORD_CHAR.test(lower[at - 1] ?? "")) {
+        continue;
+      }
+      found.push({ at, term });
+      if (found.length > PLACES_PER_WORD) {
+        break;
+      }
+    }
+    if (found.length > PLACES_PER_WORD) {
+      everywhere += 1;
+    } else {
+      places.push(...found);
+    }
+  }
+  places.sort((a, b) => a.at - b.at);
+  let best = { at: 0, places: 0, terms: 0 };
+  /** How many places of each word lie in the window from the current place to `end`. */
+  const held = new Map<number, number>();
+  let end = 0;
+  for (const [start, place] of places.entries()) {
+    for (; end < places.length && (places[end]?.at ?? 0) - place.at <= CONTEXT_CHARS; end++) {
+      const term = places[end]?.term ?? 0;
+      held.set(term, (held.get(term) ?? 0) + 1);
+    }
+    const terms = held.size + everywhere;
+    if (terms > best.terms || (terms === best.terms && end - start > best.places)) {
+      best = { at: place.at, places: end - start, terms };
+    }
+    const left = (held.get(place.term) ?? 1) - 1;
+    if (left === 0) {
+      held.delete(place.term);
+    } else {
+      held.set(place.term, left);
+    }
+  }
+  return Math.max(0, best.at - CONTEXT_CHARS);
+}
+
+/** How far a stretch's edge moves to the nearest whitespace, at most. */
+const EDGE_CHARS = 64;
+
+/**
+ * `column` cut to its marked stretch ({@link stretchOf}), each edge moved to
+ * whitespace so no word is cut in two, and an ellipsis where words were cut
+ * away (punctuation to the tokenizer: no token, no mark).
+ */
+function stretch(column: string | null, words: readonly string[]): string | null {
+  if (column === null || column.length <= MARKED_CHARS) {
+    return column;
+  }
+  const from = stretchOf(column, words);
+  const after = from === 0 ? -1 : column.slice(from, from + EDGE_CHARS).search(/\s/);
+  const start = after < 0 ? from : from + after + 1;
+  const to = Math.min(column.length, from + MARKED_CHARS);
+  const before = to === column.length ? -1 : column.slice(to - EDGE_CHARS, to).search(/\s\S*$/);
+  const end = before < 0 ? to : to - EDGE_CHARS + before;
+  return `${start > 0 ? "… " : ""}${column.slice(start, end)}${end < column.length ? " …" : ""}`;
 }
 
 /** A document a pass ranked: its id, its conversation by string ids, its score. */
@@ -442,6 +558,14 @@ interface Described {
   session_id: string;
   sidechain: number;
   ts: string | null;
+}
+
+/** A moment's document as a search marked it ({@link TranscriptIndex.#marked}): its excerpt, and its columns' stretches with every token marked. */
+interface Marked {
+  output: string | null;
+  snippet: string;
+  text: string;
+  thinking: string | null;
 }
 
 /** How much of a document's words tell two moments of a conversation apart. */
@@ -498,32 +622,32 @@ export interface SyncResult {
 }
 
 /**
- * Free text as safe FTS5 MATCH expressions, every word quoted and required:
- * `whole`, each word as itself (porter stemming matches its other forms);
- * `typing`, the last word as the start of longer ones too, the word a
- * person is still typing, once it has {@link PREFIX_MIN} letters. A shorter
- * last word after others is left out until it has them: half a word that
- * short says nothing yet, and required whole it would empty the answer
- * between keystrokes. Alone, a short word is searched as itself.
+ * The words of free text a search requires, each to be quoted in its MATCH
+ * expressions (porter stemming matches its other forms), and whether the
+ * last may also match as the start of longer ones: the word a person is
+ * still typing, once it has {@link PREFIX_MIN} letters. A shorter last word
+ * after others is left out until it has them: half a word that short says
+ * nothing yet, and required whole it would empty the answer between
+ * keystrokes. Alone, a short word is searched as itself.
  *
  * Only the last word is a prefix: FTS5 reads every term a prefix expands to
  * whole before a rowid range or another word narrows it, so a prefix costs
  * what all its expansions' documents cost (a common word's, 51 ms on 400,000
  * documents, where the same word whole in the newest tier cost 0.4 ms).
  */
-export function matchQueries(text: string): { typing: string | null; whole: string } {
+export function matchQueries(text: string): { prefix: boolean; words: string[] } {
   const typed = text
     .split(/\s+/)
     .map((t) => t.replaceAll('"', ""))
     .filter((t) => t.length > 0);
   const last = typed.at(-1) ?? "";
   const words = typed.length > 1 && last.length < PREFIX_MIN ? typed.slice(0, -1) : typed;
-  const whole = words.map((t) => `"${t}"`).join(" ");
-  return {
-    whole,
-    typing: words.length === typed.length && last.length >= PREFIX_MIN ? `${whole}*` : null,
-  };
+  return { words, prefix: words.length === typed.length && last.length >= PREFIX_MIN };
 }
+
+/** `words` quoted as FTS5 phrases, the last also as a prefix when `prefix`, joined by `join`. */
+const phrases = (words: readonly string[], prefix: boolean, join: " " | " OR "): string =>
+  words.map((word, i) => `"${word}"${prefix && i === words.length - 1 ? "*" : ""}`).join(join);
 
 /**
  * How many transcript bytes a full parse takes on at once. A parse returns
@@ -588,6 +712,7 @@ export class TranscriptIndex {
       this.#rebuild(path);
     }
     this.db.exec(SCHEMA);
+    this.db.exec(MARKING);
     for (const [key, value] of [
       ["automerge", FTS_AUTOMERGE],
       ["usermerge", FTS_USERMERGE],
@@ -605,13 +730,14 @@ export class TranscriptIndex {
   }
 
   /**
-   * Who said each of the person's documents, read again by the rules of now
-   * (text.ts `userAuthor`, `AUTHOR_RULES`) once those rules change: what
-   * they newly tell as a harness's or the hub's (a summariser's prompt)
-   * stops being the person's, in place. The index is never rebuilt for it: a
-   * rebuild reads every transcript again, hours on a large machine, while
-   * the person's documents are a small share of the rows, read off
-   * `docs_author_ts`. Once per rules version.
+   * Who said each of the person's and the injected documents, read again by
+   * the rules of now (text.ts `userAuthor`, `AUTHOR_RULES`) once those rules
+   * change: what they newly tell as a harness's or the hub's (a summariser's
+   * prompt) stops being the person's, in place, and what they tell as a copy
+   * of another session's words (text.ts `COPIED`) leaves the index. The
+   * index is never rebuilt for it: a rebuild reads every transcript again,
+   * hours on a large machine, while these documents are a small share of the
+   * rows, read off `docs_author_ts`. Once per rules version.
    */
   #reattribute(): void {
     const done = this.db.query("SELECT value FROM meta WHERE key = 'author_rules'").get() as {
@@ -620,18 +746,26 @@ export class TranscriptIndex {
     if (done?.value === String(AUTHOR_RULES)) {
       return;
     }
-    const owner = this.#strings.get("owner");
+    const authors = ["owner", "injected"].flatMap((name) => {
+      const id = this.#strings.get(name);
+      return id === undefined ? [] : [{ id, name }];
+    });
     const reread = this.db.transaction(() => {
       let moved = 0;
-      if (owner !== undefined) {
+      let copies = 0;
+      const update = this.db.query("UPDATE docs SET author = ? WHERE id = ?");
+      const drop = this.db.query("DELETE FROM docs WHERE id = ?");
+      for (const { id, name } of authors) {
         const rows = this.db
           .query("SELECT id, text FROM docs INDEXED BY docs_author_ts WHERE author = ?")
-          .all(owner) as { id: number; text: string }[];
-        const update = this.db.query("UPDATE docs SET author = ? WHERE id = ?");
+          .all(id) as { id: number; text: string }[];
         for (const row of rows) {
-          const { author } = userAuthor(row.text);
-          if (author !== "owner") {
-            update.run(this.#stringId(author), row.id);
+          const said = userAuthor(row.text);
+          if (said === null) {
+            drop.run(row.id);
+            copies += 1;
+          } else if (said.author !== name) {
+            update.run(this.#stringId(said.author), row.id);
             moved += 1;
           }
         }
@@ -641,12 +775,17 @@ export class TranscriptIndex {
           "INSERT INTO meta (key, value) VALUES ('author_rules', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         )
         .run(String(AUTHOR_RULES));
-      return moved;
+      return { copies, moved };
     });
     try {
-      const moved = reread();
+      const { copies, moved } = reread();
       if (moved > 0) {
-        console.info(`[search] ${moved} documents told again as not the person's own`);
+        console.info(`[search] ${moved} documents told again by who said them`);
+      }
+      if (copies > 0) {
+        console.info(
+          `[search] ${copies} documents that copied another session's words (the hub's summariser prompts) left the index`,
+        );
       }
     } catch (error) {
       this.#reloadStrings();
@@ -1090,23 +1229,56 @@ export class TranscriptIndex {
   }
 
   /**
-   * The excerpt of each of `ids` that `pass` found, its terms between 「 and
-   * 」. A pass of whole words seeks each id in the index; the last word's
-   * prefix pass reads its matches once, since a prefix is merged whole on
-   * every read (`matchQueries`).
+   * Each of `ids`'s excerpt as `pass` marks it, its words between 「 and 」
+   * (FTS5 `snippet`), and its columns of words with every token marked
+   * (FTS5 `highlight`), what a moment's context is cut from: by the index's
+   * own tokenizer and stemmer, whole tokens only, every word of the pass
+   * wherever it stands. Marked in {@link MARKING}, each column cut to its
+   * marked stretch ({@link MARKED_CHARS}), never in the index itself, whose
+   * whole documents made `snippet` cost the square of their matches; what
+   * tools answered only when the search matched it (`toolOutput`). A
+   * document none of whose stretches holds a word of the pass (a match in
+   * its tools' names alone) is not answered.
    */
-  #excerpts(pass: Pass, ids: number[]): Map<number, string> {
-    const from = pass.seek
-      ? "json_each(?) AS k CROSS JOIN docs_fts ON docs_fts.rowid = k.value"
-      : "docs_fts JOIN json_each(?) AS k ON k.value = docs_fts.rowid";
+  #marked(pass: Pass, ids: number[], toolOutput: boolean): Map<number, Marked> {
+    const docs = this.db
+      .prepare(
+        `SELECT d.id, d.text, d.thinking, d.tools, d.output
+         FROM json_each(?) AS k JOIN docs d ON d.id = k.value`,
+      )
+      .all(JSON.stringify(ids)) as {
+      id: number;
+      output: string | null;
+      text: string;
+      thinking: string | null;
+      tools: string | null;
+    }[];
+    this.db.exec("DELETE FROM temp.marking");
+    const put = this.db.query(
+      "INSERT INTO temp.marking (rowid, text, thinking, tools, output) VALUES (?, ?, ?, ?, ?)",
+    );
+    for (const doc of docs) {
+      put.run(
+        doc.id,
+        stretch(doc.text, pass.words) ?? "",
+        stretch(doc.thinking, pass.words),
+        doc.tools,
+        toolOutput ? stretch(doc.output, pass.words) : null,
+      );
+    }
     const rows = this.db
       .prepare(
-        `SELECT docs_fts.rowid AS id, snippet(docs_fts, -1, '「', '」', '…', 16) AS snip
-         FROM ${from}
-         WHERE docs_fts MATCH ?`,
+        `SELECT rowid AS id,
+                snippet(marking, -1, '「', '」', '…', 16) AS snippet,
+                highlight(marking, 0, '「', '」') AS text,
+                highlight(marking, 1, '「', '」') AS thinking,
+                highlight(marking, 3, '「', '」') AS output
+         FROM temp.marking
+         WHERE marking MATCH ?`,
       )
-      .all(JSON.stringify(ids), pass.match) as { id: number; snip: string }[];
-    return new Map(rows.map((row) => [row.id, row.snip]));
+      .all(pass.mark) as (Marked & { id: number; text: string | null })[];
+    this.db.exec("DELETE FROM temp.marking");
+    return new Map(rows.map(({ id, text, ...rest }) => [id, { ...rest, text: text ?? "" }]));
   }
 
   /**
@@ -1127,16 +1299,20 @@ export class TranscriptIndex {
   }
 
   #searchNow(query: string, options: SearchOptions): ConversationHit[] {
-    const queries = matchQueries(query);
-    if (queries.whole.length === 0) {
+    const { words, prefix } = matchQueries(query);
+    if (words.length === 0) {
       return [];
     }
     // What tools answered is matched only when asked for: else every phrase
     // reads what was said, thought and called alone.
     const scoped = (match: string) =>
       options.toolOutput ? match : `${SAID_COLUMNS} : (${match})`;
-    const whole = scoped(queries.whole);
-    const typing = queries.typing === null ? null : scoped(queries.typing);
+    const lower = words.map((word) => word.toLowerCase());
+    const pass = (asPrefix: boolean) => ({
+      match: scoped(phrases(words, asPrefix, " ")),
+      mark: scoped(phrases(words, asPrefix, " OR ")),
+      words: lower,
+    });
     const limit = options.limit ?? 20;
     const params: (string | number)[] = [];
     let filters = "";
@@ -1168,30 +1344,19 @@ export class TranscriptIndex {
       filters += " AND d.ts <= ?";
       params.push(options.before);
     }
-    const ranked = this.#rankedPasses(whole, typing, filters, params, limit);
+    const ranked = this.#rankedPasses(pass(false), prefix ? pass(true) : null, filters, params, limit);
     const described = this.#described(ranked.map((row) => row.id));
     const kept = this.#moments(ranked, described);
-    const excerpts = new Map<number, string>();
-    for (const pass of new Set(kept.flatMap((each) => each.moments.map((moment) => moment.pass)))) {
-      const ids = kept.flatMap((each) =>
-        each.moments.filter((moment) => moment.pass === pass).map((moment) => moment.id),
+    const marked = new Map<number, Marked>();
+    for (const each of new Set(kept.flatMap((hit) => hit.moments.map((moment) => moment.pass)))) {
+      const ids = kept.flatMap((hit) =>
+        hit.moments.filter((moment) => moment.pass === each).map((moment) => moment.id),
       );
-      for (const [id, snip] of this.#excerpts(pass, ids)) {
-        excerpts.set(id, snip);
-      }
-    }
-    const words = new Map<
-      number,
-      { output: string | null; text: string; thinking: string | null }
-    >();
-    for (const pass of options.context
-      ? new Set(kept.flatMap((each) => each.moments.map((moment) => moment.pass)))
-      : []) {
-      const ids = kept.flatMap((each) =>
-        each.moments.filter((moment) => moment.pass === pass).map((moment) => moment.id),
+      const read = section("search index: moments marked", () =>
+        this.#marked(each, ids, options.toolOutput === true),
       );
-      for (const [id, marked] of this.#highlighted(pass, ids)) {
-        words.set(id, marked);
+      for (const [id, one] of read) {
+        marked.set(id, one);
       }
     }
     return kept
@@ -1202,9 +1367,9 @@ export class TranscriptIndex {
           if (!row) {
             return [];
           }
-          const snippet = excerpts.get(moment.id) ?? row.gist;
-          const doc = words.get(moment.id);
-          const context = doc ? contextOf(doc) : undefined;
+          const one = marked.get(moment.id);
+          const snippet = one?.snippet ?? row.gist;
+          const context = one && options.context ? contextOf(one) : undefined;
           return [
             {
               docId: row.doc_id,
@@ -1219,38 +1384,6 @@ export class TranscriptIndex {
         }),
       }))
       .slice(0, limit);
-  }
-
-  /**
-   * Each of `ids`'s columns of words as `pass` matched them, every token it
-   * matched between 「 and 」 (FTS5 `highlight`: the index's own tokenizer
-   * and stemmer, whole tokens only): what a moment's context is cut from.
-   */
-  #highlighted(
-    pass: Pass,
-    ids: number[],
-  ): Map<number, { output: string | null; text: string; thinking: string | null }> {
-    const from = pass.seek
-      ? "json_each(?) AS k CROSS JOIN docs_fts ON docs_fts.rowid = k.value"
-      : "docs_fts JOIN json_each(?) AS k ON k.value = docs_fts.rowid";
-    const rows = this.db
-      .prepare(
-        `SELECT docs_fts.rowid AS id,
-                highlight(docs_fts, 0, '「', '」') AS text,
-                highlight(docs_fts, 1, '「', '」') AS thinking,
-                highlight(docs_fts, 3, '「', '」') AS output
-         FROM ${from}
-         WHERE docs_fts MATCH ?`,
-      )
-      .all(JSON.stringify(ids), pass.match) as {
-      id: number;
-      output: string | null;
-      text: string | null;
-      thinking: string | null;
-    }[];
-    return new Map(
-      rows.map(({ id, text, ...doc }) => [id, { ...doc, text: text ?? "" }]),
-    );
   }
 
   /** Every column of words of each of `ids`: a listing's context is the start of them. */
@@ -1526,8 +1659,8 @@ export class TranscriptIndex {
    * once, best score first.
    */
   #rankedPasses(
-    whole: string,
-    typing: string | null,
+    whole: Omit<Pass, "within">,
+    typing: Omit<Pass, "within"> | null,
     filters: string,
     params: (string | number)[],
     limit: number,
@@ -1539,14 +1672,13 @@ export class TranscriptIndex {
     );
     const passes: Pass[] = [
       ...floors.map((floor, i) => ({
-        match: whole,
-        seek: true,
+        ...whole,
         within:
           i === 0
             ? `docs_fts.rowid > ${floor}`
             : `docs_fts.rowid > ${floor} AND docs_fts.rowid <= ${floors[i - 1]}`,
       })),
-      ...(typing ? [{ match: typing, seek: false, within: "1" }] : []),
+      ...(typing ? [{ ...typing, within: "1" }] : []),
     ];
     const rows = new Map<number, Ranked>();
     const conversations = new Set<string>();

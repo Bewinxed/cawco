@@ -1,11 +1,16 @@
 import "../../packages/core/src/no-huge-pages";
 import { publishRuntime, runtimeTree } from "../../packages/core/src/runtime";
 
-await publishRuntime();
-process.env.PI_PACKAGE_DIR = runtimeTree("pi");
-if (Bun.argv[2]?.startsWith("proof-")) {
+if (Bun.argv[2] === "search-host") {
+  // The agent's search process, as the shipped binary starts it (entry.ts).
+  await import("../../packages/agent/src/search/host");
+} else if (Bun.argv[2]?.startsWith("proof-")) {
+  await publishRuntime();
+  process.env.PI_PACKAGE_DIR = runtimeTree("pi");
   await import("./proof-runtime");
 } else {
+  await publishRuntime();
+  process.env.PI_PACKAGE_DIR = runtimeTree("pi");
   const home = process.env.HOME;
   if (
     !home?.includes("binary") ||

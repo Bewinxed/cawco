@@ -4,13 +4,7 @@
  * and answers once.
  */
 
-import type {
-  ListOptions,
-  SearchOptions,
-  TurnsOptions,
-} from "@cawco/jsonl-parser/fts5";
 import { opencodeReads, type SessionQuery } from "./opencode-reads";
-import { searchHost } from "./search-host";
 import { usageHost } from "./usage-host";
 
 /** How an op says how far it has come, before it answers. */
@@ -24,16 +18,6 @@ export const storeOps = {
   "opencode.ownCredentials": (_: undefined) => opencodeReads.ownCredentials(),
   "opencode.sessions": (query: SessionQuery) => opencodeReads.sessions(query),
   "opencode.backupV1": (dataHome: string) => opencodeReads.backupV1(dataHome),
-  "search.open": (_: undefined) => searchHost.open(),
-  "search.sync": (startedAt: number, tell: Tell) =>
-    searchHost.sync(startedAt, (through) => tell(through)),
-  "search.forget": (sessionId: string) => searchHost.forget(sessionId),
-  "search.turns": (options: TurnsOptions) => searchHost.turns(options),
-  "search.listed": (options: ListOptions) => searchHost.listed(options),
-  "search.search": (args: { query: string; options: SearchOptions }) =>
-    searchHost.search(args.query, args.options),
-  "search.count": (_: undefined) => searchHost.count(),
-  "search.close": (_: undefined) => Promise.resolve(searchHost.close()),
   "usage.scan": (now: number) => usageHost.scan(now),
 } satisfies Record<string, (arg: never, tell: Tell) => Promise<unknown>>;
 

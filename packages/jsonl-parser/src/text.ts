@@ -119,8 +119,9 @@ const TAGGED: Readonly<Record<string, DocAuthor>> = {
  * opening, which quotes its summary and its last turns or the person's asks.
  * Both carry the person's words, copied: indexed as the person's, every
  * summarised session's words came back twice under `by: person`, the copy
- * ranked above the turn. Keep these in step with continuation.ts's
- * `summariserPrompt`, `openingMessage` and `asksOpening`.
+ * ranked above the turn. The summariser's prompt is {@link COPIED}, never
+ * indexed. Keep these in step with continuation.ts's `summariserPrompt`,
+ * `openingMessage` and `asksOpening`.
  */
 const INJECTED = [
   /^<(?:command-name|command-message|command-args|local-command-stdout|local-command-stderr|local-command-caveat|task-notification|user-prompt-submit-hook|bash-stdout|bash-stderr)>/,
@@ -128,20 +129,39 @@ const INJECTED = [
   /^\[Request interrupted by user/,
   /^This session is being continued from a previous conversation/,
   /^Base directory for this skill: /,
-  /^Below is the transcript of a coding-agent session, up to its last few turns\./,
   /^(?:Continuing|Restarting) session ".*" \(instance [0-9a-f-]+, /,
 ];
 
 /**
- * The version of the rules {@link userAuthor} reads by: raised whenever
- * {@link INJECTED} or {@link TAGGED} changes, so an index re-reads who said
- * what it already holds (fts5.ts `#reattribute`) instead of being rebuilt.
+ * The hub's summariser prompt (continuation.ts `summariserPrompt`): another
+ * session's transcript quoted whole as one user turn, each of its words
+ * already indexed where it was said, in a session no find ever answers with
+ * (hub find.ts `hubMade`). Indexed, it held every word of any long query
+ * and answered first: 116 of them (13.7 MB, up to 739 KB each) were 21 of a
+ * 19-word query's 24 moments on obelisk's index, and FTS5's `snippet()`
+ * over them, quadratic in their ~7,800 matches each, was 5.6 s of its 5.9 s
+ * (2026-10-25). Never indexed.
  */
-export const AUTHOR_RULES = 2;
+export const COPIED = "Below is the transcript of a coding-agent session, up to its last few turns.";
 
-/** Who wrote a user turn's `text`, and the words to index for it. */
-export function userAuthor(text: string): { author: DocAuthor; text: string } {
+/**
+ * The version of the rules {@link userAuthor} reads by: raised whenever
+ * {@link INJECTED}, {@link TAGGED} or {@link COPIED} changes, so an index
+ * re-reads who said what it already holds (fts5.ts `#reattribute`) instead
+ * of being rebuilt.
+ */
+export const AUTHOR_RULES = 3;
+
+/**
+ * Who wrote a user turn's `text`, and the words to index for it; null for
+ * a turn whose words are a copy of another session's ({@link COPIED}),
+ * which is not indexed.
+ */
+export function userAuthor(text: string): { author: DocAuthor; text: string } | null {
   const said = text.replace(SYSTEM_REMINDER, "").trim();
+  if (said.startsWith(COPIED)) {
+    return null;
+  }
   const tagged = CAWCO_TAG.exec(said)?.[1];
   if (tagged) {
     return { author: TAGGED[tagged] ?? "injected", text: said };
@@ -228,7 +248,7 @@ function queuedDoc(record: AttachmentRecord, options: ExtractOptions): Transcrip
   }
   const words = blocksToText(command.prompt, options);
   const said = userAuthor(words.text);
-  if (!said.text) {
+  if (!said?.text) {
     return null;
   }
   return {
@@ -273,7 +293,7 @@ export function extractDoc(
     record.type === "user" && (words.text.trim() || !words.output)
       ? userAuthor(words.text)
       : { author: "agent" as const, text: words.text.trim() };
-  if (!said.text && !words.thinking && words.tools.length === 0 && !words.output) {
+  if (!said || (!said.text && !words.thinking && words.tools.length === 0 && !words.output)) {
     return null;
   }
   return {

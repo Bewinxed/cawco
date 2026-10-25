@@ -1,8 +1,10 @@
 /**
- * Transcript search service: keeps the transcript index (held on the
- * agent's stores thread, stores/search-host.ts) in sync with Claude Code
+ * Transcript search service: keeps the transcript index (held by the
+ * agent's search process, search/host.ts) in sync with Claude Code
  * transcripts and OpenCode sessions, in the background and before a search,
- * and asks it each search. Nothing of the index's SQLite runs on the loop.
+ * and asks it each search. Nothing of the index's SQLite runs in the agent:
+ * a question that runs past its limit, or that its asker lets go, ends with
+ * the process that ran it (search/process.ts).
  */
 
 import type {
@@ -13,8 +15,7 @@ import type {
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { inFlight } from "../loop-watch";
-import { storeRead, storeWork } from "../stores/client";
-import type { StoreAnswer, StoreArg, StoreOp } from "../stores/ops";
+import { SearchProcess } from "./process";
 
 /**
  * How often the index takes in what the transcripts gained when nobody is
@@ -31,8 +32,10 @@ import type { StoreAnswer, StoreArg, StoreOp } from "../stores/ops";
 const SYNC_INTERVAL_MS = 10 * 60_000;
 /**
  * How far behind the transcripts a search may answer. Search is the
- * dashboard's jump palette, for finding a session by what was said in it,
- * one query per keystroke (150 ms debounce): the first keystroke syncs, the
+ * dashboard's Find and the app's Jump, for finding a session by what was
+ * said in it, asked once typing settles (250 ms after the last keystroke;
+ * the app's, 150 ms), each newer one letting the last go (hub find.ts
+ * `FindRequest.signal`), and agents' `find`: the first search syncs, the
  * rest of a burst answer from that sync. A sync that finds nothing new
  * writes nothing.
  */
@@ -52,14 +55,6 @@ const DEFAULT_SEARCH_LIMIT = 20;
 const MAX_LISTED_DOCS = 200;
 /** The most turns either side of a centre `turns` answers with: `find`'s detailed `around` asks five. */
 const MAX_TURNS_SIDE = 10;
-/**
- * How long a question of the index (a search, a listing, a conversation's
- * turns) is given on the stores thread, ms. A sync running there takes turns
- * between its parts, so a question answers between them; a thread held past
- * this (a disk that does not answer) refuses the question rather than
- * leaving it owed. Our call: far past the hub's own window for a machine.
- */
-const QUERY_MS = 10_000;
 
 /** A failed sync in a few words: SQLite's own message, with its code when it has one. */
 function syncFailure(error: unknown): string {
@@ -71,31 +66,6 @@ function syncFailure(error: unknown): string {
     ? `${error.message}, ${code}`
     : error.message;
 }
-
-/**
- * `op` asked of the index on the stores thread, given {@link QUERY_MS}:
- * its answer, or a refusal that says the index did not answer in time.
- */
-const askIndex = async <K extends StoreOp>(
-  op: K,
-  arg: StoreArg<K>
-): Promise<StoreAnswer<K>> => {
-  const read = await storeRead(op, arg, QUERY_MS);
-  switch (read.kind) {
-    case "answered":
-      return read.value;
-    case "unanswered":
-      throw new Error(
-        read.reason === "dead"
-          ? "its index's thread ended before it answered"
-          : `its index did not answer within ${Math.round(read.after / 1000)} s`
-      );
-    default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
-  }
-};
 
 export class TranscriptSearchService {
   #timer: ReturnType<typeof setInterval> | null = null;
@@ -117,15 +87,11 @@ export class TranscriptSearchService {
   readonly #firstSync = Promise.withResolvers<void>();
   /** Settles once the first sync has ended, however it ended. */
   readonly synced = this.#firstSync.promise;
-
-  /** The service, its index opened on the stores thread, knowing how far that index is whole. */
-  static async create(): Promise<TranscriptSearchService> {
-    const svc = new TranscriptSearchService();
-    const through = await storeWork("search.open", undefined);
-    svc.#indexedThrough = through;
-    svc.#whole = through > 0;
-    return svc;
-  }
+  /** The index, in its own process: each process that opens it says how far it is whole. */
+  readonly #index = new SearchProcess((through) => {
+    this.#indexedThrough = Math.max(this.#indexedThrough, through);
+    this.#whole ||= through > 0;
+  });
 
   /**
    * Run one sync cycle, or join the one in flight: claude transcripts +
@@ -165,7 +131,7 @@ export class TranscriptSearchService {
 
   async #syncOnce(): Promise<void> {
     const startedAt = Date.now();
-    await storeWork("search.sync", startedAt, (through) => {
+    await this.#index.work("sync", startedAt, (through) => {
       this.#indexedThrough = Math.max(this.#indexedThrough, Number(through));
     });
     this.#syncedAt = startedAt;
@@ -180,7 +146,7 @@ export class TranscriptSearchService {
    */
   async forget(sessionId: string): Promise<void> {
     await this.#syncing?.catch(() => undefined);
-    const gone = await storeWork("search.forget", sessionId);
+    const gone = await this.#index.work("forget", sessionId);
     console.info(
       `[search] transcript ${sessionId} deleted: ${gone} indexed document${gone === 1 ? "" : "s"} forgotten`
     );
@@ -209,7 +175,8 @@ export class TranscriptSearchService {
    */
   async search(
     query: string,
-    options?: TranscriptQuery
+    options?: TranscriptQuery,
+    signal?: AbortSignal
   ): Promise<TranscriptAnswer> {
     const started = performance.now();
     await this.#fresh();
@@ -220,7 +187,12 @@ export class TranscriptSearchService {
     );
     // No words and an author: that author's words, newest first, off the
     // index's author-and-time order (fts5.ts `listed`), never a scan.
-    const conversations = await this.#conversations(query, limit, options);
+    const conversations = await this.#conversations(
+      query,
+      limit,
+      options,
+      signal
+    );
     return {
       conversations,
       // Only a sync of an index that was never whole is a catch-up: a slow
@@ -278,14 +250,21 @@ export class TranscriptSearchService {
    * agent's `find` reads a hit's turns from, whatever its stored transcript
    * keeps now.
    */
-  async turns(query: TranscriptTurnsQuery): Promise<TranscriptTurns> {
+  async turns(
+    query: TranscriptTurnsQuery,
+    signal?: AbortSignal
+  ): Promise<TranscriptTurns> {
     await this.#fresh();
-    return askIndex("search.turns", {
-      sessions: query.sessions,
-      side: Math.min(Math.max(0, query.side), MAX_TURNS_SIDE),
-      ...(query.docId ? { docId: query.docId } : {}),
-      ...(query.at === undefined ? {} : { at: query.at }),
-    });
+    return this.#index.read(
+      "turns",
+      {
+        sessions: query.sessions,
+        side: Math.min(Math.max(0, query.side), MAX_TURNS_SIDE),
+        ...(query.docId ? { docId: query.docId } : {}),
+        ...(query.at === undefined ? {} : { at: query.at }),
+      },
+      signal
+    );
   }
 
   /**
@@ -293,44 +272,52 @@ export class TranscriptSearchService {
    * and an author, that author's words newest first, off the index's author
    * and time order (fts5.ts `listed`), never a scan.
    */
-  #conversations(query: string, limit: number, options?: TranscriptQuery) {
+  #conversations(
+    query: string,
+    limit: number,
+    options: TranscriptQuery | undefined,
+    signal: AbortSignal | undefined
+  ) {
     const author = options?.author;
     const narrowed = {
       ...(options?.sessions ? { sessions: options.sessions } : {}),
       ...(options?.before ? { before: options.before } : {}),
     };
     if (query.trim() === "" && author !== undefined) {
-      return askIndex("search.listed", {
-        author,
-        limit: Math.min(options?.limit ?? MAX_LISTED_DOCS, MAX_LISTED_DOCS),
-        ...narrowed,
-        ...(options?.since ? { since: options.since } : {}),
-        ...(options?.toolOutput ? { toolOutput: true } : {}),
-        ...(options?.context ? { context: true } : {}),
-      });
+      return this.#index.read(
+        "listed",
+        {
+          author,
+          limit: Math.min(options?.limit ?? MAX_LISTED_DOCS, MAX_LISTED_DOCS),
+          ...narrowed,
+          ...(options?.since ? { since: options.since } : {}),
+          ...(options?.toolOutput ? { toolOutput: true } : {}),
+          ...(options?.context ? { context: true } : {}),
+        },
+        signal
+      );
     }
-    return askIndex("search.search", {
-      query,
-      options: {
-        limit,
-        ...(author ? { author } : {}),
-        ...narrowed,
-        ...(options?.toolOutput ? { toolOutput: true } : {}),
-        ...(options?.context ? { context: true } : {}),
+    return this.#index.read(
+      "search",
+      {
+        query,
+        options: {
+          limit,
+          ...(author ? { author } : {}),
+          ...narrowed,
+          ...(options?.toolOutput ? { toolOutput: true } : {}),
+          ...(options?.context ? { context: true } : {}),
+        },
       },
-    });
+      signal
+    );
   }
 
-  /** Document count in the index. */
-  count(): Promise<number> {
-    return askIndex("search.count", undefined);
-  }
-
-  close(): Promise<void> {
+  close(): void {
     if (this.#timer) {
       clearInterval(this.#timer);
       this.#timer = null;
     }
-    return storeWork("search.close", undefined);
+    this.#index.close();
   }
 }

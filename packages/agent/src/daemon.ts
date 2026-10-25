@@ -3534,13 +3534,12 @@ export const startDaemon = (rediscover = false) =>
       yield* Effect.addFinalizer(() => Effect.sync(() => watchdog.stop()));
     }
 
-    // Transcript search index: FTS5-backed BM25 search over transcripts.
-    // Created once, syncs every ten minutes in the background and before a
-    // search, outlives reconnects.
-    const search = yield* Effect.promise(() =>
-      TranscriptSearchService.create()
-    );
+    // Transcript search index: FTS5-backed BM25 search over transcripts, in
+    // a process of its own (search/process.ts). Created once, syncs every ten
+    // minutes in the background and before a search, outlives reconnects.
+    const search = new TranscriptSearchService();
     search.start();
+    yield* Effect.addFinalizer(() => Effect.sync(() => search.close()));
     // A deleted transcript's words leave the index with it (a purge).
     supervisor.onTranscriptDeleted((sessionId) => search.forget(sessionId));
     // The agent's memory, by what holds it (memory.ts): once its first usage
@@ -3954,13 +3953,18 @@ export const startDaemon = (rediscover = false) =>
     supervisor.registerDaemonFunction(CONTROL_MOVE_CANCEL, (jobId) =>
       moveCancel(jobId as string)
     );
-    supervisor.registerDaemonFunction(
+    // Stopped where they run once the hub lets them go (CONTROL_ABANDON).
+    supervisor.registerAbandonable(
       CONTROL_SEARCH_TRANSCRIPTS,
-      (query, options) =>
-        search.search(query as string, options as TranscriptQuery | undefined)
+      (signal, query, options) =>
+        search.search(
+          query as string,
+          options as TranscriptQuery | undefined,
+          signal
+        )
     );
-    supervisor.registerDaemonFunction(CONTROL_TRANSCRIPT_TURNS, (query) =>
-      search.turns(query as TranscriptTurnsQuery)
+    supervisor.registerAbandonable(CONTROL_TRANSCRIPT_TURNS, (signal, query) =>
+      search.turns(query as TranscriptTurnsQuery, signal)
     );
 
     phase("connecting");

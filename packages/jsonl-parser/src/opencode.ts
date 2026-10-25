@@ -83,7 +83,7 @@ function wordsOf(
       return null;
     }
     const said = userAuthor(message.text);
-    return said.text ? { ...said, thinking: "", tools: [], output: "" } : null;
+    return said?.text ? { ...said, thinking: "", tools: [], output: "" } : null;
   }
   if (message.time?.completed === undefined) {
     return null;

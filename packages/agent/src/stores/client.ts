@@ -1,7 +1,8 @@
 /**
  * The loop's side of the agent's stores thread (stores/worker.ts): every
- * SQLite read or write the agent makes is asked of that thread, so the loop
- * never waits on a disk, a sync or another process's lock.
+ * SQLite read or write the agent makes, but the transcript index's (its own
+ * process, search/process.ts), is asked of that thread, so the loop never
+ * waits on a disk, a sync or another process's lock.
  *
  * A read is asked with a deadline ({@link storeRead}, core bounded.ts): a
  * thread held by a slow disk or a locked database answers it unanswered,

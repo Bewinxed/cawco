@@ -1186,6 +1186,7 @@ export const createFindTool = (deps: FindToolDeps) => {
     const offset = decodeCursor(input.cursor);
     const page = await deps.find.find({
       q: query,
+      caller: `the find tool of session ${actor.id}`,
       limit,
       transcripts: true,
       // Everything: what was said, and what tools returned in any session.
@@ -1241,6 +1242,7 @@ export const createFindTool = (deps: FindToolDeps) => {
         : Math.min(where.before ?? from.at, from.at);
     const { results, coverage } = await deps.find.listing({
       author: AUTHOR[input.by],
+      caller: `the find tool of session ${actor.id}`,
       transcripts: true,
       context: true,
       where: { ...where, ...(before === undefined ? {} : { before }) },

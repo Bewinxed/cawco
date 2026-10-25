@@ -1,11 +1,13 @@
 /**
- * The agent's stores thread: every SQLite file it reads or writes (OpenCode's
- * databases, the transcript search index, the usage store) and the reads
- * that feed them, off the loop. The loop asks through stores/client.ts.
+ * The agent's stores thread: the SQLite files it reads or writes (OpenCode's
+ * databases, the usage store) and the reads that feed them, off the loop.
+ * The loop asks through stores/client.ts. The transcript search index is not
+ * here: it runs in a process of its own, which a query past its limit ends
+ * (search/process.ts), so no read here waits behind one.
  *
- * Asks run as they arrive, each to its end or its next await: the search
- * index's sync and the usage scan take turns between their parts, so a read
- * the loop asks meanwhile answers between them.
+ * Asks run as they arrive, each to its end or its next await: the usage scan
+ * takes turns between its parts, so a read the loop asks meanwhile answers
+ * between them.
  */
 import {
   type StoreAsk,
