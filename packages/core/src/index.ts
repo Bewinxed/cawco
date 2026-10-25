@@ -1955,6 +1955,7 @@ export * from "./words/contact";
 export * from "./words/containers";
 export * from "./words/decisions";
 export * from "./words/delegate-types";
+export * from "./words/design-graph";
 export * from "./words/files";
 export * from "./words/find-secrets";
 export * from "./words/gate";

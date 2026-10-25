@@ -18,6 +18,15 @@
  */
 
 import { readWithin } from "@cawco/core/bounded";
+import type {
+  DialsModel,
+  GraphModel,
+  GraphSection,
+  MoveAsk,
+  MoveModel,
+  StageAsk,
+  StagePoint,
+} from "@cawco/core/design-graph";
 import {
   type AnimationRead,
   CANVAS_EMBED_FETCHED,
@@ -45,7 +54,7 @@ import {
   sectionName,
 } from "@cawco/core/stage";
 import { shellWords } from "@cawco/core/words/shell";
-import { Chrome } from "./chrome";
+import { dressPage } from "./chrome";
 import {
   deltaOf,
   drew,
@@ -58,8 +67,16 @@ import {
   partsOf,
   readAnimation,
   snapshot,
+  sourceOf,
   valuesOf,
 } from "./measure";
+import {
+  elementWords,
+  MoveStage,
+  motionTokens,
+  type Played,
+  type PlayedRecord,
+} from "./moves";
 import { queriesIn, userEventIn } from "./play";
 import {
   allClass,
@@ -71,6 +88,7 @@ import {
 } from "./pseudo";
 import { onPageScheme, pageScheme } from "./scheme";
 import { frameAsViewport, windowHeight, windowWidth } from "./viewport";
+import { drawWashes, washesBetween } from "./washes";
 import { frameWidths, splitWidth, WIDTH_CONTAINER } from "./width";
 
 /** What the adapter is handed for one story (Storybook's `decorateStory` inputs). */
@@ -378,8 +396,13 @@ export interface CanvasState {
 declare global {
   interface Window {
     __cawcoCanvas?: CanvasState;
+    /** The agent's dials as the page last said them (`cawco:dials`): the overlay says them again on the pane's hello. */
+    __cawcoDials?: DialsModel;
     __cawcoErrors?: { at: number; error: unknown }[];
-    __cawcoSheetChosen?: string | null;
+    /** What the page last said of its sections for the design graph (`cawco:graph`): the overlay says it again on the pane's hello. */
+    __cawcoGraph?: GraphModel;
+    /** The kept move as the page last said it (`cawco:move`), or null for none: the overlay says it again on the pane's hello. */
+    __cawcoMove?: MoveModel | null;
     __cawcoSheetOnPage?: SheetOnPage;
   }
 }
@@ -427,21 +450,29 @@ export function boot(options: BootOptions): void {
   const pageErrors: PageError[] = [];
   const sections: Section[] = [];
   const overrides = new Map<string, Record<string, unknown>>();
-  let chosen = window.__cawcoSheetChosen ?? null;
   let reportTimer: ReturnType<typeof setTimeout> | undefined;
   let reports = 0;
-  /** The person's drags, by frame key, from the artifact's doc. */
-  let moved: Record<string, [number, number]> = {};
+  /**
+   * What the pane's design graph asks the page to stand (Projects spec
+   * §5.10, "The design graph"): the kept state, the one a hover previews,
+   * and the room its panel and dock leave. Null until a pane asks: the
+   * canvas then stands every frame, as the stage's own render reads it.
+   */
+  let staged: StageAsk | null = null;
 
   document.documentElement.classList.add("cawco-canvas-page");
   document.documentElement.classList.toggle("cawco-embed", embed);
+  /** The page's sheet set, and the house tokens it reads its own lengths from. */
+  const house = dressPage({ faces: options.faces, tokens: options.tokens });
   const canvas = document.getElementById("cawco-canvas") as HTMLElement;
   const world = document.createElement("div");
   world.className = "cawco-world";
-  const edges = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  edges.classList.add("cawco-edges", "cawco-ui");
-  world.append(edges);
   canvas.append(world);
+  /** The change marks over what the stage stands while a hover previews (washes.ts), in the world so they move with it. */
+  const marks = document.createElement("div");
+  marks.className = "cawco-washes cawco-ui";
+  marks.setAttribute("aria-hidden", "true");
+  world.append(marks);
   /** Off screen: where a story's states are probed and its moves played, never seen. */
   const rig = document.createElement("div");
   rig.className = "cawco-rig";
@@ -540,14 +571,12 @@ export function boot(options: BootOptions): void {
     ...document.styleSheets,
     ...document.adoptedStyleSheets,
   ];
-  /** A sheet the canvas writes for itself (its page style, DialKit's, the width probe): it answers the window. */
+  /** A sheet the canvas writes for itself (its page style, the width probe): it answers the window. */
   const canvasOwned = (sheet: CSSStyleSheet) => {
     const node = sheet.ownerNode;
     return (
       node instanceof HTMLElement &&
-      ["cawcoCanvas", "cawcoDialkit", "cawcoProbe"].some(
-        (key) => key in node.dataset
-      )
+      ["cawcoCanvas", "cawcoProbe"].some((key) => key in node.dataset)
     );
   };
   const rewriteAll = () => {
@@ -951,6 +980,9 @@ export function boot(options: BootOptions): void {
         const one = document.createElement("div");
         one.className = "cawco-stand-in cawco-waiting cawco-ui";
         one.setAttribute("aria-hidden", "true");
+        // The stage stands the kept story's skeleton alone (`stage`).
+        one.dataset.cawcoStory = story.name;
+        one.dataset.cawcoInteraction = column.interaction;
         one.style.gridRow = String(row + 2);
         one.style.gridColumn = String(at + 1);
         const words = document.createElement("span");
@@ -976,6 +1008,7 @@ export function boot(options: BootOptions): void {
     section.head.append(status);
     section.grid.append(...frames);
     section.standIns = [status, ...columnHeads, ...frames];
+    stage();
   }
 
   /** What stood for a section's frames, taken away: they drew, or it says why not. */
@@ -1000,7 +1033,7 @@ export function boot(options: BootOptions): void {
     return {
       blur: tokens.getPropertyValue("--skeleton-reveal-blur").trim(),
       ease: tokens.getPropertyValue("--ease-crossfade").trim(),
-      ms: chrome.duration("--dur-skeleton-reveal", 400),
+      ms: house.ms("--dur-skeleton-reveal"),
     };
   }
 
@@ -1233,14 +1266,17 @@ export function boot(options: BootOptions): void {
       ) + 1;
     frame.el.style.gridRow = String(row);
     frame.el.style.gridColumn = String(Math.max(1, at));
-    const offset = moved[frame.key];
-    frame.el.style.translate = offset ? `${offset[0]}px ${offset[1]}px` : "";
     if (!frame.el.isConnected) {
       section.grid.append(frame.el);
     }
   }
 
-  /** Every column the section's stories reach, in the grid's order: interactions within each scheme and width. */
+  /**
+   * Every column the section's stories reach, in the grid's order:
+   * interactions within each scheme and width; on the stage, schemes and
+   * widths within each interaction, so the frames of the state it stands
+   * (light and dark, every width asked) stand side by side.
+   */
   function columnsOfSection(section: Section): Column[] {
     const reached = new Set<Interaction>(["rest"]);
     for (const list of section.interactions.values()) {
@@ -1248,11 +1284,16 @@ export function boot(options: BootOptions): void {
         reached.add(one);
       }
     }
-    return slotsOf().flatMap((slot) =>
-      (["rest", "hover", "focus", "pressed"] as Interaction[])
-        .filter((one) => reached.has(one))
-        .map((interaction) => ({ interaction, ...slot }))
-    );
+    const interactions = (
+      ["rest", "hover", "focus", "pressed"] as Interaction[]
+    ).filter((one) => reached.has(one));
+    return staged
+      ? interactions.flatMap((interaction) =>
+          slotsOf().map((slot) => ({ interaction, ...slot }))
+        )
+      : slotsOf().flatMap((slot) =>
+          interactions.map((interaction) => ({ interaction, ...slot }))
+        );
   }
 
   /** The column heads of a section's grid. */
@@ -1459,7 +1500,6 @@ export function boot(options: BootOptions): void {
         body.classList.add(allClass(state));
       }
     }
-    frame.el.toggleAttribute("data-cawco-selected", chosen === story.name);
     frame.el.toggleAttribute(
       "data-cawco-edited",
       overrides.has(`${frame.section.file}|${story.name}`)
@@ -1584,7 +1624,8 @@ export function boot(options: BootOptions): void {
       embed && !!section.mod && stories.length === 0
     );
     heads(section);
-    chrome.outline();
+    sayGraph();
+    stage();
   }
 
   /** Loads a section's states file and mounts its stories. */
@@ -2034,16 +2075,6 @@ export function boot(options: BootOptions): void {
 
   let movePlaying: Section | null = null;
 
-  interface Played {
-    move: MoveRender;
-    records: {
-      animation: Animation;
-      keyframes: Keyframe[];
-      read: AnimationRead;
-      target: Element | null;
-    }[];
-  }
-
   /** Plays move `to` (from its `from`) in `body`: mounted from the start story's args, then its `play`; every animation it fired, read as it started. */
   async function playIn(
     section: Section,
@@ -2072,20 +2103,31 @@ export function boot(options: BootOptions): void {
     const args = argsOf(section, from);
     const mounted = mountInto(body, section, from, args, into);
     await frameTick();
+    // What stood before the move: an element it animates that wasn't here came in with it.
+    const before = new Set(body.querySelectorAll("*"));
     const seen = new Set<Animation>();
     const t0 = document.timeline.currentTime as number;
     let watching = true;
+    const caught = (one: Animation): PlayedRecord => {
+      const effect = one.effect as KeyframeEffect | null;
+      const target = effect?.target ?? null;
+      const read = readAnimation(one, t0);
+      return {
+        animation: one,
+        keyframes: effect?.getKeyframes() ?? [],
+        read,
+        target,
+        // Read as it starts: an exit's element is gone by the move's end.
+        element: elementWords(target, read.target),
+        source: target ? sourceOf(target, root) : null,
+        kind: target && before.has(target) ? "change" : "enter",
+      };
+    };
     const watch = () => {
       for (const one of body.getAnimations({ subtree: true })) {
         if (!seen.has(one)) {
           seen.add(one);
-          const effect = one.effect as KeyframeEffect | null;
-          records.push({
-            animation: one,
-            keyframes: effect?.getKeyframes() ?? [],
-            read: readAnimation(one, t0),
-            target: effect?.target ?? null,
-          });
+          records.push(caught(one));
         }
       }
       if (watching) {
@@ -2129,6 +2171,7 @@ export function boot(options: BootOptions): void {
     if (into.error && !move.error) {
       move.error = into.error;
     }
+    markExits(records);
     move.animations = records.map((one) => one.read);
     (body as HTMLElement & { __cawcoMounted?: Mounted }).__cawcoMounted =
       mounted;
@@ -2163,30 +2206,27 @@ export function boot(options: BootOptions): void {
       });
     }
     section.moves = moves;
-    drawEdges();
     later();
   }
 
   /**
-   * A move played where the person sees it, in its destination's rest frame,
-   * then held for the timeline: each animation it fired made again, paused,
-   * on its own element with its own keyframes, so the timeline's playhead
-   * seeks what the engine ran and its tuned timing previews live.
+   * The kept move played where the person sees it: in the kept state's
+   * frame on the stage (its first, where the view stands it in several
+   * schemes or widths), from its `from` through its `play`, every animation
+   * it fired caught as it started; the dock holds them to play again
+   * (moves.ts). Null when no such frame is drawn.
    */
-  async function playVisible(
-    file: string,
-    to: string
-  ): Promise<{
-    move: MoveRender;
-    replays: { animation: Animation | null; read: AnimationRead }[];
-  } | null> {
+  async function playVisible(file: string, to: string): Promise<Played | null> {
     const section = sectionOf(file);
     if (!section?.mod) {
       return null;
     }
-    const frame = [...section.frames.values()].find(
+    const frames = [...section.frames.values()].filter(
       (one) => one.story.name === to && one.column.interaction === "rest"
     );
+    const frame =
+      frames.find((one) => one.el.hasAttribute("data-cawco-on-stage")) ??
+      frames[0];
     if (!frame) {
       return null;
     }
@@ -2195,35 +2235,22 @@ export function boot(options: BootOptions): void {
     frame.mounted = undefined;
     frame.body.replaceChildren();
     dress(frame);
-    const played = await playIn(section, to, frame.body);
-    frame.mounted = (
-      frame.body as HTMLElement & { __cawcoMounted?: Mounted }
-    ).__cawcoMounted;
-    // Each animation again, paused, where its element still stands; an
-    // outro's element is gone once the move ends, so its clip is tuned
-    // without a preview.
-    const replays = played.records.map((one) => {
-      if (!(one.target?.isConnected && one.keyframes.length > 0)) {
-        return { animation: null, read: one.read };
+    try {
+      const played = await playIn(section, to, frame.body);
+      frame.mounted = (
+        frame.body as HTMLElement & { __cawcoMounted?: Mounted }
+      ).__cawcoMounted;
+      const kept = section.moves.findIndex((one) => one.to === to);
+      if (kept === -1) {
+        section.moves.push(played.move);
+      } else {
+        section.moves[kept] = played.move;
       }
-      const animation = one.target.animate(one.keyframes, {
-        duration: one.read.duration,
-        delay: one.read.start + one.read.delay,
-        easing: one.read.easing,
-        fill: "both",
-      });
-      animation.pause();
-      animation.currentTime = 0;
-      return { animation, read: one.read };
-    });
-    const kept = section.moves.findIndex((one) => one.to === to);
-    if (kept === -1) {
-      section.moves.push(played.move);
-    } else {
-      section.moves[kept] = played.move;
+      later();
+      return played;
+    } finally {
+      movePlaying = null;
     }
-    later();
-    return { move: played.move, replays };
   }
 
   /* --- What the page says: the sheet for the inspector, the report -------- */
@@ -2235,6 +2262,56 @@ export function boot(options: BootOptions): void {
     const sheet = { ...section.mod.SHEET, file: section.file };
     window.__cawcoSheetOnPage = sheet;
     dispatchEvent(new CustomEvent("cawco:sheet", { detail: sheet }));
+  }
+
+  /** A section as the design graph draws it: its loaded stories, or before then its plan's. */
+  const graphSection = (section: Section): GraphSection => {
+    let state: GraphSection["state"] = "waiting";
+    if (section.failure) {
+      state = "failed";
+    } else if (section.mod) {
+      state = "drawn";
+    }
+    const stories = section.mod
+      ? section.mod.SHEET.stories.map((story) => ({
+          name: story.name,
+          label: story.label,
+          from: story.play ? story.from : null,
+          interactions: (section.interactions.get(story.name) ?? []).filter(
+            (one): one is Exclude<Interaction, "rest"> => one !== "rest"
+          ),
+        }))
+      : (plans[section.file]?.stories ?? []).map((story) => ({
+          name: story.name,
+          label: story.label,
+          from: null,
+          interactions: [],
+        }));
+    return { file: section.file, name: section.name, state, stories };
+  };
+  let graphSaid = "";
+  /**
+   * What the page holds, said to the pane's design graph (`cawco:graph`)
+   * once per change: each section's stories, the interactions each reaches,
+   * its moves, and the agent's groups and edges. A map's card, an embed and
+   * the stage's own render have no graph.
+   */
+  function sayGraph(): void {
+    if (card || embed || sweeping) {
+      return;
+    }
+    const model: GraphModel = {
+      edges: spec.edges ?? [],
+      group: spec.group ?? {},
+      sections: sections.map(graphSection),
+    };
+    const text = JSON.stringify(model);
+    if (text === graphSaid) {
+      return;
+    }
+    graphSaid = text;
+    window.__cawcoGraph = model;
+    dispatchEvent(new CustomEvent("cawco:graph", { detail: model }));
   }
 
   function later(): void {
@@ -2335,8 +2412,7 @@ export function boot(options: BootOptions): void {
     // The frames are read where they stand, never while the sweep has them out of rendering.
     await worldBack();
     const report = reportNow();
-    chrome.counts(report);
-    drawEdges();
+    sayDials();
     if (card) {
       fit();
     }
@@ -2368,12 +2444,60 @@ export function boot(options: BootOptions): void {
   /* --- Pan and zoom: one transform -------------------------------------- */
 
   const zoom = { x: 0, y: 0, z: 1 };
+  /** The world box of what the stage stands, while it stands something: a pan or zoom never leaves it. */
+  let stood: { h: number; w: number; x: number; y: number } | null = null;
+  /**
+   * On the stage the view moves only over what it stands: along an axis
+   * where that fits the canvas it stays where the stage put it (centred
+   * across, its top at the inset), along one where it doesn't it scrolls
+   * from its start edge to its end edge, each kept the inset clear.
+   */
+  const clampToStage = () => {
+    if (!(staged && stood)) {
+      return;
+    }
+    const axis = (
+      at: number,
+      start: number,
+      size: number,
+      room: number,
+      inset: number,
+      centred: boolean
+    ) => {
+      const drawn = size * zoom.z;
+      if (drawn + inset * 2 <= room) {
+        return centred
+          ? (room - drawn) / 2 - start * zoom.z
+          : inset - start * zoom.z;
+      }
+      return Math.min(
+        inset - start * zoom.z,
+        Math.max(room - inset - (start + size) * zoom.z, at)
+      );
+    };
+    zoom.x = axis(
+      zoom.x,
+      stood.x,
+      stood.w,
+      canvas.clientWidth,
+      WORLD_INSET.x,
+      true
+    );
+    zoom.y = axis(
+      zoom.y,
+      stood.y,
+      stood.h,
+      canvas.clientHeight,
+      WORLD_INSET.y,
+      false
+    );
+  };
   const place = () => {
     // An embed stands in the page's own flow: it never pans or zooms.
+    clampToStage();
     world.style.transform = embed
       ? ""
       : `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.z})`;
-    chrome.where();
   };
   const ZOOM_MIN = 0.1;
   const ZOOM_MAX = 4;
@@ -2423,9 +2547,8 @@ export function boot(options: BootOptions): void {
     canvas.scrollLeft = 0;
     place();
   });
-  /** A drag on the canvas's ground pans; on a frame's label it moves the frame (past a few px, else it picks). */
+  /** A drag on the canvas's ground pans. */
   let drag: {
-    key?: string;
     x: number;
     y: number;
     ox: number;
@@ -2437,23 +2560,19 @@ export function boot(options: BootOptions): void {
     if (embed || (event.button !== 0 && event.button !== 1)) {
       return;
     }
-    const label = (event.target as Element).closest?.(".cawco-frame-label");
     const ground =
       event.target === canvas ||
       event.target === world ||
       (event.target as Element).classList?.contains("cawco-grid") ||
       (event.target as Element).classList?.contains("cawco-section");
-    if (!(label || ground || event.button === 1)) {
+    if (!(ground || event.button === 1)) {
       return;
     }
-    const key = label?.closest<HTMLElement>(".cawco-frame")?.dataset.cawcoKey;
-    const was = key ? (moved[key] ?? [0, 0]) : [zoom.x, zoom.y];
     drag = {
-      key,
       x: event.clientX,
       y: event.clientY,
-      ox: was[0] as number,
-      oy: was[1] as number,
+      ox: zoom.x,
+      oy: zoom.y,
       moved: false,
       id: event.pointerId,
     };
@@ -2471,64 +2590,22 @@ export function boot(options: BootOptions): void {
       canvas.setPointerCapture?.(event.pointerId);
     }
     drag.moved = true;
-    if (drag.key) {
-      moved[drag.key] = [drag.ox + dx / zoom.z, drag.oy + dy / zoom.z];
-      const el = world.querySelector<HTMLElement>(
-        `[data-cawco-key="${CSS.escape(drag.key)}"]`
-      );
-      if (el) {
-        el.style.translate = `${moved[drag.key]?.[0]}px ${moved[drag.key]?.[1]}px`;
-      }
-      drawEdges();
-    } else {
-      letGo();
-      zoom.x = drag.ox + dx;
-      zoom.y = drag.oy + dy;
-      place();
-    }
+    letGo();
+    zoom.x = drag.ox + dx;
+    zoom.y = drag.oy + dy;
+    place();
   });
   window.addEventListener("pointerup", (event) => {
-    if (!drag || event.pointerId !== drag.id) {
-      return;
+    if (drag && event.pointerId === drag.id) {
+      drag = null;
     }
-    if (drag.moved && drag.key) {
-      keepLayout();
-      // The drag was no pick.
-      window.addEventListener("click", (click) => click.stopPropagation(), {
-        capture: true,
-        once: true,
-      });
-    }
-    drag = null;
   });
-
-  let layoutTimer: ReturnType<typeof setTimeout> | undefined;
-  /** The person's drags go into the artifact's doc, never the project. */
-  const keepLayout = () => {
-    clearTimeout(layoutTimer);
-    layoutTimer = setTimeout(() => {
-      bridge()
-        ?.set("layout", moved)
-        .catch(() => undefined);
-      later();
-    }, 400);
-  };
-  const resetLayout = () => {
-    moved = {};
-    for (const section of sections) {
-      for (const frame of section.frames.values()) {
-        frame.el.style.translate = "";
-      }
-    }
-    keepLayout();
-    drawEdges();
-  };
 
   /**
    * An element's box in the world's own coordinates, before the world's
-   * transform: its layout offsets up to the world, and a frame's drag
-   * (`translate`). Unlike a screen rect it is the same whatever the world's
-   * transform is now, or is animating through.
+   * transform: its layout offsets up to the world. Unlike a screen rect it
+   * is the same whatever the world's transform is now, or is animating
+   * through.
    */
   const worldBox = (el: HTMLElement) => {
     let x = 0;
@@ -2541,13 +2618,7 @@ export function boot(options: BootOptions): void {
       x += at.offsetLeft;
       y += at.offsetTop;
     }
-    const dragged = moved[el.dataset.cawcoKey ?? ""] ?? [0, 0];
-    return {
-      x: x + dragged[0],
-      y: y + dragged[1],
-      w: el.offsetWidth,
-      h: el.offsetHeight,
-    };
+    return { x, y, w: el.offsetWidth, h: el.offsetHeight };
   };
 
   /**
@@ -2561,7 +2632,7 @@ export function boot(options: BootOptions): void {
   let flight: Animation | null = null;
   const holding = new ResizeObserver(() => {
     if (held?.el.isConnected) {
-      show(held.key, held.el, false, held.own);
+      show(held.el, false, held.own);
     }
   });
   const letGo = () => {
@@ -2575,16 +2646,7 @@ export function boot(options: BootOptions): void {
    * `ownSize`: at zoom 1 and without its section's head, as its picture is
    * taken, whatever the window's width.
    */
-  const show = (
-    key: string,
-    el: HTMLElement,
-    animate: boolean,
-    ownSize = false
-  ) => {
-    // Marked current first: on a phone that is what shows the frame and its
-    // section (chrome.ts PAGE_CSS hides the rest), and so what gives it the
-    // box it is placed by.
-    chrome.current(key);
+  const show = (el: HTMLElement, animate: boolean, ownSize = false) => {
     // Where the world stands now, a flight still going included; that
     // flight ends here, or it would draw its stale end over this placement.
     const from = getComputedStyle(world).transform;
@@ -2592,25 +2654,10 @@ export function boot(options: BootOptions): void {
     flight = null;
     const width = canvas.clientWidth;
     const height = canvas.clientHeight;
-    const own = worldBox(el);
+    const box = worldBox(el);
     if (ownSize) {
       zoom.z = 1;
-    } else if (chrome.phone()) {
-      // One frame at a time, as wide as the screen lets it be, never past its own size.
-      zoom.z = Math.max(
-        ZOOM_MIN,
-        Math.min(1, (width - 24) / Math.max(1, own.w))
-      );
     }
-    // On a phone the frame stands alone in its section: it is shown with its section's head, which names its sheet.
-    const headEl =
-      chrome.phone() && !ownSize
-        ? el
-            .closest(".cawco-section")
-            ?.querySelector<HTMLElement>(".cawco-section-head")
-        : null;
-    const top = headEl ? Math.min(worldBox(headEl).y, own.y) : own.y;
-    const box = { x: own.x, y: top, w: own.w, h: own.y + own.h - top };
     zoom.x = width / 2 - (box.x + box.w / 2) * zoom.z;
     zoom.y =
       Math.min(height / 2, WORLD_INSET.y + (box.h * zoom.z) / 2) -
@@ -2620,13 +2667,11 @@ export function boot(options: BootOptions): void {
       flight = world.animate(
         [{ transform: from }, { transform: world.style.transform }],
         {
-          duration: chrome.duration("--dur-panel", 280),
+          duration: house.ms("--dur-panel"),
           easing: "cubic-bezier(0.23, 1, 0.32, 1)",
         }
       );
     }
-    // On a phone the frame shown changed: its edges are drawn again, to frames now drawn only.
-    drawEdges();
     // Its open layers in sight with it, once the view stands where it goes;
     // a frame posed for its picture stays where its pose puts it.
     const landed = () =>
@@ -2655,194 +2700,255 @@ export function boot(options: BootOptions): void {
     if (!el) {
       return;
     }
-    // A frame posed for its picture stays posed when it is shown again: the
-    // chrome shows its current frame anew as the window resizes or its
-    // outline is rebuilt (chrome.ts `layout`, `outline`), which on a phone's
-    // width would zoom it to fit under the picture being taken. Only the
-    // person's own pan or zoom (`letGo`), or another frame, ends a pose.
+    // A frame posed for its picture stays posed when it is shown again (its
+    // box changing shows it anew). Only the person's own pan or zoom
+    // (`letGo`), or another frame, ends a pose.
     const posed = own || (held?.own === true && held.key === key);
     letGo();
-    show(key, el, !posed, posed);
+    show(el, !posed, posed);
     held = { key, el, own: posed };
     holding.observe(el);
-    // The canvas resizing (a dock taking its room, the pane resized) shows it again too.
+    // The canvas resizing (the graph's panel or dock taking its room, the pane resized) shows it again too.
     holding.observe(canvas);
-    const headEl = el
-      .closest(".cawco-section")
-      ?.querySelector<HTMLElement>(".cawco-section-head");
-    if (headEl) {
-      holding.observe(headEl);
-    }
   };
 
-  /* --- Edges: moves always, the agent's own when it sent them ---------- */
+  /* --- The stage: the state the design graph keeps, or previews --------- */
 
-  /** The rest frame (first column) of a story, named `Story` or `file:Story`. */
-  const restFrame = (name: string, file?: string): HTMLElement | null => {
-    const [inFile, story] =
-      name.includes(":") && !file
-        ? (name.split(LAST_COLON) as [string, string])
-        : [file, name];
-    for (const section of sections) {
-      if (inFile && section.file !== inFile) {
-        continue;
-      }
-      for (const frame of section.frames.values()) {
-        if (frame.story.name === story && frame.column.interaction === "rest") {
-          return frame.el;
-        }
-      }
-    }
-    return null;
-  };
+  /** Whether a frame (or a section's stand-in for one) is the state a stage point names. */
+  const pointed = (
+    point: StagePoint,
+    file: string,
+    story: string | undefined,
+    interaction: string | undefined
+  ) =>
+    point.file === file &&
+    point.story === story &&
+    point.interaction === interaction;
 
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: gathers the three kinds of edge and draws each from one frame's box side to the other's in one pass
-  function drawEdges(): void {
-    const lines: {
-      from: HTMLElement;
-      to: HTMLElement;
-      label: string;
-      kind: "move" | "edge" | "group";
-      file?: string;
-      story?: string;
-    }[] = [];
-    for (const section of sections) {
-      for (const move of movesOf(section)) {
-        const from = restFrame(move.from, section.file);
-        const to = restFrame(move.to, section.file);
-        if (from && to) {
-          const fired = section.moves.find((one) => one.to === move.to);
-          lines.push({
-            from,
-            to,
-            kind: "move",
-            // The arrow is the edge's own marker: the words name the two ends.
-            label: fired
-              ? `${move.from} to ${move.to} · ${fired.animations.length} animation${fired.animations.length === 1 ? "" : "s"}`
-              : `${move.from} to ${move.to}`,
-            file: section.file,
-            story: move.to,
-          });
-        }
-      }
+  /** What the stage stands this time: the frames of the point, its section's stand-ins for it, or its section while it failed. */
+  let standing: HTMLElement[] = [];
+  /** Stands again what it stands as their boxes or the canvas change size: a section mounting, a dock taking its room. */
+  const restand = new ResizeObserver(() => standOn(false));
+
+  /**
+   * The world placed so what the stage stands is in view: at its own size
+   * unless wider than the canvas (then fitted across it, as far as the
+   * zoom's floor), centred across and its top at the inset (clampToStage).
+   * `fresh`: a new state, so the view starts at its top; otherwise the view
+   * keeps where the person scrolled it, held to what stands.
+   */
+  function standOn(fresh: boolean): void {
+    const boxes = standing
+      .filter((el) => el.isConnected && el.offsetWidth > 0)
+      .map(worldBox);
+    if (boxes.length === 0) {
+      stood = null;
+      return;
     }
-    for (const edge of spec.edges ?? []) {
-      const from = restFrame(edge.from);
-      const to = restFrame(edge.to);
-      if (from && to) {
-        lines.push({ from, to, kind: "edge", label: edge.label ?? "" });
-      }
+    const x = Math.min(...boxes.map((one) => one.x));
+    const y = Math.min(...boxes.map((one) => one.y));
+    stood = {
+      x,
+      y,
+      w: Math.max(...boxes.map((one) => one.x + one.w)) - x,
+      h: Math.max(...boxes.map((one) => one.y + one.h)) - y,
+    };
+    if (fresh) {
+      const room = canvas.clientWidth - WORLD_INSET.x * 2;
+      zoom.z = Math.max(ZOOM_MIN, Math.min(1, room / Math.max(1, stood.w)));
+      zoom.x = Number.POSITIVE_INFINITY;
+      zoom.y = Number.POSITIVE_INFINITY;
     }
-    for (const [child, parent] of Object.entries(spec.group ?? {})) {
-      const from = restFrame(parent);
-      const to = restFrame(child);
-      if (from && to) {
-        lines.push({ from, to, kind: "group", label: "" });
-      }
-    }
-    edges.replaceChildren();
-    edges.innerHTML = `<defs><marker id="cawco-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker></defs>`;
-    // An end not drawn (a phone shows one frame) has no box: no edge is drawn to it.
-    const drawn = lines.filter((line) =>
-      [line.from, line.to].every((el) => {
-        const box = el.getBoundingClientRect();
-        return box.width > 0 && box.height > 0;
-      })
+    letGo();
+    place();
+  }
+
+  /** The point a stage stands now: what a hover previews, else what is kept. */
+  const pointNow = (): StagePoint | null =>
+    staged?.peek ?? staged?.kept ?? null;
+  let stoodAt = "";
+
+  /** The frames of a state on the page, in their columns' order. */
+  const framesAt = (point: StagePoint): Frame[] =>
+    [...(sectionOf(point.file)?.frames.values() ?? [])].filter((frame) =>
+      pointed(point, point.file, frame.story.name, frame.column.interaction)
     );
-    // Every edge joins two stories' rest frames, and a rest frame stands in
-    // its section's first column: so every edge runs in the world's left
-    // gutter, out of its frame's left side, along a lane of its own and into
-    // the other's, crossing no frame whatever the grid; its label stands in
-    // the gutter too, left of every lane. The labels' widths set the gutter.
-    const svg = "http://www.w3.org/2000/svg";
-    const texts = drawn.map((line) => {
-      if (!line.label) {
-        return null;
-      }
-      const text = document.createElementNS(svg, "text");
-      text.classList.add("cawco-edge-label");
-      text.setAttribute("text-anchor", "end");
-      text.textContent = line.label;
-      if (line.kind === "move") {
-        text.dataset.cawcoMove = `${line.file}|${line.story}`;
-      }
-      edges.append(text);
-      return text;
-    });
-    const widest = Math.max(
-      0,
-      ...texts.map((text) => text?.getComputedTextLength() ?? 0)
-    );
-    const lanesWide =
-      drawn.length > 0 ? EDGE_OUT + EDGE_LANE * (drawn.length - 1) : 0;
-    const gutter =
-      drawn.length > 0
-        ? Math.ceil(lanesWide + (widest > 0 ? EDGE_LABEL_GAP * 2 + widest : 0))
-        : 0;
-    world.style.setProperty("--cawco-gutter", `${gutter}px`);
-    const origin = world.getBoundingClientRect();
-    const local = (rect: DOMRect) => ({
-      x: (rect.x - origin.x) / zoom.z,
-      y: (rect.y - origin.y) / zoom.z,
-      w: rect.width / zoom.z,
-      h: rect.height / zoom.z,
-    });
-    const labelsEnd = gutter - lanesWide - EDGE_LABEL_GAP;
-    let below = Number.NEGATIVE_INFINITY;
-    const placed = drawn
-      .map((line, lane) => {
-        const a = local(line.from.getBoundingClientRect());
-        const b = local(line.to.getBoundingClientRect());
-        return { line, lane, a, b, words: texts[lane] ?? null };
-      })
-      .sort((one, two) => (one.a.y + one.b.y) / 2 - (two.a.y + two.b.y) / 2);
-    for (const { line, lane, a, b, words } of placed) {
-      const x = gutter - EDGE_OUT - EDGE_LANE * lane;
-      const fromY = a.y + a.h / 2;
-      const toY = b.y + b.h / 2;
-      const turn = Math.min(EDGE_TURN, Math.abs(toY - fromY) / 2);
-      const down = toY >= fromY ? 1 : -1;
-      const path = document.createElementNS(svg, "path");
-      path.setAttribute(
-        "d",
-        [
-          `M${a.x - EDGE_CLEAR} ${fromY}`,
-          `H${x + turn}`,
-          `Q${x} ${fromY} ${x} ${fromY + down * turn}`,
-          `V${toY - down * turn}`,
-          `Q${x} ${toY} ${x + turn} ${toY}`,
-          `H${b.x - EDGE_CLEAR}`,
-        ].join(" ")
+
+  /**
+   * The washes between the kept state and the one a hover previews (the
+   * owner's pick "washes", washes.ts): each previewed frame against the kept
+   * frame of its own column, drawn once the stage has laid them out; none
+   * while nothing is previewed.
+   */
+  let washing = 0;
+  function wash(): void {
+    cancelAnimationFrame(washing);
+    const kept = staged?.kept;
+    const peek = staged?.peek;
+    if (!(kept && peek) || kept.file !== peek.file) {
+      drawWashes(marks, []);
+      return;
+    }
+    washing = requestAnimationFrame(() => {
+      const was = framesAt(kept);
+      const pairs = framesAt(peek).flatMap((frame) => {
+        const match = was.find(
+          (one) =>
+            one.column.scheme === frame.column.scheme &&
+            one.column.width === frame.column.width
+        );
+        return match
+          ? [{ at: worldBox(frame.body), kept: match.body, peek: frame.body }]
+          : [];
+      });
+      drawWashes(
+        marks,
+        washesBetween(
+          pairs,
+          zoom.z,
+          house.px("--c-target-gap"),
+          house.px("--space-3")
+        )
       );
-      path.classList.add("cawco-edge", `cawco-edge-${line.kind}`);
-      if (line.kind !== "group") {
-        path.setAttribute("marker-end", "url(#cawco-arrow)");
+    });
+  }
+
+  /** The move into the kept state, when its story declares one (`from` with a `play`) and it stands at rest. */
+  const keptMove = (): { file: string; to: string } | null => {
+    const kept = staged?.kept;
+    if (kept?.interaction !== "rest") {
+      return null;
+    }
+    const story = sectionOf(kept.file)?.mod?.SHEET.stories.find(
+      (one) => one.name === kept.story
+    );
+    return story?.from && story.play
+      ? { file: kept.file, to: kept.story }
+      : null;
+  };
+
+  /** A section's frames and stand-ins marked on the stage or off it for `point`: what of it stands. */
+  function markStage(
+    section: Section,
+    point: StagePoint,
+    holds: boolean
+  ): HTMLElement[] {
+    section.el.toggleAttribute("data-cawco-on-stage", holds);
+    const on: HTMLElement[] = [];
+    for (const frame of section.frames.values()) {
+      const here = pointed(
+        point,
+        section.file,
+        frame.story.name,
+        frame.column.interaction
+      );
+      frame.el.toggleAttribute("data-cawco-on-stage", here);
+      frame.el.inert = !here;
+      if (here) {
+        on.push(frame.body);
       }
-      path.dataset.cawcoFrom = line.from.dataset.cawcoKey ?? "";
-      path.dataset.cawcoTo = line.to.dataset.cawcoKey ?? "";
-      if (line.kind === "move") {
-        path.dataset.cawcoMove = `${line.file}|${line.story}`;
-        const title = document.createElementNS(svg, "title");
-        title.textContent = `${line.label}: open its timeline`;
-        path.append(title);
+    }
+    for (const stand of section.grid.querySelectorAll<HTMLElement>(
+      ":scope > .cawco-stand-in"
+    )) {
+      const here = pointed(
+        point,
+        section.file,
+        stand.dataset.cawcoStory,
+        stand.dataset.cawcoInteraction
+      );
+      stand.toggleAttribute("data-cawco-on-stage", here);
+      if (here) {
+        on.push(stand);
       }
-      edges.append(path);
-      if (words) {
-        // At its lane's middle, below the label above it where two would meet.
-        const y = Math.max((fromY + toY) / 2 + 4, below + EDGE_LABEL_LINE);
-        below = y;
-        words.setAttribute("x", String(labelsEnd));
-        words.setAttribute("y", String(y));
+    }
+    return on;
+  }
+
+  /**
+   * What the stage stands, from the pane's ask: the point's frames (every
+   * scheme and width the view asks, side by side) seen and in reach, every
+   * other frame mounted and measured where it stands, unseen and inert;
+   * its section loaded now wherever it stands; the washes while a hover
+   * previews; the kept move played and held for the dock while none does.
+   * Run again as sections load and frames are made.
+   */
+  function stage(): void {
+    const point = pointNow();
+    if (!point) {
+      return;
+    }
+    const section = sectionOf(point.file);
+    if (section && !(section.loaded || section.loading || section.failure)) {
+      quietly(loadSection(section));
+    }
+    const on = sections.flatMap((one) =>
+      markStage(one, point, one === section)
+    );
+    if (on.length === 0 && section) {
+      const failed = section.el.querySelector<HTMLElement>(
+        ".cawco-section-failed"
+      );
+      if (failed) {
+        on.push(failed);
       }
+    }
+    standing = on;
+    restand.disconnect();
+    restand.observe(canvas);
+    for (const el of on) {
+      restand.observe(el);
+    }
+    const at = `${point.file}|${point.story}|${point.interaction}|${on.length}`;
+    standOn(at !== stoodAt);
+    stoodAt = at;
+    wash();
+    if (!staged?.peek) {
+      quietly(moves.keep(keptMove()));
     }
   }
-  edges.addEventListener("click", (event) => {
-    const move = (event.target as Element)
-      .closest?.("[data-cawco-move]")
-      ?.getAttribute("data-cawco-move");
-    if (move) {
-      const [file, to] = move.split("|") as [string, string];
-      quietly(chrome.openMove(file, to));
+
+  /** The kept move held for the dock (moves.ts): played in the kept frame, said to the pane, played again as it asks. */
+  const moves = new MoveStage({
+    play: playVisible,
+    tokens: () =>
+      motionTokens(sheetsNow().filter((sheet) => !canvasOwned(sheet))),
+    say: (move) => {
+      window.__cawcoMove = move;
+      dispatchEvent(new CustomEvent("cawco:move", { detail: move }));
+    },
+    tune: (tuned) => {
+      bridge()
+        ?.set("tuned", tuned)
+        .catch(() => undefined);
+    },
+  });
+
+  window.addEventListener("cawco:stage", (event) => {
+    const ask = (event as CustomEvent<StageAsk | undefined>).detail;
+    if (!ask?.kept || card || embed || sweeping) {
+      return;
+    }
+    const first = staged === null;
+    staged = ask;
+    const html = document.documentElement;
+    html.toggleAttribute("data-cawco-staged", true);
+    html.style.setProperty("--cawco-stage-end", `${ask.room.end}px`);
+    html.style.setProperty("--cawco-stage-bottom", `${ask.room.bottom}px`);
+    if (first) {
+      // The columns take the stage's order: the state's frames side by side.
+      for (const section of sections) {
+        if (section.loaded) {
+          syncFrames(section);
+        }
+      }
+    }
+    stage();
+  });
+  window.addEventListener("cawco:move-ask", (event) => {
+    const ask = (event as CustomEvent<MoveAsk | undefined>).detail;
+    if (ask && !(card || embed || sweeping)) {
+      moves.ask(ask);
     }
   });
 
@@ -2879,6 +2985,83 @@ export function boot(options: BootOptions): void {
     later();
   };
 
+  /** Each dial's value now: as the person set it, else as the first frame draws it (a CSS variable); an arg's has none until set. */
+  const dialValues: Record<string, boolean | number | string> = {};
+  /** The agent's dials and their values, said to the pane's design graph (`cawco:dials`) once the frames draw them. */
+  let dialsSaid = "";
+  function sayDials(): void {
+    const dials = spec.dials ?? [];
+    if (card || embed || sweeping || dials.length === 0) {
+      return;
+    }
+    const first = world.querySelector<HTMLElement>(".cawco-frame-body");
+    for (const dial of dials) {
+      if (dial.name in dialValues || !("cssVar" in dial.target) || !first) {
+        continue;
+      }
+      const raw = getComputedStyle(first)
+        .getPropertyValue(dial.target.cssVar)
+        .trim();
+      if (raw) {
+        dialValues[dial.name] =
+          dial.kind === "number" ? Number.parseFloat(raw) : raw;
+      }
+    }
+    const model: DialsModel = { dials, values: { ...dialValues } };
+    const text = JSON.stringify(model);
+    if (text === dialsSaid) {
+      return;
+    }
+    dialsSaid = text;
+    window.__cawcoDials = model;
+    dispatchEvent(new CustomEvent("cawco:dials", { detail: model }));
+  }
+  let dialsKept: ReturnType<typeof setTimeout> | undefined;
+  /** A dial the person moved on the design graph: every frame draws it, and the artifact keeps the values as `dials`. */
+  window.addEventListener("cawco:dial", (event) => {
+    const { name, value } =
+      (event as CustomEvent<{ name?: unknown; value?: unknown } | undefined>)
+        .detail ?? {};
+    const dial = (spec.dials ?? []).find((one) => one.name === name);
+    if (!(
+      dial &&
+      (typeof value === "number" ||
+        typeof value === "string" ||
+        typeof value === "boolean")
+    )) {
+      return;
+    }
+    dialValues[dial.name] = value;
+    applyDials(dialValues);
+    sayDials();
+    clearTimeout(dialsKept);
+    dialsKept = setTimeout(() => {
+      bridge()
+        ?.set("dials", { ...dialValues })
+        .catch(() => undefined);
+    }, 400);
+  });
+  // The values the artifact kept from an earlier visit, drawn once as the page opens.
+  let dialsHeard = false;
+  bridge()?.on("picks", (picks) => {
+    const kept = picks.dials?.value;
+    if (dialsHeard || !kept || typeof kept !== "object") {
+      return;
+    }
+    dialsHeard = true;
+    for (const [name, value] of Object.entries(kept)) {
+      if (
+        typeof value === "number" ||
+        typeof value === "string" ||
+        typeof value === "boolean"
+      ) {
+        dialValues[name] = value;
+      }
+    }
+    applyDials(dialValues);
+    sayDials();
+  });
+
   /* --- The pane's words, through the overlay ----------------------------- */
 
   window.addEventListener("cawco:story-args", (event) => {
@@ -2907,29 +3090,6 @@ export function boot(options: BootOptions): void {
     }
     dispatchEvent(new CustomEvent("cawco:hmr"));
     later();
-  });
-  // The pane's mode, as the overlay hears it (preview-overlay page.ts
-  // `mode`): in Comment mode the frame in view keeps no fill of its own on
-  // its label (chrome.ts), since the comment target's tint is the one mark.
-  window.addEventListener("cawco:mode", (event) => {
-    const mode = (event as CustomEvent<{ mode?: unknown }>).detail?.mode;
-    document.documentElement.toggleAttribute(
-      "data-cawco-commenting",
-      mode === "comment"
-    );
-  });
-  window.addEventListener("cawco:story-select", (event) => {
-    const story = (event as CustomEvent<{ story?: unknown }>).detail?.story;
-    chosen = typeof story === "string" ? story : null;
-    window.__cawcoSheetChosen = chosen;
-    for (const section of sections) {
-      for (const frame of section.frames.values()) {
-        frame.el.toggleAttribute(
-          "data-cawco-selected",
-          frame.story.name === chosen
-        );
-      }
-    }
   });
   /** The pane's toggles: scheme, widths, motion, all permutations, zoom. */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the pane's five toggles, each re-dressing the frames it changes
@@ -2965,7 +3125,8 @@ export function boot(options: BootOptions): void {
       letGo();
       zoomAt(next.zoom, canvas.clientWidth / 2, canvas.clientHeight / 2);
     }
-    chrome.view(view);
+    // A scheme or width asked stands its frames on the stage too.
+    stage();
     later();
   };
   window.addEventListener("cawco:canvas-view", (event) => {
@@ -2981,8 +3142,12 @@ export function boot(options: BootOptions): void {
     }
   });
 
-  /** Zoom to the content's width, never past 1. */
+  /** Zoom to the content's width, never past 1; on the stage, to what it stands. */
   const fit = () => {
+    if (staged && stood) {
+      standOn(true);
+      return;
+    }
     const box = canvas.getBoundingClientRect();
     const width = world.scrollWidth || box.width;
     zoom.z = Math.max(ZOOM_MIN, Math.min(1, (box.width - 48) / width));
@@ -3062,25 +3227,8 @@ export function boot(options: BootOptions): void {
     later();
   });
 
-  /* --- The chrome: what the canvas says about itself ------------------- */
-
-  const chrome = new Chrome({
-    canvas,
-    spec,
-    tokens: options.tokens,
-    faces: options.faces,
-    view,
-    sections: () => sections,
-    go,
-    resetLayout,
-    setView,
-    playVisible,
-    applyDials,
-    world: () => zoom,
-  });
-
-  // The page's scheme turned (the host's theme, or the system's): every frame drawn in it, and the chrome's DialKit, follow.
-  onPageScheme((scheme) => {
+  // The page's scheme turned (the host's theme, or the system's): every frame drawn in it follows.
+  onPageScheme(() => {
     for (const section of sections) {
       for (const frame of section.frames.values()) {
         if (frame.column.scheme === "page") {
@@ -3088,29 +3236,10 @@ export function boot(options: BootOptions): void {
         }
       }
     }
-    chrome.scheme(scheme);
     later();
   });
 
-  bridge()?.on("picks", (picks) => {
-    const layout = picks.layout?.value;
-    if (layout && typeof layout === "object" && !drag) {
-      moved = layout as Record<string, [number, number]>;
-      for (const section of sections) {
-        for (const frame of section.frames.values()) {
-          placeFrame(frame);
-        }
-      }
-      drawEdges();
-    }
-  });
-
-  window.addEventListener("resize", () => {
-    chrome.layout();
-    drawEdges();
-  });
   new ResizeObserver(() => {
-    drawEdges();
     later();
     sayShape();
   }).observe(world);
@@ -3260,7 +3389,7 @@ export function boot(options: BootOptions): void {
         rect.top >= Math.max(0, room.top) - 0.5 &&
         rect.right <= Math.min(windowWidth(), room.right) + 0.5 &&
         rect.bottom <= Math.min(windowHeight(), room.bottom) + 0.5,
-      view: `the world at zoom ${zoom.z} in a ${Math.round(room.width)}×${Math.round(room.height)} canvas, a ${windowWidth()}×${windowHeight()} window${chrome.phone() ? " (a phone's)" : ""}`,
+      view: `the world at zoom ${zoom.z} in a ${Math.round(room.width)}×${Math.round(room.height)} canvas, a ${windowWidth()}×${windowHeight()} window`,
     };
   };
 
@@ -3297,11 +3426,7 @@ export function boot(options: BootOptions): void {
     standIn(section, toDraw(plans[section.file]?.stories ?? []));
   }
   window.__cawcoCanvas = canvasState;
-  if (card) {
-    chrome.asCard();
-  }
   if (embed) {
-    chrome.asEmbed();
     tellGraphFetched();
     // Its stories load now, not on the observer's first callback: a frame off the page's screen gets no rendering steps until it is scrolled to, and its module is fetched and mounted meanwhile.
     quietly(pump());
@@ -3310,36 +3435,25 @@ export function boot(options: BootOptions): void {
     zoom.y = WORLD_INSET.y;
   }
   place();
-  chrome.layout();
 }
 
 /**
- * Where the world stands from the canvas's corner when fitted, and the
- * least a frame shown by `go` keeps from its top. The canvas begins under
- * the head (chrome.ts PAGE_CSS), so this is room from the head's foot.
+ * Where the world stands from the canvas's corner when fitted, the least a
+ * frame shown by `go` keeps from its top, and the room the stage keeps
+ * round what it stands.
  */
 const WORLD_INSET = { x: 24, y: 16 };
 
 /** `file:Story`: the colon before the story's name. */
 const LAST_COLON = /:(?=[^:]+$)/;
-/**
- * The edges' gutter, on DESIGN.md's spacing ladder: a lane's first stands
- * 18px out from the frames, each next one 7px further, its corners turn on
- * a 7px radius, the labels stand 7px clear of the lanes, a line (16px, the
- * meta role's) apart where two would meet.
- */
-const EDGE_OUT = 18;
-const EDGE_LANE = 7;
-const EDGE_TURN = 7;
-const EDGE_LABEL_GAP = 7;
-const EDGE_LABEL_LINE = 16;
-/**
- * How far clear of a frame's side an edge starts and its arrow's tip ends,
- * px: the move's 2px stroke and its arrow (the marker's tip 1.6px past the
- * path's end) never stand on the frame, so a frame's picture, taken by its
- * own rect, holds none of the canvas's lines (a review read the tip at
- * every frame's left edge as a stray speck).
- */
-const EDGE_CLEAR = 4;
+
+/** Each clip whose element the move took away: an exit, read once the move has ended. */
+function markExits(records: PlayedRecord[]): void {
+  for (const one of records) {
+    if (!one.target?.isConnected) {
+      one.kind = "exit";
+    }
+  }
+}
 const BODY_RULE = /(^|,)\s*(body|html|:root)\s*(,|$)/;
 const REDUCED_QUERY = /prefers-reduced-motion/;

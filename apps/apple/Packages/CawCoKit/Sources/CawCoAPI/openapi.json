@@ -38708,6 +38708,10 @@
             "description": "When it was first delivered to the session.",
             "type": "string"
           },
+          "state": {
+            "description": "The design graph's kept state when it was placed (Projects spec §5.10,\nthe owner's pick \"pins\"): its machine, state and variation in words,\nshown under the person's words; none on a page with no graph.",
+            "type": "string"
+          },
           "thread": {
             "description": "Oldest first.",
             "type": "array",

@@ -248,17 +248,13 @@ const VIRTUAL = "cawco:sheet/";
 /** The canvas's own modules: its entry, runtime, adapter and Svelte props holder. */
 const VIRTUAL_STAGE = "cawco:stage/";
 
-/** Bundled in by build.ts: the canvas's browser runtime (canvas/runtime.ts), CawCo's tokens, and DialKit's vanilla build and stylesheet. */
+/** Bundled in by build.ts: the canvas's browser runtime (canvas/runtime.ts), CawCo's tokens and the house faces. */
 declare const __CANVAS_RUNTIME__: string;
 declare const __CANVAS_TOKENS__: string;
-declare const __DIALKIT_JS__: string;
-declare const __DIALKIT_CSS__: string;
 declare const __CANVAS_FACES__: string;
 declare const __CANVAS_FACE_FILES__: Record<string, string>;
 const CANVAS_RUNTIME = __CANVAS_RUNTIME__;
 const CANVAS_TOKENS = __CANVAS_TOKENS__;
-const DIALKIT_JS = __DIALKIT_JS__;
-const DIALKIT_CSS = __DIALKIT_CSS__;
 const CANVAS_FACES = __CANVAS_FACES__;
 const root = process.cwd();
 const port = Number(process.env.CAWCO_STAGE_PORT);
@@ -1108,14 +1104,11 @@ async function reportOf(files: string[]): Promise<RenderReport> {
 }
 
 /**
- * DialKit's vendored vanilla build and stylesheet (decision-page kit, MIT),
- * served beside the canvas for its timeline and dials, and the house faces'
- * woff2 pieces (core house-faces.ts, cut from the repository's own Figtree
- * and JetBrains Mono, OFL) its `faces` rules name, at `faces/<file>`.
+ * The house faces' woff2 pieces (core house-faces.ts, cut from the
+ * repository's own Figtree and JetBrains Mono, OFL) the canvas's `faces`
+ * rules name, at `faces/<file>`.
  */
 const CANVAS_ASSETS: Record<string, { body: string | Buffer; type: string }> = {
-  "/@cawco/dialkit.js": { body: DIALKIT_JS, type: "text/javascript" },
-  "/@cawco/dialkit.css": { body: DIALKIT_CSS, type: "text/css" },
   ...Object.fromEntries(
     Object.entries(__CANVAS_FACE_FILES__).map(([name, base64]) => [
       `/@cawco/faces/${name}`,
