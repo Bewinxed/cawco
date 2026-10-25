@@ -1023,29 +1023,48 @@
     display: block flex;
     grid-row: 1;
     grid-column: 1;
-    gap: var(--space-3);
-    align-items: center;
-    justify-content: space-between;
-    padding-inline: var(--space-3);
+    align-items: stretch;
   }
 
-  /* The views: one glass group of words; the chosen one lifted, as a
-     segmented control's thumb. */
+  /* The project's views as folder tabs (DESIGN.md, Folder tabs): they stand
+     on their shelf, the tab strip's own ground, and the chosen tab is a
+     sheet of the page it opens. No hairline runs under them. */
   .strip {
+    display: block flex;
+    flex: 1 1 auto;
+    gap: 2px;
+    align-items: end;
     min-inline-size: 0;
+    padding-inline: var(--space-3);
+    background: var(--surface-shelf);
+  }
 
-    [aria-current] {
-      background: var(--surface-lift);
-      box-shadow: var(--shadow-raised);
+  .tab {
+    display: block flex;
+    gap: var(--space-1);
+    align-items: center;
+    block-size: 34px;
+    padding-inline: var(--space-4);
+    border-start-start-radius: var(--radius-md);
+    border-start-end-radius: var(--radius-md);
+    background: var(--surface-recess-deep);
+    color: var(--ink-muted);
+    font: var(--type-label);
+    white-space: nowrap;
+
+    &.on {
+      background: var(--tab-sheet);
       color: var(--ink-strong);
-    }
-
-    .gi.words:not([aria-current]) {
-      color: var(--ink-muted);
+      box-shadow:
+        var(--shadow-tab-start-chosen, none), var(--shadow-tab-end-chosen, none);
     }
   }
 
+  /* New task floats in glass over the shelf's trailing end. */
   .bar-end {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: var(--space-3);
     display: block flex;
     gap: var(--space-2);
     align-items: center;
@@ -1096,6 +1115,7 @@
     display: block grid;
     grid-row: 1 / -1;
     grid-column: 1;
+    grid-template-rows: minmax(0, 1fr);
     grid-template-columns: minmax(0, 1fr);
     min-block-size: 0;
     overflow: clip;
@@ -1146,39 +1166,29 @@
       to bottom,
       rgb(0 0 0 / calc(1 - var(--edge-k))),
       #000 calc(var(--c-top-bar-h) + var(--c-edge-fade-len-phone)),
-      #000 calc(100% - var(--fade-end)),
-      transparent
+      #000 calc(100% - var(--foot-inset, 0px) - var(--fade-end)),
+      transparent calc(100% - var(--foot-inset, 0px))
     );
   }
 
-  /* The project's head: one row (The Title Bars Follow Liquid Glass Rule). Its
-     name leads; the machine, drawn as a place, and the worded acts trail, each
-     group one capsule of glass. No ground, hairline or facts line of its own. */
-  .phead {
+  /* A pane's head as a bar: one row, its short name, then trailing glass
+     and at most one prominent act. No ground, hairline or facts line. */
+  .vhead {
     display: block flex;
-    gap: var(--space-4);
-    align-items: center;
-    justify-content: space-between;
-    min-block-size: var(--c-top-bar-h, 44px);
-    padding-block-start: var(--space-3);
-  }
-
-  .phead-title {
-    display: block flex;
-    flex: 0 1 auto;
     gap: var(--space-3);
     align-items: center;
-    min-inline-size: 0;
-    margin-inline-end: var(--space-3);
-    font: var(--type-title);
-    letter-spacing: -0.01em;
-  }
+    min-block-size: var(--c-top-bar-h);
 
-  .phead-end {
-    display: block flex;
-    flex: none;
-    gap: var(--space-2);
-    align-items: center;
+    h3 {
+      min-inline-size: 0;
+      margin-inline-end: var(--space-3);
+      font: var(--type-title);
+      letter-spacing: -0.01em;
+    }
+
+    .grow {
+      flex: 1 1 auto;
+    }
   }
 
   /* One capsule of the panel's glass (DESIGN.md, Top bar's trailing edge):
@@ -1254,19 +1264,6 @@
       inline-size: var(--icon-md);
       block-size: var(--icon-md);
       color: var(--ink-muted);
-    }
-  }
-
-  /* The project's folder glyph alone, in the project's hue (identity is ink, never a tile). */
-  .pmark {
-    display: block grid;
-    flex: none;
-    place-items: center;
-    color: oklch(from var(--identity-ink) l c 205);
-
-    .ic {
-      inline-size: var(--icon-lg);
-      block-size: var(--icon-lg);
     }
   }
 
@@ -1589,11 +1586,26 @@
     }
   }
 
+  /* Facts about a surface, drawn as content under its bar: the state with
+     its glyph first, the rest beside it, wrapping as room runs out. */
   .facts {
     display: block flex;
     flex-wrap: wrap;
-    gap: var(--space-1);
+    gap: var(--space-1) var(--space-4);
     align-items: center;
+    color: var(--ink-muted);
+    font: var(--type-meta);
+
+    .fact {
+      display: inline flex;
+      gap: var(--space-1);
+      align-items: center;
+      min-inline-size: 0;
+    }
+
+    .fact:first-child {
+      color: var(--ink-strong);
+    }
   }
 
   .split-body {
@@ -1946,8 +1958,11 @@
     }
   }
 
+  /* The shape is drawn at its laid-out height (--shape-h); its edges keep
+     that height wherever the box grows, so they meet the nodes. */
   .shape {
     position: relative;
+    block-size: var(--shape-h);
     min-block-size: 280px;
     border: 1px solid var(--border-hairline);
     border-radius: var(--radius-md);
@@ -1956,9 +1971,9 @@
 
     svg.edges {
       position: absolute;
-      inset: 0;
+      inset: 0 0 auto;
       inline-size: 100%;
-      block-size: 100%;
+      block-size: var(--shape-h);
       overflow: visible;
     }
 
@@ -2041,6 +2056,18 @@
     );
     background-size: 18px 18px;
     overflow: clip;
+
+    /* On the canvas the shape is the canvas: it fills the box, with no card
+       of its own over the dotted ground. */
+    .shape {
+      position: absolute;
+      inset: 0;
+      block-size: auto;
+      min-block-size: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
   }
 
   .tray {
@@ -2111,7 +2138,10 @@
   /* The phone: a 44px bar floating over the page, the page, the bottom ViewBar. */
   .phone {
     --text-title: 1.125rem;
-    grid-template-rows: var(--c-top-bar-h) minmax(0, 1fr) auto;
+    /* The foot bar's height: its glass controls and the room under them. */
+    --pfoot-h: calc(var(--c-btn-h) + var(--space-2) + var(--space-5));
+
+    grid-template-rows: var(--c-top-bar-h) minmax(0, 1fr) var(--pfoot-h);
     border-radius: var(--radius-modal);
   }
 
@@ -2144,15 +2174,17 @@
      (the house edge fade at the phone's length, kit-edge-fade-block). Its
      parts keep their own height, so nothing is squeezed and cut. */
   .pbody {
-    --fade-len: var(--c-edge-fade-len-phone);
+    --fade-len: var(--c-edge-fade-len);
+    --foot-inset: var(--pfoot-h);
 
     display: block flex;
-    grid-row: 1 / 3;
+    grid-row: 1 / -1;
     grid-column: 1;
     flex-direction: column;
     gap: var(--space-4);
     min-block-size: 0;
-    padding: calc(var(--c-top-bar-h) + var(--space-4)) var(--space-5) var(--space-5);
+    padding: calc(var(--c-top-bar-h) + var(--space-4)) var(--space-5)
+      calc(var(--pfoot-h) + var(--space-5));
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-width: none;
@@ -2182,14 +2214,38 @@
     }
   }
 
+  /* The phone's foot is a bar too: no ground or hairline. Its controls
+     float as glass over the page, which runs under it and fades out above
+     it while content passes under (the page's own mask, --foot-inset); the
+     one prominent act keeps its coral. */
   .pfoot {
+    position: relative;
+    z-index: 1;
     display: block flex;
+    grid-row: 3;
+    grid-column: 1;
     gap: var(--space-2);
-    align-items: center;
+    align-items: start;
     justify-content: space-between;
     padding: var(--space-2) var(--space-3) var(--space-5);
-    border-block-start: 1px solid var(--border-hairline);
-    background: var(--surface-recess);
+
+    > .btn:not(.primary) {
+      border-color: var(--border-hairline);
+      border-radius: var(--radius-pill);
+      background: var(--material-panel);
+      box-shadow: var(--shadow-tile);
+      backdrop-filter: blur(var(--material-blur)) saturate(var(--material-saturate));
+
+      @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+        border-color: var(--border-contrast);
+        background: var(--surface-raised);
+        backdrop-filter: none;
+      }
+    }
+
+    > .btn.primary {
+      border-radius: var(--radius-pill);
+    }
   }
 
   .pcard {
@@ -2227,21 +2283,6 @@
 
     .r {
       color: var(--ink-subtle);
-      font: var(--type-meta);
-    }
-  }
-
-  .ptitle {
-    display: block grid;
-    gap: 2px;
-
-    h4 {
-      font: var(--type-title);
-      letter-spacing: -0.01em;
-    }
-
-    p {
-      color: var(--ink-muted);
       font: var(--type-meta);
     }
   }

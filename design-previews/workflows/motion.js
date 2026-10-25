@@ -260,9 +260,13 @@ export function keepFlight(stage) {
   if (!(src && dst)) {
     return;
   }
+  const count = dst.closest(".block")?.querySelector(".count");
   if (dst.dataset.kept) {
     delete dst.dataset.kept;
-    dst.style.opacity = "0";
+    dst.hidden = true;
+    if (count) {
+      count.textContent = "1";
+    }
     src.style.visibility = "";
     for (const run of src.getAnimations()) {
       run.cancel();
@@ -275,6 +279,12 @@ export function keepFlight(stage) {
   }
   if (menu) {
     menu.style.visibility = "hidden";
+  }
+  // The kept row is not drawn until it lands: it takes its place unseen, then the tree flies to it.
+  dst.style.opacity = "0";
+  dst.hidden = false;
+  if (count) {
+    count.textContent = "2";
   }
   const a = src.getBoundingClientRect();
   const b = dst.getBoundingClientRect();

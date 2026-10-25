@@ -11,7 +11,7 @@
     "job": "create",
     "width": 390,
     "file": "A-create-390-1.png",
-    "caption": "A · The brief, Create (Phone 390 × 844): Type in the brief: the shape redraws on the pause."
+    "caption": "A · The brief, Create (Phone 390 × 844): The brief typed on the phone, its shape read under it."
   },
   {
     "option": "A",
@@ -25,42 +25,42 @@
     "job": "edit",
     "width": 390,
     "file": "A-edit-390-1.png",
-    "caption": "A · The brief, Edit (Phone 390 × 844): Line 6 is not read as a step: it is highlighted and goes to the orchestrator as prose."
+    "caption": "A · The brief, Edit (Phone 390 × 844): The workflow opened under its row: line 6 goes as prose, the shape under it."
   },
   {
     "option": "A",
     "job": "run",
     "width": 1440,
     "file": "A-run-1440.png",
-    "caption": "A · The brief, Run and see runs (Desk 1440 × 900): Run 7 in the Split, the shape lit by its work items; the asking node’s question opens under it."
+    "caption": "A · The brief, Run and see runs (Desk 1440 × 900): Run 8 in the Split, the shape lit by its work items; the asking node’s question opens under it."
   },
   {
     "option": "A",
     "job": "run",
     "width": 390,
     "file": "A-run-390-1.png",
-    "caption": "A · The brief, Run and see runs (Phone 390 × 844, screen 1 of 2): Run 7 in the Split, the shape lit by its work items; the asking node’s question opens under it."
+    "caption": "A · The brief, Run and see runs (Phone 390 × 844, screen 1 of 2): The workflow's runs: run 8 needs you, then the routine's runs before it."
   },
   {
     "option": "A",
     "job": "run",
     "width": 390,
     "file": "A-run-390-2.png",
-    "caption": "A · The brief, Run and see runs (Phone 390 × 844, screen 2 of 2): Run 7 in the Split, the shape lit by its work items; the asking node’s question opens under it."
+    "caption": "A · The brief, Run and see runs (Phone 390 × 844, screen 2 of 2): Run 8 opened: the shape lit, and step 4's question under it."
   },
   {
     "option": "A",
     "job": "evaluate",
     "width": 1440,
     "file": "A-evaluate-1440.png",
-    "caption": "A · The brief, Evaluate (Desk 1440 × 900): Checks are sentences under the brief; each mark is one run."
+    "caption": "A · The brief, Evaluate (Desk 1440 × 900): Checks are sentences scored on each run’s reports; each mark is one run."
   },
   {
     "option": "A",
     "job": "evaluate",
     "width": 390,
     "file": "A-evaluate-390-1.png",
-    "caption": "A · The brief, Evaluate (Phone 390 × 844): Checks are sentences under the brief; each mark is one run."
+    "caption": "A · The brief, Evaluate (Phone 390 × 844): The checks, each mark one run."
   },
   {
     "option": "A",
@@ -74,7 +74,14 @@
     "job": "delete",
     "width": 390,
     "file": "A-delete-390-1.png",
-    "caption": "A · The brief, Delete (Phone 390 × 844): The row’s ⋯ holds every way to manage it; Delete asks in place and names what it reaches."
+    "caption": "A · The brief, Delete (Phone 390 × 844, screen 1 of 2): The row's ⋯ open: every way to manage the workflow."
+  },
+  {
+    "option": "A",
+    "job": "delete",
+    "width": 390,
+    "file": "A-delete-390-2.png",
+    "caption": "A · The brief, Delete (Phone 390 × 844, screen 2 of 2): Delete asks in place under its row, naming its runs, its routine and the run still going."
   },
   {
     "option": "B",
@@ -88,7 +95,7 @@
     "job": "create",
     "width": 390,
     "file": "B-create-390-1.png",
-    "caption": "B · Step ledger, Create (Phone 390 × 844): Rows by hand, or Caw’s draft kept row by row. Press Add a step."
+    "caption": "B · Step ledger, Create (Phone 390 × 844): On the phone: the name, the brief and the rows by hand; Ask Caw to draft it is in the foot."
   },
   {
     "option": "B",
@@ -102,28 +109,28 @@
     "job": "edit",
     "width": 390,
     "file": "B-edit-390-1.png",
-    "caption": "B · Step ledger, Edit (Phone 390 × 844): A Call row opened in place: its connection, tool, arguments and when it is approved. Ledger | Shape swaps the rows for their picture."
+    "caption": "B · Step ledger, Edit (Phone 390 × 844): The Call row opened in place: x-use, get_tweet, its argument and when it is approved."
   },
   {
     "option": "B",
     "job": "run",
     "width": 1440,
     "file": "B-run-1440.png",
-    "caption": "B · Step ledger, Run and see runs (Desk 1440 × 900): Run 7 is the same ledger, lit. Press the asking row: its question folds and unfolds in place."
+    "caption": "B · Step ledger, Run and see runs (Desk 1440 × 900): Run 8 is the same ledger, lit. Press the asking row: its question folds and unfolds in place."
   },
   {
     "option": "B",
     "job": "run",
     "width": 390,
     "file": "B-run-390-1.png",
-    "caption": "B · Step ledger, Run and see runs (Phone 390 × 844, screen 1 of 2): Run 7 is the same ledger, lit. Press the asking row: its question folds and unfolds in place."
+    "caption": "B · Step ledger, Run and see runs (Phone 390 × 844, screen 1 of 2): The workflows, then their runs: run 8 needs you."
   },
   {
     "option": "B",
     "job": "run",
     "width": 390,
     "file": "B-run-390-2.png",
-    "caption": "B · Step ledger, Run and see runs (Phone 390 × 844, screen 2 of 2): Run 7 is the same ledger, lit. Press the asking row: its question folds and unfolds in place."
+    "caption": "B · Step ledger, Run and see runs (Phone 390 × 844, screen 2 of 2): Run 8 opened: the step rows lit, step 4's question unfolded under its row."
   },
   {
     "option": "B",
@@ -137,7 +144,7 @@
     "job": "evaluate",
     "width": 390,
     "file": "B-evaluate-390-1.png",
-    "caption": "B · Step ledger, Evaluate (Phone 390 × 844): The run’s checks, plus a step’s own “Done when”, scored on that step’s report alone."
+    "caption": "B · Step ledger, Evaluate (Phone 390 × 844): The run's checks, then step 5's own check, not run yet."
   },
   {
     "option": "B",
@@ -151,21 +158,21 @@
     "job": "delete",
     "width": 390,
     "file": "B-delete-390-1.png",
-    "caption": "B · Step ledger, Delete (Phone 390 × 844): The row’s ⋯ and the delete asked in place, naming the runs and the routine it reaches."
+    "caption": "B · Step ledger, Delete (Phone 390 × 844): Delete asked in place under the workflow's row, each row keeping its ⋯."
   },
   {
     "option": "C",
     "job": "create",
     "width": 1440,
     "file": "C-create-1440.png",
-    "caption": "C · Canvas, Create (Desk 1440 × 900): A blank canvas from Start; dragging from a node asks the edge’s kind. Press Agent in the tray."
+    "caption": "C · Canvas, Create (Desk 1440 × 900): A blank canvas from its Start node, with the tray. Press Agent in the tray: the first node joins under Start."
   },
   {
     "option": "C",
     "job": "create",
     "width": 390,
     "file": "C-create-390-1.png",
-    "caption": "C · Canvas, Create (Phone 390 × 844): A blank canvas from Start; dragging from a node asks the edge’s kind. Press Agent in the tray."
+    "caption": "C · Canvas, Create (Phone 390 × 844): On the phone the new canvas is a picture of its Start node; steps are added as a list under it."
   },
   {
     "option": "C",
@@ -179,21 +186,21 @@
     "job": "edit",
     "width": 390,
     "file": "C-edit-390-1.png",
-    "caption": "C · Canvas, Edit (Phone 390 × 844): Click a node: the inspector changes to it in place."
+    "caption": "C · Canvas, Edit (Phone 390 × 844): Read-only on the phone: the canvas with Read via x-use chosen, its settings under it."
   },
   {
     "option": "C",
     "job": "run",
     "width": 1440,
     "file": "C-run-1440.png",
-    "caption": "C · Canvas, Run and see runs (Desk 1440 × 900): The run lights the same canvas; the asking node’s question stands in the inspector."
+    "caption": "C · Canvas, Run and see runs (Desk 1440 × 900): Run 8 lights the same canvas; the asking node’s question stands in the inspector."
   },
   {
     "option": "C",
     "job": "run",
     "width": 390,
     "file": "C-run-390-1.png",
-    "caption": "C · Canvas, Run and see runs (Phone 390 × 844): The run lights the same canvas; the asking node’s question stands in the inspector."
+    "caption": "C · Canvas, Run and see runs (Phone 390 × 844): Run 8 on the phone: the canvas lit, step 4's question under it."
   },
   {
     "option": "C",
@@ -207,70 +214,70 @@
     "job": "evaluate",
     "width": 390,
     "file": "C-evaluate-390-1.png",
-    "caption": "C · Canvas, Evaluate (Phone 390 × 844): A check can be pinned to a node and scored on that node’s report."
+    "caption": "C · Canvas, Evaluate (Phone 390 × 844): The checks, one of them pinned to Read via x-use."
   },
   {
     "option": "C",
     "job": "delete",
     "width": 1440,
     "file": "C-delete-1440.png",
-    "caption": "C · Canvas, Delete (Desk 1440 × 900): Draft and published versions side by side with the canvas; Delete asks under them."
+    "caption": "C · Canvas, Delete (Desk 1440 × 900): Draft and published versions beside the canvas; Delete asks under them."
   },
   {
     "option": "C",
     "job": "delete",
     "width": 390,
     "file": "C-delete-390-1.png",
-    "caption": "C · Canvas, Delete (Phone 390 × 844): Draft and published versions side by side with the canvas; Delete asks under them."
+    "caption": "C · Canvas, Delete (Phone 390 × 844): The canvas, its draft and live versions, then Delete asking what it reaches."
   },
   {
     "option": "D",
     "job": "create",
     "width": 1440,
     "file": "D-create-1440.png",
-    "caption": "D · Keep a run, Create (Desk 1440 × 900): Any finished tree’s ⋯ › Keep as workflow. Press it: the tree travels into the ledger and becomes the row."
+    "caption": "D · Keep a run, Create (Desk 1440 × 900): Run 7’s finished tree and its ⋯ › Keep as workflow. Press it: the tree travels into the ledger and becomes the row."
   },
   {
     "option": "D",
     "job": "create",
     "width": 390,
     "file": "D-create-390-1.png",
-    "caption": "D · Keep a run, Create (Phone 390 × 844, screen 1 of 2): Any finished tree’s ⋯ › Keep as workflow. Press it: the tree travels into the ledger and becomes the row."
+    "caption": "D · Keep a run, Create (Phone 390 × 844, screen 1 of 2): A finished run, Oct 21's, with its ⋯ open on Keep as workflow."
   },
   {
     "option": "D",
     "job": "create",
     "width": 390,
     "file": "D-create-390-2.png",
-    "caption": "D · Keep a run, Create (Phone 390 × 844, screen 2 of 2): Any finished tree’s ⋯ › Keep as workflow. Press it: the tree travels into the ledger and becomes the row."
+    "caption": "D · Keep a run, Create (Phone 390 × 844, screen 2 of 2): Kept: the tree is now the workflow's steps and brief, ready to prune or run."
   },
   {
     "option": "D",
     "job": "edit",
     "width": 1440,
     "file": "D-edit-1440.png",
-    "caption": "D · Keep a run, Edit (Desk 1440 × 900): Pruning the kept tree. Press Remove on “Re-run the post search”."
+    "caption": "D · Keep a run, Edit (Desk 1440 × 900): Pruning the kept tree. Press Remove on “Draft up to 3 DMs”."
   },
   {
     "option": "D",
     "job": "edit",
     "width": 390,
     "file": "D-edit-390-1.png",
-    "caption": "D · Keep a run, Edit (Phone 390 × 844): Pruning the kept tree. Press Remove on “Re-run the post search”."
+    "caption": "D · Keep a run, Edit (Phone 390 × 844): The kept tree on the phone, pruned the same way."
   },
   {
     "option": "D",
     "job": "run",
     "width": 1440,
     "file": "D-run-1440.png",
-    "caption": "D · Keep a run, Run and see runs (Desk 1440 × 900): Run 7 beside what was kept: a step the orchestrator added is marked, with Keep."
+    "caption": "D · Keep a run, Run and see runs (Desk 1440 × 900): Run 8 beside what was kept: a step the orchestrator added is marked, with Keep."
   },
   {
     "option": "D",
     "job": "run",
     "width": 390,
     "file": "D-run-390-1.png",
-    "caption": "D · Keep a run, Run and see runs (Phone 390 × 844): Run 7 beside what was kept: a step the orchestrator added is marked, with Keep."
+    "caption": "D · Keep a run, Run and see runs (Phone 390 × 844): Run 8 against the kept run: the added step marked, step 4's question open."
   },
   {
     "option": "D",
@@ -284,20 +291,27 @@
     "job": "evaluate",
     "width": 390,
     "file": "D-evaluate-390-1.png",
-    "caption": "D · Keep a run, Evaluate (Phone 390 × 844): Every run is scored against the kept run (a pinned baseline)."
+    "caption": "D · Keep a run, Evaluate (Phone 390 × 844): The checks, each scored against run 7, the kept run."
   },
   {
     "option": "D",
     "job": "delete",
     "width": 1440,
     "file": "D-delete-1440.png",
-    "caption": "D · Keep a run, Delete (Desk 1440 × 900): Manage adds “Keep run 6 instead”: a better run becomes the next version."
+    "caption": "D · Keep a run, Delete (Desk 1440 × 900): Manage adds “Keep run 2 instead”: another good run becomes the next version."
   },
   {
     "option": "D",
     "job": "delete",
     "width": 390,
     "file": "D-delete-390-1.png",
-    "caption": "D · Keep a run, Delete (Phone 390 × 844): Manage adds “Keep run 6 instead”: a better run becomes the next version."
+    "caption": "D · Keep a run, Delete (Phone 390 × 844, screen 1 of 2): The row's ⋯ open, with Keep run 2 instead."
+  },
+  {
+    "option": "D",
+    "job": "delete",
+    "width": 390,
+    "file": "D-delete-390-2.png",
+    "caption": "D · Keep a run, Delete (Phone 390 × 844, screen 2 of 2): Delete asks in place under its row, naming what it reaches."
   }
 ]

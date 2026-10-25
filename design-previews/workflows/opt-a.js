@@ -9,10 +9,14 @@ import {
   deleteAsk,
   desk,
   esc,
+  facts,
   glyph,
   ic,
+  LIVE,
+  liveFacts,
   manageMenu,
   phone,
+  RUNS,
   runsLedger,
   splitPane,
 } from "./parts.js";
@@ -61,8 +65,7 @@ const createPhone = () => [
   phone({
     title: "New workflow",
     back: true,
-    body: `<div class="ptitle"><h4>New workflow</h4><p>Numbered steps; the shape is read as you write.</p></div>
-      <span class="field focus"><span>Reply shortlist</span></span>
+    body: `<span class="field focus"><span>Reply shortlist</span></span>
       <div class="brief-text"><textarea spellcheck="false" aria-label="The brief">${esc(BRIEF)}</textarea></div>
       ${shapeView(parseBrief(BRIEF), { w: 128 })}`,
     foot: `${btn("Cancel", { v: "ghost" })}${btn("Create workflow", { v: "primary" })}`,
@@ -75,7 +78,7 @@ const openWell = (text) => `<div class="well">
     <div data-shape-host>${shapeView(parseBrief(text), { w: 140 })}</div>
   </div>
   ${inputsLine(`<span class="grow"></span><span class="meta">${ic("checks", "sm")} 3 checks</span>${btn("Add a check", { v: "ghost", size: "xs" })}`)}
-  ${versionLine(`${btn("Run now", { size: "sm", icon: "play" })}${btn("Save as v4", { v: "primary", size: "sm" })}`)}
+  ${versionLine(`${btn("Run now", { size: "sm", icon: "play" })}${btn("Save as v2", { v: "primary", size: "sm" })}`)}
 </div>`;
 
 const editDesk = () =>
@@ -85,50 +88,48 @@ const editDesk = () =>
 
 const editPhone = () => [
   phone({
-    title: "Cawco",
+    title: "Workflows",
     body: `${wfPhoneList({
       open: `<div class="stack" style="padding-block:var(--space-2)">${briefLines(BRIEF_SLIPPED)}${shapeView(parseBrief(BRIEF_SLIPPED), { w: 120 })}</div>`,
     })}`,
-    foot: `${btn("Run now", { icon: "play" })}${btn("Save as v4", { v: "primary" })}`,
+    foot: `${btn("Run now", { icon: "play" })}${btn("Save as v2", { v: "primary" })}`,
   }),
 ];
 
 const runSplit = () =>
   splitPane({
-    title: "Run 7",
-    label: "Reply shortlist, run 7",
-    facts: "v3 · 3 of 5 steps · 4m · $0.41",
+    title: "Reply shortlist",
+    label: `Reply shortlist, run ${LIVE}`,
+    facts: liveFacts(),
     asking: true,
     acts: [["stop", "Stop run"]],
-    body: `${shapeView(PLAN, { lit: true, caption: "Run 7, lit by its work items", w: 150 })}${askTile()}
-      <p class="meta">${glyph("done", "sm")} Checks so far: 2 of 3</p>`,
+    body: `${shapeView(PLAN, { lit: true, caption: "Lit by its work items", w: 150 })}${askTile()}`,
   });
 
 const runDesk = () =>
   desk({
-    pane: `${wfLedger()}${block({ icon: "runs", title: "Runs", count: "7", body: runsLedger() })}`,
+    pane: `${wfLedger()}${block({ icon: "runs", title: "Runs", count: "8", body: runsLedger() })}`,
     split: runSplit(),
   });
+
+const runList = () =>
+  `<div class="pcard">${RUNS.slice(0, 4)
+    .map(
+      (r) =>
+        `<div class="prow">${glyph(r.state)}<span class="t">Run ${r.n}</span><span class="r">${ic("right")}</span><span class="m">${r.when} · ${r.outcome}</span></div>`
+    )
+    .join("")}</div>`;
 
 const runPhone = () => [
   phone({
     title: "Reply shortlist",
-    body: `<div class="ptitle"><h4>Reply shortlist</h4><p>v3 · 7 runs</p></div>
-      <div class="pcard">${[
-        ["running", "Run 7", "4m ago · 3 of 5 · needs you"],
-        ["done", "Run 6", "Oct 21 · delivered · 9m"],
-        ["failed", "Run 5", "Oct 18 · failed, ran again"],
-      ]
-        .map(
-          ([s, t, m]) =>
-            `<div class="prow">${glyph(s)}<span class="t">${t}</span><span class="r">${ic("right")}</span><span class="m">${m}</span></div>`
-        )
-        .join("")}</div>`,
+    back: true,
+    body: `${facts(["v1", "8 runs"])}${runList()}`,
   }),
   phone({
-    title: "Run 7",
+    title: "Reply shortlist",
     back: true,
-    body: `<div class="ptitle"><h4>Reply shortlist · run 7</h4><p class="num">Working · 4m · v3 · $0.41</p></div>
+    body: `${facts(liveFacts())}
       ${shapeView(PLAN, { lit: true, caption: "Lit by its work items", w: 122 })}${askTile({ chosen: "all" })}`,
     foot: btn("Stop run", { icon: "stop" }),
   }),
@@ -138,15 +139,15 @@ const evalDesk = () =>
   desk({
     pane: `${wfLedger()}
       ${block({ icon: "checks", title: "Checks", count: "3", acts: btn("Add a check", { size: "sm", icon: "plus" }), body: checksList() })}
-      <p class="meta">A judge reads each run’s reports against these sentences once the run ends. Each mark is one run, newest last.</p>
-      ${block({ icon: "runs", title: "Runs", count: "7", body: runsLedger() })}`,
+      <p class="meta">A judge reads each run’s reports against these sentences once the run ends. Each mark is one run, oldest first; run 8 is still going.</p>
+      ${block({ icon: "runs", title: "Runs", count: "8", body: runsLedger() })}`,
   });
 
 const evalPhone = () => [
   phone({
-    title: "Reply shortlist",
+    title: "Checks",
     back: true,
-    body: `<div class="ptitle"><h4>Checks</h4><p>Scored on every run’s reports</p></div>${checksList()}
+    body: `${checksList()}
       ${btn("Add a check", { icon: "plus" })}`,
   }),
 ];
@@ -159,8 +160,14 @@ const deleteDesk = () =>
 
 const deletePhone = () => [
   phone({
-    title: "Cawco",
-    body: `<div class="ptitle"><h4>Workflows</h4><p>2 workflows</p></div>${wfPhoneList()}${deleteAsk()}`,
+    title: "Workflows",
+    body: wfPhoneList({
+      menu: manageMenu({ style: "inset-block-start:40px;inset-inline-end:var(--space-2)" }),
+    }),
+  }),
+  phone({
+    title: "Workflows",
+    body: wfPhoneList({ open: `<div style="padding-block:var(--space-2)">${deleteAsk()}</div>` }),
   }),
 ];
 
@@ -181,26 +188,37 @@ export const A = {
       desk: createDesk,
       phones: createPhone,
       note: "Type in the brief: the shape redraws on the pause.",
+      phoneNotes: ["The brief typed on the phone, its shape read under it."],
     },
     edit: {
       desk: editDesk,
       phones: editPhone,
       note: "Line 6 is not read as a step: it is highlighted and goes to the orchestrator as prose.",
+      phoneNotes: ["The workflow opened under its row: line 6 goes as prose, the shape under it."],
     },
     run: {
       desk: runDesk,
       phones: runPhone,
-      note: "Run 7 in the Split, the shape lit by its work items; the asking node’s question opens under it.",
+      note: "Run 8 in the Split, the shape lit by its work items; the asking node’s question opens under it.",
+      phoneNotes: [
+        "The workflow's runs: run 8 needs you, then the routine's runs before it.",
+        "Run 8 opened: the shape lit, and step 4's question under it.",
+      ],
     },
     evaluate: {
       desk: evalDesk,
       phones: evalPhone,
-      note: "Checks are sentences under the brief; each mark is one run.",
+      note: "Checks are sentences scored on each run’s reports; each mark is one run.",
+      phoneNotes: ["The checks, each mark one run."],
     },
     delete: {
       desk: deleteDesk,
       phones: deletePhone,
       note: "The row’s ⋯ holds every way to manage it; Delete asks in place and names what it reaches.",
+      phoneNotes: [
+        "The row's ⋯ open: every way to manage the workflow.",
+        "Delete asks in place under its row, naming its runs, its routine and the run still going.",
+      ],
     },
   },
   motions: [

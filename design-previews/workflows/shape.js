@@ -196,7 +196,7 @@ export function shapeView(
         `<span class="edge-tag" style="left:${e.tx}%;top:${e.ty}px">${esc(e.tag)}</span>`
     )
     .join("");
-  return `<div class="shape" data-shape style="--node-w:${w}px;block-size:${height}px"><span class="shape-cap">${caption}</span><svg class="edges" viewBox="0 0 100 ${height}" preserveAspectRatio="none" aria-hidden="true">${paths}</svg>${nodes}${tagHtml}${extraTag}</div>`;
+  return `<div class="shape" data-shape style="--node-w:${w}px;--shape-h:${height}px"><span class="shape-cap">${caption}</span><svg class="edges" viewBox="0 0 100 ${height}" preserveAspectRatio="none" aria-hidden="true">${paths}</svg>${nodes}${tagHtml}${extraTag}</div>`;
 }
 
 export const BRIEF = `Build today’s reply shortlist for @{{account}}. You publish nothing.

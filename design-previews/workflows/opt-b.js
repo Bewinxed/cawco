@@ -13,8 +13,12 @@ import {
   ic,
   kind,
   manageMenu,
+  facts,
+  LIVE,
+  liveFacts,
   phone,
   RUN,
+  RUNS,
   runsLedger,
   STEPS,
   seg,
@@ -69,7 +73,7 @@ const ledgerWell = ({ open = "", view = "ledger", create = false } = {}) => `<di
   ${
     create
       ? `<div class="row-wrap" style="justify-content:space-between"><span class="meta">${ic("pen", "sm")} New · not saved yet · its first save is v1</span><span class="acts">${btn("Cancel", { v: "ghost", size: "sm" })}${btn("Create workflow", { v: "primary", size: "sm" })}</span></div>`
-      : versionLine(`${btn("Run now", { size: "sm", icon: "play" })}${btn("Save as v4", { v: "primary", size: "sm" })}`)
+      : versionLine(`${btn("Run now", { size: "sm", icon: "play" })}${btn("Save as v2", { v: "primary", size: "sm" })}`)
   }
 </div>`;
 
@@ -110,7 +114,7 @@ const createPhone = () => [
     title: "New workflow",
     back: true,
     body: `<span class="field focus"><span>Reply shortlist</span></span>
-      <span class="field"><span class="ph">The orchestrator’s brief…</span></span>
+      <span class="field"><span>Build today’s reply shortlist for @{{account}}. You publish nothing.</span></span>
       ${inputsLine()}<p class="label">Steps</p>${phoneSteps()}`,
     foot: `${btn("Ask Caw to draft it", { icon: "sparkles" })}${btn("Create", { v: "primary" })}`,
   }),
@@ -123,7 +127,7 @@ const editPhone = () => [
   phone({
     title: "Reply shortlist",
     back: true,
-    body: `<div class="ptitle"><h4>Reply shortlist</h4><p>v3 · 5 steps · 7 runs</p></div>
+    body: `${facts(["v1", "5 steps", "8 runs"])}
       ${phoneSteps(
         `<div class="stack" style="padding-block:var(--space-2)"><span class="field">${ic("link")}<span class="grow">x-use · get_tweet</span>${ic("sort")}</span><div class="argwell">{ <span class="k">"id"</span>: <span class="s">"{{post}}"</span> }</div>${seg(
           [
@@ -134,7 +138,7 @@ const editPhone = () => [
           "Approve on phone"
         )}</div>`
       )}`,
-    foot: `${btn("Shape", { icon: "shape" })}${btn("Save as v4", { v: "primary" })}`,
+    foot: `${btn("Shape", { icon: "shape" })}${btn("Save as v2", { v: "primary" })}`,
   }),
 ];
 
@@ -149,48 +153,45 @@ const runRows = ({ open = true } = {}) => {
       s.n === 4
         ? ' data-play="b-unfold" role="button" tabindex="0" aria-expanded="true"'
         : "";
-    return `<div class="runrow ${r.state}" data-depth="1" style="--depth:1"${press}><span>${glyph(r.state)}</span><span class="t">${s.title}</span><span class="r num">${r.took || kind(s.kind)}</span><span class="d">${s.kind === "call" ? "x-use · get_tweet · approved at start" : r.report}</span></div>${ask}`;
+    return `<div class="runrow ${r.state}" data-depth="1" style="--depth:1"${press}><span>${glyph(r.state)}</span><span class="t">${s.title}</span><span class="r num">${kind(s.kind)}</span><span class="d">${s.kind === "call" ? "x-use · get_tweet · approved at start" : r.report}</span></div>${ask}`;
   });
-  return `<div class="stack" style="gap:0"><div class="runrow"><span>${glyph("running")}</span><span class="t">Workflow · Reply shortlist</span><span class="r">orchestrator</span></div>${rows.join("")}</div>`;
+  return `<div class="stack" style="gap:0"><div class="runrow"><span>${glyph("needs")}</span><span class="t">Workflow · Reply shortlist</span><span class="r">orchestrator</span></div>${rows.join("")}</div>`;
 };
 
 const runDesk = () =>
   desk({
-    pane: `${wfLedger()}${block({ icon: "runs", title: "Runs", count: "7", body: runsLedger() })}`,
+    pane: `${wfLedger()}${block({ icon: "runs", title: "Runs", count: "8", body: runsLedger() })}`,
     split: splitPane({
-      title: "Run 7",
-      label: "Reply shortlist, run 7",
-      facts: "v3 · 3 of 5 steps · 4m · $0.41",
+      title: "Reply shortlist",
+      label: `Reply shortlist, run ${LIVE}`,
+      facts: liveFacts(),
       asking: true,
       acts: [["stop", "Stop run"]],
-      body: `${runRows()}<div class="hr"></div><p class="meta">${glyph("done", "sm")} Checks so far: 2 of 3 · “Nothing was posted, liked or followed” scores when the run ends.</p>`,
+      body: `${runRows()}<div class="hr"></div><p class="meta">The checks score when the run ends.</p>`,
     }),
   });
 
 const runPhone = () => [
   phone({
-    title: "Cawco",
-    body: `<div class="ptitle"><h4>Workflows</h4><p>2 workflows · 1 run going</p></div>${wfPhoneList()}
-      <p class="label">Runs</p><div class="pcard">${[
-        ["running", "Run 7", "4m ago · 3 of 5 · needs you"],
-        ["done", "Run 6", "Oct 21 · delivered · 9m"],
-      ]
+    title: "Workflows",
+    body: `${wfPhoneList()}
+      <p class="label">Runs</p><div class="pcard">${RUNS.slice(0, 2)
         .map(
-          ([s, t, m]) =>
-            `<div class="prow">${glyph(s)}<span class="t">${t}</span><span class="r">${ic("right")}</span><span class="m">${m}</span></div>`
+          (r) =>
+            `<div class="prow">${glyph(r.state)}<span class="t">Run ${r.n}</span><span class="r">${ic("right")}</span><span class="m">${r.when} · ${r.outcome}</span></div>`
         )
         .join("")}</div>`,
   }),
   phone({
-    title: "Run 7",
+    title: "Reply shortlist",
     back: true,
-    body: `<div class="ptitle"><h4>Reply shortlist · run 7</h4><p class="num">Working · 4m · 3 of 5 · $0.41</p></div>${runRows()}`,
+    body: `${facts(liveFacts())}${runRows()}`,
     foot: btn("Stop run", { icon: "stop" }),
   }),
 ];
 
 const doneWhen = () =>
-  `<div class="card checks"><div class="check">${ic("checks", "g-idle")}<span class="t">Step 5 · Measure posts after 48 hours: done when each kept reply has its numbers</span><span class="marks" role="img" aria-label="5 passed of 6"><i></i><i></i><i class="f"></i><i></i><i></i><i></i></span><span class="s">5 of 6</span><span class="scope">Scored on that step’s report alone</span></div></div>`;
+  `<div class="card checks"><div class="check">${ic("checks", "g-idle")}<span class="t">Step 5 · Measure posts after 48 hours: done when each kept reply has its numbers</span><span class="marks" role="img" aria-label="Not run yet"><i class="n"></i></span><span class="s">not run yet</span><span class="scope">Scored on that step’s report alone</span></div></div>`;
 
 const evalDesk = () =>
   desk({
@@ -199,14 +200,14 @@ const evalDesk = () =>
         ${block({ icon: "checks", title: "Checks", count: "3", acts: btn("Add a check", { size: "sm", icon: "plus" }), body: checksList() })}
         ${block({ icon: "checks", title: "Step checks", count: "1", body: doneWhen() })}
       </div>
-      ${block({ icon: "runs", title: "Runs", count: "7", body: runsLedger() })}`,
+      ${block({ icon: "runs", title: "Runs", count: "8", body: runsLedger() })}`,
   });
 
 const evalPhone = () => [
   phone({
-    title: "Reply shortlist",
+    title: "Checks",
     back: true,
-    body: `<div class="ptitle"><h4>Checks</h4><p>The run’s, and one step’s</p></div>${checksList()}${doneWhen()}`,
+    body: `${checksList()}<p class="label">Step 5’s own check</p>${doneWhen()}`,
   }),
 ];
 
@@ -218,8 +219,8 @@ const deleteDesk = () =>
 
 const deletePhone = () => [
   phone({
-    title: "Cawco",
-    body: `<div class="ptitle"><h4>Workflows</h4><p>2 workflows</p></div>${wfPhoneList()}${deleteAsk()}`,
+    title: "Workflows",
+    body: wfPhoneList({ open: `<div style="padding-block:var(--space-2)">${deleteAsk()}</div>` }),
   }),
 ];
 
@@ -241,26 +242,34 @@ export const B = {
       desk: createDesk,
       phones: createPhone,
       note: "Rows by hand, or Caw’s draft kept row by row. Press Add a step.",
+      phoneNotes: ["On the phone: the name, the brief and the rows by hand; Ask Caw to draft it is in the foot."],
     },
     edit: {
       desk: editDesk,
       phones: editPhone,
       note: "A Call row opened in place: its connection, tool, arguments and when it is approved. Ledger | Shape swaps the rows for their picture.",
+      phoneNotes: ["The Call row opened in place: x-use, get_tweet, its argument and when it is approved."],
     },
     run: {
       desk: runDesk,
       phones: runPhone,
-      note: "Run 7 is the same ledger, lit. Press the asking row: its question folds and unfolds in place.",
+      note: "Run 8 is the same ledger, lit. Press the asking row: its question folds and unfolds in place.",
+      phoneNotes: [
+        "The workflows, then their runs: run 8 needs you.",
+        "Run 8 opened: the step rows lit, step 4's question unfolded under its row.",
+      ],
     },
     evaluate: {
       desk: evalDesk,
       phones: evalPhone,
       note: "The run’s checks, plus a step’s own “Done when”, scored on that step’s report alone.",
+      phoneNotes: ["The run's checks, then step 5's own check, not run yet."],
     },
     delete: {
       desk: deleteDesk,
       phones: deletePhone,
       note: "The row’s ⋯ and the delete asked in place, naming the runs and the routine it reaches.",
+      phoneNotes: ["Delete asked in place under the workflow's row, each row keeping its ⋯."],
     },
   },
   motions: [

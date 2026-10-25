@@ -1,6 +1,6 @@
 /*
  * The pieces every drawing shares: the glyph helper, the reply-shortlist
- * workflow and its run 7, and the desk's and the phone's chrome as CawCo draws them.
+ * workflow and its runs, and the desk's and the phone's chrome as CawCo draws them.
  */
 import { ICONS } from "./icons.js";
 
@@ -98,84 +98,60 @@ export const STEPS = [
   },
 ];
 
-/** Run 7 as it stands: three done, one asking, one planned. */
+/*
+ * One state of the world for every option, from his records. The routine's
+ * seven runs are real (each one's session and report on the hub): the test
+ * run and the first run on Oct 15 delivered, Oct 16–19 failed twice a day
+ * because no x-use was connected, Oct 21 delivered. Run 8 is the one this
+ * preview draws going, as the workflow would run it: it asks at step 4. No
+ * cost or duration is drawn, because none is on record.
+ */
+export const LIVE = 8;
+export const KEPT_RUN = 7;
+
+/** Run 8 as it stands: three done, one asking, one planned. */
 export const RUN = {
-  1: { state: "done", took: "1m 3s", report: "11 posts from the last 24 hours" },
-  2: { state: "done", took: "48s", report: "Read @cawcodev’s last 20 posts" },
-  3: {
-    state: "done",
-    took: "2s",
-    report: "Read 11 posts · approved at start",
-  },
-  4: { state: "needs", took: "1m", report: "Waiting on you" },
-  5: { state: "planned", took: "", report: "Waits on 4 · if you keep any" },
+  1: { state: "done", report: "Posts found, each with a draft reply" },
+  2: { state: "done", report: "x-use reads no follower counts, so picks go by views" },
+  3: { state: "done", report: "Read through x-use · nothing posted" },
+  4: { state: "needs", report: "Waiting on you" },
+  5: { state: "planned", report: "Waits on 4 · if you keep any" },
 };
 
+/** The runs, newest first: run 8 going, then the routine's real runs. */
 export const RUNS = [
-  {
-    n: 7,
-    when: "4m ago",
-    v: 3,
-    state: "running",
-    outcome: "Running",
-    took: "4m",
-    steps: "3 of 5",
-    score: "2 of 3 so far",
-    cost: "0.41",
-  },
-  {
-    n: 6,
-    when: "Oct 21",
-    v: 3,
-    state: "done",
-    outcome: "Delivered",
-    took: "9m",
-    steps: "5 of 5",
-    score: "3 of 3",
-    cost: "0.88",
-  },
-  {
-    n: 5,
-    when: "Oct 18",
-    v: 2,
-    state: "failed",
-    outcome: "Failed, ran again",
-    took: "6m",
-    steps: "5 of 5",
-    score: "1 of 3",
-    cost: "0.52",
-  },
-  {
-    n: 4,
-    when: "Oct 17",
-    v: 2,
-    state: "done",
-    outcome: "Delivered",
-    took: "8m",
-    steps: "5 of 5",
-    score: "3 of 3",
-    cost: "0.79",
-  },
+  { n: 8, when: "Now", state: "needs", outcome: "Needs you at step 4", score: "when it ends" },
+  { n: 7, when: "Oct 21", state: "done", outcome: "Delivered: 12 posts, 3 DM drafts", score: "3 of 3" },
+  { n: 6, when: "Oct 19", state: "failed", outcome: "Failed twice: x-use not connected", score: "1 of 3" },
+  { n: 5, when: "Oct 18", state: "failed", outcome: "Failed twice: x-use not connected", score: "1 of 3" },
+  { n: 4, when: "Oct 17", state: "failed", outcome: "Failed twice: x-use not connected", score: "1 of 3" },
+  { n: 3, when: "Oct 16", state: "failed", outcome: "Failed twice: x-use not connected", score: "1 of 3" },
+  { n: 2, when: "Oct 15", state: "done", outcome: "Delivered: 10 posts, 3 DM drafts", score: "3 of 3" },
+  { n: 1, when: "Oct 15", state: "done", outcome: "Test run: 11 posts, 3 DM drafts", score: "3 of 3" },
 ];
 
-/** The checks, each with its runs as marks: 1 passed, 0 failed, null not yet. */
+/** The checks, each with its runs as marks, oldest first: 1 passed, 0 failed, null not yet (run 8). */
 export const CHECKS = [
   {
     text: "The shortlist holds 8–12 posts",
-    marks: [1, 1, 0, 1, 1, 1],
-    pass: "5 of 6",
+    marks: [1, 1, 0, 0, 0, 0, 1, null],
+    pass: "3 of 7",
   },
   {
-    text: "Every post is from the last 24 hours",
-    marks: [1, 1, 1, 1, 1, 1],
-    pass: "6 of 6",
+    text: "It drafts up to 3 DMs",
+    marks: [1, 1, 0, 0, 0, 0, 1, null],
+    pass: "3 of 7",
   },
   {
     text: "Nothing was posted, liked or followed",
-    marks: [1, 0, 1, 1, 1, 1, null],
-    pass: "5 of 6",
+    marks: [1, 1, 1, 1, 1, 1, 1, null],
+    pass: "7 of 7",
   },
 ];
+
+/** Facts about a surface, drawn as content under its bar (The Title Bars Follow Liquid Glass Rule). */
+export const facts = (items) =>
+  `<div class="facts">${items.map((i) => `<span class="fact">${i}</span>`).join("")}</div>`;
 
 export const marks = (list) =>
   `<span class="marks" role="img" aria-label="${list.filter((m) => m === 1).length} passed of ${list.filter((m) => m !== null).length}">${list
@@ -222,8 +198,8 @@ export const block = ({ icon, title, count = "", acts = "", body, cls = "" }) =>
 
 /* ----------------------------------------------------------- the desk */
 
-const treeRow = ({ depth = 0, mark, title, age = "", cls = "", dot = "" }) =>
-  `<div class="trow ${cls}" data-depth="${depth}" style="--depth:${depth}">${mark}${dot}<span class="trunc">${title}</span><span class="age num">${age}</span></div>`;
+const treeRow = ({ depth = 0, mark, title, cls = "", dot = "" }) =>
+  `<div class="trow ${cls}" data-depth="${depth}" style="--depth:${depth}">${mark}${dot}<span class="trunc">${title}</span><span class="age num"></span></div>`;
 
 const tile = (icon, dot = "") =>
   `<span class="tmark"${dot ? ` data-dot="${dot}"` : ""}>${ic(icon)}</span>`;
@@ -232,52 +208,33 @@ const bare = (state) => `<span class="tmark bare">${glyph(state)}</span>`;
 
 const railRun = (extra) => {
   const rows = [
-    treeRow({
-      mark: tile("workflow", "attn"),
-      title: `Workflow · ${WF} · run 7`,
-      age: "4m",
-    }),
-    treeRow({
-      depth: 1,
-      mark: bare("done"),
-      title: STEPS[0].title,
-      age: "3m",
-    }),
-    treeRow({
-      depth: 1,
-      mark: bare("done"),
-      title: STEPS[1].title,
-      age: "3m",
-    }),
+    treeRow({ mark: tile("workflow", "attn"), title: `Workflow · ${WF}` }),
+    treeRow({ depth: 1, mark: bare("done"), title: STEPS[0].title }),
+    treeRow({ depth: 1, mark: bare("done"), title: STEPS[1].title }),
     ...(extra
       ? [
           treeRow({
             depth: 1,
             mark: bare("unplanned"),
             title: "Check the DM drafts",
-            age: "20s",
             cls: "unplanned",
           }),
         ]
       : []),
-    treeRow({
-      depth: 1,
-      mark: bare("needs"),
-      title: STEPS[3].title,
-      age: "1m",
-    }),
+    treeRow({ depth: 1, mark: bare("needs"), title: STEPS[3].title }),
   ];
   return rows.join("");
 };
 
+/** The rail: the fleet's four machines are his (obelisk-of-light, Omars-MacBook-Pro, niftybot.art, uwucloud). */
 export const rail = ({
   drift = false,
 } = {}) => `<aside class="rail" aria-label="Rail">
   <div class="rail-brand"><span class="wordmark">Caw&amp;Co</span>${btn("", { v: "ghost", size: "sm", icon: "plus" })}</div>
   <nav class="rail-group" aria-label="Home">
-    <span class="nav">${ic("monitor")}<span>Fleet</span><span class="count num">1</span></span>
+    <span class="nav">${ic("monitor")}<span>Fleet</span><span class="count num">4</span></span>
     <span class="nav">${ic("working")}<span>Working</span><span class="count num">1</span></span>
-    <span class="nav">${ic("done")}<span>Finished</span><span class="count num">4</span></span>
+    <span class="nav">${ic("done")}<span>Finished</span><span class="count num"></span></span>
   </nav>
   <div class="rail-group"><p class="rail-h">${MACHINE}</p><div class="tree">${railRun(drift)}</div></div>
   <div class="rail-group"><p class="rail-h">Projects</p>
@@ -287,15 +244,16 @@ export const rail = ({
 
 const VIEWS = ["Board", "Table", "Routines", "Workflows", "Decisions"];
 
-/** The project's views as one glass group of words, the chosen one lifted. */
+/** The project's views as folder tabs on their shelf, the chosen one a sheet of the page (DESIGN.md, Folder tabs). */
 export const viewStrip = () =>
-  `<nav class="glass strip" aria-label="Views">${VIEWS.map((v) => `<span class="gi words"${v === "Workflows" ? ' aria-current="page"' : ""}>${v}</span>`).join("")}</nav>`;
+  `<nav class="strip" aria-label="Views">${VIEWS.map((v) => `<span class="tab${v === "Workflows" ? " on" : ""}"${v === "Workflows" ? ' aria-current="page"' : ""}>${v}</span>`).join("")}</nav>`;
 
 /*
- * The desk's top bar: no ground of its own (The Title Bars Follow Liquid
- * Glass Rule). The views and New task float as glass groups over the page,
- * which runs to the frame's top edge under them; the scroll edge effect
- * (.edge) blurs and fades what scrolls under them, absent at rest.
+ * The desk's top bar draws no ground, hairline or shadow of its own (The
+ * Title Bars Follow Liquid Glass Rule). The folder tabs stand on their
+ * shelf, the strip's own ground ("The folder tabs' shelf is the tab strip's
+ * own ground, not a bar's"); New task floats in glass at the trailing end.
+ * Its name is the rail's chosen project, so the page has no head of its own.
  */
 export const bar = () => `<header class="bar"><span class="edge" aria-hidden="true"></span>
   ${viewStrip()}
@@ -306,7 +264,7 @@ export const bar = () => `<header class="bar"><span class="edge" aria-hidden="tr
 export const place = (name = MACHINE) =>
   `<span class="place">${ic("tux")}<span>${esc(name)}</span></span>`;
 
-/** One capsule of the panel's glass holding bare items: [icon, name] for a symbol, [ "", words ] for a word. */
+/** One capsule of the panel's glass holding bare items: [icon, name] for a symbol, ["", words] for a word. */
 export const glass = (items, cls = "") =>
   `<div class="glass ${cls}" role="group">${items
     .map(([icon, name]) =>
@@ -316,17 +274,13 @@ export const glass = (items, cls = "") =>
     )
     .join("")}</div>`;
 
-/** The project's head: one row, its name leading, the machine and its acts trailing in glass. */
-export const projectHead = () => `<header class="phead">
-  <h3 class="phead-title"><span class="pmark">${ic("folder")}</span><span class="trunc">${PROJECT}</span></h3>
-  <div class="phead-end"><div class="glass" role="group" aria-label="Machine"><span class="gi words" title="On ${MACHINE}">${place()}</span></div>${glass(
-    [
-      ["", "Ask Caw"],
-      ["", "Spin off"],
-    ],
-    "acts-words"
-  )}</div>
-</header>`;
+/**
+ * A pane's head as a bar: one row, the view's short name, then the trailing
+ * glass and at most one prominent act. `back` leads it with the Back symbol
+ * alone, named by where it goes.
+ */
+export const paneHead = ({ title, back = "", acts = [], prominent = "" }) =>
+  `<header class="vhead">${back ? glass([["left", back]]) : ""}<h3 class="trunc">${esc(title)}</h3><span class="grow"></span>${acts.length ? glass(acts) : ""}${prominent}</header>`;
 
 export const desk = ({
   pane,
@@ -335,31 +289,39 @@ export const desk = ({
 }) => `<div class="frame desk" data-frame="desk">
   ${rail({ drift })}
   <div class="main">${bar()}
-    <div class="page${split ? " with-split" : ""}"><div class="pane">${projectHead()}${pane}</div>${split}</div>
+    <div class="page${split ? " with-split" : ""}"><div class="pane">${pane}</div>${split}</div>
   </div>
 </div>`;
 
 /**
- * A run opened in the Split beside the view. Its head is one row: the view's
- * own short name, then one glass group of bare symbols, Close last. What the
- * run is doing (`facts`) is content, the first line of its body, with the
- * machine drawn as a place.
+ * A run opened in the Split beside the view. Its head is one row: the
+ * workflow's name, then one glass group of bare symbols, Close last. What
+ * the run is doing (`facts`) is content, drawn under the head.
  */
 export const splitPane = ({
   title = "",
   label = title,
-  facts = "",
+  facts: list = [],
   acts = [],
   body,
   asking = false,
 }) => `<aside class="split" aria-label="${esc(label)}">
   <header class="split-head">${title ? `<h4 class="trunc">${esc(title)}</h4>` : '<span class="grow"></span>'}${glass([...acts, ["close", "Close"]])}</header>
-  <div class="split-body">${facts ? `<p class="facts meta num">${facts} · ${place()}</p>` : ""}${body}</div>
+  <div class="split-body">${list.length ? facts(list) : ""}${body}</div>
   <div class="composer"><span>Message the orchestrator…</span>${btn("", { v: asking ? "secondary" : "primary", size: "sm", icon: "arrow" })}</div>
 </aside>`;
 
 /* ---------------------------------------------------------- the phone */
 
+/** The phone's foot when a screen names none: the view picker and New workflow, each in glass. */
+const defaultFoot = () =>
+  `<div class="glass" role="group"><button type="button" class="gi words">Workflows ${ic("down")}</button></div>${glass([["plus", "New workflow"]])}`;
+
+/**
+ * A phone screen. Its bar and its foot draw no ground: their controls float
+ * in glass over the page, which runs under both and fades at each while
+ * content passes under it.
+ */
 export const phone = ({
   title,
   back = false,
@@ -368,28 +330,32 @@ export const phone = ({
 }) => `<div class="frame phone" data-frame="phone">
   <header class="pbar"><span class="edge" aria-hidden="true"></span>${glass([back ? ["left", "Back to Workflows"] : ["sidebar", "Open the sidebar"]])}<span class="t">${title}</span>${glass([["more", "More"]])}</header>
   <div class="pbody">${body}</div>
-  <footer class="pfoot">${foot || `${btn("Workflows", { size: "sm", icon: "down" })}${btn("", { size: "sm", icon: "plus" })}`}</footer>
+  <footer class="pfoot">${foot || defaultFoot()}</footer>
 </div>`;
-
-export const composerFoot = () =>
-  `<div class="composer inline"><span>Message the orchestrator…</span>${btn("", { v: "primary", size: "sm", icon: "arrow" })}</div>`;
 
 /* ------------------------------------------------- shared run drawings */
 
-/** A run's steps as lit tree rows: glyph, title, took; the report's first line under it. */
+/** The live run as a fact line: its glyph, its number and where it stands. */
+export const liveFacts = (extra = []) => [
+  `${glyph("needs", "sm")}<span>Run ${LIVE} · needs you at step 4</span>`,
+  "3 of 5 steps",
+  ...extra,
+];
+
+/** A run's steps as lit tree rows: glyph, title, kind; the report's first line under it. */
 export const runTree = ({ ask = "", drift = false, stepsOf = STEPS } = {}) => {
   const rows = [
-    `<div class="runrow"><span>${glyph("running")}</span><span class="t">Workflow · ${WF}</span><span class="r">orchestrator</span></div>`,
+    `<div class="runrow"><span>${glyph("needs")}</span><span class="t">Workflow · ${WF}</span><span class="r">orchestrator</span></div>`,
   ];
   for (const s of stepsOf) {
     const r = RUN[s.n];
     if (drift && s.n === 3) {
       rows.push(
-        `<div class="runrow unplanned" data-depth="1" style="--depth:1"><span>${glyph("unplanned")}</span><span class="t">Check the DM drafts</span><span class="r num">${glyph("running", "sm")} 20s</span><span class="d">Not in v3 · the orchestrator added it ${btn("Keep", { v: "secondary", size: "xs" })}</span></div>`
+        `<div class="runrow unplanned" data-depth="1" style="--depth:1"><span>${glyph("unplanned")}</span><span class="t">Check the DM drafts</span><span class="r num">${glyph("running", "sm")}</span><span class="d">Not in v1 · the orchestrator added it ${btn("Keep", { v: "secondary", size: "xs" })}</span></div>`
       );
     }
     rows.push(
-      `<div class="runrow ${r.state}" data-depth="1" style="--depth:1"${s.n === 4 ? ' data-ask-row=""' : ""}><span>${glyph(r.state)}</span><span class="t">${s.title}</span><span class="r num">${r.took || kind(s.kind)}</span><span class="d">${r.report}</span></div>${s.n === 4 ? ask : ""}`
+      `<div class="runrow ${r.state}" data-depth="1" style="--depth:1"${s.n === 4 ? ' data-ask-row=""' : ""}><span>${glyph(r.state)}</span><span class="t">${s.title}</span><span class="r num">${kind(s.kind)}</span><span class="d">${r.report}</span></div>${s.n === 4 ? ask : ""}`
     );
   }
   return `<div class="stack" style="gap:0">${rows.join("")}</div>`;
@@ -399,19 +365,20 @@ export const runTree = ({ ask = "", drift = false, stepsOf = STEPS } = {}) => {
 export const askTile = ({ chosen = "" } = {}) => `<div class="ask">
   <p class="q">${STEPS[3].title}</p>
   <p class="why">Step 5 measures only the replies you keep. The orchestrator waits here.</p>
-  <div class="opts"><span class="opt${chosen === "all" ? " on" : ""}"><span class="key">1</span>all 11</span><span class="opt${chosen === "none" ? " on" : ""}"><span class="key">2</span>none</span><span class="grow"></span>${btn("Answer", { v: "primary", size: "sm" })}</div>
+  <div class="opts"><span class="opt${chosen === "all" ? " on" : ""}"><span class="key">1</span>keep all</span><span class="opt${chosen === "none" ? " on" : ""}"><span class="key">2</span>keep none</span><span class="grow"></span>${btn("Answer", { v: "primary", size: "sm" })}</div>
 </div>`;
 
+/** The runs ledger: when, outcome and checks, from the records; no cost or duration is on record. */
 export const runsLedger = ({
   compare = false,
-  rows = RUNS,
+  rows = RUNS.slice(0, 5),
 } = {}) => `<div class="card"><table class="ledger">
-  <colgroup><col style="width:28px"><col style="width:92px"><col style="width:36px"><col><col style="width:64px"><col style="width:72px"><col style="width:${compare ? 104 : 96}px"><col style="width:52px"></colgroup>
-  <thead><tr><th class="lead"><span class="sr-only">State</span></th><th>When</th><th>v</th><th>Outcome</th><th>Took</th><th>Steps</th><th>${compare ? "vs run 7" : "Checks"}</th><th class="end">$</th></tr></thead>
+  <colgroup><col style="width:28px"><col style="width:84px"><col><col style="width:${compare ? 128 : 112}px"></colgroup>
+  <thead><tr><th class="lead"><span class="sr-only">State</span></th><th>When</th><th>Outcome</th><th>${compare ? `vs run ${KEPT_RUN}` : "Checks"}</th></tr></thead>
   <tbody>${rows
     .map(
       (r) =>
-        `<tr><td class="lead">${glyph(r.state)}</td><td class="num">${r.when}</td><td class="num">${r.v}</td><td class="name">${r.outcome}</td><td class="num">${r.took}</td><td class="num">${r.steps}</td><td class="num">${compare ? r.delta : r.score}</td><td class="num end">${r.cost}</td></tr>`
+        `<tr><td class="lead">${glyph(r.state)}</td><td class="num">${r.when}</td><td class="name">Run ${r.n} · ${r.outcome}</td><td class="num">${compare ? r.delta : r.score}</td></tr>`
     )
     .join("")}</tbody></table></div>`;
 
@@ -432,7 +399,7 @@ export const manageMenu = ({
     ["calendar", "Start on a schedule", ""],
     ["copy", "Duplicate", ""],
     ["pause", "Pause", ""],
-    ["runs", "Versions", "3"],
+    ["runs", "Versions", "1"],
   ]
     .map(
       ([i, t, k]) =>
@@ -448,9 +415,9 @@ export const deleteAsk =
   () => `<div class="askhere" role="group" aria-label="Delete ${WF}?">
   <p class="t">Delete ${WF}?</p>
   <ul>
-    <li>${ic("runs", "sm")}<span>Its 7 runs stay in Runs, read-only, with their reports and scores.</span></li>
-    <li>${ic("calendar", "sm")}<span>The routine “Daily reply shortlist for X” starts it every day at 06:30; that routine stops and waits for you to point it elsewhere.</span></li>
-    <li>${ic("working", "sm")}<span>Run 7 is still going: it finishes on v3 unless you stop it.</span></li>
+    <li>${ic("runs", "sm")}<span>Its 8 runs stay in Runs, read-only, with their reports and scores.</span></li>
+    <li>${ic("calendar", "sm")}<span>The routine “Daily reply shortlist for X” is set to start it at 06:30 each day (it is paused now); it stops and waits for you to point it elsewhere.</span></li>
+    <li>${ic("working", "sm")}<span>Run 8 is still going: it finishes on v1 unless you stop it.</span></li>
   </ul>
   <div class="row">${btn("Cancel", { v: "ghost", size: "sm" })}${btn("Delete workflow", { v: "danger", size: "sm" })}</div>
 </div>`;

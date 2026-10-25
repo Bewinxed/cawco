@@ -1,29 +1,32 @@
 /*
  * The Workflows tab's own ledger, shared by every option: a row per workflow,
- * opened in place under its row (as RoutineDetail opens today).
+ * opened in place under its row (as RoutineDetail opens today). The second
+ * workflow is his routine "Weekly X milestone check": it ran on Oct 15 and
+ * Oct 19, and read no numbers either time.
  */
-import { block, btn, esc, glyph, ic } from "./parts.js";
+import { block, btn, esc, glyph, ic, LIVE } from "./parts.js";
 
-const WORKFLOWS = [
-  {
-    name: "Reply shortlist",
-    meta: "5 steps · research, low · x-use",
-    v: 3,
-    state: "needs",
-    last: "run 7 · 4m ago",
-    runs: 7,
-    score: "5 of 6",
-  },
-  {
-    name: "Milestone check",
-    meta: "2 steps · low · x-use",
-    v: 1,
-    state: "failed",
-    last: "Oct 19",
-    runs: 1,
-    score: "0 of 1",
-  },
-];
+export const REPLY = {
+  name: "Reply shortlist",
+  meta: "5 steps · research, low · x-use",
+  v: 1,
+  state: "needs",
+  last: `run ${LIVE} · now`,
+  runs: 8,
+  score: "3 of 3",
+};
+
+export const MILESTONE = {
+  name: "Milestone check",
+  meta: "from the routine Weekly X milestone check · x-use",
+  v: 1,
+  state: "failed",
+  last: "Oct 19",
+  runs: 2,
+  score: "–",
+};
+
+const WORKFLOWS = [REPLY, MILESTONE];
 
 export const wfRow = (w, { open = false, more = "" } = {}) =>
   `<tr${open ? ' class="open"' : ""}><td class="lead">${glyph(w.state)}</td><td><span class="rowname"><span class="name trunc">${esc(w.name)}</span><span class="meta trunc">${w.meta}</span></span></td><td class="num">v${w.v}</td><td class="num">${w.last}</td><td class="num">${w.runs}</td><td class="num">${w.score}</td><td class="end" style="overflow:visible;position:relative">${btn("", { v: "ghost", size: "sm", icon: "more" })}${more}</td></tr>`;
@@ -50,7 +53,7 @@ export const wfLedger = ({
     })
     .join("");
   const table = `<div class="card" style="overflow:visible"><table class="ledger">
-    <colgroup><col style="width:28px"><col><col style="width:44px"><col style="width:132px"><col style="width:64px"><col style="width:88px"><col style="width:44px"></colgroup>
+    <colgroup><col style="width:28px"><col><col style="width:44px"><col style="width:112px"><col style="width:64px"><col style="width:72px"><col style="width:44px"></colgroup>
     <thead><tr><th class="lead"><span class="sr-only">State</span></th><th>Workflow</th><th>v</th><th>Last run</th><th>Runs</th><th>Checks</th><th><span class="sr-only">Actions</span></th></tr></thead>
     <tbody>${body}</tbody></table></div>`;
   if (!head) {
@@ -65,15 +68,20 @@ export const wfLedger = ({
   });
 };
 
-/** The phone's list of workflows: two-line rows. */
-export const wfPhoneList = ({ open = "" } = {}) =>
-  `<div class="pcard">${WORKFLOWS.map(
-    (w, i) =>
-      `<div class="prow">${glyph(w.state)}<span class="t trunc">${w.name}</span><span class="r num">v${w.v}</span><span class="m">${w.last} · ${w.runs} runs · checks ${w.score}</span></div>${i === 0 ? open : ""}`
-  ).join("")}</div>`;
+/**
+ * The phone's list of workflows: two-line rows, each with its ⋯. `open` is
+ * drawn under the first row; `menu` hangs from the first row's ⋯.
+ */
+export const wfPhoneList = ({ open = "", menu = "", rows = WORKFLOWS } = {}) =>
+  `<div class="pcard" style="position:relative">${rows
+    .map(
+      (w, i) =>
+        `<div class="prow">${glyph(w.state)}<span class="t trunc">${w.name}</span><span class="r">${btn("", { v: "ghost", size: "xs", icon: "more" })}</span><span class="m">${w.last} · ${w.runs} runs · checks ${w.score}</span></div>${i === 0 ? open : ""}`
+    )
+    .join("")}${menu}</div>`;
 
 export const inputsLine = (extra = "") =>
   `<span class="row-wrap"><span class="meta">Inputs</span><span class="field" style="min-block-size:26px"><span class="mono">account</span><span class="ph">cawcodev</span></span>${extra}</span>`;
 
 export const versionLine = (acts) =>
-  `<div class="row-wrap" style="justify-content:space-between"><span class="meta num">${ic("runs", "sm")} v3 · saved 2m ago · 7 runs</span><span class="acts">${acts}</span></div>`;
+  `<div class="row-wrap" style="justify-content:space-between"><span class="meta num">${ic("runs", "sm")} v1 · 8 runs</span><span class="acts">${acts}</span></div>`;

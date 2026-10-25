@@ -98,7 +98,7 @@ const folder =
   <div style="padding-inline-start:6ch">workflow.md <span class="g-idle">· the orchestrator’s brief</span></div>
   <div style="padding-inline-start:6ch">steps.json <span class="g-idle">· each step and what it waits for</span></div>
   <div style="padding-inline-start:6ch">checks.json <span class="g-idle">· what a judge scores</span></div>
-  <div style="padding-inline-start:6ch">runs/7/ <span class="g-idle">· one folder per run</span></div>
+  <div style="padding-inline-start:6ch">runs/8/ <span class="g-idle">· one folder per run</span></div>
   <div style="padding-inline-start:2ch">${ic("folder", "sm")} decisions/ <span class="g-idle">· as today</span></div>
 </div>`;
 
@@ -118,17 +118,17 @@ const lives = () => `<section class="pv-section pv-col" aria-labelledby="lives">
     ${reach(
       "monitor",
       "On a desk: a tab of its own",
-      `<div class="row">${viewStrip()}</div><code>/project/cawco?view=workflows</code>`,
+      `<div class="bar" style="border-radius:var(--radius-md);overflow:clip">${viewStrip()}</div><code>/project/cawco?view=workflows</code>`,
       "Between Routines and Decisions. Three blocks: Workflows, Runs, Checks. A workflow opens in place under its row; a run opens as its tree in the Split beside the view."
     )}
     ${reach(
       "workflow",
       "In the rail and the home lists",
       `<div class="tree">${[
-        [0, "workflow", "Workflow · Reply shortlist · run 7", "4m", "attn"],
-        [1, "done", "Find 8–12 posts from the last 24 hours", "3m", ""],
-        [1, "done", "Read @cawcodev’s recent posts", "3m", ""],
-        [1, "needs", "Which replies do you keep?", "1m", ""],
+        [0, "workflow", "Workflow · Reply shortlist", "", "attn"],
+        [1, "done", "Find 8–12 posts from the last 24 hours", "", ""],
+        [1, "done", "Read @cawcodev’s recent posts", "", ""],
+        [1, "needs", "Which replies do you keep?", "", ""],
       ]
         .map(
           ([d, i, t, a, dot]) =>
@@ -245,7 +245,7 @@ const stage = (o) => {
     <div class="pv-col pv-stage-cap"><h3>Desk</h3><p>1440 × 900 · ${job.note}</p></div>
     ${fit(job.desk(), 1440, 900, "desk-fit")}
     <div class="pv-col pv-stage-cap"><h3>Phone</h3><p>390 × 844${phones.length > 1 ? " · two screens of one journey" : ""}</p></div>
-    <div class="phones">${phones.map((p) => `<div class="phone-fit">${fit(p, 390, 844)}</div>`).join("")}</div>
+    <div class="phones">${phones.map((p, i) => `<div class="phone-fit">${fit(p, 390, 844)}${job.phoneNotes?.[i] ? `<p class="phone-cap">${job.phoneNotes[i]}</p>` : ""}</div>`).join("")}</div>
   </div>`;
 };
 
@@ -324,7 +324,7 @@ function wireStage(el) {
   if (el.dataset.option === "C" && el.dataset.job === "create") {
     el.playC = () => {
       const host = el.querySelector("[data-canvas-host]");
-      const grown = host.querySelectorAll("[data-node]").length > 2;
+      const grown = host.querySelectorAll("[data-node]").length > 1;
       const shape = host.querySelector("[data-shape]");
       const holder = document.createElement("div");
       shape.replaceWith(holder);
@@ -334,7 +334,7 @@ function wireStage(el) {
         holder,
         shapeView(grown ? C_START : C_GROWN, {
           start: true,
-          caption: "New workflow · drag a node from the tray",
+          caption: "Draft · drag a node from the tray",
           w: 160,
         })
       );
