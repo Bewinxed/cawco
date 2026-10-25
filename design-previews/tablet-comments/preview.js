@@ -166,19 +166,45 @@ class Hang {
     layer.append(this.wrapper);
     this.sized = new ResizeObserver(() => this.neck());
     this.sized.observe(this.card);
+    // A tween of its box (the swap) is followed frame by frame, as HangCard's
+    // glide is: a resize observer is not told of every frame of it in WebKit.
+    this.card.__neck = () => this.neck();
   }
-  /** On the anchor's foot, its trailing edge on the anchor's, its room to the well's foot less `--space-2`. */
+  /**
+   * On the anchor's foot, its trailing edge on the anchor's. Its room runs to
+   * the well's foot less `--space-2`, and never onto a pill on the page: a
+   * pill under the footprint `width` wide stops the card's foot `--space-2`
+   * above its drawn edge, so a person always sees the pins (the review's
+   * must-fix: the card stood on the pin he opened). Where the card's width
+   * changes, the caller sets it (the swap); this reads it for the footprint.
+   */
   place(width, foot) {
+    this.width = width;
+    this.foot = foot;
     const room = this.layer.getBoundingClientRect();
     const at = this.anchor.getBoundingClientRect();
     this.wrapper.style.insetBlockStart = `${at.bottom - room.top}px`;
     this.wrapper.style.insetInlineEnd = `${room.right - at.right}px`;
-    this.card.style.setProperty("--card-w", `${width}px`);
+    const gap = px("--space-2");
+    const left = at.right - width;
+    let stop = foot - gap;
+    for (const pill of pillBoxes()) {
+      const beside = pill.right + gap <= left || pill.left - gap >= at.right;
+      if (!beside && pill.bottom > at.bottom) {
+        stop = Math.min(stop, pill.top - gap);
+      }
+    }
     this.card.style.setProperty(
       "--card-max-h",
-      `${Math.max(0, foot - px("--space-2") - at.bottom)}px`
+      `${Math.max(0, stop - at.bottom)}px`
     );
     this.neck();
+  }
+  /** Placed again where it stands: the pills or the page moved. */
+  refit() {
+    if (this.width !== undefined && !this.closing) {
+      this.place(this.width, this.foot);
+    }
   }
   neck() {
     setNeck(this.card, neckOf(this.card, this.anchor));
@@ -269,8 +295,10 @@ const faceIn = (card) => card.querySelector("[data-face]:not([data-leaving])");
  * over --dur-morph on --ease-drawer, the incoming held at its natural size
  * meanwhile (the box clips it). With less motion the box takes its new
  * size at once and the faces still cross-fade. `still`: at once, no fade.
+ * `fit` runs once the new width and face stand, before the new size is read
+ * (the card's room for its new footprint, `Hang.place`).
  */
-function swap(card, face, width, still = false) {
+function swap(card, face, width, still = false, fit = () => undefined) {
   const leaving = faceIn(card);
   const drawnBox = card.getBoundingClientRect();
   card.__tween?.cancel();
@@ -298,6 +326,8 @@ function swap(card, face, width, still = false) {
   }
   card.style.setProperty("--card-w", `${width}px`);
   card.append(face);
+  fit();
+  opensAtNewest(face);
   if (still) {
     return;
   }
@@ -326,6 +356,14 @@ function swap(card, face, width, still = false) {
     { id: "morph", duration: dur("--dur-morph"), easing: ease("--ease-drawer") }
   );
   card.__tween = tween;
+  const follow = () => {
+    if (card.__tween === tween) {
+      card.__neck?.();
+      requestAnimationFrame(follow);
+    }
+  };
+  card.__neck?.();
+  requestAnimationFrame(follow);
   const done = () => {
     if (card.__tween === tween) {
       card.__tween = null;
@@ -336,6 +374,57 @@ function swap(card, face, width, still = false) {
     }
   };
   tween.finished.then(done, done);
+}
+
+/**
+ * A thread opens at its newest entry's first line, so a long reply reads from
+ * its start (PinCard `settle`, the owner's pick "At the reply's first line");
+ * the house edge fade then says what is past either edge.
+ */
+function opensAtNewest(face) {
+  const room = face.querySelector("[data-pin-room]");
+  const list = room?.querySelector('[data-slot="thread"]');
+  const newest = list?.querySelector(":scope > li:last-child");
+  if (!(room && list && newest)) {
+    return;
+  }
+  let placed = -1;
+  const settle = () => {
+    room.scrollTop =
+      newest.getBoundingClientRect().top -
+      room.getBoundingClientRect().top +
+      room.scrollTop;
+    placed = room.scrollTop;
+  };
+  settle();
+  // Unscrolled, it keeps that place as the room and its entries take their
+  // height (the card's room for a pill, a font), as PinCard's does.
+  const watch = new ResizeObserver(() => {
+    if (Math.abs(room.scrollTop - placed) <= 1) {
+      settle();
+    }
+  });
+  watch.observe(room);
+  watch.observe(list);
+}
+
+/** Each page pill's drawn box, its rings included (PinMark: a 2px ring, a focus ring 2px out). */
+function pillBoxes() {
+  if (!built) {
+    return [];
+  }
+  const ring = 4;
+  return [...built.pins.querySelectorAll("[data-page-pin]")]
+    .filter((pin) => pin.style.visibility !== "hidden")
+    .map((pin) => {
+      const r = (pin.querySelector("[data-mark]") ?? pin).getBoundingClientRect();
+      return {
+        left: r.left - ring,
+        right: r.right + ring,
+        top: r.top - ring,
+        bottom: r.bottom + ring,
+      };
+    });
 }
 
 /* ── What each face holds ─────────────────────────────────────────── */
@@ -427,19 +516,28 @@ function threadFace(number, how) {
     row?.remove();
     return { face, peers };
   }
+  // One bar row: Back, then the pill, then the four peers at its end; the
+  // element's name under it is the card's content.
   const bar = document.createElement("div");
   bar.className = "thread-bar";
   // The part is the kit's Button itself.
   const back = part("back");
   back.addEventListener("click", () => how.onback());
-  bar.append(back);
+  const lead = document.createElement("span");
+  lead.className = "thread-lead";
+  lead.append(back);
+  const pill = row?.querySelector('[data-slot="head-pill"]');
+  if (pill) {
+    // Its focus ring is left to the page's pill: the panel's one coral is Reply's send.
+    pill.querySelector("[data-mark]")?.removeAttribute("data-focused");
+    lead.append(pill);
+  }
+  bar.append(lead);
   if (peers) {
     bar.append(peers);
   }
+  row?.remove();
   face.querySelector('[data-slot="head"]')?.prepend(bar);
-  const pill = row?.querySelector("[data-mark]");
-  pill?.removeAttribute("data-focused");
-  // The pill's dot: as its row's (PinMark `dot`), an answer unread.
   return { face, peers: null };
 }
 
@@ -483,6 +581,8 @@ function placePins(well, iframe, layer) {
   if (!doc) {
     return;
   }
+  // The card's room follows the pills it must keep clear of.
+  queueMicrotask(() => built?.hang?.refit());
   const at = iframe.getBoundingClientRect();
   const room = well.getBoundingClientRect();
   for (const pin of PINS) {
@@ -625,17 +725,35 @@ function build() {
     win.addEventListener("scroll", again, { capture: true, passive: true });
     doc.addEventListener("transitionend", again, true);
     doc.addEventListener("animationend", again, true);
-    // The page is ready once its own runs that end have ended (a breath and
-    // a live dot loop for good) and its fonts are in.
-    const ending = doc
-      .getAnimations()
-      .filter((run) =>
-        Number.isFinite(Number(run.effect?.getComputedTiming().endTime))
-      );
-    Promise.all([
-      doc.fonts.ready,
-      ...ending.map((run) => run.finished.catch(() => undefined)),
-    ]).then(() => {
+    // The page is ready once it has said so (its own `data-ready`, set as it
+    // plays its opening), and then once every run of its own that ends has
+    // ended (a breath and a live dot loop for good) and two frames have
+    // passed with none running: so the page's own card is never caught
+    // mid-opening, and A and B differ only by the option.
+    const frameOf = () => new Promise((done) => win.requestAnimationFrame(done));
+    const ending = () =>
+      doc
+        .getAnimations()
+        .filter(
+          (run) =>
+            run.playState !== "finished" &&
+            Number.isFinite(Number(run.effect?.getComputedTiming().endTime))
+        );
+    const still = async () => {
+      while (!doc.documentElement.dataset.ready) {
+        // biome-ignore lint/performance/noAwaitInLoops: waits on the page, a frame at a time
+        await frameOf();
+      }
+      let quiet = 0;
+      while (quiet < 2) {
+        const runs = ending();
+        // biome-ignore lint/performance/noAwaitInLoops: each run's end, then a frame
+        await Promise.all(runs.map((run) => run.finished.catch(() => undefined)));
+        await frameOf();
+        quiet = runs.length === 0 ? quiet + 1 : 0;
+      }
+    };
+    Promise.all([doc.fonts.ready, still()]).then(() => {
       requestAnimationFrame(() => {
         again();
         settle();
@@ -759,8 +877,8 @@ function openThreadA(number, still) {
     hang.number = number;
     hang.peers = peers;
     hang.card.setAttribute("aria-label", `Comment ${number}`);
-    swap(hang.card, face, readingW(wellW), true);
-    hang.place(readingW(wellW), foot);
+    const width = readingW(wellW);
+    swap(hang.card, face, width, true, () => hang.place(width, foot));
     built.hang = hang;
     hang.open(still);
   }
@@ -814,8 +932,10 @@ function openList(still = false) {
   });
   hang.card.setAttribute("aria-label", "Comments");
   hang.face = "list";
-  swap(hang.card, listFace((number) => openThread(number)), listW(wellBox.width), true);
-  hang.place(listW(wellBox.width), wellBox.bottom);
+  const width = listW(wellBox.width);
+  swap(hang.card, listFace((number) => openThread(number)), width, true, () =>
+    hang.place(width, wellBox.bottom)
+  );
   built.hang = hang;
   built.comments?.setAttribute("aria-expanded", "true");
   hang.open(still);
@@ -865,7 +985,8 @@ function openThreadB(number, still) {
   });
   hang.face = "thread";
   hang.number = number;
-  swap(hang.card, face, readingW(wellBox.width), still);
+  const width = readingW(wellBox.width);
+  swap(hang.card, face, width, still, () => hang.place(width, wellBox.bottom));
   focusPill(built.pins, number);
   state.shows = "thread";
   state.pin = number;
@@ -879,7 +1000,8 @@ function backToList() {
   const wellBox = built.well.getBoundingClientRect();
   const face = listFace((number) => openThread(number));
   hang.face = "list";
-  swap(hang.card, face, listW(wellBox.width));
+  const width = listW(wellBox.width);
+  swap(hang.card, face, width, false, () => hang.place(width, wellBox.bottom));
   const rows = face.querySelector('[data-slot="rows"]');
   if (rows) {
     rows.scrollTop = hang.listScroll ?? 0;

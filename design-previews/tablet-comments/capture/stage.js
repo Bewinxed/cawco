@@ -3,6 +3,7 @@
  * dashboard's dev server: the dashboard's own stylesheet, then the real
  * components mounted with the pins read from the hub (Stage.svelte).
  */
+import "./now.js";
 import "../../../apps/dashboard/src/app.css";
 import { mount, tick } from "svelte";
 import Stage from "./Stage.svelte";

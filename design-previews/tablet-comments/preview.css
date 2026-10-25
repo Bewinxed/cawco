@@ -289,20 +289,42 @@
       visibility: hidden;
     }
   }
+  /* The four peers in the row's trailing cell: PinCard's own cluster, its
+     gap brought to --space-1 so all four stand clear of the pill in the
+     200px strip (PinCard's coarse gap, --space-5, put Resolve under it). */
   .row-peers {
     position: absolute;
     inset-block: 0;
     inset-inline-end: var(--space-1);
     display: block flex;
     align-items: center;
+    > [data-box] {
+      gap: var(--space-1);
+    }
   }
 
-  /* ---- B: the thread's bar. Back leads; Resolve, Delete, More and Close
-     trail; the pill and what it stands on under it. ---- */
+  /* A glass item whose surface stands open (Comments while its list hangs or
+     docks): the kit Toggle's on step, `surface-pressed`, so the item says
+     it is open (the glass rule: bare until hovered or pressed). */
+  [data-slot="tools"] [data-bar-item][aria-expanded="true"] {
+    background: var(--surface-pressed);
+    [data-slot="bar-symbol"] {
+      color: var(--ink-strong);
+    }
+  }
+
+  /* ---- B: the thread's bar, one row. Back and the pill lead; Resolve,
+     Delete, More and Close trail; what it stands on is under it. ---- */
   .thread-bar {
     display: block flex;
     align-items: center;
     justify-content: space-between;
+    gap: var(--space-2);
+    min-inline-size: 0;
+  }
+  .thread-lead {
+    display: block flex;
+    align-items: center;
     gap: var(--space-2);
     min-inline-size: 0;
   }

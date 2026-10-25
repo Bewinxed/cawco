@@ -48,7 +48,9 @@ What it is made of:
   (comment_read, all, 2026-10-25T06:36:37Z), each pin's anchor, point, looks
   and whole thread; the elements' captured styles and each pin's title and
   link are left out. The session that answers is named as the hub names it.
-  Ages are as the capture drew them.
+  Every age (a row's, a thread's entries') is told against `now`, the
+  moment the pins were read: capture/now.js fixes the stage's clock to it,
+  so the ages never go stale, and the manifest records it.
 - `preview.js`: the frame and the house motion ported line for line: hang's
   open and close (translate alone under a cut that never moves, `--dur-pop`
   in and `--dur-exit` out on `--ease-out`, interruptible, the kit's fade
@@ -62,7 +64,16 @@ What it is made of:
 - `captures/`: each option at each width, the list open and comment 1's
   thread, with `manifest.json`; made by the probe's run.
 
-Not drawn: the pane bringing the opened pin out from under the card (a
-scroll of the page, pins.ts `reveal`); a pill's own hang with B's card shut
+No card stands on a pill: where a pill on the page falls under a hung
+card's footprint, the card's foot stops `--space-2` above the pill's drawn
+edge (rings included), so a person always sees the pins (the capture
+review's must-fix; a call made here, since the pane's reveal, a scroll of
+the page, cannot move a pill out from under a card that runs to the well's
+foot). In B at 744 and 820 that leaves the thread's room short.
+
+The frame stands ready only once the page under review has played its own
+opening to the end, so A and B differ only by the option.
+
+Not drawn: a pill's own hang with B's card shut
 (the pin-hang the builder is making); the composer for a new comment; Day
 and Night (the page follows the system; the hung shadow is the day's).

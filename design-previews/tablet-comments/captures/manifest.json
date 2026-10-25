@@ -4,83 +4,95 @@
     "width": 744,
     "state": "list open",
     "file": "a-744-list.png",
-    "caption": "A: the strip of one-line rows beside the page, 744px"
+    "caption": "A: the strip of one-line rows beside the page, 744px",
+    "now": "2026-10-25T06:36:37.603Z"
   },
   {
     "option": "a",
     "width": 744,
     "state": "thread",
     "file": "a-744-thread.png",
-    "caption": "A: comment 1's thread hung from its row, over the page, 744px"
+    "caption": "A: comment 1's thread hung from its row, over the page, 744px",
+    "now": "2026-10-25T06:36:37.603Z"
   },
   {
     "option": "b",
     "width": 744,
     "state": "list open",
     "file": "b-744-list.png",
-    "caption": "B: the list hung from Comments in the head's trailing group, 744px"
+    "caption": "B: the list hung from Comments in the head's trailing group, 744px",
+    "now": "2026-10-25T06:36:37.603Z"
   },
   {
     "option": "b",
     "width": 744,
     "state": "thread",
     "file": "b-744-thread.png",
-    "caption": "B: the same card changed in place to comment 1's thread, 744px"
+    "caption": "B: the same card changed in place to comment 1's thread, 744px",
+    "now": "2026-10-25T06:36:37.603Z"
   },
   {
     "option": "a",
     "width": 820,
     "state": "list open",
     "file": "a-820-list.png",
-    "caption": "A: the strip of one-line rows beside the page, 820px"
+    "caption": "A: the strip of one-line rows beside the page, 820px",
+    "now": "2026-10-25T06:36:37.603Z"
   },
   {
     "option": "a",
     "width": 820,
     "state": "thread",
     "file": "a-820-thread.png",
-    "caption": "A: comment 1's thread hung from its row, over the page, 820px"
+    "caption": "A: comment 1's thread hung from its row, over the page, 820px",
+    "now": "2026-10-25T06:36:37.603Z"
   },
   {
     "option": "b",
     "width": 820,
     "state": "list open",
     "file": "b-820-list.png",
-    "caption": "B: the list hung from Comments in the head's trailing group, 820px"
+    "caption": "B: the list hung from Comments in the head's trailing group, 820px",
+    "now": "2026-10-25T06:36:37.603Z"
   },
   {
     "option": "b",
     "width": 820,
     "state": "thread",
     "file": "b-820-thread.png",
-    "caption": "B: the same card changed in place to comment 1's thread, 820px"
+    "caption": "B: the same card changed in place to comment 1's thread, 820px",
+    "now": "2026-10-25T06:36:37.603Z"
   },
   {
     "option": "a",
     "width": 1024,
     "state": "list open",
     "file": "a-1024-list.png",
-    "caption": "A: the strip of one-line rows beside the page, 1024px"
+    "caption": "A: the strip of one-line rows beside the page, 1024px",
+    "now": "2026-10-25T06:36:37.603Z"
   },
   {
     "option": "a",
     "width": 1024,
     "state": "thread",
     "file": "a-1024-thread.png",
-    "caption": "A: comment 1's thread hung from its row, over the page, 1024px"
+    "caption": "A: comment 1's thread hung from its row, over the page, 1024px",
+    "now": "2026-10-25T06:36:37.603Z"
   },
   {
     "option": "b",
     "width": 1024,
     "state": "list open",
     "file": "b-1024-list.png",
-    "caption": "B: the list hung from Comments in the head's trailing group, 1024px"
+    "caption": "B: the list hung from Comments in the head's trailing group, 1024px",
+    "now": "2026-10-25T06:36:37.603Z"
   },
   {
     "option": "b",
     "width": 1024,
     "state": "thread",
     "file": "b-1024-thread.png",
-    "caption": "B: the same card changed in place to comment 1's thread, 1024px"
+    "caption": "B: the same card changed in place to comment 1's thread, 1024px",
+    "now": "2026-10-25T06:36:37.603Z"
   }
 ]

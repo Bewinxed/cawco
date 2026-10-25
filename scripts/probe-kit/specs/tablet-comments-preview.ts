@@ -49,6 +49,7 @@ const FRACTIONS = [0, 0.5, 1];
 const SHOWN_PIN = 1;
 
 interface Entry {
+  at: string;
   by: string;
   files?: string[];
   text: string;
@@ -56,6 +57,35 @@ interface Entry {
 interface Pin {
   number: number;
   thread: Entry[];
+}
+/** Each pin's row age and its entries' ages, as the house tells them against the fixed now. */
+type Expect = Record<number, { row: string; entries: string[] }>;
+
+/**
+ * An age as the house writes it (utils/time `formatAgeShort`): under 45s
+ * "now", then whole minutes, hours, days, weeks and years, each rounded.
+ * Written out here, so the proof holds the parts to the rule rather than to
+ * themselves.
+ */
+function ageOf(at: number, now: number): string {
+  const seconds = Math.max(0, Math.floor((now - at) / 1000));
+  if (seconds < 45) {
+    return "now";
+  }
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) {
+    return `${minutes}m`;
+  }
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) {
+    return `${hours}h`;
+  }
+  const days = Math.round(hours / 24);
+  if (days < 7) {
+    return `${days}d`;
+  }
+  const weeks = Math.round(days / 7);
+  return weeks < 52 ? `${weeks}w` : `${Math.round(days / 365)}y`;
 }
 
 function serve() {
@@ -114,8 +144,12 @@ async function load(
     page.off("console", told);
   }
   await page.evaluate(async () => {
+    // Runs on the document's clock only: a scroller's edge fade runs on its
+    // scroll's timeline, and finished it drew the top fade at scroll-top.
     for (const run of document.getAnimations()) {
-      run.finish();
+      if (run.timeline === document.timeline) {
+        run.finish();
+      }
     }
     await new Promise((done) =>
       requestAnimationFrame(() => requestAnimationFrame(done))
@@ -189,6 +223,71 @@ function readFrame() {
     face: face?.dataset.face ?? null,
     pin: face?.dataset.pin ? Number(face.dataset.pin) : null,
     openRow: box(openRow),
+    /** Each row's age, by its pin's number. */
+    ages: Object.fromEntries(
+      rows.map((row) => [
+        row.dataset.pinRow ?? "",
+        row.querySelector('[data-slot="age"]')?.textContent?.trim() ?? "",
+      ])
+    ),
+    /** The open thread's entries' ages, in order. */
+    threadAges: [
+      ...(face?.querySelectorAll<HTMLElement>('li[data-slot="entry"]') ?? []),
+    ].map((entry) =>
+      [...entry.querySelectorAll('time[data-slot="when"]')]
+        .map((t) => t.textContent?.trim() ?? "")
+        .join(" ")
+    ),
+    /** A's open row: its pill and its first and last peer. */
+    peers: (() => {
+      const li = pane.querySelector("li[data-open]");
+      const pill = li?.querySelector("[data-mark]");
+      const buttons = [...(li?.querySelectorAll(".row-peers button") ?? [])];
+      return pill && buttons.length > 0
+        ? {
+            pill: box(pill),
+            first: box(buttons[0]),
+            last: box(buttons.at(-1)),
+            count: buttons.length,
+            row: box(li),
+          }
+        : null;
+    })(),
+    /** B's thread bar: Back, the pill and the last peer, each one row. */
+    bar: (() => {
+      const bar = face?.querySelector(".thread-bar");
+      const back = bar?.querySelector('[aria-label="Back to comments"]');
+      const pill = bar?.querySelector("[data-mark]");
+      const close = bar?.querySelector('[aria-label="Close"]');
+      const name = face?.querySelector('[data-slot="name"]');
+      return bar && back && pill && close
+        ? {
+            back: box(back),
+            pill: box(pill),
+            close: box(close),
+            name: box(name),
+            rows: face?.querySelectorAll('[data-slot="head-row"]').length ?? 0,
+          }
+        : null;
+    })(),
+    /** The open thread's room: its scroll and how much stands past each edge. */
+    room: (() => {
+      const room = face?.querySelector<HTMLElement>("[data-pin-room]");
+      const newest = room?.querySelector<HTMLElement>(
+        '[data-slot="thread"] > li:last-child'
+      );
+      return room && newest
+        ? {
+            top: room.scrollTop,
+            newest:
+              newest.getBoundingClientRect().top -
+              room.getBoundingClientRect().top +
+              room.scrollTop,
+            max: room.scrollHeight - room.clientHeight,
+            h: room.clientHeight,
+          }
+        : null;
+    })(),
     pins: [...pane.querySelectorAll<HTMLElement>("[data-page-pin]")].map(
       (pin) => ({
         n: Number(pin.dataset.pagePin),
@@ -391,7 +490,8 @@ function renderChecks(
   option: Option,
   width: number,
   shows: "list" | "thread",
-  read: Frame
+  read: Frame,
+  expect: Expect
 ): void {
   kit.check(
     `${at}: the frame stands at ${width}px (${read.frameW}px), its head in three glass groups (${read.groups}) with Comments in the trailing one`,
@@ -400,14 +500,49 @@ function renderChecks(
       read.commentsInTrailing
   );
   const pinsShown = read.pins.filter((pin) => pin.shown).length;
-  const open = read.pins.find((pin) => pin.n === read.pin)?.box;
-  if (shows === "thread" && open && read.card) {
-    const c = read.card;
-    const over =
-      Math.max(0, Math.min(open.r, c.r) - Math.max(open.l, c.l)) *
-      Math.max(0, Math.min(open.b, c.b) - Math.max(open.t, c.t));
-    kit.note(
-      `${at}: the open comment's pill ${over > 0 ? `stands under the card (${over.toFixed(0)}px² of it): the pane's reveal, a scroll of the page, is not drawn here` : "stands clear of the card"}`
+  // No pill under the card, its rings included (a 2px ring, a focus ring 2px out).
+  const c = read.card;
+  const under = read.pins
+    .map((pin) => {
+      const b = pin.box;
+      if (!(c && b)) {
+        return { n: pin.n, over: 0 };
+      }
+      const ring = 4;
+      const w = Math.min(b.r + ring, c.r) - Math.max(b.l - ring, c.l);
+      const h = Math.min(b.b + ring, c.b) - Math.max(b.t - ring, c.t);
+      return { n: pin.n, over: Math.max(0, w) * Math.max(0, h) };
+    })
+    .filter((one) => one.over > 0);
+  kit.check(
+    `${at}: no pill stands under the card, rings included${c ? ` (the card ${n1(c.l)}–${n1(c.r)} × ${n1(c.t)}–${n1(c.b)}; pills ${read.pins.map((pin) => (pin.box ? `${pin.n} at ${n1(pin.box.l)},${n1(pin.box.t)}` : `${pin.n} ?`)).join("; ")})` : ", none hangs"}`,
+    under.length === 0,
+    JSON.stringify(under)
+  );
+  const rows = Object.entries(read.ages);
+  // B's thread stands in the list's place: no rows then, its last entry's age is held to the row's below.
+  const listed = !(option === "b" && shows === "thread");
+  kit.check(
+    listed
+      ? `${at}: every row's age is its last entry's, told against the fixed now (${rows.map(([n, age]) => `${n}: ${age}, wanted ${expect[Number(n)]?.row}`).join("; ")})`
+      : `${at}: the thread stands in the list's place, no rows drawn beside it`,
+    listed
+      ? rows.length === 2 &&
+          rows.every(([n, age]) => age === expect[Number(n)]?.row)
+      : rows.length === 0
+  );
+  if (shows === "thread" && read.pin !== null) {
+    const want = expect[read.pin]?.entries ?? [];
+    kit.check(
+      `${at}: comment ${read.pin}'s entries' ages are their own timestamps told against the same now, its last one the row's (${read.threadAges.join(" ")} against ${want.join(" ")})`,
+      read.threadAges.length === want.length &&
+        read.threadAges.every((age, i) => age === want[i]) &&
+        read.threadAges.at(-1) === expect[read.pin]?.row
+    );
+    const { room } = read;
+    kit.check(
+      `${at}: the thread opens at its newest entry's first line (scrolled ${room ? n1(room.top) : "?"} of ${room ? n1(room.max) : "?"}, the newest at ${room ? n1(room.newest) : "?"}, in a ${room ? n1(room.h) : "?"}px room), so the edge fade stands at both edges while more is past them`,
+      room !== null && Math.abs(room.top - Math.min(room.newest, room.max)) <= 1
     );
   }
   kit.check(
@@ -428,7 +563,6 @@ function renderChecks(
       JSON.stringify(read.rows)
     );
     if (shows === "thread") {
-      const c = read.card;
       const row = read.openRow;
       const want = Math.min(480, Math.max(280, 0.4 * (read.well?.w ?? 0)));
       kit.check(
@@ -441,12 +575,38 @@ function renderChecks(
           Math.abs(c.t - row.b) <= 1 &&
           Math.abs(c.w - want) <= 1
       );
+      const p = read.peers;
+      kit.check(
+        `${at}: the open row holds all four peers clear of its pill (${p?.count} peers, ${p ? n1(p.first?.l ?? 0) : "?"}–${p ? n1(p.last?.r ?? 0) : "?"}, the pill ending at ${p ? n1(p.pill?.r ?? 0) : "?"}, the row ${p ? n1(p.row?.l ?? 0) : "?"}–${p ? n1(p.row?.r ?? 0) : "?"})`,
+        p !== null &&
+          p.count === 4 &&
+          p.first !== null &&
+          p.last !== null &&
+          p.pill !== null &&
+          p.row !== null &&
+          p.first.l >= p.pill.r + 4 &&
+          p.last.r <= p.row.r + 0.5
+      );
     } else {
       kit.check(`${at}: no card hangs with the list alone`, read.card === null);
     }
     return;
   }
-  const c = read.card;
+  if (shows === "thread") {
+    const b = read.bar;
+    const mid = (x: { t: number; h: number } | null) =>
+      x ? x.t + x.h / 2 : Number.NaN;
+    kit.check(
+      `${at}: the thread's head is one row (Back at ${b ? n1(mid(b.back)) : "?"}, the pill at ${b ? n1(mid(b.pill)) : "?"}, Close at ${b ? n1(mid(b.close)) : "?"}), what it stands on under it (${b ? n1(b.name?.t ?? 0) : "?"})`,
+      b !== null &&
+        b.rows === 0 &&
+        Math.abs(mid(b.back) - mid(b.pill)) <= 2 &&
+        Math.abs(mid(b.back) - mid(b.close)) <= 2 &&
+        b.name !== null &&
+        b.back !== null &&
+        b.name.t >= b.back.b - 0.5
+    );
+  }
   const g = read.trailing;
   const wellW = read.well?.w ?? 0;
   const want =
@@ -580,7 +740,20 @@ async function swapLeg(
           selector
         ),
       '[data-slot="hangs"]',
-      { fractions: FRACTIONS, of: "morph", read: () => page.evaluate(readHang) }
+      {
+        fractions: FRACTIONS,
+        of: "morph", // Read in the next frame drawn at the held time: the neck follows the
+        // box frame by frame, as HangCard's does, never inside the seek.
+        read: async () => {
+          await page.evaluate(
+            () =>
+              new Promise((done) =>
+                requestAnimationFrame(() => requestAnimationFrame(done))
+              )
+          );
+          return page.evaluate(readHang);
+        },
+      }
     );
     const held = motion.at.map((one) => one.value) as (HangRead | null)[];
     const runs = motion.runs
@@ -655,8 +828,27 @@ const spec: Spec = {
     const server = serve();
     const base = `http://127.0.0.1:${server.port}/`;
     const exported = (await Bun.file(join(DIR, "pins.json")).json()) as {
+      now: string;
       pins: Pin[];
     };
+    // Every age is told against the moment the pins were read (pins.json `now`).
+    const now = Date.parse(exported.now);
+    const expect: Expect = Object.fromEntries(
+      exported.pins.map((pin) => {
+        const last = Math.max(
+          ...pin.thread.map((entry) => Date.parse(entry.at))
+        );
+        return [
+          pin.number,
+          {
+            row: ageOf(last, now),
+            entries: pin.thread.map((entry) =>
+              ageOf(Date.parse(entry.at), now)
+            ),
+          },
+        ];
+      })
+    );
     const manifest: Record<string, string | number>[] = [];
     try {
       const engines = (process.env.TABLET_ENGINES ?? "chromium,webkit").split(
@@ -694,7 +886,7 @@ const spec: Spec = {
                 kit.check(`${at}: the frame renders`, false);
                 continue;
               }
-              renderChecks(kit, at, option, width, shows, read);
+              renderChecks(kit, at, option, width, shows, read, expect);
               const swept = await page.evaluate(scan);
               const wide = await page.evaluate(readWide);
               spills += swept.length + wide.length;
@@ -702,6 +894,32 @@ const spec: Spec = {
                 `${at}: the overflow sweep finds nothing (nothing spills, no control covers text, nothing scrolls sideways)`,
                 swept.length === 0 && wide.length === 0,
                 [...swept, ...wide].slice(0, 6).join("; ")
+              );
+              // The page under review has ended its own opening: none of its
+              // runs that end is still running, so A and B differ only by the option.
+              const pageRuns = await page.evaluate(() => {
+                const doc =
+                  document.querySelector<HTMLIFrameElement>(
+                    '[data-slot="page"]'
+                  )?.contentDocument;
+                return (doc?.getAnimations() ?? [])
+                  .filter(
+                    (run) =>
+                      run.playState !== "finished" &&
+                      Number.isFinite(
+                        Number(run.effect?.getComputedTiming().endTime)
+                      )
+                  )
+                  .map((run) => {
+                    const target = (run.effect as KeyframeEffect)
+                      .target as HTMLElement | null;
+                    return `${target?.dataset.slot ?? target?.localName ?? "?"} ${run.playState}`;
+                  });
+              });
+              kit.check(
+                `${at}: the page under review has ended its opening, none of its own runs that end still running (${pageRuns.length})`,
+                pageRuns.length === 0,
+                pageRuns.join(", ")
               );
               if (engine === "chromium") {
                 const file = `${option}-${width}-${shows}.png`;
@@ -715,6 +933,7 @@ const spec: Spec = {
                   state: shows === "list" ? "list open" : "thread",
                   file,
                   caption: `${CAPTIONS[option][shows]}, ${width}px`,
+                  now: exported.now,
                 });
               }
             }
