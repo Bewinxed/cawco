@@ -34,13 +34,23 @@
  *    refusal frame on the pane's socket, hub artifacts/sync.ts `refusal`):
  *    the pane says the hub's reason in its band and goes on in a fresh doc
  *    of the hub's, so a pin the page writes after it is in the list.
+ * 6. The dashboard behind the owner's outpost proxy (`outpost.bewinxed.com`,
+ *    cloudflare-front `outpostTo`, as `~/.outpost/tunnel-proxy.ts` forwards),
+ *    on Chromium and WebKit: the pane's doc socket syncs through it, and the
+ *    rail lists the pins of (1), never stuck on its skeleton.
+ *
+ * The tabs read are Open and Resolved; To check, which leads them, is read by
+ * its own specs.
  */
 import type { Frame, Page, WebSocketRoute } from "playwright-core";
 import { messageAuth } from "y-websocket";
 import type { Pin } from "../../../packages/core/src/comments";
+import { commentWords } from "../../../packages/core/src/words/comments";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { until } from "../../scratch-fleet";
+import { outpostTo, scratchCertificate } from "../cloudflare-front";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
+import { PASS_DOMAIN, PASS_HOSTS } from "../pass-legs";
 import { writePagePins } from "../pins";
 
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
@@ -79,7 +89,7 @@ const refusalFrame = (reason: string): Buffer => {
 /** How long the stand-in keeps the hub's first messages from the pane. */
 const HOLD_MS = 2500;
 /** A tab's label carrying a count, as the recorder writes it. */
-const COUNTED = /tabs=Open \d/;
+const COUNTED = /[=|](?:Open|Resolved) \d/;
 
 interface HubPin {
   id: string;
@@ -199,6 +209,10 @@ const drawn = (page: Page): Promise<Drawn> =>
     )
     .then(async (read) => ({
       ...read,
+      // Open and Resolved, the tabs that count the pins: To check (what
+      // changed since he looked, CommentRail `checks`) leads them, and is
+      // read by its own specs.
+      tabs: read.tabs.filter((tab) => !tab.startsWith(commentWords.toCheck)),
       // By its accessible name: a kit Button's text holds its pending words too.
       tryAgain:
         (await page
@@ -367,7 +381,75 @@ const run = async (kit: Kit) => {
     }
   );
   await nothing({ ...at, id: none.id });
+  for (const engine of ["chromium", "webkit"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each its own report
+    await fronted(at, engine);
+  }
   await rejoined(at);
+};
+
+/** The name the owner reaches his dashboard at, under the kit's resolvable domain. */
+const OUTPOST = `outpost.${PASS_DOMAIN}`;
+
+/**
+ * 6. The dashboard behind the owner's outpost proxy (`outpost.bewinxed.com`,
+ * his Cloudflare tunnel to `~/.outpost/tunnel-proxy.ts`, to 127.0.0.1:3455;
+ * cloudflare-front `outpostTo`): https at the front, `X-Forwarded-Proto:
+ * https` and the browser's host in `X-Forwarded-Host`; a WebSocket opened
+ * on with those, `Origin` and `Cookie` alone. The pane's doc socket
+ * (`/ws/artifact/<session>`) completes its first sync through it: the rail
+ * lists the pins, never stuck on its skeleton. Chromium at the outpost's
+ * name (its host rules map it to 127.0.0.1); WebKit, which takes no host
+ * rules, at the front's address.
+ */
+const fronted = async (at: At, engine: "chromium" | "webkit") => {
+  const front = outpostTo(
+    new URL(at.base).host,
+    await scratchCertificate(at.kit.out, [OUTPOST, "127.0.0.1"])
+  );
+  const host = engine === "chromium" ? OUTPOST : "127.0.0.1";
+  const page = await at.kit.page("desk", {
+    engine,
+    ignoreHTTPSErrors: true,
+    ...(engine === "chromium" ? { hostRules: PASS_HOSTS } : {}),
+  });
+  await listOpenFor(page, at.session);
+  /** Each `/ws/artifact/` socket: how many frames it was sent, and how it closed. */
+  const sockets: { frames: number; closed: boolean; url: string }[] = [];
+  page.on("websocket", (socket) => {
+    if (!socket.url().includes("/ws/artifact/")) {
+      return;
+    }
+    const seen = { frames: 0, closed: false, url: socket.url() };
+    sockets.push(seen);
+    socket.on("framereceived", () => {
+      seen.frames += 1;
+    });
+    socket.on("close", () => {
+      seen.closed = true;
+    });
+  });
+  await open(
+    page,
+    `https://${host}:${front.port}/artifact/${at.id}`,
+    `${LIST}`
+  );
+  const now = await until(
+    "the list's rows through the front",
+    () => drawn(page),
+    (state) => state.rows.length + state.moved.length > 0,
+    30_000
+  ).catch(() => drawn(page));
+  at.kit.check(
+    `6 ${engine}: the dashboard behind the owner's outpost proxy at https://${host} (its socket opened on with X-Forwarded-Host, X-Forwarded-Proto: https, Origin and Cookie alone): the pane's doc socket syncs through it, and the rail lists the pins, no skeleton`,
+    !now.reading &&
+      now.rows.join() === "1" &&
+      now.moved.join() === "3" &&
+      sockets.some((socket) => socket.frames > 0),
+    JSON.stringify({ now, sockets })
+  );
+  await page.context().close();
+  front.stop(true);
 };
 
 interface Leg {

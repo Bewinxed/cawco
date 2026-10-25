@@ -124,6 +124,90 @@ export const cloudflareTo = (
   });
 
 /**
+ * The owner's outpost proxy in front of a dashboard at `target`
+ * (`host:port`), as `~/.outpost/tunnel-proxy.ts` forwards behind his
+ * Cloudflare tunnel (outpost.bewinxed.com → :3220 → :3455), less its Access
+ * check: HTTP with every header of the browser's, `X-Forwarded-Host` the
+ * browser's host, `X-Forwarded-Proto: https`, `Host` the dashboard's; a
+ * WebSocket opened to the dashboard with those two and the browser's
+ * `Origin` and `Cookie` alone, upgraded on the browser's side before the
+ * dashboard's answers, and its frames pumped both ways. With `tls` it
+ * answers https, as Cloudflare's edge does.
+ */
+export const outpostTo = (
+  target: string,
+  tls?: { cert: string; key: string }
+) =>
+  Bun.serve<{
+    backend: WebSocket;
+    queue: (string | Uint8Array<ArrayBuffer>)[];
+  }>({
+    hostname: "127.0.0.1",
+    port: 0,
+    ...(tls ? { tls } : {}),
+    fetch(request, bun) {
+      const url = new URL(request.url);
+      if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
+        const headers: Record<string, string> = {
+          "x-forwarded-host": url.host,
+          "x-forwarded-proto": "https",
+        };
+        for (const name of ["origin", "cookie"]) {
+          const value = request.headers.get(name);
+          if (value) {
+            headers[name] = value;
+          }
+        }
+        const backend = new SocketWith(
+          `ws://${target}${url.pathname}${url.search}`,
+          { headers }
+        );
+        if (bun.upgrade(request, { data: { backend, queue: [] } })) {
+          return;
+        }
+        backend.close();
+        return new Response("upgrade failed", { status: 500 });
+      }
+      const headers = new Headers(request.headers);
+      headers.set("x-forwarded-host", url.host);
+      headers.set("x-forwarded-proto", "https");
+      headers.set("host", target);
+      return fetch(`http://${target}${url.pathname}${url.search}`, {
+        method: request.method,
+        headers,
+        body: request.body,
+        redirect: "manual",
+        decompress: false,
+      } as RequestInit);
+    },
+    websocket: {
+      open(ws) {
+        const { backend } = ws.data;
+        backend.addEventListener("message", (event) => ws.send(event.data));
+        backend.addEventListener("close", () => ws.close());
+        backend.addEventListener("open", () => {
+          for (const held of ws.data.queue) {
+            backend.send(held);
+          }
+          ws.data.queue.length = 0;
+        });
+      },
+      message(ws, said) {
+        const { backend, queue } = ws.data;
+        const message = typeof said === "string" ? said : new Uint8Array(said);
+        if (backend.readyState === WebSocket.OPEN) {
+          backend.send(message);
+        } else if (backend.readyState === WebSocket.CONNECTING) {
+          queue.push(message);
+        }
+      },
+      close(ws) {
+        ws.data.backend.close();
+      },
+    },
+  });
+
+/**
  * A self-signed certificate for `names` (RSA 2048, SHA-256, the names as
  * SANs, a day), made in `dir`: what {@link cloudflareTo} answers https with.
  */

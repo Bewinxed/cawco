@@ -382,10 +382,34 @@ function overlayAt(html: string): number {
 }
 
 /**
+ * Every framed page's root keeps its scrollbar's gutter, so a classic
+ * scrollbar coming or going never changes the width the page lays out in.
+ * A page that scales itself to its window's width (a design preview's frame
+ * fit from a ResizeObserver) otherwise shakes in the panel: the scrollbar
+ * takes width, the scale and the height drop under the window's, the
+ * scrollbar goes, and round again every frame (owner, 2026-10-25: "this page
+ * keeps shaking with scrollbars opening and closing rapidly";
+ * artifact-resize-loop's still leg). "When using classic scrollbars, the
+ * gutter will be present if overflow is auto, scroll, or hidden even if the
+ * box is not overflowing. When using overlay scrollbars, the gutter will not
+ * be present" (developer.mozilla.org/en-US/docs/Web/CSS/scrollbar-gutter).
+ *
+ * The page's own word wins: the rule stands in a cascade layer declared
+ * before any of the page's (the tag goes first in its head,
+ * {@link overlayAt}), and every unlayered rule, and every later layer, of
+ * the page's outranks it, whatever its specificity (`:where` keeps it at
+ * none as well). A page that sets `scrollbar-gutter: auto` on its root
+ * (the canvas's host page, which never scrolls) has no gutter.
+ */
+const GUTTER_FLOOR =
+  "<style>@layer cawco-floor{:where(html){scrollbar-gutter:stable}}</style>";
+
+/**
  * The page with the overlay's script tag in it ({@link overlayAt}), carrying
  * the page's hash and `data` as `data-*` attributes (the hub's page
  * artifacts add their id and their document's state, so the overlay fills
- * the page before it paints). `hash` is the page's when its HTML is not what
+ * the page before it paints), and the root's gutter kept before it
+ * ({@link GUTTER_FLOOR}). `hash` is the page's when its HTML is not what
  * it is: a decision page's program, which the host page around it draws.
  */
 export function injectOverlay(
@@ -401,7 +425,7 @@ export function injectOverlay(
     .join("");
   const script = `<script src="${OVERLAY_PATH}" data-page-hash="${hash}"${extra}></script>`;
   const at = overlayAt(html);
-  return html.slice(0, at) + script + html.slice(at);
+  return html.slice(0, at) + GUTTER_FLOOR + script + html.slice(at);
 }
 
 /*

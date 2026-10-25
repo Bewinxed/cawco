@@ -11,6 +11,12 @@ body,
   margin: 0;
 }
 
+/* The canvas never scrolls (body's overflow: hidden): no gutter kept on its
+   edge, as a framed page's root keeps one (core preview-proxy GUTTER_FLOOR). */
+html {
+  scrollbar-gutter: auto;
+}
+
 body {
   overflow: hidden;
   background: var(--surface-raised);

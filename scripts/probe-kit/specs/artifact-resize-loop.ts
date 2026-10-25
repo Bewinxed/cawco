@@ -46,11 +46,13 @@
  *   window (1920×1000, the panel at its widest: the page's well 819×881, as
  *   his stood when it shook), on Chromium and WebKit ({@link runStill}): its
  *   page a frame scaled to the window whose height sits a hair past the
- *   well's. Watched standing for 3 s, no element of the panel or the page
- *   changes its clientWidth, no scrollbar comes or goes, the frame loads
- *   nothing again, the rail lists the page's two pins and no skeleton, and
- *   nothing logs an error. `--still <folder>[?query]` runs that leg alone on
- *   any preview's folder (the owner's comment-sizing preview).
+ *   well's, written as his was, with no gutter of its own. Watched standing
+ *   for 3 s, no element of the panel or the page changes its clientWidth, no
+ *   scrollbar comes or goes (the root's gutter CawCo keeps on every framed
+ *   page), the frame loads nothing again, the rail lists the page's two pins
+ *   and no skeleton, and nothing logs an error but the page's own observer's
+ *   loop notice. `--still <folder>[?query]` runs that leg alone on any
+ *   preview's folder (the owner's comment-sizing preview).
  *
  * On opening and over every sweep, the page sent the hub no error report
  * and logged no ResizeObserver loop. A desk page draws its scrollbars as a
@@ -1801,17 +1803,17 @@ const PANEL_FRAME =
 const FILES_WIDTHS = [1440, 1100, 1000, 920];
 
 /**
- * A design preview of the common kind: a frame drawn at its real size and
- * scaled to the window's width from a ResizeObserver, its height set at
- * load to sit 4px past the window's, so the page scrolls by a hair. Its root
- * keeps its scrollbar's gutter (`scrollbar-gutter: stable`): the scrollbar
- * standing or not never changes the width the scale is read from; and the
- * scale is written in the frame after the observer's delivery. Without
- * it the page loops by itself on a desk's scrollbars (comment-sizing's
- * preview.js `scaleOf`, owner 2026-10-25: "this page keeps shaking with
+ * A design preview of the common kind, written as the owner's shaking one
+ * was (comment-sizing's preview.js `scaleOf` and its `.stage` observer): a
+ * frame drawn at its real size and scaled to the window's width from a
+ * ResizeObserver that writes the scale inside its own delivery, its height
+ * set at load to sit 4px past the window's, so the page scrolls by a hair,
+ * and no `scrollbar-gutter` of its own. On a desk's scrollbars it would
+ * loop by itself (owner 2026-10-25: "this page keeps shaking with
  * scrollbars opening and closing rapidly"): the scrollbar takes width, the
  * scale and the height drop under the window's, the scrollbar goes, and
- * round again every frame.
+ * round again every frame. The root's gutter CawCo keeps on every framed
+ * page (core preview-proxy `GUTTER_FLOOR`) holds it still.
  */
 const STILL_PAGE = `<!doctype html>
 <html lang="en">
@@ -1819,7 +1821,6 @@ const STILL_PAGE = `<!doctype html>
 <meta charset="utf-8">
 <title>A frame scaled to the window</title>
 <style>
-  :root { scrollbar-gutter: stable; }
   body { margin: 0; font: 16px/1.4 system-ui, sans-serif; }
   .stage { display: grid; justify-items: center; gap: 12px; padding: 24px; }
   h1 { margin: 0; font-size: 20px; }
@@ -1849,18 +1850,12 @@ const STILL_PAGE = `<!doctype html>
   const above = fit.getBoundingClientRect().top + scrollY;
   const below = parseFloat(getComputedStyle(stage).paddingBlockEnd);
   fit.style.setProperty("--h", String((innerHeight + 4 - above - below) / s));
-  // The scale is written in the next frame, never inside the delivery: the
-  // write grows the stage it watches, which WebKit would report as a loop.
-  let next = 0;
   new ResizeObserver(() => {
-    next ||= requestAnimationFrame(() => {
-      next = 0;
-      const now = scale();
-      if (Math.abs(now - s) > 0.001) {
-        s = now;
-        fit.style.setProperty("--s", String(s));
-      }
-    });
+    const now = scale();
+    if (Math.abs(now - s) > 0.001) {
+      s = now;
+      fit.style.setProperty("--s", String(s));
+    }
   }).observe(stage);
 </script>
 </body>
@@ -2034,7 +2029,10 @@ const stillGeometry = (page: Page) =>
  * pins, watched standing for {@link STILL_MS}. Over that time no element of
  * the panel or of the page changes its clientWidth, nothing's scrollbar
  * comes or goes, the frame loads nothing again, the rail lists the page's
- * pins and no skeleton, and nothing is logged as an error.
+ * pins and no skeleton, and nothing is logged as an error but the page's
+ * own observer's loop notice: {@link STILL_PAGE} writes inside its delivery
+ * as the owner's did, and WebKit says so while the rail opens and narrows
+ * the frame; no gutter can take that from it.
  *
  * `folder` is the preview's folder; unset, {@link STILL_PAGE} is written to
  * one. `--still <folder>` reads any page so (the owner's comment-sizing
@@ -2213,18 +2211,24 @@ export const runStill = async (
     JSON.stringify({ written, listed, rail })
   );
   const errors = said.errors.filter((line) => !kitsOwnMessage(line));
+  const loopNotices = errors.filter((line) => LOOP.test(line));
+  const dashboardLoops = await page.evaluate(() => window.__loopFrames ?? []);
+  // The kit's init scripts run in the page's frame too: a loop its own
+  // observer raised is named there, by that observer.
+  const pageLoops = await frame
+    .evaluate(() => window.__loopFrames ?? [])
+    .catch(() => [] as string[][]);
   kit.check(
-    `${name}: no console error from opening it to the end of the watch`,
-    errors.length === 0,
+    `${name}: from opening it to the end of the watch, no console error but a ResizeObserver loop notice its page's own observer raised (one that writes inside its delivery: the page's to fix)`,
+    errors.length === loopNotices.length &&
+      dashboardLoops.length === 0 &&
+      loopNotices.length <= pageLoops.length,
     JSON.stringify({
       errors: errorsFrom,
       pageErrors: errors,
       during: said.errors.slice(errorsBefore),
-      loopFrames: await page.evaluate(() => window.__loopFrames ?? []),
-      // WebKit runs the kit's init scripts in every frame: the page's own loops, named.
-      pageLoopFrames: await frame
-        .evaluate(() => window.__loopFrames ?? [])
-        .catch(() => []),
+      dashboardLoops,
+      pageLoops,
     })
   );
   await checkQuiet(
