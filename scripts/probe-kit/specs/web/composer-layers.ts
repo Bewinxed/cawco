@@ -548,7 +548,11 @@ async function measure(
     kit.check(
       `${what}: its open and its close each run on one clock`,
       clockFaults.length === 0,
-      clockFaults.slice(0, 4).join("; ") || runs
+      // Every run each read caught, with its faults: a run the read missed
+      // (an entrance absent from the open) is told by its absence.
+      clockFaults.length === 0
+        ? runs
+        : `${clockFaults.slice(0, 4).join("; ")} (${runs})`
     );
   }
   kit.check(
