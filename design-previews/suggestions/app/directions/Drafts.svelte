@@ -3,8 +3,9 @@
   the suggestions drawn as the person's own messages not sent yet, outline
   only, right-aligned and anchored on the composer, each hugging its words
   up to 85% of the column, its reason one muted line under it, and one
-  provenance line closing the set. On the empty board the stack stands
-  right-aligned in a centred 560px column, the composer under it. Drawn as
+  provenance line closing the set. On the empty board too the stack ends on
+  the composer's end (the looks review: sets stand on the composer's
+  edges), the composer under it. Drawn as
   specced, its costs included (three left edges per item; the reason under
   a bubble can read as history).
 
@@ -169,8 +170,8 @@
 
 <div class="drafts" data-direction="drafts" data-touch={draws.touch || undefined} data-where={where}>
   <!-- The report's own arrangement in Today's surroundings: the stack stands
-       right-aligned on the composer (a centred 560px column on the board),
-       and hides while the keyboard is up. -->
+       right-aligned on the composer's end at every where, and hides while
+       the keyboard is up. -->
   <Surround anchor="end" {foot} {set} {where} />
   <p aria-live="polite" class="sr-only">{said}</p>
 </div>
@@ -189,12 +190,6 @@
     align-items: end;
     gap: var(--drafts-gap);
     transition: opacity var(--dur-control) var(--ease-out);
-
-    [data-where="board"] & {
-      inline-size: 100%;
-      max-inline-size: var(--board-column);
-      margin-inline: auto;
-    }
 
     &[data-dimmed] {
       opacity: var(--drafts-dim);
@@ -297,9 +292,12 @@
   }
 
   /* Loading: three empty outlines, their edge pulsing 20% to 40%; no bars inside. */
+  /* At a one-line bubble's size: its line, its padding and its 1px edge. */
   .ghost {
     display: block;
-    block-size: calc(1lh + 2 * var(--drafts-pad-block));
+    box-sizing: content-box;
+    block-size: 1lh;
+    padding-block: var(--drafts-pad-block);
     font: var(--type-prose);
     border: 1px solid var(--drafts-ghost-edge-low);
     border-radius: var(--well-r) var(--well-r) var(--radius-hair) var(--well-r);

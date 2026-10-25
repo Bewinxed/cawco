@@ -30,10 +30,9 @@ a desk), the cue the dashboard's own scrollers wear, so a cut list shows more
 lies below before anyone scrolls. A direction differs only where the designer's report says so, and
 the switcher's note says it in one line:
 
-- drafts: the stack stands right-aligned on the composer, in a centred 560px
-  column on the board, and hides while the keyboard is up ("stack hides when
-  the keyboard is up").
-- ledger: on the board the rows stand at the report's 560px reading width.
+- drafts: the stack stands right-aligned on the composer's end, and hides
+  while the keyboard is up ("stack hides when the keyboard is up").
+- ledger: none; its rows stand on the composer's edges, as every set does.
 - tray: the suggestions live in the composer's own frame, over its field,
   so the field keeps Today's place at the foot at Today's width; the tray
   grows upward until the heading's room, past it the rows scroll inside the
@@ -100,7 +99,6 @@ variables in `app/preview.css`:
 
 | Variable | Value | From |
 | --- | --- | --- |
-| `--board-column` | 560px | every direction's reading column on the board |
 | `--keyboard-h` | 291px | the phone's keyboard (own call: an iPhone's) |
 | `--drafts-edge` | ink at 40% | drafts' outline |
 | `--drafts-gap` | 6px | between bubbles |
@@ -126,6 +124,7 @@ variables in `app/preview.css`:
 | `--tray-carry` | 40px | the words' travel down into the field |
 | `--tray-line` | 2px | loading's line on the divider |
 | `--tray-bone-1/2/3` | 72% / 88% / 58% | loading rows (own call: the ledger's) |
+| `--tray-bone-reason` | 40% | loading's reason bar under a finger (own call: the ledger's) |
 | `--tray-chip-max` | 16rem | a chip's widest before its words clip (own call) |
 | `--tray-bone-ink` | ink at 14% (22% dark) | loading rows on the tint (own call: the house skeleton's fill vanished on the tint at night) |
 

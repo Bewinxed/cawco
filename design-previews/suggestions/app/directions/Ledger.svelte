@@ -4,8 +4,9 @@
   glyph at its far end; full-width rows parted by hairlines, each the
   suggestion at 15px over its reason at 12px muted, a pencil at the row's
   end because a press leads to editing, not sending. The whole row is the
-  button. At the top of Caw's thread; on the empty board, one column at the
-  560px reading width. Drawn as specced, its costs included (rows of
+  button. At the top of Caw's thread; on the empty board, one column on the
+  composer's edges (the looks review: sets stand on the composer's edges,
+  where the report had 560px). Drawn as specced, its costs included (rows of
   sentences on hairlines can read as history; the kicker carries "these are
   things to say" alone).
 
@@ -149,7 +150,7 @@
         {#if writing}
           {#each (draws.loading ? [0, 1, 2] : shown.map((_, i) => i)) as slot (slot)}
             <li class="row bones">
-              <Skeleton class="bone" line="body" radius="line" style="inline-size: {BONES[slot % 3]}" />
+              <Skeleton class="bone suggestion-line" radius="line" style="inline-size: {BONES[slot % 3]}" />
               <Skeleton class="bone" line="meta" radius="line" style="inline-size: var(--ledger-bone-reason)" />
             </li>
           {/each}
@@ -206,8 +207,7 @@
   data-touch={draws.touch || undefined}
   data-where={where}
 >
-  <!-- The report's own arrangement in Today's surroundings: on the board the
-       rows stand at the 560px reading width. -->
+  <!-- Today's surroundings: the rows stand on the composer's edges. -->
   <Surround {foot} {set} {where} />
   <p aria-live="polite" class="sr-only">{said}</p>
 </div>
@@ -222,10 +222,6 @@
 
   .set {
     transition: opacity var(--dur-fade) var(--ease-out);
-
-    [data-where="board"] & {
-      max-inline-size: var(--board-column);
-    }
 
     &[data-faded] {
       opacity: 0;
@@ -330,8 +326,11 @@
       background: var(--ledger-press-fill);
     }
 
+    /* A placeholder row: its two bars stacked in one column, the suggestion's
+       line over its reason's, as the row it holds the place of. */
     &.bones {
       display: grid;
+      grid-template-columns: minmax(0, 1fr);
       align-content: center;
       gap: var(--space-1);
       cursor: default;
@@ -355,6 +354,15 @@
 
   .more .text {
     color: var(--ink-muted);
+  }
+
+  /* The suggestion's bar at the suggestion's own line box (15px on the body
+     leading), so the placeholder row stands at the real row's height. */
+  .rows :global(.suggestion-line) {
+    font-family: var(--font-body);
+    font-size: var(--ledger-text-size);
+    line-height: var(--leading-body);
+    block-size: 1lh;
   }
 
   .reason {

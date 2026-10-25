@@ -33,7 +33,7 @@
 import { readFileSync } from "node:fs";
 import { join, normalize } from "node:path";
 import type { Page } from "playwright-core";
-import { capture, contrast, px, type Rgb } from "../ink";
+import { capture, contrast, off, px, type Rgb } from "../ink";
 import { scan } from "../journeys/scan";
 import type { Engine, Kit, Spec } from "../kit";
 import { ROOT, readMotion } from "../kit";
@@ -60,9 +60,11 @@ const HIS = (() => {
 /**
  * The captures for a reviewer (into `kit.out`, Chromium alone): the states
  * the review's two findings changed. Every tray state's field moved to
- * Today's foot (finding 1), so the tray's at each where; and the cut lists
+ * Today's foot (finding 1), so the tray's at each where; the cut lists
  * now under the house edge fade (finding 2): Today's seven, the drafts' and
- * the ledger's seven expanded, the tray's seven expanded.
+ * the ledger's seven expanded, the tray's seven expanded; and the looks
+ * review's: the drafts' and the ledger's board on the composer's edges,
+ * their placeholders, and Caw by night.
  */
 const SHOTS: string[] = [
   ...["thread", "board", "phone", "keyboard"].flatMap((where) =>
@@ -75,6 +77,16 @@ const SHOTS: string[] = [
   "direction:today,where:phone,data:seven,theme:light",
   "direction:drafts,where:thread,data:seven-expanded,theme:light",
   "direction:ledger,where:thread,data:seven-expanded,theme:light",
+  // The looks review: sets on the composer's edges, placeholders at their rows' size, Caw by night.
+  "direction:drafts,where:board,data:three,theme:light",
+  "direction:ledger,where:board,data:three,theme:light",
+  ...["thread", "board", "phone"].flatMap((where) =>
+    ["drafts", "ledger"].map(
+      (direction) =>
+        `direction:${direction},where:${where},data:loading,theme:light`
+    )
+  ),
+  "direction:today,where:thread,data:three,theme:dark",
 ];
 const PRESSES: [string, string, string][] = [
   ["drafts", "the drafts' travel into the box", "--dur-morph"],
@@ -459,6 +471,281 @@ async function fadeInk(page: Page): Promise<{ foot: number; body: number }> {
     body = Math.min(body, strongest(40, 80));
   }
   return { foot, body };
+}
+
+/**
+ * The looks review's findings (cockpit-483f82d8): every direction's
+ * suggestions stand on the composer's own edges, and every placeholder
+ * stands at the size of the row it holds the place of. Read at three and at
+ * loading, light, at each where the directions share.
+ */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one leg serialized per state, its readings inside it
+async function looksLeg(kit: Kit, page: Page, base: string, engine: string) {
+  const edgeBad: string[] = [];
+  const edgeSaid: string[] = [];
+  const boneBad: string[] = [];
+  let bones = 0;
+  for (const direction of ["today", "drafts", "ledger", "tray"]) {
+    for (const where of ["thread", "board", "phone"]) {
+      // biome-ignore lint/performance/noAwaitInLoops: one state on the page at a time
+      await go(
+        page,
+        base,
+        `?__state=direction:${direction},where:${where},data:three,theme:light`
+      );
+      const real = await page.evaluate((d) => {
+        const stage = document.querySelector('[data-slot="stage"]');
+        const box = stage
+          ?.querySelector('[data-slot="foot"] [data-slot="composer"]')
+          ?.getBoundingClientRect();
+        const units = [
+          ...(stage?.querySelectorAll<HTMLElement>(
+            '[data-slot="suggestion"]'
+          ) ?? []),
+        ].map((el) => el.getBoundingClientRect());
+        // The real row as it stands for a one-line suggestion (and a
+        // one-line reason where the reason shows): a copy of the first,
+        // its words cut to one, measured and taken out again.
+        const first = stage?.querySelector<HTMLElement>(
+          '[data-slot="suggestion"]'
+        );
+        const unit = d === "drafts" ? first : first?.closest("li");
+        let oneLine = 0;
+        if (unit?.parentElement) {
+          const copy = unit.cloneNode(true) as HTMLElement;
+          for (const words of copy.querySelectorAll(
+            '[data-slot="suggestion-text"], [data-slot="suggestion-reason"]'
+          )) {
+            words.textContent = "Word";
+          }
+          unit.parentElement.append(copy);
+          oneLine = copy.getBoundingClientRect().height;
+          copy.remove();
+        }
+        return {
+          box: box ? { l: box.left, r: box.right } : null,
+          start: Math.min(...units.map((u) => u.left)),
+          end: Math.max(...units.map((u) => u.right)),
+          oneLine,
+        };
+      }, direction);
+      // Every set ends on the composer's inline end; a full-width set (all
+      // but the drafts' right-aligned stack) starts on its start too. The
+      // tray's rows stand inside the composer's 1px edge.
+      const inset = direction === "tray" ? 1 : 0;
+      const near = (a: number, b: number) => Math.abs(a - b) <= inset + 0.5;
+      const ok =
+        real.box !== null &&
+        near(real.end, real.box.r - 0) &&
+        (direction === "drafts" || near(real.start, real.box.l));
+      edgeSaid.push(
+        `${direction}@${where} ${Math.round(real.start)}–${Math.round(real.end)}/${Math.round(real.box?.l ?? 0)}–${Math.round(real.box?.r ?? 0)}`
+      );
+      if (!ok) {
+        edgeBad.push(edgeSaid.at(-1) ?? "");
+      }
+      if (direction === "today") {
+        continue;
+      }
+      await go(
+        page,
+        base,
+        `?__state=direction:${direction},where:${where},data:loading,theme:light`
+      );
+      const held = await page.evaluate(() =>
+        [
+          ...document.querySelectorAll<HTMLElement>(
+            '[data-slot="stage"] .ghost, [data-slot="stage"] li.bones'
+          ),
+        ].map((el) => {
+          const r = el.getBoundingClientRect();
+          const room = el.parentElement?.getBoundingClientRect();
+          const inside = [
+            ...el.querySelectorAll('[data-slot="skeleton"], .loops'),
+          ]
+            // A bar its row hides (the tray's reason bar at a desk) is not drawn.
+            .filter((bar) => bar.getClientRects().length > 0)
+            .map((bar) => bar.getBoundingClientRect())
+            .every(
+              (bar) =>
+                bar.width > 0 &&
+                bar.height > 0 &&
+                bar.left >= r.left - 0.5 &&
+                bar.right <= r.right + 0.5 &&
+                bar.top >= r.top - 0.5 &&
+                bar.bottom <= r.bottom + 0.5
+            );
+          return {
+            h: r.height,
+            fits: inside && Boolean(room && r.right <= room.right + 0.5),
+          };
+        })
+      );
+      for (const one of held) {
+        bones += 1;
+        if (Math.abs(one.h - real.oneLine) > 0.5 || !one.fits) {
+          boneBad.push(
+            `${direction}@${where}: placeholder ${one.h.toFixed(1)}px against the one-line row's ${real.oneLine.toFixed(1)}px${one.fits ? "" : ", a bar empty or outside its row"}`
+          );
+        }
+      }
+    }
+  }
+  kit.check(
+    `${engine}: every direction's suggestions stand on the composer's own edges at each where, start and end (the drafts' stack, right-aligned, on its end): ${edgeSaid.join("; ")}`,
+    edgeBad.length === 0,
+    edgeBad.join(" | ")
+  );
+  kit.check(
+    `${engine}: every placeholder stands at the size of the row it holds the place of, a one-line suggestion (its reason line where the reason shows), every bar drawn inside it (${bones} placeholders)`,
+    boneBad.length === 0 && bones > 0,
+    [...new Set(boneBad)].slice(0, 6).join(" | ")
+  );
+}
+
+/**
+ * Caw at night (cockpit-57cd5e7c: "Caw almost disappears at night"): his
+ * hero still read in the pixels. His drawing is found by drawing him over a
+ * ground he can't match (the pixels that stay the same over both grounds
+ * are his own, opaque); then, on the real ground, the share of his outline
+ * whose strongest ink within 2px (his edge or the rim drawn round it)
+ * stands at 3:1 or more against it, the floor for a graphic a person must
+ * make out. Read by night with his night
+ * still (on the paper rim), and with his day still on the same night
+ * ground, as he stood before it: the night still must hold his edge clear
+ * over most of it and far past the day still's there.
+ */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one pixel read, its mask, ground and outline inside it
+async function cawEdge(
+  page: Page,
+  src: string | null
+): Promise<{ share: number; edge: number }> {
+  const clip = await page.evaluate((swap) => {
+    const img = [
+      ...document.querySelectorAll<HTMLImageElement>(
+        '[data-slot="stage"] [data-slot="hero"] img'
+      ),
+    ].find((el) => el.getClientRects().length > 0);
+    if (img && swap) {
+      img.dataset.was = img.getAttribute("src") ?? "";
+      img.src = swap;
+    }
+    const r = img?.getBoundingClientRect();
+    return r
+      ? {
+          x: Math.round(r.left),
+          y: Math.round(r.top),
+          width: Math.round(r.width),
+          height: Math.round(r.height),
+        }
+      : null;
+  }, src);
+  if (!clip) {
+    return { share: 0, edge: 0 };
+  }
+  await page.evaluate(async () => {
+    await Promise.all(
+      [
+        ...document.querySelectorAll<HTMLImageElement>(
+          '[data-slot="stage"] [data-slot="hero"] img'
+        ),
+      ].map((img) => img.decode().catch(() => undefined))
+    );
+  });
+  const paint = (fill: string) =>
+    page.evaluate((f) => {
+      for (const el of document.querySelectorAll<HTMLElement>(
+        '[data-slot="stage"] [data-slot="hero"] img'
+      )) {
+        el.style.background = f;
+      }
+    }, fill);
+  const shot = await capture(page, clip);
+  await paint("rgb(0, 255, 0)");
+  const over = await capture(page, clip);
+  await paint("");
+  await page.evaluate(() => {
+    for (const img of document.querySelectorAll<HTMLImageElement>(
+      '[data-slot="stage"] [data-slot="hero"] img[data-was]'
+    )) {
+      img.src = img.dataset.was ?? "";
+      delete img.dataset.was;
+    }
+  });
+  const w = shot.width;
+  const h = shot.height;
+  const him = new Uint8Array(w * h);
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      him[y * w + x] = off(px(over, x, y), px(shot, x, y)) <= 12 ? 1 : 0;
+    }
+  }
+  const counts = new Map<string, { rgb: Rgb; n: number }>();
+  for (let i = 0; i < w * h; i += 1) {
+    if (him[i]) {
+      continue;
+    }
+    const rgb = px(shot, i % w, Math.floor(i / w));
+    const one = counts.get(rgb.join(",")) ?? { rgb, n: 0 };
+    one.n += 1;
+    counts.set(rgb.join(","), one);
+  }
+  const ground = [...counts.values()].reduce((p, q) => (q.n > p.n ? q : p)).rgb;
+  // Each point of his outline (a drawn pixel beside one that isn't) is
+  // clear where the strongest ink within 2px of it, his edge or the rim
+  // drawn round it, stands at 3:1 against the ground.
+  const ring = Math.round(2 * shot.scale);
+  const outline = (x: number, y: number) =>
+    him[y * w + x] === 1 &&
+    [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ].some(([ox = 0, oy = 0]) => {
+      const nx = x + ox;
+      const ny = y + oy;
+      return nx < 0 || ny < 0 || nx >= w || ny >= h || !him[ny * w + nx];
+    });
+  const strongest = (x: number, y: number) => {
+    let most = 1;
+    for (let oy = -ring; oy <= ring; oy += 1) {
+      for (let ox = -ring; ox <= ring; ox += 1) {
+        most = Math.max(most, contrast(px(shot, x + ox, y + oy), ground));
+      }
+    }
+    return most;
+  };
+  let edge = 0;
+  let clear = 0;
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      if (outline(x, y)) {
+        edge += 1;
+        clear += strongest(x, y) >= 3 ? 1 : 0;
+      }
+    }
+  }
+  return { share: edge > 0 ? clear / edge : 0, edge };
+}
+
+async function cawLeg(kit: Kit, page: Page, base: string, engine: string) {
+  const at = (theme: string) =>
+    go(
+      page,
+      base,
+      `?__state=direction:today,where:thread,data:three,theme:${theme}`
+    );
+  await at("light");
+  const day = await cawEdge(page, null);
+  await at("dark");
+  const night = await cawEdge(page, null);
+  const before = await cawEdge(page, "caw/caw-ready-day.png");
+  const pc = (n: number) => `${(n * 100).toFixed(0)}%`;
+  kit.check(
+    `${engine}: Caw stands clear of the night's ground: ${pc(night.share)} of his edge at 3:1 or more by night (his day still on that ground, as before the rim: ${pc(before.share)}; by day: ${pc(day.share)})`,
+    night.edge > 0 && night.share >= 0.75 && night.share >= before.share + 0.25
+  );
 }
 
 /** Leg 4: a press's runs held on the clock and sought through: one clock per moment, his words in the box after it. */
@@ -853,6 +1140,8 @@ const spec: Spec = {
           }
           kit.note(`captures: ${SHOTS.length} PNGs in ${kit.out}`);
         }
+        await looksLeg(kit, page, base, engine);
+        await cawLeg(kit, page, base, engine);
         for (const press of PRESSES) {
           // biome-ignore lint/performance/noAwaitInLoops: one press at a time under one mouse
           await pressLeg(kit, page, base, engine, press);

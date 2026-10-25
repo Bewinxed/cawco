@@ -183,6 +183,7 @@
                 {#each ["var(--tray-bone-1)", "var(--tray-bone-2)", "var(--tray-bone-3)"] as width (width)}
                   <li class="row bones">
                     <span class="bone" data-slot="skeleton" style:inline-size={width}></span>
+                    <span class="bone reason-bone" data-slot="skeleton"></span>
                   </li>
                 {/each}
               {:else}
@@ -464,6 +465,17 @@
 
     @media (prefers-reduced-motion: no-preference) {
       animation: tray-bone var(--dur-skeleton-pulse) ease-in-out infinite alternate;
+    }
+  }
+
+  /* The reason's bar, where a reason shows unasked (under a finger). */
+  .reason-bone {
+    display: none;
+    inline-size: var(--tray-bone-reason);
+    font: var(--type-meta);
+
+    [data-touch] & {
+      display: block;
     }
   }
 

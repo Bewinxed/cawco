@@ -69,7 +69,7 @@ export const DIRECTIONS = [
   {
     value: "drafts",
     label: "Unsent drafts",
-    note: "Report: the stack stands right-aligned on the composer, in a centred 560px column on the board, and hides while the keyboard is up.",
+    note: "Report: the stack stands right-aligned on the composer's end, and hides while the keyboard is up.",
     where: ["thread", "board", "phone", "keyboard"],
     data: [
       common.loading,
@@ -99,7 +99,7 @@ export const DIRECTIONS = [
   {
     value: "ledger",
     label: "The ledger",
-    note: "The design's stated change: on the board the rows stand at the report's 560px reading width.",
+    note: "",
     where: ["thread", "board", "phone"],
     data: [
       common.loading,
