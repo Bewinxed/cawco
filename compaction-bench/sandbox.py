@@ -503,7 +503,10 @@ def claude_turn(sb, config_dir, session_id, message, model, effort, new_session,
     claude = os.path.realpath(os.environ["CLAUDE_BIN"]) if os.environ.get("CLAUDE_BIN") else real_bin("claude")
     if not claude:
         raise common.RunStopped("no claude binary found")
-    cmd = [claude, "-p", "--output-format", "stream-json",
+    # Claude Code's own debug log for the turn, in the run dir (writable inside srt): on 2026-10-25 three new sessions
+    # ran to a clean result and filed no transcript anywhere, and nothing else on the host said why
+    debug_log = os.path.join(sb.base, os.path.basename(log_path).replace(".stream.jsonl", ".debug.log"))
+    cmd = [claude, "-p", "--output-format", "stream-json", "--debug-file", debug_log,
            "--verbose", "--model", model, "--session-id" if new_session else "--resume", session_id,
            "--strict-mcp-config", "--mcp-config", sb.mcp, "--settings", sb.settings,
            "--disallowedTools", "WebFetch,WebSearch", "--dangerously-skip-permissions"]
@@ -567,7 +570,13 @@ def claude_turn(sb, config_dir, session_id, message, model, effort, new_session,
     turn = recs[before:]
     if not turn:
         # a turn that ran but left nothing in its transcript (a write the sandbox refused, or a session filed
-        # elsewhere) has nothing to judge or price: it stops here rather than passing as done
+        # elsewhere) has nothing to judge or price: it stops here rather than passing as done, with Claude Code's debug
+        # log and what the project dir held kept beside the stream
+        if os.path.exists(debug_log):
+            shutil.copy(debug_log, log_path.replace(".stream.jsonl", ".debug.log"))
+        with open(log_path.replace(".stream.jsonl", ".projectdir.txt"), "w") as fh:
+            proj = sb.project_dir(config_dir)
+            fh.write(f"{proj}: {sorted(os.listdir(proj)) if os.path.isdir(proj) else 'absent'}\n")
         raise common.RunStopped(f"the turn wrote nothing to {path} (exit {code}): {check['result_text'] or check['stderr']}")
     reqs = common.requests_of(turn)
     if message.startswith("/compact") and not reqs:

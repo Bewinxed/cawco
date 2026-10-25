@@ -292,6 +292,11 @@ reads:
  "steps": [...what ran before it, with usage...], "sessions": ["<uuid>"], "probe": {...}}
 ```
 
+Every turn runs with `--debug-file` into its sandbox. A turn that ran to a clean result but filed no transcript stops
+with `<step>.debug.log` (Claude Code's own log) and `<step>.projectdir.txt` (what the run's project dir held) kept
+beside its stream. On 2026-10-25, three new sessions on one account (c23 A4, 05:01–05:03 UTC) filed nothing anywhere
+on the host; the same runs filed normally an hour later, and the cause was not found.
+
 A failed `/compact` exits 0 with `result: success`. Only its `status` frame (`compact_result: "failed"`) says it
 failed, and the bench reads that frame. A summariser that answers on another model than the one asked stops with
 `answered on [...]`. `run.py` exits 75 when any run stopped. Once `--max-stopped` runs have stopped (default 6), no

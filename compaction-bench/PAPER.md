@@ -493,6 +493,10 @@ interactive shell resolved a blocked name past its shim.
   and `whole` no option. The cut's other arms are scored against the real turn on the absolute scale only.
 - **Refusals.** A `/compact` can be refused by Opus 5.5's safeguards ("Opus 5.5's safeguards flagged this message").
   Such a run stops and is counted, never rerun on another model.
+- **A turn that files nothing.** Three new sessions on one account (c23 A4, 05:01–05:03 UTC on 2026-10-25) ran to a
+  clean result and left no transcript anywhere on the host, so there was nothing to judge or price. Rerun on another
+  account an hour later, with the same opening, all three filed normally. The cause was not found. Every turn now keeps
+  Claude Code's debug log, so a recurrence carries its own explanation.
 - **What the next message is.** 15 of the 24 drawn next messages are another session's words (hand-offs, reports,
   asks), 8 the person's and 1 the hub's resume nudge. The pool is orchestrator-heavy (242 of 256), as the fleet is.
 - **OpenCode (A7d) was not run.** The opencode-go account's key, the one ending 4DEY, has expired: "This API key has
