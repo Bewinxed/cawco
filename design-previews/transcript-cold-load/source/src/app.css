@@ -239,7 +239,8 @@
     outline: none;
   }
 
-  .listing:not([data-shown]) {
+  /* Laid out and measured unseen until the landing has put it on its place. */
+  .scroller:not([data-shown]) {
     visibility: hidden;
   }
 
@@ -247,37 +248,9 @@
     block-size: var(--space-8);
   }
 
-  .loading {
-    display: block flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin: 0;
-    padding: var(--space-5) var(--gutter-end) var(--space-5) var(--gutter-start);
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-
-  .live-dot {
-    flex: none;
-    inline-size: var(--status-dot-size);
-    block-size: var(--status-dot-size);
-    border-radius: var(--radius-pill);
-    background: var(--status-live-glyph);
-
-    @media (prefers-reduced-motion: no-preference) {
-      animation: breathe var(--breath) var(--ease-crossfade) infinite;
-    }
-  }
-
-  @keyframes breathe {
-    50% {
-      opacity: var(--breath-floor);
-    }
-  }
-
   /* A block of the conversation. */
   .row,
-  .veil {
+  .gen-shape {
     padding-inline: var(--gutter-start) var(--gutter-end);
   }
 
@@ -487,29 +460,52 @@
 }
 
 @layer veil {
-  /* The skeleton veil over the list (TranscriptSkeleton), on the edge the landing will be. */
+  /* The drawing's colours (transitions.dev ui-generation.css `--gen-*`), in the house's inks. */
+  .veil,
+  .gen-strip {
+    --gen-line: var(--neutral-8);
+    --gen-strong: var(--ink-muted);
+    --gen-ink: color-mix(in oklab, var(--ink-strong) 30%, transparent);
+    --gen-surface: var(--surface-raised);
+    --gen-dot: 2.1px;
+    --line-my: calc((1lh - var(--c-skeleton-x-height)) / 2);
+  }
+
+  /* Over the list until it has come in, on the edge the landing will be. */
   .veil {
     position: absolute;
     inset: 0;
     display: block flex;
     flex-direction: column;
     justify-content: flex-end;
-    overflow: hidden;
+    overflow: clip;
     padding-block-end: var(--space-8);
-    background: var(--surface-page);
-    --line-my: calc((1lh - var(--c-skeleton-x-height)) / 2);
+    pointer-events: none;
 
     &[data-align="top"] {
       justify-content: flex-start;
-      padding-block: 0;
+      padding-block: var(--space-4) 0;
     }
   }
 
-  .sk-block {
+  /* The shape the drawing traces: the transcript's blocks, laid out unseen. */
+  .gen-shape {
     flex: none;
-    padding-block-start: var(--space-4);
+    opacity: 0;
+    border-radius: var(--radius-md);
   }
 
+  /* The strip at an end of the list while there is a page past it. */
+  .gen-strip {
+    position: relative;
+    display: block flex;
+    flex-direction: column;
+    justify-content: center;
+    block-size: calc(var(--tx-line) + 2 * var(--space-5));
+    overflow: clip;
+  }
+
+  .sk-block,
   .sk-rail {
     flex: none;
     padding-block-start: var(--space-4);
@@ -536,10 +532,6 @@
     flex: none;
     border-radius: var(--radius-hair);
     background: var(--surface-fill);
-
-    @media (prefers-reduced-motion: no-preference) {
-      animation: skeleton-pulse var(--dur-skeleton-pulse) var(--ease-crossfade) infinite;
-    }
 
     &.line {
       block-size: var(--c-skeleton-x-height);
@@ -569,13 +561,80 @@
     }
   }
 
-  .veil .rail-line .sk.line {
+  .rail-line .sk.line {
     margin-block: 0;
   }
 
-  @keyframes skeleton-pulse {
-    50% {
-      opacity: var(--skeleton-pulse-floor);
-    }
+  /* The drawing (generate.js; transitions.dev ui-generation.css). */
+  .gen {
+    position: absolute;
+    pointer-events: none;
+  }
+
+  .gen-field,
+  .gen-svg {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    overflow: visible;
+  }
+
+  .gen-wireframe {
+    stroke-width: var(--gen-dot);
+  }
+
+  .gen-wire {
+    fill: none;
+    stroke: var(--gen-line);
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .gen-guide {
+    fill: none;
+    stroke: var(--gen-line);
+    stroke-width: 1.6;
+    stroke-linecap: round;
+  }
+
+  .gen-guide--dashed {
+    stroke-dasharray: 0 5;
+  }
+
+  .gen-head,
+  .gen-flyer {
+    fill: var(--gen-strong);
+  }
+
+  .gen-handle {
+    fill: var(--gen-surface);
+    stroke: var(--gen-strong);
+    stroke-width: 1;
+  }
+
+  .gen-reticle {
+    fill: none;
+    stroke: var(--gen-strong);
+    stroke-width: 1.2;
+    stroke-linecap: round;
+  }
+
+  .gen-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    fill: var(--gen-line);
+    letter-spacing: 0.02em;
+  }
+
+  .gen-label--small {
+    font-size: 7.5px;
+    fill: var(--gen-strong);
+  }
+
+  .gen-label--tag {
+    font-size: 7.5px;
+    fill: var(--gen-strong);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
   }
 }

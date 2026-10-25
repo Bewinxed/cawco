@@ -20,21 +20,34 @@ The bar holds the hub's latency (0.3 s, 1 s, 2 s), "Spot no longer exists"
    stands for the session page's server `load`: it reads the reader's place
    from the `cawco-place` cookie and starts the window read as a promise it
    does not wait on (`hub.js` `load`). The shell, the pane's head and the
-   transcript's skeleton veil, is drawn at once. The veil stands on its
-   bottom edge for a tail landing and on its top edge for a kept place.
-2. The fake hub answers after the bar's latency with the 120 blocks around
+   transcript's loading drawing, is drawn at once.
+2. The loading state is transitions.dev's UI generation skeleton, the load
+   transition of the first `.cm-beam` on https://transitions.dev/ (its
+   prompt box), drawn over the transcript's own shape (`generate.js`,
+   `Veil.svelte`): a dot field ripples out, guides and corner handles come in,
+   the outline and then each block (the who marks, the reader's well, prose
+   lines, the rail's tool lines) are traced in small flowing dots. It stands on
+   its bottom edge for a tail landing and on its top edge for a kept place.
+3. The fake hub answers after the bar's latency with the 120 blocks around
    the place, or the newest 60 for the tail. A place it no longer holds is
    the window read's 409; the load answers the newest page and says so.
-3. Only then is virtua mounted, with a cache built from the sizes this tab
+4. Only then is virtua mounted, with a cache built from the sizes this tab
    kept by row key (virtua reads `cache` once, when it is made, cut to the
    rows it holds then: prototype finding 1). `restore()` (Transcript.svelte
    on main, b7b06ab9a) puts the row at the view's top, unseen, writing until
-   it holds still; the veil goes and the list comes on one clock (400 ms,
-   ease-in-out, 2 px blur, transitions.dev Skeleton loader and reveal).
-4. The place is held for 1.5 s while the rows around it measure. Scrolling
+   it holds still.
+5. The list comes in over the drawing as theirs does: its opacity from 0 and
+   its blur from 3px, 475 ms on cubic-bezier(.22, 1, .36, 1), from 930 ms into
+   the drawing (or once the rows are landed, if later), the drawing fading
+   out 254 ms after it. Until then a drawing that has finished tracing holds
+   its pose, its dots still flowing. All of it runs on one Web Animation
+   clock, so DevTools holds and seeks it whole.
+6. The place is held for 1.5 s while the rows around it measure. Scrolling
    up, older pages come in above with virtua's `shift`; scrolling down,
-   newer ones come in below; the row being read does not move.
-5. As the reader scrolls, the place goes into the cookie (throttled to one
+   newer ones come in below; the row being read does not move. While there
+   is a page past either end, that end's strip is the same drawing over one
+   tool line (`GenStrip.svelte`).
+7. As the reader scrolls, the place goes into the cookie (throttled to one
    write per 300 ms, and on `pagehide`); the sizes go into sessionStorage on
    `pagehide`.
 

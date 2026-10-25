@@ -2,14 +2,17 @@
   The transcript's cold load, as the design (report dbc77f55, §1) has it.
 
   The shell is drawn before the hub answers: this component mounts with the
-  veil up and the load's promise pending. When the window around the kept
+  veil up, its generation drawing running from that first frame
+  (generate.js, transitions.dev's UI generation skeleton), and the load's
+  promise pending. When the window around the kept
   place is in hand (or the newest page, for the tail), the rows are built and
   only then is virtua mounted, its cache built from the sizes this tab kept by
   row key: virtua reads `cache` once, as it is made, cut to the rows it holds
   then, so a list mounted before its rows drops every size (prototype
   question 1). The view is put on the place unseen (`restore`, from
   Transcript.svelte as written on main, b7b06ab9a), and once every row in
-  view is drawn and measured the list comes in as the veil goes, one clock.
+  view is drawn and measured the list comes in over the drawing as it fades,
+  on the drawing's one clock.
 
   Then the place is held for LANDING_HOLD_MS while the rows around it go on
   measuring; older pages come in above with virtua's `shift` and newer ones
@@ -21,6 +24,7 @@
   import { SESSION, newer, older } from "./hub.js";
   import { flushPlace, keepPlace, keepSizes, readSizes } from "./place.js";
   import Row from "./Row.svelte";
+  import GenStrip from "./GenStrip.svelte";
   import Veil from "./Veil.svelte";
 
   /** `loading`: the load's promise, started before anything mounted. `align`: the veil's edge. */
@@ -49,7 +53,8 @@
   let listing = $state();
   let list = $state();
   let strip = $state();
-  let veil = $state();
+  /** The veil's generation run (generate.js); none for a reader who asked for less motion. */
+  let veilRun = $state.raw();
   let viewHeight = $state(0);
   let buffer = $state(0);
   let shown = $state(false);
@@ -98,11 +103,24 @@
     return index >= 0 && scrollToRow(index, resume.into);
   }
 
-  /** Whether the scroller already stands at `target`, or as near as the engine's rounding lets it. */
+  /**
+   * Whether this engine keeps a scroll offset in whole pixels, cutting off what
+   * is written past one (WebKit: 455.65625 reads back 455), as the first write
+   * of a fraction showed; null until one has.
+   */
+  let wholePixels = null;
+
+  /**
+   * Whether the scroller already stands at `target`, or as near as the
+   * engine's steps let it: a write that would read back where the view
+   * already is moves nothing, and is not made (Transcript.svelte learns that
+   * per target, `placeWrite`, after one such write each).
+   */
   function standsAt(target) {
     const now = scroller.scrollTop;
     return (
       Math.abs(now - target) <= 0.5 ||
+      (wholePixels === true && now === Math.floor(target)) ||
       (placeWrite !== null && Math.abs(placeWrite.target - target) <= 0.5 && now === placeWrite.read)
     );
   }
@@ -112,6 +130,9 @@
     scroller.scrollTop = target;
     lastWrite = scroller.scrollTop;
     placeWrite = { target, read: lastWrite };
+    if (wholePixels === null && target % 1 > 0.01 && lastWrite !== target) {
+      wholePixels = lastWrite === Math.floor(target);
+    }
     log.writes.push({ phase, frame: frameNo, ms: Math.round(performance.now() - t0), from, target: +target.toFixed(2) });
   }
 
@@ -221,30 +242,21 @@
   }
 
   /**
-   * The list comes in as the veil goes: transitions.dev Skeleton loader and
-   * reveal, both layers on one clock (--dur-skeleton-reveal on
-   * --ease-crossfade, the veil out into a --skeleton-reveal-blur blur and the
-   * list up out of one). At once for a reader who asked for less motion.
+   * The list comes in over the drawing: transitions.dev's UI generation
+   * reveal (generate.js `reveal`), its opacity from 0 and its blur from 3px
+   * over 475ms on cubic-bezier(.22, 1, .36, 1), from 930ms into the drawing
+   * or now if that has passed, as the drawing fades out after it. All on the
+   * drawing's one clock. For a reader who asked for less motion, no drawing:
+   * the list fades in over 200ms, as theirs does.
    */
   function crossFade() {
-    if (!matchMedia("(prefers-reduced-motion: no-preference)").matches || !veil) {
+    if (!veilRun) {
+      const fade = scroller.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: "ease-out" });
+      fade.id = "generate-reveal";
       veiled = false;
       return;
     }
-    const css = getComputedStyle(document.documentElement);
-    // A registered <time> token reads back as seconds ("0.4s"), an unregistered one as written.
-    const time = css.getPropertyValue("--dur-skeleton-reveal").trim();
-    const duration = time.endsWith("ms") ? Number.parseFloat(time) : Number.parseFloat(time) * 1000;
-    const easing = css.getPropertyValue("--ease-crossfade").trim() || "ease-in-out";
-    const blur = css.getPropertyValue("--skeleton-reveal-blur").trim() || "2px";
-    const standing = { opacity: 1, filter: "blur(0px)" };
-    const away = { opacity: 0, filter: `blur(${blur})` };
-    const out = veil.animate([standing, away], { duration, easing, fill: "forwards" });
-    const into = scroller.animate([away, standing], { duration, easing });
-    const at = document.timeline.currentTime;
-    out.startTime = at;
-    into.startTime = at;
-    out.finished.then(() => {
+    veilRun.reveal(scroller).then(() => {
       veiled = false;
     });
   }
@@ -519,6 +531,7 @@
       keptPlace: () => keptPlace,
       rows: () => rows.map((row) => row.key),
       edges: () => ({ cursor, after, readingOlder, readingNewer }),
+      gen: () => veilRun?.read() ?? null,
     };
 
     loading.then(async ({ landing, page }) => {
@@ -551,11 +564,11 @@
 </script>
 
 <div class="transcript">
-  <div class="scroller" bind:this={scroller} onscroll={readScroll} role="log" aria-label="Transcript">
+  <div class="scroller" data-shown={shown || undefined} bind:this={scroller} onscroll={readScroll} role="log" aria-label="Transcript">
     {#if mounted}
       <div class="strip" bind:this={strip} {@attach keepStrip}>
         {#if cursor !== null}
-          <p class="loading"><span class="live-dot" aria-hidden="true"></span><span>Loading transcript…</span></p>
+          <GenStrip />
         {/if}
       </div>
       <div class="listing" data-shown={shown || undefined} bind:this={listing}>
@@ -576,13 +589,13 @@
         </Virtualizer>
       </div>
       {#if after !== null}
-        <p class="loading foot"><span class="live-dot" aria-hidden="true"></span><span>Loading transcript…</span></p>
+        <GenStrip />
       {/if}
     {/if}
     <div class="room"></div>
   </div>
   {#if veiled}
-    <Veil {align} bind:ref={veil} />
+    <Veil {align} bind:run={veilRun} />
   {/if}
   <p class="dock" role="status">{unfound ? GONE_WORDS : ""}</p>
 </div>

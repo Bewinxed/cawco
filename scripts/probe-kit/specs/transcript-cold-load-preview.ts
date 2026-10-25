@@ -39,7 +39,7 @@ const ENGINES: Engine[] = ["chromium", "webkit"];
 const LANDING_VIEWS: View[] = ["desk", "phone"];
 const SWEEP_VIEWS: View[] = ["desk", "narrowDesk", "phone"];
 const LEGS = new Set(
-  (process.env.COLD_LOAD_LEGS ?? "landings,journey,gone,sweep").split(",")
+  (process.env.COLD_LOAD_LEGS ?? "landings,journey,gone,sweep,scrub").split(",")
 );
 /** The demo's one session, and the cookie its place is kept in (source/src/hub.js, place.js). */
 const SESSION = "ses-obsidian-7k2q";
@@ -52,6 +52,8 @@ const PLACES = Array.from(
 const INTO = 30;
 const HOLD_MS = 1500;
 const GONE_WORDS = "Where you were isn't in this session any more.";
+/** The reveal's curve, as an engine writes it back. */
+const REVEAL_CURVE = /^cubic-bezier\(0\.22, 1, 0\.36, 1\)$/;
 
 const serve = () =>
   Bun.serve({
@@ -83,7 +85,11 @@ const listen = (page: Page, where: string): void => {
 };
 
 interface Write {
+  frame?: number;
+  from?: number;
+  ms?: number;
   phase: string;
+  target?: number;
 }
 interface Drawn {
   error: number | null;
@@ -111,10 +117,12 @@ declare global {
         readingNewer: boolean;
         readingOlder: boolean;
       };
+      gen: () => { lit: number; revealAt: number | null; shown: number; t: number } | null;
       keptPlace: () => Place | null;
       log: Log;
       rows: () => string[];
     };
+    __firstFrames?: { drawing?: number; shell?: number };
   }
 }
 
@@ -187,34 +195,79 @@ const waitDrawn = async (page: Page): Promise<Log> => {
   return readLog(page);
 };
 
-interface Fade {
+interface Run {
+  delay: unknown;
   duration: unknown;
   easing: unknown;
-  on: string;
+  id: string;
   start: CSSNumberish | null;
 }
-/** The reveal's runs, read in the frame the list is drawn. */
-const waitFade = async (page: Page): Promise<Fade[]> => {
+/** The generation's runs once the reveal is on them (the list landed). */
+const waitReveal = async (page: Page): Promise<Run[]> => {
   const handle = await page.waitForFunction(
-    () =>
-      window.__coldLoad?.log.drawn &&
-      document
+    () => {
+      const runs = document
         .getAnimations()
-        .filter((run) => !(run instanceof CSSAnimation))
-        .map((run) => {
+        .filter((run) => ["generate", "generate-reveal", "generate-wire"].includes(run.id));
+      return (
+        runs.some((run) => run.id === "generate-reveal") &&
+        runs.map((run) => {
           const timing = run.effect?.getTiming();
           return {
+            id: run.id,
             start: run.startTime,
+            delay: timing?.delay,
             duration: timing?.duration,
             easing: timing?.easing,
-            on: String((run.effect as KeyframeEffect).target?.className),
           };
-        }),
+        })
+      );
+    },
     null,
     { timeout: 15_000, polling: "raf" }
   );
-  return (await handle.jsonValue()) as Fade[];
+  return (await handle.jsonValue()) as Run[];
 };
+
+/** Once the drawing has gone: what is left of it, and the list's own style. */
+const waitRest = async (page: Page) => {
+  await page.waitForFunction(() => !document.querySelector(".veil"), null, {
+    timeout: 15_000,
+  });
+  return page.evaluate(() => {
+    const scroller = document.querySelector(".scroller") as HTMLElement;
+    const style = getComputedStyle(scroller);
+    return {
+      layers: document.querySelectorAll('[data-gen-run="veil"]').length,
+      veil: document.querySelectorAll(".veil").length,
+      runs: document
+        .getAnimations()
+        .filter((run) => ["generate", "generate-reveal", "generate-wire"].includes(run.id)).length,
+      opacity: style.opacity,
+      filter: style.filter,
+    };
+  });
+};
+
+/** The frame the shell is first drawn in, and the frame the drawing first is, counted from the page's start. */
+function countFirstFrames(): void {
+  const firsts: { shell?: number; drawing?: number } = {};
+  (window as unknown as { __firstFrames: typeof firsts }).__firstFrames = firsts;
+  let frame = 0;
+  const step = () => {
+    frame += 1;
+    if (firsts.shell === undefined && document.querySelector(".pane-head")) {
+      firsts.shell = frame;
+    }
+    if (firsts.drawing === undefined && document.querySelector('[data-gen-run="veil"]')) {
+      firsts.drawing = frame;
+    }
+    if (frame < 600) {
+      requestAnimationFrame(step);
+    }
+  };
+  requestAnimationFrame(step);
+}
 
 /** How far the block's row stands from where the place puts it: its top at the view's top, `into` up. */
 const placeError = (page: Page, block: string, into: number) =>
@@ -350,6 +403,7 @@ async function landings(
 ): Promise<void> {
   const label = `${engine} ${view}`;
   const page = await kit.page(view, { engine });
+  await page.addInitScript(countFirstFrames);
   listen(page, label);
   const runs: {
     fresh: Log;
@@ -390,6 +444,10 @@ async function landings(
     kit.note(
       `${label} ${leg}: writes before the reveal ${JSON.stringify(writes)}, frames ${JSON.stringify(frames)}, landing error px ${JSON.stringify(errs)}, hold writes after it ${JSON.stringify(holds)}, error once held ${JSON.stringify(finals)}`
     );
+    const many = runs.filter((run) => before(run[leg]) > 2).map((run) => run[leg].writes);
+    if (many.length > 0) {
+      kit.note(`${label} ${leg}: the landings with more than 2 writes: ${JSON.stringify(many).slice(0, 1500)}`);
+    }
     kit.check(
       `${label} ${leg}: ten places land within 1px`,
       errs.worst <= 1,
@@ -420,46 +478,55 @@ async function landings(
     `${moved}`
   );
 
-  // The tail, and the veil's pulse on one clock while the hub reads.
-  await settings(page, 1000, false);
-  await setPlace(page, origin, null);
-  await page.goto(`${origin}/`);
-  await page.waitForSelector(".veil .sk");
-  const pulses = await page.evaluate(() =>
-    document
-      .getAnimations()
-      .filter(
-        (run) =>
-          run instanceof CSSAnimation && run.animationName === "skeleton-pulse"
-      )
-      .map((run) => run.startTime)
-  );
-  kit.check(
-    `${label}: the skeleton's ${pulses.length} bars pulse on one clock`,
-    pulses.length > 0 && pulses.every((start) => start === 0),
-    JSON.stringify([...new Set(pulses)])
-  );
-  const fade = await waitFade(page);
-  const tail = await readLog(page);
-  kit.check(
-    `${label}: the veil goes and the list comes on one clock, 400ms ease-in-out`,
-    fade.length === 2 &&
-      fade.every(
-        (run) =>
-          run.start === fade[0].start &&
-          run.duration === 400 &&
-          // --ease-crossfade; WebKit names the same curve by its keyword.
-          ["cubic-bezier(0.42, 0, 0.58, 1)", "ease-in-out"].includes(String(run.easing))
-      ) &&
-      fade.some((run) => run.on.includes("veil")) &&
-      fade.some((run) => run.on.includes("scroller")),
-    JSON.stringify(fade)
-  );
-  kit.check(
-    `${label}: the tail lands on the scroller's end`,
-    tail.landing?.tail === true && Math.abs(tail.drawn?.error ?? 99) <= 1,
-    JSON.stringify(tail.drawn)
-  );
+  // The tail, at each latency: the drawing is up in the shell's first frame,
+  // the reveal runs on its clock, and it ends at rest.
+  for (const latency of [300, 1000, 2000]) {
+    await settings(page, latency, false);
+    await setPlace(page, origin, null);
+    await page.goto(`${origin}/`);
+    const clock = await waitReveal(page);
+    const firsts = await page.evaluate(() => ({
+      shell: window.__firstFrames?.shell,
+      drawing: window.__firstFrames?.drawing,
+    }));
+    kit.check(
+      `${label} ${latency}ms: the drawing is on in the shell's first frame`,
+      firsts.shell !== undefined && firsts.drawing === firsts.shell,
+      JSON.stringify(firsts)
+    );
+    const driver = clock.find((run) => run.id === "generate");
+    const into = clock.find((run) => run.id === "generate-reveal");
+    const out = clock.find((run) => run.id === "generate-wire");
+    kit.check(
+      `${label} ${latency}ms: the drawing and the reveal run on one clock, 475ms on cubic-bezier(.22, 1, .36, 1) from ${into?.delay}ms`,
+      !!(driver && into && out) &&
+        clock.every((run) => run.start === driver?.start) &&
+        into?.duration === 475 &&
+        out?.duration === 475 &&
+        [into, out].every((run) => REVEAL_CURVE.test(String(run?.easing))) &&
+        Number(into?.delay) >= 930 &&
+        Number(out?.delay) === Number(into?.delay) + 254,
+      JSON.stringify(clock)
+    );
+    const atRest = await waitRest(page);
+    kit.check(
+      `${label} ${latency}ms: it ends at rest (no drawing, no run left, the list whole)`,
+      atRest.layers === 0 &&
+        atRest.veil === 0 &&
+        atRest.runs === 0 &&
+        atRest.opacity === "1" &&
+        atRest.filter === "none",
+      JSON.stringify(atRest)
+    );
+    if (latency === 1000) {
+      const tail = await readLog(page);
+      kit.check(
+        `${label}: the tail lands on the scroller's end`,
+        tail.landing?.tail === true && Math.abs(tail.drawn?.error ?? 99) <= 1,
+        JSON.stringify(tail.drawn)
+      );
+    }
+  }
 }
 
 /**
@@ -608,6 +675,8 @@ const sweep = (page: Page) =>
       // What scrolls sideways by design (a code block, a table) holds its own.
       if (
         el.parentElement?.closest("pre, table") ||
+        // The strip's drawing: decoration its strip clips (generate.js).
+        el.closest(".gen") ||
         !el.checkVisibility({ visibilityProperty: true })
       ) {
         continue;
@@ -642,7 +711,7 @@ async function overflow(kit: Kit, origin: string, engine: Engine): Promise<void>
       await setPlace(page, origin, { block: "b-372", into: 20 });
       await page.goto(`${origin}/`);
       await waitDrawn(page);
-      await page.waitForTimeout(600);
+      await waitRest(page);
       const spills = await sweep(page);
       total += spills.length;
       found.push(...spills.slice(0, 4).map((s) => `${view} ${state}: ${s}`));
@@ -655,25 +724,186 @@ async function overflow(kit: Kit, origin: string, engine: Engine): Promise<void>
   );
 }
 
+const SMOOTH_OUT = (x: number): number => {
+  // cubic-bezier(0.22, 1, 0.36, 1), the reveal's curve (theirs, ui-generation.js).
+  if (x <= 0) {
+    return 0;
+  }
+  if (x >= 1) {
+    return 1;
+  }
+  const bx = (t: number) => 3 * 0.22 * t * (1 - t) ** 2 + 3 * 0.36 * t * t * (1 - t) + t ** 3;
+  const by = (t: number) => 3 * 1 * t * (1 - t) ** 2 + 3 * 1 * t * t * (1 - t) + t ** 3;
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 40; i += 1) {
+    const m = (lo + hi) / 2;
+    if (bx(m) < x) {
+      lo = m;
+    } else {
+      hi = m;
+    }
+  }
+  return by((lo + hi) / 2);
+};
+
+interface Sample {
+  blur: number;
+  list: number;
+  shown: number;
+  t: number;
+  time: number;
+  wire: number;
+}
+
+/**
+ * The drawing and its reveal held and sought on the DevTools clock
+ * (Chromium's Animation domain): every 16ms from the first frame to the last,
+ * the list's opacity and blur and the drawing's own opacity on their curve,
+ * the drawing standing until the list is in, and the run at rest after.
+ */
+async function scrub(kit: Kit, origin: string, view: View): Promise<void> {
+  const page = await kit.page(view, { engine: "chromium" });
+  listen(page, `chromium ${view} scrub`);
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Animation.enable");
+  const ids = new Map<string, string>();
+  cdp.on("Animation.animationStarted", (event) => {
+    const { name, id } = event.animation;
+    if (name.startsWith("generate")) {
+      ids.set(name, id);
+    }
+  });
+  for (const latency of [300, 1000]) {
+    const label = `chromium ${view} ${latency}ms`;
+    await settings(page, latency, false);
+    await setPlace(page, origin, { block: "b-372", into: 20 });
+    ids.clear();
+    await page.goto(`${origin}/`);
+    const runs = await waitReveal(page);
+    const names = ["generate", "generate-reveal", "generate-wire"];
+    for (let i = 0; i < 100 && names.some((name) => !ids.has(name)); i += 1) {
+      await page.waitForTimeout(10);
+    }
+    kit.note(`${label}: the DevTools Animation domain names ${JSON.stringify([...ids.keys()])}`);
+    const all = names.map((name) => ids.get(name) as string);
+    await cdp.send("Animation.setPaused", { animations: all, paused: true });
+    await page.evaluate(
+      () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))
+    );
+    const revealAt = Number(runs.find((run) => run.id === "generate-reveal")?.delay);
+    const end = Number(runs.find((run) => run.id === "generate")?.duration);
+    const samples: Sample[] = [];
+    for (let time = 0; time < end - 1; time += 16) {
+      await cdp.send("Animation.seekAnimations", { animations: all, currentTime: time });
+      samples.push(
+        await page.evaluate(
+          (at) =>
+            new Promise<Sample>((done) =>
+              requestAnimationFrame(() =>
+                requestAnimationFrame(() => {
+                  const list = getComputedStyle(document.querySelector(".scroller") as Element);
+                  const wire = document.querySelector(".veil .gen-wireframe");
+                  const gen = window.__coldLoad?.gen();
+                  done({
+                    time: at,
+                    t: gen?.t ?? -1,
+                    shown: gen?.shown ?? 0,
+                    list: Number(list.opacity),
+                    // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
+                    blur: Number(/blur\(([\d.]+)px\)/.exec(list.filter)?.[1] ?? 0),
+                    wire: wire ? Number(getComputedStyle(wire).opacity) : -1,
+                  });
+                })
+              )
+            ),
+          time
+        )
+      );
+    }
+    const off = (got: number, want: number) => Math.abs(got - want);
+    const lag = 254;
+    let listOff = 0;
+    let wireOff = 0;
+    let blurOff = 0;
+    let clockOff = 0;
+    let clockAt = 0;
+    let gap = 1;
+    for (const s of samples) {
+      const into = SMOOTH_OUT((s.time - revealAt) / 475);
+      const away = 1 - SMOOTH_OUT((s.time - revealAt - lag) / 475);
+      listOff = Math.max(listOff, off(s.list, into));
+      wireOff = Math.max(wireOff, off(s.wire, away));
+      blurOff = Math.max(blurOff, off(s.blur, 3 * (1 - into)));
+      if (off(s.t, s.time) > clockOff) {
+        clockOff = off(s.t, s.time);
+        clockAt = s.time;
+      }
+      gap = Math.min(gap, Math.max(s.list, s.wire));
+    }
+    const drawn = samples.filter((s) => s.time >= 480 && s.time <= revealAt);
+    kit.note(
+      `${label}: ${samples.length} frames sought to ${end}ms, reveal from ${revealAt}ms; worst off its curve: list ${listOff.toFixed(3)}, drawing ${wireOff.toFixed(3)}, blur ${blurOff.toFixed(3)}px; the drawing's clock off the seek by ${clockOff.toFixed(1)}ms (at ${clockAt}ms)`
+    );
+    kit.check(
+      `${label}: one clock, every part sought together (the drawing's time is the seek's)`,
+      clockOff <= 1,
+      `${clockOff}`
+    );
+    kit.check(
+      `${label}: the drawing stands from its ripple until the list comes in (dots drawn at every frame from 480ms to ${revealAt}ms)`,
+      drawn.length > 0 && drawn.every((s) => s.shown > 0 && s.wire === 1 && s.list === 0),
+      JSON.stringify(drawn.find((s) => !(s.shown > 0 && s.wire === 1 && s.list === 0)) ?? null)
+    );
+    kit.check(
+      `${label}: the list comes in and the drawing goes on their curve, no hold and no jump (each within 0.02 of it), never both gone`,
+      listOff <= 0.02 && wireOff <= 0.02 && blurOff <= 0.06 && gap >= 0.5,
+      `list ${listOff.toFixed(3)}, drawing ${wireOff.toFixed(3)}, blur ${blurOff.toFixed(3)}, least shown ${gap.toFixed(3)}`
+    );
+    await cdp.send("Animation.setPaused", { animations: all, paused: false });
+    const atRest = await waitRest(page);
+    kit.check(
+      `${label}: let go, it ends at rest`,
+      atRest.layers === 0 &&
+        atRest.veil === 0 &&
+        atRest.runs === 0 &&
+        atRest.opacity === "1" &&
+        atRest.filter === "none",
+      JSON.stringify(atRest)
+    );
+  }
+}
+
+/** Every leg, by its name in COLD_LOAD_LEGS, for one engine. */
+async function legsOf(kit: Kit, origin: string, engine: Engine): Promise<void> {
+  const perView = [
+    ["landings", landings],
+    ["journey", journey],
+    ["gone", gone],
+  ] as const;
+  for (const view of LANDING_VIEWS) {
+    for (const [name, leg] of perView) {
+      if (LEGS.has(name)) {
+        await leg(kit, origin, engine, view);
+      }
+    }
+  }
+  if (LEGS.has("sweep")) {
+    await overflow(kit, origin, engine);
+  }
+  if (LEGS.has("scrub") && engine === "chromium") {
+    for (const view of LANDING_VIEWS) {
+      await scrub(kit, origin, view);
+    }
+  }
+}
+
 const probe = async (kit: Kit): Promise<void> => {
   const server = serve();
   const origin = `http://127.0.0.1:${server.port}`;
   try {
     for (const engine of ENGINES) {
-      for (const view of LANDING_VIEWS) {
-        if (LEGS.has("landings")) {
-          await landings(kit, origin, engine, view);
-        }
-        if (LEGS.has("journey")) {
-          await journey(kit, origin, engine, view);
-        }
-        if (LEGS.has("gone")) {
-          await gone(kit, origin, engine, view);
-        }
-      }
-      if (LEGS.has("sweep")) {
-        await overflow(kit, origin, engine);
-      }
+      await legsOf(kit, origin, engine);
     }
     kit.check(
       "no page said a console error",
