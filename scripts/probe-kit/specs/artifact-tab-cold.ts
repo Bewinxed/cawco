@@ -13,13 +13,31 @@
  * and WebKit one session makes a folder preview and a decision page, then a
  * third artifact last, so its panel shows neither of the two. At the desk,
  * each of the two is opened in a browser context of its own (nothing cached,
- * nothing stored), then reloaded; read in the page, from its navigation's
- * start to the artifact's frame entering the document:
+ * nothing stored), then reloaded once its frame's page has drawn; read in
+ * the page, from its navigation's start to the artifact's frame entering the
+ * document:
  *
- * 1. the folder preview's first visit and its reload each mount the frame
- *    within BUDGET_MS, and the frame reads the folder's own page;
- * 2. the decision page's first visit and its reload each mount the frame
- *    within BUDGET_MS.
+ * 1. the folder preview's first visit mounts the frame within
+ *    FIRST_BUDGET_MS and its reload within RELOAD_BUDGET_MS, and the frame
+ *    reads the folder's own page;
+ * 2. the decision page's likewise, and the frame draws the page.
+ *
+ * The reload waits for the frame's page because a hub run from source (this
+ * fleet's) builds the decision host in its own process on the first request
+ * for it (core decision-host.ts `bundle`): Svelte's compiler, Tailwind and
+ * the house faces' subsetting held its event loop 1-1.4 s in chunks of up to
+ * 900 ms (sampled with bun:jsc), and a reload landing then waited on every
+ * read. The released binary serves the host prebuilt (`standalone`), so the
+ * person's hub never builds it.
+ *
+ * Then the hub's show of a decision page (`POST …/artifacts/<id>/show`, the
+ * panel's Show and artifact_show), made with the session's panel on another
+ * artifact:
+ *
+ * 3. with no view open it answers that none is showing the session, within
+ *    SHOWN_WAIT_MS and OPEN_BUDGET_MS more: the show's own work (the open,
+ *    the publish) costs at most that; with the session's page open in a
+ *    browser it answers opened within VIEWED_BUDGET_MS.
  *
  *   bun scripts/probe-kit/run.ts artifact-tab-cold
  */
@@ -27,18 +45,31 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { SHOWN_WAIT_MS } from "../../../packages/hub/src/artifacts/service";
 import { type Reply, until } from "../../scratch-fleet";
-import type { Engine, Kit, Spec } from "../kit";
+import { type Engine, type Kit, open, type Spec } from "../kit";
 
 /** The artifact panel's frame (PreviewPane), in an artifact's own tab. */
 const FRAME = 'iframe[title="Preview"]';
 
 /**
- * Navigation start to the frame in the document, first visit and reload
- * alike. Our call, from the brief's invariant: well under 2 s on the host; a
- * reload measured 559 ms live, the first visit 18,992 ms.
+ * Navigation start to the frame in the document on a first visit. Our call,
+ * from the brief's invariant: well under 2 s on the host; the first visit
+ * measured 18,992 ms live, 216-833 ms on this fleet once fixed.
  */
-const BUDGET_MS = 2000;
+const FIRST_BUDGET_MS = 2000;
+
+/** The same on a reload. Our call: reloads read 121-471 ms on this fleet. */
+const RELOAD_BUDGET_MS = 750;
+
+/** A show's own work past its wait for a view. Our call, from the brief: the open and publish read 1-83 ms. */
+const OPEN_BUDGET_MS = 300;
+
+/** A show answered by an open view of its session. Our call: it read 95-209 ms. */
+const VIEWED_BUDGET_MS = 1000;
+
+/** What the decision page's frame draws once its host has loaded. */
+const QUESTION = "Which word reads right?";
 
 /** How long a leg waits for the frame at all before it reads none. */
 const GIVE_UP_MS = 40_000;
@@ -162,42 +193,98 @@ const run = async (kit: Kit) => {
     return { folder, page };
   };
 
-  /** One artifact's tab in a fresh context: its first visit, then a reload. */
-  const visit = async (engine: Engine, id: string) => {
+  /**
+   * One artifact's tab in a fresh context: its first visit, then, once
+   * `drawn` says the frame's page has drawn, a reload.
+   */
+  const visit = async (
+    engine: Engine,
+    id: string,
+    drawn: (tab: Page) => Promise<boolean>
+  ) => {
     const tab = await kit.page("desk", { engine, init: [recordFrame] });
     await tab.goto(`${base}/artifact/${id}`, { waitUntil: "commit" });
     const first = await frameAt(tab);
+    const page = await until(
+      "the frame's page drawn",
+      () => drawn(tab),
+      (now) => now,
+      30_000
+    ).catch(() => false);
     await tab.reload({ waitUntil: "commit" });
     const reload = await frameAt(tab);
-    return { tab, first, reload };
+    return { tab, first, page, reload };
   };
-  const within = (ms: number | null) => ms !== null && ms < BUDGET_MS;
+  const timely = (first: number | null, reload: number | null) =>
+    first !== null &&
+    first < FIRST_BUDGET_MS &&
+    reload !== null &&
+    reload < RELOAD_BUDGET_MS;
+  const folderDrawn = async (tab: Page) => (await wordIn(tab)) === "cold";
+  const pageDrawn = (tab: Page) =>
+    tab
+      .frameLocator(FRAME)
+      .first()
+      .getByText(QUESTION)
+      .first()
+      .isVisible()
+      .catch(() => false);
 
   const engines: Engine[] = ["chromium", "webkit"];
   for (const engine of engines) {
     const { folder, page } = await made(engine);
-    const cold = await visit(engine, folder.id);
-    const word = await until(
-      "the folder's word in its tab",
-      () => wordIn(cold.tab),
-      (now) => now === "cold",
-      10_000
-    ).catch(() => null);
+    const cold = await visit(engine, folder.id, folderDrawn);
     kit.check(
-      `${engine}: 1: the folder preview's tab mounts its frame within ${BUDGET_MS} ms of navigation on a first visit (${cold.first} ms) and on reload (${cold.reload} ms), and reads the folder's page`,
-      within(cold.first) && within(cold.reload) && word === "cold",
-      JSON.stringify({ first: cold.first, reload: cold.reload, word })
+      `${engine}: 1: the folder preview's tab mounts its frame within ${FIRST_BUDGET_MS} ms of navigation on a first visit (${cold.first} ms) and within ${RELOAD_BUDGET_MS} ms on reload (${cold.reload} ms), and reads the folder's page`,
+      timely(cold.first, cold.reload) && cold.page,
+      JSON.stringify(cold, ["first", "reload", "page"])
     );
     await cold.tab.context().close();
 
-    const decision = await visit(engine, page.id);
+    const decision = await visit(engine, page.id, pageDrawn);
     kit.check(
-      `${engine}: 2: the decision page's tab mounts its frame within ${BUDGET_MS} ms of navigation on a first visit (${decision.first} ms) and on reload (${decision.reload} ms)`,
-      within(decision.first) && within(decision.reload),
-      JSON.stringify({ first: decision.first, reload: decision.reload })
+      `${engine}: 2: the decision page's tab mounts its frame within ${FIRST_BUDGET_MS} ms of navigation on a first visit (${decision.first} ms) and within ${RELOAD_BUDGET_MS} ms on reload (${decision.reload} ms), and draws the page`,
+      timely(decision.first, decision.reload) && decision.page,
+      JSON.stringify(decision, ["first", "reload", "page"])
     );
     await decision.tab.context().close();
   }
+
+  // 3. The hub's show of a decision page, with the panel on another artifact.
+  const showPage = async (name: string) => {
+    const shownPage = await fleet.api<{ id: string }>(at, {
+      kind: "page",
+      does: "pick",
+      ask: "Pick the word",
+      name,
+      program: PROGRAM,
+    });
+    await fleet.api<{ id: string }>(at, {
+      kind: "preview",
+      does: "try",
+      ask: "Try the front folder",
+      name: `${name}-front`,
+      dir: join(kit.out, "chromium", "front"),
+    });
+    const started = performance.now();
+    const answer = await fleet.api<{ opened: boolean }>(
+      `${at}/${shownPage.id}/show`,
+      {}
+    );
+    return { ms: Math.round(performance.now() - started), answer };
+  };
+  const bare = await showPage("show-bare");
+  const viewer = await kit.page("desk");
+  await open(viewer, `${base}/session/${session}`, FRAME);
+  const viewed = await showPage("show-viewed");
+  kit.check(
+    `3: a show of a decision page answers within ${SHOWN_WAIT_MS} + ${OPEN_BUDGET_MS} ms with no view open (${bare.ms} ms, not opened), and opened within ${VIEWED_BUDGET_MS} ms with the session's page open (${viewed.ms} ms)`,
+    !bare.answer.opened &&
+      bare.ms < SHOWN_WAIT_MS + OPEN_BUDGET_MS &&
+      viewed.answer.opened &&
+      viewed.ms < VIEWED_BUDGET_MS,
+    JSON.stringify({ bare, viewed })
+  );
 };
 
 const spec: Spec = { name: "artifact-tab-cold", run };
