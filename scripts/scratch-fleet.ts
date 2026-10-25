@@ -1505,6 +1505,45 @@ async function heldByLive(dir: string): Promise<boolean> {
 }
 
 /**
+ * The folder `dir` of a fleet that died, removed: one whose owner lock is
+ * free, the processes it left carrying the folder ended first; one still
+ * held, or no fleet's, stays. Answers whether it went.
+ */
+const sweepDeadFleet = async (dir: string): Promise<boolean> => {
+  let fd: number;
+  try {
+    fd = openLockFile(join(dir, OWNER_FILE), false);
+  } catch {
+    return false;
+  }
+  try {
+    if (!tryLock(fd)) {
+      return false;
+    }
+    // The fleet is gone (its lock is free): what it started that
+    // outlived it still carries the folder in its environment.
+    const ended = await endCarriers([dir]);
+    if (ended.length > 0) {
+      console.log(
+        `… ${ended.length} process(es) a dead fleet left carrying ${dir} in their environment, ended: ${ended.join("; ")}`
+      );
+    }
+    if (await heldByLive(dir)) {
+      return false;
+    }
+    // A fleet that died (a SIGKILL) left its browsers too.
+    await removeFleetBrowsers(dir).catch((error: unknown) =>
+      console.log(`… browsers under ${dir} not removed: ${String(error)}`)
+    );
+    await removeTree(dir);
+    forgetSessiondLink(dir);
+    return true;
+  } finally {
+    unlock(fd);
+  }
+};
+
+/**
  * Removes the folders of scratch fleets that died before they cleaned up (a
  * SIGKILL, a host that went down), from the roots every fleet uses: those
  * whose {@link OWNER_FILE} lock no process holds, in any workspace or on the
@@ -1529,48 +1568,21 @@ export async function sweepDeadFleets(): Promise<string[]> {
         .map((entry) => join(temp, entry))
     : [];
   const removed: string[] = former ? await removeKept(former) : [];
-  for (const root of new Set([
+  const roots = new Set([
     scratch,
     homes,
     short,
     ...(former ? [former] : []),
     ...fleetDirs,
-  ])) {
+  ]);
+  for (const root of roots) {
     // biome-ignore lint/performance/noAwaitInLoops: one root at a time
     const entries = await readdir(root).catch(() => [] as string[]);
     for (const entry of entries) {
       const dir = join(root, entry);
-      let fd: number;
-      try {
-        fd = openLockFile(join(dir, OWNER_FILE), false);
-      } catch {
-        continue;
-      }
-      try {
-        if (!tryLock(fd)) {
-          continue;
-        }
-        // The fleet is gone (its lock is free): what it started that
-        // outlived it still carries the folder in its environment.
-        // biome-ignore lint/performance/noAwaitInLoops: one folder at a time, each read against every process
-        const ended = await endCarriers([dir]);
-        if (ended.length > 0) {
-          console.log(
-            `… ${ended.length} process(es) a dead fleet left carrying ${dir} in their environment, ended: ${ended.join("; ")}`
-          );
-        }
-        if (await heldByLive(dir)) {
-          continue;
-        }
-        // A fleet that died (a SIGKILL) left its browsers too.
-        await removeFleetBrowsers(dir).catch((error: unknown) =>
-          console.log(`… browsers under ${dir} not removed: ${String(error)}`)
-        );
-        await removeTree(dir);
-        forgetSessiondLink(dir);
+      // biome-ignore lint/performance/noAwaitInLoops: one folder at a time, each read against every process
+      if (await sweepDeadFleet(dir)) {
         removed.push(dir);
-      } finally {
-        unlock(fd);
       }
     }
   }
