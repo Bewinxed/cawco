@@ -14,7 +14,8 @@
  *   path on Linux.
  * - b. A conflict: a delegate writes `notes.txt` in another folder, the
  *   person writes it meanwhile, and finish_item comes back with both
- *   versions; nothing is written, the item still runs.
+ *   versions; nothing is written, the item still runs (its delegate holds
+ *   its turn after the answer, so no quiet turn ends it meanwhile).
  * - c. A repository whose checkout lags origin's main (a first delegate's
  *   commit landed there): the next delegate starts from origin's main (it
  *   sees that commit's file, which the checkout lacks), lands through the
@@ -35,6 +36,8 @@ import type { Kit, KitFleet, Spec } from "../kit";
 
 const FINISH = "mcp__cawco__finish_item";
 const TAG = /PROBE-FOLDER-(A|B|C1|C2)\b/;
+/** How finish_item answers a folder landing's conflict (hub work-items.ts `conflictText`). */
+const CONFLICT = "Not landed: a file you changed";
 type Tag = "A" | "B" | "C1" | "C2";
 
 /** Where each tag's folder is, filled once the fleet's sandbox is known. */
@@ -114,6 +117,17 @@ const respond = (request: Seen): Reply => {
   ) {
     step.searched = true;
     return tool("ToolSearch", { query: `select:${FINISH}`, max_results: 1 });
+  }
+  // b, its conflict answered: its turn held while the spec reads its item,
+  // as boundary-writes holds its own. A "done" would end the turn, and the
+  // third quiet turn in a row fails the item (hub work-items.ts
+  // `QUIET_TURNS`), within a second of the answer.
+  if (tag === "B" && step.finish && request.all.includes(CONFLICT)) {
+    return tool("Bash", {
+      command: "sleep 600",
+      description: "Hold the turn",
+      timeout: 600_000,
+    });
   }
   return text("done");
 };
@@ -249,14 +263,12 @@ const run = async (kit: Kit) => {
         (one) =>
           one.afterTool &&
           one.all.includes("PROBE-FOLDER-B") &&
-          one.all.includes("Not landed: a file you changed")
+          one.all.includes(CONFLICT)
       )?.all,
     Boolean,
     600_000
   ).catch(() => "");
-  const conflict = answer.slice(
-    answer.indexOf("Not landed: a file you changed")
-  );
+  const conflict = answer.slice(answer.indexOf(CONFLICT));
   check(
     "b: finish_item comes back with the conflict, both versions shown",
     conflict.includes("### notes.txt") &&

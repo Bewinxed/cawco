@@ -1,0 +1,265 @@
+/**
+ * A scratch fleet's workspace copy as a probe on the host reads and writes
+ * it (agent layer.ts). On the Mac, and for a clone cut before layers, the
+ * copy is a folder of its own at the workspace's path. On Linux the path is
+ * the person's folder itself, seen through the workspace's view: what the
+ * delegate wrote is in the view's upper dir under the workspace's state dir,
+ * and only a process in the view's mount namespace reads the folder as the
+ * delegate does. So no probe reads `workspace.path` on the host for the
+ * delegate's work there; every such read goes through here.
+ *
+ * - {@link copyPath}: where one path of the copy is on the host: the upper's
+ *   entry when the delegate (or the copy's making) wrote it, the folder's
+ *   otherwise, nothing when the delegate deleted it. A folder the delegate
+ *   made whole (its `node_modules`, a harness folder) is all in the upper.
+ * - {@link copyGone}: the copy taken away: on Linux its layer (upper, work
+ *   dirs, record) gone, the folder itself untouched; elsewhere its folder.
+ * - {@link inCopy}: a command run in the copy, through the view's namespace
+ *   while it runs (layer.ts `viewArgv`), as the agent's own git there runs.
+ */
+import { existsSync, lstatSync, readFileSync } from "node:fs";
+import { join, relative } from "node:path";
+import { viewArgv } from "../../packages/agent/src/layer";
+import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "../../packages/core/src/safe-git";
+
+/** A workspace as the probes read its row. */
+export interface CopyRef {
+  id: string;
+  path: string;
+}
+
+/** What a scratch fleet gives these reads: its services' HOME. */
+export interface CopyFleet {
+  home: string;
+}
+
+/** One overlay of a view, as layer.json records it. */
+interface Mount {
+  at: string;
+  upper: string;
+}
+
+/** The part of layer.json these reads use. */
+interface LayerRecord {
+  folder: string;
+  form: "overlay" | "copy";
+  mounts?: Mount[];
+}
+
+/** The workspace's state dir in the fleet's HOME (core paths.ts `workspaceStateDir`). */
+export const stateDirOf = (fleet: CopyFleet, id: string): string =>
+  join(fleet.home, ".cawco", "workspaces", id);
+
+/** Workspace `id`'s layer record, when it has one. */
+const layerOf = (fleet: CopyFleet, id: string): LayerRecord | undefined => {
+  try {
+    return JSON.parse(
+      readFileSync(join(stateDirOf(fleet, id), "layer.json"), "utf8")
+    ) as LayerRecord;
+  } catch {
+    // No layer on record: a copy cut before layers, or one gone.
+  }
+};
+
+/** Whether workspace `ws` is a Linux view of its folder. */
+export const isView = (fleet: CopyFleet, ws: CopyRef): boolean =>
+  layerOf(fleet, ws.id)?.form === "overlay";
+
+const within = (path: string, root: string): boolean =>
+  path === root || path.startsWith(`${root}/`);
+
+/** Whether `path` is an overlay whiteout: a character device 0:0. */
+const isWhiteout = (path: string): boolean => {
+  try {
+    const info = lstatSync(path);
+    return info.isCharacterDevice() && info.rdev === 0;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Where `rel` of workspace `ws`'s copy is on the host, or nothing when the
+ * copy has no such path: in a view, the upper's entry the delegate wrote
+ * (nothing when that is a whiteout, its deletion), else the folder's own;
+ * in a copy of its own, the path under it. A view whose layer is gone reads
+ * as its folder.
+ */
+export const copyPath = (
+  fleet: CopyFleet,
+  ws: CopyRef,
+  rel: string
+): string | undefined => {
+  const at = join(ws.path, rel);
+  const layer = layerOf(fleet, ws.id);
+  if (layer?.form === "overlay") {
+    const mount = [...(layer.mounts ?? [])]
+      .reverse()
+      .find((each) => within(at, each.at));
+    if (mount) {
+      const upper = join(mount.upper, relative(mount.at, at));
+      if (isWhiteout(upper)) {
+        return;
+      }
+      if (existsSync(upper)) {
+        return upper;
+      }
+    }
+  }
+  return existsSync(at) ? at : undefined;
+};
+
+/** Whether `rel` is in workspace `ws`'s copy ({@link copyPath}). */
+export const inCopyExists = (
+  fleet: CopyFleet,
+  ws: CopyRef,
+  rel: string
+): boolean => copyPath(fleet, ws, rel) !== undefined;
+
+/** `rel` of workspace `ws`'s copy as text, or nothing when it has none. */
+export const copyText = (
+  fleet: CopyFleet,
+  ws: CopyRef,
+  rel: string
+): string | undefined => {
+  const at = copyPath(fleet, ws, rel);
+  return at === undefined ? undefined : readFileSync(at, "utf8");
+};
+
+/**
+ * Where a probe writes `rel` into workspace `ws`'s copy while nothing runs
+ * in it (a held workspace, its boundary and view ended): a view's upper,
+ * which an overlay not mounted takes offline (the kernel's overlayfs.rst,
+ * "Changes to underlying filesystems": "Offline changes, when the overlay
+ * is not mounted, are allowed to the upper tree"); a copy's own path
+ * elsewhere.
+ */
+export const copyWritePath = (
+  fleet: CopyFleet,
+  ws: CopyRef,
+  rel: string
+): string => {
+  const at = join(ws.path, rel);
+  const layer = layerOf(fleet, ws.id);
+  if (layer?.form !== "overlay") {
+    return at;
+  }
+  const mount = [...(layer.mounts ?? [])]
+    .reverse()
+    .find((each) => within(at, each.at));
+  if (!mount) {
+    throw new Error(`${at} is in no overlay of workspace ${ws.id}'s view`);
+  }
+  return join(mount.upper, relative(mount.at, at));
+};
+
+/**
+ * The folder on the host that holds workspace `ws`'s own writes to its
+ * folder: a view's upper of the folder itself (what the delegate wrote or
+ * made there, and nothing of the person's), a copy's own folder elsewhere.
+ */
+export const ownWritesOf = (fleet: CopyFleet, ws: CopyRef): string => {
+  const layer = layerOf(fleet, ws.id);
+  const mount =
+    layer?.form === "overlay"
+      ? layer.mounts?.find((each) => each.at === layer.folder)
+      : undefined;
+  return mount?.upper ?? ws.path;
+};
+
+/**
+ * Whether workspace `ws`'s copy is gone: a view's layer (its record, upper
+ * and work dirs) and state dir taken away, the folder itself standing; a
+ * copy of its own, its folder gone.
+ */
+export const copyGone = (fleet: CopyFleet, ws: CopyRef): boolean => {
+  const state = stateDirOf(fleet, ws.id);
+  if (process.platform === "linux") {
+    return !(
+      existsSync(join(state, "layer.json")) || existsSync(join(state, "layer"))
+    );
+  }
+  return !existsSync(ws.path);
+};
+
+/** The view's holder's record: `<pid> <mount namespace> <user namespace>` (layer.ts `viewFile`). */
+const viewPid = (fleet: CopyFleet, id: string): number | undefined => {
+  try {
+    const [pid] = readFileSync(
+      join(stateDirOf(fleet, id), "layer", "view"),
+      "utf8"
+    )
+      .trim()
+      .split(" ");
+    const number = Number(pid);
+    return Number.isInteger(number) && existsSync(`/proc/${number}`)
+      ? number
+      : undefined;
+  } catch {
+    // No view started, or its record gone with it.
+  }
+};
+
+/**
+ * `argv` as it runs in workspace `ws`'s copy, in `cwd` there: entered into
+ * its view while the view runs (layer.ts `viewArgv`), as it is for a copy
+ * of its own. Throws for a view that does not run: nothing reads it so.
+ */
+export const copyArgv = (
+  fleet: CopyFleet,
+  ws: CopyRef,
+  argv: readonly string[],
+  cwd = ws.path
+): { argv: string[]; cwd: string } => {
+  if (!isView(fleet, ws)) {
+    return { argv: [...argv], cwd };
+  }
+  const pid = viewPid(fleet, ws.id);
+  if (pid === undefined) {
+    throw new Error(`workspace ${ws.id}'s view does not run`);
+  }
+  return { argv: viewArgv(pid, cwd, argv), cwd: "/" };
+};
+
+/** `argv` run in workspace `ws`'s copy: its exit, stdout and stderr. */
+export const inCopy = async (
+  fleet: CopyFleet,
+  ws: CopyRef,
+  argv: readonly string[],
+  env: Record<string, string | undefined> = process.env
+): Promise<{ exitCode: number; stderr: string; stdout: string }> => {
+  let run: { argv: string[]; cwd: string };
+  try {
+    run = copyArgv(fleet, ws, argv);
+  } catch (error) {
+    return { exitCode: -1, stderr: String(error), stdout: "" };
+  }
+  const child = Bun.spawn(run.argv, {
+    cwd: run.cwd,
+    env,
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  return { exitCode, stderr, stdout };
+};
+
+/** git in workspace `ws`'s copy ({@link inCopy}), as safe-git.ts says: its stdout, trimmed. */
+export const gitInCopy = async (
+  fleet: CopyFleet,
+  ws: CopyRef,
+  args: readonly string[]
+): Promise<string> =>
+  (
+    await inCopy(
+      fleet,
+      ws,
+      ["git", ...SAFE_GIT_FLAGS, "-C", ws.path, ...args],
+      { ...process.env, ...SAFE_GIT_ENV }
+    )
+  ).stdout.trim();

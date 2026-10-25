@@ -1,9 +1,8 @@
 /**
- * A place's first commit never reads a file whole and never makes a home or
- * cache folder a repository; a delegate works in a private copy of the
- * folder its `cwd` is in, its repository's root when it is in one, and no
- * folder is made a repository for it (agent place-repo.ts `notAProject`,
- * `judge`; agent layer.ts). On a scratch fleet (real hub, agent and sessiond; Claude
+ * No folder is made a repository for a project or a delegate: a delegate
+ * works in a private copy of the folder its `cwd` is in, its repository's
+ * root when it is in one, and a home's large files are never read (hub
+ * place-repo.ts, agent layer.ts). On a scratch fleet (real hub, agent and sessiond; Claude
  * Code against the mock model). The fleet's HOME stands in for the owner's:
  * it holds `.cache/huggingface/hub/blobs/<sha>`, a sparse file of
  * 8,463,330,762 bytes (the blob that stopped Backlot's delegates), and
@@ -21,18 +20,18 @@
  *   folder's (no repository): no `.git` in HOME, and the agent says nothing
  *   of the large file. Inside a workspace the host refuses it as it refuses
  *   A.
- * - C: a project made from a plain folder still becomes a repository, its
- *   files in one commit.
- * - D: a project made from a plain folder holding a sparse file of the same
- *   size becomes a repository, that file left out (named in .gitignore, not
- *   committed) and never read.
+ * - C: a project made from a plain folder stays a plain folder (hub
+ *   place-repo.ts: only a publish makes one a repository), and its
+ *   delegate works in a private copy of it, a folder's: no `.git` in it.
+ * - D: so does a plain folder holding a sparse file of the same size: no
+ *   `.git`, and the agent never names the file.
  *
  *   bun scripts/probe-kit/run.ts place-repo-home
  */
 import { existsSync } from "node:fs";
 import { mkdir, truncate, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { MACHINE, type Reply, until } from "../../scratch-fleet";
+import { MACHINE, type Reply } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 /** The blob's size on obelisk, as the Backlot session reported it. */
@@ -91,13 +90,6 @@ const delegate = (
       (started) => ({ workspaceId: started.workspaceId }),
       (error: Error) => ({ refused: error.message })
     );
-
-const git = (cwd: string, ...args: string[]): Promise<string> =>
-  Bun.$`git -C ${cwd} ${args}`
-    .quiet()
-    .nothrow()
-    .text()
-    .then((out) => out.trim());
 
 /** Whether `folder` holds a `.git`, in words. */
 const gitIn = (folder: string): string =>
@@ -162,39 +154,67 @@ const legB = async (
   );
 };
 
-/** A project made from `folder`, and whether it became a repository within a minute. */
-const madeRepo = async (
+/**
+ * A project made from `folder` and a delegate of its own session there: the
+ * workspace the delegate got, and whether the folder holds a `.git` once
+ * that workspace is made (a project's making once made a plain folder a
+ * repository off its request, within seconds).
+ */
+const projectOf = async (
   fleet: KitFleet,
   name: string,
   folder: string
-): Promise<boolean> => {
-  await fleet.api("/api/projects", { name, machineId: MACHINE, cwd: folder });
-  return await until(
-    `${name} a repository`,
-    () => existsSync(join(folder, ".git")),
-    Boolean,
-    60_000
-  ).catch(() => false);
+): Promise<{
+  git: boolean;
+  workspace: { kind: string; repo_root: string } | string;
+}> => {
+  const project = await fleet.api<{ id: string }>("/api/projects", {
+    name,
+    machineId: MACHINE,
+    cwd: folder,
+  });
+  const parent = await fleet.spawn("claude", `${name} parent`, folder, {
+    projectId: project.id,
+  });
+  const cut = await delegate(fleet, parent, folder, `${name} cut`);
+  const [row] =
+    "workspaceId" in cut && cut.workspaceId
+      ? fleet.query<{ kind: string; repo_root: string }>(
+          "SELECT kind, repo_root FROM workspaces WHERE id = ?",
+          cut.workspaceId
+        )
+      : [];
+  return {
+    git: existsSync(join(folder, ".git")),
+    workspace: row ?? ("refused" in cut ? cut.refused : "no workspace"),
+  };
 };
 
-/** C: a plain project folder still becomes a repository. */
+/** Whether a delegate's workspace is a folder's, made of `folder`, or one the host refused (a boundary inside another). */
+const folderCopy = (
+  workspace: { kind: string; repo_root: string } | string,
+  folder: string
+): boolean =>
+  typeof workspace === "string"
+    ? refusedByHost(workspace)
+    : workspace.kind === "folder" && workspace.repo_root === folder;
+
+/** C: a plain project folder stays a folder, its delegate in a copy of it. */
 const legC = async (
   { check }: Kit,
   fleet: KitFleet,
   plain: string
 ): Promise<void> => {
   await plainFolder(plain);
-  const made = await madeRepo(fleet, "Plain", plain);
-  const files = made ? await git(plain, "ls-files") : "";
-  const commits = made ? await git(plain, "rev-list", "--count", "HEAD") : "";
+  const made = await projectOf(fleet, "Plain", plain);
   check(
-    "C: a plain project folder becomes a repository, its files in one commit",
-    made && files.split("\n").includes("src/file-0.ts") && commits === "1",
-    `made ${made}; ${commits} commit(s); files: ${files.replaceAll("\n", " ")}`
+    "C: a project made from a plain folder stays a plain folder, and its delegate works in a private copy of it, a folder's",
+    !made.git && folderCopy(made.workspace, plain),
+    `${gitIn(plain)}; ${typeof made.workspace === "string" ? made.workspace.slice(0, 600) : JSON.stringify(made.workspace)}`
   );
 };
 
-/** D: a plain project folder holding a large file: made, the file left out unread. */
+/** D: a plain project folder holding a large file stays a folder, the file never read. */
 const legD = async (
   { check }: Kit,
   fleet: KitFleet,
@@ -202,24 +222,17 @@ const legD = async (
 ): Promise<void> => {
   await plainFolder(large);
   await sparse(join(large, "weights.bin"), BLOB_BYTES);
-  const made = await madeRepo(fleet, "Plain large", large);
-  const files = made ? (await git(large, "ls-files")).split("\n") : [];
-  const ignore = made
-    ? (await Bun.file(join(large, ".gitignore")).text()).split("\n")
-    : [];
-  const said = (await fleet.logs("agent"))
+  const made = await projectOf(fleet, "Plain large", large);
+  const named = (await fleet.logs("agent"))
     .split("\n")
-    .filter((line) => line.includes(large))
+    .filter((line) => line.includes("weights.bin"))
     .slice(-3)
     .join(" | ")
     .slice(0, 600);
   check(
-    "D: a plain folder holding a large file becomes a repository, the large file left out and named in .gitignore",
-    made &&
-      files.includes("src/file-0.ts") &&
-      !files.includes("weights.bin") &&
-      ignore.includes("/weights.bin"),
-    `made ${made}; files: ${files.join(" ")}; .gitignore: ${ignore.join(" | ")}; agent: ${said}`
+    "D: a plain folder holding a large file stays a folder: no .git, its delegate in a folder's copy, and the agent never names the file",
+    !made.git && folderCopy(made.workspace, large) && named === "",
+    `${gitIn(large)}; ${typeof made.workspace === "string" ? made.workspace.slice(0, 600) : JSON.stringify(made.workspace)}; agent: ${named || "names nothing of it"}`
   );
 };
 

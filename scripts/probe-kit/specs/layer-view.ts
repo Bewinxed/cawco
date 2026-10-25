@@ -211,7 +211,7 @@ const run = async (kit: Kit) => {
   );
 
   await removeLayer(id, (await readLayer(id)) as Layer);
-  const left = linux ? await endView(id) : [];
+  const left = linux ? (await endView(id)).left : [];
   check(
     "v8: removing the layer ends its view and leaves the folder as landed",
     left.length === 0 &&

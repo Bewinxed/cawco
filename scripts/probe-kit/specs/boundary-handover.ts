@@ -82,6 +82,7 @@ import {
   until,
 } from "../../scratch-fleet";
 import { decisionsOf, startedSince } from "../agent-records";
+import { type CopyRef, copyText, inCopyExists } from "../copy";
 import type { Kit, Spec } from "../kit";
 
 const WAIT = "mcp__cawco__wait_item";
@@ -223,11 +224,13 @@ const respond = (request: Seen): Reply => {
 
 type Fleet = Awaited<ReturnType<Kit["fleet"]>>;
 
+/** The heartbeat file in H's copy, read on the host where its copy keeps it (../copy.ts). */
+const beatText = (fleet: Fleet, clone: CopyRef): string =>
+  copyText(fleet, clone, "beat") ?? "";
+
 /** The heartbeat's lines in H's clone, read on the host. */
-const beats = async (clone: string): Promise<number> =>
-  (await readFile(join(clone, "beat"), "utf8").catch(() => ""))
-    .split("\n")
-    .filter(Boolean).length;
+const beats = (fleet: Fleet, clone: CopyRef): number =>
+  beatText(fleet, clone).split("\n").filter(Boolean).length;
 
 /** H's boundary processes as the keeper holds them. */
 const boundariesOf = async (fleet: Fleet, id: string): Promise<string[]> =>
@@ -435,15 +438,18 @@ const run = async (kit: Kit) => {
       Boolean(loopPid && firstNs),
     `item ${waiting?.state ?? "missing"}; loop pid ${loopPid ?? "unread"}; pid namespace ${firstNs ?? "unread"}`
   );
-  const clone =
-    fleet.query<{ path: string }>(
-      "SELECT path FROM workspaces WHERE id = ?",
-      h.workspaceId
-    )[0]?.path ?? "";
+  const clone: CopyRef = {
+    id: h.workspaceId,
+    path:
+      fleet.query<{ path: string }>(
+        "SELECT path FROM workspaces WHERE id = ?",
+        h.workspaceId
+      )[0]?.path ?? "",
+  };
   const had = await boundariesOf(fleet, h.workspaceId);
 
   await olderFormRestart(fleet, home, h.workspaceId);
-  const beatsBefore = await beats(clone);
+  const beatsBefore = beats(fleet, clone);
   // More than a beat before H's turn reads it: a turn that comes back
   // within the loop's own 2 s would read the same count from a live loop
   // (3cf54d3f1's run: 1, then 1, then 5 six seconds on).
@@ -459,9 +465,9 @@ const run = async (kit: Kit) => {
   const alive = ALIVE.exec(second?.all ?? "")?.[1];
   const counted = Number(BEATS.exec(second?.all ?? "")?.[1] ?? 0);
   await Bun.sleep(6000);
-  const beatsAfter = await beats(clone);
+  const beatsAfter = beats(fleet, clone);
   kit.note(
-    `1: the heartbeat's beats, each its second: ${(await readFile(join(clone, "beat"), "utf8").catch(() => "")).trim().split("\n").join(" ")}`
+    `1: the heartbeat's beats, each its second: ${beatText(fleet, clone).trim().split("\n").join(" ")}`
   );
 
   kit.check(
@@ -521,7 +527,8 @@ const foregroundAcross = async (
   ).catch(() => undefined);
   const started = await until(
     "F's foreground command started",
-    () => (clone ? existsSync(join(clone, "fg.started")) : false),
+    () =>
+      clone ? inCopyExists(fleet, { id, path: clone }, "fg.started") : false,
     Boolean,
     240_000
   ).catch(() => false);
@@ -635,7 +642,7 @@ const narrowedStops = async (
   fleet: Fleet,
   home: string,
   h: {
-    clone: string;
+    clone: CopyRef;
     id: string;
     instanceId: string;
     loopPid: string | undefined;
@@ -659,9 +666,9 @@ const narrowedStops = async (
     30_000
   ).catch(() => boundariesOf(fleet, h.id));
   const took = Date.now() - renamed;
-  const beatsThen = await beats(h.clone);
+  const beatsThen = beats(fleet, h.clone);
   await Bun.sleep(6000);
-  const beatsLater = await beats(h.clone);
+  const beatsLater = beats(fleet, h.clone);
   const granted = await grantedNow(home, h.id);
   kit.check(
     `4: with no word to H, its boundary is replaced within ${LOOK_BOUND_MS / 1000} s of the rename, the new one started without the project's folder`,
@@ -744,7 +751,7 @@ const deletedStops = async (
   fleet: Fleet,
   home: string,
   h: {
-    clone: string;
+    clone: CopyRef;
     id: string;
     instanceId: string;
     /** The project's other sessions, F and the parent, asleep too before the delete. */
@@ -794,9 +801,9 @@ const deletedStops = async (
   }
   // The loop runs on through the sessions' sleep: what the delete's stop
   // must find in H's boundary, read a beat apart.
-  const beatsAsleep = await beats(h.clone);
+  const beatsAsleep = beats(fleet, h.clone);
   await Bun.sleep(BEAT_GAP_MS);
-  const beatsBeforeDelete = await beats(h.clone);
+  const beatsBeforeDelete = beats(fleet, h.clone);
   kit.check(
     "6: H's loop runs on with H, F and their parent asleep, before the delete",
     beatsBeforeDelete > beatsAsleep,
@@ -815,9 +822,9 @@ const deletedStops = async (
     30_000
   ).catch(() => boundariesOf(fleet, h.id));
   const took = Date.now() - asked;
-  const beatsThen = await beats(h.clone);
+  const beatsThen = beats(fleet, h.clone);
   await Bun.sleep(6000);
-  const beatsLater = await beats(h.clone);
+  const beatsLater = beats(fleet, h.clone);
   // The stop the hub's move of the folder made, as the agent records it.
   const said = (await stopsOf(home, h.id)).find(
     (one) =>
