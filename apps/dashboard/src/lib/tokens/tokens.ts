@@ -602,6 +602,7 @@ export type TokenSize =
   | "size.c-tree-mark-num-w"
   | "size.c-usage-cap-lh"
   | "size.c-usage-strip-row"
+  | "size.c-usage-strip-clip"
   | "size.c-usage-strip-home-h"
   | "size.c-usage-pct-w"
   | "size.c-filed-task-w"

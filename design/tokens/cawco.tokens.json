@@ -6736,6 +6736,19 @@
         }
       }
     },
+    "c-usage-strip-clip": {
+      "$type": "dimension",
+      "$value": {
+        "value": 39,
+        "unit": "px"
+      },
+      "$description": "The clip over the usage strip's row, hiding a wrapped second row: the row and a space-1 of room above it for the time's glyphs, which reach past their 16px line.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc({size.c-usage-strip-row} + {space.space-1})"
+        }
+      }
+    },
     "c-usage-strip-home-h": {
       "$type": "dimension",
       "$value": {

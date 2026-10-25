@@ -504,9 +504,14 @@
          says. Where the rail is too narrow for both, opencode's cell wraps
          onto a second row the strip does not show (it stays in the strip's
          label and the popover), rather than Claude's answer being cut: one
-         row of cells, 34px (the first line, 3px, the caption). -->
+         row of cells, 34px (the first line, 3px, the caption). The clip
+         that hides the second row starts --space-1 above the first, its
+         box drawn that much higher and its row put back by as much padding:
+         the time's glyphs reach past their 16px line (the label face's
+         ascent), and a clip at the line's top cut them (the owner's audit,
+         "45m" cut 1px). -->
     <span
-      class="flex h-c-usage-strip-row min-w-0 flex-1 flex-wrap gap-x-space-2 overflow-clip group-variant-home/strip:gap-x-space-6"
+      class="-mt-space-1 flex h-c-usage-strip-clip min-w-0 flex-1 flex-wrap gap-x-space-2 overflow-clip pt-space-1 group-variant-home/strip:gap-x-space-6"
     >
       {#if claude}
         <span

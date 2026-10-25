@@ -83,6 +83,7 @@
   import ProjectHead from "#lib/cawco/project/ProjectHead.svelte";
   import StarterCards from "#lib/cawco/project/StarterCards.svelte";
   import ViewBar from "#lib/cawco/project/ViewBar.svelte";
+  import ViewTabs from "#lib/cawco/project/ViewTabs.svelte";
   import {
     archiveTask,
     createTask,
@@ -150,16 +151,10 @@
     AlertAction,
     AlertDescription,
   } from "#lib/components/ui/alert/index.js";
-  import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
-  import {
-    TabItem,
-    Tabs,
-    TabsList,
-  } from "#lib/components/ui/fluid-tabs/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
@@ -1597,34 +1592,12 @@
         : "pe-space-6 pb-space-4 ps-space-7 max-desk:px-space-5",
     ]}
   >
-    <Tabs onValueChange={choose} value={current}>
-      <TabsList aria-label="Views" scrollable>
-        {#each tabs as each (each.value)}
-          <TabItem
-            href={hrefOf(null, each.value)}
-            label={each.label}
-            value={each.value}
-          >
-            {#snippet trail()}
-              {#if each.draft}
-                <!-- The tag stands after the view's name, never over it. -->
-                <Badge class="ms-space-1" variant="secondary"
-                  ><span>draft</span></Badge
-                >
-              {:else if each.value === "decisions" && decisions.waiting > 0}
-                <!-- The Decisions tab's trail: the pages still waiting for
-                     picks, as Needs you's number. -->
-                <span
-                  data-slot="tab-num"
-                  class="ms-space-1 type-meta num text-ink-muted"
-                  >{decisions.waiting}</span
-                >
-              {/if}
-            {/snippet}
-          </TabItem>
-        {/each}
-      </TabsList>
-    </Tabs>
+    <ViewTabs
+      {current}
+      hrefOf={(view) => hrefOf(null, view)}
+      onchoose={choose}
+      views={barViews}
+    />
     {#if trailing}
       <!-- Under 640px New task and Ask Caw are in the head's ⋯: the rule
            stands only while Needs you follows it there. -->

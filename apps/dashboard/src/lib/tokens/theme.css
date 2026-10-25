@@ -561,6 +561,7 @@
   --spacing-c-tree-mark-num-w: var(--c-tree-mark-num-w);
   --spacing-c-usage-cap-lh: var(--c-usage-cap-lh);
   --spacing-c-usage-strip-row: var(--c-usage-strip-row);
+  --spacing-c-usage-strip-clip: var(--c-usage-strip-clip);
   --spacing-c-usage-strip-home-h: var(--c-usage-strip-home-h);
   --spacing-c-usage-pct-w: var(--c-usage-pct-w);
   --spacing-c-filed-task-w: var(--c-filed-task-w);

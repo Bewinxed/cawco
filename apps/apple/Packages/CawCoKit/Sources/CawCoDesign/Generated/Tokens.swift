@@ -1134,6 +1134,8 @@ public enum Size {
     public static let cUsageCapLh: Double = 15
     /// The usage strip's one row of cells: first line, gap, caption.
     public static let cUsageStripRow: Double = 35
+    /// The clip over the usage strip's row, hiding a wrapped second row: the row and a space-1 of room above it for the time's glyphs, which reach past their 16px line.
+    public static let cUsageStripClip: Double = 39
     /// The usage strip's hit height on the home card.
     public static let cUsageStripHomeH: Double = 56
     /// The week share's column: as wide as "100%" in the figure face.

@@ -423,6 +423,7 @@
 @custom-variant slot-editor-wrap (&[data-slot="editor-wrap"]);
 @custom-variant slot-end (&[data-slot="end"]);
 @custom-variant slot-ff-tab (&[data-slot="ff-tab"]);
+@custom-variant slot-ff-tabs-list (&[data-slot="ff-tabs-list"]);
 @custom-variant slot-field (&[data-slot="field"]);
 @custom-variant slot-field-content (&[data-slot="field-content"]);
 @custom-variant slot-field-label (&[data-slot="field-label"]);

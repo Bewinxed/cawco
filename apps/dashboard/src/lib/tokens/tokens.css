@@ -1316,6 +1316,8 @@
     --c-usage-strip-row: calc(
       var(--icon-md) + var(--space-1) + var(--c-usage-cap-lh)
     );
+    /* The clip over the usage strip's row, hiding a wrapped second row: the row and a space-1 of room above it for the time's glyphs, which reach past their 16px line. */
+    --c-usage-strip-clip: calc(var(--c-usage-strip-row) + var(--space-1));
     /* The usage strip's hit height on the home card. */
     --c-usage-strip-home-h: 56px;
     /* The week share's column: as wide as "100%" in the figure face. */

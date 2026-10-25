@@ -227,7 +227,17 @@
         </span>
       {/if}
       {#each task.labels.slice(0, 2) as label (label)}
-        <Badge variant="secondary"><span>{label}</span></Badge>
+        <!-- A tag longer than the card ends in its ellipsis inside the
+             badge (DESIGN.md, The Truncate Inside Rule), never past the
+             card's edge; the task's own page lists it whole. Its line is
+             the badge's height, so the clip the ellipsis needs leaves the
+             descenders whole. -->
+        <Badge class="max-w-full" title={label} variant="secondary"
+          ><span
+            class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap leading-icon-lg"
+            >{label}</span
+          ></Badge
+        >
       {/each}
       {#if task.labels.length > 2}
         <Badge data-num figures="tabular" variant="secondary"

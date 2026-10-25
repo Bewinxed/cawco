@@ -10,6 +10,10 @@
 export const viewsWords = {
   /** The strip's ghost action, and the head's ⋯ on a phone, while Caw can start. */
   ask: "Ask Caw for a view",
+  /** The strip's ⋯ after its tabs, holding the views with no room to stand as one. */
+  more: "More views",
+  /** The strip's one menu where no tab has room, named for the view on screen. */
+  pick: (view: string) => `View: ${view}`,
   /** The ask's composer, a view in a sentence. */
   placeholder: "A view of what is scheduled this week…",
   /** A draft's bar, over the view, with its two answers. */

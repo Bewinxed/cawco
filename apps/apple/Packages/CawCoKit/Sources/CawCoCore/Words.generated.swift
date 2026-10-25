@@ -2408,6 +2408,14 @@ public enum Words {
         /// The strip's ghost action, and the head's ⋯ on a phone, while Caw can start.
         public static let ask = "Ask Caw for a view"
 
+        /// The strip's ⋯ after its tabs, holding the views with no room to stand as one.
+        public static let more = "More views"
+
+        /// The strip's one menu where no tab has room, named for the view on screen.
+        public static func pick(view: String) -> String {
+            "View: \(view)"
+        }
+
         /// The ask's composer, a view in a sentence.
         public static let placeholder = "A view of what is scheduled this week…"
 

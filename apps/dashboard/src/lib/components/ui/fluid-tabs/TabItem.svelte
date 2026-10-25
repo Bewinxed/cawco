@@ -459,7 +459,7 @@
     data-slot="hit"
     data-hit
     aria-selected={selected}
-    class="touch-hit pick-inherit static z-3 flex min-w-0 flex-auto items-center gap-(--hit-gap) self-stretch rounded-inherit border-none border-current background-transparent py-0 ps-(--hit-ps) text-(length:--text) leading-none whitespace-nowrap text-inherit no-underline outline-off last:pe-(--px) before:absolute before:inset-0 before:-z-1 in-variant-folder:aria-selected:before:-inset-x-(--flare) in-variant-folder:aria-selected:before:clip-tab-foot"
+    class="touch-hit pick-inherit static z-3 flex min-w-0 flex-auto items-center gap-(--hit-gap) self-stretch rounded-inherit border-none border-current background-transparent py-0 ps-(--hit-ps) text-(length:--text) leading-none whitespace-nowrap text-inherit no-underline outline-off last:pe-(--px-end,var(--px)) before:absolute before:inset-0 before:-z-1 in-variant-folder:aria-selected:before:-inset-x-(--flare) in-variant-folder:aria-selected:before:clip-tab-foot"
     style:--hit-gap="calc(var(--gap) + var(--space-1))"
     style:--hit-ps="var(--px-start, var(--px))"
     draggable={href ? "false" : undefined}

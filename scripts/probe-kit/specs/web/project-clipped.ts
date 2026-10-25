@@ -1,0 +1,813 @@
+/**
+ * The project page cuts no label and stacks no header on another, at every
+ * width from a phone's 320 to a desk's 1440, on a scratch fleet in the built
+ * dashboard (the live audit's defects, report 0b676ac6 §4: the view tabs cut
+ * to "Tab…" at 900 and "Canvas" at 1100, a card's tag badges cut by the
+ * split beside the open task at 1100, the rail's "Finished 39" drawn over
+ * "Working 1", the usage strip's "45m" cut 1px).
+ *
+ * The project is a working one: thirty tasks across its stages, two and
+ * three tags each (`ready-for-agent`, `apple`, `bug`…, one tag longer than
+ * a card), some after others (the Canvas tab), some set for a date
+ * (Calendar), some that made something (Made), so the strip holds every
+ * view; the rail holds one session working and a dozen finished, two-digit
+ * counts; every answer carries the account's usage, so the usage strip says
+ * its time. On Chromium and WebKit, at 320, 390, 680, 900, 1100 and 1440,
+ * the board alone and with a task open (beside the board from 900, its own
+ * page under it), and from 900 the board with the rail dragged to 216 and
+ * 248 (where Working/Finished squeeze) and 420 (from 1100: under it the
+ * widest rail leaves the strip no room for its own actions, a finding
+ * apart), Finished chosen, read from the engine:
+ *
+ *  0. The page stands: its words read, its cards drawn, no error thrown.
+ *  1. Every text node's range rects against every ancestor that clips it
+ *     (overflow other than visible, clip-path, paint containment), walked by
+ *     containing block, each clip cutting what the ones inside it left: no
+ *     rect part shown and part cut, totalling zero cut labels. Not counted:
+ *     text that ends in its own ellipsis or line clamp (DESIGN.md, The
+ *     Truncate Inside Rule), and content a scroller has scrolled past along
+ *     the axis it scrolls with the box it is drawn in (a column's cards
+ *     under its foot, the sideways board), except a tab strip's, where a tab
+ *     cut at rest is a cut label whatever scrolls it, and a tab's own
+ *     ellipsis is one too, but for Working and Finished with the rail at its
+ *     narrowest (216), where their labels give way by design (TabsList's
+ *     `work` strip): said as a note there. Each card's tags stand
+ *     inside the card. From 900, the usage strip says its time, and how far
+ *     its glyphs reach above their line (what its clip had cut).
+ *  2. No two header boxes overlap: within each tab strip, no tab's words
+ *     over another's, and no tab's words or count under the sheet of a
+ *     folder tab drawn over it; and the page's heads (the rail's head, the
+ *     bar, the project's head, the view strip, a column's head, the task's
+ *     head) each clear of the others, as drawn.
+ *
+ *   bun scripts/probe-kit/run.ts web project-clipped
+ *   PROBE_CLIPPED_ENGINES=chromium bun scripts/probe-kit/run.ts web project-clipped
+ */
+// biome-ignore-all lint/performance/noAwaitInLoops: one page, one width at a time
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import type { Page } from "playwright-core";
+import { MACHINE, type Reply, type Seen, until } from "../../../scratch-fleet";
+import { type Engine, type Kit, open, type Spec, settle } from "../../kit";
+
+const WORK = "WORK";
+/** The account's usage on every answer: its 5-hour window back in 45 minutes (the usage strip's "45m"). */
+const limits = (): Reply["limits"] => ({
+  fiveHour: { resetsAt: Date.now() + 45 * 60_000, utilization: 0.62 },
+  sevenDay: { resetsAt: Date.now() + 4 * 86_400_000, utilization: 0.31 },
+});
+const respond = (request: Seen): Reply =>
+  request.tools && request.last.includes(WORK)
+    ? {
+        words: Array.from({ length: 600 }, (_, i) => `step ${i + 1}. `),
+        everyMs: 500,
+        limits: limits(),
+      }
+    : { words: ["Done."], everyMs: 20, limits: limits() };
+
+const WIDTHS = (process.env.PROBE_CLIPPED_WIDTHS ?? "320,390,680,900,1100,1440")
+  .split(",")
+  .map(Number);
+const ENGINES: Engine[] = (
+  process.env.PROBE_CLIPPED_ENGINES ?? "chromium,webkit"
+).split(",") as Engine[];
+const FINISHED = Number(process.env.PROBE_CLIPPED_FINISHED ?? 12);
+/** The rail's narrowest and a wide drag (Shell's RAIL_MIN, toward its RAIL_MAX). */
+const RAIL_MIN = 216;
+const RAILS = [RAIL_MIN, 248, 420] as const;
+/** Under this window the widest rail leaves the page too little for the strip's own actions (a finding, not this spec's). */
+const WIDE_RAIL_FROM = 1100;
+
+const TAGS = [
+  ["ready-for-agent", "apple", "bug"],
+  ["waiting-on-the-app-store-review-team", "apple"],
+  ["apple", "bug"],
+  ["ready-for-agent", "design"],
+  ["bug", "needs-review", "apple"],
+  ["infrastructure", "ready-for-agent"],
+];
+const TITLES = [
+  "Tide tables read the harbour feed in GMT",
+  "Calendar shows all fourteen sessions",
+  "Push the release notes to the landing page",
+  "Fix the widget's timezone on the lock screen",
+  "Sync the tracker when a task moves",
+  "Draw the tide curve on the watch face",
+  "Check the push certificate before it expires",
+  "Rename the export menu",
+  "Move the settings into one sheet",
+  "Cache the feed for an offline morning",
+];
+const TASKS = 30;
+
+interface Setup {
+  url: string;
+}
+
+const setUp = async (kit: Kit): Promise<Setup> => {
+  const fleet = await kit.fleet(respond);
+  fleet.launch("sessiond");
+  await fleet.sessiondUp();
+  fleet.launch("hub");
+  await fleet.hubUp();
+  fleet.fileAccount();
+  fleet.launch("agent");
+  await fleet.agentUp();
+  await fleet.accountSignedIn();
+  const home = fleet.env.HOME as string;
+  const src = join(fleet.sandbox, "tidewater");
+  await writeFile(
+    join(home, ".gitconfig"),
+    "[user]\n\tname = Owner\n\temail = owner@probe.test\n"
+  );
+  await mkdir(src, { recursive: true });
+  await Bun.$`git init -q -b main && git remote add origin https://github.com/probe/tidewater.git && echo t > README.md && git add -A && git commit -qm 'First commit'`
+    .cwd(src)
+    .env({ ...process.env, HOME: home })
+    .quiet();
+  const project = await fleet.api<{ id: string }>("/api/projects", {
+    name: "Tidewater",
+    machineId: MACHINE,
+    cwd: src,
+  });
+  const stages = await fleet.api<{
+    stages: { kind: string; name: string }[];
+  }>(`/api/projects/${project.id}/stages`);
+  const placed = stages.stages
+    .filter((stage) => stage.kind !== "dropped")
+    .map((stage) => stage.name);
+  for (let n = 1; n <= TASKS; n += 1) {
+    const day = String(1 + (n % 27)).padStart(2, "0");
+    await fleet.api(`/api/projects/${project.id}/tasks`, {
+      title: `${TITLES[n % TITLES.length]}${n > TITLES.length ? ` (${n})` : ""}`,
+      stage: placed[n % placed.length],
+      labels: TAGS[n % TAGS.length],
+      ...(n > 3 && n % 4 === 0 ? { after: [`tsk-${n - 3}`] } : {}),
+      ...(n % 5 === 0 ? { fields: { due: `2026-11-${day}` } } : {}),
+      ...(n % 7 === 0 ? { outputs: ["notes.md"] } : {}),
+      ...(n % 3 === 0 ? { todos: ["Read the feed", "Write the table"] } : {}),
+    });
+  }
+  // The rail: one session working, a dozen finished (two-digit counts).
+  const working = await fleet.spawn("claude", "Tide feed rework", src);
+  await fleet.send(working, `${WORK} for a while.`);
+  const finished: string[] = [];
+  for (let n = 1; n <= FINISHED; n += 1) {
+    const id = await fleet.spawn("claude", `Finished session ${n}`, src);
+    await fleet.send(id, "Say done.");
+    finished.push(id);
+  }
+  const turns = () =>
+    finished.map(
+      (id) =>
+        fleet.query<{ turn_open_at: number | null }>(
+          "SELECT turn_open_at FROM instances WHERE id = ?",
+          id
+        )[0]
+    );
+  await until(
+    "every short session's turn ended",
+    turns,
+    (rows) => rows.every((row) => row && !row.turn_open_at),
+    180_000
+  );
+  const base = await fleet.dashboard();
+  return { url: `${base}/project/${project.id}` };
+};
+
+interface Cut {
+  axis: "x" | "y";
+  by: string;
+  lost: number;
+  text: string;
+  where: string;
+}
+interface Overlap {
+  a: string;
+  b: string;
+  by: number;
+}
+interface Read {
+  /** The task cards drawn, and how many words it read: what a pass stands on. */
+  cards: number;
+  cuts: Cut[];
+  /** The usage strip's time, and how far its glyphs reach above its 16px line. */
+  digits: { above: number; text: string } | null;
+  overlaps: Overlap[];
+  read: number;
+  scrolled: string[];
+  /** Tag badges standing past their card's edge. */
+  spills: string[];
+  truncated: string[];
+}
+
+/**
+ * Every cut label and every overlapping header on the page as drawn. One
+ * function serialized into the page, everything it needs inside it.
+ */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one function serialized into the page
+function readPage(giveWay: boolean): Read {
+  const SLACK = 0.5;
+  // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
+  const PAINT = /paint|strict|content/;
+  // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
+  const CONTAINS = /paint|layout|strict|content/;
+  // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
+  const WILL_HOLD = /transform|filter|perspective/;
+  interface Box {
+    bottom: number;
+    left: number;
+    right: number;
+    top: number;
+  }
+  const styles = new Map<Element, CSSStyleDeclaration>();
+  const style = (el: Element) => {
+    let known = styles.get(el);
+    if (!known) {
+      known = getComputedStyle(el);
+      styles.set(el, known);
+    }
+    return known;
+  };
+  const shown = (el: Element): boolean => {
+    for (let up: Element | null = el; up; up = up.parentElement) {
+      const s = style(up);
+      if (
+        s.display === "none" ||
+        s.visibility === "hidden" ||
+        s.visibility === "collapse" ||
+        Number(s.opacity) === 0 ||
+        s.contentVisibility === "hidden"
+      ) {
+        return false;
+      }
+    }
+    return true;
+  };
+  const clips = (s: CSSStyleDeclaration) =>
+    s.overflowX !== "visible" ||
+    s.overflowY !== "visible" ||
+    s.clipPath !== "none" ||
+    PAINT.test(s.contain);
+  const holdsFixed = (s: CSSStyleDeclaration) =>
+    s.transform !== "none" ||
+    s.filter !== "none" ||
+    s.perspective !== "none" ||
+    (s.backdropFilter ?? "none") !== "none" ||
+    CONTAINS.test(s.contain) ||
+    WILL_HOLD.test(s.willChange);
+  const clippers = (el: Element): Element[] => {
+    const list: Element[] = [];
+    let { position } = style(el);
+    for (
+      let up = el.parentElement;
+      up && up !== document.documentElement && up !== document.body;
+      up = up.parentElement
+    ) {
+      const s = style(up);
+      let holds = true;
+      if (position === "fixed") {
+        holds = holdsFixed(s);
+      } else if (position === "absolute") {
+        holds = s.position !== "static" || holdsFixed(s);
+      }
+      if (holds) {
+        if (clips(s)) {
+          list.push(up);
+        }
+        ({ position } = s);
+      }
+    }
+    return list;
+  };
+  const inner = (el: Element): Box => {
+    const r = el.getBoundingClientRect();
+    const own = el as HTMLElement;
+    const sx = own.offsetWidth > 0 ? r.width / own.offsetWidth : 1;
+    const sy = own.offsetHeight > 0 ? r.height / own.offsetHeight : 1;
+    const s = style(el);
+    const left = r.left + el.clientLeft * sx;
+    const top = r.top + el.clientTop * sy;
+    return {
+      left: s.overflowX === "visible" ? r.left : left,
+      top: s.overflowY === "visible" ? r.top : top,
+      right: s.overflowX === "visible" ? r.right : left + el.clientWidth * sx,
+      bottom: s.overflowY === "visible" ? r.bottom : top + el.clientHeight * sy,
+    };
+  };
+  /** `box` as drawn: cut by every clip in `by`, or null where none of it shows. */
+  const seen = (box: Box, by: Element[]): Box | null => {
+    let r = box;
+    for (const clip of by) {
+      const c = inner(clip);
+      r = {
+        left: Math.max(r.left, c.left),
+        top: Math.max(r.top, c.top),
+        right: Math.min(r.right, c.right),
+        bottom: Math.min(r.bottom, c.bottom),
+      };
+      if (r.right - r.left <= SLACK || r.bottom - r.top <= SLACK) {
+        return null;
+      }
+    }
+    return r;
+  };
+  const name = (el: Element) => {
+    const slot = el.getAttribute("data-slot");
+    const cls = [...el.classList].slice(0, 2).join(".");
+    return `${el.tagName.toLowerCase()}${slot ? `[${slot}]` : ""}${!slot && cls ? `.${cls}` : ""}`;
+  };
+  const path = (el: Element) => {
+    const parts: string[] = [];
+    for (
+      let up: Element | null = el;
+      up && up !== document.body && parts.length < 4;
+      up = up.parentElement
+    ) {
+      parts.unshift(name(up));
+    }
+    return parts.join(" > ");
+  };
+  const words = (text: string) => {
+    const one = text.replace(/\s+/g, " ").trim();
+    return one.length > 40 ? `${one.slice(0, 38)}…` : one;
+  };
+  /** Text its own box truncates by design: an ellipsis or a line clamp. */
+  const truncates = (el: Element) => {
+    const s = style(el);
+    return (
+      s.textOverflow === "ellipsis" ||
+      (s.getPropertyValue("-webkit-line-clamp") || "none") !== "none"
+    );
+  };
+  /** Room to scroll on `axis`: what a scroller cuts there is scrolled, not cut. */
+  const scrolls = (el: Element, axis: "x" | "y") => {
+    const s = style(el);
+    const o = axis === "x" ? s.overflowX : s.overflowY;
+    if (!(o === "auto" || o === "scroll")) {
+      return false;
+    }
+    return axis === "x"
+      ? el.scrollWidth > el.clientWidth + 1
+      : el.scrollHeight > el.clientHeight + 1;
+  };
+
+  /** The block the words are drawn in: the nearest one with a fill, an edge or a shadow. */
+  const holderOf = (el: Element, within: Element): Element | null => {
+    for (
+      let up: Element | null = el;
+      up && up !== within;
+      up = up.parentElement
+    ) {
+      const s = style(up);
+      const painted =
+        (s.backgroundColor !== "rgba(0, 0, 0, 0)" &&
+          s.backgroundColor !== "transparent") ||
+        s.boxShadow !== "none" ||
+        (Number.parseFloat(s.borderTopWidth) > 0 &&
+          s.borderTopStyle !== "none");
+      if (painted && !s.display.startsWith("inline")) {
+        return up;
+      }
+    }
+    return null;
+  };
+  /** The words' own block is cut by `clip` on `axis` too: scrolled, not spilled. */
+  const scrolledWith = (el: Element, clip: Element, axis: "x" | "y") => {
+    const holder = holderOf(el, clip);
+    if (!holder) {
+      return true;
+    }
+    const h = holder.getBoundingClientRect();
+    const c = inner(clip);
+    return axis === "x"
+      ? h.left < c.left - SLACK || h.right > c.right + SLACK
+      : h.top < c.top - SLACK || h.bottom > c.bottom + SLACK;
+  };
+  const cuts: Cut[] = [];
+  const scrolled = new Set<string>();
+  let read = 0;
+  const truncated: string[] = [];
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const text = node as Text;
+    const parent = text.parentElement;
+    if (
+      !(parent && text.data.trim()) ||
+      parent.closest("script, style, noscript, template, svg, .sr-only") ||
+      !shown(parent)
+    ) {
+      continue;
+    }
+    const range = document.createRange();
+    range.selectNodeContents(text);
+    const rects = [...range.getClientRects()].filter(
+      (r) => r.width > SLACK && r.height > SLACK
+    );
+    if (rects.length === 0) {
+      continue;
+    }
+    const own = clips(style(parent)) ? [parent] : [];
+    const by = [...own, ...clippers(parent)];
+    const chrome = parent.closest('[role="tablist"]') !== null;
+    read += 1;
+    for (const rect of rects) {
+      // Wholly cut away somewhere (scrolled off, folded shut): not drawn.
+      if (seen(rect, by) === null) {
+        continue;
+      }
+      // Each clip, nearest first, cuts what the ones inside it left: a cut
+      // is said once, by the box that made it.
+      let r: Box = rect;
+      for (const clip of by) {
+        const c = inner(clip);
+        const x = Math.max(0, c.left - r.left) + Math.max(0, r.right - c.right);
+        const y = Math.max(0, c.top - r.top) + Math.max(0, r.bottom - c.bottom);
+        for (const [axis, lost] of [
+          ["x", x],
+          ["y", y],
+        ] as const) {
+          if (lost <= SLACK) {
+            continue;
+          }
+          // Its own ellipsis or clamp (on its box or the block it ends in):
+          // the design's truncation, said apart; a tab's is a cut tab, but
+          // for Working and Finished on the rail at its narrowest, whose
+          // labels give way inside their ellipsis there by design
+          // (TabsList's `work` strip, DESIGN.md "the name gives way first").
+          if (
+            truncates(clip) &&
+            (!chrome || (giveWay && parent.closest("[data-work-tabs]")))
+          ) {
+            truncated.push(`“${words(text.data)}” (${path(parent)})`);
+            continue;
+          }
+          // Content a scroller has scrolled past, on the axis it scrolls:
+          // the box the words are drawn in is past the edge with them.
+          // Words that ran out of their own box (a tag wider than its card)
+          // are cut whatever scrolls them.
+          if (
+            !chrome &&
+            scrolls(clip, axis) &&
+            scrolledWith(parent, clip, axis)
+          ) {
+            scrolled.add(`“${words(text.data)}” past ${name(clip)}`);
+            continue;
+          }
+          cuts.push({
+            text: words(text.data),
+            where: path(parent),
+            by: `${path(clip)} (overflow ${style(clip).overflowX}/${style(clip).overflowY}, ${Math.round(c.right - c.left)}×${Math.round(c.bottom - c.top)})`,
+            axis,
+            lost: Math.round(lost * 10) / 10,
+          });
+        }
+        r = {
+          left: Math.max(r.left, c.left),
+          top: Math.max(r.top, c.top),
+          right: Math.min(r.right, c.right),
+          bottom: Math.min(r.bottom, c.bottom),
+        };
+      }
+    }
+  }
+
+  // Headers: within each tab strip, each tab's words; and the page's heads.
+  const overlaps: Overlap[] = [];
+  const meet = (a: Box, b: Box) =>
+    Math.max(
+      0,
+      Math.min(
+        Math.min(a.right, b.right) - Math.max(a.left, b.left),
+        Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top)
+      )
+    ) *
+    (Math.min(a.right, b.right) > Math.max(a.left, b.left) &&
+    Math.min(a.bottom, b.bottom) > Math.max(a.top, b.top)
+      ? 1
+      : 0);
+  const textBoxes = (el: Element): Box[] => {
+    const boxes: Box[] = [];
+    const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let n = w.nextNode(); n; n = w.nextNode()) {
+      const p = n.parentElement;
+      if (
+        !(p && (n as Text).data.trim()) ||
+        p.closest(".sr-only") ||
+        !shown(p)
+      ) {
+        continue;
+      }
+      const range = document.createRange();
+      range.selectNodeContents(n);
+      const by = [...(clips(style(p)) ? [p] : []), ...clippers(p)];
+      for (const r of range.getClientRects()) {
+        const drawn = seen(r, by);
+        if (drawn) {
+          boxes.push(drawn);
+        }
+      }
+    }
+    return boxes;
+  };
+  for (const list of document.querySelectorAll('[role="tablist"]')) {
+    if (!shown(list)) {
+      continue;
+    }
+    const tabs = [...list.querySelectorAll('[data-slot="ff-tab"]')].filter(
+      shown
+    );
+    /** Where a tab stacks: folder tabs overlap, the higher drawn over the lower. */
+    const rank = (tab: Element) => Number(style(tab).zIndex) || 0;
+    for (const [i, a] of tabs.entries()) {
+      for (const b of tabs.slice(i + 1)) {
+        let most = 0;
+        for (const x of textBoxes(a)) {
+          for (const y of textBoxes(b)) {
+            most = Math.max(most, meet(x, y));
+          }
+        }
+        // The lower tab's words and counts under the higher tab's sheet
+        // (its box): folder tabs overlap, the chosen one drawn over all.
+        const [under, over] = rank(a) < rank(b) ? [a, b] : [b, a];
+        if (rank(a) !== rank(b)) {
+          const sheet = over.getBoundingClientRect();
+          const marks = [
+            ...under.querySelectorAll(
+              '[data-slot="count"], [data-slot="badge"]'
+            ),
+          ].map((mark) => mark.getBoundingClientRect());
+          for (const x of [...textBoxes(under), ...marks]) {
+            most = Math.max(most, meet(x, sheet));
+          }
+        }
+        if (most > SLACK) {
+          overlaps.push({
+            a: `tab “${words(over.textContent ?? "")}”`,
+            b: `tab “${words(under.textContent ?? "")}”`,
+            by: Math.round(most * 10) / 10,
+          });
+        }
+      }
+    }
+  }
+  const heads = [
+    ...document.querySelectorAll(
+      '[data-slot="head"], [data-slot="strip"], [data-slot="project-head"], header'
+    ),
+  ].filter((el) => shown(el) && el.getBoundingClientRect().width > 0);
+  for (const [i, a] of heads.entries()) {
+    for (const b of heads.slice(i + 1)) {
+      if (a.contains(b) || b.contains(a)) {
+        continue;
+      }
+      const x = seen(a.getBoundingClientRect(), clippers(a));
+      const y = seen(b.getBoundingClientRect(), clippers(b));
+      const most = x && y ? meet(x, y) : 0;
+      if (most > SLACK) {
+        overlaps.push({
+          a: path(a),
+          b: path(b),
+          by: Math.round(most * 10) / 10,
+        });
+      }
+    }
+  }
+  return {
+    cuts,
+    overlaps,
+    cards: document.querySelectorAll("[data-task-card]").length,
+    // A card's tags stand inside the card, whatever scrolls the card.
+    spills: [...document.querySelectorAll("[data-task-card]")].flatMap(
+      (card) => {
+        const c = card.getBoundingClientRect();
+        return [...card.querySelectorAll('[data-slot="badge"]')].flatMap(
+          (badge) => {
+            const b = badge.getBoundingClientRect();
+            const past = Math.max(c.left - b.left, b.right - c.right);
+            return past > SLACK
+              ? [
+                  `“${words(badge.textContent ?? "")}” ${Math.round(past * 10) / 10}px past its card ${card.getAttribute("data-task")}`,
+                ]
+              : [];
+          }
+        );
+      }
+    ),
+    digits: (() => {
+      // The usage strip's time, and how far its glyphs reach above its line.
+      const el = document.querySelector("[data-strip-digits]");
+      const line = el?.parentElement;
+      if (!(el && line && shown(el) && el.textContent?.trim())) {
+        return null;
+      }
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const top = Math.min(...[...range.getClientRects()].map((r) => r.top));
+      return {
+        text: el.textContent.trim(),
+        above: Math.round((line.getBoundingClientRect().top - top) * 10) / 10,
+      };
+    })(),
+    read,
+    scrolled: [...scrolled],
+    truncated: [...new Set(truncated)],
+  };
+}
+
+const leg = async (
+  kit: Kit,
+  { url }: Setup,
+  engine: Engine,
+  width: number,
+  withTask: boolean,
+  rail: number | null = null
+) => {
+  const phone = width <= 390;
+  const page: Page = await kit.page(phone ? "phone" : "desk", {
+    engine,
+    // The rail as dragged (Shell's `cawco-rail-width`), read before the body
+    // parses, with Finished chosen (`cawco-home-tab`): the chosen folder tab
+    // stands over Working's end.
+    init:
+      rail === null
+        ? []
+        : [
+            {
+              content: `localStorage.setItem("cawco-rail-width", "${rail}"); localStorage.setItem("cawco-home-tab", JSON.stringify("finished"))`,
+            },
+          ],
+  });
+  await page.setViewportSize({ width, height: phone ? 844 : 900 });
+  const said: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") {
+      said.push(message.text().slice(0, 300));
+    }
+  });
+  page.on("pageerror", (error) => said.push(String(error).slice(0, 300)));
+  await open(
+    page,
+    withTask ? `${url}?task=tsk-1` : url,
+    withTask ? "[data-task-card], [data-slot=project-page]" : "[data-task-card]"
+  );
+  await page.waitForTimeout(600);
+  await settle(page, 300);
+  const read = await page.evaluate(readPage, rail === RAIL_MIN);
+  const tag = `${engine} ${width}${withTask ? " task open" : " board"}${rail === null ? "" : `, rail ${rail}, Finished chosen`}`;
+  // The page stands as read: its board drawn (the task its own page under
+  // 900), no error thrown.
+  const board = !withTask || width >= 900;
+  kit.check(
+    `${tag}: the page stands (${read.read} words read, ${read.cards} cards, no error)`,
+    read.read > 50 && (read.cards > 0 || !board) && said.length === 0,
+    `${await page.evaluate(() => `${location.href} “${document.body.innerText.slice(0, 120).replace(/\s+/g, " ")}”`)}; ${said.join(" | ")}`
+  );
+  kit.check(
+    `${tag}: no label cut by a container`,
+    read.cuts.length === 0,
+    read.cuts
+      .slice(0, 8)
+      .map(
+        (cut) =>
+          `“${cut.text}” (${cut.where}) ${cut.lost}px ${cut.axis} by ${cut.by}`
+      )
+      .join("; ")
+  );
+  kit.check(
+    `${tag}: every card's tags stand inside the card`,
+    read.spills.length === 0,
+    read.spills.slice(0, 4).join("; ")
+  );
+  if (width >= 900) {
+    kit.check(
+      `${tag}: the usage strip says its time (${read.digits?.text ?? "none"}, its glyphs ${read.digits?.above ?? "?"}px above their line)`,
+      read.digits !== null
+    );
+  }
+  kit.check(
+    `${tag}: no two headers overlap`,
+    read.overlaps.length === 0,
+    read.overlaps
+      .slice(0, 6)
+      .map((o) => `${o.a} over ${o.b} by ${o.by}px`)
+      .join("; ")
+  );
+  if (read.scrolled.length > 0) {
+    kit.note(
+      `${tag}: ${read.scrolled.length} words stand past a scroller's edge with the box they are drawn in (scrolled, not counted): ${read.scrolled.slice(0, 3).join(", ")}`
+    );
+  }
+  if (read.truncated.length > 0) {
+    kit.note(
+      `${tag}: ${read.truncated.length} words end in their own ellipsis or clamp (not counted): ${read.truncated.slice(0, 4).join(", ")}`
+    );
+  }
+  // The strip stands from 640, over the board (a task under 900 is its own page).
+  if (!phone && board) {
+    await viewsMenu(kit, page, tag, !withTask && rail === null);
+  }
+  await page.close();
+};
+
+/**
+ * The strip's views: the tabs that stand, every view (the ruler's), the
+ * chosen tab, the ⋯ while any view is not a tab, and the one menu that holds
+ * them all where no tab has room (what its trigger says).
+ */
+const readStrip = (page: Page) =>
+  page.evaluate(() => {
+    const strip = document.querySelector('[data-slot="views"]');
+    const shown = ':scope > div:not([data-views-ruler]) > [data-slot="tabs"]';
+    const label = (tab: Element) =>
+      tab.querySelector('[data-slot="text"]')?.textContent?.trim() ?? "";
+    return {
+      tabs: [
+        ...(strip?.querySelectorAll(`${shown} [data-slot="ff-tab"]`) ?? []),
+      ].map(label),
+      views: [
+        ...(strip?.querySelectorAll(
+          '[data-views-ruler] [data-slot="ff-tab"]'
+        ) ?? []),
+      ].map(label),
+      chosen:
+        strip
+          ?.querySelector(`${shown} [data-tab-item-selected]`)
+          ?.textContent?.trim() ?? "",
+      more: Boolean(strip?.querySelector("[data-views-more]")),
+      picker:
+        strip
+          ?.querySelector("[data-views-picker]")
+          ?.getAttribute("aria-label") ?? null,
+      /** What the one menu's trigger shows: the view's name, or the ⋯ alone. */
+      face:
+        strip?.querySelector("[data-views-picker]")?.textContent?.trim() || "⋯",
+    };
+  });
+
+/**
+ * Every view is reachable from the strip: a tab, or an item of the ⋯ that
+ * stands whenever one is not a tab, or of the one menu that holds them all
+ * where not even the chosen tab has room beside the ⋯. On the board alone, a
+ * view picked from the menu stands as the chosen tab (or the one menu says
+ * it), and the page cuts no label after (the read again).
+ */
+const viewsMenu = async (kit: Kit, page: Page, tag: string, pick: boolean) => {
+  const strip = await readStrip(page);
+  const how =
+    strip.picker === null
+      ? `${strip.tabs.length} of ${strip.views.length} tabs${strip.more ? ", ⋯" : ""}`
+      : `one menu, “${strip.picker}”, showing “${strip.face}”`;
+  kit.check(
+    `${tag}: every view a tab or in a menu (${how})`,
+    strip.views.length >= 6 &&
+      strip.tabs.every((tab) => strip.views.includes(tab)) &&
+      (strip.tabs.length === strip.views.length ||
+        strip.more ||
+        (strip.picker !== null && strip.tabs.length === 0)),
+    JSON.stringify(strip)
+  );
+  if (!(pick && (strip.more || strip.picker !== null))) {
+    return;
+  }
+  const last = strip.views.at(-1) ?? "";
+  if (strip.picker === null) {
+    await page.locator("[data-views-more]").click();
+    await page.getByRole("menuitem", { name: last }).click();
+  } else {
+    await page.locator("[data-views-picker]").click();
+    await page.getByRole("menuitemradio", { name: last }).click();
+  }
+  await page.waitForTimeout(600);
+  await settle(page, 300);
+  const after = await readStrip(page);
+  const read = await page.evaluate(readPage, false);
+  kit.check(
+    `${tag}: “${last}” picked from the menu stands as the chosen view, no label cut`,
+    (after.picker === null
+      ? after.chosen.startsWith(last) && after.tabs.includes(last)
+      : after.picker.endsWith(last)) && read.cuts.length === 0,
+    `${JSON.stringify(after)}; ${read.cuts.map((one) => `“${one.text}” ${one.lost}px by ${one.by}`).join(", ")}`
+  );
+};
+
+const run = async (kit: Kit) => {
+  const setup = await setUp(kit);
+  for (const engine of ENGINES) {
+    for (const width of WIDTHS) {
+      await leg(kit, setup, engine, width, false);
+      await leg(kit, setup, engine, width, true);
+      // From 900 the rail stands beside the page: at its narrowest and
+      // dragged wide (the strip's least room).
+      if (width >= 900) {
+        for (const rail of RAILS.filter(
+          (each) => each < 400 || width >= WIDE_RAIL_FROM
+        )) {
+          await leg(kit, setup, engine, width, false, rail);
+        }
+      }
+    }
+  }
+};
+
+export default { name: "project-clipped", run } satisfies Spec;
