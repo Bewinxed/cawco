@@ -32,6 +32,7 @@ import { ReverseReader, readSpans, typeFilter } from "@cawco/jsonl-parser";
 import {
   type LineIndex,
   LineIndexes,
+  unlessGone,
   windowCuts,
   windowRange,
 } from "./transcript-index.ts";
@@ -188,63 +189,116 @@ function buildUuidMap(records: ChainNode[]): Map<string, ChainNode> {
 }
 
 /**
+ * `byUuid`'s records by parent, kept in step as records are moved: who has a
+ * parent is one lookup, not a pass over every record (a pass per compaction
+ * held the loop 620 ms on a real 413 MB transcript of 50 compactions).
+ */
+class Relinker {
+  readonly byUuid: Map<string, ChainNode>;
+  readonly #children = new Map<string, Set<string>>();
+
+  constructor(byUuid: Map<string, ChainNode>) {
+    this.byUuid = byUuid;
+    for (const [uuid, r] of byUuid) {
+      this.#link(uuid, r.parentUuid);
+    }
+  }
+
+  /** The uuids whose parent is `parent` now. */
+  childrenOf(parent: string): string[] {
+    return [...(this.#children.get(parent) ?? [])];
+  }
+
+  /** `uuid`'s record, given `parent` as its parent (a copy: the original is the file's). */
+  move(uuid: string, parent: string | null | undefined): void {
+    const rec = this.byUuid.get(uuid);
+    if (!rec) {
+      return;
+    }
+    if (rec.parentUuid) {
+      this.#children.get(rec.parentUuid)?.delete(uuid);
+    }
+    this.byUuid.set(uuid, { ...rec, parentUuid: parent });
+    this.#link(uuid, parent);
+  }
+
+  #link(uuid: string, parent: string | null | undefined): void {
+    if (!parent) {
+      return;
+    }
+    let children = this.#children.get(parent);
+    if (!children) {
+      children = new Set();
+      this.#children.set(parent, children);
+    }
+    children.add(uuid);
+  }
+}
+
+/**
  * Relink parentUuid chains around compact boundaries, exactly as the SDK does.
  * Mutates `byUuid` in place (replaces records with updated copies).
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: compact boundary relink must handle both preservedMessages and preservedSegment shapes in one pass
 function relinkCompactBoundaries(byUuid: Map<string, ChainNode>): Set<string> {
   const skippedAnchors = new Set<string>();
-  for (const r of byUuid.values()) {
-    if (r.type !== "system" || r.subtype !== "compact_boundary") {
-      continue;
-    }
+  const boundaries = [...byUuid.values()].filter(isCompactBoundary);
+  if (boundaries.length === 0) {
+    return skippedAnchors;
+  }
+  const links = new Relinker(byUuid);
+  for (const r of boundaries) {
     const preserved = r.compactMetadata?.preservedMessages;
     const segment = r.compactMetadata?.preservedSegment;
-    if (preserved) {
-      if (preserved.uuids.length === 0) {
-        continue; // the SDK skips this globally too — parity, not a window artifact
-      }
-      if (preserved.uuids.some((u) => !byUuid.has(u))) {
-        skippedAnchors.add(preserved.anchorUuid);
-        continue;
-      }
-      let anchor = preserved.anchorUuid;
-      for (const u of preserved.uuids) {
-        const rec = byUuid.get(u);
-        if (rec) {
-          byUuid.set(u, { ...rec, parentUuid: anchor });
-          anchor = u;
-        }
-      }
-      const [first] = preserved.uuids;
-      const last = preserved.uuids.at(-1) ?? first;
-      for (const [uuid, rec] of byUuid) {
-        if (rec.parentUuid === preserved.anchorUuid && uuid !== first) {
-          byUuid.set(uuid, { ...rec, parentUuid: last });
-        }
-      }
-    } else if (segment) {
-      const head = byUuid.get(segment.headUuid);
-      if (!head) {
-        skippedAnchors.add(segment.anchorUuid);
-      }
-      if (head) {
-        byUuid.set(segment.headUuid, {
-          ...head,
-          parentUuid: segment.anchorUuid,
-        });
-      }
-      for (const [uuid, rec] of byUuid) {
-        if (
-          rec.parentUuid === segment.anchorUuid &&
-          uuid !== segment.headUuid
-        ) {
-          byUuid.set(uuid, { ...rec, parentUuid: segment.tailUuid });
-        }
-      }
+    const skipped = preserved
+      ? relinkPreserved(links, preserved)
+      : segment && relinkSegment(links, segment);
+    if (skipped) {
+      skippedAnchors.add(skipped);
     }
   }
   return skippedAnchors;
+}
+
+/** A boundary's preserved messages put after its anchor; the anchor's, when they are not all here. */
+function relinkPreserved(
+  links: Relinker,
+  preserved: NonNullable<CompactMetadata["preservedMessages"]>
+): string | undefined {
+  if (preserved.uuids.length === 0) {
+    return; // the SDK skips this globally too — parity, not a window artifact
+  }
+  if (preserved.uuids.some((u) => !links.byUuid.has(u))) {
+    return preserved.anchorUuid;
+  }
+  let anchor = preserved.anchorUuid;
+  for (const u of preserved.uuids) {
+    links.move(u, anchor);
+    anchor = u;
+  }
+  const [first] = preserved.uuids;
+  const last = preserved.uuids.at(-1) ?? first;
+  for (const uuid of links.childrenOf(preserved.anchorUuid)) {
+    if (uuid !== first) {
+      links.move(uuid, last);
+    }
+  }
+}
+
+/** A boundary's preserved segment put after its anchor; the anchor's, when its head is not here. */
+function relinkSegment(
+  links: Relinker,
+  segment: NonNullable<CompactMetadata["preservedSegment"]>
+): string | undefined {
+  const here = links.byUuid.has(segment.headUuid);
+  if (here) {
+    links.move(segment.headUuid, segment.anchorUuid);
+  }
+  for (const uuid of links.childrenOf(segment.anchorUuid)) {
+    if (uuid !== segment.headUuid) {
+      links.move(uuid, segment.tailUuid);
+    }
+  }
+  return here ? undefined : segment.anchorUuid;
 }
 
 /** Build a file-order index map for tiebreaking. */
@@ -519,13 +573,55 @@ function walkChainWindowed(
   windowed: boolean,
   said = false
 ): ChainNode[] {
+  const steps = walkSteps(records, windowed, said);
+  for (;;) {
+    const step = steps.next();
+    if (step.done) {
+      return step.value;
+    }
+  }
+}
+
+/** The loop's turn between two steps of a long walk. */
+const loopTurn = (): Promise<void> =>
+  new Promise((resolve) => setImmediate(resolve));
+
+/**
+ * {@link walkChainWindowed} over a whole file's index, giving the loop a turn
+ * between its steps: each is a pass over every node (tens of milliseconds
+ * on a transcript of 100,000 lines), the walk whole more than 100.
+ */
+async function walkChainYielding(
+  records: ChainNode[],
+  said: boolean
+): Promise<ChainNode[]> {
+  const steps = walkSteps(records, false, said);
+  for (;;) {
+    const step = steps.next();
+    if (step.done) {
+      return step.value;
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: the turn between two steps is the point
+    await loopTurn();
+  }
+}
+
+/** The walk, a step at a time: it yields between its passes over the records. */
+function* walkSteps(
+  records: ChainNode[],
+  windowed: boolean,
+  said: boolean
+): Generator<void, ChainNode[]> {
   const byUuid = buildUuidMap(records);
   const original = said ? new Map(byUuid) : byUuid;
+  yield;
   const skippedAnchors = relinkCompactBoundaries(byUuid);
+  yield;
   const found = findActiveChain(byUuid, records);
   if (found.chain.length === 0) {
     return [];
   }
+  yield;
   const { chainSet } = found;
   let active = said ? withSetAside(found.chain, original) : found.chain;
   for (const r of active) {
@@ -565,6 +661,7 @@ function walkChainWindowed(
       return [];
     }
   }
+  yield;
   return spliceOrphans(active, chainSet, byUuid);
 }
 
@@ -1125,10 +1222,11 @@ interface SaidPlan {
   nodes: ChainNode[];
 }
 
-function saidPlan(all: readonly ChainNode[]): SaidPlan {
-  const nodes = walkChainWindowed([...all], false, true).filter(
+async function saidPlan(all: readonly ChainNode[]): Promise<SaidPlan> {
+  const nodes = (await walkChainYielding([...all], true)).filter(
     (node) => node.shows !== undefined
   );
+  await loopTurn();
   return {
     at: new Map(nodes.map((node, i) => [node.uuid, i])),
     cuts: windowCuts(
@@ -1140,16 +1238,20 @@ function saidPlan(all: readonly ChainNode[]): SaidPlan {
   };
 }
 
-/** A memo on an index, rebuilt once the file changes under it. */
+/** A memo on an index, rebuilt once the file changes under it; one that failed is built again by the next read. */
 const memo = <T>(
   index: LineIndex<ChainNode>,
   key: string,
-  build: () => T
-): T => {
-  if (!index.memo.has(key)) {
-    index.memo.set(key, build());
+  build: () => Promise<T>
+): Promise<T> => {
+  const held = index.memo.get(key) as Promise<T> | undefined;
+  if (held) {
+    return held;
   }
-  return index.memo.get(key) as T;
+  const built = build();
+  index.memo.set(key, built);
+  built.catch(() => index.memo.delete(key));
+  return built;
 };
 
 /**
@@ -1207,6 +1309,10 @@ async function messagesAt(
 }
 // ---------------------------------------------------------------------------
 // Public API
+//
+// A transcript deleted while it is read (its session deleted, its workspace
+// retired) reads as one never found, as the harness reads a session with no
+// transcript: no messages ({@link unlessGone}).
 // ---------------------------------------------------------------------------
 
 /**
@@ -1214,17 +1320,19 @@ async function messagesAt(
  * through the line index: for readers that need all of it (a summariser's
  * answer, a continuation).
  */
-export async function readSessionChain(
-  path: string
-): Promise<SDKSessionMessage[]> {
-  const index = await indexes.get(path);
-  const nodes = memo(index, "chain", () =>
-    walkChainWindowed([...index.nodes], false).filter(
-      (node) => node.shows !== undefined
-    )
-  );
-  const joined = memo(index, "joined", () => joinedCounts(index.nodes));
-  return messagesAt(path, nodes, joined, 0, nodes.length);
+export function readSessionChain(path: string): Promise<SDKSessionMessage[]> {
+  return unlessGone(async () => {
+    const index = await indexes.get(path);
+    const nodes = await memo(index, "chain", async () =>
+      (await walkChainYielding([...index.nodes], false)).filter(
+        (node) => node.shows !== undefined
+      )
+    );
+    const joined = await memo(index, "joined", () =>
+      Promise.resolve(joinedCounts(index.nodes))
+    );
+    return messagesAt(path, nodes, joined, 0, nodes.length);
+  }, []);
 }
 
 /**
@@ -1232,16 +1340,16 @@ export async function readSessionChain(
  * chain walk, so the history before each compaction and every abandoned
  * branch is there too. For readers that index what a session ever did.
  */
-export async function readSessionWhole(
-  path: string
-): Promise<SDKSessionMessage[]> {
-  const index = await indexes.get(path);
-  const shown = index.nodes.filter((node) => node.shows !== undefined);
-  const records = (await readSpans(path, shown)) as (RawRecord | undefined)[];
-  return records.flatMap((r) => {
-    const msg = r ? toSDKMessage(r) : null;
-    return msg ? [msg] : [];
-  });
+export function readSessionWhole(path: string): Promise<SDKSessionMessage[]> {
+  return unlessGone(async () => {
+    const index = await indexes.get(path);
+    const shown = index.nodes.filter((node) => node.shows !== undefined);
+    const records = (await readSpans(path, shown)) as (RawRecord | undefined)[];
+    return records.flatMap((r) => {
+      const msg = r ? toSDKMessage(r) : null;
+      return msg ? [msg] : [];
+    });
+  }, []);
 }
 
 /** How far back the newest window reads before it takes the line index instead. Ours: 32 MiB. */
@@ -1264,25 +1372,35 @@ export interface SaidWindow {
  * messages back; `older` names its first message (null at the start), and
  * `newer` the message after its last (null at the end).
  */
-export async function readSaidWindow(
+export function readSaidWindow(
   path: string,
   ask: WindowAsk
 ): Promise<SaidWindow> {
-  if ("end" in ask) {
-    const fast = await newestWindow(path, ask.limit);
-    if (fast) {
-      return fast;
-    }
-  }
-  const index = await indexes.get(path);
-  const plan = memo(index, "said", () => saidPlan(index.nodes));
-  const { at, cuts, joined, nodes } = plan;
-  const { from, to } = windowRange(cuts, nodes.length, (id) => at.get(id), ask);
-  return {
-    messages: await messagesAt(path, nodes, joined, from, to),
-    older: from > 0 ? nodes[from].uuid : null,
-    newer: "start" in ask && to < nodes.length ? nodes[to].uuid : null,
-  };
+  return unlessGone(
+    async () => {
+      if ("end" in ask) {
+        const fast = await newestWindow(path, ask.limit);
+        if (fast) {
+          return fast;
+        }
+      }
+      const index = await indexes.get(path);
+      const plan = await memo(index, "said", () => saidPlan(index.nodes));
+      const { at, cuts, joined, nodes } = plan;
+      const { from, to } = windowRange(
+        cuts,
+        nodes.length,
+        (id) => at.get(id),
+        ask
+      );
+      return {
+        messages: await messagesAt(path, nodes, joined, from, to),
+        older: from > 0 ? nodes[from].uuid : null,
+        newer: "start" in ask && to < nodes.length ? nodes[to].uuid : null,
+      };
+    },
+    { messages: [], older: null, newer: null }
+  );
 }
 
 /**
@@ -1411,9 +1529,19 @@ const opensId = (node: ChainNode, id: string): boolean =>
  *
  * Returns records in chronological order (oldest first).
  */
-export async function readSessionEnd(
+export function readSessionEnd(
   path: string,
   count = 200
+): Promise<{ complete: boolean; messages: SDKSessionMessage[] }> {
+  return unlessGone(() => sessionEnd(path, count), {
+    complete: true,
+    messages: [],
+  });
+}
+
+async function sessionEnd(
+  path: string,
+  count: number
 ): Promise<{ complete: boolean; messages: SDKSessionMessage[] }> {
   const reader = new ReverseReader(path, { prefilter: CHAIN_TYPES });
   let target = count;

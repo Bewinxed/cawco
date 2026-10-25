@@ -66,7 +66,12 @@ import { machineWithAccountsRuntime } from "./pi-accounts";
 import { checkPiCredential, type PiCredentialState } from "./pi-auth";
 import { piMcpEntry, piMcpList } from "./pi-mcp";
 import { piOpenTurns } from "./pi-sessiond";
-import { LineIndexes, windowCuts, windowRange } from "./transcript-index";
+import {
+  LineIndexes,
+  unlessGone,
+  windowCuts,
+  windowRange,
+} from "./transcript-index";
 
 const PI_TOOL = toolSpec("pi");
 if (!PI_TOOL) {
@@ -767,6 +772,35 @@ async function piEntriesAt(
   return entries;
 }
 
+/** The window `ask` names of the session stored at `path` (the services' `readTranscriptWindow`). */
+async function piWindow(
+  path: string,
+  dir: string,
+  sessionKey: string,
+  ask: WindowAsk
+): Promise<TranscriptWindow> {
+  const plan = await piPlanOf(path, dir);
+  const { length } = plan.path;
+  // An entry's id is its stored entry's, or that one's marked
+  // (`<id>:error`, `<id>:boundary`): a cut names its stored entry by it.
+  const { from, to } = windowRange(
+    plan.cuts,
+    length,
+    (id) => plan.at.get(id.split(":")[0] ?? id),
+    ask
+  );
+  let entries = await piEntriesAt(path, sessionKey, plan.path, plan, from, to);
+  if ("through" in ask) {
+    const cut = entries.findIndex((entry) => entry.uuid === ask.through);
+    entries = cut >= 0 ? entries.slice(0, cut + 1) : entries;
+  }
+  return {
+    entries,
+    older: from > 0 ? (plan.path[from]?.id ?? null) : null,
+    newer: "start" in ask && to < length ? (plan.path[to]?.id ?? null) : null,
+  };
+}
+
 /**
  * The file pi stores a session in: `<timestamp>_<id>.jsonl` in the folder pi
  * keeps its sessions for `cwd` (named by pi itself: `getSessionDir` of a
@@ -1016,9 +1050,12 @@ export class PiProfile {
     if (!path) {
       return [];
     }
-    const plan = await piPlanOf(path, dir);
-    const nodes = span === "whole" ? plan.stored : plan.path;
-    return await piEntriesAt(path, sessionKey, nodes, plan, 0, nodes.length);
+    // A session file deleted while it is read reads as one never found.
+    return unlessGone(async () => {
+      const plan = await piPlanOf(path, dir);
+      const nodes = span === "whole" ? plan.stored : plan.path;
+      return piEntriesAt(path, sessionKey, nodes, plan, 0, nodes.length);
+    }, []);
   }
 
   /**
@@ -1037,33 +1074,12 @@ export class PiProfile {
     if (!(path && dir)) {
       return { entries: [], older: null, newer: null };
     }
-    const plan = await piPlanOf(path, dir);
-    const { length } = plan.path;
-    // An entry's id is its stored entry's, or that one's marked
-    // (`<id>:error`, `<id>:boundary`): a cut names its stored entry by it.
-    const { from, to } = windowRange(
-      plan.cuts,
-      length,
-      (id) => plan.at.get(id.split(":")[0] ?? id),
-      ask
-    );
-    let entries = await piEntriesAt(
-      path,
-      sessionKey,
-      plan.path,
-      plan,
-      from,
-      to
-    );
-    if ("through" in ask) {
-      const cut = entries.findIndex((entry) => entry.uuid === ask.through);
-      entries = cut >= 0 ? entries.slice(0, cut + 1) : entries;
-    }
-    return {
-      entries,
-      older: from > 0 ? (plan.path[from]?.id ?? null) : null,
-      newer: "start" in ask && to < length ? (plan.path[to]?.id ?? null) : null,
-    };
+    // A session file deleted while it is read reads as one never found.
+    return unlessGone(() => piWindow(path, dir, sessionKey, ask), {
+      entries: [],
+      older: null,
+      newer: null,
+    });
   }
 
   renameSession(): Promise<void> {
