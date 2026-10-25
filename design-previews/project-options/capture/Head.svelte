@@ -100,8 +100,8 @@
   </BarGlass>
 {/snippet}
 
-<header data-head={option} data-fold={fold} class="flex flex-col">
-  <div data-bar class="grid min-h-c-top-bar-h grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center">
+<div data-head={option} data-fold={fold} class="flex flex-col">
+  <header data-bar class="grid min-h-c-top-bar-h grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center">
     <span data-group="lead" class="flex min-w-0 items-center gap-space-2 ps-space-7">
       <h1 class="m-0 type-title whitespace-nowrap text-ink-strong">{PROJECT.title}</h1>
       {@render place()}
@@ -164,7 +164,8 @@
       <span data-slot-part="askcaw" class="contents"></span>
       <span data-img="shell/desk-tools.png" data-shell-tools data-natural class="block flex-none"></span>
     </span>
-  </div>
+  </header>
+  <!-- H2′'s views are a tab row on the content's ground, not the bar: outside its header. -->
   {#if option === "H2"}
     <nav data-tab-row aria-label="Views" class="flex min-h-c-top-bar-h flex-wrap items-center gap-space-1 ps-space-7 pe-space-6">
       {#each VIEWS as one (one.name)}
@@ -179,4 +180,4 @@
       {/each}
     </nav>
   {/if}
-</header>
+</div>

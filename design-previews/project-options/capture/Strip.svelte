@@ -31,7 +31,7 @@
       {/if}
       <span>{stage.name}</span>
       {#if counts[stage.key] > 0}
-        <span data-slot="num" class="num type-meta text-ink-subtle">{counts[stage.key]}</span>
+        <span data-slot="num" class="num type-meta text-ink-muted group-aria-pressed/option:text-selected-ink">{counts[stage.key]}</span>
       {/if}
     </button>
   {/each}

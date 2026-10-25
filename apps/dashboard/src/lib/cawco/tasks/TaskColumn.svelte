@@ -10,6 +10,7 @@
    */
   import { type Snippet, tick } from "svelte";
   import type { Attachment } from "svelte/attachments";
+  import { MediaQuery } from "svelte/reactivity";
   import {
     reflow,
     reflowsFrom,
@@ -97,6 +98,12 @@
     return () => clearTimeout(later);
   });
   const drawn = $derived(whole ? cards : cards.slice(0, FIRST_CARDS));
+  /**
+   * A phone's column holds all its cards and the page scrolls them; at a
+   * desk the column scrolls its own, under the house edge fade (DESIGN.md:
+   * hidden content has a fade that draws).
+   */
+  const phone = new MediaQuery("(width < 640px)");
   /** The quiet word under the name: the stage's kind, or what the column holds. */
   const kindWord = $derived.by(() => {
     if (kind) {
@@ -149,7 +156,10 @@
   </header>
   <ol
     data-slot="cards"
-    class="m-0 flex min-h-c-btn-h-lg flex-auto list-none flex-col gap-space-1 overflow-y-auto p-0 max-phone:flex-none max-phone:overflow-visible"
+    class={[
+      !phone.current && "kit-edge-fade-block",
+      "m-0 flex min-h-c-btn-h-lg flex-auto list-none flex-col gap-space-1 overflow-y-auto p-0 max-phone:flex-none max-phone:overflow-visible",
+    ]}
     bind:this={list}
     {@attach reflow()}
   >

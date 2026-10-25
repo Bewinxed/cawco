@@ -37,6 +37,8 @@
   const before = $derived(STAGES.slice(0, first));
   const within = $derived(STAGES.slice(first, last + 1));
   const after = $derived(STAGES.slice(last + 1));
+  // Out of date, the rows fade to the house's out-of-date reading; the
+  // heads and their counts are text and keep their ink (4.5:1).
   const stale = $derived(state === "stale" ? "opacity-(--account-stale-opacity)" : "");
 </script>
 
@@ -49,7 +51,6 @@
     class={[
       "flex h-c-row-h w-full flex-none items-center gap-space-2 border-0 bg-transparent px-space-3 text-start select-none press-tint",
       sticky && "sticky top-0 z-3",
-      stale,
     ]}
     type="button"
   >

@@ -700,6 +700,20 @@ const spec: Spec = {
         const house = new HouseRules(kit, engine, {
           except: [
             {
+              rule: "overflow",
+              selector: "[data-pane-scroll]",
+              text: "impeccable text-occlusion",
+              reason:
+                "the pane's content runs under its stuck jump strip and its docked verdict and scrolls clear of both (pb-(--po-foot)), on the scroll edge effect (DESIGN.md, No bar ground): K1-top at rest and K1-review opened on the Result",
+            },
+            {
+              rule: "overflow",
+              selector: '[data-board="P1"], [data-board="P2"]',
+              text: "impeccable text-occlusion",
+              reason:
+                "the phone's board runs under the page's floating bar and scrolls clear of it, as a phone page's content passes under its bars (DESIGN.md, No bar ground)",
+            },
+            {
               rule: "made-up",
               text: "probe-kit",
               reason:
@@ -710,6 +724,18 @@ const spec: Spec = {
               text: "(div.absolute.inset-s-0.top-full",
               reason:
                 "the frame draws a popover open over the tabs it hangs from: covering them is what it is",
+            },
+            {
+              rule: "overflow",
+              text: "(div.rounded-lg.bg-surface-raised.p-space-2.shadow-overlay)",
+              reason:
+                "F2's place popover on a phone, open over the board it hangs above: covering it is what a popover is",
+            },
+            {
+              rule: "overflow",
+              text: "(div.group/alert.relative",
+              reason:
+                "F2's place popover, open with the Fault in it, over the strip and the board it hangs above: covering them is what a popover is",
             },
           ],
         });

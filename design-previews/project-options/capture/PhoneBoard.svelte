@@ -24,7 +24,7 @@
 
 {#if option === "P1"}
   <div data-board="P1" class="flex flex-col gap-space-3 px-space-3">
-    <Strip chosen={shown} class={state === "stale" ? "opacity-(--account-stale-opacity)" : ""} {counts} />
+    <Strip chosen={shown} {counts} />
     <ol class="m-0 flex list-none flex-col gap-space-1 p-0">
       {#each columns[shown] as item (item.task.id)}
         <li class={state === "stale" && !item.fault ? "opacity-(--account-stale-opacity)" : ""} data-card={cardKey(item, ask)}></li>

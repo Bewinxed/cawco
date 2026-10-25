@@ -19,7 +19,7 @@
  * | coral       | own code                    | each view's controls and grounded chips whose fill, border or (a control's) ink resolves to a coral token from tokens.css; at most one; a checked checkbox, switch or radio, and an identity tile on its mark hue, are allowed and named |
  * | glyph       | own code                    | a control whose only content is a glyph: no fill, border or shadow on it or on a wrapper that holds it alone; its svg holds no solid disc, tile or rounded shape spanning 70% of its viewBox |
  * | bar-ground  | own code                    | bars (`header`, toolbars, the bar data-slots, foot bars) paint no fill, border or shadow; a folder-tab shelf (DESIGN.md:665) and a group's capsule (DESIGN.md:666) are named, not failed |
- * | head        | own code                    | a bar's title and controls share one row (centres within 4px), no second line in the bar, the title not repeated by the first heading under it |
+ * | head        | own code                    | a bar's title and controls share one row (centres within 4px), no second line in the bar (a popover, menu or dialog it opens is no part of it), the title not repeated by the first heading under it |
  * | back-close  | own code                    | no control's words say Back or Close (DESIGN.md:668) |
  * | hidden-cue  | own code + ink              | a scroller cut at an edge carries a computed mask there that draws (the edge's pixels with and without it), or an item peeking 16px or more |
  * | contrast    | own code + impeccable `low-contrast` | every text run against the ground under it, 4.5:1 (3:1 at 24px); the lowest is reported |
@@ -78,7 +78,7 @@ export const HOUSE_RULES: Record<HouseRule, { says: string; by: string }> = {
 
 const RULES = Object.keys(HOUSE_RULES) as HouseRule[];
 
-/** One element-level exemption: findings of `rule` on what `selector` matches (or whose words hold `text`). */
+/** One element-level exemption: findings of `rule` on what `selector` matches, whose words hold `text`; either alone, or both together. */
 export interface HouseExcept {
   reason: string;
   rule: HouseRule;
@@ -1030,8 +1030,18 @@ function houseRead(args: InPageArgs): InPageRead {
       }
       const t = title.getBoundingClientRect();
       const tMid = (t.top + t.bottom) / 2;
+      // A layer a bar's control opens (a popover, a menu, a dialog) is over
+      // the page, not in the bar's row, wherever its markup stands (a
+      // preview's drawing keeps it beside its anchor; the product portals it).
+      const LAYER =
+        '[data-popover], [data-slot="popover-content"], [role="dialog"], [role="menu"], [role="listbox"]';
+      const ofBar = (node: Node): boolean => {
+        const el = node instanceof Element ? node : node.parentElement;
+        const layer = el?.closest(LAYER);
+        return bar.contains(node) && !(layer && bar.contains(layer));
+      };
       const inBar = controls.filter(
-        (c) => bar.contains(c) && !title.contains(c) && !c.contains(title)
+        (c) => ofBar(c) && !title.contains(c) && !c.contains(title)
       );
       for (const c of inBar) {
         const r = c.getBoundingClientRect();
@@ -1046,7 +1056,7 @@ function houseRead(args: InPageArgs): InPageRead {
       }
       const second = texts.find(
         (one) =>
-          bar.contains(one.node) &&
+          ofBar(one.node) &&
           !title.contains(one.node) &&
           !inBar.some((c) => c.contains(one.node)) &&
           one.rects.some((r) => r.top >= t.bottom - 1)
@@ -1582,11 +1592,13 @@ function excuseIn(args: {
     (window as unknown as { __houseEls?: Element[] }).__houseEls ?? [];
   return args.items.map((item) => {
     const el = item.at >= 0 ? els[item.at] : null;
+    // Given both, both must hold: findings of that kind on that element.
     const hit = args.except.find(
       (one) =>
         one.rule === item.rule &&
-        ((one.selector && el?.closest(one.selector)) ||
-          (one.text && `${item.element} ${item.measured}`.includes(one.text)))
+        (one.selector || one.text) &&
+        (!one.selector || el?.closest(one.selector)) &&
+        (!one.text || `${item.element} ${item.measured}`.includes(one.text))
     );
     return hit ? hit.reason : null;
   });

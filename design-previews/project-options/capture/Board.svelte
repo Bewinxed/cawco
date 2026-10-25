@@ -11,9 +11,11 @@
     `--container-po-fit` (1100px) or wider, with no strip; narrower, it is
     D2 (at his 1037 window both are D2).
 
-  `stale`: the board as it last read, its rows and counts at
-  `account-stale-opacity` (the house's out-of-date reading), the card whose
-  file didn't read kept whole with its own failure.
+  `stale`: the board as it last read, its rows at `account-stale-opacity`
+  (the house's out-of-date reading), the card whose file didn't read kept
+  whole with its own failure. The stage heads and their counts keep their
+  ink: that opacity is a graphic's (3:1, DESIGN.md), and a count is text
+  that holds 4.5:1.
 -->
 <script>
   import { board, cardKey, STAGES } from "./data.js";
@@ -30,7 +32,7 @@
 </script>
 
 <div data-board={option} class="@container flex h-full min-h-0 flex-col gap-space-3">
-  <Strip class={[option === "D1" ? "@po-fit:hidden" : "", state === "stale" ? "opacity-(--account-stale-opacity)" : ""].join(" ")} {counts} />
+  <Strip class={option === "D1" ? "@po-fit:hidden" : ""} {counts} />
   <div
     data-columns
     class={[
@@ -45,11 +47,11 @@
         aria-label="{stage.name}, {cards.length} {cards.length === 1 ? 'task' : 'tasks'}"
         class="flex max-h-full min-h-0 min-w-0 flex-col gap-space-1 self-start rounded-lg bg-surface-band p-space-1 inset-ring inset-ring-border-hairline"
       >
-        <header class={["px-space-2 py-space-1", state === "stale" && "opacity-(--account-stale-opacity)"]}>
+        <header class="px-space-2 py-space-1">
           <StageHead count={cards.length} {stage} />
         </header>
         {#if cards.length > 0}
-          <ol class="m-0 flex min-h-0 list-none flex-col gap-space-1 overflow-y-auto overscroll-y-contain p-0">
+          <ol class="kit-edge-fade-block m-0 flex min-h-0 list-none flex-col gap-space-1 overflow-y-auto overscroll-y-contain p-0">
             {#each cards as item (item.task.id)}
               <li class={state === "stale" && !item.fault ? "opacity-(--account-stale-opacity)" : ""} data-card={cardKey(item, ask)}></li>
             {/each}

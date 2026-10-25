@@ -98,7 +98,7 @@
         <a class={chipVariants({ variant: "option", class: "no-underline" })} href="#k-{one.id}">
           {#if one.waits}<IconNeedsYou aria-hidden="true" class="-me-space-1 size-icon-md text-ink-strong" />{/if}
           <span>{one.name}</span>
-          {#if one.count}<span data-slot="num" class="num type-meta text-ink-subtle">{one.count}</span>{/if}
+          {#if one.count}<span data-slot="num" class="num type-meta text-ink-muted">{one.count}</span>{/if}
         </a>
       {/each}
     </nav>

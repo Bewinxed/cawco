@@ -370,7 +370,8 @@ function openOnReview(root) {
   if (!(scroller && result && strip && bar)) {
     return;
   }
-  const gap = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--space-3")) || 0;
+  // Clear of the strip's scroll edge band (its fade runs this far under it).
+  const gap = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--c-edge-fade-len-phone")) || 0;
   const top = result.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
   scroller.scrollTop = top - bar.offsetHeight - strip.offsetHeight - gap;
 }
