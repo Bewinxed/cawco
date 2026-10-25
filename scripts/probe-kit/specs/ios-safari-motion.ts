@@ -49,8 +49,7 @@
  *    opened-at record's mark (its row's `::before`, a session reached at a
  *    record by a link's `?at=`), the config rail's unsaved dot (a new
  *    hook's field typed into), the canvas's corner grip (⌘⇧D in the
- *    composer), a decision graph's card (the project's Decisions graph
- *    opened) and a card new to the Canvas view (a task filed after the
+ *    composer) and a card new to the Canvas view (a task filed after the
  *    view settled). The mark fades by its keyframes (`--mark-in`,
  *    `kit-fade-in`): its `@starting-style` on the `::before` ran nothing in
  *    iOS 27.2 Safari (no run, opacity 1 on the first read).
@@ -1230,15 +1229,6 @@ async function fadeOf(
   );
 }
 
-/** The decision page the graph draws: two cards, the second after the first. */
-const PRICING = `root = Decisions("Price the hosted plan", [shape, trial])
-shape = Decision("shape", "What does a customer pay for?", [seat, machine], "A machine is what the fleet costs to run.")
-seat = Option("seat", "Per seat", "Each person on the team pays.", false, [], "A solo builder pays once.")
-machine = Option("machine", "Per machine", "Each machine pays.", true, [], "A team on one machine pays once.")
-trial = Decision("trial", "How long is the trial?", [week, month], "A month covers a whole project.", [], ["shape"])
-week = Option("week", "A week", "People decide fast.", false, [], "Too short.")
-month = Option("month", "A month", "Thirty days, then pay.", true, [], "Revenue starts later.")`;
-
 async function deskEntrances(on: On, stood: Stood): Promise<void> {
   const { fleet, base } = stood;
   const steps: [string, () => Promise<void>][] = [
@@ -1337,7 +1327,7 @@ async function deskEntrances(on: On, stood: Stood): Promise<void> {
       },
     ],
     [
-      "the graphs' cards",
+      "the Canvas view's cards",
       async () => {
         const dir = join(fleet.sandbox, "pricing-site");
         await Bun.$`mkdir -p ${dir} && git init -q -b main ${dir}`.quiet();
@@ -1346,16 +1336,6 @@ async function deskEntrances(on: On, stood: Stood): Promise<void> {
           machineId: MACHINE,
           cwd: dir,
           caw: false,
-        });
-        const writer = await fleet.spawn("claude", "Price the plan", dir, {
-          projectId: project.id,
-        });
-        await fleet.api(`/api/instances/${writer}/artifacts`, {
-          kind: "page",
-          does: "pick",
-          ask: "Pick one option on each card",
-          name: "pricing",
-          program: PRICING,
         });
         const first = await fleet.api<{ id: string }>(
           `/api/projects/${project.id}/tasks`,
@@ -1369,16 +1349,6 @@ async function deskEntrances(on: On, stood: Stood): Promise<void> {
           on,
           `${base}/project/${project.id}`,
           '[role="tablist"]'
-        );
-        await fadeOf(
-          on,
-          page,
-          "a decision graph's card",
-          '[data-slot="decision-graph"] .svelte-flow__node-decision',
-          () =>
-            page.run(follow, [
-              `/project/${project.id}?view=decisions&mode=graph`,
-            ])
         );
         await page.run(follow, [`/project/${project.id}?view=canvas`]);
         await until(

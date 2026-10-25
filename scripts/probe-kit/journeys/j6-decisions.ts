@@ -140,7 +140,7 @@ async function walk(leg: Leg): Promise<void> {
     async () => {
       await shows(
         page.getByRole("link", { name: new RegExp(title.slice(0, 40)) }),
-        `the page's tile, “${title}”`
+        `the page's row, “${title}”`
       );
       if (leg.size === "phone") {
         await shows(

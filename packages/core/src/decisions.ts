@@ -19,13 +19,12 @@
  *   beside it is the record in words, for sessions to read why.
  * - **Tasks link back** by a field of the project's own on the task file:
  *   `decided: <page>#<card>` ({@link DECIDED_FIELD}).
- * - **The graph**, derived from the programs the project's folder keeps
- *   (`decisions/<name>/page.oui`, which outlives the artifact): every
- *   decision a card, an edge from each decision its `after` names
- *   (`page#card` across pages), a group per `Section`. Its picks are the
- *   artifact's. The person's drags are theirs, not the
- *   writer's: each page's artifact keeps its cards' places in its state
- *   under {@link PLACES_KEY}, so they outlive revisions as picks do.
+ * - **Links between pages**, derived from the programs the project's
+ *   folder keeps (`decisions/<name>/page.oui`, which outlives the
+ *   artifact): a decision whose `after` names another page's decision
+ *   (`page#card`) puts that page in its page's `after`, and its own page in
+ *   the other's `unlocks`. The Decisions tab says them as words on each
+ *   page's row ("After: …", "Unlocks: …").
  */
 import type { ElementNode } from "@openuidev/lang-core";
 import { decisionsWords } from "./words/decisions";
@@ -73,8 +72,14 @@ export interface DecisionWriter {
   title: string;
 }
 
-/** A page as the Decisions tab lists it. */
-export interface DecisionPageSummary {
+/** Another of the project's decision pages, named on a page's row. */
+export interface DecisionLink {
+  name: string;
+  title: string;
+}
+
+/** What the hub reads of one page: its progress, its state and its writer. */
+export interface DecisionPageFacts {
   /** Its artifact; null for a page whose artifact the hub no longer holds. */
   artifactId: string | null;
   /** Its cards. */
@@ -95,9 +100,24 @@ export interface DecisionPageSummary {
   writer: DecisionWriter | null;
 }
 
+/** A page as the Decisions tab lists it: its facts, the pages it links to, and its questions for search. */
+export interface DecisionPageSummary extends DecisionPageFacts {
+  /** The pages one of its decisions comes after, in the order its cards name them. */
+  after: DecisionLink[];
+  /** Its cards' questions, in page order. */
+  questions: string[];
+  /** The pages with a decision that comes after one of its own. */
+  unlocks: DecisionLink[];
+}
+
 export interface DecisionsList {
-  /** The decisions form a graph: one names another in `after`, or stands in a Section. */
-  graph: boolean;
+  /**
+   * Always false: no client draws the decisions as a graph. Sent only
+   * because TestFlight ios 20261018 requires the field to read the list; it
+   * goes once that build is no longer installable, 2027-01-16 (bash
+   * apps/apple/scripts/testflight.sh --expire 20261018).
+   */
+  graph: false;
   pages: DecisionPageSummary[];
   /** What could not be read, one sentence each. */
   problems: string[];
@@ -134,62 +154,21 @@ export interface DecisionRecord {
 }
 
 /** A page opened in the Decisions tab: its summary, its record and its last send. */
-export interface DecisionPageRead extends DecisionPageSummary {
+export interface DecisionPageRead extends DecisionPageFacts {
   record: DecisionRecord | null;
   /** When the person last sent (I'm done picking, a comment), ISO; null before. */
   sentAt: string | null;
 }
 
-/** One card on the graph: its page's decision, and where it stands. */
-export interface GraphCard {
-  /** Its decision's id on its page. */
-  card: string;
-  /** Options of its pick that a revision took out, by id: the pick is kept, and the card says they are gone. */
-  gone: string[];
-  /** `page#card`: one id across the project's pages. */
-  id: string;
-  /** Its question. */
-  name: string;
-  /** The page it is a card of. */
-  page: string;
-  /** Picked on its page, every option picked one it still offers. */
-  picked: boolean;
-  x: number;
-  y: number;
-}
-
-/** A Section, as a frame round its cards. */
-export interface GraphGroup {
-  /** The graph ids of its cards. */
-  cards: string[];
-  /** `page#section`. */
-  id: string;
-  name: string;
-}
-
-/** The project's decisions as a graph, derived from its programs on each read. */
-export interface DecisionGraph {
-  cards: GraphCard[];
-  /** From the decision depended on to the one that depends on it, by graph id. */
-  edges: [string, string][];
-  groups: GraphGroup[];
-  /**
-   * What the graph cannot draw as written, one sentence each: an `after`
-   * naming no decision, a pick on a decision or option a revision took out,
-   * a page whose artifact (and so its picks) the hub no longer holds.
-   */
-  problems: string[];
-}
-
-/** What a page's program does to the project's graph, said to its writer (artifact_create, artifact_update). */
-export interface GraphLinks {
+/** What a page's program does to the project's links, said to its writer (artifact_create, artifact_update). */
+export interface AfterLinks {
   /** Each decision another page comes after, by its id: the `page#card`s that do. */
   dependents: Record<string, string[]>;
   /** Its `after`s naming no decision of the project's, as `<decision> after <ref>`. */
   unlinked: string[];
 }
 
-/** A card's pick as the graph reads it: whether it is picked, and the options of it the card no longer offers. */
+/** A card's pick: whether it is picked, and the options of it the card no longer offers. */
 export const pickOf = (
   card: { options: Pick<DecisionOption, "id">[] },
   entry: { options?: string[] } | undefined
@@ -205,7 +184,7 @@ export const pickOf = (
  * Whether the person picked on one choice a page asks: an option chosen that
  * its card still offers (a plain page's choice has no card: any option). A
  * note alone is a note, never a pick. The one rule every "picked" count reads:
- * artifact_list, artifact_read, Needs you, the graph and the page's own bar.
+ * artifact_list, artifact_read, Needs you, the Decisions tab and the page's own bar.
  */
 export const pickMade = (
   card: { options: Pick<DecisionOption, "id">[] } | undefined,
@@ -228,12 +207,6 @@ export const picksMade = (
     firstUnpicked: unpicked[0]?.id ?? null,
   };
 };
-
-/** One card's place on the graph, as the person dragged it. */
-export interface GraphPlace {
-  x: number;
-  y: number;
-}
 
 /** What the hub answers a send on a page: who heard it. */
 export interface DecisionSent {
@@ -258,11 +231,8 @@ export const decidedOf = (
   return found ? { page: found[1], card: found[2] } : null;
 };
 
-/** The state key a page's artifact keeps its cards' places on the graph under: `{ [card]: { x, y } }`. */
-export const PLACES_KEY = "graph.places";
-
-/** The graph id of a page's card. */
-export const graphId = (page: string, card: string): string =>
+/** A page's card as one id across the project's pages: `page#card`. */
+export const cardRef = (page: string, card: string): string =>
   `${page}#${card}`;
 
 /** What a program says of itself: its title and intro, its cards and Sections, and the media it names. */

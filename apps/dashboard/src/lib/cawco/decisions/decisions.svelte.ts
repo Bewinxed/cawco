@@ -9,11 +9,8 @@ import type { DecisionsList } from "@cawco/core/decisions";
 import { failureWords } from "#lib/cawco/hub-read.js";
 import { listDecisions } from "./decisions-api";
 
-/** How the tab shows the pages: the tiles, or the graph they form. */
-export type DecisionsMode = "list" | "graph";
-
 export class ProjectDecisions {
-  /** The pages and whether they form a graph; null until first read. */
+  /** The pages, each with the pages it links to; null until first read. */
   list = $state<DecisionsList | null>(null);
   /** Why the last read failed, in the hub's words; null when it read. */
   problem = $state<string | null>(null);

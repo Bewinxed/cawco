@@ -82,10 +82,39 @@ export const decisionsWords = {
   unavailableLine: (project: string, problem: string) =>
     `The decision pages for ${project} could not be read: ${problem}`,
   retry: "Retry",
+  /** The list's groups, by a page's standing: waiting on picks, sent, decided. */
+  needsYou: "Needs you",
+  /** Needs you's line when no page waits on picks. */
+  nothingWaits: "Nothing waits on you.",
+  /** A page's cards still unpicked, on its row: `2 open`. */
+  open: (open: number) => `${open} open`,
+  /** A page fully picked and not yet sent, on its row. */
+  notSent: "Not sent",
+  /** A sent page's share picked, on its row: `3 of 4`. */
+  pickedOf: (picked: number, cards: number) => `${picked} of ${cards}`,
+  /** Who has a sent page now, on its row. */
+  workingOn: "working on it",
+  sessionEnded: "its session ended",
+  /** A decided page while its tasks are being filed. */
+  makingTasks: "making tasks",
+  /** The pages another links to, as words on its row and its page: `After: Price the plan`. */
+  after: "After:",
+  unlocks: "Unlocks:",
+  /** A row's age, said whole for a pointer that rests on it and for a screen reader. */
+  lastChanged: (when: string) => `Last changed ${when}`,
+  /** A group's rows past its first few, behind one reveal: `3 more sent pages`. */
+  more: (count: number, group: string) =>
+    `${count} more ${group} ${count === 1 ? "page" : "pages"}`,
+  /** The list's search. */
+  search: "Search decisions",
+  clearSearch: "Clear the search",
+  noMatch: (query: string) => `No decisions for “${query}”`,
+  /** ‹ back from an opened page, said for the screen reader and in its tooltip. */
+  back: "Back to Decisions",
   /** The empty tab, with Caw able to start: his starters under him. */
-  empty: "No decisions yet",
+  empty: "Your decision pages will appear here",
   emptyCaw:
-    "Caw writes a decision page: the choices this project needs you to make, each with its options.",
+    "Caw writes one when this project needs you to choose: each choice with its options, picked here and sent to the agents.",
   /** The empty tab while Caw can't start: a session writes one. */
   emptySession:
     "A session writes decision pages; start one and ask for a page.",

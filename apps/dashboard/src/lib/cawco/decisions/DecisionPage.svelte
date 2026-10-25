@@ -1,8 +1,12 @@
 <script lang="ts">
   /**
    * A decision page opened in the Decisions tab's pane (Open Page Rule: in
-   * place, nothing modal). The draft-bar head: ‹ Decisions, the page's title
-   * and its figure (flown from the tile), its state pill. Under it, while it
+   * place, nothing modal). Its bar is one row with no ground of its own
+   * (DESIGN.md, The Title Bars Follow Liquid Glass Rule): the back symbol,
+   * named "Back to Decisions", and the page's title. Its facts are content
+   * under it: the ring and its figure, its state pill, and the pages it
+   * links to as words ("After: …", "Unlocks: …"), each opening that page
+   * here. Under them, while it
    * is picked on, the page itself, live (PageFrame); once decided, its
    * record: the cards as they were settled (RecordCard), on the page's own
    * grid. At its foot, one docked composer: a note for the session (its
@@ -26,7 +30,6 @@
     reveal,
     revealOut,
   } from "#lib/cawco/motion/curves.svelte.js";
-  import { land } from "#lib/cawco/motion/share.svelte.js";
   import type { StageKind } from "#lib/cawco/project-tasks.js";
   import TaskRing from "#lib/cawco/TaskRing.svelte";
   import FootFade from "#lib/cawco/transcript/FootFade.svelte";
@@ -53,7 +56,9 @@
     now,
     taskOf,
     hrefOf,
+    pageHref,
     onopentask,
+    onopenpage,
     onback,
   }: {
     projectId: string;
@@ -67,7 +72,11 @@
       id: string
     ) => { kind: StageKind | null; title: string } | undefined;
     hrefOf: (taskId: string) => string;
+    /** Another decision page's address in the tab. */
+    pageHref: (name: string) => string;
     onopentask: (taskId: string) => void;
+    /** A linked page pressed: it opens here. */
+    onopenpage: (name: string) => void;
     onback: () => void;
   } = $props();
 
@@ -239,63 +248,78 @@
     style:--scroll-pad="calc(var(--dock-room) + var(--space-4))"
     bind:this={scroller}
   >
-    <!-- The draft-bar recipe: surface-band, a hairline edge, 12px. -->
-    <div
-      data-slot="page-head"
-      class="flex flex-none flex-col gap-space-2 rounded-lg border border-border-hairline bg-surface-band px-space-3 py-space-2"
-    >
-      <div class="flex flex-wrap items-center gap-x-space-3 gap-y-space-2">
-        <Button
-          class="-ms-space-2 flex-none"
-          onclick={onback}
-          size="sm"
-          variant="ghost"
-        >
-          <IconChevronLeft />
-          <span>{words.tab}</span>
-        </Button>
-        <div
-          data-slot="what"
-          class="flex min-w-0 shrink grow basis-c-decision-head-what flex-wrap items-center gap-x-space-3 gap-y-space-1"
-        >
-          <span
-            data-slot="title"
-            class="type-label text-ink-strong"
-            data-share="dpage:{name}:title"
-            {@attach land(() => `dpage:${name}:title`)}
-            >{shown?.title ?? name}</span
-          >
-          {#if shown}
-            <span
-              class="mark-line inline-flex items-center gap-space-2 text-ink-strong"
-              data-share="dpage:{name}:progress"
-              {@attach land(() => `dpage:${name}:progress`)}
-            >
-              <TaskRing
-                done={isDecided(shown) ? 1 : shown.picked}
-                total={isDecided(shown) ? 1 : shown.cards}
-              />
-              <span data-slot="num" class="type-meta num text-ink-muted"
-                >{figure}</span
-              >
-            </span>
-          {/if}
-          {#if pill}
-            <!-- The pill ends the title's group: at the row's end on a desk,
-                 and on a phone, where the group wraps, beside the figure or
-                 under the title, never alone under the back button. -->
-            <span class="ms-auto flex" data-box>
-              <StatePill
-                tone={pill.tone}
-                title={pill.title}
-                who={pill.who}
-                word={pill.word}
-              />
-            </span>
-          {/if}
-        </div>
-      </div>
+    <!-- The bar: one row, no ground; the back symbol and the title. -->
+    <div data-slot="page-head" class="flex flex-none items-center gap-space-2">
+      <Button
+        aria-label={words.back}
+        class="-ms-space-2 flex-none"
+        icon={IconChevronLeft}
+        onclick={onback}
+        size="icon-sm"
+        title={words.back}
+        variant="ghost"
+      />
+      <h2
+        data-slot="title"
+        class="m-0 min-w-0 type-label text-pretty wrap-anywhere text-ink-strong"
+      >
+        {shown?.title ?? name}
+      </h2>
     </div>
+    {#if shown}
+      <!-- What the page stands at, as content under the bar. -->
+      <div
+        data-slot="page-facts"
+        class="flex flex-none flex-wrap items-center gap-x-space-3 gap-y-space-2"
+      >
+        <span
+          class="mark-line inline-flex items-center gap-space-2 text-ink-strong"
+        >
+          <TaskRing
+            done={isDecided(shown) ? 1 : shown.picked}
+            total={isDecided(shown) ? 1 : shown.cards}
+          />
+          <span data-slot="num" class="type-meta num text-ink-muted"
+            >{figure}</span
+          >
+        </span>
+        {#if pill}
+          <StatePill
+            tone={pill.tone}
+            title={pill.title}
+            who={pill.who}
+            word={pill.word}
+          />
+        {/if}
+        {#each [{ label: words.after, to: summary?.after ?? [], kind: "after" }, { label: words.unlocks, to: summary?.unlocks ?? [], kind: "unlocks" }] as group (group.kind)}
+          {#if group.to.length > 0}
+            <span class="type-meta text-pretty" data-links={group.kind}>
+              <span class="text-ink-muted">{group.label}</span>
+              {#each group.to as link, index (link.name)}
+                <a
+                  class="rounded-xs text-ink-strong underline decoration-border-control underline-offset-(--underline-offset) wrap-anywhere hover:decoration-ink-muted focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring"
+                  data-link-to={link.name}
+                  href={pageHref(link.name)}
+                  onclick={(event) => {
+                    if (
+                      event.metaKey ||
+                      event.ctrlKey ||
+                      event.shiftKey ||
+                      event.altKey ||
+                      event.button !== 0
+                    ) {
+                      return;
+                    }
+                    event.preventDefault();
+                    onopenpage(link.name);
+                  }}>{link.title}</a
+                >{index < group.to.length - 1 ? ", " : ""}
+              {/each}
+            </span>
+          {/if}
+        {/each}
+      </div>
+    {/if}
 
     {#if unread && !read}
       <p class="type-body py-space-5 text-ink-muted" role="alert">

@@ -167,28 +167,6 @@
    class from the markup that hosts them. Each is anchored on the host's own
    hook. */
 @layer components {
-  /* Svelte Flow's node and handle (the decisions graph): a card new to the
-     graph fades up where it lands, and the handles the edges need stay as
-     1px points nobody can grab. */
-  @media (prefers-reduced-motion: no-preference) {
-    [data-slot="decision-graph"] .svelte-flow__node-decision {
-      transition: opacity var(--dur-fade) var(--ease-out);
-
-      @starting-style {
-        opacity: 0;
-      }
-    }
-  }
-  [data-slot="decision-node"] .svelte-flow__handle {
-    inline-size: 1px;
-    block-size: 1px;
-    min-inline-size: 0;
-    min-block-size: 0;
-    border: 0;
-    background: transparent;
-    pointer-events: none;
-  }
-
   /* PhotoSwipe's DOM (its root is appended to <body>), under the
      `cawco-pswp` mainClass Lightbox passes it: its chrome on the house's
      raised surface and hairline, 44px controls. */
@@ -1347,11 +1325,7 @@
    link reaches the 24px pointer floor (DESIGN.md, The 24 Pointer Rule) and
    its ring sits on its own box. @xyflow's sheet is in `vendor`, under this. */
 @layer components {
-  :is(
-      [data-slot="view-canvas"],
-      [data-slot="decision-graph"],
-      [data-slot="canvas-map"]
-    )
+  :is([data-slot="view-canvas"], [data-slot="canvas-map"])
     .svelte-flow__attribution {
     --xy-attribution-background-color: transparent;
     font: var(--type-meta);

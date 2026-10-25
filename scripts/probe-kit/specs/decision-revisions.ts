@@ -1,13 +1,13 @@
 /**
- * The project's decision graph stays whole across sessions and revisions
- * (Projects spec §5.8: derived from the programs the project's folder
+ * A project's decision pages stay whole across sessions and revisions
+ * (Projects spec §5.8: read from the programs the project's folder
  * keeps), on a scratch fleet: a real hub, agent and sessiond, two Claude
  * Code sessions of one project against the mock model, their pages made
  * and revised through the hub's artifact routes as artifact_create and
- * artifact_update make them. Read from the hub: its answers, the graph,
- * the artifact's state and the project's folder.
+ * artifact_update make them. Read from the hub: its answers, the
+ * Decisions list, the artifact's state and the project's folder.
  *
- *   bun scripts/probe-kit/run.ts decision-graph
+ *   bun scripts/probe-kit/run.ts decision-revisions
  *
  * (a) A page whose `after` names a card its other page lacks is told so
  *     on create (`broken.unlinked`, naming that page and card). A statement
@@ -19,17 +19,18 @@
  *     names all three (`broken.picked`, `broken.options`, `broken.after`,
  *     which also names the decision the other page wants and it never had);
  *     the folder's page.oui is the revised program.
- * (c) The graph keeps the picks: the card whose option went is not drawn
- *     picked and names the option gone; its state still holds both picks;
- *     its problems say the broken `after`s with their page and card, and
- *     both orphaned picks.
+ * (c) The picks are kept: the list counts no pick on the card whose
+ *     option went, its state still holds both picks, and artifact_list
+ *     counts no pick made there.
  * (g) The page drawn on its session's origin: the card whose picked option
  *     went stands open, its head its question alone, nothing marked; a pick on
  *     an option it offers marks it, the card open.
  * (d) artifact_delete of a project's page takes its page.oui out of the
- *     folder with it, and the graph draws none of its cards.
+ *     folder with it, and the list holds no row for it.
  * (e) A project's page outlives its writing session: the session deleted,
- *     its row stays with no session, and the graph draws its card picked.
+ *     its row stays with no session, the list counts its card picked, and
+ *     the later page that comes after it names it as words both ways
+ *     (rollout's `after`, pricing's `unlocks`).
  * (f) A later session's create of the page's name in the project is a
  *     revision of that page: the same artifact, its picks kept.
  */
@@ -74,7 +75,7 @@ const REVISION = `root = Decisions("Price the hosted plan", [shape])
 shape = Decision("shape", "What does a customer pay for?", [team, machine], "A machine is what the fleet costs to run.")
 team = Option("team", "Per team", "One price for the whole team.", false, [], "A big team pays what a small one does.")`;
 
-/** A later session's page that comes after the pricing card left standing: the graph's edge once launch is gone. */
+/** A later session's page that comes after the pricing card left standing: the link once launch is gone. */
 const ROLLOUT = `root = Decisions("Plan the rollout", [go])
 go = Decision("go", "Does the rollout start now?", [ship, hold], "The price is set first.", [], ["pricing#shape"])
 ship = Option("ship", "Ship it", "Goes out this week.", true, [], "Less time to polish.")
@@ -110,10 +111,14 @@ interface Broken {
   unlinked?: string[];
 }
 
-interface GraphRead {
-  cards: { gone: string[]; id: string; picked: boolean }[];
-  edges: [string, string][];
-  problems: string[];
+interface ListRead {
+  pages: {
+    after: { name: string; title: string }[];
+    cards: number;
+    name: string;
+    picked: number;
+    unlocks: { name: string; title: string }[];
+  }[];
 }
 
 interface Read {
@@ -228,39 +233,33 @@ const run = async (kit: Kit) => {
     kept.content.slice(0, 200)
   );
 
-  const graphOf = () =>
-    fleet.api<GraphRead>(`/api/projects/${projectId}/decisions/graph`);
-  const graph = await graphOf();
-  const shape = graph.cards.find((card) => card.id === "pricing#shape");
+  const listOf = () =>
+    fleet.api<ListRead>(`/api/projects/${projectId}/decisions`);
+  const listed = await listOf();
+  const pricingRow = listed.pages.find((each) => each.name === "pricing");
   kit.check(
-    "(c) the card whose picked option went is not drawn picked, and names the option gone; both picks are kept",
-    shape?.picked === false &&
-      JSON.stringify(shape.gone) === JSON.stringify(["seat"]) &&
+    "(c) the list counts no pick on the card whose option went; both picks are kept in its state",
+    pricingRow?.picked === 0 &&
+      pricingRow.cards === 1 &&
       JSON.stringify(now.state.shape?.options) === JSON.stringify(["seat"]) &&
       JSON.stringify(now.state.trial?.options) === JSON.stringify(["week"]),
-    JSON.stringify({ shape, state: now.state })
+    JSON.stringify({ pricingRow, state: now.state })
   );
-  const listed = (
+  const status = (
     await fleet.api<{ id: string; picks?: { asked: number; made: number } }[]>(
       `${at(writer)}/status`
     )
   ).find((each) => each.id === pricing.id);
   kit.check(
     "(c) artifact_list counts no pick made on the card whose option went",
-    listed?.picks?.asked === 1 && listed.picks.made === 0,
-    JSON.stringify(listed?.picks)
+    status?.picks?.asked === 1 && status.picks.made === 0,
+    JSON.stringify(status?.picks)
   );
-  const said = [
-    "launch#date comes after pricing#trial: pricing has no decision trial.",
-    "launch#promo comes after pricing#discount: pricing has no decision discount.",
-    "pricing#shape was picked as seat, which the page no longer offers; the pick is kept.",
-    "pricing#trial was picked, and the page no longer asks it; the pick is kept.",
-  ];
   kit.check(
-    "(c) the graph's problems say each broken after with its page and card, and each orphaned pick",
-    said.every((line) => graph.problems.includes(line)) &&
-      graph.edges.length === 0,
-    JSON.stringify(graph.problems)
+    "(c) an after naming a decision the page no longer has links nothing: launch names no page, pricing unlocks none",
+    listed.pages.find((each) => each.name === "launch")?.after.length === 0 &&
+      pricingRow?.unlocks.length === 0,
+    JSON.stringify(listed.pages)
   );
 
   // (g) The page itself, on its project's origin, as the panel loads it.
@@ -319,15 +318,13 @@ const run = async (kit: Kit) => {
     method: "DELETE",
   });
   const launchFile = await folderFile("decisions/launch/page.oui");
-  const after = await graphOf().catch((error: unknown) => String(error));
+  const after = await listOf();
   kit.check(
-    "(d) artifact_delete of a project's page takes its page.oui out of the folder, and the graph draws none of its cards",
+    "(d) artifact_delete of a project's page takes its page.oui out of the folder, and the list holds no row for it",
     gone.ok &&
       launchFile.includes(" 404") &&
-      (typeof after === "string"
-        ? after.includes(" 404")
-        : !after.cards.some((card) => card.id.startsWith("launch#"))),
-    `${gone.status} | ${launchFile} | ${typeof after === "string" ? after : JSON.stringify(after.cards.map((card) => card.id))}`
+      !after.pages.some((each) => each.name === "launch"),
+    `${gone.status} | ${launchFile} | ${JSON.stringify(after.pages.map((each) => each.name))}`
   );
 
   // (e) The rollout comes after the pricing card; then the writer goes.
@@ -392,20 +389,18 @@ const run = async (kit: Kit) => {
     "SELECT instance_id FROM artifacts WHERE id = ?",
     pricing.id
   );
-  const outlived = await graphOf().catch((error: unknown) => String(error));
-  const shapeNow =
-    typeof outlived === "string"
-      ? undefined
-      : outlived.cards.find((card) => card.id === "pricing#shape");
+  const outlived = await listOf();
+  const pricingNow = outlived.pages.find((each) => each.name === "pricing");
+  const rolloutNow = outlived.pages.find((each) => each.name === "rollout");
   kit.check(
-    "(e) the writing session deleted, its project's page stays with no session, and the graph draws its card picked",
+    "(e) the writing session deleted, its project's page stays with no session, the list counts its card picked, and the rollout names it both ways",
     !!dropped &&
       stayed?.instance_id === null &&
-      shapeNow?.picked === true &&
-      typeof outlived !== "string" &&
-      outlived.edges.some(
-        ([from, to]) => from === "pricing#shape" && to === "rollout#go"
-      ),
+      pricingNow?.picked === 1 &&
+      JSON.stringify(rolloutNow?.after) ===
+        JSON.stringify([{ name: "pricing", title: "Price the hosted plan" }]) &&
+      JSON.stringify(pricingNow?.unlocks) ===
+        JSON.stringify([{ name: "rollout", title: "Plan the rollout" }]),
     JSON.stringify({
       dropped: !!dropped,
       writer: {
@@ -414,7 +409,7 @@ const run = async (kit: Kit) => {
         ending: ending ?? null,
       },
       stayed: stayed ?? null,
-      graph: typeof outlived === "string" ? outlived : outlived.cards,
+      pages: outlived.pages,
     })
   );
 
@@ -455,5 +450,5 @@ const run = async (kit: Kit) => {
   );
 };
 
-const spec: Spec = { name: "decision-graph", run };
+const spec: Spec = { name: "decision-revisions", run };
 export default spec;

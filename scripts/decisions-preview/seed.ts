@@ -11,8 +11,8 @@
  *   left open, notes, a dial, a card with a diagram, a recommendation
  *   turned down, and three tasks filed back onto its cards (`decided`).
  * - **onboarding** — "Shape onboarding", 5 cards, 2 picked, in a Section,
- *   each after the one before: a graph, with the landing's two hero cards
- *   after its last (`onboarding#caw-intro`).
+ *   each after the one before, with the landing's two hero cards
+ *   after its last (`onboarding#caw-intro`): landing comes after onboarding.
  *
  * Card and option ids are dashed, so no word of the page's prose is one:
  * the probe asserts no element's text holds a card id.

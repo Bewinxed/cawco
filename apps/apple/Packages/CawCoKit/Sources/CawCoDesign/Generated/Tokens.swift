@@ -576,7 +576,7 @@ public enum Size {
     public static let cCanvasSkeletonW: Double = 240
     /// A component canvas's frame on its way: the skeleton's height, two rows of a card's content, so the frames that land under it move the layout least (DESIGN.md Artifact panel, canvas and ink; Skeleton).
     public static let cCanvasSkeletonH: Double = 96
-    /// An edge's stroke on a graph canvas: the decision graph's and a component canvas's map, from one card to the next (DESIGN.md Artifact panel, canvas and ink).
+    /// An edge's stroke on a graph canvas: a component canvas's map, from one card to the next (DESIGN.md Artifact panel, canvas and ink).
     public static let cGraphEdge: Double = 1.5
     /// A component on a canvas's map: its name, file and counts over its frames at 16:10, live when chosen; the widest that keeps five across a desk pane at the map's fit (DESIGN.md Artifact panel, canvas and ink).
     public static let cMapNodeW: Double = 264
@@ -966,14 +966,6 @@ public enum Size {
     public static let cBlockRefusedBasis: Double = 288
     /// The composer canvas's top grab strip.
     public static let cCanvasGrabW: Double = 160
-    /// A decision page head's title group: how narrow it goes beside ‹ Decisions before it wraps.
-    public static let cDecisionHeadWhat: Double = 224
-    /// The decisions graph's least height.
-    public static let cDecisionGraphMinH: Double = 384
-    /// A decision card's width; the hub's graph layout assumes the same box (DecisionGraph CARD).
-    public static let cDecisionNodeW: Double = 148
-    /// A decision card's least height (DecisionGraph CARD.height).
-    public static let cDecisionNodeH: Double = 56
     /// A decision page's one centred column (decisions/host): two option columns side by side, each a 60ch line at the label size, and the gap between.
     public static let cDecisionPageW: Double = 920
     /// The length of a decision page's count bar in its sticky foot, beside "1 of 5 picked".

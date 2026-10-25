@@ -7162,203 +7162,6 @@
         }
       }
     },
-    "/api/projects/{id}/decisions/graph": {
-      "get": {
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "operationId": "getApiProjectsByIdDecisionsGraph",
-        "responses": {
-          "200": {
-            "description": "getApiProjectsByIdDecisionsGraph 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DecisionGraph"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "getApiProjectsByIdDecisionsGraph 400",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "getApiProjectsByIdDecisionsGraph 404",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "getApiProjectsByIdDecisionsGraph 409",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "getApiProjectsByIdDecisionsGraph 422",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "getApiProjectsByIdDecisionsGraph 503",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "places": {
-                    "maxItems": 500,
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "minLength": 1,
-                          "maxLength": 200,
-                          "type": "string"
-                        },
-                        "x": {
-                          "type": "number"
-                        },
-                        "y": {
-                          "type": "number"
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "x",
-                        "y"
-                      ]
-                    }
-                  }
-                },
-                "required": [
-                  "places"
-                ]
-              }
-            }
-          }
-        },
-        "operationId": "putApiProjectsByIdDecisionsGraph",
-        "responses": {
-          "200": {
-            "description": "putApiProjectsByIdDecisionsGraph 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/putApiProjectsByIdDecisionsGraph200"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "putApiProjectsByIdDecisionsGraph 400",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "putApiProjectsByIdDecisionsGraph 404",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "putApiProjectsByIdDecisionsGraph 409",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "putApiProjectsByIdDecisionsGraph 422",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "putApiProjectsByIdDecisionsGraph 503",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/projects/{id}/decisions/{name}": {
       "get": {
         "parameters": [
@@ -27664,17 +27467,6 @@
           }
         ]
       },
-      "putApiProjectsByIdDecisionsGraph200": {
-        "type": "object",
-        "properties": {
-          "placed": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "placed"
-        ]
-      },
       "getApiPush200": {
         "type": "object",
         "properties": {
@@ -36710,8 +36502,8 @@
         "type": "object",
         "properties": {
           "broken": {
-            "$ref": "#/components/schemas/GraphBroken",
-            "description": "What a decision page's program left broken on the picks and the graph; absent when nothing."
+            "$ref": "#/components/schemas/PageBroken",
+            "description": "What a decision page's program left broken on the picks and the links; absent when nothing."
           },
           "cards": {
             "type": "object",
@@ -37042,13 +36834,13 @@
           "route"
         ]
       },
-      "GraphBroken": {
-        "description": "What a decision page's program leaves broken on the person's picks and\nthe project's graph, for its writer to put back or tell the person.\nEach list only when it has something.",
+      "PageBroken": {
+        "description": "What a decision page's program leaves broken on the person's picks and\nthe project's links between pages, for its writer to put back or tell\nthe person.\nEach list only when it has something.",
         "type": "object",
         "properties": {
           "after": {
             "type": "object",
-            "description": "Decisions it lacks (taken out, or never written) that another page comes after, with the `page#card`s that do: no edge is drawn for them."
+            "description": "Decisions it lacks (taken out, or never written) that another page comes after, with the `page#card`s that do: no link is made for them."
           },
           "options": {
             "type": "object",
@@ -37062,7 +36854,7 @@
             }
           },
           "unlinked": {
-            "description": "Its `after`s naming no decision of the project's: no edge is drawn for them.",
+            "description": "Its `after`s naming no decision of the project's: no link is made for them.",
             "type": "array",
             "items": {
               "type": "string"
@@ -38354,8 +38146,8 @@
         "type": "object",
         "properties": {
           "broken": {
-            "$ref": "#/components/schemas/GraphBroken",
-            "description": "What it left broken on the picks and the graph; absent when nothing."
+            "$ref": "#/components/schemas/PageBroken",
+            "description": "What it left broken on the picks and the links; absent when nothing."
           },
           "cards": {
             "type": "object",
@@ -39662,8 +39454,11 @@
         "type": "object",
         "properties": {
           "graph": {
-            "description": "The decisions form a graph: one names another in `after`, or stands in a Section.",
-            "type": "boolean"
+            "description": "Always false: no client draws the decisions as a graph. Sent only\nbecause TestFlight ios 20261018 requires the field to read the list; it\ngoes once that build is no longer installable, 2027-01-16 (bash\napps/apple/scripts/testflight.sh --expire 20261018).",
+            "type": "boolean",
+            "enum": [
+              false
+            ]
           },
           "pages": {
             "type": "array",
@@ -39686,9 +39481,30 @@
         ]
       },
       "DecisionPageSummary": {
-        "description": "A page as the Decisions tab lists it.",
+        "description": "A page as the Decisions tab lists it: its facts, the pages it links to, and its questions for search.",
         "type": "object",
         "properties": {
+          "after": {
+            "description": "The pages one of its decisions comes after, in the order its cards name them.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DecisionLink"
+            }
+          },
+          "questions": {
+            "description": "Its cards' questions, in page order.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "unlocks": {
+            "description": "The pages with a decision that comes after one of its own.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DecisionLink"
+            }
+          },
           "artifactId": {
             "description": "Its artifact; null for a page whose artifact the hub no longer holds.",
             "type": [
@@ -39734,16 +39550,35 @@
           }
         },
         "required": [
+          "after",
           "artifactId",
           "cards",
           "decided",
           "name",
           "notes",
           "picked",
+          "questions",
           "state",
           "tasks",
           "title",
+          "unlocks",
           "updatedAt"
+        ]
+      },
+      "DecisionLink": {
+        "description": "Another of the project's decision pages, named on a page's row.",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "title"
         ]
       },
       "DecisionState": {
@@ -39774,128 +39609,6 @@
           "ended",
           "instanceId",
           "title"
-        ]
-      },
-      "DecisionGraph": {
-        "description": "The project's decisions as a graph, derived from its programs on each read.",
-        "type": "object",
-        "properties": {
-          "cards": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/GraphCard"
-            }
-          },
-          "edges": {
-            "description": "From the decision depended on to the one that depends on it, by graph id.",
-            "type": "array",
-            "items": {
-              "type": "array",
-              "minItems": 2,
-              "maxItems": 2,
-              "prefixItems": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "string"
-                }
-              ]
-            }
-          },
-          "groups": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/GraphGroup"
-            }
-          },
-          "problems": {
-            "description": "What the graph cannot draw as written, one sentence each: an `after`\nnaming no decision, a pick on a decision or option a revision took out,\na page whose artifact (and so its picks) the hub no longer holds.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "cards",
-          "edges",
-          "groups",
-          "problems"
-        ]
-      },
-      "GraphCard": {
-        "description": "One card on the graph: its page's decision, and where it stands.",
-        "type": "object",
-        "properties": {
-          "card": {
-            "description": "Its decision's id on its page.",
-            "type": "string"
-          },
-          "gone": {
-            "description": "Options of its pick that a revision took out, by id: the pick is kept, and the card says they are gone.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "id": {
-            "description": "`page#card`: one id across the project's pages.",
-            "type": "string"
-          },
-          "name": {
-            "description": "Its question.",
-            "type": "string"
-          },
-          "page": {
-            "description": "The page it is a card of.",
-            "type": "string"
-          },
-          "picked": {
-            "description": "Picked on its page, every option picked one it still offers.",
-            "type": "boolean"
-          },
-          "x": {
-            "type": "number"
-          },
-          "y": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "card",
-          "gone",
-          "id",
-          "name",
-          "page",
-          "picked",
-          "x",
-          "y"
-        ]
-      },
-      "GraphGroup": {
-        "description": "A Section, as a frame round its cards.",
-        "type": "object",
-        "properties": {
-          "cards": {
-            "description": "The graph ids of its cards.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "id": {
-            "description": "`page#section`.",
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "cards",
-          "id",
-          "name"
         ]
       },
       "DecisionPageRead": {

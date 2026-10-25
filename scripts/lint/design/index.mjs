@@ -91,10 +91,6 @@ const INLINE_STYLES = {
   "src/lib/cawco/config/SectionFrame.svelte": ["min-height"],
   "src/lib/cawco/config/SectionRow.svelte": ["color"],
   "src/lib/cawco/decisions/DecisionsView.svelte": ["animation"],
-  "src/lib/cawco/decisions/graph/DecisionGroup.svelte": [
-    "block-size",
-    "inline-size",
-  ],
   "src/lib/cawco/find/MentionField.svelte": ["left", "top"],
   "src/lib/cawco/home/HomeRecent.svelte": ["inline-size"],
   "src/lib/cawco/home/NeedsCard.svelte": ["color"],

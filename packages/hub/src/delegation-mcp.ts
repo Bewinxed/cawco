@@ -259,7 +259,7 @@ export function createDelegationMcp(options: {
     query: DelegateListQuery
   ) => Promise<DelegateList>;
   /**
-   * Caw's own tools (threads, views, his folder, the decision graph), for a
+   * Caw's own tools (threads, views, his folder), for a
    * project's lead (caw.ts). `toolUseId` is the call's own: a delegate type
    * his `folder_write` parks as a proposal is drawn at it.
    */
@@ -674,7 +674,7 @@ export function createDelegationMcp(options: {
     return await projectFromSessionTool(() => make(actor)).call(input);
   };
 
-  /** One of Caw's own tools (threads, views, his folder, the decision graph), its role already checked. */
+  /** One of Caw's own tools (threads, views, his folder), its role already checked. */
   const cawCall = async (
     actor: InstanceRow,
     name: string,

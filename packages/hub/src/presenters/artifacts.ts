@@ -10,7 +10,6 @@
 
 import { artifactLink } from "@cawco/core";
 import { type Pin, pinStandsOn, type ThreadEntry } from "@cawco/core/comments";
-import { PLACES_KEY } from "@cawco/core/decisions";
 import type { CanvasSpec, DesignMap } from "@cawco/core/stage";
 import type {
   ArtifactRead,
@@ -20,8 +19,8 @@ import type {
   ComponentWritten,
   Created,
   DecisionAnswer,
-  GraphBroken,
   Opened,
+  PageBroken,
   Promoted,
   Removed,
   Revised,
@@ -176,7 +175,7 @@ const answerLine = (answer: DecisionAnswer, now: number): string => {
 const valueLines = (read: ArtifactRead, now: number): string[] => {
   const asked = new Set((read.decisions ?? []).map((answer) => answer.id));
   return Object.entries(read.state)
-    .filter(([key]) => !(asked.has(key) || key === PLACES_KEY))
+    .filter(([key]) => !asked.has(key))
     .map(([key, entry]) => {
       const said = [
         ...(entry.options.length > 0
@@ -456,8 +455,8 @@ const openedWords = (opened: Opened): string =>
     ? "It is on the person's screen."
     : `Not on screen: ${opened.why}`;
 
-/** What a program left broken on the picks and the graph. */
-const brokenLines = (broken: GraphBroken | undefined): string[] =>
+/** What a program left broken on the picks and the links between pages. */
+const brokenLines = (broken: PageBroken | undefined): string[] =>
   broken
     ? [
         ...(broken.picked?.length
@@ -471,7 +470,7 @@ const brokenLines = (broken: GraphBroken | undefined): string[] =>
         ),
         ...Object.entries(broken.after ?? {}).map(
           ([decision, cards]) =>
-            `${decision} is gone, and ${listed(cards)} come after it: no edge is drawn.`
+            `${decision} is gone, and ${listed(cards)} come after it: no link is made.`
         ),
         ...(broken.unlinked?.length
           ? [

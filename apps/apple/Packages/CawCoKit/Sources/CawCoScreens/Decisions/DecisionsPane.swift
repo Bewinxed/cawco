@@ -9,9 +9,7 @@ import UIKit
 /// (DecisionPageView), its title and figure flying into the page's head,
 /// and ‹ Decisions goes back. Empty, Caw stands over the starters that ask
 /// him for a page in his panel (The Empty Starts Work Rule); while the list
-/// is read, the grid's skeleton stands (The Claim Of Nothing Rule). The
-/// graph mode the web offers when the decisions form one waits on the
-/// owner's call on native graphs (audit Q5).
+/// is read, the grid's skeleton stands (The Claim Of Nothing Rule).
 final class DecisionsPane: UIView, UICollectionViewDelegate {
     /// Caw's panel from where he stands, with a starter's words in his field when one was pressed.
     var openCaw: (UIView, String?) -> Void = { _, _ in }
@@ -357,7 +355,7 @@ extension DecisionPageView {
 
 // MARK: A tile
 
-/// One decision page in the grid (DecisionTile.svelte; the card recipe:
+/// One decision page in the grid (the card recipe:
 /// 12pt, raised, the tile shadow, 18pt rhythm). Line 1: its title, and its
 /// state pill at the end; line 2: the ring and its figure, `12 of 20 picked
 /// · 3 notes`, or decided, the check and `12 decided · 14 tasks`; line 3:

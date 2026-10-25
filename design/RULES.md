@@ -245,7 +245,7 @@ Under "Shapes" (DESIGN.md line 713); rule at line 719.
 
 Under "Shapes" (DESIGN.md line 713); rule at line 723.
 
-**The Whole Pixel Border Rule.** A border or an outline is a whole CSS pixel. A browser snaps its width to whole device pixels, so a 1.5px border draws 1px on a 1× screen and on a 3× one. A fractional stroke (the canvas's corner grip, a decision node's ring, DialKit's easing handles on a decision page, which the kit's page.css redraws over the vendored sheet's 1.5px border) is an inset ring, `inset-ring-(length:--x)`, whose spread is never snapped, or an SVG stroke. `scripts/border-width-check.ts` (in `bun run check`) refuses a fractional border or outline width in a token, a class or a declaration.
+**The Whole Pixel Border Rule.** A border or an outline is a whole CSS pixel. A browser snaps its width to whole device pixels, so a 1.5px border draws 1px on a 1× screen and on a 3× one. A fractional stroke (the canvas's corner grip, DialKit's easing handles on a decision page, which the kit's page.css redraws over the vendored sheet's 1.5px border) is an inset ring, `inset-ring-(length:--x)`, whose spread is never snapped, or an SVG stroke. `scripts/border-width-check.ts` (in `bun run check`) refuses a fractional border or outline width in a token, a class or a declaration.
 
 ## The Earned Count Rule
 

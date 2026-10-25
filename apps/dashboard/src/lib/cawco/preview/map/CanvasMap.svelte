@@ -9,7 +9,7 @@
    * (the hub's `GET …/artifacts/:id/map`). Each card counts its states and
    * frames drawn; the chosen one, the canvas's own until another is
    * pressed, draws its canvas live, the others the report's thumbnail of
-   * their frames. On Svelte Flow, as the decision graph, with its dots and
+   * their frames. On Svelte Flow, as the project's Canvas view, with its dots and
    * zoom tools. In a pane under 640px it is a list: Used in, This canvas,
    * Made of.
    */

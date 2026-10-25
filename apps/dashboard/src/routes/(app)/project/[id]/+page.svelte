@@ -52,10 +52,7 @@
   } from "#lib/cawco/blocks/BlockPage.svelte";
   import { cawco, requestView, threadsOf } from "#lib/cawco/client.svelte.js";
   import DecisionsView from "#lib/cawco/decisions/DecisionsView.svelte";
-  import {
-    type DecisionsMode,
-    ProjectDecisions,
-  } from "#lib/cawco/decisions/decisions.svelte.js";
+  import { ProjectDecisions } from "#lib/cawco/decisions/decisions.svelte.js";
   import { firstRender } from "#lib/cawco/first-render.svelte.js";
   import {
     failureClause,
@@ -535,9 +532,8 @@
 
   /** The project's decision pages (decisions.svelte.ts): the tab and its trail read them. */
   const decisions = new ProjectDecisions(() => projectId);
-  /** The decision page open in the tab, and how the tab shows the rest. */
+  /** The decision page open in the tab. */
   let decisionPage = $derived<string | null>(data.decisionPage);
-  let decisionMode = $derived<DecisionsMode>(data.decisionMode);
   /** The decision page the person has open, in the Decisions tab. */
   const openPage = $derived(current === "decisions" ? decisionPage : null);
   /** On a phone Caw's panel is a sheet over the page's foot: an open decision page stands under it. */
@@ -564,7 +560,6 @@
   );
   interface DecisionsPlace {
     card?: string | null;
-    mode?: DecisionsMode;
     page?: string | null;
   }
 
@@ -584,13 +579,10 @@
     }
     const at = {
       page: "page" in place ? (place.page ?? null) : decisionPage,
-      mode: place.mode ?? decisionMode,
       card: "card" in place ? (place.card ?? null) : decisionCard,
     };
     if (as === "decisions" && at.page) {
       query.set("page", at.page);
-    } else if (as === "decisions" && at.mode === "graph") {
-      query.set("mode", "graph");
     }
     if (id) {
       query.set("task", id);
@@ -606,13 +598,10 @@
     return `/project/${projectId}${search ? `?${search}` : ""}${hash}`;
   }
 
-  /** Where the Decisions tab goes: a page (at a card), the list or the graph. */
+  /** Where the Decisions tab goes: a page (at a card) or the list. */
   function decisionsGo(to: DecisionsPlace) {
     if ("page" in to) {
       decisionPage = to.page ?? null;
-    }
-    if (to.mode) {
-      decisionMode = to.mode;
     }
     if ("card" in to) {
       decisionCard = to.card ?? null;
@@ -620,7 +609,7 @@
     remember();
   }
 
-  /** The time the tiles' ages read, moved each minute while the tab shows. */
+  /** The time the rows' ages read, moved each minute while the tab shows. */
   let decisionsNow = $state(Date.now());
   $effect(() => {
     if (current !== "decisions") {
@@ -1501,24 +1490,18 @@
           !current.startsWith("view:") &&
           current !== "routines"
   );
-  /** What the pane holds, as its layout reads it: a decision page or the graph fills it. */
+  /** What the pane holds, as its layout reads it: a decision page fills it. */
   const paneView = $derived.by(() => {
     if (current !== "decisions") {
       // A task view with views placed beside it is a page of blocks.
       return framed ? "blocks" : current;
     }
-    if (decisionPage) {
-      return "decisions-page";
-    }
-    return decisionMode === "graph" && decisions.list?.graph
-      ? "decisions-graph"
-      : "decisions";
+    return decisionPage ? "decisions-page" : "decisions";
   });
   /** A view that fills its pane stands on the pane's foot at its own padding. */
   const PANE_FOOT: Record<string, string> = {
     board: "pb-0",
     canvas: "pb-space-5",
-    "decisions-graph": "pb-space-5",
     "decisions-page": "pb-0",
   };
   /**
@@ -1543,15 +1526,10 @@
    * phone that is the page (the board's columns included, which stand at
    * their height in it); elsewhere the pane, where the board scrolls its
    * columns sideways under its own. None while a view fills its pane (the
-   * canvas, a decision page, the decisions' graph) or the next project is read.
+   * canvas, a decision page) or the next project is read.
    */
   const fadeOn = $derived.by((): "page" | "pane" | null => {
-    if (
-      reading ||
-      current === "canvas" ||
-      paneView === "decisions-page" ||
-      paneView === "decisions-graph"
-    ) {
+    if (reading || current === "canvas" || paneView === "decisions-page") {
       return null;
     }
     if (pageScrollsQuery.current) {
@@ -1896,7 +1874,6 @@
       go={decisionsGo}
       hrefOf={(to) => hrefOf(null, "decisions", to)}
       {lead}
-      mode={decisionMode}
       now={decisionsNow}
       onopentask={openOne}
       page={decisionPage}
@@ -2289,7 +2266,7 @@
     data-slot="pane"
     aria-busy={cawco.hub === "unreachable" || awaiting || reading}
     class={[
-      "group flex min-h-0 max-w-full flex-auto flex-col overflow-y-auto pt-0 pe-space-6 ps-space-7 max-desk:px-space-5 view-board:overflow-hidden view-canvas:overflow-hidden view-decisions-graph:overflow-hidden view-decisions-page:overflow-hidden max-phone:shrink-0 max-phone:overflow-visible max-phone:view-board:overflow-visible max-phone:view-canvas:basis-0 max-phone:view-canvas:min-h-(--pane-min) max-phone:view-canvas:overflow-visible max-phone:view-decisions-graph:basis-0 max-phone:view-decisions-graph:min-h-(--pane-min) max-phone:view-decisions-graph:overflow-visible max-phone:view-decisions-page:basis-0 max-phone:view-decisions-page:min-h-(--pane-min) max-phone:view-decisions-page:overflow-visible",
+      "group flex min-h-0 max-w-full flex-auto flex-col overflow-y-auto pt-0 pe-space-6 ps-space-7 max-desk:px-space-5 view-board:overflow-hidden view-canvas:overflow-hidden view-decisions-page:overflow-hidden max-phone:shrink-0 max-phone:overflow-visible max-phone:view-board:overflow-visible max-phone:view-canvas:basis-0 max-phone:view-canvas:min-h-(--pane-min) max-phone:view-canvas:overflow-visible max-phone:view-decisions-page:basis-0 max-phone:view-decisions-page:min-h-(--pane-min) max-phone:view-decisions-page:overflow-visible",
       fadeOn === "pane" && "kit-edge-fade-block",
       paneFoot,
     ]}
@@ -2319,7 +2296,7 @@
     {:else}
       <div
         data-slot="swap"
-        class="relative flex min-h-0 flex-col group-view-board:flex-auto group-view-canvas:flex-auto group-view-decisions-graph:flex-auto group-view-decisions-page:flex-auto"
+        class="relative flex min-h-0 flex-col group-view-board:flex-auto group-view-canvas:flex-auto group-view-decisions-page:flex-auto"
         in:reveal
       >
         <!-- A view the URL names, still read, stands as its skeleton, which
@@ -2327,19 +2304,19 @@
              swaps as the lists do (leave). -->
         {#if shown === "awaiting"}
           <div
-            class="flex min-h-0 flex-col group-view-board:flex-auto group-view-canvas:flex-auto group-view-decisions-graph:flex-auto group-view-decisions-page:flex-auto"
+            class="flex min-h-0 flex-col group-view-board:flex-auto group-view-canvas:flex-auto group-view-decisions-page:flex-auto"
             out:revealOut
           >
             <Skeleton class="w-full" height="board" radius="card" />
           </div>
         {:else}
           <div
-            class="relative flex min-h-0 flex-col group-view-board:flex-auto group-view-canvas:flex-auto group-view-decisions-graph:flex-auto group-view-decisions-page:flex-auto"
+            class="relative flex min-h-0 flex-col group-view-board:flex-auto group-view-canvas:flex-auto group-view-decisions-page:flex-auto"
             in:reveal
           >
             {#key shown}
               <div
-                class="flex min-h-0 flex-col group-view-board:flex-auto group-view-canvas:flex-auto group-view-decisions-graph:flex-auto group-view-decisions-page:flex-auto"
+                class="flex min-h-0 flex-col group-view-board:flex-auto group-view-canvas:flex-auto group-view-decisions-page:flex-auto"
                 style:animation={swap.rowAnim(0, ListSwap.leaveEnd(0))}
                 out:leave
               >

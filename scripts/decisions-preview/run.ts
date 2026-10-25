@@ -48,7 +48,6 @@ await run.spec({
     console.log(`  list:      ${tab}`);
     console.log(`  picking:   ${tab}&page=landing`);
     console.log(`  decided:   ${tab}&page=pricing`);
-    console.log(`  graph:     ${tab}&mode=graph`);
     console.log("\nCtrl-C stops the fleet.");
     await stopped;
   },

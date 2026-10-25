@@ -12,7 +12,7 @@ public typealias DecisionPageRead = Components.Schemas.DecisionPageRead
 public typealias DecisionRecordCard = Components.Schemas.RecordCard
 
 public extension ProjectTasks {
-    /// The project's pages, newest first, and whether its decisions form a graph (`listDecisions`).
+    /// The project's pages, newest first (`listDecisions`).
     func decisions() async throws -> DecisionsList {
         let output = try await client.getApiProjectsByIdDecisions(path: .init(id: projectId))
         if case let .ok(ok) = output { return try ok.body.json }
@@ -48,7 +48,7 @@ public final class ProjectDecisions {
     public let projectId: String
     @ObservationIgnored private let hub: HubConnection
 
-    /// The pages and whether they form a graph; nil until first read.
+    /// The pages; nil until first read.
     public private(set) var list: DecisionsList?
     /// Why the last read failed, in the hub's words; nil when it read.
     public private(set) var problem: String?

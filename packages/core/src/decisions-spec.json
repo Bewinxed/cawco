@@ -138,7 +138,7 @@
           "children"
         ],
         "additionalProperties": false,
-        "description": "A heading over some decisions: a group on the decision graph."
+        "description": "A heading over some decisions on the page."
       },
       "Decision": {
         "type": "object",

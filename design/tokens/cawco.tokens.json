@@ -4284,7 +4284,7 @@
         "value": 1.5,
         "unit": "px"
       },
-      "$description": "An edge's stroke on a graph canvas: the decision graph's and a component canvas's map, from one card to the next (DESIGN.md Artifact panel, canvas and ink)."
+      "$description": "An edge's stroke on a graph canvas: a component canvas's map, from one card to the next (DESIGN.md Artifact panel, canvas and ink)."
     },
     "c-map-node-w": {
       "$type": "dimension",
@@ -6038,38 +6038,6 @@
         "unit": "px"
       },
       "$description": "The composer canvas's top grab strip."
-    },
-    "c-decision-head-what": {
-      "$type": "dimension",
-      "$value": {
-        "value": 14,
-        "unit": "rem"
-      },
-      "$description": "A decision page head's title group: how narrow it goes beside ‹ Decisions before it wraps."
-    },
-    "c-decision-graph-min-h": {
-      "$type": "dimension",
-      "$value": {
-        "value": 24,
-        "unit": "rem"
-      },
-      "$description": "The decisions graph's least height."
-    },
-    "c-decision-node-w": {
-      "$type": "dimension",
-      "$value": {
-        "value": 148,
-        "unit": "px"
-      },
-      "$description": "A decision card's width; the hub's graph layout assumes the same box (DecisionGraph CARD)."
-    },
-    "c-decision-node-h": {
-      "$type": "dimension",
-      "$value": {
-        "value": 56,
-        "unit": "px"
-      },
-      "$description": "A decision card's least height (DecisionGraph CARD.height)."
     },
     "c-decision-page-w": {
       "$type": "dimension",

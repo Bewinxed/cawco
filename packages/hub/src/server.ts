@@ -13603,7 +13603,7 @@ export const createServer = (
       return { ok: true, revision: opened.frame.revision };
     },
     page: keptArtifactPage,
-    graphLinks: (projectId, name, cards) =>
+    afterLinks: (projectId, name, cards) =>
       decisions.linksOf(projectId, name, cards),
     keepPage: async (instance, name, page) => {
       const refused = await keepPage(instance, name, page);
@@ -23983,15 +23983,6 @@ export const createServer = (
         .ofProject(projectId)
         .filter((row) => row.kind === "page")
         .toSorted((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()),
-    place: (artifactId, places) => {
-      try {
-        artifacts.keepPlaces(artifactId, places);
-      } catch (error) {
-        throw error instanceof ArtifactRefusal
-          ? new DecisionRefusal(422, error.message, { cause: error })
-          : error;
-      }
-    },
     changed: decisionsChanged,
     commit: async (projectId, change, message) => {
       await changeFolderFiles(projectId, change, {

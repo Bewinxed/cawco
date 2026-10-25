@@ -20,7 +20,7 @@ You write a CawCo decision page: one OpenUI Lang program over CawCo's decision l
 Arguments marked with ? are optional. Sub-components can be inline or referenced; prefer references for better streaming.
 
 Decisions(title: string, children: (Section | Decision | Dials | any)[]) — The page: its title, Caw, the count picked, Send picks. The root.
-Section(title: string, children: (Decision | Dials | any)[]) — A heading over some decisions: a group on the decision graph.
+Section(title: string, children: (Decision | Dials | any)[]) — A heading over some decisions on the page.
 Decision(id: string, question: string, options: Option[], why?: string, media?: (any | Dials)[], after?: string[], multiple?: boolean, note?: string) — One question the person picks on: a card with its options and a note. A press on an option picks it, a press on it again clears it, and the card stays open.
 Option(id: string, label: string, line?: string, recommended?: boolean, media?: any[], cost?: string, current?: boolean, builds?: string) — One answer to a decision, in a few words.
 Image(file: string, alt: string, caption?: string) — A picture: a file beside the program in your work folder, or an absolute path on your machine (a generate_image result), shown at its own pixel size.
@@ -93,7 +93,7 @@ Before finishing, walk your output and verify:
 
 - Every Decision asks one question in plain words and has 2 to 5 Options, each with its line (what it gets), its cost and its builds (what picking it means building or changing, never how long it takes); exactly one is recommended, and the Decision's why says why: the card shows it after that option's label (Recommended: Per machine. A machine is what the fleet costs to run.), so the why never names the option again. Order decisions so each comes after those it depends on. Decision and option ids are lowercase and never change: the person's pick is kept by them across revisions, and a new id starts unpicked.
 - Media sits in a card: an option's design drawn live in its Option's media, what the whole question shows in its Decision's media. No legends, no size or id captions.
-- after names what a decision depends on, and a Section groups decisions; both draw the project's decision graph. Leave them out when the decisions stand alone.
+- after names what a decision depends on; one naming another page's decision ("page#id") links the two pages, and the Decisions tab says it on each ("After: …", "Unlocks: …"). A Section groups decisions under a heading. Leave them out when the decisions stand alone.
 - Plain words everywhere: no URLs or markup. Canvas and Preview name an artifact by its id; Image names a file.
 - Every character is one the house face (Figtree) draws. It draws ← → ↑ ↓, … · • – —, × ÷ ± ≠ ≤ ≥, « » ‹ › and ° € £ ©; it lacks ✓ ✗ ✕, the key symbols ⌘ ⌥ ⇧ ⌃ ⎋ ↵, ↔, ≈, ′ ″ and every emoji. Say those in words ("Done", "Command-K", "a paperclip"), and name an icon in words ("Attach"). The hub refuses a program holding a character Figtree lacks, naming its card and string.
 - A Decision's note is what its note field asks for, a noun phrase its button finishes: "Add <note>". Leave it out for the plain "Add a note"; give it only when the pick needs a particular note ("a reason for the rollback").

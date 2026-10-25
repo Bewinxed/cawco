@@ -20,12 +20,9 @@
  *     an ink stroke anchor by the card's id; a revision (statements) that
  *     puts a decision ahead keeps the pin on its card, the ink on its
  *     options and the pick marked, and the next pick carries the new hash.
- * (c) The graph is derived: a card per decision, an edge per `after`, a
- *     frame per Section; a drag's place is kept in the page's state under
- *     `graph.places` and survives a revision; the Decisions tab's graph
- *     draws its cards and edges; the page live in the tab stands its Send
- *     picks bar above the docked composer and the foot fade's dissolve,
- *     no fade layer over the bar's box.
+ * (c) The page live in the tab stands its Send picks bar above the
+ *     docked composer and the foot fade's dissolve, no fade layer over the
+ *     bar's box.
  * (d) A flowchart, a sequence diagram and a Gantt chart draw as Pele SVG on
  *     the house tokens in both themes; "Open as canvas" stands under the
  *     two types the converter draws as elements, never the Gantt, and opens
@@ -243,9 +240,6 @@ const INSERT = `root = Decisions("Shape the launch", [audience, stack, host, lat
 audience = Decision("audience", "Who is the page for?", [teams, solo], "Teams run the most machines.")
 teams = Option("teams", "Teams", "Each seat a person.", true, [], "Solo builders read past it.")
 solo = Option("solo", "Solo builders", "One person, many machines.", false, [], "Teams look elsewhere.")`;
-
-/** A revision that rewords one decision. */
-const REWORD = `host = Decision("host", "Where does the launch page run?", [hub, edge], "It ships with the hub today.", [sketch, tune], ["stack"])`;
 
 const MOCKUP = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Motion</title>
 <style>body{margin:0;font:16px system-ui}.box{margin:16px;padding:16px;border-radius:12px;background:#eee}
@@ -2412,85 +2406,10 @@ const insertAhead = async (on: On, first: string) => {
   );
 };
 
-interface GraphRead {
-  cards: { id: string; x: number; y: number }[];
-  edges: [string, string][];
-  groups: { cards: string[]; id: string; name: string }[];
-}
-
-/** (c) the derived graph, a drag kept through a revision, the tab's graph. */
-const graphChecks = async (on: On) => {
-  const { fleet, kit, projectId } = on;
-  const graphOf = () =>
-    fleet.api<GraphRead>(`/api/projects/${projectId}/decisions/graph`);
-  const graph = await graphOf();
-  kit.check(
-    "(c) the graph is derived: a card per decision, an edge per after, a frame for the Section",
-    JSON.stringify(graph.cards.map((each) => each.id).toSorted()) ===
-      JSON.stringify([
-        "launch#audience",
-        "launch#host",
-        "launch#plan",
-        "launch#stack",
-      ]) &&
-      JSON.stringify(graph.edges.toSorted()) ===
-        JSON.stringify([
-          ["launch#host", "launch#plan"],
-          ["launch#stack", "launch#host"],
-        ]) &&
-      JSON.stringify(graph.groups) ===
-        JSON.stringify([
-          { id: "launch#later", name: "Later", cards: ["launch#plan"] },
-        ]),
-    JSON.stringify(graph)
-  );
-  const placed = await fetch(
-    `${fleet.base}/api/projects/${projectId}/decisions/graph`,
-    {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ places: [{ id: "launch#host", x: 640, y: 320 }] }),
-    }
-  );
-  await fleet.api(
-    `/api/instances/${on.writer}/artifacts/${on.page}/statements`,
-    {
-      statements: REWORD,
-    }
-  );
-  const moved = (await graphOf()).cards.find(
-    (each) => each.id === "launch#host"
-  );
-  const places = (await on.read()).state["graph.places"]?.value as
-    Record<string, { x: number; y: number }> | undefined;
-  kit.check(
-    "(c) a drag is kept in the page's state under graph.places and stands after a revision",
-    placed.ok && moved?.x === 640 && moved.y === 320 && places?.host?.x === 640,
-    JSON.stringify({ status: placed.status, moved, places })
-  );
+/** (c) the page live in the tab: its Send picks bar clear of the dock and the foot fade. */
+const liveBarChecks = async (on: On) => {
+  const { kit, projectId } = on;
   const tab = await kit.page("desk", { theme: "light" });
-  await open(
-    tab,
-    `${on.base}/project/${projectId}?view=decisions`,
-    '[data-slot="decisions"]'
-  );
-  await tab.getByRole("radio", { name: "Graph" }).click();
-  const drawn = await until(
-    "the tab's graph",
-    () =>
-      tab.evaluate(() => ({
-        nodes: document.querySelectorAll(".svelte-flow__node-decision").length,
-        edges: document.querySelectorAll(".svelte-flow__edge").length,
-        frames: document.querySelectorAll(".svelte-flow__node-frame").length,
-      })),
-    (g) => g.nodes === 4 && g.edges === 2 && g.frames === 1,
-    20_000
-  ).catch(() => null);
-  kit.check(
-    "(c) the Decisions tab's graph draws the derived cards, edges and Section frame",
-    drawn?.nodes === 4 && drawn.edges === 2 && drawn.frames === 1,
-    JSON.stringify(drawn)
-  );
   // The page live in the tab: its Send picks bar stands above the docked
   // composer and above the foot fade's dissolve over it (FootFade), so no
   // layer of the fade is drawn over the bar's box.
@@ -5548,7 +5467,7 @@ const run = async (kit: Kit) => {
     await foldLeg(on, theme);
   }
   await waitChecks(on);
-  await graphChecks(on);
+  await liveBarChecks(on);
   await makeTasks(on);
   await htmlPage(on);
   const html = await until(

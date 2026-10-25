@@ -301,7 +301,6 @@
 @custom-variant mark-circle (&[data-mark="circle"]);
 @custom-variant mark-lemniscate (&[data-mark="lemniscate"]);
 @custom-variant marked-off (&[data-marked="off"]);
-@custom-variant mode-graph (&[data-mode="graph"]);
 @custom-variant mode-page (&[data-mode="page"]);
 @custom-variant mounted-false (&[data-mounted="false"]);
 @custom-variant outcome-failed (&[data-outcome="failed"]);
@@ -399,8 +398,6 @@
 @custom-variant slot-crumb (&[data-slot="crumb"]);
 @custom-variant slot-ctrls (&[data-slot="ctrls"]);
 @custom-variant slot-cwd (&[data-slot="cwd"]);
-@custom-variant slot-decision-graph (&[data-slot="decision-graph"]);
-@custom-variant slot-decision-node (&[data-slot="decision-node"]);
 @custom-variant slot-desktop (&[data-slot="desktop"]);
 @custom-variant slot-details-body (&[data-slot="details-body"]);
 @custom-variant slot-details-measure (&[data-slot="details-measure"]);
@@ -717,7 +714,6 @@
 @custom-variant view-a (&[data-view="a"]);
 @custom-variant view-board (&[data-view="board"]);
 @custom-variant view-canvas (&[data-view="canvas"]);
-@custom-variant view-decisions-graph (&[data-view="decisions-graph"]);
 @custom-variant view-decisions-page (&[data-view="decisions-page"]);
 @custom-variant x-position-center (&[data-x-position="center"]);
 @custom-variant y-position-bottom (&[data-y-position="bottom"]);

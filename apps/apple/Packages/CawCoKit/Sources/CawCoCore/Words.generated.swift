@@ -1911,10 +1911,64 @@ public enum Words {
 
         public static let retry = "Retry"
 
-        /// The empty tab, with Caw able to start: his starters under him.
-        public static let empty = "No decisions yet"
+        /// The list's groups, by a page's standing: waiting on picks, sent, decided.
+        public static let needsYou = "Needs you"
 
-        public static let emptyCaw = "Caw writes a decision page: the choices this project needs you to make, each with its options."
+        /// Needs you's line when no page waits on picks.
+        public static let nothingWaits = "Nothing waits on you."
+
+        /// A page's cards still unpicked, on its row: `2 open`.
+        public static func open(open: Int) -> String {
+            "\(open) open"
+        }
+
+        /// A page fully picked and not yet sent, on its row.
+        public static let notSent = "Not sent"
+
+        /// A sent page's share picked, on its row: `3 of 4`.
+        public static func pickedOf(picked: Int, cards: Int) -> String {
+            "\(picked) of \(cards)"
+        }
+
+        /// Who has a sent page now, on its row.
+        public static let workingOn = "working on it"
+
+        public static let sessionEnded = "its session ended"
+
+        /// A decided page while its tasks are being filed.
+        public static let makingTasks = "making tasks"
+
+        /// The pages another links to, as words on its row and its page: `After: Price the plan`.
+        public static let after = "After:"
+
+        public static let unlocks = "Unlocks:"
+
+        /// A row's age, said whole for a pointer that rests on it and for a screen reader.
+        public static func lastChanged(when: String) -> String {
+            "Last changed \(when)"
+        }
+
+        /// A group's rows past its first few, behind one reveal: `3 more sent pages`.
+        public static func more(count: Int, group: String) -> String {
+            "\(count) more \(group) \(count == 1 ? "page" : "pages")"
+        }
+
+        /// The list's search.
+        public static let search = "Search decisions"
+
+        public static let clearSearch = "Clear the search"
+
+        public static func noMatch(query: String) -> String {
+            "No decisions for “\(query)”"
+        }
+
+        /// ‹ back from an opened page, said for the screen reader and in its tooltip.
+        public static let back = "Back to Decisions"
+
+        /// The empty tab, with Caw able to start: his starters under him.
+        public static let empty = "Your decision pages will appear here"
+
+        public static let emptyCaw = "Caw writes one when this project needs you to choose: each choice with its options, picked here and sent to the agents."
 
         /// The empty tab while Caw can't start: a session writes one.
         public static let emptySession = "A session writes decision pages; start one and ask for a page."

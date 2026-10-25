@@ -60,7 +60,7 @@ Away from a desk, the operator uses the Caw&Co app on iPhone, iPad and Mac, or t
 - Routines: scheduled or event-fired work that starts a delegate, an orchestrator or a message to Caw, once per slot
 - Plans: every session keeps its plan in CawCo's list on every harness; the person's edits reach it at its next step
 - Artifacts: pages, canvases, previews, component canvases and the project's browser, kept by the hub, with picks, pins, comments and ink that reach the session that made them
-- Decision pages: the person's choices, one card each, drawn live; their picks become tasks, and their links form a graph
+- Decision pages: the person's choices, one card each, drawn live; their picks become tasks, and their links read as words on each page
 - Memory and Find: AGENTS.md and dated, sourced fact lines curated from agents' notes; one search over everything any session said or made, for the person and every agent
 - Fleet watch: code detectors and a triage that nudges a session's lead when it loops or stalls; a session is never told about itself
 - Browser take-over: each project's own Chrome; the person takes over privately for a sign-in or a code and hands back

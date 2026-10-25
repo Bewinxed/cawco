@@ -57,7 +57,7 @@ function findSeed(
  * ended, so a refusal is said where the board would be, never drawn as an
  * empty board. `?view=` names the view (the board when absent) and
  * `?task=` the task whose sheet is open; on the Decisions tab `?page=`
- * names the decision page open in it and `?mode=graph` its graph.
+ * names the decision page open in it.
  */
 export const load: PageLoad = async ({ fetch, params, url }) => {
   const base = `/api/projects/${encodeURIComponent(params.id)}`;
@@ -106,8 +106,5 @@ export const load: PageLoad = async ({ fetch, params, url }) => {
     view: url.searchParams.get("view") ?? "board",
     task: url.searchParams.get("task"),
     decisionPage: url.searchParams.get("page"),
-    decisionMode: (url.searchParams.get("mode") === "graph"
-      ? "graph"
-      : "list") as "graph" | "list",
   };
 };

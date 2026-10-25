@@ -757,7 +757,7 @@
     --c-canvas-skeleton-w: 240px;
     /* A component canvas's frame on its way: the skeleton's height, two rows of a card's content, so the frames that land under it move the layout least (DESIGN.md Artifact panel, canvas and ink; Skeleton). */
     --c-canvas-skeleton-h: 96px;
-    /* An edge's stroke on a graph canvas: the decision graph's and a component canvas's map, from one card to the next (DESIGN.md Artifact panel, canvas and ink). */
+    /* An edge's stroke on a graph canvas: a component canvas's map, from one card to the next (DESIGN.md Artifact panel, canvas and ink). */
     --c-graph-edge: 1.5px;
     /* A component on a canvas's map: its name, file and counts over its frames at 16:10, live when chosen; the widest that keeps five across a desk pane at the map's fit (DESIGN.md Artifact panel, canvas and ink). */
     --c-map-node-w: 264px;
@@ -1146,14 +1146,6 @@
     --c-block-refused-basis: 18rem;
     /* The composer canvas's top grab strip. */
     --c-canvas-grab-w: 160px;
-    /* A decision page head's title group: how narrow it goes beside ‹ Decisions before it wraps. */
-    --c-decision-head-what: 14rem;
-    /* The decisions graph's least height. */
-    --c-decision-graph-min-h: 24rem;
-    /* A decision card's width; the hub's graph layout assumes the same box (DecisionGraph CARD). */
-    --c-decision-node-w: 148px;
-    /* A decision card's least height (DecisionGraph CARD.height). */
-    --c-decision-node-h: 56px;
     /* A decision page's one centred column (decisions/host): two option columns side by side, each a 60ch line at the label size, and the gap between. */
     --c-decision-page-w: 920px;
     /* The length of a decision page's count bar in its sticky foot, beside "1 of 5 picked". */

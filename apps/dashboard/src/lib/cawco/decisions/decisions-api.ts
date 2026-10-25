@@ -4,7 +4,6 @@
  * them. Each refusal is thrown in the hub's own words.
  */
 import type {
-  DecisionGraph,
   DecisionPageRead,
   DecisionSent,
   DecisionsList,
@@ -21,7 +20,7 @@ async function answered<T>(response: Response): Promise<T> {
   return (await response.json()) as T;
 }
 
-/** The project's pages, newest first, and whether its decisions form a graph. */
+/** The project's pages, newest first, each with the pages it links to. */
 export async function listDecisions(projectId: string): Promise<DecisionsList> {
   return answered(await fetch(base(projectId)));
 }
@@ -59,27 +58,6 @@ export async function makeDecisionTasks(
   return answered(
     await fetch(`${base(projectId)}/${encodeURIComponent(name)}/tasks`, {
       method: "POST",
-    })
-  );
-}
-
-/** The graph the hub derives from the project's decision pages, each card's pick read from its page. */
-export async function readDecisionGraph(
-  projectId: string
-): Promise<DecisionGraph> {
-  return answered(await fetch(`${base(projectId)}/graph`));
-}
-
-/** The person's drags: each card's new place (by `page#card`), kept in its page's artifact. */
-export async function placeDecisionCards(
-  projectId: string,
-  places: { id: string; x: number; y: number }[]
-): Promise<void> {
-  await answered(
-    await fetch(`${base(projectId)}/graph`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ places }),
     })
   );
 }

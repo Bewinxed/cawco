@@ -102,10 +102,8 @@ import {
   wroteLine,
 } from "@cawco/core/comments";
 import {
+  type AfterLinks,
   type DecisionCard,
-  type GraphLinks,
-  type GraphPlace,
-  PLACES_KEY,
   pickMade,
   pickOf,
   picksMade,
@@ -591,17 +589,18 @@ export interface ArtifactRead {
 
 /**
  * What a decision page's program leaves broken on the person's picks and
- * the project's graph, for its writer to put back or tell the person.
+ * the project's links between pages, for its writer to put back or tell
+ * the person.
  * Each list only when it has something.
  */
-export interface GraphBroken {
-  /** Decisions it lacks (taken out, or never written) that another page comes after, with the `page#card`s that do: no edge is drawn for them. */
+export interface PageBroken {
+  /** Decisions it lacks (taken out, or never written) that another page comes after, with the `page#card`s that do: no link is made for them. */
   after?: Record<string, string[]>;
   /** Options taken out that the person picked, by decision: the pick is kept, and its card says the option is gone. */
   options?: Record<string, string[]>;
   /** Decisions taken out that the person picked: the pick is kept, on no card. */
   picked?: string[];
-  /** Its `after`s naming no decision of the project's: no edge is drawn for them. */
+  /** Its `after`s naming no decision of the project's: no link is made for them. */
   unlinked?: string[];
 }
 
@@ -610,8 +609,8 @@ export interface GraphBroken {
  * not the page. The person's picks are read with `artifact_read`.
  */
 export interface Revised {
-  /** What it left broken on the picks and the graph; absent when nothing. */
-  broken?: GraphBroken;
+  /** What it left broken on the picks and the links; absent when nothing. */
+  broken?: PageBroken;
   /** The cards it put in or rewrote, each by its link (`[question](cawco:decision/<artifact>/<card>)`), by id. */
   cards: Record<string, string>;
   /** Its decisions now, by id, in page order. */
@@ -671,8 +670,8 @@ export interface ArtifactStatus {
 }
 
 export interface Created {
-  /** What a decision page's program left broken on the picks and the graph; absent when nothing. */
-  broken?: GraphBroken;
+  /** What a decision page's program left broken on the picks and the links; absent when nothing. */
+  broken?: PageBroken;
   /** A decision page's cards' links, by id (`[question](cawco:decision/<artifact>/<card>)`): what the agent names each by. */
   cards?: Record<string, string>;
   /** A decision page's decisions, by id, in page order. */
@@ -978,14 +977,12 @@ const answerOf = (
   };
 };
 
-/** The person's picks and notes written since their last send (a card's places on the graph are no answer): what Send sends of the page's choices. */
+/** The person's picks and notes written since their last send: what Send sends of the page's choices. */
 const unsentChoices = (
   state: Record<string, ChoiceEntry>,
   sentAt: string | null
 ): number =>
-  Object.entries(state).filter(
-    ([key, entry]) => key !== PLACES_KEY && (!sentAt || entry.at > sentAt)
-  ).length;
+  Object.values(state).filter((entry) => !sentAt || entry.at > sentAt).length;
 
 /** The page hash the newest entry was made on: a preview's, which the hub never built. */
 const newestHash = (state: Record<string, ChoiceEntry>): string | null =>
@@ -1361,6 +1358,16 @@ export type PageFrom =
 export interface ArtifactServiceDeps {
   /** The notice ids the person acknowledged (hub notices.ts): Not now's among them. */
   acknowledged: () => readonly string[];
+  /**
+   * What decision page `name` drawn with `cards` does to its project's
+   * links (decisions.ts `linksOf`): its `after`s naming no decision, and
+   * its decisions other pages come after. Said to its writer.
+   */
+  afterLinks: (
+    projectId: string,
+    name: string,
+    cards: DecisionCard[]
+  ) => Promise<AfterLinks>;
   /** The Caw thread a project's lead's turn answers now (caw.ts `askThread`); none for any other session. */
   askThread: (instance: InstanceRow) => string | undefined;
   /**
@@ -1417,16 +1424,6 @@ export interface ArtifactServiceDeps {
     dir: string,
     path: string | undefined
   ) => Promise<FolderWeight>;
-  /**
-   * What decision page `name` drawn with `cards` does to its project's
-   * graph (decisions.ts `linksOf`): its `after`s naming no decision, and
-   * its decisions other pages come after. Said to its writer.
-   */
-  graphLinks: (
-    projectId: string,
-    name: string,
-    cards: DecisionCard[]
-  ) => Promise<GraphLinks>;
   /**
    * Tells `parent` once that its delegate `maker` handed it `artifact`, not
    * opened, or changed it while its panel shows it, the change held as
@@ -3206,14 +3203,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const brokenBy = async (
     page: { id: string | undefined; name: string; projectId: string | null },
     cards: DecisionCard[]
-  ): Promise<GraphBroken | undefined> => {
+  ): Promise<PageBroken | undefined> => {
     const state = page.id ? stateOf(docs.doc(page.id)) : {};
     const has = (id: string) => cards.some((card) => card.id === id);
     const picked = Object.entries(state)
-      .filter(
-        ([key, entry]) =>
-          key !== PLACES_KEY && !has(key) && (entry.options ?? []).length > 0
-      )
+      .filter(([key, entry]) => !has(key) && (entry.options ?? []).length > 0)
       .map(([key]) => key);
     const options = Object.fromEntries(
       cards.flatMap((card) => {
@@ -3222,12 +3216,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       })
     );
     const links = page.projectId
-      ? await deps.graphLinks(page.projectId, page.name, cards)
+      ? await deps.afterLinks(page.projectId, page.name, cards)
       : { unlinked: [], dependents: {} };
     const after = Object.fromEntries(
       Object.entries(links.dependents).filter(([id]) => !has(id))
     );
-    const broken: GraphBroken = {
+    const broken: PageBroken = {
       ...(picked.length > 0 ? { picked } : {}),
       ...(Object.keys(options).length > 0 ? { options } : {}),
       ...(Object.keys(after).length > 0 ? { after } : {}),
@@ -3238,14 +3232,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /**
    * A create's page built, and what its program leaves broken on the picks
-   * of the page it replaces and on the project's graph. A re-create held
+   * of the page it replaces and on the project's links between pages. A re-create held
    * for the parent is kept in its project's folder when they open it.
    */
   const createdPage = async (
     { maker, owner }: Making,
     input: ArtifactInput
   ): Promise<{
-    broken: GraphBroken | undefined;
+    broken: PageBroken | undefined;
     html: string;
     program?: BuiltProgram;
   }> => {
@@ -6078,7 +6072,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       let machineId: string | null = null;
       let html: string | null = null;
       let program: BuiltProgram | undefined;
-      let broken: GraphBroken | undefined;
+      let broken: PageBroken | undefined;
       if (input.kind === "page") {
         ({ html, program, broken } = await createdPage(making, input));
       } else {
@@ -6308,34 +6302,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     pageShows: (pageId: string, id: string): boolean => {
       const page = db.get(pageId);
       return !!page && mediaOf(page).includes(id) && !!mediaSeen(page, id);
-    },
-
-    /**
-     * The person's places of a decision page's cards on the project's graph
-     * (decisions.ts `place`), kept in its state under `graph.places` by card
-     * id, so a revision keeps them as it keeps picks. The hub's write: the
-     * page's session hears nothing of it.
-     */
-    keepPlaces: (id: string, places: Record<string, GraphPlace>): void => {
-      const doc = docs.doc(id);
-      const entry: ChoiceEntry = {
-        options: [],
-        note: "",
-        value: places,
-        pageHash:
-          metaOf(doc).pageHash ?? newestHash(stateOf(doc)) ?? "0".repeat(64),
-        at: new Date().toISOString(),
-      };
-      const problem = choiceEntryProblem(PLACES_KEY, entry);
-      if (problem) {
-        throw new ArtifactRefusal(
-          413,
-          `The graph's places were not kept: ${problem}`
-        );
-      }
-      docs.transact(id, "hub", (live) =>
-        live.getMap("state").set(PLACES_KEY, entry)
-      );
     },
 
     /** A decision page's program as the hub keeps it; undefined for an HTML page, any other artifact, or none. */
