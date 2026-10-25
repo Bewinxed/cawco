@@ -26,13 +26,8 @@ import { join } from "node:path";
 import type { Page } from "playwright-core";
 import type { accountMoveWords } from "../../../packages/core/src/accounts";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
-import {
-  ACCOUNT,
-  MACHINE,
-  type Reply,
-  type Seen,
-  until,
-} from "../../scratch-fleet";
+import { toolWords } from "../../lib/tool-call";
+import { ACCOUNT, type Reply, type Seen, until } from "../../scratch-fleet";
 import {
   type Engine,
   type Kit,
@@ -269,30 +264,32 @@ const standUp = async (kit: Kit): Promise<KitFleet> => {
   return fleet;
 };
 
-/** A message to `id` from its parent session `parent`, as a parent's send carries it. */
+/**
+ * A message to `id` from its parent session `parent`, sent as a parent
+ * sends it: its `handoff`, through the hub's tool door with the parent's own
+ * credential (a page's send is the person's, hub stream.ts, so a socket
+ * send naming the parent is refused).
+ */
 const peerSend = async (
   fleet: KitFleet,
   id: string,
   parent: string,
   words: string
 ): Promise<void> => {
-  await fleet.post({
-    type: "command",
-    commandId: crypto.randomUUID(),
-    kind: "send",
-    machineId: MACHINE,
-    sessionId: id,
-    payload: {
-      instanceId: id,
-      message: {
-        type: "user",
-        uuid: crypto.randomUUID(),
-        message: { role: "user", content: words },
-        parent_tool_use_id: null,
-        origin: { kind: "peer", fromSession: parent, name: "Wait parent" },
-      },
-    },
-  });
+  const credential = await until(
+    "the parent's credential",
+    () => fleet.sessionCredential(parent),
+    Boolean,
+    60_000
+  );
+  const said = await toolWords(
+    { base: fleet.base, id: parent, credential },
+    "handoff",
+    { target: id, message: words }
+  );
+  if (said.refused) {
+    throw new Error(`the parent's handoff was refused: ${said.text}`);
+  }
 };
 
 type Move = Parameters<typeof accountMoveWords>[0];

@@ -67,6 +67,7 @@ import {
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
 import { accountsWords } from "../../../packages/core/src/words/accounts";
 import { COMPACT_FOCUS } from "../../../packages/hub/src/open-items";
+import { toolWords } from "../../lib/tool-call";
 import {
   ACCOUNT,
   MACHINE,
@@ -699,32 +700,32 @@ const compactLeg = async (kit: Kit, fleet: KitFleet): Promise<void> => {
   );
 };
 
-/** A message to `id` from its parent session `parent`, as a parent's send carries it. */
+/**
+ * A message to `id` from its parent session `parent`, sent as a parent
+ * sends it: its `handoff`, through the hub's tool door with the parent's own
+ * credential (a page's send is the person's, hub stream.ts, so a socket
+ * send naming the parent is refused).
+ */
 const peerSend = async (
   fleet: KitFleet,
   id: string,
   parent: string,
   words: string
-): Promise<string> => {
-  const uuid = crypto.randomUUID();
-  await fleet.post({
-    type: "command",
-    commandId: crypto.randomUUID(),
-    kind: "send",
-    machineId: MACHINE,
-    sessionId: id,
-    payload: {
-      instanceId: id,
-      message: {
-        type: "user",
-        uuid,
-        message: { role: "user", content: words },
-        parent_tool_use_id: null,
-        origin: { kind: "peer", fromSession: parent, name: "Limit parent" },
-      },
-    },
-  });
-  return uuid;
+): Promise<void> => {
+  const credential = await until(
+    "the parent's credential",
+    () => fleet.sessionCredential(parent),
+    Boolean,
+    60_000
+  );
+  const said = await toolWords(
+    { base: fleet.base, id: parent, credential },
+    "handoff",
+    { target: id, message: words }
+  );
+  if (said.refused) {
+    throw new Error(`the parent's handoff was refused: ${said.text}`);
+  }
 };
 
 /** The restart bound a move waits for work held for later (core binary-updates.ts `RESTART_WAIT_CAP_MS`). */
@@ -917,7 +918,7 @@ const waitShown = (page: Page, id: string) =>
         transcript: read(live?.querySelector('[data-slot="words"]')),
         line: read(live?.querySelector("button")),
         alerts: document.querySelectorAll(
-          '.group\\/move [role="alert"], [data-slot="stop"]'
+          '.group\\/move [role="alert"], [data-slot="stop"][role="alert"]'
         ).length,
         failed: document.querySelectorAll('[data-session-status-tone="failed"]')
           .length,
