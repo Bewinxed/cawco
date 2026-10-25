@@ -25202,7 +25202,7 @@ export const createServer = (
    * or what stopped the walk: the pages are the in-memory builder's
    * (transcripts.ts), so the whole walk reads no disk twice.
    */
-  const wholeTranscript = async (instanceId: string) => {
+  const everyPage = async (instanceId: string) => {
     const id = db.instanceIdOf(instanceId);
     const pages: TranscriptPage[] = [];
     let before: string | undefined;
@@ -25223,7 +25223,7 @@ export const createServer = (
   const handedInputs = createHandedInputs({
     artifacts,
     attachments: async (instanceId) => {
-      const read = await wholeTranscript(instanceId);
+      const read = await everyPage(instanceId);
       if ("gone" in read) {
         throw new Error(`the transcript no longer holds block ${read.gone}`);
       }
@@ -29674,7 +29674,7 @@ export const createServer = (
       // first, so the list never depends on the pages a reader has loaded.
       // A transcript that can't be read answers as its page would.
       .get("/api/instances/:id/attachments", async ({ params, status }) => {
-        const read = await wholeTranscript(params.id);
+        const read = await everyPage(params.id);
         if ("gone" in read) {
           return status(
             409,
