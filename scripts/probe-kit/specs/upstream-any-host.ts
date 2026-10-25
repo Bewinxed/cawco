@@ -119,6 +119,7 @@ interface HeldAsk {
 
 const spec: Spec = {
   name: "upstream-any-host",
+  host: "it delegates, so its fleet cuts workspaces",
   async run(kit) {
     const { check } = kit;
     const fleet = await kit.fleet(respond);
