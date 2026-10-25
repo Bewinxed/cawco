@@ -85,6 +85,19 @@ class Data:
         # B6: a cut leaves an arm's CI only when fewer than 2 of its runs finished there; 1 when every arm ran once
         self.min_runs = 2 if max((k[2] for k in self.results), default=1) > 1 else 1
         self.e5 = common.load(os.path.join(out, "e5.json"), {})
+        # arith.py: the cost of every situation and band by arithmetic; per cut, per situation, per method
+        ar = common.load(os.path.join(out, "arith.json"), {})
+        self.arith = {(c["situation"], c["band"], c["method"]): c for c in ar.get("cells", [])}
+        self.arith_cut = {}
+        for c in ar.get("cells", []):
+            for x in c["per_cut"]:
+                self.arith_cut.setdefault((c["situation"], x["cut"]), {"P": x["P"]})[c["method"]] = x["total"]
+
+    def arith_best(self, situation, band):
+        """(cheapest method, {method: median total}) by arithmetic, or (None, {}) when arith.py has not run."""
+        tot = {m: self.arith[(situation, band, m)]["total"] for m in ("whole", "native", "sonnet")
+               if (situation, band, m) in self.arith}
+        return (min(tot, key=tot.get) if tot else None), tot
 
     def per_cut(self, arm, value, cuts=None):
         """{cut: median over runs of value(cut, arm, run)} for cuts with at least one value."""
@@ -121,7 +134,9 @@ def compare(d, a, b, floor, cuts=None):
         reasons.append("quality CI spans 0")
     if o["median"] is not None and abs(o["median"]) < floor:
         reasons.append(f"|Δ| {abs(o['median']):.2f} < floor {floor:.2f}")
-    if o["median"] is None or s["median"] is None or (o["median"] > 0) != (s["median"] > 0):
+    if o["median"] is None and s["median"] is None:
+        reasons.append("no quality judgment")
+    elif o["median"] is None or s["median"] is None or (o["median"] > 0) != (s["median"] > 0):
         reasons.append("judges disagree on direction")
     out["actionable"], out["why_not"] = not reasons, reasons
     return out
@@ -134,6 +149,10 @@ def rules_txt(d, arm, judge):
         per = d.per_cut(arm, lambda c, a, r, k=k: (d.rules.get((c, a, r, judge)) or (None, None))[k])
         out.append(med(per.values()))
     return "–" if out[0] is None else f"{fmt(out[0], 1)} / {fmt(out[1], 1)}"
+
+
+def usd_signed(x, nd=4):
+    return "–" if x is None else f"{'+' if x >= 0 else '−'}${abs(x):,.{nd}f}"
 
 
 def ci_txt(ci, nd=2):
@@ -234,20 +253,47 @@ def main(argv=None):
         k = next(i for i, (_, x) in enumerate(cross) if x < 0 and all(y < 0 for _, y in cross[i:])) if cross[-1][1] < 0 else None
         be = (f"{cross[k - 1][0] // 1000}k-{cross[k][0] // 1000}k: whole cheaper below, summarize above (E6)" if k
               else "no single crossing: the sign changes more than once across cuts (E6)")
+    if be == "not measured (E6)" and d.arith_cut:
+        # by arithmetic (§7b): the smallest context at which moving whole, cold, was the cheapest of the three
+        cold = sorted((v["P"], min((m for m in ("whole", "native", "sonnet") if m in v), key=v.get))
+                      for (s, _), v in d.arith_cut.items() if s == "cold or cross-org")
+        wins = [p for p, m in cold if m == "whole"]
+        be = (f"whole was the cheapest at {len(wins)} of {len(cold)} cuts, the largest at {max(wins) // 1000}k (§7b)" if wins
+              else f"below {cold[0][0] // 1000}k: whole was dearer than a summary at every one of {len(cold)} cuts from "
+                   f"{cold[0][0] // 1000}k to {cold[-1][0] // 1000}k (§7b, cost alone; contexts under 100k were not drawn)")
     L.append(f"| cold / cross-org / no cache | < floor | move whole | `moveWholeUnderK` = {be} |")
+    name = {"whole": "whole", "native": "native /compact", "sonnet": "Sonnet summary"}
+    setting = {"whole": "whole", "native": "compact", "sonnet": "summarize"}
+
+    def by_cost(sit, b):
+        best, tot = d.arith_best(sit, b)
+        return (f"by cost alone (§7b): {name[best]} (" + ", ".join(f"{name[m]} ${t:.2f}" for m, t in tot.items()) + ")",
+                setting[best]) if best else ("", None)
     for b, cs in bands.items():
         pick, why, _ = choose(d, [x for x in ["A0", "A1"] + SUMMARY_ARMS if x in arms_present], floor, cs)
         act = compare(d, pick, "A2", floor, cs) if pick and pick != "A2" and pick in arms_present and "A2" in arms_present else None
         note = "" if not act else (" (actionable)" if act["actionable"] else f" (not actionable: {'; '.join(act['why_not'])})")
-        overfloor = {"A0": "whole", "A1": "compact"}.get(pick, "summarize") if pick else "undecided"
-        L.append(f"| cold / cross-org / no cache | {b} | {('E1: ' + pick + ' ' + NAMES.get(pick, '')) if pick else 'undecided: ' + why}{note} | `overFloor` = {overfloor} |")
-        L.append(f"| limit gone early | {b} | {('E1: ' + pick) if pick else 'undecided'} (ahead-of-limit unavailable) | `overFloor` = {overfloor} |")
+        for sit, label in (("cold or cross-org", "cold / cross-org / no cache"), ("limit gone early", "limit gone early")):
+            if pick:
+                overfloor = {"A0": "whole", "A1": "compact"}.get(pick, "summarize")
+                cell = f"E1: {pick} {NAMES.get(pick, '')}{note}"
+            else:
+                txt, s = by_cost(sit, b)
+                overfloor = f"{s} (cost alone; quality unmeasured)" if s else "undecided"
+                cell = f"undecided on quality ({why}); {txt}" if txt else f"undecided: {why}"
+            if sit == "limit gone early":
+                cell += " (ahead-of-limit unavailable)"
+            L.append(f"| {label} | {b} | {cell} | `overFloor` = {overfloor} |")
+    for b in bands:
+        txt, s = by_cost("warm same-org", b)
+        if txt:
+            L.append(f"| warm, same org (by cost) | {b} | {txt}; quality unmeasured | — |")
     for label, x, y in (("E2 model", "A3", "A2"), ("E3 input", "A4", "A2"), ("E4 shape", "A5", "A4"),
                         ("A7d vs A4", "A7d", "A4"), ("A7g vs A4", "A7g", "A4")):
         if x in arms_present and y in arms_present:
             c = compare(d, x, y, floor, single)
             L.append(f"| (E1 = summarize) | {label} | {x} − {y}: quality {fmt(c['opus']['median'], 2, '+') if c['opus']['median'] is not None else '–'} "
-                     f"{ci_txt(c['opus']['ci'])}, cost {fmt(c['cost']['median'], 4, '+$') if c['cost']['median'] is not None else '–'} "
+                     f"{ci_txt(c['opus']['ci'])}, cost {usd_signed(c['cost']['median'])} "
                      f"{ci_txt(c['cost']['ci'], 4)}; {'actionable' if c['actionable'] else 'not actionable: ' + '; '.join(c['why_not'])} | "
                      f"`summarizer.model`; the extract and prompt in `continuation.ts` |")
     e7, why7, _ = choose(d, [x for x in ("A1", "A2", "A6") if x in arms_present], floor, chained)
@@ -278,6 +324,32 @@ def main(argv=None):
                  for c in single)
     L += ["", "Per cut (context at the cut → A1 warm, A0 cold, Δ): " + (", ".join(
         f"{c} {p // 1000}k → ${a1:.2f}, ${a0:.2f}, {a1 - a0:+.2f}" for p, c, a1, a0 in per if a1 is not None and a0 is not None) or "–")]
+    if d.arith_cut:
+        # the same question by arithmetic (§7b), over every drawn cut: compact on the warm account, then the turn and the
+        # horizon cold on the target = arith's warm-native cell; moving whole to another organization = its cold-whole cell
+        L += ["", "By arithmetic over every drawn cut (§7b): compact warm, then move = native `/compact` reading the context "
+              "from the warm cache, then the compacted prompt written on the target; move whole = the whole context "
+              "written on the target. Total over the next 20 real turns, USD.", "",
+              "| band | cuts | move whole (cold) | compact warm, then move | Δ | compact-first cheaper at | Sonnet summary, then move |",
+              "|---|---|---|---|---|---|---|"]
+        for b in [x for x, _, _ in common.BANDS] + ["all"]:
+            rows = [(v, d.arith_cut.get(("warm same-org", c))) for (s, c), v in d.arith_cut.items()
+                    if s == "cold or cross-org" and (b == "all" or d.cuts[c]["band"] == b)]
+            rows = [(v, w) for v, w in rows if w]
+            if not rows:
+                continue
+            whole = [v["whole"] for v, _ in rows]
+            first = [w["native"] for _, w in rows]
+            son = [v["sonnet"] for v, _ in rows]
+            dif = [f - w for f, w in zip(first, whole)]
+            L.append(f"| {b} | {len(rows)} | ${med(whole):.2f} | ${med(first):.2f} | {med(dif):+.2f} {ci_txt(boot_ci(dif))} | "
+                     f"{sum(1 for x in dif if x < 0)} of {len(dif)} | ${med(son):.2f} |")
+        tl = [(k[0], k[2]) for k, r in d.results.items() if k[1] == "A0" and r["status"] == "stopped"
+              and "Prompt is too long" in (r.get("error") or "")]
+        if tl:
+            L += ["", f"Moving whole was not possible at all at {len({c for c, _ in tl})} cuts: every A0 run there stopped on "
+                  "\"Prompt is too long\" (" + ", ".join(f"{c} {d.cuts[c]['pre_tokens'] // 1000}k" for c in sorted({c for c, _ in tl}))
+                  + "); the real sessions compacted there."]
 
     # ---- 2. per-arm quality
     S["quality"] = len(L)
@@ -285,7 +357,7 @@ def main(argv=None):
           "| arm | what | cuts | abs 0-5 Opus | abs 0-5 Sonnet | win/tie/loss vs A0 Opus | win/tie/loss vs A0 Sonnet | asked back | files J | commands J | re-fetches | anchor keys carried | probe score Opus | probe score Sonnet | summary rules 1 / 2 Opus | summary rules 1 / 2 Sonnet |",
           "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for arm in arms_present:
-        cuts_ = {k[0] for k in d.results if k[1] == arm}
+        cuts_ = {k[0] for k, r in d.results.items() if k[1] == arm and r["status"] == "done"}
         wtl = {}
         for j in ("opus", "sonnet"):
             cnt = collections.Counter(v["outcome"] for k, v in d.pair.items() if k[1] == arm and k[3] == j)
@@ -297,7 +369,7 @@ def main(argv=None):
                  f"{fmt(med(d.quality(arm, 'sonnet').values()))} | {wtl['opus'] if arm != 'A0' else '—'} | "
                  f"{wtl['sonnet'] if arm != 'A0' else '—'} | {fmt(med(asked), 1)} | {fmt(med(e['files_jaccard'] for e in eng))} | "
                  f"{fmt(med(e['commands_jaccard'] for e in eng))} | {fmt(med(e['refetch'] for e in eng), 1)} | "
-                 f"{fmt(med(len(e['keys_present']) / max(1, e['keys_total']) for e in eng))} | "
+                 f"{fmt(med(len(e['keys_present']) / max(1, e['keys_total']) for e in eng if e.get('keys_total') is not None))} | "
                  f"{fmt(statistics.fmean(probes['opus']) if probes['opus'] else None)} | "
                  f"{fmt(statistics.fmean(probes['sonnet']) if probes['sonnet'] else None)} | "
                  + " | ".join(rules_txt(d, arm, j) for j in ("opus", "sonnet")) + " |")
@@ -305,7 +377,14 @@ def main(argv=None):
         L.append("| – | – | 0 | – | – | – | – | – | – | – | – | – | – | – | – | – |")
     L += ["", "Summary rules: the owner's rules for a compaction summary (2026-10-21), 0-5 each, on the summary the arm "
           "carried (A1: Claude Code's; A2-A7: the summariser's): 1, the person's messages carried as meaning, never quoted; "
-          "2, only what the next turns need. Median over runs, then over cuts. Secondary: it enters no decision."]
+          "2, only what the next turns need. Median over runs, then over cuts. Secondary: it enters no decision.",
+          "", "Cuts: those with at least one finished run. Files J and commands J are Jaccard similarities with the real "
+          "turn's edited files and commands; two empty sets count as 1 (neither turn edited a file), and a command matches "
+          "only verbatim, so commands J is near 0 wherever wording differs. A blank judge column means no judgment was made."]
+    n_judged = len(d.q) + len(d.pair)
+    if not n_judged:
+        L += ["", "**No quality judgment exists**: the run was stopped before any judge call (out/not_run.json). The only "
+              "readings are the engine's above, which cannot separate the arms on this sample."]
 
     # ---- 2b. strata: what the next message was, the cut's kind, same or cross org
     S["strata"] = len(L)
@@ -385,6 +464,12 @@ def main(argv=None):
         L.append(f"| {b} | {ref} | {len(diffs)} | {fmt(med(x for _, x in diffs), 4, '$')} | "
                  + (", ".join(f"{p // 1000}k → {x:+.4f}" for p, x in diffs) or "–") + " |")
 
+    # ---- 7b. the cost by arithmetic (arith.py): every situation and band, no model call
+    S["arith"] = len(L)
+    ar = os.path.join(out, "arith.md")
+    L += ["", "## 7b. Cost by arithmetic: whole, native /compact and a Sonnet summary, per situation and band", ""]
+    L += open(ar).read().split("\n")[2:] if os.path.exists(ar) else ["(not run: arith.py)"]
+
     # ---- 8. stopped: by class first (what PAPER.md carries; no error text, which can quote a transcript), then each
     S["stopped"] = len(L)
     judge_stops = common.read_jsonl(os.path.join(out, "judge", "stopped.jsonl"))
@@ -426,7 +511,7 @@ def main(argv=None):
 START, END = "<!-- results:start (written by report.py --paper; do not edit by hand) -->", "<!-- results:end -->"
 # Aggregates only: the cut counts, the decision table, quality and cost per arm and stratum, the noise floor, judge
 # disagreements, E5 with its calibration, E6, and stopped runs by class. No transcript text, no error text.
-PAPER_SECTIONS = ["cuts", "decision", "move", "quality", "strata", "cost", "floor", "disagree", "e5", "e6", "stopped"]
+PAPER_SECTIONS = ["cuts", "decision", "move", "quality", "strata", "cost", "floor", "disagree", "e5", "e6", "arith", "stopped"]
 
 
 def write_paper(path, L, S, title, written):

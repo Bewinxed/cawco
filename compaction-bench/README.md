@@ -21,6 +21,7 @@ compaction-bench/              beside ../infinite-chat-eval (imported, never cop
   judge.py       anchors, engine readings, pairwise both orders, 0–5, probes; Opus 5.5 and Sonnet 5.5
   cost.py        each request priced on its own by the product; C_make, C_between, C_turn1, C_horizon; window %
   e5.py          warm-compaction window cost from the DB (no model calls)
+  arith.py       the cost of whole, native /compact and a Sonnet summary per situation and band, by arithmetic
   report.py      out/report.md, and with --paper the Results section of PAPER.md
   PAPER.md       the paper draft: method, related work, the sandbox, threats, decisions log; Results from report.py
   tools_dump.py  the stand-in's tool list from `cawco tools`
@@ -218,6 +219,14 @@ gpt-5.6-terra. `python3 -I` is used throughout; `python -I` is the same where `p
 The DB is never opened for writing: every step reads a copy taken with
 `sqlite3 -readonly ~/.local/share/cawco/cawco.db "VACUUM INTO '<out>/cawco.db'"` (never `.backup` or `cp`).
 
+The transcripts are read the same way. The draw scans the live account dirs once, then copies every transcript a cut
+reads (its pre-cut transcript and its real horizon) into `out/transcripts/` and points the cut at the copy, each
+checked to hold its cut (record count, the cut's uuid). Runs, judgments, prices and the arithmetic read only those
+copies. The live files cannot be read twice: CawCo moves a session's files to the account the session moves to, and
+appends to them while it runs. On 2026-10-25 c24's 460 MB transcript moved accounts mid-run, and a run that read the
+drawn path placed an empty transcript ("No conversation found"). `cuts.py --snapshot` takes the copies for an
+existing cuts.json; a draw, `--replace-chained` and `--add-cuts` take them themselves.
+
 ```bash
 # from compaction-bench/, everything under out/ (gitignored)
 COCKPIT=$HOME/.worktrees/compaction-bench-cockpit            # git worktree add --detach … origin/main; bun install
@@ -243,16 +252,26 @@ python3 -I e5.py --db out/cawco.db --accounts ~/.cawco/accounts --cockpit-root $
 ./unit.sh bench-preflight $S $Z $J run.py --cuts out/cuts.json $BOX --only-cut <id> --arms A0 --runs 1 --preflight-only
 # 1. smoke: one cut, every arm, one run (proves /compact via -p --resume inside srt, the placement and the A7 hand-offs)
 ./unit.sh bench-smoke $S $Z $J run.py --cuts out/cuts.json $BOX --only-cut <id> --runs 1
-# 2-3. the noise floor (A0 ×5 at the floor cuts) and the run (3 runs per arm per cut), paced on the shared host:
+# 2-3. the noise floor (A0 ×5 at the floor cuts) and the run (3 runs per arm per cut), paced on the shared host, arm
+#      by arm; what holds each start is a line of out/pace.jsonl:
 systemd-run --user --same-dir --unit bench-pace -E PATH="$PATH" python3 -I pace.py --cuts out/cuts.json \
-    --accounts <id,id,…> --arms A0,A1,A2,A3,A4,A5,A6 --max-units 12 --per-account 3 --start-load 30 -- $BOX
+    --accounts <id,id,…> --arms A0,A1,A2,A3,A4,A5,A6 --max-units 9 --per-account 2 --start-load 25 --start-gap 90 \
+    --retry-stopped --retry-match "session limit|rate_limit|usage limit" -- $BOX
 #    the cross-harness arms when their accounts answer (same command, --arms A7d,A7g, with OPENCODE_ACCOUNT_DIR and
-#    PI_ACCOUNT_DIR in its environment); --retry-stopped reruns stopped runs
-# 4. judge, cost, report
-./unit.sh bench-judge $S $Z $J judge.py --runs out/runs
+#    PI_ACCOUNT_DIR in its environment)
+# 4. judge, cost, the arithmetic, report
+./unit.sh bench-judge $S $Z $J judge.py --runs out/runs          # model calls; --engine-only: the engine readings alone
 python3 -I cost.py --runs out/runs --cockpit-root $COCKPIT --db out/cawco.db
-python3 -I report.py --out out --paper PAPER.md
+python3 -I arith.py --out out --cockpit-root $COCKPIT          # no model call: every situation × band × method
+python3 -I report.py --out out --paper PAPER.md --eval-report <the eval's out/report.md>
 ```
+
+`arith.py` prices whole, native `/compact` and a Sonnet summary for every drawn cut in the three situations from
+token counts alone: the cut's context, the real session's next 20 turns, and the compaction and summary sizes measured
+on the real boundaries (e5.json) and the finished runs. Its docstring gives every formula. It is what §7b of the
+report and the "by cost alone" rows of the decision table read. On 2026-10-25 the owner stopped the model runs after
+57 had finished ("the cost side is arithmetic"), before any judge call, so those rows carry the decisions and no
+quality reading exists (`out/not_run.json`).
 
 `--paper` rewrites only what lies between PAPER.md's results markers, and only with aggregates: cut counts, the
 decision table, quality and cost per arm and stratum, the noise floor, judge disagreements, E5 with its calibration,

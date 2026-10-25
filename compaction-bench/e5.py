@@ -106,8 +106,13 @@ def main(argv=None):
                     u = min(near, key=lambda u: abs(u[8] - at))
                     measured = {"model": u[1], "at": u[8], "input": u[3], "cacheRead": u[4], "cacheCreation": u[5],
                                 "cacheWrite1h": u[6] or 0, "output": u[7]}
+            # what the session carried after it: the prompt of the first request after the summary (arith.py's S for
+            # native compaction), and whether that request wrote it to the cache
+            post = common.requests_of(recs[i + 1:i + 400])
             found.append({"instance": iid, "account": account, "model": model, "trigger": meta.get("trigger"),
-                          "pre_tokens": meta["preTokens"], "at": at, "summary_chars": len(text), "measured": measured})
+                          "pre_tokens": meta["preTokens"], "at": at, "summary_chars": len(text), "measured": measured,
+                          "post_prompt": common.prompt_tokens(post[0]) if post else None,
+                          "post_write": post[0]["cacheCreation"] if post else None})
     con.close()
     if found:
         est = common.cockpit("tokens", a.cockpit_root, {"chars": [f["summary_chars"] for f in found]})["tokens"]
@@ -181,6 +186,8 @@ def main(argv=None):
     calib = [f for f in found if f["measured"]]
     res = {"boundaries": len(found), "manual": sum(1 for f in found if f["trigger"] == "manual"),
            "auto": sum(1 for f in found if f["trigger"] == "auto"), "skipped": dict(skipped), "table": table,
+           "boundary_rows": [{k: f.get(k) for k in ("model", "trigger", "pre_tokens", "summary_tokens", "post_prompt",
+                                                  "post_write", "at")} for f in found],
            "calibration": [{k: f.get(k) for k in ("model", "pre_tokens", "summary_chars", "summary_tokens", "measured",
                                                    "measured_usd", "formula_usd", "measured_weighted", "formula_weighted",
                                                    "measured_window_pct", "window_pct")} for f in calib],

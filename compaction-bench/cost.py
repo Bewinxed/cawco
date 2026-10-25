@@ -39,6 +39,16 @@ def turns_of(recs, start, end):
     return [common.requests_of(recs[a:b]) for a, b in zip(starts, starts[1:])]
 
 
+def horizon_turns(recs, start, end):
+    """The real session's turns from the cut's next message, from its first turn that made an API request: that request
+    is the one that carries the context across the cut. A turn before it with none (a synthetic reply, a turn of
+    attachments only; c09 and c21 of the 2026-10-25 draw) carries nothing and is skipped."""
+    turns = turns_of(recs, start, end)
+    while turns and not turns[0]:
+        turns = turns[1:]
+    return turns
+
+
 def price_all(reqs, root):
     if not reqs:
         return []
@@ -91,13 +101,13 @@ def main(argv=None):
     rows = []
     for cut in cuts:
         nxt = cut["second"] if cut.get("chained") else cut
-        real = common.read_jsonl(common.transcript(nxt["real"]["jsonl"]))
-        real_turns = turns_of(real, nxt["real"]["index"], nxt["real"]["horizon_end"])
+        real = common.read_jsonl(nxt["real"]["jsonl"])
+        real_turns = horizon_turns(real, nxt["real"]["index"], nxt["real"]["horizon_end"])
         if not real_turns or not real_turns[0]:
             continue
         P = common.prompt_tokens(real_turns[0][0])
         # what the session held at the cut: the prompt of its last request in the live scope (A0's warm read)
-        pre = common.read_jsonl(common.transcript(cut["jsonl"]))[:nxt["cut_index"] if cut.get("chained") else cut["cut_index"]]
+        pre = common.read_jsonl(cut["jsonl"])[:nxt["cut_index"] if cut.get("chained") else cut["cut_index"]]
         held = common.requests_of(common.live_scope(pre)[1])
         carried = common.prompt_tokens(held[-1]) if held else 0
         win = windows_for(a.db, cut.get("account_id"))

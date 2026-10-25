@@ -141,7 +141,7 @@ def anchors_for(cut):
     have = common.load(path)
     if have is not None:
         return have
-    recs = common.read_jsonl(common.transcript(cut["jsonl"]))[:cut["second"]["cut_index"] if cut.get("chained") else cut["cut_index"]]
+    recs = common.read_jsonl(cut["jsonl"])[:cut["second"]["cut_index"] if cut.get("chained") else cut["cut_index"]]
     prior, scope = common.live_scope(recs)
     _, M, _ = common.eval_modules(O.out)
     text = ("[earlier summary]\n" + prior + "\n\n" if prior else "") + M.render_conv(common.to_eval_entries(scope))
@@ -161,7 +161,7 @@ def anchors_for(cut):
 
 def real_turn(cut):
     nxt = cut["second"] if cut.get("chained") else cut
-    recs = common.read_jsonl(common.transcript(nxt["real"]["jsonl"]))
+    recs = common.read_jsonl(nxt["real"]["jsonl"])
     return recs[nxt["real"]["index"]:nxt["real"]["end"]]
 
 
@@ -170,7 +170,9 @@ def anchor_block(anchors):
 
 
 def judge_cut(cut, pool):
-    anchors = anchors_for(cut)
+    # --engine-only: the readings no model makes (files, commands, re-fetches against the real turn); anchors, and so
+    # the anchor-key presence, need Opus, so they stay unread
+    anchors = {"kept": []} if O.engine_only else anchors_for(cut)
     if anchors is None:
         return
     jd = os.path.join(O.out, "judge", cut["id"])
@@ -178,7 +180,7 @@ def judge_cut(cut, pool):
     real = real_turn(cut)
     real_txt = render(real)
     nxt = (cut["second"] if cut.get("chained") else cut)["next_text"]
-    pre = common.read_jsonl(common.transcript(cut["jsonl"]))[:cut["second"]["cut_index"] if cut.get("chained") else cut["cut_index"]]
+    pre = common.read_jsonl(cut["jsonl"])[:cut["second"]["cut_index"] if cut.get("chained") else cut["cut_index"]]
     _, _, pre_reads = readings(pre, cut["cwd"])
     pre_reads = set(pre_reads)
     r_edit, r_cmd, _ = readings(real, cut["cwd"])
@@ -197,9 +199,12 @@ def judge_cut(cut, pool):
                 "files_jaccard": jaccard(edit, r_edit), "commands_jaccard": jaccard(cmd, r_cmd),
                 "refetch": sum(1 for x in reads if x in pre_reads), "edited": sorted(edit), "real_edited": sorted(r_edit),
                 "keys_present": [f["id"] for f in anchors["kept"] if f["key"] in carried],
-                "keys_total": len(anchors["kept"]), "carried_chars": len(carried)})
+                "keys_total": None if O.engine_only else len(anchors["kept"]), "carried_chars": len(carried),
+                "turn_tool_calls": len(common.tool_calls(turn)), "real_tool_calls": len(common.tool_calls(real))})
             done[(arm, int(run))] = (render(turn), carried)
             summaries[(arm, int(run))] = summary_of(rd, arm, carried)
+    if O.engine_only:
+        return
     jobs = []
     for (arm, run), text in summaries.items():
         if not text:
@@ -323,10 +328,11 @@ def main(argv=None):
     ap.add_argument("--cockpit-root")
     ap.add_argument("--parallel", type=int, default=4)
     ap.add_argument("--dry", action="store_true")
+    ap.add_argument("--engine-only", action="store_true", help="the engine readings alone: no model call")
     a = ap.parse_args(argv)
     out = os.path.abspath(a.out or os.path.dirname(os.path.abspath(a.runs)))
-    O.__dict__.update(out=out, judge_config_dir=a.judge_config_dir, dry=a.dry)
-    if not a.dry and not a.judge_config_dir:
+    O.__dict__.update(out=out, judge_config_dir=a.judge_config_dir, dry=a.dry, engine_only=a.engine_only)
+    if not a.dry and not a.engine_only and not a.judge_config_dir:
         raise SystemExit("BENCH_JUDGE_CONFIG_DIR (or --judge-config-dir) names the account the judges run on")
     llm.setup(out, a.dry)
     cuts = common.load(a.cuts or os.path.join(out, "cuts.json"))["cuts"]

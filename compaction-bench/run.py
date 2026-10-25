@@ -183,6 +183,8 @@ def main():
                    "--db", os.path.join(o.out, "fixture", "cawco.db")])
         e5.main(["--db", os.path.join(o.out, "fixture", "cawco.db"), "--accounts", os.path.join(o.out, "fixture", "accounts"),
                  "--cockpit-root", o.cockpit_root, "--out", os.path.join(o.out, "e5.md")])
+        import arith
+        arith.main(["--out", o.out, "--cockpit-root", o.cockpit_root])
         # the paper's Results are written into a copy under out/dry: simulated numbers never reach the tracked PAPER.md
         paper = os.path.join(o.out, "PAPER.md")
         shutil.copy(os.path.join(common.HERE, "PAPER.md"), paper)

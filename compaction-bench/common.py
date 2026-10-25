@@ -7,6 +7,7 @@ prompts/unii_system.txt) left as it is. claude_call.py writes its ledger to $EVA
 dir before the import, so every call the bench makes is one row of `out/ledger.jsonl`.
 """
 import builtins
+import collections
 import datetime
 import importlib.util
 import io
@@ -117,30 +118,18 @@ def read_jsonl(path):
     return out
 
 
-def transcript(path):
-    """Where a drawn transcript is now. CawCo moves a session's files to the account the session moves to (agent
-    `[claude] session …: N entries moved from <account> to <account>`), so a path drawn hours ago can be gone while the
-    same file, append-only, lives under another account's same project dir. Searched by project dir and file name
-    across every account dir and ~/.claude; the drawn path when it still exists."""
-    if os.path.exists(path):
-        return path
-    proj, name = os.path.basename(os.path.dirname(path)), os.path.basename(path)
-    home = os.path.expanduser("~")
-    roots = [os.path.join(home, ".cawco", "accounts", a, "claude", "projects")
-             for a in sorted(os.listdir(os.path.join(home, ".cawco", "accounts")))] + [os.path.join(home, ".claude", "projects")]
-    found = [p for p in (os.path.join(r, proj, name) for r in roots) if os.path.exists(p)]
-    if not found:
-        raise RunStopped(f"transcript {name} is no longer under any account's projects/{proj}")
-    return max(found, key=os.path.getsize)
-
-
-_transcripts, _transcripts_lock = {}, threading.Lock()
+# A unit's runs read one cut, so the last two prefixes read are kept and older ones dropped: unbounded, checking all 24
+# cuts in one process (cuts.py snapshot) held 8.3 GB.
+_transcripts, _transcripts_lock, _TRANSCRIPTS_KEPT = collections.OrderedDict(), threading.Lock(), 2
 
 
 def read_transcript(path, upto=None, uuid=None):
-    """read_jsonl of transcript(path), checked to still hold the drawn cut: at least `upto` records and, when given,
-    the record `uuid` among them. A transcript only grows, so the prefix a cut was drawn on stays as it was."""
-    p = transcript(path)
+    """A cut's transcript, read from the bench's own snapshot of it (cuts.py snapshot: out/transcripts/), never from
+    the fleet's live account dirs: up to record `upto` (the rest is not needed), once per process, and checked to hold
+    the cut as drawn: at least `upto` records and, when given, the record `uuid` among them."""
+    p = path
+    if not os.path.exists(p):
+        raise RunStopped(f"transcript snapshot {p} is missing: run cuts.py --snapshot")
     with _transcripts_lock:  # a unit's runs share one read of the prefix (a live orchestrator's is ~460 MB)
         key = (p, upto)
         if key not in _transcripts:
@@ -157,6 +146,9 @@ def read_transcript(path, upto=None, uuid=None):
                     if isinstance(d, dict):
                         recs.append(d)
             _transcripts[key] = recs
+            while len(_transcripts) > _TRANSCRIPTS_KEPT:
+                _transcripts.popitem(last=False)
+        _transcripts.move_to_end(key)
         recs = _transcripts[key]
     if upto is not None and len(recs) < upto:
         raise RunStopped(f"transcript {p} holds {len(recs)} records; the cut is at {upto}")

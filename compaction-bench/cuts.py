@@ -41,6 +41,7 @@ import json
 import os
 import random
 import re
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -105,6 +106,63 @@ def load_db(db):
     return inst, events, convs
 
 
+SNAPSHOT_DIR = "transcripts"
+
+
+def live_path(path):
+    """Where a live transcript is now. CawCo moves a session's files to the account the session moves to (agent
+    `[claude] session …: N entries moved from <account> to <account>`), so a file listed a minute ago can be gone while
+    the same file, append-only, lives under another account's same project dir. Searched by project dir and file name
+    across every account dir and ~/.claude; the given path when it still exists. Only the draw reads the live tree;
+    everything after it reads the snapshot the draw took (snapshot)."""
+    if os.path.exists(path):
+        return path
+    proj, name = os.path.basename(os.path.dirname(path)), os.path.basename(path)
+    home = os.path.expanduser("~")
+    roots = [os.path.join(home, ".cawco", "accounts", a, "claude", "projects")
+             for a in sorted(os.listdir(os.path.join(home, ".cawco", "accounts")))] + [os.path.join(home, ".claude", "projects")]
+    found = [p for p in (os.path.join(r, proj, name) for r in roots) if os.path.exists(p)]
+    if not found:
+        raise common.RunStopped(f"transcript {name} is no longer under any account's projects/{proj}")
+    return max(found, key=os.path.getsize)
+
+
+def snapshot(cuts_path):
+    """Every transcript a cut reads, copied into <out>/transcripts/ and the cut pointed at the copy, as the DB is read
+    from a VACUUM INTO copy: the live files keep moving between accounts and growing (c24's moved mid-run on
+    2026-10-25), and a run, a judgment and a price must all read the same bytes the draw read. Each copy is checked to
+    hold its cut (record count and the cut's uuid). A cut already on its snapshot is left as it is; the live path is
+    kept as `source`."""
+    data = common.load(cuts_path)
+    root = os.path.join(os.path.dirname(os.path.abspath(cuts_path)), SNAPSHOT_DIR)
+    os.makedirs(root, exist_ok=True)
+    copied = {}
+
+    def snap(path):
+        if os.path.dirname(os.path.abspath(path)) == root:
+            return path
+        if path not in copied:
+            src = live_path(path)
+            dst = os.path.join(root, os.path.basename(path))
+            shutil.copyfile(src, dst)
+            copied[path] = dst
+        return copied[path]
+    for c in data["cuts"]:
+        refs = [("jsonl", c), ("jsonl", c["real"])] + ([("jsonl", c["second"]["real"])] if c.get("chained") else [])
+        c.setdefault("source", {"jsonl": c["jsonl"], "real": c["real"]["jsonl"],
+                                **({"second_real": c["second"]["real"]["jsonl"]} if c.get("chained") else {})})
+        for key, holder in refs:
+            holder[key] = snap(holder[key])
+        upto = c["second"]["cut_index"] if c.get("chained") else c["cut_index"]
+        common.read_transcript(c["jsonl"], upto, c.get("cut_uuid"))
+        for real in [c["real"]] + ([c["second"]["real"]] if c.get("chained") else []):
+            common.read_transcript(real["jsonl"], real["horizon_end"])
+    data.setdefault("snapshots", []).append({"at": common.now_iso(), "copied": len(copied),
+                                             "bytes": sum(os.path.getsize(p) for p in copied.values())})
+    common.save(cuts_path, data)
+    return copied
+
+
 class Transcripts:
     """Every transcript under the account dirs, by session id (the file's name). Parsed records are kept for the last
     CACHE files only: the account dirs hold many GB of JSONL, and keeping every parsed file resident took 25 GiB on the
@@ -127,7 +185,8 @@ class Transcripts:
         if path in self._recs:
             self._recs.move_to_end(path)
         else:
-            self._recs[path] = common.read_jsonl(path)
+            # CawCo can move a session's file to another account between the listing and this read
+            self._recs[path] = common.read_jsonl(live_path(path))
             while len(self._recs) > self.CACHE:
                 self._recs.popitem(last=False)
         return self._recs[path]
@@ -136,6 +195,10 @@ class Transcripts:
     def has_boundary(path):
         """Whether the file holds a compact_boundary record at all, by its bytes, before any parse."""
         needle, tail = b'"compact_boundary"', b""
+        try:
+            path = live_path(path)  # moved since the listing: read where it is now
+        except common.RunStopped:
+            return False
         with open(path, "rb") as fh:
             for chunk in iter(lambda: fh.read(1 << 22), b""):
                 if needle in tail + chunk:
@@ -416,13 +479,16 @@ def draw(eligible, pairs, n, seed, taken=()):
     """Seeded, stratified (design B3). Returns (cuts, shortfall)."""
     rng = random.Random(seed)
     taken = set(taken)
-    key = lambda c: (c["jsonl"], c["cut_index"], bool(c.get("chained")))  # noqa: E731
+    key = lambda c: (c["jsonl"], c["cut_index"], bool(c.get("chained")))  # noqa: E731  (the seeded order)
+    # a cut already drawn is known by its transcript's file name (the session id), the same on the live path and in
+    # the snapshot (`taken` holds those)
+    ident = lambda c: (os.path.basename(c["jsonl"]), c["cut_index"], bool(c.get("chained")))  # noqa: E731
     per_band = [n // 3 + (1 if k < n % 3 else 0) for k in range(3)]
     quota = max(1, round(n / 12)) if n >= 6 else 0
     out, short = [], []
     for (band, _, _), want in zip(common.BANDS, per_band):
-        pool_p = sorted((p for p in pairs if p["band"] == band and key(p) not in taken), key=key)
-        pool_s = sorted((c for c in eligible if c["band"] == band and key(c) not in taken), key=key)
+        pool_p = sorted((p for p in pairs if p["band"] == band and ident(p) not in taken), key=key)
+        pool_s = sorted((c for c in eligible if c["band"] == band and ident(c) not in taken), key=key)
         rng.shuffle(pool_p)
         rng.shuffle(pool_s)
         chosen = pool_p[:min(quota, want)]
@@ -550,7 +616,13 @@ def main(argv=None):
     ap.add_argument("--fixture", action="store_true", help="draw the synthetic fixture's cuts")
     ap.add_argument("--replace-chained", type=int, metavar="MAX_GAP",
                     help="in the existing --out, draw the chained slots again from pairs at most MAX_GAP turns apart")
+    ap.add_argument("--snapshot", action="store_true",
+                    help="copy every transcript the existing --out's cuts read into <out dir>/transcripts and point the cuts at the copies")
     o = ap.parse_args(argv)
+    if o.snapshot:
+        got = snapshot(o.out)
+        print(f"snapshot: {len(got)} transcripts copied → {os.path.join(os.path.dirname(os.path.abspath(o.out)), SNAPSHOT_DIR)}")
+        return 0
     if o.replace_chained:
         got = replace_chained(o.out, o.db, o.accounts, o.cockpit_root, o.replace_chained)
         print(json.dumps(got, indent=1))
@@ -570,6 +642,7 @@ def main(argv=None):
         cuts, short = draw(eligible, pairs, o.n, o.seed)
     number(cuts, 1)
     write(o.out, cuts, short, excluded, eligible, pairs, o.seed)
+    snapshot(o.out)
     print(f"{len(cuts)} cuts → {o.out}; eligible {len(eligible)} (+{len(pairs)} chained pairs), excluded {len(excluded)}"
           + (f"; shortfall: {'; '.join(short)}" if short else ""))
     if o.explain:
@@ -586,7 +659,9 @@ def replace_chained(path, db, accounts, cockpit_root, max_gap, seed=None):
     o = argparse.Namespace(min_context=100_000, horizon=10, chain_gap=15, cockpit_root=cockpit_root)
     eligible, pairs, excluded = find(db, accounts, o)
     pool = [p for p in pairs if len(p["replay_texts"]) <= max_gap]
-    used = {(c["jsonl"], i) for c in cur["cuts"] if not c.get("chained")
+    # a transcript is keyed by its file name (the session id), the same on the live path and in the snapshot
+    name = os.path.basename
+    used = {(name(c["jsonl"]), i) for c in cur["cuts"] if not c.get("chained")
             for i in (c["cut_index"], (c.get("second") or {}).get("cut_index")) if i is not None}
     rng = random.Random((seed if seed is not None else cur["seed"]) * 1000 + max_gap)
     out, replaced = [], []
@@ -594,15 +669,15 @@ def replace_chained(path, db, accounts, cockpit_root, max_gap, seed=None):
         if not c.get("chained"):
             out.append(c)
             continue
-        mine = sorted((p for p in pool if p["band"] == c["band"]
-                       and (p["jsonl"], p["cut_index"]) not in used and (p["jsonl"], p["second"]["cut_index"]) not in used),
+        mine = sorted((p for p in pool if p["band"] == c["band"] and (name(p["jsonl"]), p["cut_index"]) not in used
+                       and (name(p["jsonl"]), p["second"]["cut_index"]) not in used),
                       key=lambda p: (p["jsonl"], p["cut_index"]))
         rng.shuffle(mine)
         if not mine:
             out.append(dict(c, chained_replaced=f"no pair within {max_gap} turns in {c['band']}: kept"))
             continue
         new = dict(mine[0], id=c["id"], chained=True, floor=False)
-        used |= {(new["jsonl"], new["cut_index"]), (new["jsonl"], new["second"]["cut_index"])}
+        used |= {(name(new["jsonl"]), new["cut_index"]), (name(new["jsonl"]), new["second"]["cut_index"])}
         replaced.append({"id": c["id"], "was": {"jsonl": c["jsonl"], "cut_index": c["cut_index"],
                                                  "replays": len(c.get("replay_texts") or [])},
                          "now": {"jsonl": new["jsonl"], "cut_index": new["cut_index"], "replays": len(new["replay_texts"])}})
@@ -615,7 +690,8 @@ def replace_chained(path, db, accounts, cockpit_root, max_gap, seed=None):
                       "max": gaps[-1] if gaps else None},
         "within_gap_by_band": dict(collections.Counter(p["band"] for p in pool)), "replaced": replaced})
     common.save(path, cur)
-    return cur["chained_replaced"][-1]
+    snapshot(path)
+    return common.load(path)["chained_replaced"][-1]
 
 
 def add_cuts(path, n, db, accounts, cockpit_root, seed=None):
@@ -623,12 +699,13 @@ def add_cuts(path, n, db, accounts, cockpit_root, seed=None):
     cur = common.load(path)
     o = argparse.Namespace(min_context=100_000, horizon=10, chain_gap=15, cockpit_root=cockpit_root)
     eligible, pairs, excluded = find(db, accounts, o)
-    taken = [(c["jsonl"], c["cut_index"], bool(c.get("chained"))) for c in cur["cuts"]]
+    taken = [(os.path.basename(c["jsonl"]), c["cut_index"], bool(c.get("chained"))) for c in cur["cuts"]]
     more, short = draw(eligible, pairs, n, (seed if seed is not None else cur["seed"]) + len(cur["cuts"]), taken)
     number(more, len(cur["cuts"]) + 1)
     cur["cuts"] += more
     cur.setdefault("added", []).append({"at": common.now_iso(), "n": n, "got": len(more), "shortfall": short})
     common.save(path, cur)
+    snapshot(path)
     return more
 
 
