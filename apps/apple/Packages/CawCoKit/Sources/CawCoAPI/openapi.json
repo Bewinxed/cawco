@@ -19783,6 +19783,9 @@
                 "properties": {
                   "until": {
                     "type": "string"
+                  },
+                  "call": {
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -48144,6 +48147,10 @@
             "type": "number"
           },
           "thinkingSignature": {
+            "type": "string"
+          },
+          "toolCut": {
+            "description": "What cut the call mid-run, when CawCo did (core turn-cuts.ts): \"your\nStop\", a machine's pause. `toolResult` then says so, in place of the\nharness's \"rejected\" or \"aborted\", which no answer of the person's was.\nOn a `ui.interrupted` line, the cut that line is.",
             "type": "string"
           },
           "toolDiff": {

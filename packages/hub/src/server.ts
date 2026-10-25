@@ -427,6 +427,7 @@ import {
   initialHandover,
   presenceOf,
 } from "@cawco/core/handover";
+import type { NeutralMessage } from "@cawco/core/harness";
 import {
   type HubPreviewOrigins,
   isHubPreview,
@@ -478,6 +479,7 @@ import {
 } from "@cawco/core/upstream-post";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import { containerWords } from "@cawco/core/words/containers";
+import { turnCutWords } from "@cawco/core/words/cuts";
 import { leakWords } from "@cawco/core/words/leaks";
 import { machineReadWords } from "@cawco/core/words/machine-reads";
 import { noticeWords } from "@cawco/core/words/notices";
@@ -731,6 +733,7 @@ import {
   type CommandOptions,
   createMachinePause,
   PAUSE_ORIGIN,
+  type PauseCaller,
   throwIfStopped,
   WouldWait,
   whenStopped,
@@ -4005,7 +4008,7 @@ export const createServer = (
   const machinePause = createMachinePause({
     db,
     lifetime,
-    paused: (machineId, until) => pauseBegan(machineId, until),
+    paused: (machineId, until, caller) => pauseBegan(machineId, until, caller),
     resumed: (machineId) => pauseEnded(machineId),
   });
 
@@ -22307,8 +22310,9 @@ export const createServer = (
           : turnWords.fromScreen
       );
       noteInterrupt(message.instanceId);
-      // The error closing that turn is the stop's receipt, on every screen.
-      transcripts.noteInterrupt(message.instanceId);
+      // The error closing that turn is the stop's receipt, on every screen,
+      // and the call it cut says it was the person's Stop.
+      cutTurn(message.instanceId, turnCutWords.stop);
     }
   };
 
@@ -22951,6 +22955,7 @@ export const createServer = (
       return row?.status === "running";
     },
     commands: (instanceId) => db.instanceCommands(instanceId) ?? undefined,
+    cuts: (instanceId) => db.turnCuts.of(instanceId),
     tooling: (instanceId) => db.instanceTooling(instanceId) ?? undefined,
   });
 
@@ -23927,7 +23932,8 @@ export const createServer = (
       interruptTurn(
         instanceId,
         false,
-        `by the hub: its provider's retries ran past their deadline (${why})`
+        `by the hub: its provider's retries ran past their deadline (${why})`,
+        turnCutWords.retries
       );
     },
   });
@@ -24082,7 +24088,9 @@ export const createServer = (
   const interruptTurn = (
     instanceId: string,
     hold: boolean,
-    why: string
+    why: string,
+    /** Who or what cut it, as the call and line it ends say it (core `turnCutWords`). */
+    cause: string
   ): void => {
     const [row] = db.getInstancesByIds([instanceId]);
     const agent = row ? registry.agent(row.machineId) : undefined;
@@ -24104,7 +24112,105 @@ export const createServer = (
       },
     } satisfies Envelope<ControlPayload>);
     noteInterrupt(instanceId, hold);
-    transcripts.noteInterrupt(instanceId);
+    cutTurn(instanceId, cause);
+  };
+
+  /**
+   * The hub cut the session's turn, for `cause`: kept (db `turnCuts`), so
+   * the call and the line the cut ends say so in every transcript built of
+   * it, where its harness wrote "rejected" or "aborted" (core turn-cuts.ts).
+   */
+  const cutTurn = (instanceId: string, cause: string): void => {
+    if (db.getInstancesByIds([instanceId]).length === 0) {
+      return;
+    }
+    db.turnCuts.add(
+      instanceId,
+      transcripts.noteInterrupt(instanceId, Date.now(), cause)
+    );
+  };
+
+  /**
+   * A machine's pause cuts the session's turn, and sends it word to carry
+   * on, which the pause keeps at the hub until it ends.
+   */
+  const cutForPause = (
+    instanceId: string,
+    machineId: string,
+    until: Date
+  ): void => {
+    interruptTurn(
+      instanceId,
+      false,
+      "by the hub: its machine was paused",
+      turnCutWords.pause(machineName(machineId), pauseClock(until.getTime()))
+    );
+    deliverSend({
+      verb: "send",
+      machineId,
+      instanceId,
+      payload: {
+        instanceId,
+        message: {
+          type: "user",
+          uuid: crypto.randomUUID(),
+          message: {
+            role: "user",
+            content: `Your machine was paused until ${pauseClock(until.getTime())}, which stopped your turn. The pause is over: carry on from where you stopped.`,
+          },
+          parent_tool_use_id: null,
+          origin: { kind: "system", name: PAUSE_ORIGIN },
+        },
+      },
+    });
+    console.log(
+      `[pause] ${instanceId}: its turn was cut by its machine's pause`
+    );
+  };
+
+  /**
+   * Sessions whose own tool call paused their machine, by session: that
+   * call, by its harness's id, and the pause (machine-pause.ts
+   * `PauseCaller`). Each one's turn is cut as its harness writes the call's
+   * answer down ({@link afterPausingCall}).
+   */
+  const pausingCalls = new Map<
+    string,
+    { call: string; machineId: string; until: Date }
+  >();
+
+  /**
+   * A frame of a session whose own call paused its machine: the call's
+   * answer, as its harness wrote it down, and its turn is cut now, the
+   * answer the pause's own; its turn over first, there is nothing to cut;
+   * a pause ended or moved meanwhile cuts nothing.
+   */
+  const afterPausingCall = (instanceId: string, neutral: NeutralMessage) => {
+    const pausing = pausingCalls.get(instanceId);
+    if (!pausing) {
+      return;
+    }
+    if (neutral.type === "result") {
+      pausingCalls.delete(instanceId);
+      return;
+    }
+    if (neutral.type !== "user" || neutral.parent_tool_use_id) {
+      return;
+    }
+    const { content } = neutral.message as { content: unknown };
+    const answered =
+      Array.isArray(content) &&
+      content.some(
+        (block: { tool_use_id?: unknown; type?: unknown }) =>
+          block.type === "tool_result" && block.tool_use_id === pausing.call
+      );
+    if (!answered) {
+      return;
+    }
+    pausingCalls.delete(instanceId);
+    if (machinePause.until(pausing.machineId) === pausing.until.getTime()) {
+      cutForPause(instanceId, pausing.machineId, pausing.until);
+    }
   };
 
   /**
@@ -24117,7 +24223,8 @@ export const createServer = (
    */
   const pauseBegan = (
     machineId: string,
-    until: Date
+    until: Date,
+    caller?: PauseCaller
   ): Promise<StoppedCommands> => {
     const stopped = stopCommands(machineId);
     for (const row of db.listInstances()) {
@@ -24127,26 +24234,17 @@ export const createServer = (
       ) {
         continue;
       }
-      interruptTurn(row.id, false, "by the hub: its machine was paused");
-      deliverSend({
-        verb: "send",
-        machineId,
-        instanceId: row.id,
-        payload: {
-          instanceId: row.id,
-          message: {
-            type: "user",
-            uuid: crypto.randomUUID(),
-            message: {
-              role: "user",
-              content: `Your machine was paused until ${pauseClock(until.getTime())}, which stopped your turn. The pause is over: carry on from where you stopped.`,
-            },
-            parent_tool_use_id: null,
-            origin: { kind: "system", name: PAUSE_ORIGIN },
-          },
-        },
-      });
-      console.log(`[pause] ${row.id}: its turn was cut by its machine's pause`);
+      // The session whose own call paused its machine is mid-call: its
+      // turn is cut once its harness has the call's answer
+      // ({@link afterPausingCall}), so that answer is the pause's own.
+      if (caller?.call && row.id === caller.instanceId) {
+        pausingCalls.set(row.id, { call: caller.call, machineId, until });
+        console.log(
+          `[pause] ${row.id}: its own call paused its machine; its turn is cut once it has the call's answer`
+        );
+        continue;
+      }
+      cutForPause(row.id, machineId, until);
     }
     workItems.pauseChanged(machineId);
     publishInstances(machineId);
@@ -24177,7 +24275,12 @@ export const createServer = (
     proposeType: (actor, path, content, toolUseId) =>
       projectMemory.proposeType(actor, path, content, toolUseId),
     interrupt: (instanceId) =>
-      interruptTurn(instanceId, true, "by Caw: turned off mid-turn"),
+      interruptTurn(
+        instanceId,
+        true,
+        "by Caw: turned off mid-turn",
+        turnCutWords.cawOff
+      ),
     online: (machineId) =>
       machineId === undefined
         ? onlineMachines().length > 0
@@ -24360,7 +24463,12 @@ export const createServer = (
         why: "fleet watch's triage is over",
       }),
     interrupt: (instanceId) =>
-      interruptTurn(instanceId, true, "by fleet watch's triage"),
+      interruptTurn(
+        instanceId,
+        true,
+        "by fleet watch's triage",
+        turnCutWords.triage
+      ),
     lifetime,
     line: (instanceId, content) => noteWatch(instanceId, content),
     name: (row) => sessionName(row),
@@ -25899,6 +26007,10 @@ export const createServer = (
       if (control.method === CONTROL_INTERRUPT) {
         saidInterrupt(row.id, `by session ${requester.id}`);
         noteInterrupt(row.id);
+        cutTurn(
+          row.id,
+          turnCutWords.interruptFrom(`“${sessionName(requester)}”`)
+        );
       }
     },
   });
@@ -29539,8 +29651,16 @@ export const createServer = (
       // ran there has stopped: the row says how many commands that was.
       .post(
         "/api/machines/:machineId/pause",
-        { body: t.Object({ until: t.String() }) },
-        async ({ params, body, status }) => {
+        {
+          body: t.Object({
+            until: t.String(),
+            // The harness's id for the machine_pause call that asks it
+            // (delegation-actions.ts `machinePause`): its own session's turn
+            // is cut once that call is answered (machine-pause.ts `PauseCaller`).
+            call: t.Optional(t.String()),
+          }),
+        },
+        async ({ params, body, status, request }) => {
           const until = new Date(body.until);
           if (Number.isNaN(until.getTime())) {
             return status(
@@ -29551,7 +29671,17 @@ export const createServer = (
           if (until.getTime() <= Date.now()) {
             return status(400, `until: ${body.until} has already passed.`);
           }
-          const row = (await machinePause.pause(params.machineId, until))
+          // The session asking, when a session's credential asks it.
+          const asker = identities.resolve(
+            request.headers.get("authorization")
+          );
+          const row = (await machinePause.pause(
+            params.machineId,
+            until,
+            asker
+              ? { instanceId: asker.instanceId, call: body.call }
+              : undefined
+          ))
             ? machineRow(params.machineId)
             : undefined;
           if (!row) {
@@ -35449,6 +35579,7 @@ export const createServer = (
                   turnUnderWay(message.instanceId);
                 }
                 observeTurn(message.instanceId, frame);
+                afterPausingCall(message.instanceId, frame.message);
               }
               if (message.requestId && kind === "permission_request") {
                 const [owner] = db.getInstancesByIds([
@@ -36608,9 +36739,11 @@ export const createServer = (
               // Both Stop and Discard wait for the machine's teardown receipt.
               // Persisting intent is not proof that the runner has ended.
               stopFromDashboard(ws, message);
-              // A stop cuts the turn it lands in, as an interrupt does.
+              // A stop cuts the turn it lands in, as an interrupt does, and
+              // what it cut says it was the person's Stop.
               if (message.instanceId) {
                 noteInterrupt(message.instanceId);
+                cutTurn(message.instanceId, turnCutWords.stop);
               }
               break;
             case "control":

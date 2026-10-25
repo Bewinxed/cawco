@@ -72,6 +72,8 @@ export type BlockBase = Omit<TranscriptBlock, "type" | "content">;
 
 /** A tool result to fold into the `tool.use` block that opened it. */
 export interface ToolResult {
+  /** What cut the call mid-run, when CawCo did ({@link import("./turn-cuts").TurnCut}); `result` then says so. */
+  cutBy?: string;
   images?: Array<{ mediaType: string; src: string }>;
   isError: boolean;
   /**
@@ -1879,6 +1881,7 @@ export function applyToolResult(
     isError,
     structuredContent,
     questionResult,
+    cutBy,
   }: ToolResult
 ): TranscriptBlock | null {
   // `tool.handoff` is a tool call too — it just renders as a receipt. Matching
@@ -1913,6 +1916,7 @@ export function applyToolResult(
       : {}),
     ...(images ? { resultImages: images } : {}),
     toolStatus: isError ? "error" : "success",
+    ...(cutBy ? { toolCut: cutBy } : {}),
     ...(questionResult ? { toolUseResult: questionResult } : {}),
     ...(spawned
       ? { delegateInstanceId: spawned.id, delegateTitle: spawned.title }

@@ -122,6 +122,20 @@ export const whenStopped = (stop: AbortSignal | undefined): Promise<void> =>
 /** The longest a single timer is armed for; a later end is armed again from there. */
 const TIMER_MAX_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * The session whose own tool call asked for a pause, and that call by its
+ * harness's id (Claude Code's tool_use id, pi's toolCallId, OpenCode's call
+ * id). Its turn is cut once its harness has the call's answer, not under it:
+ * Claude Code writes a call an interrupt cuts mid-run as "The user doesn't
+ * want to proceed with this tool use. The tool use was rejected", and the
+ * pause it ran read as refused (23 Oct, a machine_pause in Full Send that
+ * nobody was asked about).
+ */
+export interface PauseCaller {
+  readonly call?: string;
+  readonly instanceId: string;
+}
+
 export interface MachinePauseDeps {
   readonly db: Pick<DbShape, "listAgents" | "setMachinePause">;
   readonly lifetime: HubLifetimeShape;
@@ -129,7 +143,11 @@ export interface MachinePauseDeps {
    * The pause took effect (or moved): what runs there now stops. Answers the
    * commands the machine says it stopped, which the machine's row keeps.
    */
-  readonly paused: (machineId: string, until: Date) => Promise<StoppedCommands>;
+  readonly paused: (
+    machineId: string,
+    until: Date,
+    caller?: PauseCaller
+  ) => Promise<StoppedCommands>;
   /** The pause is over, by its time or the owner's word: what waited goes. */
   readonly resumed: (machineId: string) => void;
 }
@@ -139,9 +157,14 @@ export interface MachinePause {
   readonly free: (machineId: string) => Promise<void>;
   /**
    * Pauses `machineId` until `until`, once what ran there has stopped;
-   * false when the hub knows no such machine.
+   * false when the hub knows no such machine. `caller`: the session whose
+   * tool call asked for it, when one did.
    */
-  readonly pause: (machineId: string, until: Date) => Promise<boolean>;
+  readonly pause: (
+    machineId: string,
+    until: Date,
+    caller?: PauseCaller
+  ) => Promise<boolean>;
   /** Ends the machine's pause now; nothing when it was not paused. */
   readonly resume: (machineId: string) => void;
   /** Arms every stored pause, and ends those whose time came while the hub was down. */
@@ -206,14 +229,14 @@ export const createMachinePause = (deps: MachinePauseDeps): MachinePause => {
         arm(machineId);
       }
     },
-    pause: async (machineId, until) => {
+    pause: async (machineId, until, caller) => {
       if (!db.setMachinePause(machineId, until, null)) {
         return false;
       }
       ends.set(machineId, until.getTime());
       console.log(`[pause] ${machineId}: paused until ${until.toISOString()}`);
       arm(machineId);
-      const stopped = await deps.paused(machineId, until);
+      const stopped = await deps.paused(machineId, until, caller);
       // Kept only on the pause it belongs to: not one resumed or moved meanwhile.
       if (
         Object.keys(stopped).length > 0 &&

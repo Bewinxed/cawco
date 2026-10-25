@@ -39,6 +39,7 @@ import {
   type TranscriptStreamFrame,
   type TranscriptWhere,
 } from "@cawco/core";
+import type { TurnCut } from "@cawco/core/turn-cuts";
 import type { HubLifetimeShape } from "./lifetime";
 
 /**
@@ -99,6 +100,12 @@ export interface TranscriptPorts {
    * holds no `init` for a Claude session, starts from it.
    */
   readonly commands: (instanceId: string) => SessionCommands | undefined;
+  /**
+   * Every turn of the session the hub cut, and why (db `turnCuts`): a
+   * transcript built from its stored file says each one's cause where its
+   * harness wrote "rejected" or "aborted".
+   */
+  readonly cuts: (instanceId: string) => TurnCut[];
   /** Whether a dashboard follows the session's stream. */
   readonly followed: (instanceId: string) => boolean;
   /** The session's stream head: the seq a page is consistent with. */
@@ -260,8 +267,16 @@ export interface TranscriptsShape {
     machineId: string,
     instanceIds: readonly string[]
   ) => Promise<void>;
-  /** An interrupt was carried to the session. */
-  readonly noteInterrupt: (instanceId: string) => void;
+  /**
+   * The hub cut the session's turn at `at`, for `cause`: the cut, with the
+   * calls its transcript held running then (core turn-cuts.ts), none when
+   * no transcript of it is built.
+   */
+  readonly noteInterrupt: (
+    instanceId: string,
+    at: number,
+    cause: string
+  ) => TurnCut;
   /** A page of the session's transcript, the newest when `before` is absent. */
   readonly page: (
     instanceId: string,
@@ -444,6 +459,7 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
     if (tooling) {
       builder.carryTooling(tooling);
     }
+    builder.carryCuts(ports.cuts(instanceId));
     const entry: Entry = {
       build: undefined,
       builder,
@@ -619,8 +635,12 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
     line: (instanceId, message, harness) =>
       ingest(instanceId, { kind: "line", message, harness }),
     page,
-    noteInterrupt: (instanceId) =>
-      entries.get(instanceId)?.builder.noteInterrupt(),
+    noteInterrupt: (instanceId, at, cause) =>
+      entries.get(instanceId)?.builder.noteInterrupt(at, cause) ?? {
+        at,
+        calls: [],
+        cause,
+      },
     processGone: (instanceId) => {
       if (entries.has(instanceId)) {
         ingest(instanceId, { kind: "gone" });

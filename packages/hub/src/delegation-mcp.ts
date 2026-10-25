@@ -490,6 +490,32 @@ export function createDelegationMcp(options: {
   };
 
   /**
+   * The call's id as its harness names it: Claude Code's tool_use id (its
+   * `_meta`), pi's toolCallId (its call key), OpenCode's call id, which the
+   * CawCo plugin stamps beside the credential (`__cawco.call`). What a
+   * session's own machine_pause waits on before its turn is cut
+   * (machine-pause.ts `PauseCaller`).
+   */
+  const callIdOf = (
+    args: Record<string, unknown>,
+    toolUseId: string | undefined,
+    callKey: string | undefined
+  ): string | undefined => {
+    if (toolUseId) {
+      return toolUseId;
+    }
+    if (callKey?.startsWith("pi:")) {
+      return callKey.slice("pi:".length);
+    }
+    const context = args.__cawco;
+    const stamped =
+      typeof context === "object" && context !== null && !Array.isArray(context)
+        ? (context as { call?: unknown }).call
+        : undefined;
+    return typeof stamped === "string" && stamped ? stamped : undefined;
+  };
+
+  /**
    * `value` with every token shaped like a session credential that hashes to
    * one the hub holds replaced by {@link REDACTED_CREDENTIAL}, at any depth.
    */
@@ -718,7 +744,14 @@ export function createDelegationMcp(options: {
     }
     try {
       return await options.callKeys.once(binding, name, callKey, () =>
-        answer(binding, name, args, authorization, toolUseId)
+        answer(
+          binding,
+          name,
+          args,
+          authorization,
+          toolUseId,
+          callIdOf(args, toolUseId, callKey)
+        )
       );
     } finally {
       admitted.release();
@@ -804,7 +837,8 @@ export function createDelegationMcp(options: {
     name: string,
     args: Record<string, unknown>,
     authorization?: string,
-    toolUseId?: string
+    toolUseId?: string,
+    callId?: string
   ): Promise<CallToolResult> => {
     try {
       // Routing context belongs to the bridge, not to a tool's input schema.
@@ -845,7 +879,7 @@ export function createDelegationMcp(options: {
       }
       return (
         (await route(actor, name, input, toolUseId)) ??
-        (await sessionCall(actor, name, input, authorization))
+        (await sessionCall(actor, name, input, authorization, callId))
       );
     } catch (error) {
       return {
@@ -865,7 +899,8 @@ export function createDelegationMcp(options: {
     actor: InstanceRow,
     name: string,
     input: Record<string, unknown>,
-    authorization?: string
+    authorization?: string,
+    callId?: string
   ): Promise<CallToolResult> => {
     const emitted: Envelope[] = [];
     const tree = options.delegationTree;
@@ -875,6 +910,7 @@ export function createDelegationMcp(options: {
       formerIds: options.formerIds,
       fleet: options.fleet,
       authorization,
+      callId,
       cwd: actor.cwd,
       harness: actor.harness as "claude" | "opencode" | "pi",
       canDelegate: actor.canDelegate ?? undefined,

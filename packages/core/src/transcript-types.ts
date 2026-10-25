@@ -185,6 +185,13 @@ export interface BlockMetadata {
    */
   thinkingDurationMs?: number;
   thinkingSignature?: string;
+  /**
+   * What cut the call mid-run, when CawCo did (core turn-cuts.ts): "your
+   * Stop", a machine's pause. `toolResult` then says so, in place of the
+   * harness's "rejected" or "aborted", which no answer of the person's was.
+   * On a `ui.interrupted` line, the cut that line is.
+   */
+  toolCut?: string;
   /** The unified file diff returned by an apply_patch call. */
   toolDiff?: string;
   toolId?: string;

@@ -188,7 +188,8 @@ final class SystemLineView: RailRow, RowContent, Disclosing {
                 set(.terminal, title: command ?? "Output")
                 below.addArrangedSubview(well(block.content))
             case "ui.interrupted":
-                set(.stop, title: "Interrupted")
+                // The hub's words for the cut when it made it: "Interrupted by your Stop" (core turn-cuts.ts).
+                set(.stop, title: noteTitle ?? "Interrupted")
             case "ui.error", "ui.session_error", "result.error":
                 // A failure takes the rail in the fail colours: what failed on the line, why under it.
                 railColor = Palette.statusFailInk

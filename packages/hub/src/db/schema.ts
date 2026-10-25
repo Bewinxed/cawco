@@ -2782,6 +2782,29 @@ export const toolCallKeys = sqliteTable(
 );
 
 /**
+ * Every turn the hub cut, and why (core turn-cuts.ts): the owner's Stop, a
+ * session's interrupt_delegate, a machine's pause. A transcript built at any
+ * time says the cause on the call and the line the cut ended, where its
+ * harness wrote "rejected" or "aborted" (transcripts.ts `cuts`).
+ */
+export const turnCuts = sqliteTable(
+  "turn_cuts",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    instanceId: text("instance_id")
+      .notNull()
+      .references(() => instances.id, { onDelete: "cascade" }),
+    /** When the hub sent the interrupt. */
+    at: timestamp("at").notNull(),
+    /** Its cause as a line reads it: "your Stop", "obelisk's pause until 20:53". */
+    cause: text("cause").notNull(),
+    /** The calls running as it came, by their harness's id: a failed answer to one is the cut's. */
+    calls: text("calls", { mode: "json" }).$type<string[]>().notNull(),
+  },
+  (table) => [index("turn_cuts_instance").on(table.instanceId, table.at)]
+);
+
+/**
  * Standing instructions the hub enforces on every session it watches: a phrase
  * to look for in what a session says, and a reply to send back when it shows
  * up. The hub is the only component that sees every frame from every machine,

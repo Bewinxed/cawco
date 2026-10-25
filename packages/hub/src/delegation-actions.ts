@@ -750,6 +750,12 @@ export interface HandoffDeps {
   /** This invocation's session credential; never a tool argument or persisted metadata. */
   readonly authorization?: string;
   /**
+   * The harness's id for this call (Claude Code's tool_use id, pi's
+   * toolCallId, OpenCode's call id), when it names one: a machine_pause of
+   * the caller's own machine cuts its turn once this call is answered.
+   */
+  readonly callId?: string;
+  /**
    * Whether THIS session may spawn sessions of its own. `false` on a leaf
    * delegate (spawned with `can_delegate: false`); absent means allowed.
    */
@@ -1523,6 +1529,7 @@ export const handoffActions = ({
   emit,
   spawn,
   authorization,
+  callId,
   projectId,
   ledBy,
   forkOrigins = () => [],
@@ -2156,6 +2163,10 @@ export const handoffActions = ({
               until: new Date(
                 Date.now() + (minutes ?? 0) * 60_000
               ).toISOString(),
+              // Its own turn, when the machine is its own, is cut once this
+              // call is answered, never under it (hub machine-pause.ts
+              // `PauseCaller`).
+              ...(callId ? { call: callId } : {}),
             }
       ),
     });

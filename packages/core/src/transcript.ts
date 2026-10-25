@@ -49,6 +49,8 @@ import type {
   TranscriptPageBranch,
   TranscriptTail,
 } from "./transcript-types";
+import { cutAt, cutOf, type TurnCut } from "./turn-cuts";
+import { turnCutWords } from "./words/cuts";
 
 /** How long after an interrupt the error closing the turn is its receipt, not a failure. */
 const INTERRUPT_WINDOW_MS = 15_000;
@@ -334,6 +336,8 @@ export class TranscriptBuilder {
   private facts = blankFacts();
   /** When an interrupt was last carried to this session, epoch ms. */
   private interruptedAt = Number.NEGATIVE_INFINITY;
+  /** The turns CawCo cut, and why (turn-cuts.ts): what each ended says its cause. */
+  private cuts: TurnCut[] = [];
   private readonly now: () => number;
 
   /* The change being built: emitted together at the end of one apply. */
@@ -739,8 +743,10 @@ export class TranscriptBuilder {
         hear(owner.toolUseId, at);
       }
       const sink = owner ? owner.blocks : rows;
+      const dated = Date.parse(at);
       // A real subagent's "task done" line yields to its branch card.
       for (const block of mapping.blocks) {
+        this.causeOf(block, dated);
         if (
           !suppressesTaskLine(branches, sink, block, mapping.branch?.toolUseId)
         ) {
@@ -757,7 +763,7 @@ export class TranscriptBuilder {
           );
           continue;
         }
-        applyToolResult(sink, result);
+        applyToolResult(sink, this.throughCut(result));
         // The Task call's own tool_result is the authoritative end of its branch.
         const branch = branches.get(result.toolId);
         if (!branch) {
@@ -797,8 +803,71 @@ export class TranscriptBuilder {
   /* ------------------------------------------------------------- live — */
 
   /** An interrupt was carried to this session: the error closing its turn is the stop. */
-  noteInterrupt(at: number = this.now()): void {
+  noteInterrupt(at: number = this.now(), cause?: string): TurnCut | undefined {
     this.interruptedAt = at;
+    if (!cause) {
+      return;
+    }
+    const cut: TurnCut = { at, calls: this.runningCalls(), cause };
+    this.cuts.push(cut);
+    return cut;
+  }
+
+  /** The calls still running, by id: the main loop's and every subagent's, none answered yet. */
+  private runningCalls(): string[] {
+    const running = (blocks: readonly TranscriptBlock[]): string[] =>
+      blocks.flatMap((block) =>
+        (block.type === "tool.use" || block.type === "tool.handoff") &&
+        block.metadata?.toolStatus === "pending" &&
+        block.metadata.toolId
+          ? [block.metadata.toolId]
+          : []
+      );
+    return [
+      ...running(this.rows),
+      ...[...this.branches.values()].flatMap((branch) =>
+        running(branch.blocks)
+      ),
+    ];
+  }
+
+  /**
+   * The cuts the hub kept for this session (hub db `turn_cuts`), before
+   * anything is read: a stored transcript read later says each one's cause
+   * on what it ended, as the live frames do.
+   */
+  carryCuts(cuts: readonly TurnCut[]): void {
+    this.cuts = [...cuts, ...this.cuts];
+  }
+
+  /**
+   * `result` as the cut that ended it says, when one did: a failed answer to
+   * a call that was running as the cut came (turn-cuts.ts `cutOf`). The
+   * harness's words for it ("rejected", "aborted") were no answer of anyone's.
+   */
+  private throughCut(result: ToolResult): ToolResult {
+    const cut = result.isError ? cutOf(this.cuts, result.toolId) : undefined;
+    return cut
+      ? { ...result, result: turnCutWords.call(cut.cause), cutBy: cut.cause }
+      : result;
+  }
+
+  /** An interrupted line, dated `at`, says the cut it is: "Interrupted by your Stop". */
+  private causeOf(block: TranscriptBlock, at: number): void {
+    if (block.type !== "ui.interrupted") {
+      return;
+    }
+    const cut = cutAt(this.cuts, at);
+    if (!cut) {
+      return;
+    }
+    const words = turnCutWords.line(cut.cause);
+    block.content = words;
+    block.metadata = {
+      ...block.metadata,
+      noteTitle: words,
+      toolCut: cut.cause,
+    };
   }
 
   /** One live frame, folded in. Returns the changes it made, in order. */
@@ -906,6 +975,7 @@ export class TranscriptBuilder {
         block.type = "ui.interrupted";
         block.metadata = { ...block.metadata, noteTitle: "Interrupted" };
       }
+      this.causeOf(block, now);
       this.append(branch, block);
     }
     for (const result of mapping.toolResults) {
@@ -1441,7 +1511,7 @@ export class TranscriptBuilder {
     if (at >= 0) {
       const held = sink[at];
       const next = { ...held };
-      applyToolResult([next], result);
+      applyToolResult([next], this.throughCut(result));
       sink[at] = next;
       if (!branch) {
         const shown = this.placed.lastIndexOf(held);

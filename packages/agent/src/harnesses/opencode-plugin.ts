@@ -809,7 +809,10 @@ export default {
         if (typeof credential !== "string" || !credential) {
           throw new Error("This OpenCode session holds no CawCo session credential, so it cannot call CawCo tools.");
         }
-        event.input = { ...(event.input ?? {}), __cawco: { credential } };
+        // And the call's own id, which OpenCode's tools/call names nowhere:
+        // a machine_pause of its own machine cuts its turn once this call
+        // is answered (hub machine-pause.ts \`PauseCaller\`).
+        event.input = { ...(event.input ?? {}), __cawco: { credential, call: event.id } };
       }
     };
 
