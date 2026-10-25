@@ -108,7 +108,7 @@ variables in `app/preview.css`:
 | `--drafts-press-scale` | 0.985 | press |
 | `--drafts-dim` | 0.5 | the stack once words are in the box |
 | `--drafts-ghost-1/2/3` | 60% / 78% / 52% | loading outlines |
-| `--drafts-ghost-reason` / `--drafts-ghost-provenance` | 70% / 30ch | loading's reason bar under each outline, and the provenance line's bar (own call: its 30 characters) |
+| `--drafts-ghost-reason` / `--drafts-ghost-provenance` | 40% / 30ch | loading's reason bar under each outline (the designer: under the narrowest bubble, the ledger's and tray's reason width), and the provenance line's bar (its 30 characters) |
 | `--drafts-ghost-edge-low/high` | ink at 20% / 40% | loading pulse |
 | `--ledger-text-size` | 15px | the suggestion |
 | `--ledger-kicker-size` / `--ledger-kicker-track` | 11px / 0.08em | the kicker |
@@ -125,6 +125,7 @@ variables in `app/preview.css`:
 | `--tray-carry` | 40px | the words' travel down into the field |
 | `--tray-line` | 2px | loading's line on the divider |
 | `--tray-bone-1/2/3` | 72% / 88% / 58% | loading rows (own call: the ledger's) |
+| `--tray-chip-bone-1/2/3` | 60% / 78% / 52% | keyboard loading's bars inside the first, second, third chip (the designer) |
 | `--tray-bone-reason` | 40% | loading's reason bar under a finger (own call: the ledger's) |
 | `--tray-chip-max` | 16rem | a chip's widest before its words clip (own call) |
 | `--tray-bone-ink` | ink at 14% (22% dark) | loading rows on the tint (own call: the house skeleton's fill vanished on the tint at night) |

@@ -30,7 +30,7 @@
     --drafts-ghost-1: 60%;
     --drafts-ghost-2: 78%;
     --drafts-ghost-3: 52%;
-    --drafts-ghost-reason: 70%;
+    --drafts-ghost-reason: 40%;
     --drafts-ghost-provenance: 30ch;
     --drafts-ghost-edge-low: color-mix(in oklch, var(--ink-strong) 20%, transparent);
     --drafts-ghost-edge-high: color-mix(in oklch, var(--ink-strong) 40%, transparent);
@@ -61,6 +61,9 @@
     --tray-bone-2: 88%;
     --tray-bone-3: 58%;
     --tray-bone-reason: 40%;
+    --tray-chip-bone-1: 60%;
+    --tray-chip-bone-2: 78%;
+    --tray-chip-bone-3: 52%;
     --tray-chip-max: 16rem;
     --tray-bone-ink: color-mix(in oklch, var(--ink-strong) 14%, transparent);
   }

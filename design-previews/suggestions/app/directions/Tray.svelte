@@ -154,9 +154,9 @@
             {#if draws.loading}
               <!-- Loading with the keyboard up: the chip row's own chips, each
                    holding a bar where its words will stand. -->
-              {#each [0, 1, 2] as slot (slot)}
+              {#each ["var(--tray-chip-bone-1)", "var(--tray-chip-bone-2)", "var(--tray-chip-bone-3)"] as width (width)}
                 <span aria-hidden="true" class={chipVariants({ class: "chip chip-bones" })}
-                  ><span class="bone chip-bar" data-slot="skeleton"></span></span
+                  ><span class="bone chip-bar" data-slot="skeleton" style:inline-size={width}></span></span
                 >
               {/each}
             {:else}
@@ -499,7 +499,6 @@
   }
 
   .chip-bar {
-    inline-size: 100%;
     font: inherit;
   }
 
