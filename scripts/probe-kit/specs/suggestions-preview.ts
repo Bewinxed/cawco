@@ -33,6 +33,7 @@
 import { readFileSync } from "node:fs";
 import { join, normalize } from "node:path";
 import type { Page } from "playwright-core";
+import { capture, contrast, px, type Rgb } from "../ink";
 import { scan } from "../journeys/scan";
 import type { Engine, Kit, Spec } from "../kit";
 import { ROOT, readMotion } from "../kit";
@@ -188,14 +189,16 @@ interface StateRead {
     box: Box | null;
     words: string;
   };
-  /** The set runs past its room. */
+  /** The set, or the tray's rows, run past their room. */
   clipped: boolean;
   dark: boolean;
-  /** The scroller fades both edges at the house 40px. */
+  /** Every room that runs past itself fades its cut at the house 40px. */
   faded: boolean;
   /** The composer stands whole inside the frame. */
   footInside: boolean;
   groups: string[];
+  /** The heading stands whole in its room, never pushed out by what grows under it. */
+  headingShown: boolean;
   items: number;
   key: string;
   /** Small text (reasons, kicker, meta) under 4.5:1 on its ground. */
@@ -248,9 +251,14 @@ function readStage(his: { texts: string[]; reasons: string[] }): StateRead {
   const box = stage?.querySelector('[data-slot="foot"] [data-slot="composer"]');
   const boxRect = box?.getBoundingClientRect();
   const scroller = stage?.querySelector<HTMLElement>('[data-slot="scroll"]');
-  const clipped = Boolean(
-    scroller && scroller.scrollHeight > scroller.clientHeight + 1
-  );
+  // Every room that runs past itself: the set above the composer, and the
+  // tray's own rows once they reach the heading's room.
+  const cuts = [
+    ...(stage?.querySelectorAll<HTMLElement>(
+      '[data-slot="scroll"], [data-slot="tray-rows"]'
+    ) ?? []),
+  ].filter((el) => el.scrollHeight > el.clientHeight + 1);
+  const clipped = cuts.length > 0;
   // Small text against its ground: the first opaque fill behind it.
   const canvas = document.createElement("canvas");
   canvas.width = 1;
@@ -313,11 +321,26 @@ function readStage(his: { texts: string[]; reasons: string[] }): StateRead {
         "",
     },
     clipped,
-    faded: Boolean(
-      scroller?.classList.contains("kit-edge-fade-block") &&
-      getComputedStyle(scroller).getPropertyValue("--fade-len").trim() ===
-        "40px"
-    ),
+    faded:
+      clipped &&
+      cuts.every(
+        (el) =>
+          el.hasAttribute("data-more-end") &&
+          getComputedStyle(el).getPropertyValue("--fade-len").trim() === "40px"
+      ),
+    headingShown: (() => {
+      const h = stage
+        ?.querySelector('[data-slot="heading"]')
+        ?.getBoundingClientRect();
+      const room = scroller?.getBoundingClientRect();
+      return Boolean(
+        h &&
+        room &&
+        h.height > 0 &&
+        h.top >= room.top - 1 &&
+        h.bottom <= room.bottom + 1
+      );
+    })(),
     footInside: Boolean(
       boxRect &&
       frameBox &&
@@ -344,6 +367,73 @@ function readStage(his: { texts: string[]; reasons: string[] }): StateRead {
     ].filter(drawn).length,
     strangers,
   };
+}
+
+/**
+ * Ink across the cut: each room that runs past itself (the set's scroller,
+ * the tray's rows) captured as drawn, and each band of device rows read for
+ * its strongest contrast against that room's ground (its commonest colour).
+ * Above the fade the cut rows' words stand at full ink; in the fade's last
+ * 4px they are all but gone. Read in the pixels, since a mask is what
+ * drawing alone decides. The weakest cut answers for the state.
+ */
+async function fadeInk(page: Page): Promise<{ foot: number; body: number }> {
+  const rooms = await page.evaluate(() =>
+    [
+      ...document.querySelectorAll<HTMLElement>(
+        '[data-slot="stage"] [data-slot="scroll"], [data-slot="stage"] [data-slot="tray-rows"]'
+      ),
+    ]
+      .filter((el) => el.scrollHeight > el.clientHeight + 1)
+      .map((el) => {
+        // Whole pixels inside the room, and in from its sides past the
+        // composer's rounded corners (the tray's rows meet its foot there),
+        // so a frame edge beside the cut stays out of the read.
+        const r = el.getBoundingClientRect();
+        const corner = 16;
+        const x = Math.ceil(r.left) + corner;
+        const y = Math.ceil(r.top);
+        return {
+          x,
+          y,
+          width: Math.floor(r.right) - corner - x,
+          height: Math.floor(r.bottom) - y,
+        };
+      })
+  );
+  const shots = await Promise.all(rooms.map((room) => capture(page, room)));
+  let foot = 1;
+  let body = 99;
+  for (const shot of shots) {
+    const counts = new Map<string, { rgb: Rgb; n: number }>();
+    for (let y = 0; y < shot.height; y += 1) {
+      for (let x = 0; x < shot.width; x += 1) {
+        const rgb = px(shot, x, y);
+        const one = counts.get(rgb.join(",")) ?? { rgb, n: 0 };
+        one.n += 1;
+        counts.set(rgb.join(","), one);
+      }
+    }
+    const ground = [...counts.values()].reduce((p, q) =>
+      q.n > p.n ? q : p
+    ).rgb;
+    const strongest = (fromEnd: number, toEnd: number) => {
+      let most = 1;
+      for (
+        let y = Math.floor(shot.height - toEnd * shot.scale);
+        y < shot.height - fromEnd * shot.scale;
+        y += 1
+      ) {
+        for (let x = 0; x < shot.width; x += 1) {
+          most = Math.max(most, contrast(px(shot, x, y), ground));
+        }
+      }
+      return most;
+    };
+    foot = Math.max(foot, strongest(0, 4));
+    body = Math.min(body, strongest(40, 80));
+  }
+  return { foot, body };
 }
 
 /** Leg 4: a press's runs held on the clock and sought through: one clock per moment, his words in the box after it. */
@@ -471,6 +561,10 @@ const spec: Spec = {
         /** The surroundings each direction draws at three, by where. */
         const around = new Map<string, Map<string, StateRead["around"]>>();
         const clipBad: string[] = [];
+        const inkBad: string[] = [];
+        const headingBad: string[] = [];
+        let inkRead = 0;
+        let footMost = 1;
         let clippedStates = 0;
         const lowText: string[] = [];
         let lowest = 99;
@@ -517,6 +611,19 @@ const spec: Spec = {
                 }
                 if (read.clipped) {
                   clippedStates += 1;
+                }
+                if (!read.headingShown) {
+                  headingBad.push(key);
+                }
+                if (read.clipped && read.faded && theme === "light") {
+                  const ink = await fadeInk(page);
+                  inkRead += 1;
+                  footMost = Math.max(footMost, ink.foot);
+                  if (ink.foot > 1.3 || ink.body < 3) {
+                    inkBad.push(
+                      `${key}: ${ink.foot.toFixed(2)}:1 in the last 4px, ${ink.body.toFixed(2)}:1 above the fade`
+                    );
+                  }
                 }
                 if ((read.clipped && !read.faded) || !read.footInside) {
                   clipBad.push(
@@ -620,9 +727,19 @@ const spec: Spec = {
           aroundBad.slice(0, 4).join(" | ")
         );
         kit.check(
-          `${engine}: wherever a set runs past its room it scrolls above the composer under the house 40px edge fade, and the composer stands whole in every state (${clippedStates} states scroll)`,
+          `${engine}: wherever a set (or the tray's rows) runs past its room it scrolls under the house 40px edge fade, and the composer stands whole in every state (${clippedStates} states scroll)`,
           clipBad.length === 0,
           clipBad.slice(0, 4).join(" | ")
+        );
+        kit.check(
+          `${engine}: the heading stands whole in every state, never pushed out by a growing set or tray`,
+          headingBad.length === 0,
+          headingBad.slice(0, 4).join(" | ")
+        );
+        kit.check(
+          `${engine}: the fade draws across every cut, read in the pixels: words at full ink above it, at most ${footMost.toFixed(2)}:1 against the ground in its last 4px (${inkRead} states)`,
+          inkBad.length === 0 && inkRead > 0,
+          inkBad.slice(0, 4).join(" | ")
         );
         kit.check(
           `${engine}: every reason, heading and meta line holds 4.5:1 on its ground, light and dark (lowest ${lowest.toFixed(2)}:1)`,

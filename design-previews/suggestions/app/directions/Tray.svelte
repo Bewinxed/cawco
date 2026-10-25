@@ -26,6 +26,7 @@
   import { IconChevronDown } from "../../../../apps/dashboard/src/lib/icons.js";
   import { IN_THE_BOX, oneClock, putIn, typedOf } from "../clock.js";
   import Composer from "../Composer.svelte";
+  import { edges } from "../edges.js";
   import Surround from "../Surround.svelte";
 
   type Item = { text: string; reason?: string };
@@ -175,7 +176,13 @@
             ><IconChevronDown aria-hidden="true" class="glyph" /></button>
           </div>
           {#if !shut}
-            <ul aria-labelledby="tray-label" class="rows" {@attach morph()}>
+            <ul
+              aria-labelledby="tray-label"
+              class="rows edges"
+              data-slot="tray-rows"
+              {@attach morph()}
+              {@attach edges}
+            >
               {#if draws.loading}
                 {#each ["var(--tray-bone-1)", "var(--tray-bone-2)", "var(--tray-bone-3)"] as width (width)}
                   <li class="row bones">
@@ -235,8 +242,27 @@
     min-block-size: 0;
   }
 
+  /* The tray grows upward from the composer until the heading's room: the
+     room above keeps its height (Caw and the heading), and what gives way is
+     the foot, down its chain (box, composer, tray) to the rows, which then
+     scroll inside under the house edge fade. */
+  .tray-direction :global([data-slot="scroll"]) {
+    flex-shrink: 0;
+  }
+
+  .tray-direction :global([data-slot="foot"]),
+  .box,
+  .box :global([data-slot="composer"]),
+  .tray {
+    display: flex;
+    flex: 0 1 auto;
+    flex-direction: column;
+    min-block-size: 0;
+  }
+
   .box {
     [data-where="board"] & {
+      inline-size: 100%;
       max-inline-size: var(--board-column);
       margin-inline: auto;
     }
@@ -263,6 +289,7 @@
   }
 
   .divider {
+    flex: none;
     position: relative;
     block-size: 1px;
     overflow: hidden;
@@ -337,6 +364,11 @@
   }
 
   .rows {
+    flex: 0 1 auto;
+    min-block-size: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
     margin: 0;
     padding: 0 0 var(--space-1);
     list-style: none;

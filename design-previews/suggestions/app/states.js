@@ -99,7 +99,7 @@ export const DIRECTIONS = [
   {
     value: "ledger",
     label: "The ledger",
-    note: "Report: on the board the rows stand at the 560px reading width.",
+    note: "The design's stated change: on the board the rows stand at the report's 560px reading width.",
     where: ["thread", "board", "phone"],
     data: [
       common.loading,
@@ -130,7 +130,7 @@ export const DIRECTIONS = [
   {
     value: "tray",
     label: "The tray",
-    note: "Report: the suggestions live in the composer's own frame, centred at 560px on the board, and grow upward from it.",
+    note: "The design's stated change: the suggestions live in the composer's own frame, centred at 560px on the board, growing upward from it until the heading's room, then scrolling inside.",
     where: ["thread", "board", "phone", "keyboard"],
     data: [
       common.loading,
