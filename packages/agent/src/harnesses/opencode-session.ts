@@ -2845,6 +2845,10 @@ export class OpencodeSession implements HarnessSession {
       this.#drained(messageID);
       return;
     }
+    // A send into a turn already under way joins it; one into a session at
+    // rest opens the turn it starts.
+    const joins = this.turnInFlight;
+    const answered = this.#turnPrompt;
     this.#turnOpen = true;
     this.#turnPrompt = messageID;
     this.#noteServerActivity();
@@ -2861,12 +2865,18 @@ export class OpencodeSession implements HarnessSession {
       });
     } catch (error) {
       // A prompt that was never admitted opens no turn there, so no event
-      // will ever settle it: said, and busy cleared here, or the session
-      // strands busy with every later send queuing behind nothing.
-      this.#turnOpen = false;
-      this.#clearStallTimer();
-      this.#busy = false;
-      this.#ctx.busy(false);
+      // will ever settle it: the turn it would have opened is cleared here,
+      // or the session strands busy with every later send queuing behind
+      // nothing. One that joined a turn under way leaves that turn as it was,
+      // its own end still to come.
+      if (joins) {
+        this.#turnPrompt = answered;
+      } else {
+        this.#turnOpen = false;
+        this.#clearStallTimer();
+        this.#busy = false;
+      }
+      this.#ctx.busy(this.#busy);
       this.#ctx.rejected(uuid, error);
     } finally {
       handed();
@@ -3050,7 +3060,9 @@ export class OpencodeSession implements HarnessSession {
     } catch (error) {
       this.#ctx.rejected(uuid, error);
     } finally {
-      this.#ctx.busy(false);
+      // The server's own call, no turn: the session is as busy as the turn
+      // under way, if one is (`send` said it busy as the command went in).
+      this.#ctx.busy(this.#busy);
     }
   }
 

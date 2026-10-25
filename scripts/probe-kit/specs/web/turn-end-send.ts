@@ -31,7 +31,8 @@
  * f. A subagent's frames arrive after the turn ended (fed in through a
  *    relay on the agent's socket): the tail stays not busy.
  * g. OpenCode's `/mcp`, whose end sends no `result`: at rest the tail stays
- *    not busy; into a running turn, what tail and pulse say is a note.
+ *    not busy; into a running turn, the pulse stays busy with the turn.
+ * h. A Claude Code subagent's written words reach its branch.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg, one engine, one step at a time
 import type { Page } from "playwright-core";
@@ -69,13 +70,39 @@ const AWAY_EVERY_MS = 250;
 const awayEnds = new Map<string, number>();
 const AWAY_OF = /PROBE-AWAY-(\w+)/;
 
+const BRANCH_CALL = "PROBE-BRANCH-CALL";
+const BRANCH_TASK = "PROBE-BRANCH-TASK";
+/** What the subagent writes, as one word the mock sends whole. */
+const BRANCH_WORDS = "Branch-words-reached";
+
 const words = (count: number, word: string) =>
   Array.from({ length: count }, () => word);
 
-/** A turn that runs for a few seconds; a long one to stop or kill; one the agent is away for; every other one, a word. */
+/**
+ * A turn that runs for a few seconds; a long one to stop or kill; one the
+ * agent is away for; one that calls a subagent, and that subagent's answer;
+ * every other one, a word.
+ */
 const respond = (request: Seen): Reply => {
   if (request.afterTool) {
     return { everyMs: 5, words: ["ok"] };
+  }
+  if (request.last.includes(BRANCH_TASK)) {
+    return { everyMs: 50, words: [BRANCH_WORDS] };
+  }
+  if (request.last.includes(BRANCH_CALL)) {
+    return {
+      everyMs: 5,
+      words: ["Starting it."],
+      tool: {
+        name: "Agent",
+        input: {
+          description: "Probe work",
+          prompt: `${BRANCH_TASK} say your words`,
+          subagent_type: "general-purpose",
+        },
+      },
+    };
   }
   const away = AWAY_OF.exec(request.last)?.[1];
   if (away) {
@@ -96,7 +123,7 @@ const respond = (request: Seen): Reply => {
 /** The hub's newest page of a session's transcript, as far as these legs read it. */
 interface HubPage {
   blocks?: { type: string; content?: unknown }[];
-  branches?: { toolUseId: string; blocks: unknown[] }[];
+  branches?: { toolUseId: string; status?: string; blocks: unknown[] }[];
   tail?: { busy: boolean; streams?: Record<string, string> };
 }
 
@@ -499,8 +526,10 @@ async function awayLeg(
 
 /**
  * f. A subagent's frames after its session's turn has ended. Claude Code
- *    sends none on this fleet (a background `Agent`'s frames never reach the
- *    hub, measured), so they are fed in: the machine's agent reaches the hub
+ *    sends a background subagent's written messages whenever the subagent
+ *    writes them (h), so they are fed in at a moment of the leg's own, after
+ *    the turn's end, and a streamed delta with them, which Claude Code
+ *    (2.1.302) sends for no subagent: the machine's agent reaches the hub
  *    through the probe's own relay on its socket (`CAWCO_HUB_URL`), and once
  *    a turn has ended the relay says, as the agent would, a subagent's
  *    streamed words and its written message (`parent_tool_use_id` set). The
@@ -689,10 +718,56 @@ async function mcpLeg(kit: Kit, fleet: KitFleet): Promise<void> {
     await hubPage(fleet, session),
     await hubPulse(fleet, session),
   ];
-  kit.note(
-    `opencode: /mcp into a running turn: the hub's tail busy ${mid.tail?.busy}, its pulse ${midPulse ? `busy ${midPulse.busy}` : "none"}`
+  kit.check(
+    "opencode: /mcp into a running turn: the daemon's pulse still says busy while the turn runs, as the hub's tail does",
+    mid.tail?.busy === true && midPulse?.busy === true,
+    `tail busy ${mid.tail?.busy}, pulse ${midPulse ? `busy ${midPulse.busy}` : "none"}`
   );
   await fleet.stopSession(session);
+}
+
+/**
+ * h. A Claude Code session calls a subagent (`Agent`, in the background as
+ *    Claude Code runs one by default), and the subagent's words reach its
+ *    branch on the hub, the card the transcript draws under the call.
+ *    Native subagents are the person's choice (fleet-choices.ts
+ *    `delegatesChange`), made first.
+ */
+async function branchLeg(kit: Kit, fleet: KitFleet): Promise<void> {
+  const chose = await fetch(`${fleet.base}/api/fleet/choices`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ delegates: false }),
+  });
+  if (!chose.ok) {
+    throw new Error(
+      `the fleet's delegates choice was refused: ${chose.status} ${await chose.text()}`
+    );
+  }
+  // Every machine hears the choice with its next beat.
+  await Bun.sleep(5000);
+  const session = await fleet.spawn("claude", "Turn end branch", fleet.workdir);
+  await fleet.send(session, `${BRANCH_CALL} start the work`);
+  const read = await until(
+    "the subagent's words on its branch",
+    () => hubPage(fleet, session),
+    (page) =>
+      (page.branches ?? []).some((branch) =>
+        JSON.stringify(branch.blocks).includes(BRANCH_WORDS)
+      ),
+    90_000
+  ).catch(() => hubPage(fleet, session));
+  const branches = (read.branches ?? []).map(
+    (branch) =>
+      `${branch.toolUseId} ${branch.status} ${branch.blocks.length} rows${JSON.stringify(branch.blocks).includes(BRANCH_WORDS) ? " with its words" : ""}`
+  );
+  kit.check(
+    "a subagent's words reach its branch on the hub",
+    (read.branches ?? []).some((branch) =>
+      JSON.stringify(branch.blocks).includes(BRANCH_WORDS)
+    ),
+    `branches: ${branches.join("; ") || "none"}`
+  );
 }
 
 const spec: Spec = {
@@ -717,6 +792,7 @@ const spec: Spec = {
     await stoppedLeg(kit, fleet, base);
     await mcpLeg(kit, fleet);
     await subagentLeg(kit, fleet);
+    await branchLeg(kit, fleet);
   },
 };
 export default spec;
