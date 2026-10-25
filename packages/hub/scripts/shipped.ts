@@ -52,8 +52,33 @@ export interface Baseline {
   label: string;
 }
 
-const git = (cwd: string, args: string[]) =>
-  Bun.spawnSync(["git", ...args], { cwd, stderr: "pipe" });
+/**
+ * Git run against the repository itself (`--git-common-dir`), not the
+ * checkout `cwd` names: a linked worktree shares its clone's remotes and
+ * objects, and a CawCo workspace's git door serves origin to the clone's own
+ * git dir alone, so from a worktree's dir origin is refused.
+ */
+const repoDirs = new Map<string, string>();
+const git = (cwd: string, args: string[]) => {
+  let repo = repoDirs.get(cwd);
+  if (!repo) {
+    const found = Bun.spawnSync(
+      ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+      { cwd, stderr: "pipe" }
+    );
+    if (found.exitCode !== 0) {
+      throw new Error(
+        `${cwd} is not in a git repository: ${found.stderr.toString().trim()}`
+      );
+    }
+    repo = found.stdout.toString().trim();
+    repoDirs.set(cwd, repo);
+  }
+  return Bun.spawnSync(["git", `--git-dir=${repo}`, ...args], {
+    cwd,
+    stderr: "pipe",
+  });
+};
 
 /** Origin's release tags, by name, each the commit it names; read once a process. */
 let read: Map<string, string> | undefined;
