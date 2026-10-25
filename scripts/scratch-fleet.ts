@@ -10,7 +10,7 @@
  * The mock answers every harness's model request (Anthropic messages for
  * Claude Code, OpenAI chat completions for opencode and pi) with the words
  * the probe's `respond` picks, streamed at its pace, and keeps every request
- * it answered in `seen`.
+ * it answered in `seen` (unless `record` is false).
  */
 import { Database } from "bun:sqlite";
 import {
@@ -1621,6 +1621,13 @@ export interface HubAddress {
 export async function scratchFleet(options: {
   hub?: HubAddress;
   name: string;
+  /**
+   * Whether each request answered is kept in `seen`; unsaid, it is. A
+   * spec whose sessions run thousands of turns and never reads `seen` says
+   * false: every request carries its conversation whole again, and kept,
+   * they grew two-pane-perf's runner past 8 GiB (2026-10-25).
+   */
+  record?: boolean;
   /** A promise holds the request until it settles: a spec paces a session's turns. */
   respond: (request: Seen) => Reply | Promise<Reply>;
 }) {
@@ -1646,6 +1653,7 @@ async function standUp(
   options: {
     hub?: HubAddress;
     name: string;
+    record?: boolean;
     respond: (request: Seen) => Reply | Promise<Reply>;
   },
   dirs: FleetDirs,
@@ -1715,6 +1723,13 @@ async function standUp(
 
   // ── The mock model endpoint ───────────────────────────────────────────
   const seen: Seen[] = [];
+  /** Keeps a request answered in `seen`, unless the fleet keeps none (`record`). */
+  const remember =
+    options.record === false
+      ? () => undefined
+      : (request: Seen) => {
+          seen.push(request);
+        };
   /** Token-count requests the mock got, and the hold a spec puts on their answers ({@link holdCountTokens}). */
   const countTokens = { asked: 0, held: null as Promise<void> | null };
   /** Holds every token-count answer, as a slow Anthropic would, until the release this answers is called. */
@@ -1783,7 +1798,7 @@ async function standUp(
           return typeof name === "string" ? [name] : [];
         }),
       };
-      seen.push(one);
+      remember(one);
       const reply = await options.respond(one);
       const chat = path.endsWith("/chat/completions");
       const refused = refusalOf(reply, chat);

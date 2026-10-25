@@ -2115,7 +2115,9 @@ const spec: Spec = {
     );
     const scene = sceneModel();
     const { counts, mark } = scene;
-    const fleet = await kit.fleet(scene.respond);
+    // Thousands of turns, each request its conversation whole again, and
+    // none read back: the mock keeps none of them.
+    const fleet = await kit.fleet(scene.respond, undefined, { record: false });
     scene.workdir = fleet.workdir;
     fleet.launch("sessiond");
     await fleet.sessiondUp();

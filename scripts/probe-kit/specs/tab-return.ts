@@ -2153,7 +2153,9 @@ const run = async (kit: Kit) => {
   await mkdir(folder, { recursive: true });
   await heavyFolder(folder);
   const scene = sceneModel();
-  const fleet = await kit.fleet(scene.respond);
+  // Hundreds of turns, each request its conversation whole again, and
+  // none read back: the mock keeps none of them.
+  const fleet = await kit.fleet(scene.respond, undefined, { record: false });
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");

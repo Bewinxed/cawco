@@ -424,11 +424,13 @@ export interface Kit {
    * the run's dashboard is built; its `dashboard()` serves that build
    * against its hub once asked, where the hub is reached (`hub.at`). Both go
    * when the spec ends. `hub`: where its hub listens and is reached
-   * (scratch-fleet.ts `HubAddress`), 127.0.0.1 unless named.
+   * (scratch-fleet.ts `HubAddress`), 127.0.0.1 unless named. `record`:
+   * whether the mock keeps each request in `seen` (scratch-fleet.ts).
    */
   fleet: (
     respond: (request: Seen) => Reply | Promise<Reply>,
-    hub?: HubAddress
+    hub?: HubAddress,
+    options?: { record?: boolean }
   ) => Promise<KitFleet>;
   /** A line that is neither a pass nor a fail. */
   note: (line: string) => void;
@@ -1129,7 +1131,7 @@ export class Run {
         });
         return (await served).base;
       },
-      fleet: async (respond, hub) => {
+      fleet: async (respond, hub, { record }: { record?: boolean } = {}) => {
         // Built before the fleet starts, never between its start and the
         // dashboard's: the build runs once per run, so a fleet left waiting
         // on it ran its sessions on for the build's length when its spec
@@ -1140,6 +1142,7 @@ export class Run {
         const fleet = await scratchFleet({
           name: `probe-kit-${spec.name}`,
           respond,
+          ...(record === undefined ? {} : { record }),
           ...(hub ? { hub } : {}),
         });
         let served: Promise<Served> | null = null;

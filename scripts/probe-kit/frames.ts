@@ -732,6 +732,38 @@ function samplesOf(
   return samples;
 }
 
+/** The passes whose stacks say what forced them (`forcedBy`). */
+const FORCED = new Set(["UpdateLayoutTree", "Layout"]);
+
+/**
+ * Whether `traceMain` keeps a trace event as it arrives, and kept, without
+ * what it never reads. It reads complete events (`X`), thread names (`M`),
+ * the page's marks, the sampling profile and the style and layout
+ * invalidations; of the stacks the timeline attaches, only a style or
+ * layout pass's. Kept whole, a two-pane-perf leg's trace (two panes
+ * streaming, every invalidation with its stack) held its runner at 8 GiB
+ * and growing (2026-10-25).
+ */
+function kept(event: TraceEvent): boolean {
+  const read =
+    event.ph === "X" ||
+    event.ph === "M" ||
+    event.cat.includes("blink.user_timing") ||
+    event.name === "Profile" ||
+    event.name === "ProfileChunk" ||
+    event.name.endsWith("InvalidationTracking");
+  const { args } = event;
+  if (read && args && !FORCED.has(event.name)) {
+    if (args.data?.stackTrace) {
+      args.data.stackTrace = undefined;
+    }
+    if (args.beginData?.stackTrace) {
+      args.beginData.stackTrace = undefined;
+    }
+  }
+  return read;
+}
+
 /**
  * The page's main thread while `act` runs, read off a DevTools trace
  * (Chromium): every top-level task (`RunTask`) with its wall time (`dur`)
@@ -765,7 +797,11 @@ export async function traceMain(
   const cdp = await page.context().newCDPSession(page);
   const events: TraceEvent[] = [];
   cdp.on("Tracing.dataCollected", ({ value }) => {
-    events.push(...(value as unknown as TraceEvent[]));
+    for (const event of value as unknown as TraceEvent[]) {
+      if (kept(event)) {
+        events.push(event);
+      }
+    }
   });
   const complete = new Promise<void>((resolve) => {
     cdp.once("Tracing.tracingComplete", () => resolve());
