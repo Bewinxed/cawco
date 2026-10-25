@@ -29,6 +29,22 @@
  *    through the person's setting, `POST /api/person/away-clock`): the hub
  *    says the person is away and the page reloads.
  * e. No choice, then no input for the away clock: the same.
+ *
+ * And the build's release notes reach the person whichever way it lands
+ * (owner: "idk where the update / release notes has disappeared to"). The
+ * landing is the machine's own word (`binaryUpdate.landed`, with its notes),
+ * put on the hub as an agent puts it (`PUT
+ * /api/binary-updates/machines/:id/state`); only the notice's ✕ (or Clear
+ * all, or its act) acknowledges it, never a reload or a page viewed:
+ *
+ * f. A build lands while a page is open: the toast stands and Caw's panel
+ *    holds "CawCo updated to …" with its notes open. Update now reloads, and
+ *    the reloaded page's panel still holds them; so does the page the idle
+ *    reload (the tab to the background) brings back.
+ * g. A build lands while no page is open: a page opened after it holds the
+ *    notes in Caw's panel, a reload keeps them, and Configure › Updates
+ *    viewed keeps them. Their ✕ takes them away, and a reload does not bring
+ *    them back.
  */
 
 import type { Page, WebSocketRoute } from "playwright-core";
@@ -38,7 +54,8 @@ import {
   type PersonView,
 } from "../../../packages/core/src/notifications";
 import { updatesWords } from "../../../packages/core/src/words/updates";
-import { until } from "../../scratch-fleet";
+import { MACHINE, until } from "../../scratch-fleet";
+import { caw } from "../caw-head";
 import {
   type Engine,
   type Kit,
@@ -203,6 +220,227 @@ const standsWhole = (read: Awaited<ReturnType<typeof readToast>>): boolean => {
   return inView && oneRow && content.bottom <= idle.top;
 };
 
+/** Landings put so far: each leg's are its own. */
+let landings = 0;
+
+/** The update row of Caw's panel (home/UpdateCard). */
+const UPDATE_ROW = '[data-slot="update-card-card"]';
+/** How long the panel's update row is waited for. */
+const ROW_MS = 10_000;
+
+/** A landing's build and notes: each one its own, so a reading names which. */
+const landingOf = (n: number) => ({
+  version: `0.1.99-nightly.${9000 + n}+probe`,
+  shown: `nightly ${9000 + n}`,
+  bullet: `Probe landing ${n} is in the notes`,
+  notes: `### New\n- Probe landing ${n} is in the notes\n- A second new line\n\n### Fixed\n- One fixed line`,
+});
+
+/**
+ * A build landed on the fleet's machine, as its agent says it: the state's
+ * `landed` with the build's notes (core binary-updates.ts `BinaryUpdateLanding`).
+ * A source agent's beats carry no update state, so this one stands.
+ */
+const land = async (fleet: KitFleet, n: number): Promise<void> => {
+  const { version, notes } = landingOf(n);
+  const at = Date.now();
+  const response = await fetch(
+    `${fleet.base}/api/binary-updates/machines/${MACHINE}/state`,
+    {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        phase: "installed",
+        channel: "nightly",
+        hostsHub: true,
+        installedVersion: version,
+        availableVersion: version,
+        notes,
+        landed: { at, outcome: "installed", version, notes },
+        updatedAt: at,
+      }),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(
+      `the landing was not put: ${response.status} ${await response.text()}`
+    );
+  }
+};
+
+/**
+ * What Caw's panel says of the update: the row's title, and its notes as
+ * they stand once open (Show changes pressed when they stand folded). The
+ * panel is opened by his head and closed again by Escape; opening it
+ * acknowledges nothing.
+ */
+const readNotes = async (page: Page) => {
+  await caw(page).click();
+  const row = page.locator(UPDATE_ROW).first();
+  const up = await row
+    .waitFor({ state: "visible", timeout: ROW_MS })
+    .then(() => true)
+    .catch(() => false);
+  if (!up) {
+    await page.keyboard.press("Escape");
+    return { title: null, open: false, notes: "" };
+  }
+  const toggle = row.locator('[data-toggle][aria-expanded="false"]');
+  if ((await toggle.count()) > 0) {
+    await toggle.click();
+  }
+  const fold = row.locator('[data-slot="fold"]');
+  await fold
+    .and(page.locator("[data-open]"))
+    .waitFor({ timeout: ROW_MS })
+    .catch(() => undefined);
+  const read = {
+    title: (await row.locator('[data-slot="title"]').textContent())?.trim(),
+    open: (await fold.getAttribute("data-open").catch(() => null)) !== null,
+    notes: (await fold.innerText().catch(() => "")).trim(),
+  };
+  await page.keyboard.press("Escape");
+  return read;
+};
+
+/** The panel holds landing `n`'s notice, its title naming the build, its notes open with its own bullet. */
+const holdsNotes = (
+  read: Awaited<ReturnType<typeof readNotes>>,
+  n: number
+): boolean =>
+  read.title?.endsWith(` ${landingOf(n).shown}`) === true &&
+  read.open &&
+  read.notes.includes(landingOf(n).bullet);
+
+/** What legs f and g are given of their leg: its fleet, its checks and its fresh pages. */
+interface Leg {
+  base: string;
+  check: (what: string, ok: boolean, detail: unknown) => void;
+  fleet: KitFleet;
+  fresh: () => Promise<{ page: Page; update: Update; loaded: number }>;
+  noErrors: (what: string, update: Update) => void;
+  toastUp: (page: Page) => Promise<boolean>;
+}
+
+/**
+ * f. A build lands while a page is open: the toast, the notes in Caw's
+ * panel, Update now, then the idle reload.
+ */
+const landsOpen = async ({
+  check,
+  fleet,
+  fresh,
+  noErrors,
+  toastUp,
+}: Leg): Promise<void> => {
+  const { page, update, loaded } = await fresh();
+  landings += 1;
+  const n = landings;
+  await land(fleet, n);
+  await announce(update);
+  const shown = await toastUp(page);
+  const before = await readNotes(page);
+  check(
+    "f: a build landed with the page open: the toast stands, and Caw's panel holds the update with its notes open",
+    shown && holdsNotes(before, n),
+    { shown, before }
+  );
+  await page.getByRole("button", { name: updatesWords.updateNow }).click();
+  const at = await reloaded(update, loaded, SLACK_MS);
+  await page.waitForSelector(READY, { timeout: 60_000 });
+  const after = await readNotes(page);
+  check(
+    "f: Update now reloads, and the reloaded page's panel still holds the notes",
+    at !== null && holdsNotes(after, n),
+    { reloaded: at !== null, after }
+  );
+  const reloads = update.loads.length;
+  await announce(update);
+  await toastUp(page);
+  await toBackground(page);
+  const idleAt = await reloaded(update, reloads, SLACK_MS);
+  await page.waitForSelector(READY, { timeout: 60_000 });
+  const idle = await readNotes(page);
+  check(
+    "f: the idle reload (the tab to the background) brings back a page whose panel still holds the notes",
+    idleAt !== null && holdsNotes(idle, n),
+    { reloaded: idleAt !== null, idle }
+  );
+  noErrors("f", update);
+  await page.close();
+};
+
+/**
+ * g. A build lands while no page is open: a page opened, reloaded,
+ * Configure › Updates viewed, then the notice's ✕.
+ */
+const landsClosed = async ({
+  base,
+  check,
+  fleet,
+  fresh,
+  noErrors,
+}: Leg): Promise<void> => {
+  landings += 1;
+  const n = landings;
+  await land(fleet, n);
+  const { page, update } = await fresh();
+  const opened = await readNotes(page);
+  check(
+    "g: a page opened after the build landed holds the update in Caw's panel with its notes open",
+    holdsNotes(opened, n),
+    opened
+  );
+  await page.reload();
+  await page.waitForSelector(READY, { timeout: 60_000 });
+  const again = await readNotes(page);
+  check(
+    "g: a reload keeps the notes in Caw's panel",
+    holdsNotes(again, n),
+    again
+  );
+  await open(page, `${base}/config/updates`, READY);
+  // The page stands once its auto-update switch does (SwitchField `id`).
+  await page.locator("#auto-update").waitFor({ timeout: ROW_MS });
+  await page.waitForTimeout(QUIET_MS);
+  await open(page, `${base}/`, READY);
+  const viewed = await readNotes(page);
+  check(
+    "g: Configure › Updates viewed keeps the notes in Caw's panel",
+    holdsNotes(viewed, n),
+    viewed
+  );
+  await caw(page).click();
+  // No row to dismiss is no ✕ taking it away: a failed check, not a throw.
+  // The ✕ of the row that holds the update (NoticeRow's `x`).
+  const dismissed = await page
+    .locator("article", { has: page.locator(UPDATE_ROW) })
+    .locator('[data-slot="x"]')
+    .first()
+    .click({ timeout: ROW_MS })
+    .then(() => true)
+    .catch(() => false);
+  const gone =
+    dismissed &&
+    (await page
+      .locator(UPDATE_ROW)
+      .waitFor({ state: "detached", timeout: ROW_MS })
+      .then(() => true)
+      .catch(() => false));
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(QUIET_MS);
+  await page.reload();
+  await page.waitForSelector(READY, { timeout: 60_000 });
+  const after = await readNotes(page);
+  check(
+    "g: the notice's ✕ takes the notes away, and a reload does not bring them back",
+    gone && after.title === null,
+    { gone, after }
+  );
+  noErrors("g", update);
+  await page.close();
+};
+
 const leg = async (
   kit: Kit,
   fleet: KitFleet,
@@ -353,6 +591,10 @@ const leg = async (
     noErrors("c", update);
     await page.close();
   }
+
+  const given: Leg = { base, check, fleet, fresh, noErrors, toastUp };
+  await landsOpen(given);
+  await landsClosed(given);
 
   // d and e. No input for the away clock, after Update when idle or no choice.
   await fleet.api("/api/person/away-clock", { awayAfterMs: AWAY_AFTER_MIN_MS });

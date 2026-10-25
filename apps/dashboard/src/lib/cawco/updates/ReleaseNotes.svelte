@@ -3,9 +3,9 @@
    * A release's notes as the markdown they are (docs/releases/README.md):
    * each section's heading as a small tinted label (New green, Improved cyan,
    * Fixed amber, each with its Solar glyph), then its bullets as a list,
-   * drawn by the app's one markdown renderer. The toast, the Home card and
-   * Configure › Updates all show notes through this, at the size of the
-   * text around them.
+   * drawn by the app's one markdown renderer. The update row of Caw's panel
+   * (home/UpdateCard) and Configure › Updates show notes through this, at
+   * the size of the text around them.
    */
   import type { Component } from "svelte";
   import { Badge, type BadgeVariant } from "#lib/components/ui/badge/index.js";

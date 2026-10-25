@@ -66,8 +66,6 @@ final class UpdatesSectionController: ConfigSectionController {
     private var autoSending: Bool?
     /// Cancels asked for whose machine still reports `ready`.
     private var cancelling: Set<String> = []
-    /// Landings drawn on this page, acknowledged once it has drawn them.
-    private var landings: [String] = []
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -189,12 +187,6 @@ final class UpdatesSectionController: ConfigSectionController {
         let machines = UpdateRows.ordered(fleet.machines)
         drawChannel(policy, channels: fleet.updateChannels, machines: machines)
         drawMachines(policy, machines: machines, commanded: fleet.commanded)
-        landings = fleet.noticesKnown ? UpdateRows.landingIds(machines).filter { !fleet.noticesSeen.contains($0) } : []
-    }
-
-    override func drawContent() {
-        // A person on this page has seen what landed: acknowledged for every device.
-        if view.window != nil, !landings.isEmpty { hub.acknowledge(notices: landings) }
     }
 
     private static func name(_ channel: Channel) -> String { channel == .nightly ? "Nightly" : "Stable" }

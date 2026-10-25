@@ -176,11 +176,6 @@ public enum UpdateRows {
         machines.filter { cell($0, policy: policy).row == 11 }
     }
 
-    /// The landings the machines carry, as the hub's notice ids: a person on Updates has seen them.
-    public static func landingIds(_ machines: [MachineRow]) -> [String] {
-        machines.compactMap { machine in state(machine)?.landed.map { Notice.landingId(machine.machineId, at: $0.at) } }
-    }
-
     /// The machines as Updates lists them: by hostname (rail.svelte.ts
     /// `orderMachines`, which this app keeps no arrangement for).
     public static func ordered(_ machines: [MachineRow]) -> [MachineRow] {

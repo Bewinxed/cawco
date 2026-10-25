@@ -7,12 +7,12 @@
  *
  * Every notice is acknowledged on the hub (notices.svelte.ts), by the ids of
  * the events it announces: its ✕, or acting on it, clears it for every tab
- * and device, and a reload never brings it back.
+ * and device, and a reload never brings it back. Nothing else acknowledges a
+ * landing: not a reload for the new build, not a page viewed.
  */
 import { machineLabel } from "@cawco/core";
 import { cawco } from "../client.svelte";
 import { notices } from "../notices.svelte";
-import { bidFarewell } from "../reload.svelte";
 import { newerBuild } from "../served-build.svelte";
 import { type Notice, noticeFor } from "./model";
 import { watchUpdateToast } from "./update-toast.svelte";
@@ -97,17 +97,9 @@ export function actOnUpdate(
 export function startUpdateWatch(): () => void {
   return $effect.root(() => {
     // A tab older than the dashboard offers its reload in the update toast.
-    // Every reload for a new build acknowledges the landing the notice says
-    // (on a tab older than the dashboard it says nothing else, `noticeFor`),
-    // so the reloaded tab does not say it again.
-    const unbid = bidFarewell({
-      acks: () => {
-        const notice = updateNotice.current;
-        return notice?.kind === 3 || notice?.kind === 6 ? notice.acks : [];
-      },
-    });
+    // The reload acknowledges nothing: the landing's notes stand in Caw's
+    // panel on the reloaded tab until the notice's ✕ (or its act).
     watchUpdateToast();
-    $effect(() => unbid);
 
     // "Running on N machines" leaves by itself.
     $effect(() => {

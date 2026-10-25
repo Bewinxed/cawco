@@ -3,9 +3,9 @@
  * reload that goes by itself whatever the person chose.
  *
  * Every reload for a new build ends in {@link leaveForBuild}: the composers'
- * words written down, the landing the update notice announced acknowledged
- * on the hub, the change marked as reloaded for, then the page goes. Its
- * callers:
+ * words written down, the change marked as reloaded for, then the page goes.
+ * It acknowledges nothing: the landing's notes stand in Caw's panel on the
+ * reloaded page until its ✕ (updates/update-notice.svelte.ts). Its callers:
  *
  * - the update toast (updates/update-toast.svelte.ts): Update now, or the
  *   person away or the tab hidden;
@@ -26,7 +26,6 @@
  */
 import { version } from "$app/env";
 import { leaveThePage } from "./leaving";
-import { notices } from "./notices.svelte";
 import { runningBuild } from "./served-build.svelte";
 import { store, stored } from "./storage";
 
@@ -253,22 +252,6 @@ export function busy(): Busy | null {
  */
 export type ReloadHold = "build" | Busy | "unkept";
 
-/** What the update notice gives the reload: the notice ids it acknowledges as the tab goes. */
-interface Farewell {
-  acks: () => string[];
-}
-let farewell: Farewell | null = null;
-
-/** The update notice hands every reload for a new build its acknowledgement. */
-export function bidFarewell(given: Farewell): () => void {
-  farewell = given;
-  return () => {
-    if (farewell === given) {
-      farewell = null;
-    }
-  };
-}
-
 /** Everyone told what holds the reload: the connection band (client.svelte.ts). */
 const listeners = new Set<(hold: ReloadHold) => void>();
 let reloading = false;
@@ -310,8 +293,7 @@ export const reloadedFor = (running: string): boolean =>
 
 /**
  * The one way a tab leaves for `running`, the build the dashboard's server
- * runs: every composer's words written down and what the update notice
- * announced acknowledged ({@link bidFarewell}), the change marked as
+ * runs: every composer's words written down, the change marked as
  * reloaded for ({@link RELOADED_FOR}), then the page reloads, at the address
  * it stands on. `chosen`: the person asked for it, so it goes even where the
  * mark is not kept; by itself it does not, and answers false, as it could
@@ -322,10 +304,7 @@ export async function leaveForBuild(
   chosen: boolean
 ): Promise<boolean> {
   leaving = true;
-  await Promise.allSettled([
-    ...[...flushes].map((flush) => flush()),
-    notices.acknowledge(farewell?.acks() ?? []),
-  ]);
+  await Promise.allSettled([...flushes].map((flush) => flush()));
   store("session", RELOADED_FOR, changeTo(running));
   if (!(chosen || reloadedFor(running))) {
     leaving = false;

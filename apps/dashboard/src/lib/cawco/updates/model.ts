@@ -440,7 +440,7 @@ export interface NoticeInput {
 }
 
 /** A landing's notice id: the landing itself, by its machine and when it finished. */
-export const landingId = (machineId: string, landing: { at: number }): string =>
+const landingId = (machineId: string, landing: { at: number }): string =>
   `landed:${machineId}:${landing.at}`;
 
 /** The machines, with every landing someone has acknowledged taken off. */
@@ -818,8 +818,8 @@ const unlessSeen = (notice: Notice | null, input: NoticeInput) =>
  * than the dashboard serving it says only the landing that replaced the
  * dashboard, and everything else waits for its reload, since an old tab may
  * misread what it is sent; the reload itself is the update toast's
- * (update-toast.svelte.ts), and acknowledges the landing as the tab goes,
- * so the reloaded tab does not say it again.
+ * (update-toast.svelte.ts), and the reloaded tab says the landing again,
+ * notes and all, until its ✕.
  */
 export function noticeFor(
   input: NoticeInput,
