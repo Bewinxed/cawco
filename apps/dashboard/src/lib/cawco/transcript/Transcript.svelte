@@ -1237,12 +1237,13 @@
   const ITEM_ATTRS = { "data-item": "" };
   /**
    * A row a warming pane holds is skipped while it stages (`skipping`, set
-   * by `parkRows`): its content is not styled, and its box keeps the size
-   * virtua already has for it, so virtua's observer reads that same size
-   * and nothing moves.
+   * by `parkRows`), and a row the view did not show as the pane was put away
+   * until it is styled again (`aside`): its content is not styled, and its
+   * box keeps the size virtua already has for it, so virtua's observer reads
+   * that same size and nothing moves.
    */
   const itemAttrs = ({ item }: { item: Row }) => {
-    const px = skipped.get(item.key);
+    const px = skipped.get(item.key) ?? aside.get(item.key);
     return px === undefined
       ? ITEM_ATTRS
       : {
@@ -1482,8 +1483,12 @@
   const drawnHeights = new WeakMap<Element, number>();
   /** The rows' size observer, made by the first row the list mounts (none on the server). */
   let rowSizes: FrameObserver | null = null;
-  /** A row of the list, heard as each frame lays it out (`drawnHeights`). */
-  const measureRow: Attachment<HTMLElement> = (node) => {
+  /**
+   * The rows' size observer, made here and not in a row's attachment: made
+   * there, its reader closed over that row, and held the first row the list
+   * mounted for as long as the list lived (tab-return's detached leg).
+   */
+  function rowSizesOf(): FrameObserver {
     rowSizes ??= frameObserver(() => undefined, {
       read: (entries) => {
         for (const entry of entries) {
@@ -1494,7 +1499,11 @@
         }
       },
     });
-    const sizes = rowSizes;
+    return rowSizes;
+  }
+  /** A row of the list, heard as each frame lays it out (`drawnHeights`). */
+  const measureRow: Attachment<HTMLElement> = (node) => {
+    const sizes = rowSizesOf();
     sizes.observe(node, { box: "border-box" });
     return () => {
       sizes.unobserve(node);
@@ -1680,35 +1689,66 @@
   /** A far landing: virtua mounts what is on screen alone (`landFar`). */
   let narrow = $state(false);
   /**
-   * NOT SEEN, ONLY WHAT THE VIEW SHOWS IS MOUNTED.
+   * PUT AWAY, NOTHING MOUNTED IS LET GO; WHAT THE VIEW DOES NOT SHOW IS SKIPPED.
    *
-   * A transcript off screen (put away, or laid out while the reader reaches
-   * for its tab: PaneLeaf `.pane-settling`, hidden by `visibility`) keeps
-   * virtua to the rows in its view, no screen either side. The switch that
-   * shows a warm pane restyles every element it holds, the inherited
-   * `visibility` coming back on each (2,366 elements, 26.7ms, for a view and
-   * a screen above and below it); it holds the view's rows alone now. The
-   * screens either side mount a step a task once the shown pane's first
-   * frame has painted (`buffer`), and are let go a step a task once it is
-   * put away, so none of it lands in a switch's frame (web.dev, "Optimize long
-   * tasks"). What is on screen never moves: virtua keeps the view where it
-   * stands as rows mount above it.
+   * A pane put away is skipped (PaneLeaf `.pane-hidden`, `content-visibility:
+   * hidden`): the engine lays none of it out, and a row the list took down
+   * there stayed held by the list's last layout, its boxes and its text, until
+   * the pane was shown again. Stepping virtua's buffer down to the view as the
+   * pane was put away took the rows around it down so: the busy list went
+   * from 35 mounted rows to 17, and Chromium held every one (31 rows, 350 text
+   * nodes, after 30 switches: tab-return's detached leg). So while a pane is
+   * away (`unseen`) every row mounted as it was put away stays mounted
+   * (`away`, in `keepMounted`), until it is shown or a far landing lets them
+   * go a step a task (`landFar`). Its range is the view alone meanwhile
+   * (`buffer`) and its tail takes no new rows, so a row its session sends
+   * waits unmounted, as before; shown again, the rows it kept are its buffer
+   * again in the flush that stops keeping them, and none is mounted or let go.
+   *
+   * The switch that shows a warm pane restyles every element it holds, the
+   * inherited `visibility` coming back on each (2,366 elements, 26.7ms, for a
+   * view and a screen above and below it). So the rows the view does not
+   * show are skipped as the pane is put away (`aside`, in `itemAttrs`: their
+   * content unstyled, their boxes at virtua's size for them), and the switch
+   * styles the view's rows alone. Once the shown pane's first frame has
+   * painted they are styled `STAGE_ROWS` a task, nearest the view first
+   * (web.dev, "Optimize long tasks"), where virtua's buffer stepping back up
+   * mounted each of them again; a scroll before then styles the ones it
+   * brings into the view at once (`onListScroll`). What is on screen never
+   * moves: a skipped row's box keeps the size virtua has for it.
    */
   let unseen = $state(untrack(() => !visible));
+  /** The rows mounted as the pane was put away, by key: kept mounted while it is away (`keepMounted`). */
+  let away = $state.raw<ReadonlySet<string>>(new Set());
+  /** virtua's buffer as the pane was put away: what the rows it kept span (`away`). */
+  let keptBuffer = 0;
+  /** The rows skipped since the pane was put away, each at virtua's size for it, px, nearest the view first (`itemAttrs`). */
+  let aside = $state.raw<ReadonlyMap<string, number>>(new Map());
   /**
    * How long each mounted row's text was as the pane was put away, by key:
    * what virtua last measured (`parkRows`). Read off the page's text, never
    * its layout.
    */
   let putAway = new Map<string, number>();
+  /** Whether the pane was seen at the last look: one put away keeps what it has mounted (`away`). */
+  let wasSeen = untrack(() => visible);
   $effect(() => {
     const now = visible;
+    const goneAway = wasSeen && !now;
+    wasSeen = now;
     let task: ReturnType<typeof setTimeout> | undefined;
     const frame = requestAnimationFrame(() => {
       task = setTimeout(() => {
         unseen = !now;
-        if (!now) {
-          putAway = textOfRows();
+        if (now) {
+          return;
+        }
+        putAway = textOfRows();
+        // Laid out again meanwhile (`wasWarm`), it lets go freely until it is skipped again.
+        if (goneAway && !wasWarm) {
+          away = onList();
+          aside = rowsAside();
+          keptBuffer = buffer;
         }
       });
     });
@@ -1719,15 +1759,15 @@
   });
   /**
    * How far either side of the view virtua mounts rows (its `bufferSize`):
-   * none at once for a far landing (`narrow`), and otherwise stepped an
+   * none at once for a far landing (`narrow`), and otherwise stepped up an
    * eighth of a screen (`viewHeight`) a task, each step once a frame has
-   * painted: up to `BUFFER_SCREENS` of one while the pane is seen, down to
-   * none once it is put away (`unseen`). Back up in one task, the screens either side of a
-   * pane just shown mounted together, 1,189 elements and 23ms of style in
-   * one 46ms task 73ms after the switch; a quarter a step, the frame after
-   * each step still styled 626 of them (a 36ms frame, two-pane-perf's one
-   * pane point switch). Let go in one task, a pane put away unmounted its 79
-   * rows in a 42ms timer (its two pane point switch).
+   * painted, to `BUFFER_SCREENS` of one. In one task, the screens either
+   * side of a pane just shown mounted together, 1,189 elements and 23ms of
+   * style in one 46ms task 73ms after the switch; a quarter a step, the
+   * frame after each step still styled 626 of them (a 36ms frame,
+   * two-pane-perf's one pane point switch). None while the pane is away
+   * (`unseen`), whose rows are kept by `away`; shown again, as much as they
+   * span, at once (`keptBuffer`).
    */
   const BUFFER_STEPS = 8;
   /**
@@ -1747,17 +1787,18 @@
     const full = viewHeight * BUFFER_SCREENS;
     // biome-ignore lint/complexity/noVoid: a page handed over in front steps the buffer up from nothing (`foldInFront`)
     void fronted;
-    if (narrow) {
+    if (narrow || unseen) {
       buffer = 0;
       return;
     }
-    const to = unseen ? 0 : full;
-    const now = untrack(() => buffer);
-    if (!unseen && now >= full) {
-      buffer = full;
-      return;
+    // Shown again, the rows it kept are its buffer again, in the flush that
+    // stops keeping them.
+    if (untrack(() => away.size) > 0) {
+      away = new Set();
+      buffer = Math.min(full, keptBuffer);
     }
-    if (now === to) {
+    if (untrack(() => buffer) >= full) {
+      buffer = full;
       return;
     }
     const by = Math.max(1, full / BUFFER_STEPS);
@@ -1766,9 +1807,8 @@
     const grow = () => {
       frame = requestAnimationFrame(() => {
         task = setTimeout(() => {
-          buffer =
-            to > buffer ? Math.min(to, buffer + by) : Math.max(to, buffer - by);
-          if (buffer !== to) {
+          buffer = Math.min(full, buffer + by);
+          if (buffer < full) {
             grow();
           } else if (untrack(() => frontHeld.length) > 0) {
             frontHeld = [];
@@ -1777,6 +1817,91 @@
       });
     };
     grow();
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(task);
+    };
+  });
+  /**
+   * The mounted rows the view does not show, each at virtua's size for it,
+   * nearest the view first: skipped while the pane is away (`aside`). A row
+   * virtua never measured (its `hide`) is left to be measured as the pane
+   * is laid out. Attributes and virtua's sizes alone: nothing here reads the
+   * page's layout.
+   */
+  function rowsAside(): ReadonlyMap<string, number> {
+    const container = listing?.firstElementChild;
+    if (!(container && list)) {
+      return new Map();
+    }
+    const top = list.getScrollOffset();
+    const first = list.findItemIndex(top);
+    const last = list.findItemIndex(top + list.getViewportSize());
+    const at = new Map(renderedRows.map((row, index) => [row.key, index]));
+    const out: { far: number; key: string; px: number }[] = [];
+    for (const item of container.children) {
+      const key = item.querySelector<HTMLElement>(":scope > [data-row]")
+        ?.dataset.row;
+      const index = key === undefined ? undefined : at.get(key);
+      if (
+        key === undefined ||
+        index === undefined ||
+        (index >= first && index <= last) ||
+        (item as HTMLElement).style.visibility === "hidden"
+      ) {
+        continue;
+      }
+      out.push({
+        key,
+        px: list.getItemSize(index),
+        far: index < first ? first - index : index - last,
+      });
+    }
+    out.sort((a, b) => a.far - b.far);
+    return new Map(out.map(({ key, px }) => [key, px]));
+  }
+  /** The rows skipped aside that the view from `top` shows are styled from here on (a scroll's, `onListScroll`). */
+  function liftInView(top: number): void {
+    if (!list) {
+      return;
+    }
+    const last = list.findItemIndex(top + list.getViewportSize());
+    const inView: string[] = [];
+    for (let index = list.findItemIndex(top); index <= last; index += 1) {
+      const key = renderedRows[index]?.key;
+      if (key !== undefined && aside.has(key)) {
+        inView.push(key);
+      }
+    }
+    if (inView.length > 0) {
+      aside = new Map([...aside].filter(([key]) => !inView.includes(key)));
+    }
+  }
+  // Shown, the rows skipped aside are styled `STAGE_ROWS` a task, each step
+  // once a frame has painted; not while a far landing is on its way, which
+  // lets go of the view it leaves itself, still skipped (`landFar`).
+  $effect(() => {
+    if (unseen || untrack(() => aside.size) === 0) {
+      return;
+    }
+    let frame = 0;
+    let task: ReturnType<typeof setTimeout> | undefined;
+    const step = () => {
+      frame = requestAnimationFrame(() => {
+        task = setTimeout(() => {
+          if (!(staging || narrow || landingAway !== undefined)) {
+            const mounted = onList();
+            aside = new Map(
+              [...aside].filter(([key]) => mounted.has(key)).slice(STAGE_ROWS)
+            );
+          }
+          if (aside.size > 0) {
+            step();
+          }
+        });
+      });
+    };
+    step();
     return () => {
       cancelAnimationFrame(frame);
       clearTimeout(task);
@@ -1825,13 +1950,14 @@
     if (!(container && list)) {
       return;
     }
-    // Attributes alone: nothing here reads the page's layout.
+    // Attributes alone: nothing here reads the page's layout. A row skipped
+    // aside stays so until the pane is shown (`aside`): not held here.
     const holding: string[] = [];
     const unmeasured = new Set<string>();
     for (const item of container.children) {
       const key = item.querySelector<HTMLElement>(":scope > [data-row]")
         ?.dataset.row;
-      if (key) {
+      if (key && !aside.has(key)) {
         holding.push(key);
         if ((item as HTMLElement).style.visibility === "hidden") {
           unmeasured.add(key);
@@ -1954,16 +2080,20 @@
     // off the slot it is docked in, which can be none yet as this first runs
     // (PaneHost moves it there after it mounts).
     const warmed = warm.panes();
-    const away = !visible;
+    const hidden = !visible;
     // PaneLeaf's slot: a side split's own panes (paneforge) carry an empty `data-pane`.
     const pane = listing?.closest<HTMLElement>('[data-slot="pane"][data-pane]')
       ?.dataset.pane;
     const now =
-      away &&
+      hidden &&
       (warmed.includes(session.instanceId) ||
         (!!pane && warmed.includes(pane)));
+    // Gone cold, the pane is skipped again: it keeps what it has mounted,
+    // whatever a far landing while it was warm let go (`away`).
     if (now && !wasWarm) {
       untrack(parkRows);
+    } else if (hidden && wasWarm && !now) {
+      away = untrack(onList);
     }
     wasWarm = now;
   });
@@ -2033,6 +2163,14 @@
         }
       });
     }
+    // Put away, every row mounted as it was (`away`): one let go there stays held.
+    if (away.size > 0) {
+      renderedRows.forEach((row, index) => {
+        if (away.has(row.key)) {
+          kept.push(index);
+        }
+      });
+    }
     return kept;
   });
 
@@ -2064,13 +2202,24 @@
       return;
     }
     // virtua's own range as it stands, read off its sizes: the view and its
-    // buffer either side (virtua's `$getRange`), what is mounted now. A pane
-    // just shown again still has none (`unseen`): read as a screen either
-    // side, the rows a hidden pane never mounted were mounted here, three
-    // screens of them in the landing's frame (65ms, tab-return's 3 min).
+    // buffer either side (virtua's `$getRange`), what is mounted now, and
+    // the rows a pane put away kept (`away`), let go with them. Read wider,
+    // the rows virtua never mounted were mounted here, three screens of them
+    // in the landing's frame (65ms, tab-return's 3 min).
     const from = list.findItemIndex(Math.max(0, was - buffer));
     const to = list.findItemIndex(was + viewHeight + buffer);
-    lingering = Array.from({ length: to - from + 1 }, (_, i) => from + i);
+    const behind = new Set(
+      Array.from({ length: to - from + 1 }, (_, i) => from + i)
+    );
+    if (away.size > 0) {
+      renderedRows.forEach((row, index) => {
+        if (away.has(row.key)) {
+          behind.add(index);
+        }
+      });
+      away = new Set();
+    }
+    lingering = [...behind].sort((a, b) => a - b);
     narrow = true;
     unwinding = false;
     landings += 1;
@@ -3069,6 +3218,9 @@
    */
   function onListScroll(offset: number): void {
     awayScroll = 0;
+    if (aside.size > 0) {
+      liftInView(offset);
+    }
     if (!showing) {
       readScroll(offset);
       return;

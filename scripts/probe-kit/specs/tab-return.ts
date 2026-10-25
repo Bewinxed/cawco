@@ -649,7 +649,12 @@ function watchHiddenRemovals(): void {
         .map(([what, count]) => ({ what, count }))
         .sort((a, b) => b.count - a.count),
   };
-  /** A node's mark: its tag and `data-slot`, or `#text` and its first words. */
+  /**
+   * A node's mark: its tag and `data-slot`, or `#text` and its first words;
+   * a transcript's list item (virtua's) also says what kind of row it held,
+   * its key's prefix (rows.ts: `tool:` a call in flight, `live:` a turn's
+   * words in flight, `am:` a message, `tools:` a run of calls).
+   */
   const markOf = (node: Node | null): string => {
     if (!(node instanceof Element)) {
       return node
@@ -657,7 +662,10 @@ function watchHiddenRemovals(): void {
         : "";
     }
     const slot = node.getAttribute("data-slot");
-    return `${node.localName}${slot ? `[${slot}]` : ""}`;
+    const row = node.hasAttribute("data-item")
+      ? node.querySelector<HTMLElement>(":scope > [data-row]")?.dataset.row
+      : undefined;
+    return `${node.localName}${slot ? `[${slot}]` : ""}${row === undefined ? "" : `{${row.split(":")[0]}}`}`;
   };
   const note = (parent: Node | null, child: Node | null) => {
     if (!(
@@ -2195,6 +2203,18 @@ const STREAM_TURNS = 12;
 const SWITCHES = 30;
 /** How long each switch is left to land before the next: live-perf's memory leg's. */
 const SWITCH_REST_MS = 1300;
+/**
+ * A settled transcript row taken out of its list (`watchHiddenRemovals`'
+ * mark): virtua's item, the list container's own child, so no slot sits
+ * between, holding any row but one in flight. A call or a turn's words in
+ * flight (`tool:`, `live:`) leave the list as they land, the session's own
+ * change (rows.ts `liveTail`), not the list's cut.
+ */
+const LIST_ROW = /^div\{(?!tool\}|live\})[^}]*\} in {2}\(list \d+/;
+/** A row in flight taken out of its list as it landed (`LIST_ROW`). */
+const IN_FLIGHT_ROW = /^div\{(tool|live)\} in {2}\(list \d+/;
+/** Any node taken out (`watchHiddenRemovals`' mark). */
+const ANY_NODE = /./;
 
 /**
  * What holds each detached node of `DETACHED_KINDS` in `heap` that `before`
@@ -2239,7 +2259,11 @@ function holders(before: Heap, heap: Heap): string[] {
  * away still holds is let go once it is laid out again. What holds each
  * node the later readings find that the first did not, root to node, is
  * written to `detached.txt`, each transcript's list named in the path by
- * its index (`data-probe`).
+ * its index (`data-probe`). On every engine (`PROBE_ENGINE=webkit` for
+ * Safari's, whose heap no protocol reads) it asserts what Chromium held
+ * there: no transcript row taken out of a pane put away over the switches
+ * (`watchHiddenRemovals`; Chromium kept each such row, its boxes and its
+ * text, in the list's last layout until the pane was shown again).
  */
 async function detachedLeg(
   kit: Kit,
@@ -2255,6 +2279,9 @@ async function detachedLeg(
       .first()
       .click();
   const page = await kit.page("desk", { init: [watchHiddenRemovals] });
+  // The heap is read through the DevTools protocol, Chromium's alone; on
+  // every engine, what is taken out of a pane put away is counted.
+  const engine = page.context().browser()?.browserType().name() ?? "chromium";
   await page.addInitScript(
     ([held, active]) => {
       localStorage.setItem(
@@ -2289,8 +2316,9 @@ async function detachedLeg(
       );
     }
   });
-  const cdp = await page.context().newCDPSession(page);
-  const before = await heapOf(cdp);
+  const cdp =
+    engine === "chromium" ? await page.context().newCDPSession(page) : null;
+  const before = cdp ? await heapOf(cdp) : null;
   await page.evaluate(() =>
     (
       window as unknown as { __hiddenRemovals: { start: () => void } }
@@ -2305,7 +2333,7 @@ async function detachedLeg(
   await press(page, tabs[0] as string);
   await streaming;
   await page.waitForTimeout(SWITCH_REST_MS);
-  const after = await heapOf(cdp);
+  const after = cdp ? await heapOf(cdp) : null;
   const removals = await page.evaluate(() =>
     (
       window as unknown as {
@@ -2320,7 +2348,7 @@ async function detachedLeg(
     await page.waitForTimeout(SWITCH_REST_MS);
   }
   await page.waitForTimeout(3000);
-  const shownAgain = await heapOf(cdp);
+  const shownAgain = cdp ? await heapOf(cdp) : null;
   // Where each transcript's list stands: its pane, and whether it is drawn.
   const listings = await page.evaluate(() =>
     [...document.querySelectorAll('[data-slot="listing"]')].map((el) => ({
@@ -2329,19 +2357,44 @@ async function detachedLeg(
       items: el.querySelectorAll("[data-item]").length,
     }))
   );
+  const taken = (pattern: RegExp) =>
+    removals
+      .filter((one) => pattern.test(one.what))
+      .reduce((n, one) => n + one.count, 0);
+  const said = join(
+    kit.out,
+    `detached${engine === "chromium" ? "" : `-${engine}`}.txt`
+  );
   await writeFile(
-    join(kit.out, "detached.txt"),
+    said,
     `${[
-      `# After ${SWITCHES} switches`,
-      ...holders(before, after),
-      "# Once every pane is shown again, the busy one left in front",
-      ...holders(before, shownAgain),
-      `# Taken out of a pane put away over the switches: ${removals.reduce((n, one) => n + one.count, 0)}, by what each was and where it sat`,
+      ...(before && after && shownAgain
+        ? [
+            `# After ${SWITCHES} switches`,
+            ...holders(before, after),
+            "# Once every pane is shown again, the busy one left in front",
+            ...holders(before, shownAgain),
+          ]
+        : [`# ${engine}: no heap to read (the DevTools protocol is Chromium's)`]),
+      `# Taken out of a pane put away over the switches: ${taken(ANY_NODE)}, by what each was and where it sat`,
       ...removals.slice(0, 20).map((one) => `  ${one.count}× ${one.what}`),
       `# The transcripts' lists (tabs in order: ${tabs.join(", ")}; the busy one second)`,
       ...listings.map((one) => `  ${JSON.stringify(one)}`),
     ].join("\n")}\n`
   );
+  // What Chromium holds until the pane is shown again: every row a
+  // transcript's list takes out of a pane put away (virtua's item, the
+  // list's own child), its text with it.
+  const rows = taken(LIST_ROW);
+  kit.check(
+    `detached (${engine}): ${SWITCHES} switches round ${tabs.length} tabs take no settled transcript row out of a pane put away`,
+    rows === 0,
+    `${rows} settled rows; ${taken(IN_FLIGHT_ROW)} rows in flight that landed meanwhile; ${taken(ANY_NODE)} nodes in all, by what and where in ${said}`
+  );
+  if (!(cdp && before && after && shownAgain)) {
+    await page.close();
+    return;
+  }
   kit.note(
     `detached once every pane is shown again: ${JSON.stringify(Object.fromEntries(DETACHED_KINDS.map((kind) => [kind, shownAgain.detached[kind] ?? 0])))}; lists ${JSON.stringify(listings)}`
   );
