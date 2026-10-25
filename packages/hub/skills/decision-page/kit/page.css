@@ -53,10 +53,12 @@ a {
    foot (the project's Decisions tab says it), so the last card scrolls clear. */
 /* `--dp-real-w`: the widest real-size drawing's width (page.js), so the
    column grows to hold it whole where the screen is wide enough: the
-   drawing plus the page's, card's, pane's and frame's insets. */
+   drawing plus the page's, card's, pane's and frame's insets. Under it the
+   column is the room up to `--c-decision-page-max`, so the cards grow with
+   the window. */
 .dp {
   max-width: max(
-    920px,
+    var(--c-decision-page-max),
     calc(
       var(--dp-real-w, 0px) + 2 *
         (

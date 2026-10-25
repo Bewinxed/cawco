@@ -73,8 +73,9 @@
  *    story, all five Previews of one canvas, and the same cards in words
  *    alone, at 1900, 1440, 1100, 820 and 640 under a mouse with a desk's
  *    scrollbars and 390 and 320 under a finger, light and dark: the column
- *    the largest of 742, 1417 or 2092px its room holds, never under 920
- *    and never past its room (a worded page 920); each card's options per
+ *    the largest of 742, 1417 or 2092px its room holds, never under 1348
+ *    (`--c-decision-page-max`) and never past its room (a worded page the
+ *    room up to 1348); each card's options per
  *    row on their stories' pitch (190px on a worded page; one per row
  *    under the phone's line), a pictured option alone on its last row
  *    spanning it; at 1440 and 1900 a card's two phone stories side by side
@@ -835,7 +836,7 @@ const PICTURED_PROGRAM = [
   `pcalmP = Preview("${BOARD_ID}", "Calm on a phone", ["PhoneCalm"], ${PHONE_STORY})`,
   `pdenseP = Preview("${BOARD_ID}", "Dense on a phone", ["PhoneDense"], ${PHONE_STORY})`,
 ].join("\n");
-/** The same cards in words alone: a page with no pictures keeps its 920px column and its 190px options. */
+/** The same cards in words alone: a page with no pictures keeps its column (the room up to 1348px) and its 190px options. */
 const WORDED_PROGRAM = [
   `root = Decisions("Pick the board's look", [look, phone])`,
   `look = Decision("look", "${LONG_QUESTION}", [calm, dense, split], "Calm keeps the morning short.")`,
@@ -1267,6 +1268,9 @@ interface WidthLeg {
   w: number;
 }
 
+/** The widest a decision page's column stands, `--c-decision-page-max`: three 416px option columns, their gaps and the insets. */
+const PAGE_MAX = 1348;
+
 /** The chrome round a story at 1:1, px: the page's and the card's insets each side, a well's edge and inset each side, the gap between options. */
 const CHROME = {
   gap: 11,
@@ -1277,8 +1281,8 @@ const CHROME = {
 /**
  * The page's column in a room of `room` px whose widest picture is
  * `widest` px (0: none): the largest step of pictures abreast at 1:1 the
- * room holds, never under 920, the room's whole width where not one fits;
- * 920 on a page with no pictures; never past the room.
+ * room holds, never under the page's cap, the room's whole width where not
+ * one fits; the cap on a page with no pictures; never past the room.
  */
 function columnFor(
   room: number,
@@ -1286,7 +1290,7 @@ function columnFor(
   view: "desk" | "phone"
 ): number {
   if (widest <= 0) {
-    return Math.min(room, 920);
+    return Math.min(room, PAGE_MAX);
   }
   const insets = CHROME.insets[view];
   const pitch = widest + 2 * CHROME.well;
@@ -1295,7 +1299,7 @@ function columnFor(
   );
   const step =
     abreast > 0 ? abreast * (pitch + CHROME.gap) - CHROME.gap + insets : room;
-  return Math.min(room, Math.max(920, step));
+  return Math.min(room, Math.max(PAGE_MAX, step));
 }
 
 /**
@@ -1361,7 +1365,7 @@ function checkLayout(
   { leg, pictured, view }: WidthLeg
 ) {
   const { gap, well } = CHROME;
-  // The column: on a pictured page the largest step of 640px stories abreast its room holds, never under 920, the room where none fits; else 920; never past its room.
+  // The column: on a pictured page the largest step of 640px stories abreast its room holds, never under the cap, the room where none fits; else the cap; never past its room.
   const want = columnFor(read.room, pictured ? DESK_STORY : 0, view);
   kit.check(
     `${leg}: the column is ${want}px (its room ${read.room}px; got ${read.column}px)`,

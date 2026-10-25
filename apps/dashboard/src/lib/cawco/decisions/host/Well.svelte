@@ -3,7 +3,9 @@
   (Preview, Diagram, Image, Canvas, Dials): the content well inside a raised
   card (DESIGN.md, Surfaces: `surface-well` with `border-well`), the token
   radius `well`, 11px in. Its piece stands at its real size, 1 CSS px per
-  px, never scaled, centred on both axes where it is narrower than the well.
+  px, centred on both axes where it is narrower than the well; only a
+  Preview of a page-sized design wider than its well scales down to fit it
+  (`shown`, Preview.svelte), never under its words' 10px.
   A piece that knows its own width (`picture`: a Preview's design, a
   canvas's drawing, a picture's or a diagram's own) has its well hug it: the
   piece and the well's insets, never wider than what holds it, so no empty
@@ -27,15 +29,21 @@
     action,
     caption,
     children,
+    fills = false,
     picture,
     said = "",
+    shown,
     stage = $bindable(),
   }: {
     action?: Snippet;
     caption?: string;
     children: Snippet;
+    /** Its piece takes its card's whole width (a page-sized design that names no width of its own, Preview.svelte): the card stands the column it is in one to a row (`data-fills`, Decision.svelte). */
+    fills?: boolean;
     /** Its piece's own width, px, at 1 CSS px per px: the well hugs it, scrolls it sideways where it is narrower, and under the phone's line, alone in its card (`data-bleeds`), reaches the screen's edges as far as it does. */
     picture?: number;
+    /** The width its piece stands at in the stage, px, where it is scaled to fit (a page-sized Preview); its `picture` where it is not. It scrolls sideways only where this is wider than the stage. */
+    shown?: number;
     /** A refusal of the action, in the hub's words. */
     said?: string;
     /** The box the piece stands in. */
@@ -71,9 +79,10 @@
     sizes.observe(box);
     return () => sizes.disconnect();
   });
-  const wide = $derived(
-    picture !== undefined && room > 0 && picture > room + 0.5
-  );
+  const wide = $derived.by(() => {
+    const width = shown ?? picture;
+    return width !== undefined && room > 0 && width > room + 0.5;
+  });
 </script>
 
 <figure
@@ -81,6 +90,7 @@
     "m-0 flex min-w-0 flex-col gap-space-2 rounded-well border border-border-well bg-surface-well p-space-3",
     picture !== undefined && "well-hug max-phone:in-data-bleeds:well-bleed",
   ]}
+  data-fills={fills || undefined}
   data-picture={picture}
   data-slot="media"
   style:--picture-w={picture === undefined ? undefined : `${picture}px`}

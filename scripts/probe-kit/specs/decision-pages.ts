@@ -154,6 +154,18 @@
  *   DECISION_PAGES=folder bun scripts/probe-kit/run.ts decision-pages
  *
  *     runs (s) alone.
+ *
+ * (t) A page uses the window it's given and a Preview of a page-sized design
+ *     (a folder's timeline) shows at a size the person can judge, at 1037,
+ *     1440, 1920 and 2560 in Chromium and WebKit: the column the room up to
+ *     1348px, the timeline with no width at the card's full width and a
+ *     screen's 16:10, the one naming 1440px at it or scaled to fit with its
+ *     words at 10px or more, Open full size bringing it to the panel's
+ *     front; no overflow, no console error (`widthLeg`).
+ *
+ *   DECISION_PAGES=width bun scripts/probe-kit/run.ts decision-pages
+ *
+ *     runs (t) alone.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one step at a time, as a person takes them
 import { createHash } from "node:crypto";
@@ -5396,6 +5408,410 @@ async function folderLeg(
   }
 }
 
+/** (t)'s timeline: a page-sized design that lays itself out to its frame, its least words 12px (the house's meta). */
+const TIMELINE_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Timeline</title>
+<style>body{margin:0;font:14px system-ui;padding:16px}h1{font-size:18px;margin:0 0 12px}
+.row{display:grid;grid-template-columns:120px 1fr;gap:8px;align-items:center;margin-block:6px}
+.row span{font-size:12px}.bar{block-size:14px;background:#7aa;border-radius:3px}</style></head>
+<body><h1 id="folder-mark">${FOLDER_MARK}</h1>${[
+  "Plan",
+  "Build",
+  "Check",
+  "Ship",
+  "Watch",
+]
+  .map(
+    (step, at) =>
+      `<div class="row"><span>${step}</span><div class="bar" style="margin-inline-start:${at * 12}%;inline-size:${30 + at * 4}%"></div></div>`
+  )
+  .join("")}</body></html>`;
+
+/** (t)'s first page: three options of words, then a card whose option shows the timeline with no width of its own. */
+const widthProgram = (
+  folder: string
+) => `root = Decisions("Plan the release", [when, look])
+when = Decision("when", "When does it ship?", [soon, later, never], "Soon reads as ready.")
+soon = Option("soon", "Soon", "This week, with the polish it has.", true, [], "Less polish.")
+later = Option("later", "Later", "Next month, with every rough edge sanded.", false, [], "A month of waiting.")
+never = Option("never", "Never", "It stays a prototype.", false, [], "Nothing ships.")
+look = Decision("look", "Which timeline ships?", [plain, bold], "The folder shows the plain one.")
+plain = Option("plain", "Plain", "Quiet bars.", true, [shown], "Reads flat beside the dashboard.")
+bold = Option("bold", "Bold", "Loud bars.", false, [], "Tires the eye over a day.")
+shown = Preview("${folder}", "The timeline as it stands")`;
+
+/** (t)'s second page: the same timeline naming its own layout width, 1440px. */
+const DESIGN_W = 1440;
+const sizedProgram = (
+  folder: string
+) => `root = Decisions("Plan the wide release", [wide])
+wide = Decision("wide", "Which wide timeline ships?", [plain, bold], "The folder shows the plain one.")
+plain = Option("plain", "Plain", "Quiet bars.", true, [shown], "Reads flat beside the dashboard.")
+bold = Option("bold", "Bold", "Loud bars.", false, [], "Tires the eye over a day.")
+shown = Preview("${folder}", "The timeline at its own width", [], ${DESIGN_W})`;
+
+/** (t)'s windows: the owner's own, a laptop's, a 1080p and a 1440p display's. */
+const WIDTH_WINDOWS = [
+  { w: 1037, h: 760 },
+  { w: 1440, h: 900 },
+  { w: 1920, h: 1080 },
+  { w: 2560, h: 1440 },
+] as const;
+/** `--c-decision-page-max`. */
+const PAGE_MAX = 1348;
+/** `--c-media-scale-min`. */
+const SCALE_MIN = 0.8334;
+
+/** The page's column, its cards and the timeline's frame and well, read from the engine. */
+const widthRead = (folder: string) => {
+  const box = (el: Element | null | undefined) => {
+    const r = el?.getBoundingClientRect();
+    return r ? { w: r.width, h: r.height } : null;
+  };
+  const root = document.querySelector<HTMLElement>("[data-slot=decision-page]");
+  const style = root ? getComputedStyle(root) : null;
+  const px = (name: string) =>
+    Number.parseFloat(style?.getPropertyValue(name) ?? "") || 0;
+  const tracks = (grid: Element | null | undefined) =>
+    grid
+      ? getComputedStyle(grid)
+          .gridTemplateColumns.split(" ")
+          .map(Number.parseFloat)
+          .filter((one) => one > 0)
+          .map((one) => Math.round(one))
+      : [];
+  const frame = document.querySelector<HTMLIFrameElement>(
+    `iframe[data-cawco-artifact="${folder}"]`
+  );
+  const well = frame?.closest("[data-slot=media]");
+  const stage = frame?.closest("[data-slot=media-stage]");
+  const card = frame?.closest("article[data-slot=decision]");
+  const scaler = frame?.closest<HTMLElement>("[data-slot=embed-scale]");
+  return {
+    room: document.querySelector("[data-slot=page-scroll]")?.clientWidth ?? 0,
+    column: box(document.querySelector("[data-slot=page-column]"))?.w ?? 0,
+    cards: [...document.querySelectorAll("article[data-slot=decision]")].map(
+      (one) => Math.round(one.getBoundingClientRect().width * 10) / 10
+    ),
+    pageIn: px("--page-in"),
+    wellIn: px("--well-in"),
+    whenTracks: tracks(
+      document.querySelector("#decision-when [data-slot=options]")
+    ),
+    lookTracks: tracks(
+      document.querySelector("#decision-look [data-slot=options]")
+    ),
+    body: box(card?.querySelector("[data-slot=decision-body]"))?.w ?? 0,
+    frame: box(frame),
+    frameLayout: frame ? { w: frame.offsetWidth, h: frame.offsetHeight } : null,
+    stage: stage ? Number.parseFloat(getComputedStyle(stage).width) : 0,
+    well: box(well),
+    wide: stage?.hasAttribute("data-wide") ?? false,
+    fills: well?.hasAttribute("data-fills") ?? false,
+    scale: scaler?.dataset.scale ? Number(scaler.dataset.scale) : 1,
+    drawn: frame?.hasAttribute("data-drawn") ?? false,
+    src: frame?.src ?? "",
+    tallest: innerHeight * 0.8,
+  };
+};
+
+/** The least font size any word in the frame's document is set at, px. */
+const leastWords = (frame: Frame) =>
+  frame.evaluate(() =>
+    Math.min(
+      ...[...document.body.querySelectorAll("*")]
+        .filter((el) =>
+          [...el.childNodes].some(
+            (node) =>
+              node.nodeType === Node.TEXT_NODE && node.textContent?.trim()
+          )
+        )
+        .map((el) => Number.parseFloat(getComputedStyle(el).fontSize))
+    )
+  );
+
+/** `page` at `src`, its timeline's frame drawn and the page still. */
+const openDrawn = async (page: Page, src: string, folder: string) => {
+  await page.goto(src, { waitUntil: "load" });
+  await page
+    .waitForSelector(`iframe[data-cawco-artifact="${folder}"][data-drawn]`, {
+      timeout: 60_000,
+    })
+    .catch(() => undefined);
+  await settle(page, 400);
+};
+
+/** (t)'s first page at one window: the column, three equal worded options, the timeline with no width at the card's full width, no overflow. */
+async function plainChecks(
+  kit: Kit,
+  page: Page,
+  leg: string,
+  folder: string,
+  src: string
+): Promise<void> {
+  await openDrawn(page, src, folder);
+  const mark = await folderMarkIn(
+    page.mainFrame(),
+    `iframe[data-cawco-artifact="${folder}"][data-drawn]`
+  );
+  const read = await page.evaluate(widthRead, folder);
+  const column = Math.min(read.room, PAGE_MAX);
+  const card = column - 2 * read.pageIn;
+  kit.check(
+    `${leg}: the column is the room up to ${PAGE_MAX}px: ${Math.round(read.column)}px in a ${read.room}px room (want ${column}), each card ${read.cards.join(", ")}px (want ${card})`,
+    Math.abs(read.column - column) <= 1 &&
+      read.cards.length === 2 &&
+      read.cards.every((one) => Math.abs(one - card) <= 1),
+    JSON.stringify(read)
+  );
+  const [first = 0] = read.whenTracks;
+  kit.check(
+    `${leg}: three worded options stand as three equal columns (${read.whenTracks.join(", ")}px)`,
+    read.whenTracks.length === 3 &&
+      read.whenTracks.every((one) => Math.abs(one - first) <= 1),
+    JSON.stringify(read.whenTracks)
+  );
+  const frameW = read.body - 2 * read.wellIn;
+  const frameH = Math.min((frameW * 10) / 16, read.tallest);
+  kit.check(
+    `${leg}: the timeline naming no width takes its card's whole width, its options one to a row (${read.lookTracks.join(", ")}px), its frame ${Math.round(read.frame?.w ?? 0)}×${Math.round(read.frame?.h ?? 0)}px (want ${Math.round(frameW)}×${Math.round(frameH)}), its document loaded (“${mark}”)`,
+    read.fills &&
+      read.lookTracks.length === 1 &&
+      Math.abs(read.lookTracks[0] - read.body) <= 1 &&
+      Math.abs((read.frame?.w ?? 0) - frameW) <= 1 &&
+      Math.abs((read.frame?.h ?? 0) - frameH) <= 1 &&
+      mark === FOLDER_MARK,
+    JSON.stringify(read)
+  );
+  const sweep = await overflowIn(page.mainFrame());
+  kit.check(
+    `${leg}: the overflow sweep finds nothing past the window's width`,
+    sweep.count === 0 && sweep.scroll <= 0,
+    JSON.stringify(sweep)
+  );
+}
+
+/** (t)'s second page at one window: the timeline naming 1440px at it, or scaled to its well with its words at 10px or more; no overflow. */
+async function wideChecks(
+  kit: Kit,
+  page: Page,
+  leg: string,
+  folder: string,
+  src: string
+): Promise<void> {
+  await openDrawn(page, src, folder);
+  const wide = await page.evaluate(widthRead, folder);
+  const handle = await page
+    .locator(`iframe[data-cawco-artifact="${folder}"]`)
+    .elementHandle();
+  const inner = await handle?.contentFrame();
+  const least = inner ? await leastWords(inner) : 0;
+  const want =
+    DESIGN_W <= wide.stage + 0.5
+      ? 1
+      : Math.max(SCALE_MIN, wide.stage / DESIGN_W);
+  const shown = DESIGN_W * wide.scale;
+  kit.check(
+    `${leg}: the timeline naming ${DESIGN_W}px lays out at it (${wide.frameLayout?.w}px) and stands at scale ${wide.scale.toFixed(3)} (want ${want.toFixed(3)}) in its ${Math.round(wide.stage)}px well, ${Math.round(wide.frame?.w ?? 0)}×${Math.round(wide.frame?.h ?? 0)}px on screen, its least words ${(least * wide.scale).toFixed(2)}px (≥10), ${wide.wide ? "scrolling sideways past the floor" : "whole in its well"}`,
+    wide.frameLayout?.w === DESIGN_W &&
+      Math.abs(wide.scale - want) <= 0.002 &&
+      Math.abs((wide.frame?.w ?? 0) - shown) <= 1 &&
+      least * wide.scale >= 10 - 0.01 &&
+      wide.wide === shown > wide.stage + 0.5,
+    JSON.stringify({ wide, least })
+  );
+  const sweep = await overflowIn(page.mainFrame());
+  kit.check(
+    `${leg}: the wide page's overflow sweep finds nothing past the window's width`,
+    sweep.count === 0 && sweep.scroll <= 0,
+    JSON.stringify(sweep)
+  );
+}
+
+/** (t) Open full size on the first page: the timeline at the front of the session's panel, filling it but for the pane's even inset; then the page back at its front. */
+async function openFullCheck({
+  desk,
+  errors,
+  fleet,
+  kit,
+  leg,
+  page,
+  plain,
+  writer,
+}: Pick<On, "desk" | "fleet" | "kit" | "writer"> & {
+  errors: string[];
+  leg: string;
+  page: Page;
+  plain: { id: string; src: string };
+}): Promise<void> {
+  await page.goto(plain.src, { waitUntil: "load" });
+  const control = page.locator("#decision-look [data-open-full]");
+  await control.waitFor({ timeout: 30_000 }).catch(() => undefined);
+  const label = (await control.textContent().catch(() => ""))?.trim();
+  await control.click().catch(() => undefined);
+  const inPanel = await until(
+    `${leg}: the timeline at the panel's front`,
+    () => folderMarkIn(desk.mainFrame(), FRAME),
+    (words) => words === FOLDER_MARK,
+    30_000
+  ).catch(() => "");
+  const refused = await page
+    .locator("#decision-look [data-slot=media] > p[role=status]")
+    .textContent({ timeout: 1000 })
+    .catch(() => "");
+  if (refused) {
+    errors.push(`the well said: ${refused}`);
+  }
+  const panel = await desk
+    .locator(PANE)
+    .first()
+    .boundingBox()
+    .catch(() => null);
+  const shownBox = await desk
+    .locator(FRAME)
+    .first()
+    .boundingBox()
+    .catch(() => null);
+  const start = (shownBox?.x ?? 0) - (panel?.x ?? 0);
+  const end =
+    (panel?.x ?? 0) +
+    (panel?.width ?? 0) -
+    ((shownBox?.x ?? 0) + (shownBox?.width ?? 0));
+  kit.check(
+    `${leg}: “${label}” brings the timeline to the front of the session's panel, its frame there ${Math.round(shownBox?.width ?? 0)}px of the panel's ${Math.round(panel?.width ?? 0)}px (insets ${Math.round(start)} and ${Math.round(end)}px)`,
+    label === decisionsWords.openFull &&
+      inPanel === FOLDER_MARK &&
+      !!shownBox &&
+      !!panel &&
+      start >= 0 &&
+      start <= 16 &&
+      Math.abs(start - end) <= 1,
+    JSON.stringify({ label, inPanel, panel, shownBox })
+  );
+  // The page back at the front for the next engine's press.
+  await fleet
+    .api(`/api/instances/${writer}/artifacts/${plain.id}/show`, {})
+    .catch(() => undefined);
+}
+
+/**
+ * (t) A decision page uses the space it's given, and a Preview of a
+ * page-sized design shows at a size the person can judge (the owner,
+ * 2026-10-25: "the decision page doesn't use the page size properly when i
+ * expand the page or on a larger display"; of a live timeline in a card:
+ * "the view is too narrow and small for me to view how the graph/timeline
+ * looks"). Two pages over a folder's preview of a timeline, each opened in
+ * its own window at 1037, 1440, 1920 and 2560, in Chromium and WebKit:
+ * - the column is the room up to `--c-decision-page-max` (1348px), the
+ *   cards the column less the page's insets, a card of three worded
+ *   options three equal tracks;
+ * - the timeline naming no width stands its card's options one to a row,
+ *   its frame the card's body less its well's insets wide and a screen's
+ *   16:10 of that tall (up to the media cap), its document loaded;
+ * - the timeline naming its 1440px stands at it where its well holds it,
+ *   else scaled to the well (never under `--c-media-scale-min`, its least
+ *   words at 10px or more), scrolling sideways only past that floor;
+ * - Open full size brings it to the front of the session's panel, its
+ *   frame there holding the timeline;
+ * - the overflow sweep finds nothing, and no console error.
+ */
+async function widthLeg(
+  on: Pick<On, "base" | "desk" | "fleet" | "kit" | "writer">
+): Promise<void> {
+  const { desk, fleet, kit, writer } = on;
+  const make = <T>(body: object) =>
+    fleet.api<T>(`/api/instances/${writer}/artifacts`, body);
+  const dir = join(fleet.sandbox, "timeline");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "index.html"), TIMELINE_HTML);
+  const folder = await make<{ id: string }>({
+    kind: "preview",
+    does: "try",
+    ask: "Try the timeline",
+    name: "timeline",
+    dir,
+    machine: MACHINE,
+  });
+  /** A page published from `program`, its address once it stands at the panel's front. */
+  const publishAt = async (name: string, program: string, card: string) => {
+    let refusal = "";
+    try {
+      checkProgram(program);
+    } catch (error) {
+      refusal = (error as Error).message;
+    }
+    kit.check(`(t) the hub's check keeps ${name}`, refusal === "", refusal);
+    const made = await make<{ id: string }>({
+      kind: "page",
+      does: "pick",
+      ask: "Pick one option on each card",
+      name,
+      program,
+    });
+    await until(
+      `(t) ${name} at the panel's front`,
+      async () => countIn(await frameAt(desk, FRAME), `#decision-${card}`),
+      (count) => count === 1,
+      60_000
+    ).catch(() => 0);
+    const src =
+      (await desk
+        .locator(FRAME)
+        .first()
+        .getAttribute("src")
+        .catch(() => null)) ?? "";
+    kit.check(
+      `(t) ${name} stands at the panel's front, at an address of its own (${src || "none"})`,
+      src.includes(`/__cawco/page/${made.id}/`) || src.startsWith("http"),
+      src
+    );
+    return { id: made.id, src: new URL(src, on.base).href };
+  };
+  const plain = await publishAt(
+    "timeline-pick",
+    widthProgram(folder.id),
+    "look"
+  );
+  const sized = await publishAt(
+    "timeline-wide",
+    sizedProgram(folder.id),
+    "wide"
+  );
+  for (const engine of ["chromium", "webkit"] as const) {
+    for (const { w, h } of WIDTH_WINDOWS) {
+      const leg = `(t) ${engine} ${w}×${h}`;
+      const page = await kit.page("desk", {
+        engine,
+        theme: "light",
+        scrollbars: true,
+      });
+      const errors: string[] = [];
+      page.on("pageerror", (error) => errors.push(String(error)));
+      page.on("console", (message) => {
+        if (message.type() === "error" && !kitsOwnMessage(message.text())) {
+          errors.push(message.text());
+        }
+      });
+      page.on("response", (response) => {
+        if (response.status() >= 400) {
+          errors.push(`${response.status()} ${response.url()}`);
+        }
+      });
+      await page.setViewportSize({ width: w, height: h });
+      await plainChecks(kit, page, leg, folder.id, plain.src);
+      await wideChecks(kit, page, leg, folder.id, sized.src);
+      if (w === 1440) {
+        await openFullCheck({ ...on, page, leg, errors, plain });
+      }
+      kit.check(
+        `${leg}: no console error`,
+        errors.length === 0,
+        errors.slice(0, 6).join(" | ") || "none"
+      );
+      await page.close();
+    }
+  }
+}
+
 /** (r): a dozen Previews of one heavy canvas on one page, each drawn whole, in Chromium and WebKit. */
 async function dozenLeg(kit: Kit): Promise<void> {
   let refusal = "";
@@ -5448,6 +5864,11 @@ const run = async (kit: Kit) => {
   // `DECISION_PAGES=folder`: (s) alone, on its own fleet.
   if (process.env.DECISION_PAGES === "folder") {
     await folderLeg({ ...(await standUp(kit)), kit });
+    return;
+  }
+  // `DECISION_PAGES=width`: (t) alone, on its own fleet.
+  if (process.env.DECISION_PAGES === "width") {
+    await widthLeg({ ...(await standUp(kit)), kit });
     return;
   }
   const on = await publish(kit, await standUp(kit));
@@ -5515,6 +5936,7 @@ const run = async (kit: Kit) => {
   await treeMediaLeg(on);
   await panelOfTreeLeg(on);
   await folderLeg(on);
+  await widthLeg(on);
   await dozenLeg(kit);
   kit.check(
     "the pages said no error",

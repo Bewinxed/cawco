@@ -1146,14 +1146,16 @@
     --c-block-refused-basis: 18rem;
     /* The composer canvas's top grab strip. */
     --c-canvas-grab-w: 160px;
-    /* A decision page's one centred column (decisions/host): two option columns side by side, each a 60ch line at the label size, and the gap between. */
-    --c-decision-page-w: 920px;
+    /* The widest a decision page's one centred column stands (decisions/host): three option columns at the 60ch label measure (416px each), their two gaps and the page's and card's insets; under it the column is the room. */
+    --c-decision-page-max: 1348px;
     /* The length of a decision page's count bar in its sticky foot, beside "1 of 5 picked". */
     --c-decision-meter-w: 120px;
     /* The narrowest a decision card's option column stands before the options stand one under another. */
     --c-decision-option-min: 190px;
     /* The tallest a decision card's media well draws its piece: a canvas, a frame and a diagram each fit to it (a diagram never under its words' 10px floor). */
     --c-media-max-h: 80vb;
+    /* The least a decision card's Preview of a page-sized design (a page, a dev server's or a folder's preview, a sheet) is scaled to fit its card: the house's least words, meta's 12px, standing at 10px (10 / 12, rounded up). Past it the design stays at this scale and scrolls sideways in its well. */
+    --c-media-scale-min: 0.8334;
     /* The artifact masonry's least card width: a thumbnail that still reads beside a dozen-character name. */
     --c-artifact-card-min: 148px;
     /* The rail width at and above which the Working/Finished header needs no squeeze: measured, the narrowest rail at which both labels stand whole beside three-digit counts at rest. */

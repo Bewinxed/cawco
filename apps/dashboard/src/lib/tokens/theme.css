@@ -479,7 +479,7 @@
   --spacing-c-drag-dots-edge: var(--c-drag-dots-edge);
   --spacing-c-block-refused-basis: var(--c-block-refused-basis);
   --spacing-c-canvas-grab-w: var(--c-canvas-grab-w);
-  --spacing-c-decision-page-w: var(--c-decision-page-w);
+  --spacing-c-decision-page-max: var(--c-decision-page-max);
   --spacing-c-decision-meter-w: var(--c-decision-meter-w);
   --spacing-c-decision-option-min: var(--c-decision-option-min);
   --spacing-c-media-max-h: var(--c-media-max-h);

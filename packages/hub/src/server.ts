@@ -630,7 +630,7 @@ import type { LoginMove } from "./db/accounts";
 import type { ArtifactRow } from "./db/artifacts";
 import { type LimitCompaction, waitsLine } from "./db/at-limit";
 import type { OwedMove } from "./db/owed-moves";
-import { projectOrigin } from "./db/previews";
+import { projectOfOrigin, projectOrigin } from "./db/previews";
 import type {
   ContinuationAsker,
   PriorConversation,
@@ -14264,10 +14264,25 @@ export const createServer = (
       }
       // A project's canvas, which its pages' Canvas pieces show inside them.
       const row = db.artifacts.get(artifactId);
-      return (
+      if (
         row?.kind === "canvas" &&
         row.projectId !== null &&
         key === projectOrigin(row.projectId)
+      ) {
+        return true;
+      }
+      // Any artifact a page of the project shows as a Canvas or Preview
+      // piece: its Open to draw and Open full size ask for it on the
+      // project's origin, where the page stands.
+      const project = projectOfOrigin(key);
+      return (
+        project !== null &&
+        db.artifacts
+          .ofProject(project)
+          .some(
+            (page) =>
+              page.kind === "page" && artifacts.pageShows(page.id, artifactId)
+          )
       );
     },
     ownerOf: (artifactId: string) =>

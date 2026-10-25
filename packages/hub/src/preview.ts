@@ -426,8 +426,9 @@ export interface PreviewListenerDeps {
    * serves it ({@link originOf}); a session's origin also another session's
    * artifact its panel or one of its decision pages' Canvas and Preview
    * pieces shows (its delegation tree's), a project's page
-   * excepted; and a project's origin also its project's canvases, which its
-   * pages' Canvas pieces show inside them.
+   * excepted; and a project's origin also its project's canvases, and any
+   * artifact its project's pages show as a Canvas or Preview piece (Open to
+   * draw, Open full size).
    */
   servedOn: (artifactId: string, key: string) => boolean;
   /** Whether session `instanceId` still runs: a session's ticket enters host mode's names only while it does (preview-access.ts). */

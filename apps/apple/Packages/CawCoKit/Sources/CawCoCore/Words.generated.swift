@@ -1895,6 +1895,9 @@ public enum Words {
         /// The writer's mark on the option that stands today.
         public static let current = "Current"
 
+        /// A Preview of a page-sized design: it at the front of the session's panel, at the panel's whole size.
+        public static let openFull = "Open full size"
+
         /// A decided card's fold: the options turned down.
         public static func others(count: Int) -> String {
             "\(count) other \(count == 1 ? "option" : "options")"

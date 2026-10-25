@@ -1138,13 +1138,14 @@
 /* A decision page's insets (decisions/host Decisions.svelte's root): the page's own and a card's
    (21px and 18px at a desk, 14px each under a finger), a picture's well,
    what a well reaches past to the screen's edges on a phone (`--bleed`),
-   and the column's width, 920px until a pictured page sets its own. */
+   and the column's cap: the room's width up to `--c-decision-page-max`, until
+   a pictured page sets its own. */
 @utility decision-page-insets {
   --page-in: var(--space-6);
   --card-in: var(--space-5);
   --well-in: calc(var(--space-3) + 1px);
   --bleed: calc(var(--page-in) + var(--card-in));
-  --page-w: var(--c-decision-page-w);
+  --page-w: var(--c-decision-page-max);
 
   @media (pointer: coarse) {
     --page-in: var(--space-4);

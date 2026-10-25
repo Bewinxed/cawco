@@ -2,10 +2,13 @@
   The page (the root): the panel's height, in two rows. The first scrolls
   one centred column on the recessed ground (DESIGN.md, The Frame Recesses
   Rule), 21px in at a desk and 14px under a finger, its groups 18px apart
-  (Layout: "the groups of a page … stand 18px apart"): 920px wide, or on a
+  (Layout: "the groups of a page … stand 18px apart"): the room's width up
+  to `--c-decision-page-max` (three option columns at the label measure),
+  so the cards grow with the window; or on a
   pictured page (media that knows its own width: a Preview's `width`, a
   drawing, a picture, a diagram) as wide as the most options abreast its
-  room holds with each at 1:1, or the room's whole width where none fits. Its head is
+  room holds with each at 1:1, never under that cap, or the room's whole
+  width where none fits. Its head is
   the page head: Caw as the title's mark (The Mark Line Rule) and the title.
   Then the offline notice when CawCo does not show the page, and every
   decision and piece of media the program puts on it. The second row is the
@@ -68,7 +71,7 @@
   /**
    * The widest piece of media on the page at its real size, px, as its well
    * says it (Well.svelte `picture`, through its card); 0 on a page with no
-   * pictures, which keeps its one 920px column.
+   * pictures, whose column is the room up to `--c-decision-page-max`.
    */
   const widths = hearWidths();
   setContext(MEDIA_WIDTHS, widths.hear);
@@ -78,7 +81,7 @@
    * A pictured page's column: as many options abreast as its room holds,
    * each its picture at 1:1 in its well (`--well-in` each side, `--space-3`
    * between them), inside the card's and the page's insets; the largest
-   * such step that fits, never under `--c-decision-page-w`; the room's
+   * such step that fits, never under `--c-decision-page-max`; the room's
    * whole width where not one fits, so a picture wider than the room shows
    * as much of itself as it can, scrolling sideways in its well. Read from the
    * scroller's own room (its gutter kept, so a scrollbar coming never moves
@@ -104,7 +107,7 @@
       );
       const step =
         abreast > 0 ? abreast * (pitch + gap) - gap + insets : box.clientWidth;
-      pageWidth = Math.max(px("--c-decision-page-w"), step);
+      pageWidth = Math.max(px("--c-decision-page-max"), step);
     };
     read();
     const sizes = frameObserver(read);

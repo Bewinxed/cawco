@@ -518,7 +518,7 @@ export type TokenSize =
   | "size.fig-cap-foot"
   | "size.c-block-refused-basis"
   | "size.c-canvas-grab-w"
-  | "size.c-decision-page-w"
+  | "size.c-decision-page-max"
   | "size.c-decision-meter-w"
   | "size.c-decision-option-min"
   | "size.c-media-max-h"
