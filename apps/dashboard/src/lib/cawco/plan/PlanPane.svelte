@@ -70,6 +70,7 @@
   import MessageBody from "../MessageBody.svelte";
   import { dur, motionOk } from "../motion/curves.svelte";
   import { popOut } from "../motion/pop.svelte";
+  import { send } from "../project-tasks";
   import { planAsked, takePlan } from "../reference-things.svelte";
   import { composerLayer } from "../transcript/composer-layer.svelte";
   import PlanTree from "./PlanTree.svelte";
@@ -95,6 +96,23 @@
   /** The steps are named once another part stands beside them. */
   const stepsHeaded = $derived(!!plan?.spec || showsTodos);
   const titleId = $props.id();
+
+  /*
+   * Opened, its away notes are seen (hub plans.ts `seeAway`): the hub drops
+   * `awayUnseen` and every client's ring loses its mark. Once per opening:
+   * notes written while it stands open are not taken as read.
+   */
+  $effect(() => {
+    const id = instanceId;
+    if (!untrack(() => plan?.awayUnseen)) {
+      return;
+    }
+    send(`/api/instances/${encodeURIComponent(id)}/plan/seen`, {
+      method: "POST",
+    }).catch((error: unknown) => {
+      console.warn("[cawco] marking the away notes seen failed:", error);
+    });
+  });
 
   /**
    * The room it may rise into: from the ring's row up to the top of the

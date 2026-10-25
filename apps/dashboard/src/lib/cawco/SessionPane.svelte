@@ -1154,6 +1154,7 @@
       }}
       open={planOpen}
       total={planProgressNow.total}
+      unseen={plan?.awayUnseen?.since ?? null}
     />
     {#if planOpen}
       <PlanPane

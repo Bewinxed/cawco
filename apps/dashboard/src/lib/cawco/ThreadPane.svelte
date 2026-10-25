@@ -993,6 +993,7 @@
       }}
       open={planOpen}
       total={planProgressNow.total}
+      unseen={leadPlan?.awayUnseen?.since ?? null}
     />
     {#if planOpen && lead}
       <PlanPane

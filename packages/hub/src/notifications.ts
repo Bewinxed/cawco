@@ -1196,7 +1196,7 @@ export const createNotifications = ({
       }
     },
 
-    /** The away clock, ms: the person's setting, else their pick (10 minutes). */
+    /** The away clock, ms: the person's setting, else their pick (5 minutes). */
     awayAfter,
 
     /** The person sets the away clock: every rule that reads it reads it from here on. */

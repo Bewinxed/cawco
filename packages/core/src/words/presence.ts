@@ -28,6 +28,11 @@ export const presenceWords = {
     minutes >= 60 && minutes % 60 === 0
       ? `${minutes / 60} hour${minutes === 60 ? "" : "s"}`
       : `${minutes} min`,
+  /**
+   * After the plan ring's name while its mark stands: the session's plan has
+   * notes from while you were away (`## Since HH:MM`) you haven't opened.
+   */
+  awayNotesUnseen: (since: string) => `new notes since ${since}`,
   /** The menu's group: the machines whose desktop can say you're here, each turned on by you. */
   machines: "Machines that count",
   /** A machine's state word, as its agent reads its desktop; null when it hasn't said lately. */

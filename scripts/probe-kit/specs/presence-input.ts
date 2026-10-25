@@ -11,7 +11,7 @@
  *   on a held clock: here on the orchestrator's chat with no flapping at
  *   10:52–10:57, away from 12:09:44 (the last input, 11:59:44, plus 10
  *   minutes) until his next input, the 14:55 restart changing nothing.
- * - (clock) the away clock is the person's setting: 10 minutes until set,
+ * - (clock) the away clock is the person's setting: 5 minutes until set,
  *   changed from the presence menu's row and read back from the hub. The
  *   legs after run on a 1-minute clock (5 around the restart), the
  *   person's own setting, so they run in minutes.
@@ -332,7 +332,8 @@ const memoryDb = (): DbShape => {
       clients: () => [...rows.values()],
       keepClient: (row: PresenceClientRow) => rows.set(row.clientId, row),
       dropClient: (id: string) => rows.delete(id),
-      awayAfter: () => null,
+      // The day replayed ran on the 10-minute clock the hub kept then.
+      awayAfter: () => 10 * 60_000,
       setAwayAfter: () => undefined,
       stretch: () => stretch,
       setStretch: (next: typeof stretch) => {
@@ -593,7 +594,7 @@ const clockLegs = async (kit: Kit, fleet: KitFleet, base: string) => {
   kit.check(
     `(clock) until the person sets it, the away clock is their pick: ${AWAY_AFTER_DEFAULT_MS / MINUTE} minutes`,
     first.awayAfterMs === AWAY_AFTER_DEFAULT_MS &&
-      AWAY_AFTER_DEFAULT_MS === 10 * MINUTE,
+      AWAY_AFTER_DEFAULT_MS === 5 * MINUTE,
     JSON.stringify(first)
   );
   const page = await kit.page("desk", { engine: "chromium" });
@@ -611,22 +612,22 @@ const clockLegs = async (kit: Kit, fleet: KitFleet, base: string) => {
     await row.waitFor({ state: "visible", timeout: 10_000 });
     const before = (await row.innerText()).trim();
     await row.click();
-    const five = page.locator(`[data-away-after="${5 * MINUTE}"]`);
-    await five.waitFor({ state: "visible", timeout: 10_000 });
-    await five.click();
+    const ten = page.locator(`[data-away-after="${10 * MINUTE}"]`);
+    await ten.waitFor({ state: "visible", timeout: 10_000 });
+    await ten.click();
     const set = await personWhen(
       fleet,
       "(clock) the hub's clock after the pick",
-      (person) => person.awayAfterMs === 5 * MINUTE,
+      (person) => person.awayAfterMs === 10 * MINUTE,
       10_000
     );
     await settle(page, 300);
     const after = (await row.innerText().catch(() => "")).trim();
     kit.check(
-      `(clock) the presence menu's row reads “${presenceWords.awayAfter(10)}”; picking ${presenceWords.minutes(5)} sets the hub's clock, and the row reads “${presenceWords.awayAfter(5)}”`,
-      before === presenceWords.awayAfter(10) &&
-        set.awayAfterMs === 5 * MINUTE &&
-        after === presenceWords.awayAfter(5),
+      `(clock) the presence menu's row reads “${presenceWords.awayAfter(5)}”; picking ${presenceWords.minutes(10)} sets the hub's clock, and the row reads “${presenceWords.awayAfter(10)}”`,
+      before === presenceWords.awayAfter(5) &&
+        set.awayAfterMs === 10 * MINUTE &&
+        after === presenceWords.awayAfter(10),
       `before "${before}", after "${after}", hub ${set.awayAfterMs}`
     );
     await page.keyboard.press("Escape");

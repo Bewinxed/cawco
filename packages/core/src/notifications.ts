@@ -111,13 +111,14 @@ export const DEVICE_TTL_MS = 150_000;
  */
 export const MACHINE_TTL_MS = 45_000;
 /**
- * The away clock until the person sets their own (the owner's pick): no
- * input on any device this long, and the person is away. The same clock
- * says how far back a push held at a desk follows them to the phone once
- * they are away ("only items from the last 10 min"): it went only if it
- * landed at most one away clock before their last input.
+ * The away clock until the person sets their own (the owner's pick: 5
+ * minutes, "configurable"): no input on any device this long, and the
+ * person is away. The same clock says how far back a push held at a desk
+ * follows them to the phone once they are away (the owner's "only items
+ * from the last 10 min", on this clock): it went only if it landed at most
+ * one away clock before their last input.
  */
-export const AWAY_AFTER_DEFAULT_MS = 10 * 60_000;
+export const AWAY_AFTER_DEFAULT_MS = 5 * 60_000;
 /** The shortest away clock the person can set. Our call. */
 export const AWAY_AFTER_MIN_MS = 60_000;
 /** The longest away clock the person can set. Our call. */

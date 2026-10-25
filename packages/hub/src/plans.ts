@@ -24,6 +24,7 @@
  */
 import {
   artifactLink,
+  awayNotesOf,
   type InstanceRow,
   type PlanChange,
   type PlanDelta,
@@ -48,6 +49,7 @@ export interface PlansDeps {
     | "artifacts"
     | "getInstancesByIds"
     | "planChangesOf"
+    | "putAwaySeen"
     | "putPlanChange"
     | "putSessionSpec"
     | "putSessionSteps"
@@ -451,7 +453,11 @@ export const createPlans = (deps: PlansDeps) => {
           }
         : {};
     const changes = db.planChangesOf(row.id, CHANGES_SHOWN).map(changeOf);
+    const away = awayNotesOf(own?.spec ?? undefined);
     return {
+      ...(away && away.notes !== own?.awaySeen
+        ? { awayUnseen: { since: away.since } }
+        : {}),
       source: "cawco",
       steps: own?.steps ?? [],
       ...(changes.length > 0 ? { changes } : {}),
@@ -709,6 +715,23 @@ export const createPlans = (deps: PlansDeps) => {
       }
     },
 
+    /**
+     * The person saw the session's away notes as they stand: opened its plan
+     * (`POST /api/instances/:id/plan/seen`), or had them recapped (server.ts
+     * `recapFor`). Answers whether they were unseen till now; the plan's
+     * followers hear `awayUnseen` go.
+     */
+    async seeAway(instanceId: string): Promise<boolean> {
+      const own = db.sessionPlan(instanceId);
+      const away = awayNotesOf(own?.spec ?? undefined);
+      if (!away || away.notes === own?.awaySeen) {
+        return false;
+      }
+      db.putAwaySeen(instanceId, away.notes);
+      await settle(instanceId);
+      return true;
+    },
+
     /** The plan's followers hear its changes' new state (told, or reaching no one). */
     changed(instanceId: string): void {
       settleQuietly(instanceId);
@@ -736,16 +759,33 @@ export const createPlans = (deps: PlansDeps) => {
 
 export type Plans = ReturnType<typeof createPlans>;
 
-/** `GET /api/instances/:id/plan`: the session's plan, as its followers hold it. */
+/**
+ * `GET /api/instances/:id/plan`: the session's plan, as its followers hold
+ * it. `POST /api/instances/:id/plan/seen`: the person opened it, so its away
+ * notes are seen (`awayUnseen` goes); the owner's alone, as every route no
+ * hub-auth list names.
+ */
 export const planRoutes = (plans: Plans) =>
-  new Elysia().get(
-    "/api/instances/:id/plan",
-    { params: t.Object({ id: t.String() }) },
-    async ({ params }) => {
-      try {
-        return await plans.read(params.id);
-      } catch (error) {
-        return refused(error);
+  new Elysia()
+    .get(
+      "/api/instances/:id/plan",
+      { params: t.Object({ id: t.String() }) },
+      async ({ params }) => {
+        try {
+          return await plans.read(params.id);
+        } catch (error) {
+          return refused(error);
+        }
       }
-    }
-  );
+    )
+    .post(
+      "/api/instances/:id/plan/seen",
+      { params: t.Object({ id: t.String() }) },
+      async ({ params }) => {
+        try {
+          return { seen: await plans.seeAway(params.id) };
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    );

@@ -267,7 +267,7 @@ Adopted verbatim from the doctrine (Yifrah 2017) and the Phase-7 plan constraint
   this build again), "Reload it to catch up" (a browser that keeps no session storage). Never an
   open-ended "once you're not using it". Core `words/shell.ts`
 - A new build served to an open page (the update toast): **"A new build of CawCo is ready. This
-  page updates by itself once it's in the background or you've been away for 10 min." → [Update
+  page updates by itself once it's in the background or you've been away for 5 min." → [Update
   when idle] [Update now]** (the minutes are the person's away clock; the line names exactly when
   the page goes by itself, never "soon" or "when you're not using it"). Core `words/updates.ts`
 - A project the hub didn't give (an error empty, where its board would be): **"The tasks, stages and

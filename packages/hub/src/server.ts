@@ -9034,12 +9034,6 @@ export const createServer = (
   };
 
   /**
-   * The away notes each session was last told to recap, by session: a
-   * section folded or left as it was is not recapped twice.
-   */
-  const recapped = new Map<string, string>();
-
-  /**
    * What waits on the person, read from the plan as it stands: each open
    * step waiting on a page, with the page by its chip, never a copy of the
    * page's state.
@@ -9075,8 +9069,9 @@ export const createServer = (
    * return: their input after it, notifications.ts `takeRecap`, kept on
    * the hub through a restart) carries the notes the session kept in its
    * plan meanwhile (`awayNotesOf`) and what waits on them there, for its
-   * recap, with the hub's own away-since; once per return, and never a
-   * section already recapped.
+   * recap, with the hub's own away-since; once per return, and never notes
+   * the person has seen (`session_plans.away_seen`: opened in the plan, or
+   * recapped before). Recapped, they are seen: the plan ring's mark goes.
    */
   const recapFor = (instanceId: string): PresenceSaid => {
     const back = notifications.takeRecap(instanceId);
@@ -9085,10 +9080,10 @@ export const createServer = (
     }
     const plan = db.sessionPlan(instanceId);
     const notes = awayNotesOf(plan?.spec ?? undefined);
-    if (!notes || recapped.get(instanceId) === notes.notes) {
+    if (!notes || plan?.awaySeen === notes.notes) {
       return { kind: "on" };
     }
-    recapped.set(instanceId, notes.notes);
+    detach(plans.seeAway(instanceId), "away notes recapped are seen");
     const waiting = waitingOn(instanceId, plan?.steps ?? []);
     return {
       kind: "on",

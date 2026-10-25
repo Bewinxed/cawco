@@ -9650,6 +9650,133 @@
         }
       }
     },
+    "/api/instances/{id}/plan/seen": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiInstancesByIdPlanSeen",
+        "responses": {
+          "200": {
+            "description": "postApiInstancesByIdPlanSeen 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdPlanSeen200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiInstancesByIdPlanSeen 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiInstancesByIdPlanSeen 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiInstancesByIdPlanSeen 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiInstancesByIdPlanSeen 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiInstancesByIdPlanSeen 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiInstancesByIdPlanSeen 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiInstancesByIdPlanSeen 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiInstancesByIdPlanSeen 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiInstancesByIdPlanSeen 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiInstancesByIdPlanSeen 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/instances/{id}/plan/edits": {
       "post": {
         "parameters": [
@@ -27726,6 +27853,17 @@
           "ok"
         ]
       },
+      "postApiInstancesByIdPlanSeen200": {
+        "type": "object",
+        "properties": {
+          "seen": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "seen"
+        ]
+      },
       "getApiThreads200": {
         "type": "object"
       },
@@ -40431,6 +40569,18 @@
         "description": "What `GET /api/instances/:id/plan` answers, and what the live frames keep\na client's copy equal to.",
         "type": "object",
         "properties": {
+          "awayUnseen": {
+            "description": "The spec's away notes (its `## Since HH:MM (you were away)` section,\ncore injected.ts `awayNotesOf`) changed since the person last saw them:\nopened the plan, or had them recapped. `since` is the section's HH:MM.\nAbsent once seen, and while the spec has none.",
+            "type": "object",
+            "properties": {
+              "since": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "since"
+            ]
+          },
           "changes": {
             "description": "The person's latest changes to it, newest last.",
             "type": "array",
@@ -54488,6 +54638,18 @@
             "type": "string",
             "enum": [
               "plan.snapshot"
+            ]
+          },
+          "awayUnseen": {
+            "description": "The spec's away notes (its `## Since HH:MM (you were away)` section,\ncore injected.ts `awayNotesOf`) changed since the person last saw them:\nopened the plan, or had them recapped. `since` is the section's HH:MM.\nAbsent once seen, and while the spec has none.",
+            "type": "object",
+            "properties": {
+              "since": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "since"
             ]
           },
           "changes": {

@@ -177,6 +177,13 @@ export interface TaskTodo {
  * a client's copy equal to.
  */
 export interface SessionPlan {
+  /**
+   * The spec's away notes (its `## Since HH:MM (you were away)` section,
+   * core injected.ts `awayNotesOf`) changed since the person last saw them:
+   * opened the plan, or had them recapped. `since` is the section's HH:MM.
+   * Absent once seen, and while the spec has none.
+   */
+  awayUnseen?: { since: string };
   /** The person's latest changes to it, newest last. */
   changes?: PlanChange[];
   /**

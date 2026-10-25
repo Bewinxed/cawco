@@ -1759,6 +1759,8 @@ export interface DbShape {
     /** What Cawrier said to the last push for a device: taken (no error) or refused with a reason. */
     readonly noteResult: (pairingId: string, error: string | null) => void;
   };
+  /** The person saw the session's away notes as `notes` read (`session_plans.away_seen`). A session with no plan row has none to see. */
+  readonly putAwaySeen: (instanceId: string, notes: string) => void;
   /** Upsert of one definition's file; the hash and the size are read off it. */
   readonly putFleetAgent: (agent: {
     name: string;
@@ -7859,6 +7861,12 @@ const make = async (path: string): Promise<DbShape> => {
           target: sessionPlans.instanceId,
           set: { steps, updatedAt },
         })
+        .run();
+    },
+    putAwaySeen: (instanceId, notes) => {
+      db.update(sessionPlans)
+        .set({ awaySeen: notes })
+        .where(eq(sessionPlans.instanceId, instanceId))
         .run();
     },
     putSessionSpec: (instanceId, spec) => {

@@ -3957,6 +3957,12 @@ export const sessionPlans = sqliteTable("session_plans", {
   /** The session's spec, markdown; null until it writes one. */
   spec: text("spec"),
   specAt: timestamp("spec_at"),
+  /**
+   * The away notes (core injected.ts `awayNotesOf`) as the person last saw
+   * them: opened in the plan panel, or recapped to them on their return.
+   * The spec's away notes differing from it are unseen; null until first seen.
+   */
+  awaySeen: text("away_seen"),
   updatedAt: timestamp("updated_at").notNull(),
 });
 

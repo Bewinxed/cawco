@@ -5,8 +5,8 @@
  * the mock model) with a stand-in Cawrier and one paired phone:
  *
  * - (rollup) one device after another, through `POST /api/presence` and
- *   read back from `GET /api/person`: the 10-minute clock (idle 9 min is
- *   here, 11 min is away since then), a lock overrides (a tab whose chat is
+ *   read back from `GET /api/person`: the 5-minute clock (idle 4 min is
+ *   here, 6 min is away since then), a lock overrides (a tab whose chat is
  *   in front, its machine locked, is away at once), any active device wins
  *   (the phone in front beats the lock), Appear away comes first.
  * - (line) the presence line reaches each session at the start of its turn
@@ -37,11 +37,11 @@
  *   Appear away from the menu reaching the hub.
  * - (hold) with the person at a desk whose tab can show it, a finished
  *   turn's push is held and shown on that tab as a desktop notification;
- *   Appear away sends it to the phone. One held more than 10 minutes
+ *   Appear away sends it to the phone. One held more than 5 minutes
  *   before the person's last input stays on the board; one newer goes.
  *
  * Runs inside a workspace: it delegates nothing. Its last leg waits out the
- * 10-minute hold, so the run takes about 20 minutes.
+ * 5-minute hold, so the run takes about 15 minutes.
  *
  *   bun scripts/probe-kit/run.ts presence
  *   bun scripts/probe-kit/run.ts presence --onboarding   (this browser's asks alone)
@@ -328,22 +328,22 @@ const run = async (kit: Kit) => {
 /** (rollup) Each rule with its case, devices beating straight to the hub. */
 const rollupLegs = async (kit: Kit, fleet: KitFleet): Promise<void> => {
   // The clock first, while no device has said anything else.
-  await beat(fleet, "probe-clock", { idleMs: 9 * 60_000, machine: "idle" });
-  const nine = await personOf(fleet);
+  await beat(fleet, "probe-clock", { idleMs: 4 * 60_000, machine: "idle" });
+  const four = await personOf(fleet);
   kit.check(
-    "(rollup) the 10-min clock: no input for 9 minutes is still here",
-    nine.state === "here",
-    JSON.stringify(nine)
+    "(rollup) the 5-min clock: no input for 4 minutes is still here",
+    four.state === "here",
+    JSON.stringify(four)
   );
-  const elevenAgo = Date.now() - 11 * 60_000;
-  await beat(fleet, "probe-clock", { idleMs: 11 * 60_000, machine: "idle" });
-  const eleven = await personOf(fleet);
+  const sixAgo = Date.now() - 6 * 60_000;
+  await beat(fleet, "probe-clock", { idleMs: 6 * 60_000, machine: "idle" });
+  const six = await personOf(fleet);
   kit.check(
-    `(rollup) the 10-min clock: no input for 11 minutes is away, since the last input (${AWAY_AFTER_DEFAULT_MS / 60_000} min clock)`,
-    eleven.state === "away" &&
-      eleven.since !== null &&
-      Math.abs(eleven.since - elevenAgo) < 5000,
-    JSON.stringify(eleven)
+    `(rollup) the 5-min clock: no input for 6 minutes is away, since the last input (${AWAY_AFTER_DEFAULT_MS / 60_000} min clock)`,
+    six.state === "away" &&
+      six.since !== null &&
+      Math.abs(six.since - sixAgo) < 5000,
+    JSON.stringify(six)
   );
 
   await beat(fleet, "probe-tab", {
@@ -1408,7 +1408,7 @@ const holdLegs = async (
     60_000
   ).catch(() => 0);
   kit.check(
-    "(hold) Appear away: the push held at the desk goes to the phone (it landed within 10 min of the last input)",
+    `(hold) Appear away: the push held at the desk goes to the phone (it landed within ${AWAY_AFTER_DEFAULT_MS / 60_000} min of the last input)`,
     sent === 1,
     `${sent} push(es) for turn-${first}`
   );

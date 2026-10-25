@@ -1,0 +1,1 @@
+ALTER TABLE `session_plans` ADD `away_seen` text;
