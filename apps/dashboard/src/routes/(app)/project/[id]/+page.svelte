@@ -1629,7 +1629,7 @@
           }}
           size="sm"
           title="New task"
-          variant="outline"
+          variant="ghost"
         >
           <IconPlus />
           <span class="in-form-compact:hidden">New task</span>

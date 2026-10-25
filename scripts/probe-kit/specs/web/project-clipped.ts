@@ -41,7 +41,8 @@
  *     head) each clear of the others, as drawn.
  *  3. Wherever the strip stands (640 and wider), its actions are toolbar
  *     items (DESIGN.md, Title bars follow Liquid Glass): the group drawn
- *     compact, no word of theirs drawn, each named in its tooltip; it
+ *     compact, no word of theirs drawn, none with a fill, edge or shadow
+ *     of its own at rest, each named in its tooltip; it
  *     stands as many views as tabs as fit beside them, the rest in the ⋯,
  *     which says its views' count where one of them has one (a decision
  *     page waiting on picks makes Decisions' 1; JOURNEY.md, every view with
@@ -826,30 +827,69 @@ const readFill = (page: Page) =>
     const more = views.querySelector<HTMLElement>("[data-views-more]");
     // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
     const WORD = /\p{L}/u;
+    const COLOUR = /(?:rgba?|oklch|oklab|lab|lch|hsla?|color)\([^)]*\)/g;
+    /** A computed colour that draws: its alpha above 0 (`rgba(…, a)`, `… / a)`). */
+    const seen = (colour: string) => {
+      if (colour === "transparent") {
+        return false;
+      }
+      const slash = colour.lastIndexOf("/");
+      if (slash >= 0) {
+        return Number.parseFloat(colour.slice(slash + 1)) > 0;
+      }
+      const parts = colour.slice(colour.indexOf("(") + 1, -1).split(",");
+      return parts.length < 4 || Number.parseFloat(parts[3] ?? "1") > 0;
+    };
     const group = strip.querySelector<HTMLElement>(
       ':scope > div:not([data-slot="views"])'
     );
+    /** The words a control draws: its visible text that holds a letter. */
+    const wordsOf = (one: Element) => {
+      const words: string[] = [];
+      const walker = document.createTreeWalker(one, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const text = (node as Text).data.trim();
+        if (
+          WORD.test(text) &&
+          node.parentElement?.checkVisibility({ visibilityProperty: true })
+        ) {
+          words.push(text);
+        }
+      }
+      return words;
+    };
+    /**
+     * What a control draws of its own at rest: a fill, a gradient with a
+     * stop that shows (the kit button's highlight layer is transparent to
+     * transparent off the coral), an edge that shows, a shadow.
+     */
+    const restOf = (one: Element) => {
+      const look = getComputedStyle(one);
+      const image = look.backgroundImage;
+      const edges = (["Top", "Right", "Bottom", "Left"] as const).filter(
+        (side) =>
+          look[`border${side}Style`] !== "none" &&
+          Number.parseFloat(look[`border${side}Width`]) > 0 &&
+          seen(look[`border${side}Color`])
+      );
+      return {
+        fill: seen(look.backgroundColor) ? look.backgroundColor : "",
+        image:
+          image.includes("url(") || (image.match(COLOUR) ?? []).some(seen)
+            ? image
+            : "",
+        edge: edges.map((side) => `${side} ${look[`border${side}Color`]}`),
+        shadow: look.boxShadow === "none" ? "" : look.boxShadow,
+      };
+    };
     const actions = [...(group?.querySelectorAll("button") ?? [])]
       .filter((one) => one.checkVisibility())
-      .map((one) => {
-        const words: string[] = [];
-        const walker = document.createTreeWalker(one, NodeFilter.SHOW_TEXT);
-        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-          const text = (node as Text).data.trim();
-          const holder = node.parentElement;
-          if (
-            WORD.test(text) &&
-            holder?.checkVisibility({ visibilityProperty: true })
-          ) {
-            words.push(text);
-          }
-        }
-        return {
-          name: one.getAttribute("aria-label") ?? "",
-          title: one.getAttribute("title") ?? "",
-          words,
-        };
-      });
+      .map((one) => ({
+        name: one.getAttribute("aria-label") ?? "",
+        title: one.getAttribute("title") ?? "",
+        words: wordsOf(one),
+        ...restOf(one),
+      }));
     return {
       room,
       compact: group?.dataset.form === "compact",
@@ -896,6 +936,25 @@ const stripFills = async (
     return;
   }
   const SLACK = 0.5;
+  kit.check(
+    `${tag}: no strip action draws a fill, edge or shadow at rest`,
+    fill.actions.every(
+      (one) =>
+        one.fill === "" &&
+        one.image === "" &&
+        one.edge.length === 0 &&
+        one.shadow === ""
+    ),
+    JSON.stringify(
+      fill.actions.map(({ name, fill: ground, image, edge, shadow }) => ({
+        name,
+        ground,
+        image,
+        edge,
+        shadow,
+      }))
+    )
+  );
   kit.check(
     `${tag}: the strip's ${fill.actions.length} actions are bare symbols, each named in its tooltip (${fill.actions.map((one) => one.title).join(", ")})`,
     fill.compact &&
