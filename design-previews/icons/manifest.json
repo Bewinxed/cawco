@@ -46,7 +46,7 @@
           "id": "line",
           "label": "The whole row in Solar's line cut",
           "short": "Line cut",
-          "result": "Line cut, even ink: i, ! and ? with heavier stems and real dots; Sleeping's moon in full ink. Stopped and Idle: the next question.",
+          "result": "Line cut, even ink: i, ! and ? with heavier stems and real dots; Sleeping's moon in full ink. Stopped and Idle: the next question. By day Needs you, Idle and Sleeping take the stronger ink (attention words, strong ink): their hollow strokes measured 2.44, 2.69 and 2.59:1 at 16px in their glyph inks, under the 3:1 a status glyph holds, and 4.11, 4.26 and 4.07:1 in these.",
           "items": [
             {
               "label": "Status rows, in their inks",
@@ -88,7 +88,7 @@
           "id": "outlined",
           "label": "Both outlined",
           "short": "Outlined",
-          "result": "The row's size and ink, but Stopped reads as an empty checkbox.",
+          "result": "The row's size and ink. Stopped's square is the stop glyph's own drawing, outlined, not a box around a glyph; Idle is its two bars, outlined.",
           "items": [
             {
               "label": "Status rows, in their inks",
@@ -358,15 +358,15 @@
     },
     {
       "id": "clock",
-      "question": "Clock: keep its face?",
-      "bar": "Day on the left, night on the right, real size; hold a picture to see today's.",
-      "recommended": "today",
+      "question": "Clock: which glyph?",
+      "bar": "His rule: no circle, square or box around a Solar glyph; where Solar has no container-less version, draw one in Solar's style. Every Solar clock has its ring. Day on the left, night on the right, real size; hold a picture to see today's.",
+      "recommended": "drawn",
       "candidates": [
         {
           "id": "today",
-          "label": "Keep as it is",
-          "short": "Keep",
-          "result": "Kept as it is: its circle is the clock's face.",
+          "label": "Today, kept as it is",
+          "short": "Today",
+          "result": "What ships now: the hands on a filled half-ink disc, the container his rule rules out.",
           "items": [
             {
               "label": "16 · 20 · 24",
@@ -375,15 +375,28 @@
           ]
         },
         {
-          "id": "bare",
-          "label": "Without its container",
-          "short": "Bare",
-          "result": "Hands alone, the face taken as a container.",
+          "id": "line",
+          "label": "Solar's line clock",
+          "short": "Line",
+          "result": "Solar's own clock-circle in its line cut: the ring is the glyph's own 1.5 line, nothing filled behind the hands.",
           "items": [
             {
               "label": "16 · 20 · 24",
-              "before": "img/clock-today-0.svg",
-              "after": "img/clock-bare-0.svg"
+              "after": "img/clock-line-0.svg",
+              "before": "img/clock-today-0.svg"
+            }
+          ]
+        },
+        {
+          "id": "drawn",
+          "label": "Drawn bare, in Solar's style",
+          "short": "Drawn",
+          "result": "No ring: the hands and four hour marks, Solar's 1.5 line with round caps on its 24px grid. Our drawing, since Solar has no clock without its ring.",
+          "items": [
+            {
+              "label": "16 · 20 · 24",
+              "after": "img/clock-drawn-0.svg",
+              "before": "img/clock-today-0.svg"
             }
           ]
         }
@@ -391,15 +404,15 @@
     },
     {
       "id": "server",
-      "question": "Server: keep its box?",
-      "bar": "Day on the left, night on the right, real size; hold a picture to see today's.",
-      "recommended": "today",
+      "question": "Server: which glyph?",
+      "bar": "His rule: no circle, square or box around a Solar glyph; where Solar has no container-less version, draw one in Solar's style. Day on the left, night on the right, real size; hold a picture to see today's.",
+      "recommended": "line",
       "candidates": [
         {
           "id": "today",
-          "label": "Keep as it is",
-          "short": "Keep",
-          "result": "Kept as it is: the square is the server's chassis.",
+          "label": "Today, kept as it is",
+          "short": "Today",
+          "result": "What ships now: the units' marks on one filled rounded square, the container his rule rules out.",
           "items": [
             {
               "label": "16 · 20 · 24",
@@ -408,15 +421,28 @@
           ]
         },
         {
-          "id": "bare",
-          "label": "Without its container",
-          "short": "Bare",
-          "result": "The unit marks alone, the chassis taken as a container.",
+          "id": "line",
+          "label": "Solar's line server",
+          "short": "Line",
+          "result": "Solar's own server in its line cut: two units, each drawn as its own outline with its light and slot. The outlines are the units themselves; no square stands around the glyph.",
           "items": [
             {
               "label": "16 · 20 · 24",
-              "before": "img/server-today-0.svg",
-              "after": "img/server-bare-0.svg"
+              "after": "img/server-line-0.svg",
+              "before": "img/server-today-0.svg"
+            }
+          ]
+        },
+        {
+          "id": "drawn",
+          "label": "Drawn bare, in Solar's style",
+          "short": "Drawn",
+          "result": "No outline at all: three rack lines, each led by its light, Solar's 1.5 line on its 24px grid. Our drawing; with no outline it can read as a list.",
+          "items": [
+            {
+              "label": "16 · 20 · 24",
+              "after": "img/server-drawn-0.svg",
+              "before": "img/server-today-0.svg"
             }
           ]
         }

@@ -51,29 +51,25 @@
         min-height: 36px;
         margin: 0 0 var(--space-2);
       }
+      /* Back: the chevron alone, no disc or fill at rest or under the
+         pointer; its 44px tap area is the button's own box, unpainted, the
+         chevron's ink alone answering hover. Its start pulls back by what
+         the box holds round the chevron, so the glyph stands on the text edge. */
       .back {
         display: grid;
         place-items: center;
-        inline-size: 36px;
-        block-size: 36px;
+        inline-size: 44px;
+        block-size: 44px;
         flex: none;
+        margin-inline-start: -12px;
         padding: 0;
         border: 0;
-        border-radius: var(--radius-pill);
-        background: var(--surface-raised);
-        color: var(--ink-strong);
-        position: relative;
-      }
-      @media (pointer: coarse) {
-        .back::after {
-          content: "";
-          position: absolute;
-          inset: -4px;
-        }
+        background: none;
+        color: var(--ink-muted);
       }
       @media (hover: hover) {
         .back:hover {
-          background: var(--surface-hover);
+          color: var(--ink-strong);
         }
       }
       .back svg {
