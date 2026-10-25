@@ -41,12 +41,22 @@
  *   the host: it reads `process.versions.bun`, and imports `bun:sqlite` as a
  *   SvelteKit vite.config does (before the fix Bun could not make its node
  *   shim in the read-only `/tmp`, so the bin ran under Node and the import
- *   failed with ERR_UNSUPPORTED_ESM_URL_SCHEME; agent bun-node-shim.ts).
+ *   failed with ERR_UNSUPPORTED_ESM_URL_SCHEME; agent bun-node-shim.ts);
+ * - the impeccable skill's launcher (pbakaus/impeccable at {@link
+ *   IMPECCABLE_COMMIT}, fetched into `$TMPDIR`) runs its engine: its
+ *   `IMPECCABLE_HOME` is the workspaces' cache's `impeccable/` (core paths.ts
+ *   `workspaceCacheEnv`), the engine for the version its skill pins lands
+ *   there on the host's disk, and `engine-probe` answers with that version
+ *   (before the fix the launcher's default, `~/.impeccable`, was read-only:
+ *   "cannot create cache directory: …/.impeccable/bin/0.1.17"). Then a second
+ *   delegate, in a workspace of its own, runs the launcher with its download
+ *   base unreachable, and the engine answers from the same file, unchanged:
+ *   one cache for every workspace, fetched once.
  *
  *   bun scripts/probe-kit/run.ts boundary-writes
  */
 import { existsSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { isBoundaryOf } from "../../../packages/agent/src/proc-id";
 import { RELAY_URL } from "../../../packages/agent/src/proxy-relay";
@@ -98,6 +108,24 @@ BIN
 chmod +x node_modules/.bin/probe-runtime node_modules/.bin/probe-sqlite
 bunx --bun probe-runtime 2>&1; bunx --bun probe-sqlite 2>&1; cd - > /dev/null`;
 
+/** The impeccable commit whose skill launcher the delegates run (its VERSION pins engine 0.1.17). */
+const IMPECCABLE_COMMIT = "936867543ac2576920d663cc9803597f6044f3ac";
+const IMPECCABLE_SCRIPTS = `https://raw.githubusercontent.com/pbakaus/impeccable/${IMPECCABLE_COMMIT}/.agents/skills/impeccable/scripts`;
+/** The second delegate's tag and its command's last marker. */
+const REUSE_TAG = "PROBE-ENGINE-REUSE";
+const REUSE_END = "REUSE-END";
+
+/**
+ * The impeccable launcher and its VERSION fetched into `$TMPDIR`, then run as
+ * a skill runs it, `prefix` before it: what the command's `IMPECCABLE_HOME`
+ * is, the version the skill pins, and what `engine-probe` answers with its
+ * exit, each after its marker.
+ */
+const impeccable = (prefix = ""): string =>
+  `mkdir -p "$TMPDIR/impeccable-skill/scripts" && cd "$TMPDIR/impeccable-skill/scripts" && curl -fsSL -o impeccable ${IMPECCABLE_SCRIPTS}/impeccable && curl -fsSL -o VERSION ${IMPECCABLE_SCRIPTS}/VERSION; cd - > /dev/null
+echo ${apart("IMPECCABLE_HOME-IS:")}"$IMPECCABLE_HOME" ${apart("ENGINE-PINS:")}"$(tr -d '[:space:]' < "$TMPDIR/impeccable-skill/scripts/VERSION")"
+${prefix}sh "$TMPDIR/impeccable-skill/scripts/impeccable" engine-probe > "$TMPDIR/engine.out" 2>&1; echo ${apart("ENGINE-EXIT:")}$?; tr ' ' _ < "$TMPDIR/engine.out" | sed "s/^/ENG""INE-SAID:/"`;
+
 /** The delegate's one command: each write, the install and the commit, each followed by its exit. */
 const COMMAND = [
   `bun -e '${HOME_WRITE}' "$HOME/${HOME_TARGET}" 2> "$TMPDIR/home.err"; echo ${apart("HOME-WRITE:")}$?; cat "$TMPDIR/home.err"`,
@@ -107,7 +135,18 @@ const COMMAND = [
   `git add ${CLONE_FILE} && git commit -qm '${COMMIT_SUBJECT}' 2>&1; echo ${apart("COMMITTED:")}$?`,
   `echo ${apart("HTTPS_PROXY-IS:")}"$HTTPS_PROXY" ${apart("ALL_PROXY-IS:")}"$ALL_PROXY"; echo ${apart("PROXY-CURL:")}"$(curl -sS -o /dev/null -w '%{http_code}' https://example.com/ 2>&1 | tr ' ' _)"`,
   BUNX,
+  impeccable(),
   `echo ${apart(END)}`,
+].join("\n");
+
+/**
+ * The second delegate's command: the launcher again, in a workspace of its
+ * own, with its download base a host that never resolves, so the engine can
+ * only come from the cache the first one filled.
+ */
+const REUSE_COMMAND = [
+  impeccable("IMPECCABLE_DOWNLOAD_BASE=https://download.invalid "),
+  `echo ${apart(REUSE_END)}`,
 ].join("\n");
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
@@ -131,6 +170,14 @@ const NO_CLAUDE_TMP = { CLAUDE_CODE_TMPDIR: undefined };
 const respond = (request: Seen): Reply => {
   if (!request.tools) {
     return text("Probe title");
+  }
+  if (request.all.includes(`${REUSE_TAG}:`)) {
+    return request.all.includes(REUSE_END)
+      ? bash({ command: "sleep 3600", description: "Hold the turn" })
+      : bash({
+          command: REUSE_COMMAND,
+          description: "Run the impeccable launcher from the shared cache",
+        });
   }
   if (!request.all.includes(`${TAG}:`)) {
     return text("ok");
@@ -399,6 +446,91 @@ const run = async (kit: Kit) => {
     "bunx --bun runs a bin that imports bun:sqlite, as a SvelteKit vite.config does",
     sqlite === "1",
     `bun:sqlite query: ${sqlite ?? "unread"}`
+  );
+  await checkEngineCache(kit, fleet, parent, repo, said);
+};
+
+/** What `engine-probe` said, its lines joined, as the command printed them after their marker. */
+const engineSaid = (said: string): string =>
+  said
+    .split("\n")
+    .filter((line) => line.startsWith("ENGINE-SAID:"))
+    .map((line) => line.slice("ENGINE-SAID:".length))
+    .join(" | ");
+
+/**
+ * The impeccable launcher's engine, fetched by the first delegate into the
+ * workspaces' cache and run from there by a second delegate in a workspace of
+ * its own, whose download base never resolves: the same file, unchanged.
+ */
+const checkEngineCache = async (
+  kit: Kit,
+  fleet: Fleet,
+  parent: string,
+  repo: string,
+  said: string
+): Promise<void> => {
+  const home = fleet.env.HOME as string;
+  const impeccableHome = join(home, ".cawco", "workspace-cache", "impeccable");
+  const pins = after(said, "ENGINE-PINS:") ?? "";
+  const engine = join(impeccableHome, "bin", pins, "impeccable");
+  const answer = `impeccable-engine_${pins}`;
+  kit.check(
+    `a workspace command's IMPECCABLE_HOME is the workspaces' cache's impeccable/ (${impeccableHome})`,
+    after(said, "IMPECCABLE_HOME-IS:") === impeccableHome,
+    `IMPECCABLE_HOME: ${after(said, "IMPECCABLE_HOME-IS:") ?? "unread"}`
+  );
+  const first = await stat(engine).catch(() => undefined);
+  kit.check(
+    `the impeccable launcher fetches engine ${pins || "(no version read)"} inside the boundary, and engine-probe answers with it`,
+    pins !== "" &&
+      after(said, "ENGINE-EXIT:") === "0" &&
+      engineSaid(said).startsWith(answer),
+    `exit ${after(said, "ENGINE-EXIT:") ?? "unread"}: ${engineSaid(said) || "nothing"}`
+  );
+  kit.check(
+    "the engine is on the host's disk in the workspaces' cache",
+    first?.isFile() === true && first.size > 0,
+    `${engine}: ${first ? `${first.size} bytes` : "absent"}`
+  );
+
+  const reused = await fleet.api<{ instanceId: string; workspaceId: string }>(
+    "/api/work-items",
+    {
+      parentInstanceId: parent,
+      title: "Engine reuse",
+      prompt: `${REUSE_TAG}: run the launcher again.`,
+      harness: "claude",
+      model: "claude-haiku-4-5",
+      cwd: repo,
+    }
+  );
+  const again =
+    (await until(
+      "the second delegate's command finished",
+      () => fleet.seen.find((one) => one.all.includes(REUSE_END))?.all,
+      Boolean,
+      INSTALL_MS
+    ).catch(() => undefined)) ?? "";
+  kit.note(
+    again.slice(again.indexOf("IMPECCABLE_HOME-IS:"), again.indexOf(REUSE_END))
+  );
+  const second = await stat(engine).catch(() => undefined);
+  kit.check(
+    "a second workspace, its download base unreachable, runs the same engine from the shared cache: engine-probe answers",
+    after(again, "ENGINE-EXIT:") === "0" &&
+      engineSaid(again).startsWith(answer) &&
+      after(again, "IMPECCABLE_HOME-IS:") === impeccableHome,
+    `workspace ${reused.workspaceId}, exit ${after(again, "ENGINE-EXIT:") ?? "unread"}: ${engineSaid(again) || "nothing"}`
+  );
+  kit.check(
+    "the second workspace downloaded nothing: the engine is the same file, unchanged",
+    first !== undefined &&
+      second !== undefined &&
+      second.ino === first.ino &&
+      second.mtimeMs === first.mtimeMs &&
+      second.size === first.size,
+    `before: ${first ? `inode ${first.ino}, mtime ${first.mtimeMs}` : "absent"}; after: ${second ? `inode ${second.ino}, mtime ${second.mtimeMs}` : "absent"}`
   );
 };
 

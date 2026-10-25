@@ -1024,31 +1024,16 @@ export const darwinUserDirs = async (): Promise<string[]> =>
     : [];
 
 /**
- * Where the impeccable skill's engine is installed on the host, one folder
- * per version (`<version>/impeccable`), at the path its launcher computes
- * for the version its skill pins (`${IMPECCABLE_HOME:-$HOME/.impeccable}/bin/
- * <version>`, skills/impeccable/scripts/impeccable). Only `bin`: the cache
- * root beside it is the launcher's own to write.
- */
-const hostImpeccableEngines = (): string =>
-  join(process.env.IMPECCABLE_HOME ?? join(homedir(), ".impeccable"), "bin");
-
-/**
  * The host's tool caches that skills and their commands run binaries from,
  * which every workspace reads at the same path, read-only (workspace-policy.ts
- * `workspacePolicy`): Playwright's browsers and the impeccable skill's
- * engines. The home dir stays hidden around them; a skill launcher that
- * finds its binary here never downloads (inside a workspace a download is
- * refused: it writes nothing under home, and on 2026-10-14 the curl first on
- * the Linux host's PATH, zerobrew's, verified no certificate), so each host
- * installs what its skills pin, and one it lacks is refused in the launcher's
- * own words. A dir that holds a tool's keys or settings (`~/.heygen`,
+ * `workspacePolicy`): Playwright's browsers. The home dir stays hidden around
+ * them, so each host installs what its skills pin. A tool whose launcher
+ * fetches its own binary into a folder an env var names goes in the
+ * workspaces' cache instead ({@link workspaceCacheEnv}), as impeccable's
+ * engines do. A dir that holds a tool's keys or settings (`~/.heygen`,
  * `~/.media`) is never one of these; a new cache joins by being added here.
  */
-export const hostToolCaches = (): string[] => [
-  hostPlaywrightBrowsers(),
-  hostImpeccableEngines(),
-];
+export const hostToolCaches = (): string[] => [hostPlaywrightBrowsers()];
 
 /**
  * Where the host's operating system keeps its trusted CA certificates: the
@@ -1203,6 +1188,15 @@ export const workspaceCacheEnv = (): Record<string, string> => {
     XDG_CACHE_HOME: join(cache, "xdg"),
     XDG_RUNTIME_DIR: workspaceRuntimeDir(),
     UV_CACHE_DIR: join(cache, "uv"),
+    // The impeccable skill's engines, one folder per version. Its launcher
+    // runs `$IMPECCABLE_HOME/bin/<version>/impeccable` for the version its
+    // skill pins, and else downloads it there, checked against the release's
+    // .sha256 (skills/impeccable/scripts/impeccable: `cache_root=
+    // "${IMPECCABLE_HOME:-${HOME:-/nonexistent}/.impeccable}"`). Its default,
+    // `~/.impeccable`, is read-only inside a boundary ("cannot create cache
+    // directory: …/.impeccable/bin/0.1.17"), so every workspace fetches each
+    // version once, here, and the next runs it from here.
+    IMPECCABLE_HOME: join(cache, "impeccable"),
     PLAYWRIGHT_BROWSERS_PATH: hostPlaywrightBrowsers(),
   };
 };

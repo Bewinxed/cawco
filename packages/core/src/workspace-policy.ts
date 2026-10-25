@@ -12,7 +12,7 @@
  *   objects dir its clone borrows), the toolchains on PATH and the tool
  *   trees their commands link into (`homeToolchains`), the user's git
  *   config, the host tool caches skills run binaries from
- *   (`hostToolCaches`: Playwright's browsers, impeccable's engines), the
+ *   (`hostToolCaches`: Playwright's browsers), the
  *   cawco binary, on macOS the selected
  *   Xcode bundle (`darwinDeveloperBundle`), and the user layer of
  *   Claude Code (CLAUDE.md, memories, skills, plugins, agents, commands,
