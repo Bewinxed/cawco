@@ -2791,7 +2791,7 @@ export const createTasks = (store: TaskStore) => {
     ) {
       refuse(
         403,
-        `${id} cannot go to ${to} as an approved action: only an action the owner approved, once its call is done, moves its own task to the stage it named.`
+        `This task cannot go to ${to} as an approved action: only an action the owner approved, once its call is done, moves its own task to the stage it named.`
       );
     }
     const problem =
@@ -2931,11 +2931,11 @@ export const createTasks = (store: TaskStore) => {
       (row) => row.number === number
     );
     if (board) {
-      refuse(409, `${id} is on the board (${board.path}), not archived.`);
+      refuse(409, `It is on the board (${board.path}), not archived.`);
     }
     const from = await archivedFile(projectId, number);
     if (!from) {
-      return refuse(404, `${id} is not archived.`);
+      return refuse(404, "It is not archived.");
     }
     const to = `tasks/${from.slice(ARCHIVE_DIR.length + 1)}`;
     const read = (await readFolderFile(projectId, from)).content;

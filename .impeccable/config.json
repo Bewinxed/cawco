@@ -37,6 +37,13 @@
         "files": ["design-previews/pairing/index.html"],
         "createdAt": "2026-10-24T19:36:45.835Z",
         "reason": "leaf call: the preview sets type only through DESIGN.md's locked roles (--type-title, --type-body, --type-meta), which CLAUDE.md makes law; no one-off size steps allowed"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "figtree",
+        "files": ["scripts/probe-kit/specs/tool-answers.ts"],
+        "createdAt": "2026-10-25T05:39:49.616Z",
+        "reason": "agent call: the font is a pin fixture's recorded computed style in the tool-answers probe, not UI"
       }
     ]
   }

@@ -11,6 +11,7 @@ import {
   type ThreadMessage,
   type ThreadRead,
   type ThreadSummary,
+  taskLink,
 } from "@cawco/core";
 import type {
   ConnectorPollView,
@@ -310,7 +311,7 @@ export const pollWords = (poll: ConnectorPollView): string =>
   pollLine(poll, Date.now()).replace(LIST_MARK, "Poll ");
 
 const actionLine = (action: ApprovedActionView, now: number): string =>
-  `- ${handle(action.id)} · ${action.state} · ${action.connection}:${action.tool} ${action.args.length > 200 ? `${action.args.slice(0, 199)}…` : action.args} · ${quote(action.reason, 160)}${action.runAt === null ? "" : ` · runs ${ahead(action.runAt, now)}`}${action.taskId ? ` · for ${action.taskId}${action.thenStage ? `, then ${action.thenStage}` : ""}` : ""}${action.error ? ` · ${action.error}` : ""}${action.result ? ` · result ${quote(action.result, 240)}` : ""} · proposed ${ago(action.createdAt, now)}`;
+  `- ${handle(action.id)} · ${action.state} · ${action.connection}:${action.tool} ${action.args.length > 200 ? `${action.args.slice(0, 199)}…` : action.args} · ${quote(action.reason, 160)}${action.runAt === null ? "" : ` · runs ${ahead(action.runAt, now)}`}${action.taskId ? ` · for ${action.taskTitle === null ? action.taskId : taskLink(action.projectId, action.taskId, action.taskTitle)}${action.thenStage ? `, then ${action.thenStage}` : ""}` : ""}${action.error ? ` · ${action.error}` : ""}${action.result ? ` · result ${quote(action.result, 240)}` : ""} · proposed ${ago(action.createdAt, now)}`;
 
 /** `action_list`. */
 export const actionListWords = (actions: ApprovedActionView[]): string => {

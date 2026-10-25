@@ -95,6 +95,7 @@ import {
   type ThreadStatus,
   type ThreadSummary,
   type ThreadUpsertFrame,
+  taskLink,
   type UserAnswers,
   VIEW_TOOLS,
   type ViewAsked,
@@ -1837,7 +1838,7 @@ export const createCaw = ({
     const note = endNote(project.id, item);
     const event: CawEvent = {
       by,
-      text: `The attempt at ${taskId} (“${item.title}”) ended ${item.state}.${report ? `\n\n${report}` : ""}`,
+      text: `The attempt at ${taskLink(project.id, taskId, item.title)} ended ${item.state}.${report ? `\n\n${report}` : ""}`,
       threadId: db.threadOfTask(project.id, taskId)?.id,
       note,
     };
