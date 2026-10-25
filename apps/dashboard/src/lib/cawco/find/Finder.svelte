@@ -520,7 +520,8 @@
       <span
         class="mark-line inline-flex items-center gap-space-row h-c-pill-h ps-space-3 pe-space-row border border-transparent rounded-pill bg-brand-wash type-label text-brand-ink transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-space-8"
         data-flip="pop"
-        ><span>{word}</span><button data-box
+        ><span>{word}</span><button
+          data-box
           class="select-none grid place-items-center size-icon-lg border-none border-current rounded-pill bg-transparent"
           aria-label={`Stop narrowing to ${word}`}
           onclick={() => finder.removeWords([word])}
@@ -533,7 +534,8 @@
       <span
         class="mark-line inline-flex items-center gap-space-row h-c-pill-h ps-space-3 pe-space-row border border-transparent rounded-pill bg-brand-wash type-label text-brand-ink transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-space-8"
         data-flip="pop"
-        ><span>{time}</span><button data-box
+        ><span>{time}</span><button
+          data-box
           class="select-none grid place-items-center size-icon-lg border-none border-current rounded-pill bg-transparent"
           aria-label={`Stop narrowing to ${time}`}
           onclick={() => finder.removeWords(time.split(" "))}

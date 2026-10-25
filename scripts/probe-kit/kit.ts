@@ -212,7 +212,8 @@ function safariParity(): void {
       if (node instanceof HTMLLinkElement) {
         node.addEventListener("load", () => drop(node.sheet));
       }
-      const style = node instanceof HTMLStyleElement ? node : node.parentElement;
+      const style =
+        node instanceof HTMLStyleElement ? node : node.parentElement;
       if (style instanceof HTMLStyleElement) {
         drop(style.sheet);
       }

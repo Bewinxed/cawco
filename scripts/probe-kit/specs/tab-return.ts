@@ -980,12 +980,10 @@ function watchOffscreenRuns(): void {
         const el = event.target;
         const pane =
           el instanceof Element ? el.closest('[data-slot="pane"]') : null;
-        if (
-          !(
-            el instanceof Element &&
-            pane?.matches("[data-pane-hidden], [data-pane-settling]")
-          )
-        ) {
+        if (!(
+          el instanceof Element &&
+          pane?.matches("[data-pane-hidden], [data-pane-settling]")
+        )) {
           return;
         }
         const name =
@@ -1061,7 +1059,14 @@ const hiddenLoopsOf = async (page: Page, since = 0) => {
       served: served.length,
       paused: runs.length - running.length,
       panes: panes.length,
-      line: `${runs.length} animations in ${panes.length} panes off screen (${panes.length - laidOut} put away, ${laidOut} laid out unseen): ${running.length} running, ${runs.length - running.length} paused; ${runs.length - pseudo} on elements, ${pseudo} on ::before/::after${byKind ? `; by keyframes: ${byKind}` : ""}${where.length > 0 ? ` (running: ${where.join(", ")})` : ""}; ${served.length} events from runs served there${served.length > 0 ? `: ${served.slice(0, 4).map(([, what]) => what).join(", ")}` : ""}`,
+      line: `${runs.length} animations in ${panes.length} panes off screen (${panes.length - laidOut} put away, ${laidOut} laid out unseen): ${running.length} running, ${runs.length - running.length} paused; ${runs.length - pseudo} on elements, ${pseudo} on ::before/::after${byKind ? `; by keyframes: ${byKind}` : ""}${where.length > 0 ? ` (running: ${where.join(", ")})` : ""}; ${served.length} events from runs served there${
+        served.length > 0
+          ? `: ${served
+              .slice(0, 4)
+              .map(([, what]) => what)
+              .join(", ")}`
+          : ""
+      }`,
     };
   }, since);
   return {
@@ -2233,7 +2238,10 @@ const run = async (kit: Kit) => {
     const page = await kit.page(
       "desk",
       engine === "webkit"
-        ? { engine: "webkit", init: [watchGaps, watchPosts, watchOffscreenRuns] }
+        ? {
+            engine: "webkit",
+            init: [watchGaps, watchPosts, watchOffscreenRuns],
+          }
         : {
             init: [watchCost, watchPosts, watchSizes, watchOffscreenRuns],
             oneProcess: engine === "one-process",

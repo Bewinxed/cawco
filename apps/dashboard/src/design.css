@@ -1888,16 +1888,7 @@
    scroll container. */
 @utility mark-line {
   :where(&)
-    > :where(
-      :not(
-        svg,
-        img,
-        .rail-cell,
-        .icon-swap,
-        .mark-cell,
-        [data-box]
-      )
-    ) {
+    > :where(:not(svg, img, .rail-cell, .icon-swap, .mark-cell, [data-box])) {
     @apply mark-text;
   }
 }

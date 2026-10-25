@@ -354,7 +354,8 @@
               >{formatAgeShort(Date.parse(artifact.createdAt))}</span
             >
           {/if}
-          <button data-box
+          <button
+            data-box
             aria-label={artifactWords.removeNamed(artifact.name)}
             class="select-none grid place-items-center -me-space-1 p-space-1 border-none border-current rounded-sm bg-transparent text-ink-muted opacity-0 transition-[opacity,color] duration-(--dur-control) ease-out hover:text-error-9 coarse:opacity-100 group-data-highlighted/artifact:opacity-100"
             disabled={removing.has(artifact.id)}

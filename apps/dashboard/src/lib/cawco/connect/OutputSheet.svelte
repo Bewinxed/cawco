@@ -148,7 +148,8 @@
         variant="destructive"
       />
     {/if}
-    <button data-box
+    <button
+      data-box
       type="button"
       aria-label={connectWords.closeOutput}
       title={connectWords.closeOutput}

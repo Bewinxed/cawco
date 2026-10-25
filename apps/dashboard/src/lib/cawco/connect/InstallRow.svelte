@@ -159,7 +159,8 @@
         >{#if split[1]}<span class="flex-none">{split[1]}</span>{/if}</span
       >
       {#if showMarks && install.state === "running"}
-        <span data-box
+        <span
+          data-box
           data-slot="marks"
           class="flex flex-none items-center gap-space-row"
           aria-hidden="true"
