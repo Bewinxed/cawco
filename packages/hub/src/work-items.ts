@@ -29,10 +29,9 @@
  * limit the item fails, its parent is told, and its session is ended. The
  * project's **lead** may answer, steer and stop the project's items; their
  * reports and asks reach only the session that started each, the lead only
- * for the work he started ({@link reportees}). And the **plan ↔ to-do link**: a task attempt's plan, as
- * its plan panel reads it on any harness (CawCo's own steps where "CawCo's
- * to-dos" is on, else the harness's list), is read on its turn's end, a
- * completed `[td-n]` step ticks that to-do, `finish_item` asks once about the
+ * for the work he started ({@link reportees}). And the **plan ↔ to-do link**: a task attempt's plan,
+ * CawCo's own steps on every harness, is read on its turn's end, a
+ * completed step whose id is a to-do's (`td-3`) ticks that to-do, `finish_item` asks once about the
  * to-dos still open, and steps left open become `(proposed)` to-dos.
  */
 
@@ -1107,8 +1106,8 @@ export interface WorkItemDeps {
   readonly workspaceChanged?: (workspace: WorkspaceRow) => void;
 }
 
-/** A plan item's to-do id, `[td-3] Persist the choice` → `td-3`. */
-const PLAN_TODO = /\[(td-\d{1,6})\]/;
+/** A plan step that stands for one of its task's to-dos: its `id` is that to-do's, `td-3`. */
+const PLAN_TODO = /^td-\d{1,6}$/;
 /** Plan items one attempt may leave behind as proposed to-dos. */
 const PROPOSALS_LIMIT = 20;
 const RUNS_OF_SPACE = /\s+/g;
@@ -3302,8 +3301,8 @@ export const createWorkItems = ({
 
   /**
    * Ticks each open to-do of the item's task whose id a completed plan item
-   * carries (`[td-3] …`), and each open proposed to-do whose words one
-   * without an id has: a step left open when the attempt ended once
+   * carries as its id (`td-3`), and each open proposed to-do whose words one
+   * without such an id has: a step left open when the attempt ended once
    * ({@link proposeLeftovers}) and completed after it went on. One read of
    * the ledger and, when something is to tick, one commit.
    */
@@ -3316,12 +3315,12 @@ export const createWorkItems = ({
     const done = plan.filter((entry) => entry.status === "completed");
     const completed = new Set(
       done
-        .map((entry) => PLAN_TODO.exec(entry.content)?.[1])
-        .filter((id): id is string => id !== undefined)
+        .filter((entry) => PLAN_TODO.test(entry.id))
+        .map((entry) => entry.id)
     );
     const said = new Set(
       done
-        .filter((entry) => !PLAN_TODO.test(entry.content))
+        .filter((entry) => !PLAN_TODO.test(entry.id))
         .map((entry) => planWords(entry.content))
     );
     if (completed.size === 0 && said.size === 0) {
@@ -3358,7 +3357,7 @@ export const createWorkItems = ({
 
   /**
    * An item ended: its plan's last ticks land, and the plan items it left
-   * open (without a to-do id) become proposed to-dos on its task — a line
+   * open (whose id is no to-do's) become proposed to-dos on its task — a line
    * each, `(proposed)`, skipping words the task already has.
    */
   const proposeLeftovers = async (item: WorkItemRow): Promise<void> => {
@@ -3375,8 +3374,7 @@ export const createWorkItems = ({
     );
     const left = plan
       .filter(
-        (entry) =>
-          entry.status !== "completed" && !PLAN_TODO.test(entry.content)
+        (entry) => entry.status !== "completed" && !PLAN_TODO.test(entry.id)
       )
       .map((entry) => entry.content.replace(RUNS_OF_SPACE, " ").trim())
       .filter((text) => text && !known.has(planWords(text)))
@@ -7460,7 +7458,7 @@ export const createWorkItems = ({
   ): string => {
     const link = sessionUrl?.(item.instanceId);
     const what = item.taskId
-      ? `an attempt at ${item.taskId}`
+      ? `an attempt at the task “${item.title}”`
       : `work item ${handle(item.id)}`;
     const lines = gate.declared ? gateLines(gate) : NO_CHECKS;
     return [

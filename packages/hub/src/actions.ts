@@ -741,10 +741,18 @@ export const createActions = ({
   /** The titles of the tasks waiting actions are for, read once after a start. */
   const warmTitles = async (): Promise<void> => {
     const rows = store.inStates(WAITING).filter((row) => row.taskId !== null);
-    for (const row of rows) {
+    await titlesOf(rows);
+    if (rows.length > 0) {
+      told();
+    }
+  };
+
+  /** The titles of the tasks `rows` are for, each read once into the cache: what names those tasks by their links. */
+  const titlesOf = async (rows: ActionRow[]): Promise<void> => {
+    for (const row of rows.filter((one) => one.taskId !== null)) {
       const key = `${row.projectId}/${row.taskId}`;
       if (!titles.has(key)) {
-        // biome-ignore lint/performance/noAwaitInLoops: a handful of reads, once, off the boot path
+        // biome-ignore lint/performance/noAwaitInLoops: a handful of reads, each once
         const task = await tasks
           .get(row.projectId, row.taskId ?? "")
           .catch(() => undefined);
@@ -752,9 +760,6 @@ export const createActions = ({
           titles.set(key, task.title);
         }
       }
-    }
-    if (rows.length > 0) {
-      told();
     }
   };
 
@@ -839,7 +844,9 @@ export const createActions = ({
           task: z
             .string()
             .optional()
-            .describe("The task it is for, like tsk-12."),
+            .describe(
+              "The task it is for, like tsk-12: what ends its link, cawco:task/<project>/tsk-12."
+            ),
           then_stage: z
             .string()
             .optional()
@@ -886,12 +893,12 @@ export const createActions = ({
             .optional(),
         },
         ({ state }) =>
-          run(() =>
-            list(
-              me().projectId ?? refuse(403, "This session is in no project."),
-              state
-            )
-          ),
+          run(async () => {
+            const projectId =
+              me().projectId ?? refuse(403, "This session is in no project.");
+            await titlesOf(store.list(projectId, LISTED));
+            return list(projectId, state);
+          }),
         actionListWords
       ),
       tool(

@@ -91,7 +91,9 @@ import {
   type LandsMode,
   machinesCalled,
   POST_OUTPUT_RULE,
+  sessionLink,
   taskLink,
+  todoLink,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { Elysia, status, t } from "elysia";
@@ -433,9 +435,15 @@ export interface RetryContext {
 const FAILURE_TAIL = 4000;
 const BACKTICKS = /`+/g;
 
-/** The work item's title: the task's id and title, cut to what a session name takes. */
+/** An attempt by its session's link, labelled by its task's title: what a comment or a message names it by. */
+const attemptNamed = (
+  item: Pick<WorkItemRow, "instanceId">,
+  task: Pick<TaskView, "title">
+): string => `its attempt ${sessionLink(item.instanceId, task.title)}`;
+
+/** The work item's title: the task's title, what its session's chip reads, cut to what a session name takes. */
 const titleOf = (task: TaskView): string => {
-  const title = `${task.id} ${task.title}`;
+  const { title } = task;
   return title.length > SESSION_TITLE_MAX
     ? `${title.slice(0, SESSION_TITLE_MAX - 1).trimEnd()}…`
     : title;
@@ -463,20 +471,20 @@ const briefOf = (
   const line = (id: string): string => {
     const other = byId.get(id);
     return other
-      ? `${id} “${other.title}” (${other.stage})`
+      ? `${taskLink(project.id, id, other.title)} (${other.stage})`
       : `${id} (not in the project)`;
   };
   const open = task.todos.filter((todo) => !todo.done);
   const todos =
     open.length > 0
-      ? `Start your plan from these open to-dos, keeping each one's id in its plan item, like \`[td-3] Persist the choice\`:\n\n${open
+      ? `Start your plan from these open to-dos: a step for each, its \`id\` the to-do's id (the last part of its link, \`td-3\`) and its content the to-do's words, like \`{ id: "td-3", content: "Persist the choice" }\`:\n\n${open
           .map(
             (todo) =>
-              `${"  ".repeat(todo.depth)}- [${todo.id ?? todo.path}] ${todo.text}`
+              `${"  ".repeat(todo.depth)}- ${todo.id ? todoLink(project.id, task.id, todo.id, todo.text) : todo.text}`
           )
           .join(
             "\n"
-          )}\n\nWhen a plan item carrying an id is completed, the hub ticks that to-do; you can also tick it with todo_write. Add the steps you find. finish_item lists the to-dos still open once: tick or explain each in your summary. Plan items you leave open become proposed to-dos on the task.`
+          )}\n\nWhen a step whose id is a to-do's is completed, the hub ticks that to-do; you can also tick it with todo_write. Add the steps you find. finish_item lists the to-dos still open once: tick or explain each in your summary. Steps you leave open become proposed to-dos on the task.`
       : "The task has no open to-dos. Add the steps you find with todo_write as you go; plan items you leave open become proposed to-dos on the task.";
   const waiting = all.filter((each) => each.after.includes(task.id));
   const sits = [
@@ -500,7 +508,7 @@ const briefOf = (
       : []),
   ];
   return [
-    `Your work item is an attempt at ${task.id}, “${task.title}”, a task of the project ${project.name}. This brief is its task file as it stands.`,
+    `Your work item is an attempt at ${taskLink(project.id, task.id, task.title)}, a task of the project ${project.name}. This brief is its task file as it stands. Name it, its to-dos and the tasks below to the person by their links.`,
     ...(task.description ? [`## Description\n\n${task.description}`] : []),
     ...(task.acceptance
       ? [`## Acceptance criteria\n\n${task.acceptance}`]
@@ -511,7 +519,7 @@ const briefOf = (
     `## Handing it in\n\n${RESULT_LINE}`,
     ...(context ? [context] : []),
     ...(design ? [design] : []),
-    ...(retry ? [retrySection(task, retry)] : []),
+    ...(retry ? [retrySection(project.id, task, retry)] : []),
     ...(comments.length > 0 ? [commentsSection(comments)] : []),
   ].join("\n\n");
 };
@@ -539,7 +547,11 @@ const commentsSection = (comments: TaskComment[]): string =>
     .join("\n\n")}`;
 
 /** A retry's section of the brief: how the last attempt ended, and what of the task is done. */
-const retrySection = (task: TaskView, retry: RetryContext): string => {
+const retrySection = (
+  projectId: string,
+  task: TaskView,
+  retry: RetryContext
+): string => {
   const done = task.todos.filter((todo) => todo.done);
   const failure = retry.failure.trim() || "(the hub kept no words for it)";
   const tail =
@@ -555,7 +567,7 @@ const retrySection = (task: TaskView, retry: RetryContext): string => {
   return [
     `## The last attempt\n\nThis is a retry. The last attempt (work item ${short(retry.workItemId)}) ${retry.state === "cancelled" ? "was cancelled" : "failed"}; the hub reported:\n\n${fence}\n${tail}\n${fence}`,
     done.length > 0
-      ? `Done so far, by the task's to-dos: ${done.map((todo) => `[${todo.id ?? todo.path}] ${todo.text}`).join("; ")}.`
+      ? `Done so far, by the task's to-dos: ${done.map((todo) => (todo.id ? todoLink(projectId, task.id, todo.id, todo.text) : todo.text)).join("; ")}.`
       : "None of the task's to-dos is ticked yet.",
     "When your workspace still holds the last attempt's clone, its commits and files are as it left them: read `git log` and `git status` before you start, and carry on from there rather than starting over.",
   ].join("\n\n");
@@ -729,12 +741,8 @@ export const createDispatcher = ({
    * sentence: no machine it names is known, none of them is online, or none
    * online holds a checkout of the project. It is never placed elsewhere.
    */
-  const unplaced = (
-    project: ProjectRow,
-    task: TaskView,
-    runsOn: string
-  ): string => {
-    const needs = `${task.id} runs on ${runsOnWords(runsOn)}`;
+  const unplaced = (project: ProjectRow, runsOn: string): string => {
+    const needs = `This task runs on ${runsOnWords(runsOn)}`;
     const fitting = machinesFor(runsOn);
     if (fitting.length === 0) {
       return `${needs}, and no machine this hub knows is one, so it starts nowhere else: join one, or change its runs_on.`;
@@ -764,9 +772,9 @@ export const createDispatcher = ({
     const place = placeFor(project, parent, runsOn);
     let message: string | undefined;
     if (runsOn && !place) {
-      message = unplaced(project, task, runsOn);
+      message = unplaced(project, runsOn);
     } else if (!(place || previous)) {
-      message = `No checkout of ${project.name} is on a machine that is online, so there is nowhere to cut ${task.id}'s workspace. Bring one of its machines online, or add a checkout place on one that is.`;
+      message = `No checkout of ${project.name} is on a machine that is online, so there is nowhere to cut this task's workspace. Bring one of its machines online, or add a checkout place on one that is.`;
     }
     if (message) {
       note(project.id, task, message);
@@ -801,13 +809,13 @@ export const createDispatcher = ({
     if (live) {
       refuse(
         409,
-        `${task.id} has a live attempt already: work item ${live.id} is ${live.state}. Message its session, or wait for its report.`
+        `This task has a live attempt already: ${sessionLink(live.instanceId, task.title)} is ${live.state}. Message its session, or wait for its report.`
       );
     }
     if (task.kind === "done" || task.kind === "dropped") {
       refuse(
         409,
-        `${task.id} is in ${task.stage}, a ${task.kind} stage; move it back before starting an attempt.`
+        `This task is in ${task.stage}, a ${task.kind} stage; move it back before starting an attempt.`
       );
     }
   };
@@ -829,7 +837,7 @@ export const createDispatcher = ({
     if (stages.problems.length > 0) {
       refuse(
         409,
-        `stages.md does not read, so the hub cannot tell where an attempt moves ${task.id}. ${stages.problems.join(" ")}`
+        `stages.md does not read, so the hub cannot tell where an attempt moves this task. ${stages.problems.join(" ")}`
       );
     }
     return task.kind === "active"
@@ -1153,7 +1161,7 @@ export const createDispatcher = ({
     const task = await tasks.get(projectId, ref);
     const key = keyOf(projectId, task.id);
     if (starting.has(key)) {
-      refuse(409, `An attempt at ${task.id} is starting already.`);
+      refuse(409, "An attempt at this task is starting already.");
     }
     // From here to its work item being filed, the start holds the task.
     starting.add(key);
@@ -1266,8 +1274,8 @@ export const createDispatcher = ({
       return refuse(
         409,
         previous
-          ? `${task.id}'s last attempt is ${previous.state}, not failed or stopped; start a new one with task_start.`
-          : `${task.id} has no attempt to retry; start one with task_start.`
+          ? `This task's last attempt is ${previous.state}, not failed or stopped; start a new one with task_start.`
+          : "This task has no attempt to retry; start one with task_start."
       );
     }
     return previous;
@@ -1347,7 +1355,7 @@ export const createDispatcher = ({
         note(
           projectId,
           task,
-          `${task.id} is ready to start, but Caw, who takes the reports of the attempts the hub starts, did not start: ${why}`
+          `It is ready to start, but Caw, who takes the reports of the attempts the hub starts, did not start: ${why}`
         );
       }
       return;
@@ -1479,7 +1487,7 @@ export const createDispatcher = ({
       project,
       task,
       queued.parentInstanceId,
-      `${task.id} waited in ${queued.stage} for ${owns ? "owned files" : "a slot"}`
+      `It waited in ${queued.stage} for ${owns ? "owned files" : "a slot"}`
     );
     if (!parent) {
       return;
@@ -1550,7 +1558,7 @@ export const createDispatcher = ({
       project,
       await tasks.get(projectId, id),
       actor.instanceId,
-      `${id} entered ${to}, which runs ${stage.hooks.runs}`
+      `It entered ${to}, which runs ${stage.hooks.runs}`
     );
     if (!parent) {
       return;
@@ -1774,7 +1782,7 @@ export const createDispatcher = ({
         await tasks.comment(
           projectId,
           task.id,
-          `Jev judged the acceptance criteria against attempt ${short(item.id)}'s report. Not shown met:\n\n${unmet
+          `Jev judged the acceptance criteria against the report of ${attemptNamed(item, task)}. Not shown met:\n\n${unmet
             .map((each) => `- ${each.criterion} (${each.noul.toFixed(2)})`)
             .join("\n")}`,
           about
@@ -1787,7 +1795,7 @@ export const createDispatcher = ({
         await tasks.comment(
           projectId,
           task.id,
-          `${error.message} The acceptance criteria of attempt ${short(item.id)} wait for you.`,
+          `${error.message} The acceptance criteria of ${attemptNamed(item, task)} wait for you.`,
           about
         );
         return "you";
@@ -1803,7 +1811,7 @@ export const createDispatcher = ({
         projectId,
         task,
         item,
-        `Judge ${task.id} “${task.title}”: its attempt ${short(item.id)} passed its checks and its work is in, and its acceptance criteria wait for your judgment (Jev is off; you did not do this work). Move the task to its done stage when the report shows every criterion met; else move it back to its todo stage with a task_comment naming what is missing.\n\nCriteria:\n${criteria.map((each) => `- ${each}`).join("\n")}\n\nThe attempt's report:\n\n${tailOf(report, 4000)}`
+        `Judge ${taskLink(projectId, task.id, task.title)}: ${attemptNamed(item, task)} passed its checks and its work is in, and its acceptance criteria wait for your judgment (Jev is off; you did not do this work). Move the task to its done stage when the report shows every criterion met; else move it back to its todo stage with a task_comment naming what is missing.\n\nCriteria:\n${criteria.map((each) => `- ${each}`).join("\n")}\n\nThe attempt's report:\n\n${tailOf(report, 4000)}`
       );
       return "lead";
     }

@@ -202,7 +202,14 @@ const stepParameter = () =>
     content: z.string().trim().min(1),
     status: z.enum(PLAN_STEP_STATUSES),
     depth: z.number().int().min(0).optional(),
-    id: z.string().trim().min(1).optional(),
+    id: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe(
+        "On a task attempt, a to-do's id (td-3, what ends its link) makes the step that to-do: completing it ticks it."
+      ),
     priority: z.enum(PLAN_STEP_PRIORITIES).optional(),
     waitsOn: z
       .string()
