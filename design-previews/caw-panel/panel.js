@@ -6,6 +6,8 @@
  * cross-fade over --dur-fade under reduced motion.
  */
 
+import { THREAD_ID, TURNS } from "./thread.js";
+
 const root = document.documentElement;
 const style = getComputedStyle(root);
 const token = (name) => style.getPropertyValue(name).trim();
@@ -55,7 +57,15 @@ async function settle(animation) {
 
 /* ── What the panel says ─────────────────────────────────────────── */
 
-const TITLE = "Nightly check ready";
+/*
+ * Every word below is a record on the hub: Cawco's Caw thread (thread.js),
+ * the ask Caw raised in it, what else waits in Cawco and on the fleet, and
+ * the machines online. The can't-start causes are the hub's own sentences
+ * with Cawco's names in them; none of them happened to this thread.
+ */
+
+/** The hub names a thread by its first message, cut at 80 (core title.ts). */
+const TITLE = TURNS[0].text.replace(/\s+/g, " ").trim().slice(0, 80);
 
 const CAUSES = {
   machine: {
@@ -66,16 +76,16 @@ const CAUSES = {
     hint: "Kept until a machine is back",
     note: "Not read · no machine was online",
     details:
-      "obelisk-of-light last answered at 13:52 and studio-mac at 11:07. Caw starts on the first one that comes back.",
+      "obelisk-of-light, Omars-MacBook-Pro, niftybot.art and uwucloud are all offline. Caw starts on the first one that comes back.",
   },
   budget: {
     still: "budget",
     title: "This week’s budget is spent",
-    body: "Caw used the $40 set for Cawco-Dev. What you write is kept; he reads it when the budget resets on Monday or you raise it.",
+    body: "Caw used this week’s budget for Cawco. What you write is kept; he reads it when the budget resets or you raise it.",
     way: "Raise the budget",
     hint: "Kept until the budget resets",
     note: "Not read · the budget was spent",
-    details: "$40.00 of $40.00 this week, reset Monday at 00:00.",
+    details: "Cawco is past its spend cap, so its lead is not woken.",
   },
   thread: {
     still: "thread",
@@ -84,165 +94,123 @@ const CAUSES = {
     way: "Start a new thread",
     hint: "Kept with this thread",
     note: "Not read · the thread won’t read",
-    details:
-      "threads/9f2c.jsonl, line 214: the record ends mid-entry (unexpected end of JSON).",
+    details: `Thread ${THREAD_ID.slice(0, 8)} on the hub can’t be read.`,
   },
   hub: {
     still: "hub",
     title: "The hub is updating",
-    body: "It is installing 0.42.1 and is back in about a minute. What you write is kept, and Caw reads it once the hub is up.",
+    body: "It is installing an update and is back in about a minute. What you write is kept, and Caw reads it once the hub is up.",
     way: "See the update",
     hint: "Kept until the hub is back",
     note: "Not read · the hub was updating",
-    details: "0.42.0 → 0.42.1 on obelisk-of-light, step 3 of 4: migrating.",
+    details: "The hub on obelisk-of-light is installing its update.",
   },
 };
 
-const PERMISSION = {
-  id: "perm-1",
-  what: "Run <code>bun run check</code>",
-  why: "in cockpit on obelisk-of-light",
-  wait: "2m",
-  waitDocked: "4m",
+/** "08:06" from the hub's ISO time, as the thread shows it. */
+const clockOf = (iso) => iso.slice(11, 16);
+const clockNow = () => new Date().toISOString().slice(11, 16);
+
+/** The ask Caw raised in this thread at 08:06:29 (turn 4df2aa2f): knowledge/brand.md, waiting for approval. */
+const PROPOSAL = {
+  id: "brand-md",
+  kind: "permission",
+  what: "Approve <code>knowledge/brand.md</code>",
+  why: "Caw proposed it, condensed from the ledger",
+  wait: "10d",
 };
 
-const DELEGATES = [
+/**
+ * What else waits in Cawco's scope, longest wait first as the stack lists
+ * it: the fleet's memory rewrite the orchestrator asked for this morning
+ * (global, so every project's stack holds it), then Cawco's tasks in review,
+ * which wait on you (stages.md: review (you)).
+ */
+const ASKS = [
   {
-    id: "del-1",
+    id: "task-tsk-1",
+    mark: "var(--mark-4)",
+    what: "Post: one board instead of a wall of agent terminals",
+    why: "tsk-1 · in review",
+    wait: "9d",
+  },
+  {
+    id: "task-tsk-2",
+    mark: "var(--mark-4)",
+    what: "Post: answer an agent permission prompt from your phone",
+    why: "tsk-2 · in review",
+    wait: "9d",
+  },
+  {
+    id: "task-tsk-3",
+    mark: "var(--mark-4)",
+    what: "Post: Claude Code hands work to OpenCode on another machine",
+    why: "tsk-3 · in review",
+    wait: "9d",
+  },
+  {
+    id: "mem-1",
+    kind: "permission",
     mark: "var(--mark-3)",
-    what: "Run <code>bun test apps/agent</code>",
-    why: "tray-chip · a delegate on studio-mac",
-    wait: "1m",
+    what: "admin_memory_write <code>projects/cockpit-orchestrator.md</code>",
+    why: "Orchestrate cockpit fleet work · obelisk-of-light",
+    wait: "1h",
   },
   {
-    id: "del-2",
-    mark: "var(--mark-5)",
-    what: "Write <code>design/tokens/cawco.resolver.json</code>",
-    why: "glass-join · a delegate on obelisk-of-light",
-    wait: "40s",
-  },
-  {
-    id: "del-3",
-    mark: "var(--mark-6)",
-    what: "Pick the head for the phone project page",
-    why: "A decision page waits on you · 2 cards",
-    wait: "20s",
-  },
-  {
-    id: "del-4",
-    mark: "var(--mark-2)",
-    what: "Run <code>gh pr merge 412</code>",
-    why: "nightly-tag · a delegate on studio-mac",
-    wait: "5s",
+    id: "mem-2",
+    kind: "permission",
+    mark: "var(--mark-3)",
+    what: "admin_memory_write <code>projects/cockpit-orchestrator.md</code>",
+    why: "Orchestrate cockpit fleet work · obelisk-of-light",
+    wait: "52m",
   },
 ];
 
-const you = (text, clock, extra = {}) => ({
-  who: "you",
-  text,
-  clock,
-  ...extra,
-});
-const caw = (paras, extra = {}) => ({ who: "caw", paras, ...extra });
+/** The thread's turns by the first eight of their id. */
+const T = Object.fromEntries(
+  TURNS.map((t) => [
+    t.id.slice(0, 8),
+    t.who === "you"
+      ? { who: "you", text: t.text, clock: clockOf(t.when) }
+      : { who: "caw", md: t.text, clock: clockOf(t.when) },
+  ])
+);
+const you = (text, clock, extra = {}) => ({ who: "you", text, clock, ...extra });
 
-const M = {
-  check: you("Live check of nightly 5529: reply with the word ready.", "14:00"),
-  ready: caw(["ready"]),
-  full: you("Now run the full check before I tag it.", "14:01"),
-  ask: caw(["I’ll run it. One thing first:"], { card: PERMISSION }),
-  ios: you("Yes, and check the iOS build too.", "14:03"),
-  waits: caw(
-    [
-      "Waiting on the approve above before I go on. While it waits, the nightly’s notes list three fixes:",
-    ],
-    {
-      list: [
-        "The tray chip no longer overflows on a phone.",
-        "A heavy canvas draws inside its limit.",
-        "The project page has no Pipeline view.",
-      ],
-    }
-  ),
-  draft: you("Draft the release note from those.", "14:04"),
-  drafted: caw([
-    "Drafted. I’ll attach it to the tag once the check passes and the iOS build is green.",
-  ]),
-  build: you("Put the iOS build number in it too.", "14:05"),
-  added: caw(["Added. The note now opens with the build:"], {
-    list: [
-      "Nightly 5529, iOS build 41.",
-      "Three fixes, each with its task.",
-      "No migration; the hub updates in place.",
-    ],
-  }),
-  ping: you("Good. Tell me when the check is done.", "14:06"),
-  will: caw([
-    "I will. It starts the moment you approve the run above, and the iOS build follows it on studio-mac.",
-  ]),
-  pass: caw(["Both pass. The nightly is ready to tag."]),
-  tag: you("Tag it.", "14:09"),
-  again: you("Run it again at 9.", "14:11", { kept: true }),
+/** Up to the moment named (its first eight), from the thread's start. */
+const upTo = (id) => {
+  const end = TURNS.findIndex((t) => t.id.startsWith(id));
+  return TURNS.slice(0, end + 1).map((t) => {
+    const turn = T[t.id.slice(0, 8)];
+    return t.id.startsWith("4df2aa2f") ? { ...turn, card: PROPOSAL } : turn;
+  });
 };
 
 const THREADS = {
-  rest: [M.check, M.ready],
-  needs: [
-    M.check,
-    M.ready,
-    M.full,
-    M.ask,
-    M.ios,
-    M.waits,
-    M.draft,
-    M.drafted,
-    M.build,
-    M.added,
-    M.ping,
-    M.will,
-  ],
-  scrolled: [
-    M.check,
-    M.ready,
-    M.full,
-    { ...M.ask, answered: "Approved · 14:02" },
-    M.ios,
-    M.waits,
-    M.draft,
-    M.drafted,
-    M.build,
-    M.added,
-    M.ping,
-    M.will,
-    M.pass,
-    M.tag,
-  ],
+  // His first message and Caw's first answer.
+  rest: upTo("445b6fd7"),
+  // To the moment Caw asks: the card lands under his answer.
+  needs: upTo("4df2aa2f"),
+  // The thread as it went on: the card scrolls up past the stack's floor and docks.
+  docked: upTo("15b34125"),
+  // Read to its foot before the ask.
+  scrolled: upTo("98c81a36"),
   // A full thread, so the fork of where the block stands is read where it matters.
-  cant: [
-    M.check,
-    M.ready,
-    M.full,
-    { ...M.ask, answered: "Approved · 14:02" },
-    M.ios,
-    M.waits,
-    M.draft,
-    M.drafted,
-    M.pass,
-    M.tag,
-    M.again,
-  ],
+  cant: upTo("b461b47c"),
   fresh: [],
 };
-THREADS.docked = THREADS.needs;
 
 /* ── The preview's state ─────────────────────────────────────────── */
 
 const S = {
   state: "rest",
   cause: "machine",
-  arcs: "A",
   block: "A",
   answered: new Set(),
-  delegates: 0,
+  /** Rows from elsewhere still waiting (Caw's arcs count them). */
+  asks: 0,
+  /** How many of ASKS have come in so far. */
+  arrived: 0,
 };
 
 /** Caw's switch (the ⋯ menu): on, or off and answering only when written to. */
@@ -250,12 +218,10 @@ let cawOn = true;
 const idleHint = () =>
   cawOn ? "Message Caw" : "Caw is off · answers when you write";
 
-/** What needs you in this page's scope, and the fleet past it (fork 1). */
+/** What needs you in this page's scope: the thread's ask while it waits, and what else asks. */
 function needsCount() {
   const waiting = ["needs", "docked"].includes(S.state);
-  const here =
-    (waiting && !S.answered.has(PERMISSION.id) ? 1 : 0) + S.delegates;
-  return S.arcs === "B" ? here + 3 : here;
+  return (waiting && !S.answered.has(PROPOSAL.id) ? 1 : 0) + S.asks;
 }
 
 /* ── Small builders ──────────────────────────────────────────────── */
@@ -275,18 +241,80 @@ const glyph = (name) =>
   `<svg class="glyph" aria-hidden="true"><use href="#i-${name}"/></svg>`;
 const head = '<img src="stills/caw-head.png" alt="">';
 
+const escapeHtml = (text) =>
+  text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/** A line of Caw's markdown: code, bold, italic. */
+function inline(text) {
+  return escapeHtml(text)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[^*])\*([^*\s][^*]*?)\*(?!\*)/g, "$1<em>$2</em>");
+}
+
+const ITEM = /^(\s*)(?:- |\d+\. )(.*)$/;
+
+/** Caw's words as he wrote them: paragraphs and lists (nested by indent), drawn as the thread's prose. */
+function markdown(source) {
+  const lines = source.split("\n");
+  let i = 0;
+  const list = (indent) => {
+    const tag = /^\s*\d+\. /.test(lines[i]) ? "ol" : "ul";
+    let out = `<${tag}>`;
+    while (i < lines.length) {
+      const line = lines[i];
+      const item = ITEM.exec(line);
+      if (item && item[1].length > indent) {
+        out = `${out.replace(/<\/li>$/, "")}${list(item[1].length)}</li>`;
+      } else if (item && item[1].length === indent) {
+        out += `<li>${inline(item[2])}</li>`;
+        i += 1;
+      } else if (line.trim() !== "" && line.startsWith(" ".repeat(indent + 2))) {
+        // A paragraph inside the item above.
+        out = `${out.replace(/<\/li>$/, "")}<p>${inline(line.trim())}</p></li>`;
+        i += 1;
+      } else if (line.trim() === "" && ITEM.exec(lines[i + 1] ?? "")?.[1].length >= indent) {
+        i += 1;
+      } else if (line.trim() === "" && (lines[i + 1] ?? "").startsWith(" ".repeat(indent + 2))) {
+        i += 1;
+      } else {
+        break;
+      }
+    }
+    return `${out}</${tag}>`;
+  };
+  let html = "";
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.trim() === "") {
+      i += 1;
+    } else if (ITEM.test(line)) {
+      html += list(ITEM.exec(line)[1].length);
+    } else {
+      html += `<p>${inline(line)}</p>`;
+      i += 1;
+    }
+  }
+  return html;
+}
+
+/** One row: a mark in the lead column, what and why; a permission's last line is its peers. */
 function rowGrid(item, { docked = false } = {}) {
   const mark = item.mark
     ? `<span class="mark" style="background:${item.mark}"></span>`
     : head;
   return `<div class="row${docked ? " docked" : ""}">
     <span class="lead">${mark}<span class="ping"></span></span>
-    <p class="what">${item.what}</p><span class="wait">${docked && item.waitDocked ? item.waitDocked : item.wait}</span>
-    <p class="why">${item.why}</p>
+    <p class="what">${item.what}</p><span class="wait">${item.wait}</span>
+    <p class="why">${item.why}</p>${
+      item.kind === "permission"
+        ? `
     <div class="pair">
       <button class="peer deny" type="button" data-answer="deny">${glyph("close")}<span>Deny</span></button>
       <button class="peer approve" type="button" data-answer="approve">${glyph("tick")}<span>Approve</span></button>
-    </div>
+    </div>`
+        : ""
+    }
   </div>`;
 }
 
@@ -295,7 +323,7 @@ function turnNode(msg) {
   li.dataset.who = msg.who;
   if (msg.who === "you") {
     li.innerHTML = `<h3 class="who"><span class="mark you">${glyph("user")}</span><span class="role">You</span><span class="clock">${msg.clock}</span></h3>
-      <div class="well"><p>${msg.text}</p></div>`;
+      <div class="well"><p>${escapeHtml(msg.text)}</p></div>`;
     if (msg.kept) {
       const note = el("p", "note");
       note.innerHTML = `<span class="morph" data-slot="kept-note">${CAUSES[S.cause].note}</span>`;
@@ -303,11 +331,7 @@ function turnNode(msg) {
     }
     return li;
   }
-  const paras = msg.paras.map((p) => `<p>${p}</p>`).join("");
-  const list = msg.list
-    ? `<ul>${msg.list.map((x) => `<li>${x}</li>`).join("")}</ul>`
-    : "";
-  li.innerHTML = `<h3 class="who"><span class="mark">${head}</span><span class="role">Caw</span></h3><div class="prose">${paras}${list}</div>`;
+  li.innerHTML = `<h3 class="who"><span class="mark">${head}</span><span class="role">Caw</span><span class="clock">${msg.clock}</span></h3><div class="prose">${markdown(msg.md)}</div>`;
   if (msg.card) {
     const card = el("article", "card");
     card.dataset.card = msg.card.id;
@@ -317,7 +341,7 @@ function turnNode(msg) {
     } else {
       card.dataset.open = "";
       card.innerHTML = rowGrid(msg.card);
-      card.setAttribute("aria-label", "Caw asks to run bun run check");
+      card.setAttribute("aria-label", "Caw asks you to approve knowledge/brand.md");
     }
     li.append(card);
   }
@@ -427,7 +451,7 @@ function arcOut(path) {
   settle(out).then(() => path.remove());
 }
 
-/** Caw's arcs: one per item that needs you in the bar's count (fork 1), on both of his glasses; his label says the number. */
+/** Caw's arcs: one per item that needs you in this page's scope, on both of his glasses; his label says the number. */
 function drawArcs() {
   const count = needsCount();
   const n = Math.min(count, 9);
@@ -682,9 +706,14 @@ class Panel {
       this.commitTimer = setTimeout(() => this.commit(), WHEEL_QUIET - quiet);
       return;
     }
+    // The offset goes on a whole pixel and the content carries the rest:
+    // WebKit drops a scrollTop's fraction yet reads back the one it was
+    // given, so the remainder is ours to keep, not the engine's to report.
     const want = s.scrollTop + this.carry;
-    s.scrollTop = want;
-    this.carry = want - s.scrollTop;
+    const whole = Math.round(want);
+    s.scrollTop = whole;
+    // Clamped at the thread's foot, it stands where the engine put it.
+    this.carry = want - (s.scrollTop < whole - 0.5 ? s.scrollTop : whole);
     s.style.setProperty("--scroll-rem", `${-this.carry}px`);
     this.ownTop = s.scrollTop;
   }
@@ -740,10 +769,8 @@ class Panel {
 
   fillStack() {
     const shown =
-      this.rows.querySelectorAll("li:not([data-leaving])").length > 0 ||
-      S.arcs === "B";
+      this.rows.querySelectorAll("li:not([data-leaving])").length > 0;
     this.stack.toggleAttribute("data-filled", shown);
-    this.slot("signpost").hidden = S.arcs !== "B";
     const asks = this.rows.querySelectorAll("li:not([data-leaving])").length;
     this.slot("stack-head").textContent = `Needs you, ${asks}`;
     this.paintMoreLine();
@@ -802,7 +829,7 @@ class Panel {
       ...THREADS[S.state].map((m) => {
         const answered =
           m.card && S.answered.has(m.card.id)
-            ? (m.answered ?? "Approved · 14:02")
+            ? (m.answered ?? `Approved · ${clockNow()}`)
             : m.answered;
         return turnNode({ ...m, answered });
       })
@@ -846,7 +873,7 @@ class Panel {
     const away = S.state === "cant" || S.state === "fresh";
     this.peek.hidden = away;
     const waiting =
-      ["needs", "docked"].includes(S.state) && !S.answered.has(PERMISSION.id);
+      ["needs", "docked"].includes(S.state) && !S.answered.has(PROPOSAL.id);
     const file = waiting ? "needs-you" : "idle";
     this.setPeek(file);
   }
@@ -993,7 +1020,7 @@ class Panel {
   /** Card docks: its row unfolds at the stack's foot; the conversation under it stays put. */
   dockCard(card) {
     const id = card.dataset.card;
-    const li = el("li", "", rowGrid(PERMISSION, { docked: true }));
+    const li = el("li", "", rowGrid(PROPOSAL, { docked: true }));
     li.dataset.row = id;
     li.dataset.card = id;
     li.querySelector(".what").setAttribute("role", "link");
@@ -1149,7 +1176,7 @@ class Panel {
     }
     S.answered.add(id);
     if (!host.dataset.card) {
-      S.delegates = Math.max(0, S.delegates - 1);
+      S.asks = Math.max(0, S.asks - 1);
     }
     for (const panel of panels) {
       panel.applyAnswer(id, verdict);
@@ -1158,7 +1185,7 @@ class Panel {
   }
 
   applyAnswer(id, verdict) {
-    const words = verdict === "approve" ? "Approved · 14:05" : "Denied · 14:05";
+    const words = `${verdict === "approve" ? "Approved" : "Denied"} · ${clockNow()}`;
     const card = this.thread.querySelector(`.card[data-card="${id}"]`);
     if (card) {
       this.morphCard(card, words, verdict !== "approve");
@@ -1229,8 +1256,8 @@ class Panel {
   }
 
   /** Stack gains a row from elsewhere: it unfolds at its place in wait order; rows below slide down. */
-  delegateAsks() {
-    const item = DELEGATES[(S.delegates - 1) % DELEGATES.length];
+  askArrives() {
+    const item = ASKS[S.arrived - 1];
     const li = el("li", "", rowGrid({ ...item, id: undefined }));
     li.dataset.row = item.id;
     const before = new Map(
@@ -1293,12 +1320,12 @@ class Panel {
   }
 
   /** Caw names the thread: the title's slot unfolds at the content's start, the words fade in, the tail held. */
-  nameThread() {
+  nameThread(title = TITLE) {
     const slot = this.slot("title-slot");
     const t = this.slot("large-title");
     slot.hidden = false;
-    t.textContent = TITLE;
-    this.slot("small-title").firstElementChild.textContent = TITLE;
+    t.textContent = title;
+    this.slot("small-title").firstElementChild.textContent = title;
     const h = slot.offsetHeight;
     this.hold("tail");
     if (motionOk()) {
@@ -1471,7 +1498,7 @@ class Panel {
     }
     morphText(this.slot("hint"), idleHint());
     for (const note of this.root.querySelectorAll('[data-slot="kept-note"]')) {
-      morphText(note, "Read · 14:12");
+      morphText(note, `Read · ${clockNow()}`);
     }
   }
 
@@ -1546,7 +1573,7 @@ class Panel {
     const freshCaw = this.slot("fresh-caw");
     const cawFrom = freshCaw.getBoundingClientRect();
     const cawHtml = freshCaw.innerHTML;
-    const sent = turnNode(you(words, "14:20"));
+    const sent = turnNode(you(words, clockNow()));
     this.thread.replaceChildren(sent);
     this.thread.hidden = false;
     this.slot("fresh").hidden = true;
@@ -1557,7 +1584,7 @@ class Panel {
     const well = sent.querySelector(".well");
     this.flyRect(button, from, well, "starter-to-message");
     this.flyFromRect(cawHtml, cawFrom, this.peek, "caw-to-line");
-    setTimeout(() => this.cawAnswers(words), D.panel + 600);
+    setTimeout(() => this.nameNewThread(words), D.panel + 600);
   }
 
   /** A FLIP from a rect the source stood at (it is gone from the layout now) onto `to`. */
@@ -1619,23 +1646,12 @@ class Panel {
     );
   }
 
-  cawAnswers(words) {
+  /** The hub names the new thread by its first message (core title.ts); Caw goes on working on it. */
+  nameNewThread(words) {
     if (S.state !== "fresh") {
       return;
     }
-    const reply = turnNode(
-      caw([
-        words === "What needs me?"
-          ? "Nothing in Cawco-Dev waits on you. The nightly check is ready to tag."
-          : "On it. I’ll write them as tasks of kind you, one per step of the plan.",
-      ])
-    );
-    this.thread.append(reply);
-    this.arrive(reply, D.pop);
-    this.working = false;
-    this.setPeek("idle");
-    this.paintHint();
-    this.nameThread();
+    this.nameThread(words.replace(/\s+/g, " ").trim().slice(0, 80));
   }
 
   send() {
@@ -1645,7 +1661,7 @@ class Panel {
     }
     this.field.value = "";
     const turn = turnNode(
-      you(words, "14:21", S.state === "cant" ? { kept: true } : {})
+      you(words, clockNow(), S.state === "cant" ? { kept: true } : {})
     );
     this.thread.hidden = false;
     this.slot("fresh").hidden = true;
@@ -1888,9 +1904,9 @@ const MOMENTS = {
   rest: [["Caw names the thread", (p) => p.nameThread()]],
   needs: [
     ["Land the card again", (p) => p.landCard()],
-    ["A delegate asks", (p) => p.delegateAsks(), true],
+    ["An ask comes in", (p) => p.askArrives(), true],
   ],
-  docked: [["A delegate asks", (p) => p.delegateAsks(), true]],
+  docked: [["An ask comes in", (p) => p.askArrives(), true]],
   cant: [["Caw can start again", (p) => p.leaveCant(), false, "rest"]],
   scrolled: [],
   fresh: [],
@@ -1905,9 +1921,16 @@ function paintMoments() {
     const b = el("button", "moment");
     b.type = "button";
     b.textContent = label;
+    // Every ask that waits in Cawco's scope has come in: nothing more to bring.
+    b.disabled = Boolean(counts) && S.arrived >= ASKS.length;
     b.addEventListener("click", () => {
       if (counts) {
-        S.delegates += 1;
+        if (S.arrived >= ASKS.length) {
+          return;
+        }
+        S.arrived += 1;
+        S.asks += 1;
+        b.disabled = S.arrived >= ASKS.length;
       }
       for (const p of panels) {
         p.reopen();
@@ -1941,7 +1964,8 @@ function setState(next) {
     return;
   }
   S.state = next;
-  S.delegates = 0;
+  S.asks = 0;
+  S.arrived = 0;
   S.answered.clear();
   for (const p of panels) {
     p.working = false;
@@ -1989,14 +2013,6 @@ const SWITCHES = {
       p.paintBlock(true);
       p.paintHint();
     }
-  },
-  arcs: (value) => {
-    S.arcs = value;
-    for (const p of panels) {
-      p.resizeStack(() => undefined, { grow: value === "B", id: "signpost" });
-      p.onScroll();
-    }
-    drawArcs();
   },
   block: (value) => {
     S.block = value;

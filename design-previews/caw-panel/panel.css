@@ -303,17 +303,6 @@ button {
   color: var(--ink-muted);
 }
 
-.page-body .project {
-  margin: 0;
-  font: var(--type-title);
-  color: var(--ink-strong);
-}
-
-.page-body .where {
-  margin: var(--space-1) 0 var(--space-6);
-  font: var(--type-meta);
-}
-
 .page-body .lanes {
   display: flex;
   gap: var(--space-5);
@@ -548,21 +537,6 @@ button {
   inset: 2px auto auto var(--space-1);
   width: 28px;
   height: 28px;
-}
-
-.phone-page {
-  padding: var(--space-3) var(--space-4);
-}
-
-.phone-page .project {
-  margin: 0;
-  font: var(--type-title);
-}
-
-.phone-page .where {
-  margin: var(--space-1) 0 0;
-  font: var(--type-meta);
-  color: var(--ink-muted);
 }
 
 .sheet {
@@ -832,7 +806,7 @@ button {
   background: var(--border-hairline);
 }
 
-/* Stack: what waits, pinned under the top zone; its foot the one vermillion hairline. Empty, nothing. */
+/* Stack: what waits, pinned under the top zone; its foot the grey hairline (the panel's one coral is Send). Empty, nothing. */
 .stack {
   position: relative;
   z-index: 2;
@@ -854,7 +828,7 @@ button {
 .stack[data-filled] .stack-foot {
   display: block;
   height: 1px;
-  background: var(--brand-solid);
+  background: var(--border-hairline);
 }
 
 /* Expanded past three, the rows scroll inside their own cap (panel.js), so the thread and the composer always keep their room. */
@@ -872,8 +846,7 @@ button {
   overflow: clip;
 }
 
-.more-line,
-.signpost {
+.more-line {
   display: flex;
   align-items: center;
   width: 100%;
@@ -888,29 +861,13 @@ button {
   text-align: start;
 }
 
-.more-line[hidden],
-.signpost[hidden] {
+.more-line[hidden] {
   display: none;
 }
 
 .more-line {
   cursor: pointer;
   font-weight: 500;
-}
-
-/* A link in ink: the surface's one coral stays Send's. */
-.signpost a {
-  color: var(--ink-muted);
-  text-decoration: underline;
-  text-decoration-color: var(--border-control-strong);
-  text-underline-offset: 2px;
-  transition: color var(--dur-control) var(--ease-out);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .signpost a:hover {
-    color: var(--ink-strong);
-  }
 }
 
 /* The row (stack) and the card (thread): one grid, mark in the 28px lead column, the last control at the trailing edge. */
@@ -965,18 +922,13 @@ button {
   white-space: nowrap;
 }
 
+/* The pair is the row's last line: Deny on the text column's start, Approve on the trailing edge, the row's width between them (never less than space-8). */
 .row .pair {
   grid-column: 2 / -1;
-  justify-self: end;
   display: flex;
-  gap: var(--space-2);
+  justify-content: space-between;
+  gap: var(--space-8);
   margin-top: var(--space-1);
-}
-
-@media (pointer: coarse) {
-  .row .pair {
-    gap: var(--space-4);
-  }
 }
 
 .row code,
@@ -1003,15 +955,17 @@ button {
   }
 }
 
-/* The Peer Rule, panel form: Deny then Approve, a filled tinted pair at one strength. */
+/* The Peer Rule: Deny and Approve, apart and untinted. One recessed fill, one outline edge, ink-strong glyph and label; neither changes under the pointer. */
 .peer {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
   height: var(--c-btn-h-sm);
   padding: 0 var(--space-3);
-  border: 0;
+  border: 1px solid var(--border-button-outline);
   border-radius: var(--radius-sm);
+  background: var(--surface-recess);
+  color: var(--ink-strong);
   font: var(--type-label);
   cursor: pointer;
   transition: scale var(--dur-control) var(--ease-out);
@@ -1024,16 +978,6 @@ button {
 .peer .glyph {
   width: var(--icon-md);
   height: var(--icon-md);
-}
-
-.peer.deny {
-  background: var(--status-fail-bg);
-  color: var(--status-fail-ink);
-}
-
-.peer.approve {
-  background: var(--status-done-bg);
-  color: var(--status-done-ink);
 }
 
 @media (pointer: coarse) {
@@ -1134,18 +1078,26 @@ button {
   border-radius: var(--radius-xs);
 }
 
+/* A turn's head is a row: its mark centred in the 28px lead column, its words on the text column space-2 after it (.who's gap). */
+.who .mark {
+  width: var(--c-row-lead);
+  height: var(--c-row-mark);
+  border-radius: 0;
+}
+
+.who .mark img {
+  width: var(--c-row-mark);
+  height: var(--c-row-mark);
+}
+
+/* The reader's own mark: the bare user glyph in ink (the panel's one coral is its act, Send). */
 .mark.you {
-  width: var(--row-mark);
-  height: var(--row-mark);
-  margin-inline: calc((var(--row-mark-box) - var(--row-mark)) / 2);
-  border-radius: var(--row-mark-r);
-  background: var(--action-surface);
-  color: var(--on-action);
+  color: var(--ink-muted);
 }
 
 .you .glyph {
-  width: var(--row-mark-glyph);
-  height: var(--row-mark-glyph);
+  width: var(--icon-md);
+  height: var(--icon-md);
 }
 
 .mark img {
@@ -1177,15 +1129,27 @@ button {
   text-wrap: pretty;
 }
 
-.prose p + p,
-.prose ul {
+.prose > * + *,
+.prose li + li,
+.prose li > :is(ul, ol, p) {
   margin-top: var(--space-2);
 }
 
-.prose ul {
+.prose :is(ul, ol) {
   margin-bottom: 0;
   padding-inline-start: var(--space-5);
   font: var(--type-prose);
+  color: var(--ink-strong);
+}
+
+.prose strong {
+  font-weight: 600;
+}
+
+/* A path or a URL Caw names breaks rather than pushing the panel wide. */
+.prose,
+.well p {
+  overflow-wrap: anywhere;
 }
 
 .note {
