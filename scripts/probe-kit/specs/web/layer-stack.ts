@@ -44,46 +44,14 @@
  * returns, from the top, named by the nearest `data-slot` (or its tag), with
  * the computed `z-index` of the stacked box it belongs to.
  */
-import { readFileSync } from "node:fs";
 import type { Page } from "playwright-core";
 import type { InstancesFrame } from "../../../../packages/core/src/frames";
 import type { Envelope } from "../../../../packages/core/src/index";
 import { WIRE_PROTOCOL } from "../../../../packages/core/src/stream";
 import { pressCopy } from "../../clipboard";
 import { fitsLine, inlineFit } from "../../geom";
+import { HouseRules } from "../../house-rules";
 import { type Engine, type Kit, open, type Spec, settle } from "../../kit";
-
-/**
- * With `PROBE_UI_OBSERVER=<observer.browser.js>` (the ui-observer skill's
- * scanner), each open surface's rendered layout is measured in place and its
- * observations noted by kind: what the layer change could have moved.
- */
-async function observe(kit: Kit, page: Page, what: string, scope: string) {
-  const file = process.env.PROBE_UI_OBSERVER;
-  if (!file) {
-    return;
-  }
-  const source = readFileSync(file, "utf8");
-  const read = await page.evaluate(
-    ([src, sel]) => {
-      // The scanner's own entry point, as its README runs it.
-      const run = new Function(
-        `${src}; return globalThis.__uiObserver({ scopeSel: ${JSON.stringify(sel)}, maxDepth: 10 });`
-      ) as () => { observations?: { kind?: string; type?: string }[] };
-      const found = run().observations ?? [];
-      const kinds: Record<string, number> = {};
-      for (const o of found) {
-        const k = o.kind ?? o.type ?? "other";
-        kinds[k] = (kinds[k] ?? 0) + 1;
-      }
-      return { total: found.length, kinds };
-    },
-    [source, scope] as const
-  );
-  kit.note(
-    `ui-observer, ${what} (${scope}): ${read.total} observations ${JSON.stringify(read.kinds)}`
-  );
-}
 
 interface Hit {
   name: string;
@@ -185,12 +153,11 @@ async function headTint(kit: Kit, base: string): Promise<void> {
     `head-tint: the details card (--layer-float ${float}) stands over the bench (${bench}) and the bar under it`,
     overCard[0]?.z === float && benchAt > 0
   );
-  await observe(
-    kit,
-    page,
-    "the details card open",
-    "[data-session-details-popover]"
-  );
+  const house = new HouseRules(kit, "head-tint details card", {
+    scope: "[data-session-details-popover]",
+  });
+  await house.at(page, "the details card open");
+  house.report();
   await page.close();
 }
 
@@ -927,7 +894,11 @@ async function railSheet(kit: Kit, base: string): Promise<void> {
     "rail-sheet: beside the sheet, its scrim stands over the top bar",
     scrim === 0 && barBeside > scrim
   );
-  await observe(kit, page, "the rail sheet open at 680", "[data-rail-sheet]");
+  const house = new HouseRules(kit, "rail-sheet at 680", {
+    scope: "[data-rail-sheet]",
+  });
+  await house.at(page, "the rail sheet open");
+  house.report();
   await page.close();
 }
 

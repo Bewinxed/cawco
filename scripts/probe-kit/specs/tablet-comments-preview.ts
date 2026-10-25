@@ -34,6 +34,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, normalize } from "node:path";
 import type { Page } from "playwright-core";
+import { HouseRules } from "../house-rules";
 import { scan } from "../journeys/scan";
 import type { Engine, Kit, Spec } from "../kit";
 import { ROOT, readMotion } from "../kit";
@@ -856,6 +857,9 @@ const spec: Spec = {
       ) as Engine[];
       for (const engine of engines) {
         const errors: string[] = [];
+        const house = new HouseRules(kit, engine, {
+          scope: '[data-slot="frame"]',
+        });
         let spills = 0;
         for (const width of WIDTHS) {
           // biome-ignore lint/performance/noAwaitInLoops: one engine's pages one at a time
@@ -887,6 +891,7 @@ const spec: Spec = {
                 continue;
               }
               renderChecks(kit, at, option, width, shows, read, expect);
+              await house.at(page, at);
               const swept = await page.evaluate(scan);
               const wide = await page.evaluate(readWide);
               spills += swept.length + wide.length;
@@ -940,6 +945,9 @@ const spec: Spec = {
             await hangLeg(kit, page, base, engine, option, width);
           }
           await swapLeg(kit, page, base, engine, width);
+          if (width === WIDTHS.at(-1)) {
+            house.report();
+          }
           if (width === 820) {
             for (const option of OPTIONS) {
               for (const pin of exported.pins) {

@@ -8,11 +8,10 @@
  * over the reasoning in the one live row; a fast phase change keeps the
  * latest reasoning; a turn waiting on a permission draws no working
  * indicator; a reader scrolled up stays where they are; and nothing in the
- * thinking clips or overflows (ui-observer). Each is the transcript's own
+ * thinking breaks a house rule (house-rules.ts). Each is the transcript's own
  * rule as Row.svelte, LiveRow.svelte and rows.ts `liveContent` write it.
  */
-import { readFile } from "node:fs/promises";
-import { userLayerPath } from "../../../../packages/core/src/paths";
+import { HouseRules } from "../../house-rules";
 import { type Kit, open, type Spec, settle, type View } from "../../kit";
 // `window.__traffic` and the frames this spec keeps on `window`, read inside
 // each callback: one runs alone in the page.
@@ -20,7 +19,7 @@ import "../../traffic-bench";
 
 const VIEWS_RUN: View[] = ["desk", "phone"];
 
-async function lifecycle(kit: Kit, view: View, observer: string) {
+async function lifecycle(kit: Kit, view: View) {
   const check = (what: string, ok: boolean, detail = "") =>
     kit.check(`${view}: ${what}`, ok, detail);
   const page = await kit.page(view);
@@ -181,23 +180,13 @@ async function lifecycle(kit: Kit, view: View, observer: string) {
     `${shut} → ${opened}`
   );
 
-  await page.addScriptTag({ content: observer });
-  const observed = await page.evaluate(() =>
-    window.__uiObserver({ scopeSel: "[data-think]", maxDepth: 5 })
-  );
-  const clipped = observed.observations.filter(
-    (item) =>
-      ["horizontal-overflow", "text-clipped"].includes(item.type) &&
-      !item.selector?.includes("sr-only")
-  );
-  const overflow = await page
-    .locator("[data-think]")
-    .evaluate((el) => el.scrollWidth - el.clientWidth);
-  check(
-    "nothing visible in the thinking is clipped, and it has no sideways overflow",
-    clipped.length === 0 && overflow <= 1,
-    `clipped ${JSON.stringify(clipped)}; overflow ${overflow}px`
-  );
+  const house = new HouseRules(kit, view, {
+    scope: "[data-think]",
+    noImpeccable:
+      "its read lets go of the transcript's pin to its foot (scrolled back, the legs below found the answer 39px and 68px off it), and they read that pin",
+  });
+  await house.at(page, "the thinking, its steps open");
+  house.report();
 
   await page.evaluate(() => {
     const b = window;
@@ -430,13 +419,9 @@ async function stepInk(kit: Kit) {
 const spec: Spec = {
   name: "thinking-traffic",
   run: async (kit) => {
-    const observer = await readFile(
-      userLayerPath("skills", "ui-observer", "observer.browser.js"),
-      "utf8"
-    );
     for (const view of VIEWS_RUN) {
       // biome-ignore lint/performance/noAwaitInLoops: each view's scenario runs alone, timed
-      await lifecycle(kit, view, observer);
+      await lifecycle(kit, view);
     }
     await stepInk(kit);
   },

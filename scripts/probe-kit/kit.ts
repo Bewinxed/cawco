@@ -439,6 +439,15 @@ export interface Kit {
   spec: string;
 }
 
+/** Each kit Chromium's DevTools port on loopback, by its browser. */
+const DEVTOOLS_PORTS = new WeakMap<Browser, number>();
+
+/** The DevTools port of the kit Chromium `page` runs in; none for another engine or a browser the kit did not launch. */
+export const devtoolsPort = (page: Page): number | undefined => {
+  const browser = page.context().browser();
+  return browser ? DEVTOOLS_PORTS.get(browser) : undefined;
+};
+
 const freePort = async (): Promise<number> => {
   const lease = Bun.serve({
     hostname: "127.0.0.1",
@@ -993,34 +1002,38 @@ export class Run {
             return browser;
           }),
       firefox: () => firefox.launch({ env }),
-      chromium: () =>
-        chromium
-          .launch({
-            headless: true,
-            args: [
-              "--no-sandbox",
-              "--disable-gpu",
-              ...(oneProcess
-                ? [
-                    "--disable-site-isolation-trials",
-                    "--disable-features=IsolateOrigins,site-per-process,OriginIsolationHeader",
-                  ]
-                : []),
-              ...(hostRules
-                ? [
-                    `--host-resolver-rules=${hostRules}`,
-                    "--proxy-server=direct://",
-                  ]
-                : []),
-              DESK_POINTER,
-            ],
-            ...(scrollbars ? { ignoreDefaultArgs: ["--hide-scrollbars"] } : {}),
-            env,
-          })
-          .then(async (browser) => {
-            await this.hearRendererEnds(browser);
-            return browser;
-          }),
+      chromium: async () => {
+        const port = await freePort();
+        const browser = await chromium.launch({
+          headless: true,
+          args: [
+            "--no-sandbox",
+            "--disable-gpu",
+            // A DevTools port on loopback beside Playwright's pipe, for a
+            // tool that attaches to a page as it stands (house-rules.ts runs
+            // `impeccable detect --cdp` on it).
+            `--remote-debugging-port=${port}`,
+            ...(oneProcess
+              ? [
+                  "--disable-site-isolation-trials",
+                  "--disable-features=IsolateOrigins,site-per-process,OriginIsolationHeader",
+                ]
+              : []),
+            ...(hostRules
+              ? [
+                  `--host-resolver-rules=${hostRules}`,
+                  "--proxy-server=direct://",
+                ]
+              : []),
+            DESK_POINTER,
+          ],
+          ...(scrollbars ? { ignoreDefaultArgs: ["--hide-scrollbars"] } : {}),
+          env,
+        });
+        DEVTOOLS_PORTS.set(browser, port);
+        await this.hearRendererEnds(browser);
+        return browser;
+      },
     } satisfies Record<Engine, () => Promise<Browser>>;
     const launched = launch[engine]();
     this.browsers.set(key, launched);

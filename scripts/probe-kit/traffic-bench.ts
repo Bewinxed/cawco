@@ -40,8 +40,5 @@ declare global {
     __recordThinking: boolean;
     __thinkingFrames: ThinkingFrame[];
     __traffic: TrafficBench;
-    __uiObserver: (options: { maxDepth: number; scopeSel: string }) => {
-      observations: { selector?: string; type: string }[];
-    };
   }
 }

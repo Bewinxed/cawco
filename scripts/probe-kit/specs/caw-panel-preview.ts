@@ -30,6 +30,7 @@
  */
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { HouseRules } from "../house-rules";
 import {
   type Kit,
   type MotionRead,
@@ -400,13 +401,42 @@ async function boxesEverywhere(
 ) {
   const all = cases(devices);
   const problems: string[] = [];
+  const house = new HouseRules(kit, view, {
+    scope: "main.stage",
+    views: "[data-device]",
+    except: [
+      {
+        rule: "overflow",
+        text: "p.small-title",
+        reason:
+          "the scroll-linked small title stands over the thread scrolled under it, through its edge effect (DESIGN.md:665), as the plan's §5 draws it",
+      },
+      {
+        rule: "overflow",
+        text: "div.lanes",
+        reason:
+          "the board under Caw's panel, which hangs over the page by design (DESIGN.md:800)",
+      },
+      {
+        rule: "glyph",
+        selector: ".caw-tab",
+        reason:
+          "the narrow bar's Caw on his own glass, the 32px tab DESIGN.md:800 draws",
+      },
+    ],
+  });
   let was: Case | null = null;
   for (const at of all) {
     // biome-ignore lint/performance/noAwaitInLoops: one case at a time, each read on the page as the last left it
     await arrive(page, view, at, was);
     problems.push(...(await findings(page, view, at)));
+    await house.at(
+      page,
+      `${at.device} ${at.state}${at.cause ? `/${at.cause}` : ""}${at.block ? ` block ${at.block}` : ""}`
+    );
     was = at;
   }
+  house.report();
   await pick(page, "block", "A");
   kit.check(
     `${view}: in all ${all.length} cases nothing spills or overlaps, the page never scrolls sideways, one Caw stands on the panel's axis within 1px, Send is the one thing in coral, and the can't-start block's words stand at its start`,

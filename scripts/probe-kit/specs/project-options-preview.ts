@@ -54,6 +54,7 @@ import {
   OPTION_VIEWS,
   TODAY_WIDTHS,
 } from "../../../design-previews/project-options/views";
+import { HouseRules } from "../house-rules";
 import { scan } from "../journeys/scan";
 import type { Engine, Kit, Spec, View } from "../kit";
 import { ROOT } from "../kit";
@@ -692,6 +693,22 @@ const spec: Spec = {
           page.on("pageerror", (error) => errors.push(String(error)));
         };
         const totals: Record<string, number> = { 1440: 0, 1037: 0, 390: 0 };
+        const house = new HouseRules(kit, engine, {
+          except: [
+            {
+              rule: "made-up",
+              text: "probe-kit",
+              reason:
+                "his own tasks' area, as the hub's records name it (the records every row is held to above)",
+            },
+            {
+              rule: "overflow",
+              text: "(div.absolute.inset-s-0.top-full",
+              reason:
+                "the frame draws a popover open over the tabs it hangs from: covering them is what it is",
+            },
+          ],
+        });
         const missing: string[] = [];
         const wrong: string[] = [];
         const offAxis: string[] = [];
@@ -758,6 +775,7 @@ const spec: Spec = {
                 ...off.map((one) => `${frame.at}: scrolled 30px ${one}`)
               );
             }
+            await house.at(page, frame.at);
             const spills = await page.evaluate(scan);
             const cut = await page.evaluate(clipped);
             totals[width] = (totals[width] ?? 0) + spills.length + cut.length;
@@ -769,6 +787,7 @@ const spec: Spec = {
           }
           await page.close();
         }
+        house.report();
         const index = await kit.page("desk", { engine, scale: 1 });
         watch(index);
         await index.goto(base);

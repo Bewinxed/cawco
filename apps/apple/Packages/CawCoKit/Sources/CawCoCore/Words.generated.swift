@@ -2940,7 +2940,7 @@ public enum Words {
 
         public static let skills = "Skills"
 
-        public static let skillsPlaceholder = "svelte-foundations:coding, ui-observer"
+        public static let skillsPlaceholder = "svelte-foundations:coding, impeccable"
 
         public static let denied = "Tools denied"
 
