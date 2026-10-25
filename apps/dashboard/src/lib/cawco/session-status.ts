@@ -6,7 +6,7 @@
  */
 
 import type { ThreadStatus } from "@cawco/core";
-import { commonWords } from "@cawco/core";
+import { accountsWords, commonWords } from "@cawco/core";
 import { STOPPED_LABEL, STOPPING_LABEL } from "./activity";
 import { type BoardRow, cawco, isFailed, isStale } from "./client.svelte";
 import type { MarkStatus } from "./TreeMark.svelte";
@@ -17,7 +17,7 @@ const STATUS_WORD: Record<MarkStatus, string> = {
   attn: commonWords.needsYou,
   done: "Finished",
   fail: "Failed",
-  held: "At its limit",
+  held: accountsWords.held.status,
   idle: "Idle",
 };
 

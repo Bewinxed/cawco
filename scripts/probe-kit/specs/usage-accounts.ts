@@ -55,6 +55,7 @@ import {
   type UsageLimitsResponse,
 } from "../../../packages/core/src";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
+import { accountsWords } from "../../../packages/core/src/words/accounts";
 import {
   ACCOUNT,
   MACHINE,
@@ -599,12 +600,12 @@ const run = async (kit: Kit) => {
   const benched = await until(
     "the other email's tile at its limit",
     () => tileOf(page, OTHER),
-    (tile) => tile?.say.startsWith("At its limit") === true,
+    (tile) => tile?.say.startsWith(accountsWords.held.status) === true,
     30_000
   ).catch(() => tileOf(page, OTHER));
   kit.check(
     "an account at its limit with an old reading says when it last reported",
-    benched?.say.startsWith("At its limit") === true &&
+    benched?.say.startsWith(accountsWords.held.status) === true &&
       benched.say.includes("Last reported 2h"),
     JSON.stringify(benched)
   );

@@ -48,6 +48,7 @@
     type AccountMove,
     accountMoveWords,
     accountRunWords,
+    accountsWords,
     fitsOf,
     heldReasonWords,
     renamedMove,
@@ -251,7 +252,7 @@
           class={WAY_OUT}
           disabled={asking(waiting)}
           onclick={() => moveTo(waiting, one.account.id)}
-          type="button">Move to {one.account.name}</button
+          type="button">{accountsWords.held.moveTo(one.account.name)}</button
         >{:else if waiting && fits.length > 1}
         {@const session = waiting}
         <span aria-hidden="true">{" · "}</span><DropdownMenu.Root>
@@ -262,7 +263,7 @@
                 data-slot="move-to"
                 class={WAY_OUT}
                 disabled={asking(session)}
-                type="button">Move to another account</button
+                type="button">{accountsWords.held.moveToAnother}</button
               >
             {/snippet}
           </DropdownMenu.Trigger>

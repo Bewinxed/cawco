@@ -13,7 +13,8 @@
  *   account's bench `until` too.
  * - `fits`: as `resets`, with the one account that was not benched,
  *   bewinxed@petralab.ai (bewinxed@petralab.ai's Organization), able to
- *   take it with what its line recorded it had left (29%).
+ *   take it with what its line recorded it had left (29%), and so waiting
+ *   because its own reset is near (`soon`).
  * - `after`: `moves`, with the clock past its 08:30.
  *
  * Nothing is made up: every name, hue, title, time and percent is the
@@ -53,8 +54,11 @@ function moveFor(pass) {
   if (pass === "resets") {
     return resets;
   }
+  // An account could take it, so it waits because its own reset is near
+  // (`soon`), never "no other account can take it" beside one that can.
   return {
     ...resets,
+    why: "soon",
     accounts: real.accounts.map((one) =>
       one.account.id === ORG
         ? {
@@ -79,6 +83,7 @@ function stalledFor(move) {
   const accounts = records.accounts.accounts;
   const own = accounts.find((one) => one.id === GMAIL);
   const held = {
+    kind: "waiting",
     account: { id: GMAIL, name: core.accountNameAmong(own, accounts) },
     ...(move.frees ? { frees: move.frees } : {}),
     fits: core.fitsOf(move.accounts).map((one) => one.account),

@@ -18,9 +18,10 @@
  * - full: B is spent until 2 minutes on, A refuses until 4 minutes on, and
  *   the session's cache is cold (the mock writes none): the wait for A
  *   outlives its cache, so it waits for B, the account back soonest. Its
- *   row and transcript line name B and when, and the line says why each
- *   other account didn't take it (C's 1% too little for its move, B at its
- *   limit until its reset); at B's reset it runs on B.
+ *   row and transcript line say it is at A's limit and moves to B, counting
+ *   down to B's reset; its second line says no other account can take it
+ *   now, and its accounts say why each didn't (C's 1% too little for its
+ *   move, B at its limit, back at its reset); at B's reset it runs on B.
  * - held (case B): B is spent, so A's refusal holds the session, a command
  *   of its running in the background. B frees, and a person's message to the
  *   held session moves it to B at once, the command ended by the move: it
@@ -36,27 +37,35 @@
  * - later (the design's leg 11, a driven session): an orchestrator's child,
  *   its last turn sent by its parent, refused at A's limit with a command
  *   running in the background. No person waits on it, so its move to B waits
- *   for that command: it is held, its chip and line say it moves to B when
- *   that work ends (or carries on at A's reset, which comes before the cap
- *   from when it was first held), and nothing runs on B. The hub stops, its hold's start is set back past the cap (as if
+ *   for that command: it is held, its row says it moves to B when its work
+ *   in flight ends, counting down to A's reset (which comes before the cap
+ *   from when it was first held: "· resets in …") or to the cap ("in … at
+ *   the latest"), and nothing runs on B. The hub stops, its hold's start is set back past the cap (as if
  *   the hub had been down that long), and the hub starts again: the cap
  *   counts from that stored start, so the first look moves it to B, ending
  *   the command, and it is told so there.
  * - pick: moving at the limit is switched off, and the session holds a
- *   background command when A refuses it. Its row, its head (tab and card)
- *   and its transcript line show the stop as an error, in the failure ink,
- *   with the way out (pick another account). Picked from its card's
+ *   background command when A refuses it. It waits, never a failure: its
+ *   rail row is read out "At its limit", its tab and its card's head wear the
+ *   at-limit status, its card's account line and its transcript line say
+ *   "At Probe's limit · resets in …" as a status (`role="status"`, none an
+ *   alert), and nothing is drawn in the failure ink. Picked from its card's
  *   account chip, B takes it at once: the chip never goes back to A, no
  *   line waits for a turn, the command is ended by the move and the session
- *   is told so on B, where it carries on; the error goes.
+ *   is told so on B, where it carries on; the wait goes.
  *
  *   bun scripts/probe-kit/run.ts limit-pick
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import { accountMoveWords } from "../../../packages/core/src/accounts";
+import {
+  accountMoveWords,
+  heldReasonWords,
+  type Stall,
+} from "../../../packages/core/src/accounts";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
+import { accountsWords } from "../../../packages/core/src/words/accounts";
 import { COMPACT_FOCUS } from "../../../packages/hub/src/open-items";
 import {
   ACCOUNT,
@@ -76,6 +85,10 @@ const TOKEN: Record<string, string> = {
   [C]: "sk-ant-oat01-fake-scratch-fleet-pick-c",
 };
 const NAME = { [A]: "Probe", [B]: "Probe B", [C]: "Probe C" } as const;
+/** The words a session at its limit is said in (core words/accounts.ts). */
+const HELD = accountsWords.held;
+/** How a carrying move's cap ends its line: " at the latest". */
+const LATEST = HELD.atTheLatest("").slice(HELD.atTheLatest("").indexOf(" at"));
 const HOUR = 3_600_000;
 const MINUTE = 60_000;
 /** B's 5-hour window as read, and the dollars a percent of it costs. */
@@ -398,7 +411,7 @@ const boardRow = async (fleet: KitFleet, id: string) =>
         accountId?: string | null;
         id: string;
         owedMove?: { accountId: string; waits: string };
-        stalled?: { until?: number; words: string };
+        stalled?: Stall;
       }[]
     >("/api/instances")
   ).find((one) => one.id === id);
@@ -477,34 +490,48 @@ const fullLeg = async (kit: Kit, fleet: KitFleet): Promise<void> => {
   limited.full = now + 4 * MINUTE;
   bWindow(fleet, 100, bFullUntil);
   await fleet.send(id, `${markOf("full")}: go on`);
+  const atA = `${HELD.at(NAME[A])} · ${HELD.movesIn(NAME[B], "")}`;
   const row = await until(
-    "full: its row says it is stopped and continues on B",
+    "full: its row says it is at A's limit and moves to B",
     () => boardRow(fleet, id),
-    (one) => !!one?.stalled?.words.includes(`continues on ${NAME[B]}`),
+    (one) => !!one?.stalled?.words.startsWith(atA),
     120_000
   ).catch(() => boardRow(fleet, id));
   const line = (await accountLines(fleet, id)).at(-1);
   const move = line?.metadata?.accountMove;
-  const detail = move ? accountMoveWords(move, Date.now()).detail : "";
+  const readAt = Date.now();
+  const detail = move ? accountMoveWords(move, readAt).detail : "";
+  const held = row?.stalled?.held;
   kit.check(
-    "full: with no account free and its cache cold, its row and transcript line name B, the account with room soonest, and when",
-    !!row?.stalled?.words.includes(
-      `continues on ${NAME[B]} at ${clockOf(bFullUntil)}`
-    ) &&
+    "full: with no account free and its cache cold, its row and transcript line say it is at A's limit and moves to B, the account with room soonest, counting down to B's reset",
+    !!row?.stalled?.words.startsWith(atA) &&
+      held?.kind === "waiting" &&
+      held.frees?.id === B &&
       Math.abs((row.stalled.until ?? 0) - bFullUntil) <= 2000 &&
-      !!line?.content.includes(`Waiting for ${NAME[B]} to reset`),
+      !!line?.content.startsWith(atA),
     `row ${JSON.stringify(row?.stalled ?? null)}; line ${JSON.stringify(line?.content ?? null)}; B resets at ${clockOf(bFullUntil)}, A at ${clockOf(limited.full)}`
   );
+  const reasons = new Map(
+    (move?.kind === "waiting" ? (move.accounts ?? []) : []).map((one) => [
+      one.account.id,
+      heldReasonWords(one, readAt),
+    ])
+  );
   kit.check(
-    "full: its line says why each other account didn't take it, never that none has room: C's 1% is too little for its move, B is at its limit until its reset, and it moves to B then",
-    detail.startsWith("No account can take it now") &&
-      detail.includes(`${NAME[C]} 1% left, its move takes`) &&
-      detail.includes(`${NAME[B]} at its limit until ${clockOf(bFullUntil)}`) &&
-      detail.includes(
-        `it moves to ${NAME[B]} at ${clockOf(bFullUntil)}, before ${NAME[A]} resets`
-      ) &&
-      !detail.includes("No other account has room"),
-    JSON.stringify(detail)
+    "full: its second line says no other account can take it now, and its accounts say why each didn't, never that none has room beside one that has: C's 1% is too little for its move, B is at its limit, back at its reset",
+    detail === HELD.why.full &&
+      !!reasons
+        .get(C)
+        ?.startsWith(
+          HELD.reason.room(HELD.reason.left(1), 0).slice(0, -"0%".length)
+        ) &&
+      !!reasons
+        .get(B)
+        ?.startsWith(`${HELD.reason.limit}${HELD.reason.back("")}`) &&
+      ![...reasons.values()].some((one) =>
+        one.startsWith(HELD.reason.fits("", false))
+      ),
+    JSON.stringify({ detail, reasons: Object.fromEntries(reasons) })
   );
   const onB = await until(
     "full: it runs on B past B's reset",
@@ -753,18 +780,23 @@ const laterLeg = async (kit: Kit, fleet: KitFleet): Promise<void> => {
       one.metadata?.accountMove?.kind === "unmoved" &&
       one.metadata.accountMove.waits === true
   );
-  // A resets before the cap from its hold's start, so the chip names that
-  // reset: it carries on there then, unless the command ends first.
-  const first =
-    limited.later < since + CAP_MS
-      ? `or continues at ${clockOf(limited.later)}`
-      : `by ${clockOf(since + CAP_MS)}`;
+  // A resets before the cap from its hold's start, so the row counts down to
+  // that reset: it carries on there then, unless the command ends first.
+  const resets = limited.later < since + CAP_MS;
+  const carrying = held?.stalled?.held;
   kit.check(
-    "later: no person waits on it, so its move to B waits for its command: held, its chip saying it moves to B when that work ends, or what comes first of A's reset and the cap from when it was first held, its line saying it can't move yet, and nothing runs on B",
-    !!held?.stalled?.words.includes(
-      `moves to ${NAME[B]} when its work in flight ends`
-    ) &&
-      !!held.stalled.words.includes(first) &&
+    "later: no person waits on it, so its move to B waits for its command: held, its row saying it moves to B when its work in flight ends, counting down to what comes first of A's reset and the cap from when it was first held, its line saying it can't move yet, and nothing runs on B",
+    carrying?.kind === "carrying" &&
+      !!held?.stalled?.words.startsWith(
+        `${HELD.at(NAME[A])} · ${HELD.carrying(NAME[B], carrying.work)}`
+      ) &&
+      (resets
+        ? held.stalled.words.includes(` · ${HELD.resetsIn("")}`)
+        : held.stalled.words.endsWith(LATEST)) &&
+      carrying.resets === resets &&
+      Math.abs(
+        (held.stalled.until ?? 0) - (resets ? limited.later : since + CAP_MS)
+      ) <= 2000 &&
       !!waits?.content.startsWith(
         `Can't move from ${NAME[A]} to ${NAME[B]} yet`
       ) &&
@@ -821,8 +853,12 @@ const openCard = async (page: Page, base: string, id: string) => {
   });
 };
 
-/** What the page says of the stop: its row, its tab and card glyphs, its card's line, its transcript line, each with its ink. */
-const stopShown = (page: Page, id: string) =>
+/**
+ * What the page says of the wait, each part with whether it wears the
+ * failure ink: its rail row's read-out, its tab and card glyphs, its card's
+ * account line, its transcript's live line, and any alert there.
+ */
+const waitShown = (page: Page, id: string) =>
   page.evaluate(
     ({ session, card }) => {
       const fail = document.createElement("span");
@@ -844,26 +880,26 @@ const stopShown = (page: Page, id: string) =>
               tone: el.getAttribute("data-session-status-tone"),
             }
           : null;
-      const words = document.querySelector('[data-slot="stop"][role="alert"]');
-      // The rail's row is one line: its title in the failure ink, the whole
-      // sentence on the row (its title, for the pointer), its mark failed.
+      // The live line: a status while the session waits (AccountMoveDivider `waiting`).
+      const live = document.querySelector('[data-waiting][role="status"]');
+      // The rail's row is one line: its title, read out after its status word.
       const row = document.querySelector<HTMLElement>(
         `[data-session-row="${session}"] [data-session-row-row]`
       );
       const name = row?.querySelector('[data-slot="title"]');
       return {
-        row:
-          row?.title && name
-            ? { text: row.title, failInk: read(name)?.failInk ?? false }
-            : {
-                text: "",
-                failInk: false,
-                rows: [
-                  ...document.querySelectorAll<HTMLElement>(
-                    "[data-session-row]"
-                  ),
-                ].map((one) => one.dataset.sessionRow),
-              },
+        row: name
+          ? {
+              said: name.querySelector(".sr-only")?.textContent?.trim() ?? "",
+              failInk: read(name)?.failInk ?? false,
+            }
+          : {
+              said: "",
+              failInk: false,
+              rows: [
+                ...document.querySelectorAll<HTMLElement>("[data-session-row]"),
+              ].map((one) => one.dataset.sessionRow),
+            },
         tab: glyph(
           document.querySelector(
             `[data-session-tab="${session}"] [data-slot="session-status"]`
@@ -872,11 +908,19 @@ const stopShown = (page: Page, id: string) =>
         head: glyph(
           document.querySelector(`${card} [data-slot="session-status"]`)
         ),
-        // The card's failure line: its words, which carry the ink, beside
-        // its Try again (SessionDetails.svelte `feedback`).
-        card: read(document.querySelector(`${card} [data-slot="failure"] p`)),
-        transcript: read(words),
-        line: read(words?.closest(".group\\/move")?.querySelector("button")),
+        // The card's account line while it waits (SessionDetails.svelte `feedback`).
+        card: read(
+          document.querySelector(
+            `${card} [data-slot="feedback"][role="status"]`
+          )
+        ),
+        transcript: read(live?.querySelector('[data-slot="words"]')),
+        line: read(live?.querySelector("button")),
+        alerts: document.querySelectorAll(
+          '.group\\/move [role="alert"], [data-slot="stop"]'
+        ).length,
+        failed: document.querySelectorAll('[data-session-status-tone="failed"]')
+          .length,
         chip:
           document
             .querySelector(
@@ -888,7 +932,7 @@ const stopShown = (page: Page, id: string) =>
     { session: id, card: CARD }
   );
 
-/** Session `id`'s row in the rail, once the rail has drawn it, as {@link stopShown} reads it. */
+/** Session `id`'s row in the rail, once the rail has drawn it, as {@link waitShown} reads it. */
 const railRowOf = async (page: Page, base: string, id: string) => {
   await open(
     page,
@@ -896,7 +940,7 @@ const railRowOf = async (page: Page, base: string, id: string) => {
     `[data-session-row="${id}"]`,
     120_000
   ).catch(() => undefined);
-  return (await stopShown(page, id)).row;
+  return (await waitShown(page, id)).row;
 };
 
 const pickLeg = async (kit: Kit, fleet: KitFleet): Promise<void> => {
@@ -929,9 +973,11 @@ const pickLeg = async (kit: Kit, fleet: KitFleet): Promise<void> => {
     (one) => !!one?.stalled,
     120_000
   ).catch(() => boardRow(fleet, id));
+  const atA = `${HELD.at(NAME[A])} · ${HELD.resetsIn("")}`;
   kit.check(
-    "pick: refused on A with moving off, its row says it is stopped at A's limit",
-    !!held?.stalled?.words.startsWith(`Stopped at ${NAME[A]}’s limit`),
+    "pick: refused on A with moving off, its row says it is at A's limit, counting down to A's reset",
+    !!held?.stalled?.words.startsWith(atA) &&
+      held.stalled.held?.kind === "waiting",
     JSON.stringify(held?.stalled ?? null)
   );
   const base = await fleet.dashboard();
@@ -939,25 +985,27 @@ const pickLeg = async (kit: Kit, fleet: KitFleet): Promise<void> => {
   const railRow = () => railRowOf(page, base, id);
   const row = await railRow();
   await openCard(page, base, id);
-  const way = "Pick another account to move it now.";
   const shown = await until(
-    "pick: the page shows the stop as an error",
-    () => stopShown(page, id),
+    "pick: the page shows the wait",
+    () => waitShown(page, id),
     (one) => !!one.transcript && !!one.card,
     30_000
-  ).catch(() => stopShown(page, id));
+  ).catch(() => waitShown(page, id));
   kit.check(
-    "pick: its row, its head (tab and card) and its transcript line show the stop as an error in the failure ink, with the way out",
-    row.text.endsWith(way) &&
-      row.failInk &&
-      shown.tab?.tone === "failed" &&
-      shown.tab.label === "Stopped at its limit" &&
-      shown.head?.tone === "failed" &&
-      !!shown.card?.text.endsWith(way) &&
-      shown.card.failInk &&
-      !!shown.transcript?.text.endsWith(way) &&
-      shown.transcript.failInk &&
-      !!shown.line?.failInk,
+    "pick: it waits, never a failure: its rail row is read out at its limit, its tab and card head wear the at-limit status, its card's account line and its transcript line say it at A's limit as a status, none an alert, nothing in the failure ink",
+    row.said.startsWith(HELD.status) &&
+      !row.failInk &&
+      shown.tab?.tone === "held" &&
+      shown.tab.label === HELD.status &&
+      shown.head?.tone === "held" &&
+      !!shown.card?.text.startsWith(atA) &&
+      !shown.card.failInk &&
+      !!shown.transcript?.text.startsWith(atA) &&
+      !shown.transcript.failInk &&
+      !!shown.line &&
+      !shown.line.failInk &&
+      shown.alerts === 0 &&
+      shown.failed === 0,
     JSON.stringify({ ...shown, row })
   );
   // The pick, from the card's account chip; the chip is read every 100 ms
@@ -978,7 +1026,7 @@ const pickLeg = async (kit: Kit, fleet: KitFleet): Promise<void> => {
   const owed: string[] = [];
   while (Date.now() - pickedAt < 5000) {
     // biome-ignore lint/performance/noAwaitInLoops: one sample of the chip at a time
-    const now = await stopShown(page, id);
+    const now = await waitShown(page, id);
     if (now.chip) {
       chips.push(now.chip);
     } else {
@@ -1027,26 +1075,31 @@ const pickLeg = async (kit: Kit, fleet: KitFleet): Promise<void> => {
       : `B's requests: ${JSON.stringify(seenOf(fleet, "pick", pickedAt).map((one) => [accountOf(one), one.last.slice(0, 120)]))}`
   );
   const after = await until(
-    "pick: the error goes",
+    "pick: the wait goes",
     async () => ({
       row: await boardRow(fleet, id),
-      page: await stopShown(page, id),
+      page: await waitShown(page, id),
     }),
-    (one) => !(one.row?.stalled || one.page.transcript || one.page.row?.text),
+    (one) =>
+      !(
+        one.row?.stalled ||
+        one.page.transcript ||
+        one.page.row?.said.startsWith(HELD.status)
+      ),
     30_000
   ).catch(async () => ({
     row: await boardRow(fleet, id),
-    page: await stopShown(page, id),
+    page: await waitShown(page, id),
   }));
   const rowAfter = await railRow();
   kit.check(
-    "pick: once on B, its row, head and transcript no longer show the stop",
+    "pick: once on B, its row, head and transcript no longer show the wait",
     !(
       after.row?.stalled ||
       after.page.transcript ||
-      rowAfter.text ||
+      rowAfter.said.startsWith(HELD.status) ||
       rowAfter.failInk
-    ) && after.page.tab?.tone !== "failed",
+    ) && after.page.tab?.tone !== "held",
     JSON.stringify({
       stalled: after.row?.stalled ?? null,
       page: after.page,

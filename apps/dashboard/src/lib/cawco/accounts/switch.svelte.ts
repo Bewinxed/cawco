@@ -131,17 +131,19 @@ const counting = $derived(
 /**
  * A session waiting at its account's limit, as its row's meta line says it
  * (core `stallWords`): "At gmail's limit · moves to Petralab in 1h 19m",
- * and " · design could take it" when another account could, counting down
- * on {@link clock}. On its way to another account, or held on a refused
- * sign-in, the hub's words. Undefined while it runs, or while a move it
- * was given is on its way (that move says itself).
+ * and " · design could take it" when another account could; on its way,
+ * "· moving to Petralab…"; its move waiting on work in flight, "· moves to
+ * Petralab when its work in flight ends (…), in 1h 19m at the latest",
+ * counting down on {@link clock}. Held on a refused sign-in, the hub's
+ * words. Undefined while it runs, or while a move it was given is on its
+ * way (that move says itself).
  */
 export function waitWords(instance: BoardRow): string | undefined {
   const { stalled } = instance;
   if (!stalled || movingTo(instance) !== undefined) {
     return;
   }
-  return stalled.held && stalled.until !== undefined
+  return stalled.held
     ? stallWords(renamedHeld(stalled.held, names), stalled.until, clock.now)
     : stalled.words;
 }

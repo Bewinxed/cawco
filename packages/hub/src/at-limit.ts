@@ -20,6 +20,7 @@ import {
   type PlacementStrategy,
   type RebalanceNotice,
   type Stall,
+  type StallAccount,
   type StallHeld,
   stallWords,
   tokenWords,
@@ -2249,7 +2250,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
    * or its own reset when that comes first, when it carries on where it is.
    */
   const carryStall = (
-    from: string,
+    from: StallAccount,
     carry: { since: number; to: string; why: string },
     resets: number | null
   ): Stall => {
@@ -2261,20 +2262,19 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     const work = carry.why.startsWith(WORK_IN_FLIGHT)
       ? carry.why.slice(WORK_IN_FLIGHT.length)
       : carry.why;
-    if (resets !== null && resets <= by) {
-      return {
-        words: accountsWords.stalled.carryingUntilReset(
-          from,
-          toName,
-          work,
-          clockWords(resets)
-        ),
-        until: resets,
-      };
-    }
+    const first = resets !== null && resets <= by;
+    const until = first ? resets : by;
+    const stalled: StallHeld = {
+      kind: "carrying",
+      account: from,
+      to: { id: carry.to, name: toName },
+      work,
+      resets: first,
+    };
     return {
-      words: accountsWords.stalled.carrying(from, toName, work, clockWords(by)),
-      until: by,
+      words: stallWords(stalled, until, Date.now()),
+      until,
+      held: stalled,
     };
   };
 
@@ -2291,7 +2291,6 @@ export const createAtLimit = (ports: AtLimitPorts) => {
      * while it runs.
      */
     stall(instanceId: string): Stall | undefined {
-      const words = accountsWords.stalled;
       const held = db.atLimit.hold(instanceId);
       if (held) {
         const from = db.accounts.get(held.accountId);
@@ -2299,11 +2298,11 @@ export const createAtLimit = (ports: AtLimitPorts) => {
           ? accountNameAmong(from, db.accounts.list())
           : "its account";
         if (held.until === null) {
-          return { words: words.signedOut(name) };
+          return { words: accountsWords.stalled.signedOut(name) };
         }
         const carry = later.get(instanceId);
         if (carry) {
-          return carryStall(name, carry, held.until);
+          return carryStall({ id: held.accountId, name }, carry, held.until);
         }
         // The line the hold was said in: where it goes at `until`, and the
         // accounts that could take it now.
@@ -2313,6 +2312,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
             ? last
             : undefined;
         const stalled: StallHeld = {
+          kind: "waiting",
           account: { id: held.accountId, name },
           ...(said?.frees ? { frees: said.frees } : {}),
           fits: fitsOf(said?.accounts).map((one) => one.account),
@@ -2328,11 +2328,17 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         return undefined;
       }
       const accounts = db.accounts.list();
+      const stalled: StallHeld = {
+        kind: "moving",
+        account: {
+          id: moving.from.id,
+          name: accountNameAmong(moving.from, accounts),
+        },
+        to: { id: moving.to.id, name: accountNameAmong(moving.to, accounts) },
+      };
       return {
-        words: words.moving(
-          accountNameAmong(moving.from, accounts),
-          accountNameAmong(moving.to, accounts)
-        ),
+        words: stallWords(stalled, undefined, Date.now()),
+        held: stalled,
       };
     },
     /** Every session {@link stall} says is stopped now: held, or on its way to another account. */

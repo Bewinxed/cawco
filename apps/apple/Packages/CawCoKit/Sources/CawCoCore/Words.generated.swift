@@ -600,22 +600,153 @@ public enum Words {
             public static let byKey: [String: String] = ["head": head, "move": move, "wait": wait, "minutes": minutes, "over": over, "kTokens": kTokens, "compacts": compacts, "terms": terms]
         }
 
+        public enum Held {
+            /// Its status word, read before its title and on its tab.
+            public static let status = "At its limit"
+
+            /// Whose limit it is: the head of every line that says the wait.
+            public static func at(account: String) -> String {
+                "At \(account)'s limit"
+            }
+
+            /// Another account frees first and takes it: "moves to Petralab in 1h 19m".
+            public static func movesIn(to: String, left: String) -> String {
+                "moves to \(to) in \(left)"
+            }
+
+            /// It waits for its own account's reset.
+            public static func resetsIn(left: String) -> String {
+                "resets in \(left)"
+            }
+
+            /// On its way to `to`, now or at its turn's end.
+            public static func moving(to: String) -> String {
+                "moving to \(to)…"
+            }
+
+            /// Its move to `to` waits for its work in flight (`work`: "1 command running").
+            public static func carrying(to: String, work: String) -> String {
+                "moves to \(to) when its work in flight ends (\(work))"
+            }
+
+            /// The cap its carrying move goes by, whatever the work.
+            public static func atTheLatest(left: String) -> String {
+                "in \(left) at the latest"
+            }
+
+            /// One other account could take it now.
+            public static func fits(name: String) -> String {
+                "\(name) could take it"
+            }
+
+            /// More than one could.
+            public static func fitCount(count: Int) -> String {
+                "\(count) accounts could take it"
+            }
+
+            /// A project with Caw off: nothing sends it on past the limit.
+            public static func cawOff(account: String) -> String {
+                "At \(account)'s limit · Caw is off"
+            }
+
+            /// Its reset has passed: history.
+            public static func continued(on: String) -> String {
+                "Continued on \(on)"
+            }
+
+            /// The tray chip while it waits for a moment: its status word and the time left.
+            public static func chipIn(left: String) -> String {
+                "At its limit · \(left)"
+            }
+
+            /// The way out, on the line's second line: to the one account that fits.
+            public static func moveTo(name: String) -> String {
+                "Move to \(name)"
+            }
+
+            /// …or to one of several, from their list.
+            public static let moveToAnother = "Move to another account"
+
+            /// Why it waits, by its reason, as the line's second line says it.
+            public enum Why {
+                public static let full = "No other account can take it now"
+
+                public static func free(tokens: String) -> String {
+                    "Waiting costs nothing: its cache lasts past the reset, and a move would re-read \(tokens) cold"
+                }
+
+                public static func soon(account: String, tokens: String) -> String {
+                    "\(account) resets sooner than re-reading \(tokens) elsewhere is worth"
+                }
+
+                public static let off = "Moving at the limit is switched off"
+
+                public static let fork = "A fork stays on the account its origin's cache is on"
+
+                /// No account but its own is signed in where it runs.
+                public static let alone = "No other account is signed in on its machine"
+
+                /// History only: lines a hub stored before admission changed.
+                public static func room(tokens: String) -> String {
+                    "Another account has room, but re-reading \(tokens) there would take more than half of what it has left"
+                }
+
+                /// History only: lines a hub stored while a delegate's work could carry on past its reset.
+                public static let work = "Its work item carries on here after the reset"
+
+                /// Each account that could take it, after the reason: "design could take it, 37% left".
+                public static func fitsLeft(name: String, left: String) -> String {
+                    "\(name) could take it, \(left)"
+                }
+            }
+
+            /// Why another account didn't take it, or that it could, beside its name.
+            public enum Reason {
+                public static let signin = "not signed in here"
+
+                public static func allowed(by: String) -> String {
+                    "not allowed by this \(by)"
+                }
+
+                public static let benched = "benched"
+
+                public static func reserve(pct: Int) -> String {
+                    "past its \(pct)% reserve"
+                }
+
+                public static let unread = "limits unread"
+
+                public static let limit = "at its limit"
+
+                public static let backup = "never a backup"
+
+                public static let alone = "takes one move at a time until its window is measured, and one is landing there"
+
+                public static func room(left: String, takes: Int) -> String {
+                    "\(left), its move takes \(takes)%"
+                }
+
+                public static func runsOut(left: String, inTime: String) -> String {
+                    "\(left), runs out in \(inTime)"
+                }
+
+                public static func fits(left: String, carries: Bool) -> String {
+                    "could take it, \(left)\(carries ? ", its cache carrying" : "")"
+                }
+
+                /// When a benched or limited account is back.
+                public static func back(left: String) -> String {
+                    ", back in \(left)"
+                }
+
+                /// What an account has left: "37% left".
+                public static func left(pct: Int) -> String {
+                    "\(pct)% left"
+                }
+            }
+        }
+
         public enum Stalled {
-            /// Moving to an account with room, now or once its turn ends.
-            public static func moving(from: String, to: String) -> String {
-                "Stopped at \(from)’s limit; continues on \(to)"
-            }
-
-            /// Its move to `to` waits for work in flight (`work`: "1 command running"), which no resume brings back: it moves when that ends, or at `clock` ("20:17") at the latest, ending it.
-            public static func carrying(from: String, to: String, work: String, clock: String) -> String {
-                "Stopped at \(from)’s limit; moves to \(to) when its work in flight ends (\(work)), by \(clock) at the latest"
-            }
-
-            /// Its move to `to` waits for work in flight, and `from` resets first, at `clock`: it moves when that work ends, else carries on where it is then.
-            public static func carryingUntilReset(from: String, to: String, work: String, clock: String) -> String {
-                "Stopped at \(from)’s limit; moves to \(to) when its work in flight ends (\(work)), or continues at \(clock)"
-            }
-
             /// Claude Code refused its account's sign-in, and no other account can take it yet.
             public static func signedOut(from: String) -> String {
                 "Stopped: \(from)’s sign-in was refused; continues once an account can take it"

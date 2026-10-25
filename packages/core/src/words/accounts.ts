@@ -327,30 +327,86 @@ export const accountsWords = {
       "Moving a conversation between Claude subscriptions is subject to Anthropic’s terms",
   },
 
-  // ── A delegate stopped at its account's limit, on its way or held (delegate_list): a
-  // wait for a reset is core `stallWords` ─
+  // ── A session at its account's limit: a wait, never a failure (core
+  // `stallWords`, `accountMoveWords`, `heldReasonWords`; its row, tab,
+  // transcript line and tray chip) ─
+  held: {
+    /** Its status word, read before its title and on its tab. */
+    status: "At its limit",
+    /** Whose limit it is: the head of every line that says the wait. */
+    at: (account: string) => `At ${account}'s limit`,
+    /** Another account frees first and takes it: "moves to Petralab in 1h 19m". */
+    movesIn: (to: string, left: string) => `moves to ${to} in ${left}`,
+    /** It waits for its own account's reset. */
+    resetsIn: (left: string) => `resets in ${left}`,
+    /** On its way to `to`, now or at its turn's end. */
+    moving: (to: string) => `moving to ${to}…`,
+    /** Its move to `to` waits for its work in flight (`work`: "1 command running"). */
+    carrying: (to: string, work: string) =>
+      `moves to ${to} when its work in flight ends (${work})`,
+    /** The cap its carrying move goes by, whatever the work. */
+    atTheLatest: (left: string) => `in ${left} at the latest`,
+    /** One other account could take it now. */
+    fits: (name: string) => `${name} could take it`,
+    /** More than one could. */
+    fitCount: (count: number) => `${count} accounts could take it`,
+    /** A project with Caw off: nothing sends it on past the limit. */
+    cawOff: (account: string) => `At ${account}'s limit · Caw is off`,
+    /** Its reset has passed: history. */
+    continued: (on: string) => `Continued on ${on}`,
+    /** The tray chip while it waits for a moment: its status word and the time left. */
+    chipIn: (left: string) => `At its limit · ${left}`,
+    /** The way out, on the line's second line: to the one account that fits. */
+    moveTo: (name: string) => `Move to ${name}`,
+    /** …or to one of several, from their list. */
+    moveToAnother: "Move to another account",
+    /** Why it waits, by its reason, as the line's second line says it. */
+    why: {
+      full: "No other account can take it now",
+      free: (tokens: string) =>
+        `Waiting costs nothing: its cache lasts past the reset, and a move would re-read ${tokens} cold`,
+      soon: (account: string, tokens: string) =>
+        `${account} resets sooner than re-reading ${tokens} elsewhere is worth`,
+      off: "Moving at the limit is switched off",
+      fork: "A fork stays on the account its origin's cache is on",
+      /** No account but its own is signed in where it runs. */
+      alone: "No other account is signed in on its machine",
+      /** History only: lines a hub stored before admission changed. */
+      room: (tokens: string) =>
+        `Another account has room, but re-reading ${tokens} there would take more than half of what it has left`,
+      /** History only: lines a hub stored while a delegate's work could carry on past its reset. */
+      work: "Its work item carries on here after the reset",
+      /** Each account that could take it, after the reason: "design could take it, 37% left". */
+      fitsLeft: (name: string, left: string) =>
+        `${name} could take it, ${left}`,
+    },
+    /** Why another account didn't take it, or that it could, beside its name. */
+    reason: {
+      signin: "not signed in here",
+      allowed: (by: string) => `not allowed by this ${by}`,
+      benched: "benched",
+      reserve: (pct: number) => `past its ${pct}% reserve`,
+      unread: "limits unread",
+      limit: "at its limit",
+      backup: "never a backup",
+      alone:
+        "takes one move at a time until its window is measured, and one is landing there",
+      room: (left: string, takes: number) =>
+        `${left}, its move takes ${takes}%`,
+      runsOut: (left: string, inTime: string) =>
+        `${left}, runs out in ${inTime}`,
+      fits: (left: string, carries: boolean) =>
+        `could take it, ${left}${carries ? ", its cache carrying" : ""}`,
+      /** When a benched or limited account is back. */
+      back: (left: string) => `, back in ${left}`,
+      /** What an account has left: "37% left". */
+      left: (pct: number) => `${pct}% left`,
+    },
+  },
+
+  // ── A delegate stopped on a refused sign-in (delegate_list): a stop at a limit
+  // is core `stallWords` ─
   stalled: {
-    /** Moving to an account with room, now or once its turn ends. */
-    moving: (from: string, to: string) =>
-      `Stopped at ${from}’s limit; continues on ${to}`,
-    /**
-     * Its move to `to` waits for work in flight (`work`: "1 command running"),
-     * which no resume brings back: it moves when that ends, or at `clock`
-     * ("20:17") at the latest, ending it.
-     */
-    carrying: (from: string, to: string, work: string, clock: string) =>
-      `Stopped at ${from}’s limit; moves to ${to} when its work in flight ends (${work}), by ${clock} at the latest`,
-    /**
-     * Its move to `to` waits for work in flight, and `from` resets first, at
-     * `clock`: it moves when that work ends, else carries on where it is then.
-     */
-    carryingUntilReset: (
-      from: string,
-      to: string,
-      work: string,
-      clock: string
-    ) =>
-      `Stopped at ${from}’s limit; moves to ${to} when its work in flight ends (${work}), or continues at ${clock}`,
     /** Claude Code refused its account's sign-in, and no other account can take it yet. */
     signedOut: (from: string) =>
       `Stopped: ${from}’s sign-in was refused; continues once an account can take it`,

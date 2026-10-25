@@ -302,16 +302,8 @@
   "scripts/probe-kit/specs/limit-pick.ts": {
     "[hub] send": 1,
     "a command was running and was ended by the move": 1,
-    "at its limit until": 1,
     "couldn't move to": 1,
-    "it moves to": 1,
     "moves from": 1,
-    "moves to": 1,
-    "No account can take it now": 1,
-    "No other account has room": 2,
-    "Stopped at": 1,
-    "Stopped at its limit": 1,
-    "Waiting for": 1,
     "waiting for work in flight": 1,
     "was interrupted": 1,
     "work in flight": 1,
@@ -319,8 +311,7 @@
   },
   "scripts/probe-kit/specs/limit-stall.ts": {
     "[hub] send": 1,
-    "moves to": 1,
-    "Stopped at": 2
+    "moves to": 1
   },
   "scripts/probe-kit/specs/link-under-load.ts": {
     "input(s) written": 1
@@ -492,7 +483,6 @@
     "this machine's git sign-in": 1
   },
   "scripts/probe-kit/specs/usage-accounts.ts": {
-    "At its limit": 2,
     "Hasn’t reported": 1,
     "Moved to": 1
   },

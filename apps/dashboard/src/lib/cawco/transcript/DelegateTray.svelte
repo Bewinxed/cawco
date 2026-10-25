@@ -29,6 +29,7 @@
    * a work item's: a started session that failed runs none, so its chip
    * stays in the work zone, says "failed", and leaves as a finished one does.
    */
+  import { accountsWords } from "@cawco/core";
   import { tick, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { SvelteMap } from "svelte/reactivity";
@@ -1318,7 +1319,9 @@
             class="flex-none size-icon-sm text-ink-muted"
             data-box
           /><span class="min-w-0 overflow-clip text-ellipsis num"
-            >{waits ? `At its limit · ${waits}` : "At its limit"}</span
+            >{waits
+              ? accountsWords.held.chipIn(waits)
+              : accountsWords.held.status}</span
           ></span
         >
       {:else if item.queued}

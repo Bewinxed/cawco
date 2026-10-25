@@ -47300,12 +47300,95 @@
         ]
       },
       "Stall": {
-        "description": "A session waiting at its account's limit, as the hub's at-limit\ncontroller holds it (hub at-limit.ts `stall`): the hub's words (for its\ntools and logs), `until` (epoch ms) when it carries on, and, while it\nwaits for a reset, `held`, which every reader says on its own clock.",
+        "description": "A session stopped at its account's limit, as the hub's at-limit\ncontroller holds it (hub at-limit.ts `stall`): the hub's words (for its\ntools and logs), `until` (epoch ms) when it carries on or moves at the\nlatest, and `held`, which every reader says on its own clock. A stall on\na refused sign-in has words alone.",
         "type": "object",
         "properties": {
           "held": {
-            "$ref": "#/components/schemas/StallHeld",
-            "description": "Whose limit a waiting session is at, where it goes when it carries on,\nand the accounts that could take it now ({@link HeldReason} `fits`), as\nits row says it ({@link stallWords})."
+            "description": "A session stopped at its account's limit, as its row says it ({@link * stallWords}): whose limit it is, and\n\n- `waiting`: held until the stall's `until`, where it goes then (`frees`,\n  another account that frees first; absent, its own reset), and the\n  accounts that could take it now ({@link HeldReason} `fits`);\n- `moving`: on its way to `to`, now or at its turn's end;\n- `carrying`: its move to `to` waits for its work in flight (`work`: \"1\n  command running\"), by the stall's `until` at the latest, or, when its own\n  account resets first (`resets`), until that reset, when it carries on\n  where it is.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "waiting"
+                    ]
+                  },
+                  "account": {
+                    "$ref": "#/components/schemas/StallAccount"
+                  },
+                  "fits": {
+                    "description": "The accounts that could take it now, in the hub's order.",
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/StallAccount"
+                    }
+                  },
+                  "frees": {
+                    "$ref": "#/components/schemas/StallAccount",
+                    "description": "Another account that frees before `account` resets: it moves there at the stall's `until`."
+                  }
+                },
+                "required": [
+                  "account",
+                  "fits",
+                  "kind"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "moving"
+                    ]
+                  },
+                  "account": {
+                    "$ref": "#/components/schemas/StallAccount"
+                  },
+                  "to": {
+                    "$ref": "#/components/schemas/StallAccount"
+                  }
+                },
+                "required": [
+                  "account",
+                  "kind",
+                  "to"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "carrying"
+                    ]
+                  },
+                  "account": {
+                    "$ref": "#/components/schemas/StallAccount"
+                  },
+                  "resets": {
+                    "type": "boolean"
+                  },
+                  "to": {
+                    "$ref": "#/components/schemas/StallAccount"
+                  },
+                  "work": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "account",
+                  "kind",
+                  "resets",
+                  "to",
+                  "work"
+                ]
+              }
+            ]
           },
           "until": {
             "type": "number"
@@ -47316,30 +47399,6 @@
         },
         "required": [
           "words"
-        ]
-      },
-      "StallHeld": {
-        "description": "Whose limit a waiting session is at, where it goes when it carries on,\nand the accounts that could take it now ({@link HeldReason} `fits`), as\nits row says it ({@link stallWords}).",
-        "type": "object",
-        "properties": {
-          "account": {
-            "$ref": "#/components/schemas/StallAccount"
-          },
-          "fits": {
-            "description": "The accounts that could take it now, in the hub's order.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/StallAccount"
-            }
-          },
-          "frees": {
-            "$ref": "#/components/schemas/StallAccount",
-            "description": "Another account that frees before `account` resets: it moves there at the stall's `until`."
-          }
-        },
-        "required": [
-          "account",
-          "fits"
         ]
       },
       "StallAccount": {

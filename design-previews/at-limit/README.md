@@ -15,7 +15,7 @@ hub's own records. Nothing here lands on main until he picks.
 python3 -m http.server -d design-previews/at-limit 8080   # any static server on this folder
 bun scripts/probe-kit/run.ts at-limit-preview              # the proof (Chromium + WebKit)
 bun design-previews/at-limit/capture/capture.ts            # remake parts.js, house.css, today.css, fonts/
-bun design-previews/at-limit/capture/shots.ts              # remake captures/ and its manifest.json
+bun design-previews/at-limit/capture/shots.ts [prefix…]    # remake captures/ and its manifest.json (only the shots named by a prefix)
 ```
 
 One state is on screen, the switcher beside it; every state is a link
@@ -43,7 +43,8 @@ What it is made of:
   `resets` (its own account's 5-hour reset, 09:00, from /api/usage/limits),
   `fits` (as `resets`, with the one account that was not benched,
   bewinxed@petralab.ai's Organization, able to take it with the 29% its line
-  recorded it had left) and `after` (past 08:30, carried on). The clock is
+  recorded it had left, and so waiting because its own reset is near,
+  `soon`) and `after` (past 08:30, carried on). The clock is
   held at the line's own timestamp, 08:00:01 UTC.
 - `capture/Stage.svelte`: every surface drawn by its real component
   (PaneTabs, SessionRow at both sizes, AccountMoveDivider at rest and

@@ -30,11 +30,11 @@
  *   cache is measured to outlast A's reset 2 minutes on (hub at-limit.ts
  *   `decideStop`): waiting costs nothing and a move would re-read it
  *   cold, so it waits on A though the policy waits for no reset and B has
- *   room. Its chip says it continues at A's reset and names no move; at
+ *   room. Its chip says it is at A's limit and resets in …, naming no move; at
  *   that reset it carries on on A, never on B, and its item runs to done.
  * - full: A and B are both limited until the same reset. Its tray chip and
- *   the orchestrator's `delegate_list` say it is stopped and continues at
- *   that reset; a person's message sent meanwhile reaches no model before
+ *   the orchestrator's `delegate_list` say it is at its account's limit,
+ *   counting down to that reset; a person's message sent meanwhile reaches no model before
  *   it; past it, the delegate goes on by itself, the message arrives, and
  *   its item runs on to done.
  * - continued: only A is limited, and the policy waits for a reset this
@@ -54,8 +54,8 @@
  *   which no resume on another account brings back. A delegate's work, no
  *   person waiting on it, so its move to B waits for that command, up to the
  *   cap from when it was first held (hub at-limit.ts `moveTo`, server.ts
- *   `moveRowsToAccount` with `laterSince`): its chip says it moves to B when
- *   its work in flight ends, and nothing runs on B. The command ends
+ *   `moveRowsToAccount` with `laterSince`): its chip says it is at A's limit
+ *   and moves to B when its work in flight ends, and nothing runs on B. The command ends
  *   {@link COMMAND_S} seconds in; its notice's turn on A is refused, and
  *   within {@link MOVE_WITHIN_MS} of that it runs on B, the command's end
  *   notice ({@link COMMAND_ENDED}) with it, and its chip says nothing once it
@@ -69,6 +69,7 @@ import type { WorkItemSummary } from "../../../packages/core/src";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
 import { movedLine } from "../../../packages/core/src/injected";
 import { recordOf } from "../../../packages/core/src/tool-answer";
+import { accountsWords } from "../../../packages/core/src/words/accounts";
 import type { DelegateList } from "../../../packages/hub/src/delegation-tree";
 import {
   ACCOUNT,
@@ -78,6 +79,7 @@ import {
   until,
 } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
+import { literal } from "../words";
 
 const B = "acct-scratch-fleet-b";
 /** Each account's token, as its requests carry it. */
@@ -661,8 +663,9 @@ const moveLeg = async (
  * A delegate whose cache was measured written for an hour, A refusing it
  * with its reset 2 minutes on and B measured with room: the reset comes
  * before its cache lapses, so it waits on A (at-limit.ts `decideStop`,
- * "soon") though the policy waits for no reset. Its chip says it continues
- * at that reset and names no move; past it, it carries on on A, never on B.
+ * "soon") though the policy waits for no reset. Its chip says it is at A's
+ * limit and resets in …, naming no move; past it, it carries on on A, never
+ * on B.
  */
 const warmLeg = async (
   kit: Kit,
@@ -673,9 +676,9 @@ const warmLeg = async (
   const reset = played.warm.limitedUntil;
   const refusedAt = played.warm.refused[0] as number;
   const chip = await until(
-    "warm: its chip says it continues at A's reset",
+    "warm: its chip says it waits for A's reset",
     () => look.chip(instance),
-    (one) => !!one?.stalled?.includes("continues at"),
+    (one) => !!one?.stalled?.startsWith(OWN_RESET),
     60_000
   ).catch(() => look.chip(instance));
   const [hold] = fleet.query<{ until: number | null }>(
@@ -692,12 +695,11 @@ const warmLeg = async (
       ? cache.last_request_at + HOUR
       : Number.NaN;
   kit.check(
-    "warm: its cache measured to outlast A's reset, it waits on A for that reset though B has room, and its chip says it continues then and names no move",
+    "warm: its cache measured to outlast A's reset, it waits on A for that reset though B has room, and its chip says it is at A's limit and resets in a while, naming no move",
     lapses > reset &&
       Date.now() < reset &&
       Math.abs(holdUntil - reset) <= 2000 &&
-      !!chip?.stalled?.startsWith("Stopped at Probe’s limit") &&
-      chip.stalled.includes(`continues at ${clockOf(reset)}`) &&
+      !!chip?.stalled?.startsWith(OWN_RESET) &&
       !chip.stalled.includes("moves to"),
     `stalled ${JSON.stringify(chip?.stalled ?? null)}; hold ${JSON.stringify(hold ?? null)}; cache ${JSON.stringify(cache ?? null)}, lapses ${Number.isNaN(lapses) ? "unmeasured" : `${lapses - reset} ms after the reset`}; A resets at ${clockOf(reset)}, ${reset - Date.now()} ms on`
   );
@@ -740,16 +742,14 @@ const fullLeg = async (
 ): Promise<void> => {
   const reset = played.full.limitedUntil;
   const chip = await until(
-    "full: its chip says it is stopped",
+    "full: its chip says it waits at its limit",
     () => look.chip(instance),
-    (one) => !!one?.stalled?.includes("continues at"),
+    (one) => !!one?.stalled && AT_LIMIT.test(one.stalled),
     60_000
   ).catch(() => look.chip(instance));
   kit.check(
-    "full: its tray chip says it is stopped at its limit and continues at the reset",
-    !!chip?.stalled?.startsWith("Stopped at") &&
-      chip.stalled.includes("continues at") &&
-      Date.now() < reset,
+    "full: its tray chip says it is at its limit, counting down to the reset",
+    !!chip?.stalled && AT_LIMIT.test(chip.stalled) && Date.now() < reset,
     `stalled ${JSON.stringify(chip?.stalled ?? null)}, state ${chip?.state}, ${reset - Date.now()} ms before the reset`
   );
   await fleet.send(orch, `${LIST_ASK} read your delegates`);
@@ -768,7 +768,8 @@ const fullLeg = async (
   kit.check(
     "full: delegate_list says stalled, in words, until the reset",
     node?.state === "stalled" &&
-      !!node.stalled?.words.startsWith("Stopped at") &&
+      !!node.stalled?.words &&
+      AT_LIMIT.test(node.stalled.words) &&
       Math.abs(listedUntil - reset) <= 2000,
     JSON.stringify(node ?? tree ?? null)
   );
@@ -1160,6 +1161,15 @@ const run = async (kit: Kit) => {
 };
 
 /** A moment as the hub's words say it (core accounts.ts `clockWords`). */
+/** The words a session at its limit is said in (core words/accounts.ts). */
+const HELD = accountsWords.held;
+/** A wait for its own account's reset, as its chip says it (core `stallWords`). */
+const OWN_RESET = `${HELD.at("Probe")} · ${HELD.resetsIn("")}`;
+/** A wait at a limit, for its own reset or another account's, as its chip says it. */
+const AT_LIMIT = new RegExp(
+  `^${literal(HELD.at("Probe"))} · (${literal(HELD.resetsIn(""))}|${literal(HELD.movesIn("Probe B", ""))})\\d`
+);
+
 const clockOf = (at: number): string =>
   new Date(at).toLocaleTimeString("en-GB", {
     hour: "2-digit",
@@ -1207,7 +1217,9 @@ const carryLeg = async (
       !!ended &&
       onB.at >= ended.at &&
       chips.some((one) =>
-        one.includes("moves to Probe B when its work in flight ends")
+        one.startsWith(
+          `${HELD.at("Probe")} · ${HELD.carrying("Probe B", "")}`.slice(0, -1)
+        )
       ),
     `${onB ? `first request on B ${onB.at - refusedAt} ms after A's refusal` : "nothing on B"}; the command's end first seen ${ended ? `${ended.at - refusedAt} ms after` : "never"}; chips ${JSON.stringify([...new Set(chips)])}; account ${look.accountOf(instance)}`
   );

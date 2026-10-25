@@ -2,8 +2,10 @@
 /**
  * Captures the at-limit preview for the owner's decision page:
  *
- *   bun design-previews/at-limit/capture/shots.ts
+ *   bun design-previews/at-limit/capture/shots.ts [prefix…]
  *
+ * With prefixes, only the shots whose file starts with one are taken again,
+ * the rest left as they are.
  * Each shot is one state's frame, the surface alone (its well, none of the
  * page around it), at DPR 1: a desk frame on a 1440 × 900 screen, a phone
  * frame on a 390 × 844 touch screen, so each width's own rules draw it.
@@ -66,10 +68,17 @@ const server = Bun.serve({
   },
 });
 const browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
+/** Shots named by a prefix on the command line, else every one (the folder made again). */
+const only = process.argv.slice(2);
+const taken = only.length
+  ? SHOTS.filter((shot) => only.some((prefix) => shot.file.startsWith(prefix)))
+  : SHOTS;
 try {
-  await rm(OUT, { recursive: true, force: true });
+  if (only.length === 0) {
+    await rm(OUT, { recursive: true, force: true });
+  }
   await mkdir(OUT, { recursive: true });
-  for (const shot of SHOTS) {
+  for (const shot of taken) {
     const phone = shot.device === "Phone";
     // biome-ignore lint/performance/noAwaitInLoops: one frame captured at a time
     const page = await browser.newPage({
@@ -98,7 +107,7 @@ try {
       2
     )}\n`
   );
-  console.log(`captured ${SHOTS.length} shots into ${OUT}`);
+  console.log(`captured ${taken.length} shots into ${OUT}: ${taken.map((shot) => shot.file).join(", ")}`);
 } finally {
   await browser.close();
   server.stop(true);

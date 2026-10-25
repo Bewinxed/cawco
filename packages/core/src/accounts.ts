@@ -1172,11 +1172,18 @@ export const renamedHeld = (
   names: ReadonlyMap<string, string>
 ): StallHeld => {
   const named = nameIn(names);
-  return {
-    account: named(held.account),
-    ...(held.frees ? { frees: named(held.frees) } : {}),
-    fits: held.fits.map(named),
-  };
+  switch (held.kind) {
+    case "waiting":
+      return {
+        ...held,
+        account: named(held.account),
+        ...(held.frees ? { frees: named(held.frees) } : {}),
+        fits: held.fits.map(named),
+      };
+    case "moving":
+    case "carrying":
+      return { ...held, account: named(held.account), to: named(held.to) };
+  }
 };
 
 /**
@@ -1217,26 +1224,45 @@ export const renamedMove = (
 };
 
 /**
- * Whose limit a waiting session is at, where it goes when it carries on,
- * and the accounts that could take it now ({@link HeldReason} `fits`), as
- * its row says it ({@link stallWords}).
+ * A session stopped at its account's limit, as its row says it ({@link
+ * stallWords}): whose limit it is, and
+ *
+ * - `waiting`: held until the stall's `until`, where it goes then (`frees`,
+ *   another account that frees first; absent, its own reset), and the
+ *   accounts that could take it now ({@link HeldReason} `fits`);
+ * - `moving`: on its way to `to`, now or at its turn's end;
+ * - `carrying`: its move to `to` waits for its work in flight (`work`: "1
+ *   command running"), by the stall's `until` at the latest, or, when its own
+ *   account resets first (`resets`), until that reset, when it carries on
+ *   where it is.
  */
-export interface StallHeld {
-  account: StallAccount;
-  /** The accounts that could take it now, in the hub's order. */
-  fits: StallAccount[];
-  /** Another account that frees before `account` resets: it moves there at the stall's `until`. */
-  frees?: StallAccount;
-}
+export type StallHeld =
+  | {
+      kind: "waiting";
+      account: StallAccount;
+      /** The accounts that could take it now, in the hub's order. */
+      fits: StallAccount[];
+      /** Another account that frees before `account` resets: it moves there at the stall's `until`. */
+      frees?: StallAccount;
+    }
+  | { kind: "moving"; account: StallAccount; to: StallAccount }
+  | {
+      kind: "carrying";
+      account: StallAccount;
+      resets: boolean;
+      to: StallAccount;
+      work: string;
+    };
 
 /** An account a stall names: its id, and what its line calls it. */
 export type StallAccount = Pick<NamedAccount, "id" | "name">;
 
 /**
- * A session waiting at its account's limit, as the hub's at-limit
+ * A session stopped at its account's limit, as the hub's at-limit
  * controller holds it (hub at-limit.ts `stall`): the hub's words (for its
- * tools and logs), `until` (epoch ms) when it carries on, and, while it
- * waits for a reset, `held`, which every reader says on its own clock.
+ * tools and logs), `until` (epoch ms) when it carries on or moves at the
+ * latest, and `held`, which every reader says on its own clock. A stall on
+ * a refused sign-in has words alone.
  */
 export interface Stall {
   held?: StallHeld;
@@ -1267,20 +1293,50 @@ const atLimitLine = (
   now: number
 ): string => {
   const left = countdownWords(until - now);
-  return `At ${account.name}'s limit · ${frees ? `moves to ${frees.name} in ${left}` : `resets in ${left}`}`;
+  const words = accountsWords.held;
+  return `${words.at(account.name)} · ${frees ? words.movesIn(frees.name, left) : words.resetsIn(left)}`;
 };
 
 /**
- * A waiting session's row, at `now`: "At gmail's limit · moves to Petralab
- * in 1h 19m", and " · design could take it" when another account could.
+ * A stalled session's row, at `now` (counting down to `until`):
+ *
+ * - waiting: "At gmail's limit · moves to Petralab in 1h 19m", and " ·
+ *   design could take it" when another account could, " · 2 accounts could
+ *   take it" when more could;
+ * - moving: "At gmail's limit · moving to Petralab…";
+ * - carrying: "At gmail's limit · moves to Petralab when its work in flight
+ *   ends (1 command running), in 1h 19m at the latest", or "… ends (1
+ *   command running) · resets in 1h 19m" when its own reset comes first.
  */
 export const stallWords = (
   held: StallHeld,
-  until: number,
+  until: number | undefined,
   now: number
 ): string => {
-  const [fits] = held.fits;
-  return `${atLimitLine(held.account, held.frees, until, now)}${fits ? ` · ${fits.name} could take it` : ""}`;
+  const words = accountsWords.held;
+  const at = words.at(held.account.name);
+  const left = countdownWords((until ?? now) - now);
+  switch (held.kind) {
+    case "moving":
+      return `${at} · ${words.moving(held.to.name)}`;
+    case "carrying": {
+      const moves = `${at} · ${words.carrying(held.to.name, held.work)}`;
+      return held.resets
+        ? `${moves} · ${words.resetsIn(left)}`
+        : `${moves}, ${words.atTheLatest(left)}`;
+    }
+    case "waiting":
+      break;
+  }
+  const [one, ...more] = held.fits;
+  let fits = "";
+  if (one) {
+    fits =
+      more.length === 0
+        ? ` · ${words.fits(one.name)}`
+        : ` · ${words.fitCount(held.fits.length)}`;
+  }
+  return `${atLimitLine(held.account, held.frees, until ?? now, now)}${fits}`;
 };
 
 /**
@@ -1564,7 +1620,7 @@ export const tokenWords = (tokens: number | null): string =>
 
 /** "37% left": what an account has left, percent, rounded down to the whole one. */
 const leftWords = (pct: number): string =>
-  `${Math.max(0, Math.floor(pct))}% left`;
+  accountsWords.held.reason.left(Math.max(0, Math.floor(pct)));
 
 /**
  * Why another account didn't take the session, or that it could, at `now`,
@@ -1573,34 +1629,39 @@ const leftWords = (pct: number): string =>
  * countdown.
  */
 export const heldReasonWords = (one: HeldAccount, now: number): string => {
+  const said = accountsWords.held.reason;
   const back =
-    one.backAt === undefined
-      ? ""
-      : `, back in ${countdownWords(one.backAt - now)}`;
+    one.backAt === undefined ? "" : said.back(countdownWords(one.backAt - now));
   const { reason } = one;
   switch (reason.kind) {
     case "signin":
-      return "not signed in here";
+      return said.signin;
     case "allowed":
-      return `not allowed by this ${reason.by}`;
+      return said.allowed(reason.by);
     case "benched":
-      return `benched${back}`;
+      return `${said.benched}${back}`;
     case "reserve":
-      return `past its ${reason.pct}% reserve`;
+      return said.reserve(reason.pct);
     case "unread":
-      return "limits unread";
+      return said.unread;
     case "limit":
-      return `at its limit${back}`;
+      return `${said.limit}${back}`;
     case "backup":
-      return "never a backup";
+      return said.backup;
     case "alone":
-      return "takes one move at a time until its window is measured, and one is landing there";
+      return said.alone;
     case "room":
-      return `${leftWords(reason.leftPct)}, its move takes ${Math.max(1, Math.ceil(reason.movePct))}%`;
+      return said.room(
+        leftWords(reason.leftPct),
+        Math.max(1, Math.ceil(reason.movePct))
+      );
     case "runsOut":
-      return `${leftWords(reason.leftPct)}, runs out in ${countdownWords(reason.at - now)}`;
+      return said.runsOut(
+        leftWords(reason.leftPct),
+        countdownWords(reason.at - now)
+      );
     case "fits":
-      return `could take it, ${leftWords(reason.leftPct)}${reason.carries ? ", its cache carrying" : ""}`;
+      return said.fits(leftWords(reason.leftPct), reason.carries);
   }
 };
 
@@ -1620,17 +1681,14 @@ const WAIT_SAYS: Record<
   WaitReason,
   (move: Extract<AccountMove, { kind: "waiting" }>, tokens: string) => string
 > = {
-  full: () => "No other account can take it now",
-  free: (_, tokens) =>
-    `Waiting costs nothing: its cache lasts past the reset, and a move would re-read ${tokens} cold`,
+  full: () => accountsWords.held.why.full,
+  free: (_, tokens) => accountsWords.held.why.free(tokens),
   soon: (move, tokens) =>
-    `${move.account.name} resets sooner than re-reading ${tokens} elsewhere is worth`,
-  off: () => "Moving at the limit is switched off",
-  fork: () => "A fork stays on the account its origin's cache is on",
-  // History only: lines a hub stored before admission and delegates' work changed.
-  room: (_, tokens) =>
-    `Another account has room, but re-reading ${tokens} there would take more than half of what it has left`,
-  work: () => "Its work item carries on here after the reset",
+    accountsWords.held.why.soon(move.account.name, tokens),
+  off: () => accountsWords.held.why.off,
+  fork: () => accountsWords.held.why.fork,
+  room: (_, tokens) => accountsWords.held.why.room(tokens),
+  work: () => accountsWords.held.why.work,
 };
 
 /**
@@ -1645,13 +1703,15 @@ const waitingDetail = (
 ): string => {
   const lead =
     move.accounts?.length === 0
-      ? "No other account is signed in on its machine"
+      ? accountsWords.held.why.alone
       : WAIT_SAYS[move.why](move, tokenWords(move.tokens));
   return [
     lead,
-    ...fitsOf(move.accounts).map(
-      (one) =>
-        `${one.account.name} could take it, ${leftWords(one.reason.leftPct)}`
+    ...fitsOf(move.accounts).map((one) =>
+      accountsWords.held.why.fitsLeft(
+        one.account.name,
+        leftWords(one.reason.leftPct)
+      )
     ),
   ].join(" · ");
 };
@@ -1663,7 +1723,7 @@ const stoppedWords = (
 ): { line: string; detail: string } => {
   const left = move.resetsAt === null ? 0 : move.resetsAt - now;
   return {
-    line: `At ${move.account.name}'s limit · Caw is off`,
+    line: accountsWords.held.cawOff(move.account.name),
     detail:
       left > 0
         ? `Nothing sends it on while Caw is off · ${move.account.name} resets in ${spanWords(left)}`
@@ -1801,7 +1861,7 @@ export const accountMoveWords = (
         line:
           move.until > now
             ? atLimitLine(move.account, move.frees, move.until, now)
-            : `Continued on ${(move.frees ?? move.account).name}`,
+            : accountsWords.held.continued((move.frees ?? move.account).name),
         detail: waitingDetail(move),
       };
     case "stopped":
