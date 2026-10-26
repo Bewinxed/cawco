@@ -312,11 +312,13 @@ const heldPhase = async (kit: Kit, scene: Scene): Promise<Workspace> => {
       }[]
     >("/api/projects")
   ).find((one) => one.id === scene.projectId);
+  // A workspace is no place of its project (hub migration 0322): its clone
+  // is listed nowhere there, and a place at its path holds nothing of it.
   const place = project?.places.find((one) => one.path === ws.path);
   check(
-    "(c) the person's places list does not show it held: its place's `held` is null",
-    place !== undefined && (place.held ?? null) === null,
-    JSON.stringify(place)
+    "(c) the person's places list does not show it held: no place of its, or one whose `held` is null",
+    project !== undefined && (place?.held ?? null) === null,
+    `${project ? "project read" : "project not read"}; ${place ? JSON.stringify(place) : "no place at its path"}`
   );
   // Its words (hub presenters/sessions.ts `heldLine`): the workspace by its handle.
   const said = await scene.callAsParent("delegate_list", {});

@@ -735,6 +735,7 @@ const setUp = async (kit: Kit): Promise<Scene> => {
 };
 
 const spec: Spec = {
+  group: "Workspaces and what agents may touch",
   name: "recut-interrupted",
   host: "it delegates, so its fleet cuts workspaces",
   run: async (kit: Kit) => {
