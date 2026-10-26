@@ -1,6 +1,6 @@
 ---
 name: decision-page
-description: Interview the person for a choice in CawCo — decision cards, one question each, every option drawn live with what it gets and what it costs, one recommended — written as an OpenUI Lang program and read back with artifact_read. The one way any choice reaches the person: a design direction, a component's look, a name, a policy, a scope. Use when the person must pick before work goes on, when asked for options or a page of picks, or when a picked design needs tuning with dials.
+description: Interview the person for a choice in CawCo — decision cards, one question each, every option drawn live with what it gets and what it costs, one recommended — written as an OpenUI Lang program and read back with artifact_read. The one way any choice reaches the person, Caw's questions in a thread included: a design direction, a component's look, a name, a policy, a scope. Use when the person must pick before work goes on, when asked for options or a page of picks, or when a picked design needs tuning with dials.
 ---
 
 # Decision page
@@ -8,6 +8,10 @@ description: Interview the person for a choice in CawCo — decision cards, one 
 A decision page is an **interview**: one question per card, asked in the order the answers depend on each other, each answer drawn live with what it gets the person and what it costs them, and your recommendation with its reason. The page holds only what is still open. A press on an option is the pick, kept at once; a press on it again clears it. Every card stays open, and the person sends the page from its foot when they are ready; their picks and notes come back through `artifact_read`.
 
 The page is a **page** artifact whose source is a program in OpenUI Lang over CawCo's decision library: [LIBRARY.md](LIBRARY.md) holds every component, its arguments, the syntax and the revision rules. You write the program, never markup. The `show` skill's step 1 comes first: the page opens with `does: "pick"` and an `ask` that heads the panel, so the page's title is the one line the hero needs. Each pick is kept by its decision's id with the program's hash. A revision keeps every pick whose id it still has. In a project the program is also committed to `decisions/<name>/page.oui`; a decision's `after` naming another page's decision (`page#id`) links the two pages, which the Decisions tab says on each ("After: …", "Unlocks: …").
+
+## One way to ask
+
+A choice reaches the person only as a decision card on a page, so every pick is in the Decisions tab, in the record, and something work can wait on. A single question is a page with one card (or a few, for one topic), never AskUserQuestion: a project's Caw is refused it, and asks in a thread with a one-card page whose card his reply names by its link, drawn there as the card's chip.
 
 ## The card
 

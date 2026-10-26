@@ -99,7 +99,11 @@ const eventMetadata = (
   };
 };
 
-/** Your answer to his question: the call that asked it, settled, which the transcript draws as its QuestionCard. */
+/**
+ * Your answer to a question of his from before his choices became decision
+ * pages (core `ThreadQuestion`): the call that asked it, settled, which the
+ * transcript draws as its QuestionCard, as it draws any session's.
+ */
 const answerBlock = (
   row: ThreadMessageRow
 ): Pick<TranscriptBlock, "content" | "metadata" | "toolCallId" | "type"> => {

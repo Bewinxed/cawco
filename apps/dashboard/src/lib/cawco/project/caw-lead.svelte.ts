@@ -31,7 +31,6 @@ import {
   type CawView,
   type HarnessKind,
   type ProjectCap,
-  questionsOf,
   type StarterPlace,
 } from "@cawco/core";
 import { failureWords } from "#lib/cawco/hub-read.js";
@@ -325,8 +324,8 @@ export class CawLead {
   });
 
   /**
-   * What the lead has asked in his threads, oldest first: his questions and
-   * project settings (on his row), and memory proposals he asked about
+   * What the lead has asked in his threads, oldest first: his calls and
+   * project settings on your card (on his row), and memory proposals he asked about
    * (parked under their own id, tagged to one of this project's threads).
    */
   readonly asks = $derived.by((): BlockedRequest[] => {
@@ -425,16 +424,11 @@ export class CawLead {
           ? { kind: "say", text: "Reading the board…" }
           : null;
       case "needs-you": {
+        // His asks are Approve cards: his questions are decision pages.
         const [first] = this.asks;
-        const question = questionsOf(
-          first.request.toolName,
-          first.request.input
-        )?.[0]?.question;
         return {
           kind: "ask",
-          text:
-            question ??
-            (first.request.presentation.summary || "Caw asks you something"),
+          text: first.request.presentation.summary || "Caw asks you something",
           more: this.asks.length - 1,
           threadId: first.request.threadId as string,
         };

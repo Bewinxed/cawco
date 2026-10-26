@@ -48,12 +48,19 @@
  *    his turn answers: the command, its exit, the files it touched; a
  *    refusal with why, your Deny as yours.
  *
+ * 7. **No questions**: his AskUserQuestion (OpenCode's `question`) is
+ *    refused with {@link ASK_BY_CARD}. Every choice that reaches the person
+ *    is a decision card on a page (the decision-page skill), his included:
+ *    so it is in Decisions, in the record, and something a task can wait on.
+ *    The refusal keeps no row: it is no call of his hands.
+ *
  * Review independence (tasks.ts `moveTo`) reads the rows back: a task whose
  * only changes are his own edits passes review only once you approved them
  * ({@link reviewProblem}).
  */
 import { isAbsolute, posix } from "node:path";
 import {
+  ASK_USER_QUESTION,
   type Envelope,
   type InstanceRow,
   LEAD_GATED_TOOLS,
@@ -131,6 +138,14 @@ const kindOf = (tool: string): CallKind => {
 const isGated = (ask: PermissionRequestFrame): boolean =>
   GATED.has(ask.toolName) ||
   (ask.harness === "pi" && (ask.requestKind ?? "tool") === "tool");
+
+/** What his question is refused with: how to ask instead. */
+const ASK_BY_CARD =
+  "Caw asks the person with a decision page, never AskUserQuestion: write decisions/<name>/page.oui with one card (or a few for one topic), each with its kind from Who decides, publish it with artifact_create (kind page, does: pick, an ask), name the card in your reply by its link, and end your turn.";
+
+/** Whether an ask is a question for the person: AskUserQuestion, as every harness's question reaches the hub. */
+const isQuestion = (ask: PermissionRequestFrame): boolean =>
+  ask.toolName === ASK_USER_QUESTION || ask.requestKind === "question";
 
 /** The most of a tool call's input its row keeps as its command. */
 const TOOL_INPUT_KEPT = 2000;
@@ -2239,14 +2254,14 @@ export const createLeadGate = ({
 
     /**
      * A permission ask from `lead`, before it is parked: the gate's verdict,
-     * or none for an ask that is not one of a lead's gated calls
-     * ({@link isGated}; it parks as any ask). A replay of one already
-     * settled answers the same, and spends nothing again. A replay of one
-     * still on your card is judged again by the gate as it stands now: its
-     * process still waits on it (a process sessiond holds outlives every
-     * agent and hub install), and a call today's gate lets run or refuses is
-     * the gate's to settle, not yours. An edit's verdict waits on the
-     * project's gate.md read.
+     * a refusal for a question ({@link isQuestion}), or none for an ask that
+     * is not one of a lead's gated calls ({@link isGated}; it parks as any
+     * ask). A replay of one already settled answers the same, and spends
+     * nothing again. A replay of one still on your card is judged again by
+     * the gate as it stands now: its process still waits on it (a process
+     * sessiond holds outlives every agent and hub install), and a call
+     * today's gate lets run or refuses is the gate's to settle, not yours.
+     * An edit's verdict waits on the project's gate.md read.
      */
     async decide(
       lead: InstanceRow,
@@ -2254,12 +2269,16 @@ export const createLeadGate = ({
     ): Promise<GateDecision | undefined> {
       const ask = envelope.payload as PermissionRequestFrame;
       const { requestId } = envelope;
-      if (
-        lead.role !== "lead" ||
-        !lead.projectId ||
-        !requestId ||
-        !isGated(ask)
-      ) {
+      if (lead.role !== "lead" || !lead.projectId || !requestId) {
+        return;
+      }
+      if (isQuestion(ask)) {
+        console.log(
+          `[lead-gate] ${lead.id} ${ask.toolName} refused: Caw asks with a decision page`
+        );
+        return { kind: "deny", message: ASK_BY_CARD };
+      }
+      if (!isGated(ask)) {
         return;
       }
       const known = db.leadCalls.ofRequest(requestId);

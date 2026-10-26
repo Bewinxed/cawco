@@ -76,19 +76,15 @@ import {
   type ItemEnd,
   type NeutralOrigin,
   type PermissionMode,
-  type PermissionRequestFrame,
-  type PermissionResult,
   type ProjectSpend,
   type ProjectStopFrame,
   type ProjectView,
-  questionsOf,
   type RelayProvider,
   type SendPayload,
   type SpawnPayload,
   STAGES_TEMPLATES,
   type StagesTemplate,
   sessionLink,
-  type ThreadAnswer,
   type ThreadEvent,
   type ThreadNote,
   type ThreadStatus,
@@ -96,7 +92,6 @@ import {
   type ThreadUpsertFrame,
   taskLink,
   threadTargetOf,
-  type UserAnswers,
   VIEW_TOOLS,
   type ViewAsked,
   viewTitle,
@@ -549,10 +544,10 @@ const briefOf = (projectName: string): string =>
     "Your project's settings are yours to change with project_settings: rename it, grant it a connection, link its GitHub repository, set where its work lands, publish its place to a new private GitHub repository (create_repo), or turn Review before done on or off (set_review: whether every task waits for the person before done is theirs to choose, so it and create_repo are always an Approve card first). Each other change applies at once and is noted in the thread. A task whose work landed some other way than its attempt you close yourself: move it to done with a reason naming the commit. When a change, a memory write or anything else is the person's to decide (it posts or sends outside, spends, or undoes what they chose), call the tool with ask: true, which puts an Approve/Deny card in front of them and answers you when they do.",
     "You are woken only by events, each one a message: the person writing in a thread, an attempt at a task landing or failing, a task waiting for the person, a delegate's ask routed to you, the person asking for a view. Handle the event, then end your turn. Nothing wakes you on a timer. The person can turn you off: then only their own words wake you, and you do what they ask (tasks, routines, stages, the folder) as at any time; attempts, waiting tasks and routines no longer reach you. Inbound events from outside (GitHub, polled connections) that no route took ride along on your next wake as data: route the kinds that matter to routines with event_route_create.",
     "When the person writes in a thread, answer them in plain text: what you say in the turn after reading their words is posted in that thread as your reply when the turn ends, and they watch it in the thread as you write it, so say nothing in plain text you would not say to them. When a reply names tasks (its `tasks`, shown as cards) or files you wrote, or belongs in another thread, send it with thread_reply instead: a thread_reply to their thread is your reply there, and what you say in plain text after it stays in your session.",
-    "When you need the person's decision, ask with AskUserQuestion, with options; it shows as a card in the thread and their pick comes back to you. Never end a message with a question for them to answer in text. Never hand them shell commands or ask them for setup details in text: do it with your tools, or ask with the card.",
+    'Every choice that reaches the person is a decision card on a page, never AskUserQuestion, which is refused to you. Ask it as a decision page with one card, or a few for one topic (the decision-page skill): write decisions/<name>/page.oui with folder_write, give each Decision its kind from Who decides (look, behaviour, scope, approach, rules, tools), then artifact_create with kind page, the name, does: pick and an ask. Name each card in your reply by the link artifact_create answers for it: the thread draws it as the card\'s chip. Then end your turn; the card waits. One routed to the person waits on them; an advisor\'s or common practice\'s is settled by the delegate the hub starts; one routed to you, settle yourself. When the picks come ("The page … has new responses"), read them with artifact_read and answer in the thread you asked in with thread_reply. Work that rests on a card waits on it (waits_on: "<page>#<card>"). Never end a message with a question for them to answer in text. Never hand them shell commands or ask them for setup details in text: do it with your tools, or ask with a card.',
     "A view-request event is the person asking for a view of the project: it carries how to write one, and the page to stand it on when they asked from one. Answer it with view_draft, then say in that thread what you drafted; the person keeps or discards it. A view-change event is the person asking to change a kept view: it carries the view's program; draft the change under the same name.",
     "When the person asks for a design system, file one task with task_create, its title “Build the design system” and nothing else (a stage only if they named one): the hub writes its description and acceptance, the design-system skill's steps with its decision page among them, and refuses it when the project already has a system or a build is open. Refused because it has one, answer: \"This project has one; say what to change.\" Filed, say what the build will read (the repository's styles and components, the site named in knowledge/, the brand kit in knowledge/brand/, the fonts and pictures in assets/: the ones the project has) and that you filed it. Never build one yourself, and never start one the person did not ask for: the hub asks them once when the work needs one.",
-    "A project with no code yet starts as real code from its first screen. When the person asks for a screen, a component or a design to look at and the repository has no app, name the stack: the one they named, or ask once with AskUserQuestion (SvelteKit, Vite with React or Vue, Astro, Nuxt). Then file one task that scaffolds it with that framework's own creator and builds the first screen as a real component with its sheet, its description naming the stack and the screen skill.",
+    "A project with no code yet starts as real code from its first screen. When the person asks for a screen, a component or a design to look at and the repository has no app, name the stack: the one they named, or ask once with a one-card decision page (SvelteKit, Vite with React or Vue, Astro, Nuxt). Then file one task that scaffolds it with that framework's own creator and builds the first screen as a real component with its sheet, its description naming the stack and the screen skill.",
     'Judgments go to Jev while the person has connected it; while Jev is off some are yours, and never about your own work. Mark a task `fields: { ready: "yes" }` when an agent can do it from its file alone: the dispatcher starts no other. Rank tasks with `rank`: the dispatcher starts them in that order. Triage the tasks a wake lists for triage. Judge an attempt\'s acceptance criteria when a wake asks you to.',
   ].join("\n\n");
 
@@ -791,7 +786,7 @@ export const createCaw = ({
    * once you let his own turn finish as you turned him off, else `event`.
    * What he starts in it is that work's (work-items `origin`), and turning
    * him off asks about his own turn while yours runs to its end.
-   * `threadId` is the thread it last answered (his questions, what he
+   * `threadId` is the thread it last answered (his Approve cards, what he
    * starts, the turn's cost); one no thread woke (a question reaching him as
    * the lead) has none and says `what` it answers, on his panel.
    */
@@ -2344,7 +2339,7 @@ export const createCaw = ({
      * events and is never polled, and no relay for `provider`: an event wake
      * (so only while he is on) on the project's newest conversation, whose
      * words ask him to offer one with relay_create. It carries no note: he
-     * makes the offer there himself, as his question card.
+     * makes the offer there himself, as a one-card decision page.
      */
     offerRelay(
       projectId: string,
@@ -2355,7 +2350,7 @@ export const createCaw = ({
       wakeQuietly(projectId, {
         by: "event",
         ...(threadId ? { threadId } : {}),
-        text: `Event connection: the person signed in the connection “${connection.name}” (${connection.service}, ${connection.account}) for this project. ${connection.service} pushes its events instead of being polled, so none of them reach the project until it has a relay. Offer one: ask the person with AskUserQuestion${threadId ? ` in thread ${threadId}` : ""} whether to open a public webhook path for it. On yes, call relay_create({ provider: "${provider}" }), which puts the opening in front of them as an Approve card, then tell them in the thread what to register at ${connection.service}. On no, leave it: polling stays as it is.`,
+        text: `Event connection: the person signed in the connection “${connection.name}” (${connection.service}, ${connection.account}) for this project. ${connection.service} pushes its events instead of being polled, so none of them reach the project until it has a relay. Offer one: ask the person${threadId ? ` in thread ${threadId}` : ""} with a one-card decision page whether to open a public webhook path for it. On yes, call relay_create({ provider: "${provider}" }), which puts the opening in front of them as an Approve card, then tell them in the thread what to register at ${connection.service}. On no, leave it: polling stays as it is.`,
       });
     },
 
@@ -2993,7 +2988,7 @@ export const createCaw = ({
     },
 
     /**
-     * The thread a session's question goes to, when the session is its
+     * The thread a session's ask on your card goes to, when the session is its
      * project's lead: the one whose message woke this turn, else the
      * project's newest conversation (never a routine's own thread, which
      * only notes its runs). Undefined for any other session.
@@ -3023,45 +3018,9 @@ export const createCaw = ({
       noteIn(project.id, turn ? turn.threadId : answered.get(instanceId), note);
     },
 
-    /** A question tagged to a thread was parked or settled: its status moved. */
+    /** An ask tagged to a thread was parked or settled: its status moved. */
     asksChanged(threadId: string): void {
       upsert(db.thread(threadId));
-    },
-
-    /** Your answer to the lead's question, as your message in its thread: the questions, and your choices or that you walked away. */
-    answered(parked: Envelope, result: PermissionResult): void {
-      const ask = parked.payload as PermissionRequestFrame;
-      const thread = ask.threadId ? db.thread(ask.threadId) : undefined;
-      const questions = questionsOf(ask.toolName, ask.input);
-      if (!(thread && questions)) {
-        return;
-      }
-      let answer: ThreadAnswer = { outcome: "dismissed" };
-      let body = "";
-      if (result.behavior === "allow") {
-        const input = (result.updatedInput ?? {}) as {
-          annotations?: Record<string, { notes?: string; preview?: string }>;
-          answers?: UserAnswers;
-        };
-        const answers = input.answers ?? {};
-        answer = {
-          outcome: "answered",
-          answers,
-          ...(input.annotations ? { annotations: input.annotations } : {}),
-        };
-        body = Object.values(answers).flat().join(", ");
-      }
-      const added = db.addThreadMessage({
-        threadId: thread.id,
-        author: "you",
-        body,
-        question: {
-          questions,
-          ...(ask.toolUseId ? { toolUseId: ask.toolUseId } : {}),
-        },
-        answer,
-      });
-      said(added.thread, added.message);
     },
 
     /**

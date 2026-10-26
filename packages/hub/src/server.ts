@@ -21859,8 +21859,6 @@ export const createServer = (
         throw new Error("That request is no longer pending.");
       }
       recordDelegateAnswer(parked.machineId, instanceId, requestId, result);
-      // A project lead's question: your answer lands in its thread.
-      lead?.answered(parked, result);
       // A call of his on your card: Approve lets it run, as yours; Deny means it does not.
       leadGate.answered(requestId, result);
     } finally {
@@ -36230,9 +36228,9 @@ export const createServer = (
                   break;
                 }
                 // A project's Caw's shell or edit call: his gate decides it
-                // before it parks (lead-gate.ts). Allowed or refused, it is
-                // answered here and never shown; one for your card parks as
-                // any ask does, in his thread.
+                // before it parks (lead-gate.ts), and refuses his questions.
+                // Allowed or refused, it is answered here and never shown;
+                // one for your card parks as any ask does, in his thread.
                 const gated = owner
                   ? await leadGate.decide(owner, message)
                   : undefined;
@@ -36277,14 +36275,12 @@ export const createServer = (
                 // push or a second routing decision.
                 const parkedBefore = pending.get(message.requestId);
                 const alreadyParked = parkedBefore !== undefined;
-                // A project lead's question, or a call of his on your card,
-                // goes to a thread: the one whose message woke this turn,
-                // else the project's newest. A replay keeps the thread it was
-                // first given.
+                // A call of a project lead's on your card goes to a thread:
+                // the one whose message woke this turn, else the project's
+                // newest. A replay keeps the thread it was first given. His
+                // questions never park: his gate refuses them (lead-gate.ts).
                 const askPayload = message.payload as PermissionRequestFrame;
-                const asking =
-                  questionsOf(askPayload.toolName, askPayload.input) !== null ||
-                  gated?.kind === "card";
+                const asking = gated?.kind === "card";
                 let threadId = (
                   parkedBefore?.payload as PermissionRequestFrame | undefined
                 )?.threadId;

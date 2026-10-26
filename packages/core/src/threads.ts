@@ -141,7 +141,11 @@ export interface ThreadSummary {
   title: string;
 }
 
-/** The questions the lead asked you in a thread (its AskUserQuestion). */
+/**
+ * The questions the lead asked you in a thread (its AskUserQuestion), from
+ * before his choices became decision pages (hub lead-gate.ts refuses his
+ * questions now): kept so the answers you gave then still read.
+ */
 export interface ThreadQuestion {
   questions: UserQuestion[];
   /**
@@ -177,8 +181,9 @@ export interface ThreadImage {
 }
 
 /**
- * Your answer to the lead's question: the questions, and your choices or
- * that you walked away; `body` reads it in one line. Your words themselves
+ * Your answer to one of the lead's questions from before they became
+ * decision pages ({@link ThreadQuestion}): the questions, and your choices
+ * or that you walked away; `body` reads it in one line. Your words themselves
  * are sends (`SendRecord` with its `threadId`), never a thread message.
  */
 export interface YourThreadMessage extends ThreadMessageBase {
