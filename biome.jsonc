@@ -107,21 +107,27 @@
         // Ultracite 8.1's: a numbered group is read by its index at the call
         // site, and naming 1,873 of them changes no match. Style, no defect.
         "useNamedCaptureGroup": "off",
-        // A method an interface or a base class names must stay a method,
-        // `this` or not; the rest move out of the class when they read none.
-        "useThisInClassMethods": {
-          "level": "error",
-          "options": {
-            "ignoreClassesWithImplements": "public-fields",
-            "ignoreOverrideMethods": true,
-          },
-        },
+        // Ultracite 8.1's: 84 findings, ~30 of them public members callers
+        // reach through a store or service and callback slots with a no-op
+        // default, the rest private helpers; none a defect.
+        "useThisInClassMethods": "off",
+        // getElementById is the exact lookup; querySelector("#" + id)
+        // throws on an id that starts with a digit, and querySelectorAll's
+        // list is static where getElementsByTagName's is live.
+        "useDomQuerySelector": "off",
+        // Custom properties set inline are how a value reaches CSS here;
+        // scripts/lint/design/shadcn.mjs (no-inline-styles) is the one
+        // policy, and this rule's only fix deletes the attribute.
+        "noInlineStyles": "off",
       },
       // Baseline, read against what the dashboard ships to: current Chromium
       // and WebKit (the phone app's WKWebView), never an older engine. The
       // tier is "newly"; the allow lists name the features it uses on purpose
       // that are not yet Baseline in every engine.
       "suspicious": {
+        // With let and const each iteration has its own binding; the 31
+        // findings are callbacks reading shared state on purpose.
+        "noLoopFunc": "off",
         "useBaseline": {
           "level": "error",
           "options": {
@@ -189,6 +195,12 @@
     },
   },
   "overrides": [
+    {
+      // Ultracite's Svelte preset turns noInlineStyles back on for Svelte
+      // and app.html; the house rule (shadcn.mjs no-inline-styles) holds.
+      "includes": ["**/*.svelte", "**/app.html"],
+      "linter": { "rules": { "style": { "noInlineStyles": "off" } } },
+    },
     {
       // The design system's colour rule over the dashboard's markup and
       // scripts, moved from @shadcn/lint's no-raw-colors, which ran with no
