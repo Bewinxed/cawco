@@ -186,6 +186,11 @@ public struct ProjectTasks: Sendable {
     public enum Edge: Sendable, CaseIterable {
         case after, parent, related, foundIn, duplicateOf
 
+        /// The ones a person may write: the hub's links are waitsOn, partOf and
+        /// duplicateOf since 2026-10-26, it writes found_in itself, and related
+        /// links are gone; their rows stand only for what a task already holds.
+        public static let allCases: [Edge] = [.after, .parent, .duplicateOf]
+
         /// What its row is called.
         public var name: String {
             switch self {

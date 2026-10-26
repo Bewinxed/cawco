@@ -3851,10 +3851,11 @@ export const createTasks = (store: TaskStore) => {
   };
 
   /**
-   * Each live attempt's moved witnesses already told, by work item, target
-   * and the value told: one message per change, none for the same answer.
+   * Each live attempt's moved witnesses already told, by work item: the
+   * target and the value told, one message per change, none for the same
+   * answer. An attempt leaves it once it is no longer live.
    */
-  const toldMoves = new Set<string>();
+  const toldMoves = new Map<string, Set<string>>();
 
   /**
    * What a link write does to a task's `duplicate_of`: closes it as a
@@ -3975,6 +3976,36 @@ export const createTasks = (store: TaskStore) => {
       refuseSelf(projectId, doc, id);
     }
     return { partOf: whole, said: [`part of ${whole}`] };
+  };
+
+  /**
+   * A task's live attempt hears once each card or pin it was dispatched on
+   * whose value moved since; an attempt no longer live leaves the record.
+   */
+  const tellMoved = (projectId: string, task: TaskSummary): void => {
+    for (const ended of task.attempts.filter(
+      (attempt) => !isLive(attempt.state)
+    )) {
+      toldMoves.delete(ended.workItemId);
+    }
+    const live = task.attempts.find((attempt) => isLive(attempt.state));
+    if (!live) {
+      return;
+    }
+    const heard = toldMoves.get(live.workItemId) ?? new Set<string>();
+    toldMoves.set(live.workItemId, heard);
+    for (const witness of live.waitedOn) {
+      const now = task.waits.find((wait) => wait.target === witness.target);
+      const key = `${witness.target}\0${now?.value}`;
+      if (!now || now.value === witness.value || heard.has(key)) {
+        continue;
+      }
+      heard.add(key);
+      store.tell?.(
+        live.instanceId,
+        `[CawCo] ${markdownLink(now.label, now.href)}, which ${linked(projectId, task)} was started on, ${now.value === null ? taskLinkWords.wasReopened : taskLinkWords.wasAnsweredDifferently} since. Read it again before you build on it.`
+      );
+    }
   };
 
   return {
@@ -4544,23 +4575,7 @@ export const createTasks = (store: TaskStore) => {
       const list = await listTasks(projectId);
       emit({ kind: "changed", projectId });
       for (const task of list.tasks) {
-        const live = task.attempts.find((attempt) => isLive(attempt.state));
-        for (const witness of live?.waitedOn ?? []) {
-          const now = task.waits.find((wait) => wait.target === witness.target);
-          const key = `${live?.workItemId}\0${witness.target}\0${now?.value}`;
-          if (
-            !(live && now) ||
-            now.value === witness.value ||
-            toldMoves.has(key)
-          ) {
-            continue;
-          }
-          toldMoves.add(key);
-          store.tell?.(
-            live.instanceId,
-            `[CawCo] ${markdownLink(now.label, now.href)}, which ${linked(projectId, task)} was started on, ${now.value === null ? "was reopened" : "was answered differently"} since. Read it again before you build on it.`
-          );
-        }
+        tellMoved(projectId, task);
       }
     },
 

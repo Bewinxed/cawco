@@ -737,29 +737,23 @@ export const createIngress = ({
   /**
    * The pull requests and runs project `projectId` waits on, read with its
    * poller's client, each until it settles; one nobody asked about for an
-   * hour leaves the list. A state that moved tells the project's tasks.
+   * hour leaves the list, settled or not (a reader asks again on its next
+   * read, and it comes back). A state that moved tells the project's tasks.
    */
   const readWaits = async (
     projectId: string,
     octokit: ReturnType<Connections["githubClient"]>
   ): Promise<void> => {
-    const now = Date.now();
     let moved = false;
-    for (const [url, wait] of waits) {
-      if (wait.projectId !== projectId || FINAL_WAITS.has(wait.state)) {
-        continue;
-      }
-      if (now - wait.asked > WAIT_ASKED_MS) {
-        waits.delete(url);
-        continue;
-      }
-      const target = githubTarget(url);
-      if (!target) {
-        continue;
-      }
+    for (const [url, target] of waitsDue(projectId)) {
       // biome-ignore lint/performance/noAwaitInLoops: a project's few waits, one request at a time against its rate limit
       const read = await readGitHubWait(octokit, target).catch(() => undefined);
-      if (read && (read.state !== wait.state || read.title !== wait.title)) {
+      const wait = waits.get(url);
+      if (
+        wait &&
+        read &&
+        (read.state !== wait.state || read.title !== wait.title)
+      ) {
         waits.set(url, { ...wait, ...read });
         moved = true;
       }
@@ -767,6 +761,26 @@ export const createIngress = ({
     if (moved) {
       waitsMoved?.(projectId);
     }
+  };
+
+  /** The waits project `projectId`'s poll reads now, the ones nobody asked about for an hour taken off the list. */
+  const waitsDue = (
+    projectId: string
+  ): [string, Extract<WaitTarget, { kind: "pr" | "run" }>][] => {
+    const now = Date.now();
+    const due: [string, Extract<WaitTarget, { kind: "pr" | "run" }>][] = [];
+    for (const [url, wait] of waits) {
+      const target = githubTarget(url);
+      if (wait.projectId !== projectId || !target) {
+        continue;
+      }
+      if (now - wait.asked > WAIT_ASKED_MS) {
+        waits.delete(url);
+      } else if (!FINAL_WAITS.has(wait.state)) {
+        due.push([url, target]);
+      }
+    }
+    return due;
   };
 
   /**

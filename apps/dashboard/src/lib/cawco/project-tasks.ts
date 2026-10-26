@@ -337,6 +337,8 @@ export interface TaskView extends TaskFlags, TaskTimes {
   /** Front matter fields the file carries that a task file does not know, with their values (a scalar or a list), as the hub reads them. */
   extra: Record<string, string | string[]>;
   foundIn: string | null;
+  /** Where it was found, by its link: a task's title, what a pin stands on; null when nowhere. */
+  foundInNamed: { href: string; label: string } | null;
   /** sha256 hex of the file as read. */
   hash: string;
   id: string;

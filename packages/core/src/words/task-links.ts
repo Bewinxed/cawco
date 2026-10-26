@@ -36,6 +36,10 @@ export const taskLinkWords = {
   /** Why a project cannot wait on a pull request or run. */
   noGitHub:
     "the project has no GitHub connection to read it. Connect GitHub for the project first.",
+  /** A live attempt's word that a card it started on moved: reopened. */
+  wasReopened: "was reopened",
+  /** A live attempt's word that a card it started on moved: answered differently. */
+  wasAnsweredDifferently: "was answered differently",
   /** The comment a task's related links became when links were cut over. */
   seeAlso: "See also:",
 } as const;

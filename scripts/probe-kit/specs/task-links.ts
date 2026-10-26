@@ -168,12 +168,13 @@ const pick = async (
   doc.destroy();
 };
 
-/** A work item at `task`, written as the hub records an attempt. */
+/** A work item at `task`, written as the hub records an attempt; its session the planner's when `session` says so. */
 const attempt = (
   probe: Probe,
   task: string,
   state: "running" | "done",
-  waitedOn: { target: string; value: string }[] = []
+  waitedOn: { target: string; value: string }[] = [],
+  session: string = crypto.randomUUID()
 ): void => {
   const item = crypto.randomUUID();
   const now = Date.now();
@@ -182,7 +183,7 @@ const attempt = (
     item,
     crypto.randomUUID(),
     probe.id,
-    crypto.randomUUID(),
+    session,
     probe.project.id,
     task,
     state,
@@ -194,6 +195,15 @@ const attempt = (
 
 const PULL_PATH = /\/repos\/probe\/repo\/pulls\/(\d+)$/;
 const RUN_PATH = /\/repos\/probe\/repo\/actions\/runs\/(\d+)$/;
+
+/** The hub's words to a session about its task's waits (tasks.ts `tell`), oldest first. */
+const toldTo = (probe: Probe, session: string): string[] =>
+  probe.fleet
+    .query<{ body: string }>(
+      "SELECT body FROM sent_messages WHERE instance_id = ? AND json_extract(body, '$.origin.name') = 'task-waits' ORDER BY accepted_at",
+      session
+    )
+    .map((row) => row.body);
 
 /** GitHub's REST API for one repository's pulls and runs, each in the state `states` names, on the loopback. */
 const githubStandIn = (
@@ -358,7 +368,23 @@ const run = async (kit: Kit) => {
     now.get(a.id)?.unblocks.includes(b.id) === true,
     JSON.stringify(now.get(a.id)?.unblocks)
   );
+  // A live attempt whose task waits on A, its session the planner's.
+  const h = await file(probe, {
+    title: "Count the tray badges",
+    waits_on: [a.id],
+  });
+  attempt(probe, h.id, "running", [], probe.id);
   await move(a.id, "done");
+  await Bun.sleep(1000);
+  kit.check(
+    "2: A's close tells the live session whose task waited on it, once",
+    toldTo(probe, probe.id).filter(
+      (body) =>
+        body.includes("Build the tray store") &&
+        body.includes("Count the tray badges")
+    ).length === 1,
+    JSON.stringify(toldTo(probe, probe.id))
+  );
   now = await board();
   kit.check(
     "2: with A done and the card open, B is still not ready",
@@ -487,6 +513,19 @@ const run = async (kit: Kit) => {
   });
   attempt(probe, done.id, "done", [{ target: card, value: "compact" }]);
   await move(done.id, "done");
+  // A live attempt started on the card picked "compact", its session the planner's.
+  const g = await file(probe, {
+    title: "Draw the compact tray",
+    waits_on: ["tray#head"],
+  });
+  attempt(
+    probe,
+    g.id,
+    "running",
+    [{ target: card, value: "compact" }],
+    probe.id
+  );
+  const toldBefore = toldTo(probe, probe.id).length;
   await pick(probe, artifact, null);
   now = await board();
   kit.check(
@@ -520,6 +559,14 @@ const run = async (kit: Kit) => {
     "8: the same answer again clears the flag",
     now.get(done.id)?.builtOn.length === 0,
     JSON.stringify(now.get(done.id)?.builtOn)
+  );
+  const moved = toldTo(probe, probe.id).slice(toldBefore);
+  kit.check(
+    "8: the live attempt hears once that its card was reopened, once that it was answered differently, and nothing for the same answer again",
+    moved.length === 2 &&
+      moved[0]?.includes(taskLinkWords.wasReopened) === true &&
+      moved[1]?.includes(taskLinkWords.wasAnsweredDifferently) === true,
+    JSON.stringify(moved)
   );
 
   // 9. A wait on GitHub.

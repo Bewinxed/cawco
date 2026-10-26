@@ -283,6 +283,26 @@
   {/if}
   {#if task.foundIn && byId.has(task.foundIn)}
     {@render row("Found in", [task.foundIn], null)}
+  {:else if task.foundInNamed}
+    <!-- Found in a pin's thread: the pin's own chip. -->
+    {@const drawn = referenceOf(task.foundInNamed.href)}
+    <div
+      class="grid grid-cols-(--edge-cols) items-box-start gap-space-2"
+      style:--edge-cols="var(--c-task-edge-label-w) minmax(0, 1fr)"
+    >
+      <span class="pt-space-1 type-label text-ink-muted">Found in</span>
+      <span class="pt-space-1 min-w-0 type-label">
+        {#if drawn.draw === "element"}
+          <drawn.element
+            id={drawn.id}
+            kind={drawn.kind}
+            label={task.foundInNamed.label}
+          />
+        {:else}
+          <span class="text-ink-strong">{task.foundInNamed.label}</span>
+        {/if}
+      </span>
+    </div>
   {/if}
   {#if task.duplicateOf}
     {@render row("Duplicate of", [task.duplicateOf], (id) =>
