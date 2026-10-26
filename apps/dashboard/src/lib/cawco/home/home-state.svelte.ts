@@ -772,7 +772,7 @@ export function projectOfRow(row: BoardRow): string {
 }
 
 /** A project as a row names it: its name and the hue its mark wears in the rail. */
-interface ProjectMarking {
+export interface ProjectMarking {
   hue: MarkHue;
   name: string;
 }

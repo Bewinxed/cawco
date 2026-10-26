@@ -225,7 +225,7 @@
   const ago = (at: number) => formatDistanceToNow(new Date(at));
 </script>
 
-{#snippet who(name: string)}
+{#snippet asker(name: string)}
   <span data-slot="who" class="type-label text-size-inherit text-ink-strong"
     >{name}</span
   >
@@ -246,7 +246,7 @@
       class="flex flex-col gap-space-1 rounded-md bg-surface-recess px-space-3 py-space-2"
     >
       <span class="flex items-baseline gap-space-2 type-meta"
-        >{@render who(each.who)}
+        >{@render asker(each.who)}
         {@render when(each.at)}</span
       >
       <div
@@ -270,7 +270,7 @@
         /></span
       >
       <span data-slot="what" class="min-w-0 wrap-anywhere"
-        >{@render who(each.who)}
+        >{@render asker(each.who)}
         {each.text}</span
       >
       {@render when(each.at)}

@@ -147,7 +147,13 @@
   import { cawOf } from "../session-status";
   import { capLine } from "../usage";
   import { choices } from "./choices.svelte";
-  import { askView, clock, type NeedsItem, span } from "./home-state.svelte";
+  import {
+    askView,
+    clock,
+    type NeedsItem,
+    type ProjectMarking,
+    span,
+  } from "./home-state.svelte";
   import NeedsMeta from "./NeedsMeta.svelte";
   import NeedsRow from "./NeedsRow.svelte";
   import { openPeek, peekable, peekTipOff } from "./peek.svelte";
@@ -657,6 +663,51 @@
   }
 </script>
 
+{#snippet dot()}
+  <span data-slot="dot" aria-hidden="true" class="flex-none text-ink-muted"
+    >·</span
+  >
+{/snippet}
+
+<!-- A meta line's project: its folder in the project's hue, its name a
+     name (label role, strong ink), then the dot. -->
+{#snippet projectMark(project: ProjectMarking)}
+  <span
+    data-slot="project"
+    class="mark-line inline-flex min-w-0 flex-none items-center gap-space-1"
+    data-box
+  >
+    <IconFolder
+      data-needs-card-mark
+      aria-hidden="true"
+      class="size-icon-md flex-none"
+      style="color: var(--mark-{project.hue})"
+    />
+    <span data-slot="project-name" class="type-label text-ink-strong"
+      >{project.name}</span
+    >
+  </span>
+  {@render dot()}
+{/snippet}
+
+<!-- A meta line's machine after the dot, by its OS mark, its name giving
+     way first; and that it is offline when it is. -->
+{#snippet onMachine(machine: { name: string; os: string }, offline: boolean)}
+  {@render dot()}
+  <span
+    data-slot="machine"
+    class="mark-line inline-flex min-w-0 flex-initial items-center gap-space-1"
+    data-box
+  >
+    <OsMark class="size-icon-md flex-none" os={machine.os} />
+    <span class="min-w-0 overflow-clip text-ellipsis">{machine.name}</span>
+  </span>
+  {#if offline}
+    {@render dot()}
+    <span class="flex-none">machine offline</span>
+  {/if}
+{/snippet}
+
 {#if item.kind === "relay"}
   <!-- The stream relay's journey: its own card, drawn as Needs you's row
        (its title, the steps, the onboarding meta line), the same card
@@ -868,26 +919,7 @@
           ]}
         >
           {#if item.project}
-            <span
-              data-slot="project"
-              class="mark-line inline-flex min-w-0 flex-none items-center gap-space-1"
-              data-box
-            >
-              <IconFolder
-                data-needs-card-mark
-                aria-hidden="true"
-                class="size-icon-md flex-none"
-                style="color: var(--mark-{item.project.hue})"
-              />
-              <span data-slot="project-name" class="type-label text-ink-strong"
-                >{item.project.name}</span
-              >
-            </span>
-            <span
-              data-slot="dot"
-              aria-hidden="true"
-              class="flex-none text-ink-muted">·</span
-            >
+            {@render projectMark(item.project)}
           {/if}
           <!-- A held post names the session that asked; its title is the row's. -->
           {#if item.request.presentation.post && item.request.presentation.asker}
@@ -899,29 +931,7 @@
           {:else}
             <span class="flex-none">{askKind(item)}</span>
           {/if}
-          <span
-            data-slot="dot"
-            aria-hidden="true"
-            class="flex-none text-ink-muted">·</span
-          >
-          <span
-            data-slot="machine"
-            class="mark-line inline-flex min-w-0 flex-initial items-center gap-space-1"
-            data-box
-          >
-            <OsMark class="size-icon-md flex-none" os={item.machine.os} />
-            <span class="min-w-0 overflow-clip text-ellipsis"
-              >{item.machine.name}</span
-            >
-          </span>
-          {#if item.stale}
-            <span
-              data-slot="dot"
-              aria-hidden="true"
-              class="flex-none text-ink-muted">·</span
-            >
-            <span class="flex-none">machine offline</span>
-          {/if}
+          {@render onMachine(item.machine, item.stale)}
         </span>
       {:else if item.kind === "artifact"}
         {@const Kind = ARTIFACT_GLYPHS[item.artifactKind]}
@@ -937,26 +947,7 @@
           ]}
         >
           {#if item.project}
-            <span
-              data-slot="project"
-              class="mark-line inline-flex min-w-0 flex-none items-center gap-space-1"
-              data-box
-            >
-              <IconFolder
-                data-needs-card-mark
-                aria-hidden="true"
-                class="size-icon-md flex-none"
-                style="color: var(--mark-{item.project.hue})"
-              />
-              <span data-slot="project-name" class="type-label text-ink-strong"
-                >{item.project.name}</span
-              >
-            </span>
-            <span
-              data-slot="dot"
-              aria-hidden="true"
-              class="flex-none text-ink-muted">·</span
-            >
+            {@render projectMark(item.project)}
           {/if}
           <span
             data-slot="artifact-kind"
@@ -966,29 +957,7 @@
             <Kind aria-hidden="true" class="size-icon-md flex-none" data-box />
             <span>{artifactWords.kindWord[item.artifactKind]}</span>
           </span>
-          <span
-            data-slot="dot"
-            aria-hidden="true"
-            class="flex-none text-ink-muted">·</span
-          >
-          <span
-            data-slot="machine"
-            class="mark-line inline-flex min-w-0 flex-initial items-center gap-space-1"
-            data-box
-          >
-            <OsMark class="size-icon-md flex-none" os={item.machine.os} />
-            <span class="min-w-0 overflow-clip text-ellipsis"
-              >{item.machine.name}</span
-            >
-          </span>
-          {#if item.stale}
-            <span
-              data-slot="dot"
-              aria-hidden="true"
-              class="flex-none text-ink-muted">·</span
-            >
-            <span class="flex-none">machine offline</span>
-          {/if}
+          {@render onMachine(item.machine, item.stale)}
         </span>
         {#if sends}
           <!-- Send: the kit's sm ghost over the row's cover, its last figure's
@@ -1075,34 +1044,11 @@
           class="mark-line pointer-events-none relative col-start-2 col-end-4 row-5 flex min-w-0 items-center gap-space-1 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted"
         >
           {#if item.project}
-            <span
-              data-slot="project"
-              class="mark-line inline-flex min-w-0 flex-none items-center gap-space-1"
-              data-box
-            >
-              <IconFolder
-                data-needs-card-mark
-                aria-hidden="true"
-                class="size-icon-md flex-none"
-                style="color: var(--mark-{item.project.hue})"
-              />
-              <span data-slot="project-name" class="type-label text-ink-strong"
-                >{item.project.name}</span
-              >
-            </span>
-            <span
-              data-slot="dot"
-              aria-hidden="true"
-              class="flex-none text-ink-muted">·</span
-            >
+            {@render projectMark(item.project)}
           {/if}
           <span class="flex-none">Approved action</span>
           {#if item.action.taskId}
-            <span
-              data-slot="dot"
-              aria-hidden="true"
-              class="flex-none text-ink-muted">·</span
-            >
+            {@render dot()}
             <span class="flex-none num">{item.action.taskId}</span>
           {/if}
         </span>
@@ -1210,33 +1156,10 @@
           class="mark-line pointer-events-none relative col-start-2 col-end-4 row-3 flex min-w-0 items-center gap-space-1 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted"
         >
           {#if item.project}
-            <span
-              data-slot="project"
-              class="mark-line inline-flex min-w-0 flex-none items-center gap-space-1"
-              data-box
-            >
-              <IconFolder
-                data-needs-card-mark
-                aria-hidden="true"
-                class="size-icon-md flex-none"
-                style="color: var(--mark-{item.project.hue})"
-              />
-              <span data-slot="project-name" class="type-label text-ink-strong"
-                >{item.project.name}</span
-              >
-            </span>
-            <span
-              data-slot="dot"
-              aria-hidden="true"
-              class="flex-none text-ink-muted">·</span
-            >
+            {@render projectMark(item.project)}
           {/if}
           <span class="flex-none">Task</span>
-          <span
-            data-slot="dot"
-            aria-hidden="true"
-            class="flex-none text-ink-muted">·</span
-          >
+          {@render dot()}
           <span class="flex-none num">{item.taskId}</span>
         </span>
       {:else}
