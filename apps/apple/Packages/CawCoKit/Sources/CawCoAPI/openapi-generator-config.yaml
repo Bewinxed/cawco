@@ -56,6 +56,8 @@ typeOverrides:
     ContinueStep: OpenEnums.ContinueStep
     CreatedBy: OpenEnums.CreatedBy
     DamagedRowRemedy: OpenEnums.DamagedRowRemedy
+    DecidesTableLook: OpenEnums.DecidesTableLook
+    DecidesTableLook2: OpenEnums.DecidesTableLook2
     DecisionSentTo: OpenEnums.DecisionSentTo
     DecisionState: OpenEnums.DecisionState
     DeclaredStepNeeds: OpenEnums.DeclaredStepNeeds
@@ -71,6 +73,7 @@ typeOverrides:
     ErrorFrameLastErrorKind: OpenEnums.ErrorFrameLastErrorKind
     ErrorSaidKind: OpenEnums.ErrorSaidKind
     Exclude: OpenEnums.Exclude
+    Exclude_1: OpenEnums.Exclude_1
     FindConversationOutcome: OpenEnums.FindConversationOutcome
     FindConversationRole: OpenEnums.FindConversationRole
     FindField: OpenEnums.FindField

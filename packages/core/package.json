@@ -71,6 +71,7 @@
     "./machine-key": "./src/machine-key.ts",
     "./choices": "./src/choices.ts",
     "./decisions": "./src/decisions.ts",
+    "./decides": "./src/decides.ts",
     "./house-faces": "./src/house-faces.ts",
     "./words/decisions": "./src/words/decisions.ts",
     "./words/routines": "./src/words/routines.ts",

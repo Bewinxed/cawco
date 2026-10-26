@@ -8,7 +8,7 @@
  * hash and time, a decision page's program) is the detailed form.
  */
 
-import { artifactLink } from "@cawco/core";
+import { artifactLink, decidedByLine } from "@cawco/core";
 import { type Pin, pinStandsOn, type ThreadEntry } from "@cawco/core/comments";
 import type { CanvasSpec, DesignMap } from "@cawco/core/stage";
 import type {
@@ -24,6 +24,7 @@ import type {
   Promoted,
   Removed,
   Revised,
+  Settled,
   Shown,
 } from "../artifacts/service";
 import type { Picture, Presented } from "../mcp-tool";
@@ -78,10 +79,19 @@ export interface CommentResolved {
 /** A decision page's cards' links, as the agent names each to the person. */
 const cardLinkLines = (
   heading: string,
-  cards: Record<string, string> | undefined
+  cards: Record<string, string> | undefined,
+  routes: Record<string, string> | undefined
 ): string[] => {
-  const links = Object.values(cards ?? {});
-  return links.length > 0 ? [heading, ...links.map((link) => `- ${link}`)] : [];
+  const links = Object.entries(cards ?? {}).map(
+    ([id, link]) => routes?.[id] ?? link
+  );
+  if (links.length === 0) {
+    return [];
+  }
+  return [
+    routes ? `${heading.slice(0, -1)}, and who decides each:` : heading,
+    ...links.map((link) => `- ${link}`),
+  ];
 };
 
 /** An artifact as an agent names it: its link, then its kind, `[pricing](cawco:artifact/<id>) (page)`. */
@@ -159,7 +169,7 @@ const answerLine = (answer: DecisionAnswer, now: number): string => {
     case "open":
       return `- ${asked}: no pick yet${answer.note ? `; note ${verbatim(answer.note)}` : ""}`;
     case "picked":
-      return `- ${asked}: picked ${listed(answer.options.map((option) => (option.label ? `${option.id} ${quote(option.label, 60)}` : option.id)))} ${ago(answer.at, now)}${earlier}${note}`;
+      return `- ${asked}: picked ${listed(answer.options.map((option) => (option.label ? `${option.id} ${quote(option.label, 60)}` : option.id)))} ${ago(answer.at, now)}${earlier}${note}${answer.settled ? `. ${decidedByLine(answer.settled)}${answer.settled.sources.length > 0 ? `: ${answer.settled.sources.join(", ")}` : ""}` : ""}`;
     case "cleared":
       return `- ${asked}: picked, then cleared ${ago(answer.at, now)}${earlier}; nothing picked now${note}`;
     case "gone":
@@ -487,7 +497,11 @@ export const artifactCreatedWords = (created: Created): string =>
     markedLine(created.marked),
     created.held,
     created.note,
-    cardLinkLines("Its cards, as you name each to the person:", created.cards),
+    cardLinkLines(
+      "Its cards, as you name each to the person:",
+      created.cards,
+      created.routes
+    ),
     !!created.dropped?.length &&
       `Components the library does not have, dropped: ${listed(created.dropped)}.`,
     brokenLines(created.broken),
@@ -535,7 +549,8 @@ const revisedWords = (revised: Revised): string => {
     `Its decisions now: ${listed(revised.decisions) || "none"}.`,
     cardLinkLines(
       "The cards it put in or rewrote, as you name each to the person:",
-      revised.cards
+      revised.cards,
+      revised.routes
     ),
     markedLine(revised.marked),
     revised.moved.added.length > 0 &&
@@ -738,3 +753,7 @@ export const designMapWords = (map: DesignMap): string => {
       `${map.steer ?? "More past this page."} Next page: cursor ${map.next_cursor}.`
   );
 };
+
+/** `settle`: the card, the option it holds now, and who settled it. */
+export const settledWords = (answer: Settled): string =>
+  `${answer.card} now holds ${answer.option.label}. ${decidedByLine(answer.settled)}. Its waits settle now; the person can pick again.`;

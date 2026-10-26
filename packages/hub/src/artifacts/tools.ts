@@ -13,6 +13,7 @@ import {
   PREVIEW_START_PATH,
 } from "@cawco/core";
 import { CANVAS_LIMITS, SKELETON_TYPES } from "@cawco/core/canvas";
+import { CHOICE_LIMITS } from "@cawco/core/choices";
 import { COMMENT_LIMITS } from "@cawco/core/comments";
 import {
   CANVAS_SPEC_LIMITS,
@@ -47,6 +48,7 @@ export const ARTIFACT_TOOLS = [
   "comment_reply",
   "comment_resolve",
   "design_map",
+  "settle",
 ] as const;
 export type ArtifactTool = (typeof ARTIFACT_TOOLS)[number];
 
@@ -387,4 +389,29 @@ export const commentResolve = {
   description:
     "Resolve a pin once your change answers it, with a last line when it helps. The person can reopen it.",
   input: { pin, text: z.string().min(1).max(COMMENT_LIMITS.text).optional() },
+};
+
+export const settle = {
+  name: "settle",
+  description:
+    "Pick an option on a decision card the project's Who decides gives you: a card of yours whose kind goes to the agent, or a card the hub started you to settle. A card the person decides is refused.",
+  input: {
+    card: z
+      .string()
+      .min(3)
+      .max(ARTIFACT_REF_MAX + CHOICE_LIMITS.id + 1)
+      .describe("<page>#<card>."),
+    option: z.string().min(1).max(CHOICE_LIMITS.option).describe("Its id."),
+    why: z
+      .string()
+      .min(1)
+      .max(CHOICE_LIMITS.why)
+      .describe("One sentence: the fact that decides it."),
+    sources: z
+      .array(z.string().min(1).max(CHOICE_LIMITS.source))
+      .max(CHOICE_LIMITS.sources)
+      .describe(
+        "Links or repository paths it rests on; common practice names an https link."
+      ),
+  },
 };

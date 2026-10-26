@@ -665,6 +665,7 @@ import type {
 import { TAG_MARKERS, tagStoredSend } from "./db/tag-markers";
 import { undoable } from "./db/trash";
 import { sendWords } from "./db/words";
+import { decidesRoutes } from "./decides-file";
 import { buildDecisionPage, type PageSources } from "./decision-page";
 import {
   type ArtifactNamed,
@@ -898,6 +899,7 @@ import {
 import { createSessionIdentities } from "./session-identity";
 import { createSessionLifecycle } from "./session-lifecycle";
 import { sessionLimitRoutes } from "./session-limits";
+import { createSettling } from "./settling";
 import { applySetupPicks } from "./setup";
 import { type ShownDeps, shownRefusal } from "./shown-files";
 import { resolveSkill } from "./skills";
@@ -14162,7 +14164,24 @@ export const createServer = (
     );
     return ` Its delegates left ${sessions.length === 1 ? "this artifact" : `these ${sessions.length} artifacts`} in the person's panel: ${listed}. ${now ? artifactToolWords.leftoverEnded : artifactToolWords.leftoverLive}`;
   };
+  // Who decides (settling.ts): each card's route said to its writer, and a
+  // delegate started under it, the way dispatch starts an attempt, for each
+  // card an advisor or common practice settles.
+  const settling = createSettling({
+    db: db.decides,
+    instance: (id) => db.getInstancesByIds([id])[0],
+    start: (request) => workItems.start(request),
+    live: (id) => {
+      const state = db.workItem(id)?.state;
+      return state === "starting" || state === "running";
+    },
+  });
   const artifacts: Artifacts = createArtifacts({
+    decides: {
+      routed: (asker, row, cards, all, state) =>
+        settling.routed(asker, row, cards, all, state),
+      settler: (settler, row, card) => settling.settler(settler, row, card),
+    },
     // The panel closes at once; what it showed is still served on its own
     // origin, for its tab and its decision cards.
     close: (instanceId) => {
@@ -29424,6 +29443,7 @@ export const createServer = (
           }
         ),
         gateRoutes((id) => db.project(id) !== undefined),
+        decidesRoutes(db.decides, (id) => db.project(id) !== undefined),
         taskRoutes(tasks),
         artifactRoutes(artifacts),
         decisionRoutes(decisions),

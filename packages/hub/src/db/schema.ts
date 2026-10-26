@@ -56,6 +56,7 @@ import type {
   ToolStatus,
   WorkspaceKind,
 } from "@cawco/core";
+import { DECIDES_ROUTES, DECISION_KINDS } from "@cawco/core/decides";
 import type { MachinePath } from "@cawco/core/machine-path";
 import { storedJson } from "@cawco/core/stored-json";
 import {
@@ -3228,6 +3229,47 @@ export const sessionLimits = sqliteTable("session_limits", {
   memoryPercent: integer("memory_percent"),
   cpuPercent: integer("cpu_percent"),
 });
+
+/**
+ * The fleet's Who decides (core decides.ts) — one row, keyed `'decides'`,
+ * following the {@link spendSettings} precedent: the route of each kind a
+ * project's decides.md leaves out (decides-file.ts), and the delegate type an
+ * advisor runs as. A kind it leaves out is core `DEFAULT_ROUTES`'s; no row
+ * reads as those defaults.
+ */
+export const decidesSettings = sqliteTable("decides_settings", {
+  /** Always `'decides'`. */
+  id: text("id").primaryKey(),
+  routes: storedJson(
+    z.partialRecord(z.enum(DECISION_KINDS), z.enum(DECIDES_ROUTES))
+  )("routes")
+    .notNull()
+    .default({}),
+  /** The advisor's delegate type; null: core `DEFAULT_ADVISOR`. */
+  advisor: text("advisor"),
+});
+
+/**
+ * A card the hub handed to a delegate to settle (settling.ts): an advisor's
+ * or common practice's, started for the session that wrote the card. Only
+ * that delegate's session may `settle` it. One row per card, the latest
+ * run's; a row whose work item ended stands for no one on it.
+ */
+export const cardSettlings = sqliteTable(
+  "card_settlings",
+  {
+    artifactId: text("artifact_id").notNull(),
+    card: text("card").notNull(),
+    route: text("route").$type<"advisor" | "practice">().notNull(),
+    /** The delegate's session. */
+    instanceId: text("instance_id").notNull(),
+    workItemId: text("work_item_id").notNull(),
+    /** The session that wrote the card: the delegate's parent. */
+    askedBy: text("asked_by").notNull(),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.artifactId, table.card] })]
+);
 
 /**
  * Fleet watch's switch (fleet-watch.ts) — one row, keyed `'fleet-watch'`,

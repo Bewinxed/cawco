@@ -182,6 +182,17 @@
           },
           "note": {
             "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "look",
+              "behaviour",
+              "scope",
+              "approach",
+              "rules",
+              "tools"
+            ]
           }
         },
         "required": [

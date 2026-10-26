@@ -9,7 +9,9 @@
  * hold back (core doc-link.ts).
  *
  * A page's client may write the doc's `state`, within the bridge's bounds
- * (core `choiceEntryProblem`), the same the pane checks before it writes. A
+ * (core `choiceEntryProblem`), the same the pane checks before it writes,
+ * and never a pick's `settled` record, which the hub alone writes (core
+ * `settledWriteProblem`, artifacts/service.ts `settle`). A
  * canvas's screen may write its `elements` and `files`, its pen mode in
  * `meta`, and its claims and results on the agent's `requests`, within the
  * canvas's bounds (core `CANVAS_LIMITS`). Either may write the person's ink,
@@ -27,7 +29,9 @@ import { join } from "node:path";
 import {
   type ArtifactChoices,
   CHOICE_LIMITS,
+  type ChoiceEntry,
   choiceEntryProblem,
+  settledWriteProblem,
 } from "@cawco/core";
 import { CANVAS_LIMITS } from "@cawco/core/canvas";
 import {
@@ -300,7 +304,12 @@ const stateProblem = (doc: Doc, trial: Doc): string | null => {
   const before = doc.getMap("state");
   for (const [key, value] of state.entries()) {
     if (JSON.stringify(value) !== JSON.stringify(before.get(key))) {
-      const problem = choiceEntryProblem(key, value);
+      const problem =
+        choiceEntryProblem(key, value) ??
+        settledWriteProblem(
+          before.get(key) as ChoiceEntry | undefined,
+          value as ChoiceEntry
+        );
       if (problem) {
         return problem;
       }

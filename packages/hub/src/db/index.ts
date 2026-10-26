@@ -125,6 +125,7 @@ import { type AtLimitDb, atLimitDb } from "./at-limit";
 import { type BlocksDb, blocksDb } from "./blocks";
 import { type BrowsersDb, browsersDb } from "./browsers";
 import { type ConnectionsDb, connectionsDb } from "./connections";
+import { type DecidesDb, decidesDb } from "./decides";
 import { type DesignChecksDb, designChecksDb } from "./design-checks";
 import { type DesignOffersDb, designOffersDb } from "./design-offers";
 import {
@@ -879,6 +880,8 @@ export interface DbShape {
     /** Told once the dates, written a chunk a turn after this returns, are in. */
     written?: () => void
   ) => number;
+  /** Who decides: the fleet's table and the cards handed to a delegate to settle (decides.ts). */
+  readonly decides: DecidesDb;
   /** The ask a `requestId` opened, so its answer is filed under the same parent. */
   readonly delegateAsk: (requestId: string) => DelegateEvent | undefined;
   /** The fleet's delegate types (delegate-types.ts), on this connection. */
@@ -10326,6 +10329,7 @@ const make = async (path: string): Promise<DbShape> => {
     designOffers: designOffersDb(db),
     lfsOffers: lfsOffersDb(db),
     blocks: blocksDb(db),
+    decides: decidesDb(db),
     starters: startersDb(db),
     routines: routinesDb(db),
     connections: connectionsDb(db),

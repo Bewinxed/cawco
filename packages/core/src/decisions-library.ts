@@ -22,6 +22,7 @@ import {
   type PromptOptions,
 } from "@openuidev/lang-core";
 import { z } from "zod";
+import { DECISION_KIND_WORDS, DECISION_KINDS } from "./decides";
 import { VIEW_TEXT_ROLES, VIEW_TONES } from "./views";
 
 /** Every component a decision page may name, in the order the prompt lists them. */
@@ -259,6 +260,12 @@ export const decisionLibrary = <C>(
         .optional()
         .describe(
           'What the note is for, a noun phrase its button finishes ("Add <note>") and its field asks for. Left out, it reads "Add a note".'
+        ),
+      kind: z
+        .enum(DECISION_KINDS)
+        .optional()
+        .describe(
+          `What sort of choice it is; the hub settles it by the project's Who decides. ${DECISION_KINDS.map((kind) => `${kind}: ${DECISION_KIND_WORDS[kind].example}`).join("; ")}. Left out, the person picks.`
         ),
     })
   );

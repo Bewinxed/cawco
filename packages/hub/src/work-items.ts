@@ -806,6 +806,12 @@ export interface WorkItemRequest {
    * (a memory curator run's `curator`, routines.ts), never by a tool call.
    */
   role?: SessionRole;
+  /**
+   * The hub started it to settle its parent's decision cards (settling.ts):
+   * a leaf parent takes it too, since a leaf's refusal is of its own
+   * delegate calls. Set by the hub alone, never by a tool call.
+   */
+  settlesCards?: true;
   skills?: string[];
   /**
    * The project task the item is an attempt at (dispatch.ts). Only for a new
@@ -5772,7 +5778,7 @@ export const createWorkItems = ({
         `unknown session ${request.parentInstanceId}`
       );
     }
-    if (parent.canDelegate === false) {
+    if (parent.canDelegate === false && !request.settlesCards) {
       throw new WorkItemRefusal(403, LEAF_DELEGATE_REFUSAL);
     }
     const problem = requestProblem(request);

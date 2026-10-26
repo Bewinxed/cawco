@@ -10,6 +10,7 @@ import {
   ARTIFACT_DOES,
   ARTIFACT_NAME,
   ASK_LIMIT,
+  CHOICE_LIMITS,
   PREVIEW_START_PATH,
   SHOWN_FAILURES,
 } from "@cawco/core";
@@ -537,6 +538,28 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       ({ params, body }) => {
         try {
           return artifacts.askUpdate(params.id, params.artifact, body.ask);
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
+    // A card settled for the person (settle, Who decides): written as the person's pick is, with who settled it.
+    .post(
+      "/api/instances/:id/artifacts/:artifact/settle",
+      {
+        body: t.Object({
+          card: t.String({ minLength: 1, maxLength: CHOICE_LIMITS.id }),
+          option: t.String({ minLength: 1, maxLength: CHOICE_LIMITS.option }),
+          why: t.String({ minLength: 1, maxLength: CHOICE_LIMITS.why }),
+          sources: t.Array(
+            t.String({ minLength: 1, maxLength: CHOICE_LIMITS.source }),
+            { maxItems: CHOICE_LIMITS.sources }
+          ),
+        }),
+      },
+      async ({ params, body }) => {
+        try {
+          return await artifacts.settle(params.id, params.artifact, body);
         } catch (error) {
           return refused(error);
         }

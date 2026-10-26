@@ -4,6 +4,7 @@
  * A module of its own so the preview overlay bundles these and nothing else
  * of core.
  */
+import type { DecidesRoute } from "./decides";
 
 /**
  * One id's entry in an artifact's `state` (Projects spec §5.10): the options
@@ -17,9 +18,28 @@ export interface ChoiceEntry {
   /** Options picked, in the order picked; empty when cleared. */
   options: string[];
   pageHash: string;
+  /**
+   * Who settled the pick, when it was not the person (hub settling.ts, the
+   * `settle` tool): the route, the session, why and its sources. Absent on
+   * the person's own pick, whose why is its note. Only the hub writes it.
+   */
+  settled?: SettledBy;
   /** What `cawco.set` stored under this id; null when nothing was set. */
   value: unknown;
 }
+
+/** A pick the hub wrote for a card from `settle`: by whom, why, and on what sources. */
+export interface SettledBy {
+  by: Exclude<DecidesRoute, "you">;
+  /** The session that settled it, by id. */
+  session: string;
+  /** Links it rests on; common practice's name one at least. */
+  sources: string[];
+  why: string;
+}
+
+/** Who may settle a card besides the person. */
+const SETTLERS: readonly SettledBy["by"][] = ["advisor", "practice", "agent"];
 
 /**
  * The bridge's bounds, the same at both ends: the pane checks what the page
@@ -35,6 +55,11 @@ export const CHOICE_LIMITS = {
   note: 2000,
   /** A set value, as JSON. */
   value: 2000,
+  /** A settled pick's why. */
+  why: 2000,
+  /** A settled pick's sources, and each one's length. */
+  sources: 20,
+  source: 2000,
   /** Ids one artifact's `state` keeps. */
   perArtifact: 500,
 } as const;
@@ -98,6 +123,36 @@ export const choiceEntryProblem = (
   if (JSON.stringify(entry.value ?? null).length > CHOICE_LIMITS.value) {
     return `A set value stops at ${CHOICE_LIMITS.value} characters of JSON.`;
   }
+  return entry.settled === undefined ? null : settledProblem(entry.settled);
+};
+
+/** Why `settled` is not a settled pick's record, or null when it is. */
+const settledProblem = (settled: unknown): string | null => {
+  const given = settled as Partial<SettledBy> | null;
+  if (
+    given === null ||
+    typeof given !== "object" ||
+    !SETTLERS.includes(given.by as SettledBy["by"]) ||
+    typeof given.session !== "string" ||
+    typeof given.why !== "string" ||
+    !Array.isArray(given.sources)
+  ) {
+    return `settled holds by (${SETTLERS.join(", ")}), session, why and sources.`;
+  }
+  if (given.why.length === 0 || given.why.length > CHOICE_LIMITS.why) {
+    return `A settled pick's why is 1 to ${CHOICE_LIMITS.why} characters.`;
+  }
+  if (
+    given.sources.length > CHOICE_LIMITS.sources ||
+    !given.sources.every(
+      (one) =>
+        typeof one === "string" &&
+        one.length > 0 &&
+        one.length <= CHOICE_LIMITS.source
+    )
+  ) {
+    return `A settled pick names at most ${CHOICE_LIMITS.sources} sources, each 1 to ${CHOICE_LIMITS.source} characters.`;
+  }
   return null;
 };
 
@@ -109,15 +164,53 @@ export const choiceEntryProblem = (
 export const noteText = (note: string | null | undefined): string | null =>
   note?.trimEnd() || null;
 
-/** The entry `change` makes of `before` (absent: nothing kept yet), stamped `at`. */
+/**
+ * The entry `change` makes of `before` (absent: nothing kept yet), stamped
+ * `at`. A pick the hub settled keeps who settled it until the person picks
+ * otherwise: a note or a value beside it leaves it theirs.
+ */
 export const changedEntry = (
   before: ChoiceEntry | undefined,
   change: ChoiceChange,
   at: string
-): ChoiceEntry => ({
-  options: "options" in change ? change.options : (before?.options ?? []),
-  note: "note" in change ? noteText(change.note) : (before?.note ?? null),
-  value: "value" in change ? (change.value ?? null) : (before?.value ?? null),
-  pageHash: change.pageHash,
-  at,
-});
+): ChoiceEntry => {
+  const options =
+    "options" in change ? change.options : (before?.options ?? []);
+  const settled =
+    before?.settled && sameOptions(before.options, options)
+      ? { settled: before.settled }
+      : {};
+  return {
+    options,
+    note: "note" in change ? noteText(change.note) : (before?.note ?? null),
+    value: "value" in change ? (change.value ?? null) : (before?.value ?? null),
+    pageHash: change.pageHash,
+    at,
+    ...settled,
+  };
+};
+
+/** Whether two picks hold the same options, in any order. */
+export const sameOptions = (
+  a: readonly string[],
+  b: readonly string[]
+): boolean => a.length === b.length && a.every((option) => b.includes(option));
+
+/**
+ * Why a person's write of `after` over `before` may not be kept for its
+ * `settled`, or null: only the hub settles a pick, so the person's write
+ * carries the settled record it had, unchanged, on the same pick, or none.
+ */
+export const settledWriteProblem = (
+  before: ChoiceEntry | undefined,
+  after: ChoiceEntry
+): string | null => {
+  if (after.settled === undefined) {
+    return null;
+  }
+  return before?.settled &&
+    JSON.stringify(before.settled) === JSON.stringify(after.settled) &&
+    sameOptions(before.options, after.options)
+    ? null
+    : "Only the hub settles a pick: the person's pick carries no settled record of its own.";
+};

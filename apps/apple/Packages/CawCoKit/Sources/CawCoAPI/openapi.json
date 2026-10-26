@@ -2540,6 +2540,257 @@
         }
       }
     },
+    "/api/decides": {
+      "get": {
+        "operationId": "getApiDecides",
+        "responses": {
+          "200": {
+            "description": "getApiDecides 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FleetDecides"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "routes": {
+                    "type": "object",
+                    "properties": {
+                      "look": {
+                        "type": "string",
+                        "enum": [
+                          "you",
+                          "advisor",
+                          "practice",
+                          "agent"
+                        ]
+                      },
+                      "behaviour": {
+                        "type": "string",
+                        "enum": [
+                          "you",
+                          "advisor",
+                          "practice",
+                          "agent"
+                        ]
+                      },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "you",
+                          "advisor",
+                          "practice",
+                          "agent"
+                        ]
+                      },
+                      "approach": {
+                        "type": "string",
+                        "enum": [
+                          "you",
+                          "advisor",
+                          "practice",
+                          "agent"
+                        ]
+                      },
+                      "rules": {
+                        "type": "string",
+                        "enum": [
+                          "you",
+                          "advisor",
+                          "practice",
+                          "agent"
+                        ]
+                      },
+                      "tools": {
+                        "type": "string",
+                        "enum": [
+                          "you",
+                          "advisor",
+                          "practice",
+                          "agent"
+                        ]
+                      }
+                    }
+                  },
+                  "advisor": {
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "routes",
+                  "advisor"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiDecides",
+        "responses": {
+          "200": {
+            "description": "putApiDecides 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FleetDecides"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiDecides 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/decides": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdDecides",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdDecides 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiProjectsByIdDecides200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdDecides 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiProjectsByIdDecides 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdDecides 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiProjectsByIdDecides 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiProjectsByIdDecides 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiProjectsByIdDecides 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiProjectsByIdDecides 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiProjectsByIdDecides 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiProjectsByIdDecides 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiProjectsByIdDecides 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/tasks": {
       "get": {
         "parameters": [
@@ -6108,6 +6359,93 @@
           },
           "422": {
             "description": "deleteApiInstancesByIdArtifactsByArtifact 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/instances/{id}/artifacts/{artifact}/settle": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "artifact",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "card": {
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "option": {
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "why": {
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
+                  "sources": {
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "minLength": 1,
+                      "maxLength": 2000,
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "card",
+                  "option",
+                  "why",
+                  "sources"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiInstancesByIdArtifactsByArtifactSettle",
+        "responses": {
+          "200": {
+            "description": "postApiInstancesByIdArtifactsByArtifactSettle 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settled"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiInstancesByIdArtifactsByArtifactSettle 422",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -26632,6 +26970,21 @@
           "gate"
         ]
       },
+      "getApiProjectsByIdDecides200": {
+        "type": "object",
+        "properties": {
+          "decides": {
+            "$ref": "#/components/schemas/DecidesTable"
+          },
+          "file": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "decides",
+          "file"
+        ]
+      },
       "deleteApiProjectsByIdTasksByTaskId200": {
         "type": "object",
         "properties": {
@@ -34267,6 +34620,139 @@
           "stopsRest"
         ]
       },
+      "FleetDecides": {
+        "description": "The fleet's Who decides: each kind it routes, and its advisor type; what it leaves out is {@link DEFAULT_ROUTES}'s.",
+        "type": "object",
+        "properties": {
+          "advisor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "routes": {
+            "type": "object",
+            "properties": {
+              "look": {
+                "$ref": "#/components/schemas/DecidesTableLook2"
+              },
+              "behaviour": {
+                "$ref": "#/components/schemas/DecidesTableLook2"
+              },
+              "scope": {
+                "$ref": "#/components/schemas/DecidesTableLook2"
+              },
+              "approach": {
+                "$ref": "#/components/schemas/DecidesTableLook2"
+              },
+              "rules": {
+                "$ref": "#/components/schemas/DecidesTableLook2"
+              },
+              "tools": {
+                "$ref": "#/components/schemas/DecidesTableLook2"
+              }
+            }
+          }
+        },
+        "required": [
+          "advisor",
+          "routes"
+        ]
+      },
+      "DecidesTable": {
+        "description": "A project's Who decides as the hub reads it: every kind routed, where each came from, its advisor and its own paths.",
+        "type": "object",
+        "properties": {
+          "advisor": {
+            "description": "The delegate type an advisor runs as.",
+            "type": "string"
+          },
+          "from": {
+            "type": "object",
+            "properties": {
+              "look": {
+                "$ref": "#/components/schemas/DecidesTableLook"
+              },
+              "behaviour": {
+                "$ref": "#/components/schemas/DecidesTableLook"
+              },
+              "scope": {
+                "$ref": "#/components/schemas/DecidesTableLook"
+              },
+              "approach": {
+                "$ref": "#/components/schemas/DecidesTableLook"
+              },
+              "rules": {
+                "$ref": "#/components/schemas/DecidesTableLook"
+              },
+              "tools": {
+                "$ref": "#/components/schemas/DecidesTableLook"
+              }
+            },
+            "required": [
+              "approach",
+              "behaviour",
+              "look",
+              "rules",
+              "scope",
+              "tools"
+            ],
+            "description": "Where each kind's route came from."
+          },
+          "problems": {
+            "description": "Problems in decides.md; the table then is the fleet's.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "routes": {
+            "type": "object",
+            "properties": {
+              "look": {
+                "$ref": "#/components/schemas/DecidesTableLook2"
+              },
+              "behaviour": {
+                "$ref": "#/components/schemas/DecidesTableLook2"
+              },
+              "scope": {
+                "$ref": "#/components/schemas/DecidesTableLook2"
+              },
+              "approach": {
+                "$ref": "#/components/schemas/DecidesTableLook2"
+              },
+              "rules": {
+                "$ref": "#/components/schemas/DecidesTableLook2"
+              },
+              "tools": {
+                "$ref": "#/components/schemas/DecidesTableLook2"
+              }
+            },
+            "required": [
+              "approach",
+              "behaviour",
+              "look",
+              "rules",
+              "scope",
+              "tools"
+            ]
+          },
+          "yours": {
+            "description": "Paths whose change needs a card the person picked (enforced later); empty when none.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "advisor",
+          "from",
+          "problems",
+          "routes",
+          "yours"
+        ]
+      },
       "TaskList": {
         "type": "object",
         "properties": {
@@ -36417,6 +36903,10 @@
             "description": "Its live document on the hub's preview listener.",
             "type": "string"
           },
+          "routes": {
+            "type": "object",
+            "description": "Each card's route by the project's Who decides, by id, a line after its link; absent when no card carries a kind."
+          },
           "sheet": {
             "$ref": "#/components/schemas/SheetRead",
             "description": "A sheet as its stage reads it: its stories with their args, its meta, and each component's props."
@@ -37432,6 +37922,10 @@
                         "id"
                       ]
                     }
+                  },
+                  "settled": {
+                    "$ref": "#/components/schemas/SettledBy",
+                    "description": "Who settled it for the person (`settle`), why and its sources; absent for his own pick."
                   }
                 },
                 "required": [
@@ -37544,6 +38038,43 @@
               }
             ]
           }
+        ]
+      },
+      "SettledBy": {
+        "description": "A pick the hub wrote for a card from `settle`: by whom, why, and on what sources.",
+        "type": "object",
+        "properties": {
+          "by": {
+            "$ref": "#/components/schemas/Exclude"
+          },
+          "session": {
+            "description": "The session that settled it, by id.",
+            "type": "string"
+          },
+          "sources": {
+            "description": "Links it rests on; common practice's name one at least.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "why": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "by",
+          "session",
+          "sources",
+          "why"
+        ]
+      },
+      "Exclude": {
+        "type": "string",
+        "enum": [
+          "advisor",
+          "agent",
+          "practice"
         ]
       },
       "StageUnreached": {
@@ -37757,6 +38288,39 @@
           "removed"
         ]
       },
+      "Settled": {
+        "description": "What `settle` answers: the card, the option it holds now, and who settled it.",
+        "type": "object",
+        "properties": {
+          "card": {
+            "description": "The card's link, `[question](cawco:decision/<artifact>/<card>)`.",
+            "type": "string"
+          },
+          "option": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "label"
+            ]
+          },
+          "settled": {
+            "$ref": "#/components/schemas/SettledBy"
+          }
+        },
+        "required": [
+          "card",
+          "option",
+          "settled"
+        ]
+      },
       "Revised": {
         "description": "What a decision page's revision (`statements`) answers: what it changed,\nnot the page. The person's picks are read with `artifact_read`.",
         "type": "object",
@@ -37824,6 +38388,10 @@
           },
           "revision": {
             "type": "number"
+          },
+          "routes": {
+            "type": "object",
+            "description": "The route of each card it put in or rewrote, by the project's Who decides, by id; absent when no card on the page carries a kind."
           },
           "statements": {
             "$ref": "#/components/schemas/StatementChange",
@@ -39394,6 +39962,10 @@
           },
           "question": {
             "type": "string"
+          },
+          "settled": {
+            "$ref": "#/components/schemas/SettledBy",
+            "description": "Who settled its pick when the person did not (core decides.ts): absent for his own."
           },
           "still": {
             "description": "The mockup's still in the chosen state, by its mockup's built output; null when there is none.",
@@ -42290,10 +42862,10 @@
               "done": {
                 "type": "number"
               },
-              "todo": {
+              "you": {
                 "type": "number"
               },
-              "you": {
+              "todo": {
                 "type": "number"
               },
               "dropped": {
@@ -50616,6 +51188,9 @@
             "description": "The phrase to watch for, a regular expression, or a yes/no question, as `matchKind` says.",
             "type": "string"
           },
+          "scope": {
+            "$ref": "#/components/schemas/RuleScope"
+          },
           "reply": {
             "description": "What the session is sent when the rule fires.",
             "type": "string"
@@ -50638,9 +51213,6 @@
           },
           "timing": {
             "$ref": "#/components/schemas/RuleTiming"
-          },
-          "scope": {
-            "$ref": "#/components/schemas/RuleScope"
           }
         },
         "required": [
@@ -51318,16 +51890,16 @@
             "description": "A command hook's script body. CawCo writes it to a file on every machine\nand points the registration at that path, so the hook travels — a machine\nthat has never seen this hook still runs it correctly. Absent means the\nhandler carries its own `command` and the reader is on their own for\ngetting that command onto each box.",
             "type": "string"
           },
+          "scope": {
+            "$ref": "#/components/schemas/FleetScope",
+            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends the row once to a machine that holds the project\n  ({@link MachineFleetConfig.projects}), the machine places a copy at each\n  checkout and workspace clone of it there, and each session in that\n  folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status."
+          },
           "event": {
             "$ref": "#/components/schemas/HookEvent"
           },
           "enabled": {
             "description": "A disabled hook is simply not written to any machine. Claude Code itself\nhas no way to disable one hook while keeping it, so this is cawco's\nto provide: the row stays, the registration goes.",
             "type": "boolean"
-          },
-          "scope": {
-            "$ref": "#/components/schemas/FleetScope",
-            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. The default, and what most rows\n  want.\n- `local`, `project` — one project ({@link FleetPlacement.projectId}):\n  the hub sends the row once to a machine that holds the project\n  ({@link MachineFleetConfig.projects}), the machine places a copy at each\n  checkout and workspace clone of it there, and each session in that\n  folder takes it. An MCP server, a hook, Claude Code\n  settings, an OpenCode plugin and a pi extension reach the folder's\n  sessions through CawCo's own files and their launch (agent\n  fleet-mcp-set.ts, fleet-harness-set.ts), never a file in the checkout.\n  A skill is placed in `<cwd>/.claude/skills/` under either scope, kept\n  out of the checkout's status."
           },
           "matcher": {
             "type": "string"
@@ -52656,7 +53228,7 @@
             "type": "string"
           },
           "store": {
-            "$ref": "#/components/schemas/Exclude"
+            "$ref": "#/components/schemas/Exclude_1"
           },
           "storeProvider": {
             "description": "The provider's id in that store, as the store names it (`openai` in OpenCode's for ChatGPT).",
@@ -52671,7 +53243,7 @@
           "storeProvider"
         ]
       },
-      "Exclude": {
+      "Exclude_1": {
         "type": "string",
         "enum": [
           "opencode",
@@ -58809,6 +59381,23 @@
         "enum": [
           "archive",
           "end"
+        ]
+      },
+      "DecidesTableLook": {
+        "type": "string",
+        "enum": [
+          "default",
+          "fleet",
+          "project"
+        ]
+      },
+      "DecidesTableLook2": {
+        "type": "string",
+        "enum": [
+          "advisor",
+          "agent",
+          "practice",
+          "you"
         ]
       },
       "DecisionSentTo": {

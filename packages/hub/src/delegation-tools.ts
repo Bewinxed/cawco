@@ -1,4 +1,5 @@
 import {
+  DECIDES_RULE,
   HARNESSES,
   IMAGE_GENERATION_DESCRIPTION,
   IMAGE_QUALITIES,
@@ -20,6 +21,7 @@ import type {
   Promoted,
   Removed,
   Revised,
+  Settled,
   Shown,
 } from "./artifacts/service";
 import {
@@ -36,6 +38,7 @@ import {
   commentReply,
   commentResolve,
   designMap,
+  settle,
 } from "./artifacts/tools";
 import {
   type HandoffDeps,
@@ -63,6 +66,7 @@ import {
   commentRepliedWords,
   commentResolvedWords,
   designMapWords,
+  settledWords,
   type Updated,
 } from "./presenters/artifacts";
 import {
@@ -921,6 +925,23 @@ export function handoffTools(deps: HandoffDeps) {
       { detailed: artifactUpdatedDetailed }
     ),
     tool(
+      settle.name,
+      settle.description,
+      settle.input,
+      ({ card, ...picked }) => {
+        const hash = card.lastIndexOf("#");
+        if (hash <= 0 || hash === card.length - 1) {
+          throw new Error(`“${card}” names no card: write <page>#<card>.`);
+        }
+        return actions.artifactCall(
+          "POST",
+          `/${encodeURIComponent(card.slice(0, hash))}/settle`,
+          { card: card.slice(hash + 1), ...picked }
+        ) as Promise<Settled>;
+      },
+      settledWords
+    ),
+    tool(
       artifactRead.name,
       artifactRead.description,
       artifactRead.input,
@@ -1161,8 +1182,8 @@ const DEFERRED_GROUPS: readonly { prefixes: string[]; what: string }[] = [
     what: "project automation",
   },
   {
-    prefixes: ["artifact_", "comment_", "design_map"],
-    what: "what you open in the person's panel for them to pick, judge, try or draw on (show skill first), their pins on it; design_map the component library",
+    prefixes: ["artifact_", "comment_", "design_map", "settle"],
+    what: "what you open in the person's panel for them to pick, judge, try or draw on (show skill first), their pins on it; design_map the component library; settle a card Who decides gives you",
   },
   { prefixes: ["memory_"], what: "project memory" },
   { prefixes: ["thread_"], what: "your threads with the person" },
@@ -1242,7 +1263,7 @@ export function handoffInstructions(
   const { names } = listable;
   // How a session names another in its words (core references.ts): the
   // dashboard draws the link as that session's chip.
-  const naming = `Name this session with set_title in 3 to 6 plain words once its task is clear; call it again only when the task changes.\n\n${REFERENCE_GUIDANCE}\n\n${ANSWERS}`;
+  const naming = `Name this session with set_title in 3 to 6 plain words once its task is clear; call it again only when the task changes.\n\n${DECIDES_RULE}\n\n${REFERENCE_GUIDANCE}\n\n${ANSWERS}`;
   // Sessions said image generation was unavailable on models without it:
   // the tool is the hub's, on every model, and stays the session's own.
   const images = names.includes("generate_image")

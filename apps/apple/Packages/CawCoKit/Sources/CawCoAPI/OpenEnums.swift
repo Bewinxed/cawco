@@ -1995,6 +1995,91 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/DecidesTableLook`.
+    public enum DecidesTableLook: OpenEnum {
+        case _default
+        case fleet
+        case project
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "default": self = ._default
+            case "fleet": self = .fleet
+            case "project": self = .project
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case ._default: "default"
+            case .fleet: "fleet"
+            case .project: "project"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [._default, .fleet, .project]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/DecidesTableLook2`.
+    public enum DecidesTableLook2: OpenEnum {
+        case advisor
+        case agent
+        case practice
+        case you
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "advisor": self = .advisor
+            case "agent": self = .agent
+            case "practice": self = .practice
+            case "you": self = .you
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .advisor: "advisor"
+            case .agent: "agent"
+            case .practice: "practice"
+            case .you: "you"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.advisor, .agent, .practice, .you]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/DecisionSentTo`.
     public enum DecisionSentTo: OpenEnum {
         case caw
@@ -2586,6 +2671,47 @@ public enum OpenEnums {
 
     /// `#/components/schemas/Exclude`.
     public enum Exclude: OpenEnum {
+        case advisor
+        case agent
+        case practice
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "advisor": self = .advisor
+            case "agent": self = .agent
+            case "practice": self = .practice
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .advisor: "advisor"
+            case .agent: "agent"
+            case .practice: "practice"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.advisor, .agent, .practice]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/Exclude_1`.
+    public enum Exclude_1: OpenEnum {
         case opencode
         case pi
         /// A value this app does not know: a newer hub's.

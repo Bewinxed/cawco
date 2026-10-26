@@ -234,6 +234,8 @@ const readPage = async (html: string): Promise<ReadPage> => {
             id,
           why: shown(open?.why ?? ""),
           multiple: element.hasAttribute("data-cawco-multiple"),
+          // A kind is a program's (core decides.ts): an HTML page's choice is the person's.
+          kind: null,
           mockup: open?.mockup ?? null,
           options: [],
           after: [],
@@ -916,6 +918,9 @@ export const createDecisions = (deps: DecisionsDeps) => {
         ),
         dials: dialsOf(state, card.id),
         note: state[card.id]?.note?.trim() ?? "",
+        ...(state[card.id]?.settled
+          ? { settled: state[card.id]?.settled }
+          : {}),
         tasks: [],
         mockup: card.mockup,
         still: stillOf(name, card.mockup),

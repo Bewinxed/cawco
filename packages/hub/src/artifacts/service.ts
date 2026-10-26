@@ -50,6 +50,7 @@ import {
   type PreviewSource,
   pinLink,
   type SendAttachment,
+  type SettledBy,
   type ShownFailure,
   sessionLink,
   stepWaitsOnArtifact,
@@ -152,6 +153,7 @@ import { DAY_MS } from "@cawco/core/time";
 import { applyPatch, type Operation } from "rfc6902";
 import type { Doc, YMapEvent } from "yjs";
 import type { ArtifactRow, ArtifactsDb } from "../db/artifacts";
+import { SettleRefusal } from "../decides-file";
 import {
   type ArtifactNamed,
   type BuiltProgram,
@@ -517,6 +519,8 @@ export type DecisionAnswer = {
       earlierRevision?: true;
       note?: string;
       options: { id: string; label?: string }[];
+      /** Who settled it for the person (`settle`), why and its sources; absent for his own pick. */
+      settled?: SettledBy;
     }
   | { answer: "cleared"; at: string; earlierRevision?: true; note?: string }
   | {
@@ -630,8 +634,18 @@ export interface Revised {
   moved: { added: string[]; removed: string[] };
   pageHash: string;
   revision: number;
+  /** The route of each card it put in or rewrote, by the project's Who decides, by id; absent when no card on the page carries a kind. */
+  routes?: Record<string, string>;
   /** Statements by name: new, rewritten, and dropped because nothing reaches them. */
   statements: StatementChange;
+}
+
+/** What `settle` answers: the card, the option it holds now, and who settled it. */
+export interface Settled {
+  /** The card's link, `[question](cawco:decision/<artifact>/<card>)`. */
+  card: string;
+  option: { id: string; label: string };
+  settled: SettledBy;
 }
 
 /** A decision page's choice, as the kit marks it (`data-cawco-choice="<id>"`). */
@@ -719,6 +733,8 @@ export interface Created {
   };
   /** Its live document on the hub's preview listener. */
   route: string;
+  /** Each card's route by the project's Who decides, by id, a line after its link; absent when no card carries a kind. */
+  routes?: Record<string, string>;
   /** A sheet as its stage reads it: its stories with their args, its meta, and each component's props. */
   sheet?: SheetRead;
   /** A sheet's stage, or a served preview's server, as it stands once started. */
@@ -958,6 +974,9 @@ const pinOnChoice = (pin: Pin, choice: string): boolean => {
   ].some((own) => selector === own || selector.startsWith(`${own} `));
 };
 
+/** A source common practice cites: a web link. */
+const WEB_SOURCE = /^https:\/\/\S+$/u;
+
 const metaOf = (doc: Doc) => {
   const meta = doc.getMap("meta");
   return {
@@ -1014,6 +1033,7 @@ const answerOf = (
       return label ? { id: option, label } : { id: option };
     }),
     ...said,
+    ...(entry.settled ? { settled: entry.settled } : {}),
   };
 };
 
@@ -1457,6 +1477,26 @@ export interface ArtifactServiceDeps {
   /** Closes session `instanceId`'s panel: it shows nothing, and every view of it hears so. */
   close: (instanceId: string) => void;
   db: ArtifactsDb;
+  /**
+   * Who decides (settling.ts): each card a session just wrote, routed by
+   * its project's table and said back as a line after its link, a delegate
+   * started for each card an advisor or common practice settles; and the
+   * route a session settles a card on, refused in words when it may not.
+   */
+  decides: {
+    routed: (
+      asker: InstanceRow,
+      row: ArtifactRow,
+      cards: DecisionCard[],
+      all: DecisionCard[],
+      state: Record<string, ChoiceEntry>
+    ) => Promise<Record<string, string>>;
+    settler: (
+      settler: InstanceRow,
+      row: ArtifactRow,
+      card: DecisionCard
+    ) => Promise<SettledBy["by"]>;
+  };
   /**
    * Whether `workspaceId` holds a work item of the session's delegates: one it
    * delegated, or one of a project it leads (as `stop_delegate` decides).
@@ -3251,6 +3291,90 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         409,
         `${row.name} is a decision page written as a program: revise it with statements.`
       );
+    }
+  };
+
+  /** Each of `cards` (of all `all` on artifact `id`), routed by Who decides and said as a line ({@link ArtifactServiceDeps.decides}). */
+  const routedOn = (
+    asker: InstanceRow,
+    id: string,
+    cards: DecisionCard[],
+    all: DecisionCard[]
+  ): Promise<Record<string, string>> => {
+    const row = db.get(id);
+    return row
+      ? deps.decides.routed(asker, row, cards, all, stateOf(docs.doc(id)))
+      : Promise.resolve({});
+  };
+
+  /** What a create answers of a decision page's cards' routes ({@link routedOn}); nothing when none is said. */
+  const routesOf = async (
+    asker: InstanceRow,
+    id: string,
+    program: BuiltProgram | undefined
+  ): Promise<Pick<Created, "routes">> => {
+    if (!program) {
+      return {};
+    }
+    const { cards } = program.read;
+    const routes = await routedOn(asker, id, cards, cards);
+    return Object.keys(routes).length > 0 ? { routes } : {};
+  };
+
+  /**
+   * Card `asked.card` of decision page `page` and its option
+   * `asked.option`, as `settle` names them; refused in words when the page
+   * asks no such card or the card offers no such option. A held next
+   * version is settled on its artifact.
+   */
+  const cardToSettle = (
+    instance: InstanceRow,
+    page: string,
+    asked: { card: string; option: string }
+  ): {
+    card: DecisionCard;
+    option: DecisionCard["options"][number];
+    row: ArtifactRow;
+  } => {
+    const found = readable(instance, page);
+    const row = found.heldFor ? (db.get(found.heldFor) ?? found) : found;
+    const program = programOf(row);
+    if (program === undefined) {
+      throw new ArtifactRefusal(
+        409,
+        `${named(row)} asks no decision cards: settle takes a decision page's card.`
+      );
+    }
+    const { cards } = readKept(program);
+    const card = cards.find((one) => one.id === asked.card);
+    if (!card) {
+      throw new ArtifactRefusal(
+        404,
+        `${row.name} asks no card “${asked.card}”. Its cards: ${cards.map((one) => one.id).join(", ") || "none"}.`
+      );
+    }
+    const option = card.options.find((one) => one.id === asked.option);
+    if (!option) {
+      throw new ArtifactRefusal(
+        422,
+        `“${asked.option}” is not an option of ${card.id}. Its options: ${card.options.map((one) => one.id).join(", ")}.`
+      );
+    }
+    return { row, card, option };
+  };
+
+  /** The route `instance` settles `card` on (settling.ts `settler`), its refusal an artifact refusal. */
+  const settlerOf = async (
+    instance: InstanceRow,
+    row: ArtifactRow,
+    card: DecisionCard
+  ): Promise<SettledBy["by"]> => {
+    try {
+      return await deps.decides.settler(instance, row, card);
+    } catch (error) {
+      throw error instanceof SettleRefusal
+        ? new ArtifactRefusal(error.status, error.message)
+        : error;
     }
   };
 
@@ -5355,6 +5479,21 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const before = stateOf(doc);
     const after = structuredClone(before) as Record<string, unknown>;
     const errors = applyPatch(after, change.patch);
+    const program = programOf(row);
+    const carded = program
+      ? readKept(program)
+          .cards.map((card) => card.id)
+          .filter(
+            (card) =>
+              JSON.stringify(after[card]) !== JSON.stringify(before[card])
+          )
+      : [];
+    if (carded.length > 0) {
+      throw new ArtifactRefusal(
+        409,
+        `${carded.join(", ")} ${carded.length === 1 ? "is a decision card" : "are decision cards"}: a card's pick is the person's, or settle's by the project's Who decides. Nothing was changed.`
+      );
+    }
     const failed = errors.findIndex((error) => error !== null);
     if (failed !== -1) {
       throw new ArtifactRefusal(
@@ -5418,7 +5557,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const touched = new Set(
       changes.filter((item) => item.kind === "card").map((item) => item.anchor)
     );
+    const routes = await routedOn(
+      instance,
+      moved.heldFor ?? moved.id,
+      program.read.cards.filter((card) =>
+        touched.has(`#decision-${cssEscape(card.id)}`)
+      ),
+      program.read.cards
+    );
     return {
+      ...(Object.keys(routes).length > 0 ? { routes } : {}),
       id: moved.id,
       revision: moved.revision,
       pageHash: hash,
@@ -6451,11 +6599,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
       const said = heldId(row);
       askedNow(instance, said.id);
+      const routes = await routesOf(instance, said.id, program);
       return {
         ...said,
         kind: row.kind,
         name: row.name,
         route: routeOf(said.id),
+        ...routes,
         link: artifactLink(said.id, row.name),
         ...openedOf(shown),
         ...(stage ? { stage } : {}),
@@ -6497,6 +6647,74 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       );
       askedNow(instance, found.id);
       return heldAnswer(answer);
+    },
+
+    /**
+     * A card settled for the person (`settle`, Who decides): option
+     * `option` of card `card` on decision page `page`, written into the
+     * page's doc as one transaction, the same `state` entry the person's
+     * pick is, its `settled` saying who, why and on what sources. From
+     * there it takes the person's path: the doc's update is logged and sent
+     * to every open view (docs.ts `keep`), and the hub's `updated` moves the
+     * card's waits and any build held for it. Refused in words when the
+     * session may not settle it (settling.ts `settler`), when it is
+     * picked already (the person picks again to reverse), or when the
+     * option is not the card's.
+     */
+    settle: async (
+      instanceId: string,
+      page: string,
+      asked: { card: string; option: string; sources: string[]; why: string }
+    ): Promise<Settled> => {
+      const instance = sessionOf(instanceId);
+      const { row, card, option } = cardToSettle(instance, page, asked);
+      const by = await settlerOf(instance, row, card);
+      const doc = docs.doc(row.id);
+      const before = stateOf(doc)[card.id];
+      if (pickMade(card, before)) {
+        throw new ArtifactRefusal(
+          409,
+          `${card.question} is decided already; only the person picks again.`
+        );
+      }
+      if (
+        by === "practice" &&
+        !asked.sources.some((one) => WEB_SOURCE.test(one))
+      ) {
+        throw new ArtifactRefusal(
+          422,
+          "Common practice cites: name at least one https link in sources."
+        );
+      }
+      const settled: SettledBy = {
+        by,
+        session: instance.id,
+        why: asked.why.trim(),
+        sources: asked.sources,
+      };
+      const entry: ChoiceEntry = {
+        options: [option.id],
+        note: before?.note ?? null,
+        value: before?.value ?? null,
+        pageHash: metaOf(doc).pageHash ?? before?.pageHash ?? "0".repeat(64),
+        at: new Date().toISOString(),
+        settled,
+      };
+      const problem = choiceEntryProblem(card.id, entry);
+      if (problem) {
+        throw new ArtifactRefusal(422, `${problem} Nothing was changed.`);
+      }
+      docs.transact(row.id, "agent", (live) =>
+        live.getMap("state").set(card.id, entry)
+      );
+      console.log(
+        `[artifacts] ${row.name}#${card.id} settled ${option.id} by ${by} (${instance.id})`
+      );
+      return {
+        card: decisionLink(row.id, card.id, card.question),
+        option: { id: option.id, label: option.label },
+        settled,
+      };
     },
 
     /**

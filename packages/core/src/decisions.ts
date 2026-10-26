@@ -27,6 +27,8 @@
  *   page's row ("After: …", "Unlocks: …").
  */
 import type { ElementNode } from "@openuidev/lang-core";
+import type { ChoiceEntry, SettledBy } from "./choices";
+import { DECISION_KINDS, type DecisionKind, decidedByLine } from "./decides";
 import type { DecisionComponentName } from "./decisions-library";
 import { decisionsWords } from "./words/decisions";
 
@@ -51,6 +53,8 @@ export interface DecisionCard {
   /** The decisions it depends on: an id on its page, or `page#id` on another. */
   after: string[];
   id: string;
+  /** What sort of choice it is (core decides.ts); null: the person's. */
+  kind: DecisionKind | null;
   /** Its own mockup's id (`{{MK:<id>}}`), when it places one. */
   mockup: string | null;
   /** Several options may be picked. */
@@ -136,6 +140,8 @@ export interface RecordCard {
   note: string;
   options: DecisionOption[];
   question: string;
+  /** Who settled its pick when the person did not (core decides.ts): absent for his own. */
+  settled?: SettledBy;
   /** The mockup's still in the chosen state, by its mockup's built output; null when there is none. */
   still: string | null;
   /** Tasks filed from it. */
@@ -168,6 +174,30 @@ export interface AfterLinks {
   /** Its `after`s naming no decision of the project's, as `<decision> after <ref>`. */
   unlinked: string[];
 }
+
+/** Who made a pick: the person, or who settled it for him (core decides.ts). */
+export type DecidedBy = "person" | SettledBy["by"];
+
+/** What a pick records of who made it: by whom (and their session, when not the person), why, and its sources. */
+export interface PickRecord {
+  by: DecidedBy;
+  /** The session that settled it; null for the person's. */
+  session: string | null;
+  sources: string[];
+  /** The settler's why; the person's note for his own pick, "" when none. */
+  why: string;
+}
+
+/** A pick's record of who made it ({@link PickRecord}): the hub's `settled`, else the person's with his note as the why. */
+export const pickRecord = (entry: ChoiceEntry): PickRecord =>
+  entry.settled
+    ? {
+        by: entry.settled.by,
+        session: entry.settled.session,
+        why: entry.settled.why,
+        sources: entry.settled.sources,
+      }
+    : { by: "person", session: null, why: entry.note ?? "", sources: [] };
 
 /** A card's pick: whether it is picked, and the options of it the card no longer offers. */
 export const pickOf = (
@@ -291,6 +321,9 @@ const cardOf = (
   question: text(props.question),
   why: text(props.why),
   multiple: props.multiple === true,
+  kind: (DECISION_KINDS as readonly unknown[]).includes(props.kind)
+    ? (props.kind as DecisionKind)
+    : null,
   mockup: null,
   options: elementsOf(props.options).map((option, index) => {
     const builds = text(option.props.builds);
@@ -439,6 +472,13 @@ export const logOf = (
     }
     for (const id of card.chosen) {
       lines.push(...chosenLines(card, id));
+    }
+    if (card.settled) {
+      lines.push(
+        "",
+        sentence(decidedByLine(card.settled)),
+        ...card.settled.sources.map((source) => `- ${source}`)
+      );
     }
     if (card.dials.length > 0) {
       lines.push(

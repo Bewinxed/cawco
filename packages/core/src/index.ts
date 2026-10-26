@@ -37,6 +37,8 @@ export * from "./connect-ask";
 export * from "./connections";
 export * from "./continuation";
 export * from "./continuation-read";
+// Who decides: a card's kinds, their routes and the words for them.
+export * from "./decides";
 // Delegate types: named presets the `delegate` tool's `type` param resolves,
 // so routing is by description instead of a raw model string.
 export * from "./delegate-types";

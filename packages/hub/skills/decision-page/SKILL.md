@@ -29,6 +29,23 @@ The page is a **page** artifact whose source is a program in OpenUI Lang over Ca
 
 **Settled fixes from the person's pins** are one compact card, a Decision with id `pins`: the question "Fixed from your pins: does it look right now?", their words quoted in its `why`, the fixed state live in its media, and two options, "Looks right" (recommended) and "Not yet". Answer each pin in its own thread too (`comment_reply`).
 
+## Who decides
+
+A choice that is not yours to make is a decision card with its kind; wait on the card — the hub settles it by the project's Who decides.
+
+Give the Decision its `kind`, the 9th argument (`Decision("cache", "Where do builds cache?", [disk, s3], "Disk is free.", [], [], false, null, "approach")`):
+
+| kind | The choice |
+| --- | --- |
+| `look` | Look and words: layout, copy, colour, motion, a name on screen |
+| `behaviour` | Behaviour: what the product or the fleet does — a flow, a notice, a rule for agents |
+| `scope` | Scope: how much to cut or defer against the brief |
+| `approach` | Approach: how it is built when several ways meet the brief |
+| `rules` | Rules and checks: a lint rule off, a suppression, a check skipped, a design deviation accepted |
+| `tools` | Tools and conventions: a library, a version, a format, a config value, a name in code |
+
+`artifact_create` and `artifact_update` answer each card's route: the person's (the card waits on him), an advisor's or common practice's (a delegate the hub started settles it and reports to you), or yours. On a card that is yours, call `settle({ card: "<page>#<card>", option, why, sources })`: the pick is kept as yours, with your why, and the person can pick again. A card with no kind is the person's. Wait on the card (`waitsOn: "<page>#<card>"` on a plan step or task) and build once it settles.
+
 ## Steps
 
 1. **List the open choices.** One Decision per choice the person must make and you can't settle from the brief, the code or the design system. Give each decision and option a lowercase id that will not change (`row-density`, `quiet`). Done when every open question has a card and each card has its question, its options with a get, a cost and a builds line each, and one recommended with its reason.
