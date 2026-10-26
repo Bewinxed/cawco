@@ -1,13 +1,8 @@
 <script lang="ts">
   import { ContextMenu as ContextMenuPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
-  import {
-    drawn,
-    own,
-    pressable,
-    pressedAway,
-  } from "#lib/components/ui/floating-presence.js";
-  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import FloatingBody from "#lib/components/ui/floating-body.svelte";
+  import { menuSurface } from "#lib/components/ui/menu-surface.svelte.js";
   import {
     type FloatingSurfaceLooks,
     floatingSurface,
@@ -35,23 +30,10 @@
       >;
     } = $props();
 
-  /* No lock on the page (`preventScroll` false, floating-presence): a press
-     outside closes the menu and lands on what it was pressed on (a row of
-     the rail), the focus left there (`pressedAway`). */
-  const away = pressedAway({
+  const away = menuSurface({
     content: () => ref,
     onInteractOutside: () => onInteractOutside,
     onCloseAutoFocus: () => onCloseAutoFocus,
-  });
-
-  // One ghost glides from item to item under the pointer and arrow keys.
-  $effect(() => {
-    if (ref) {
-      return highlight({
-        rows: "[data-menu-item]",
-        hovered: "[data-highlighted]",
-      })(ref);
-    }
   });
 </script>
 
@@ -73,27 +55,16 @@
     {...restProps}
   >
     {#snippet child(snippet)}
-      {#if forceMount || drawn(snippet.props)}
-        {#if callerChild}
-          {@render callerChild(snippet)}
-        {:else}
-          <div
-            {...snippet.wrapperProps}
-            style:pointer-events={pressable(snippet.open)}
-          >
-            <!-- Closing, it takes neither a press nor the focus: what an item
-                 opened (a row's title field) keeps the focus it was given,
-                 where the menu leaving would pull it back into itself. -->
-            <div
-              {...own(snippet.props)}
-              inert={!snippet.open}
-              style:pointer-events={pressable(snippet.open)}
-            >
-              {@render children?.()}
-            </div>
-          </div>
-        {/if}
-      {/if}
+      <!-- Closing, it takes neither a press nor the focus: what an item
+           opened (a row's title field) keeps the focus it was given, where
+           the menu leaving would pull it back into itself. -->
+      <FloatingBody
+        {callerChild}
+        {children}
+        {forceMount}
+        inertClosed
+        {snippet}
+      />
     {/snippet}
   </ContextMenuPrimitive.Content>
 </ContextMenuPortal>

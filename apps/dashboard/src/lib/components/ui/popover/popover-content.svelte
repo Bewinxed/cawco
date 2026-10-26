@@ -100,12 +100,8 @@
   import { MediaQuery } from "svelte/reactivity";
   import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import { type Morph, morph } from "#lib/cawco/motion/morph.svelte.js";
-  import {
-    drawn,
-    own,
-    pressable,
-    pressedAway,
-  } from "#lib/components/ui/floating-presence.js";
+  import FloatingBody from "#lib/components/ui/floating-body.svelte";
+  import { pressedAway } from "#lib/components/ui/floating-presence.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
   import { browser } from "$app/env";
   import PopoverPortal from "./popover-portal.svelte";
@@ -253,24 +249,13 @@
     {...restProps}
   >
     {#snippet child(snippet)}
-      {#if forceMount || drawn(snippet.props)}
-        {#if callerChild}
-          {@render callerChild(snippet)}
-        {:else}
-          <div
-            {...snippet.wrapperProps}
-            style:pointer-events={pressable(snippet.open)}
-          >
-            <div
-              {...own(snippet.props)}
-              style:pointer-events={pressable(snippet.open)}
-              {@attach comesIn}
-            >
-              {@render children?.()}
-            </div>
-          </div>
-        {/if}
-      {/if}
+      <FloatingBody
+        attach={comesIn}
+        {callerChild}
+        {children}
+        {forceMount}
+        {snippet}
+      />
     {/snippet}
   </PopoverPrimitive.Content>
 </PopoverPortal>

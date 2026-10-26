@@ -19,10 +19,8 @@
 
 <script lang="ts">
   import { Dialog as DialogPrimitive } from "bits-ui";
-  import { scrimMark } from "#lib/cawco/page-marks.js";
-  import { pressable } from "#lib/components/ui/floating-presence.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
-  import { scrimStack } from "./scrim-stack.js";
+  import Scrim from "./scrim.svelte";
 
   let {
     ref = $bindable(null),
@@ -49,11 +47,6 @@
   {...restProps}
 >
   {#snippet child({ props, open })}
-    <div
-      {...props}
-      style:pointer-events={pressable(open)}
-      {@attach scrimMark}
-      {@attach scrimStack}
-    ></div>
+    <Scrim {open} {props} />
   {/snippet}
 </DialogPrimitive.Overlay>

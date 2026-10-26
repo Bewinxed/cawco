@@ -235,6 +235,17 @@ interface Box {
   y: number;
 }
 
+/** How far `at` is from the middle of `box`, along `axis`. */
+function distanceTo(
+  axis: Axis,
+  at: { x: number; y: number },
+  box: Omit<Box, "r">
+): number {
+  const dx = at.x - (box.x + box.w / 2);
+  const dy = at.y - (box.y + box.h / 2);
+  return { x: Math.abs(dx), y: Math.abs(dy), xy: Math.hypot(dx, dy) }[axis];
+}
+
 /**
  * A row's four corners as one `border-radius`, each corner its own (The
  * Concentric Rule): a row concentric in its container (design.css
@@ -879,14 +890,7 @@ export function highlight(options: HighlightOptions) {
         if (!(box && reaches(box, at))) {
           continue;
         }
-        const dx = at.x - (box.x + box.w / 2);
-        const dy = at.y - (box.y + box.h / 2);
-        const distance = {
-          x: Math.abs(dx),
-          y: Math.abs(dy),
-          xy: Math.hypot(dx, dy),
-        }[axis];
-        reached.push({ distance, row });
+        reached.push({ distance: distanceTo(axis, at, box), row });
       }
       reached.sort((a, b) => a.distance - b.distance);
       return (
@@ -1093,13 +1097,7 @@ export function highlight(options: HighlightOptions) {
         if (!reaches(box, local)) {
           continue;
         }
-        const dx = local.x - (box.x + box.w / 2);
-        const dy = local.y - (box.y + box.h / 2);
-        const distance = {
-          x: Math.abs(dx),
-          y: Math.abs(dy),
-          xy: Math.hypot(dx, dy),
-        }[axis];
+        const distance = distanceTo(axis, local, box);
         if (distance < bestDistance) {
           best = row;
           bestDistance = distance;

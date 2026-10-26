@@ -1,9 +1,7 @@
 <script lang="ts">
   import { Drawer as DrawerPrimitive } from "vaul-svelte";
-  import { scrimMark } from "#lib/cawco/page-marks.js";
   import { scrimVariants } from "#lib/components/ui/dialog/dialog-overlay.svelte";
-  import { scrimStack } from "#lib/components/ui/dialog/scrim-stack.js";
-  import { pressable } from "#lib/components/ui/floating-presence.js";
+  import Scrim from "#lib/components/ui/dialog/scrim.svelte";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
 
   let {
@@ -24,11 +22,6 @@
   {...restProps}
 >
   {#snippet child({ props, open })}
-    <div
-      {...props}
-      style:pointer-events={pressable(open)}
-      {@attach scrimMark}
-      {@attach scrimStack}
-    ></div>
+    <Scrim {open} {props} />
   {/snippet}
 </DrawerPrimitive.Overlay>

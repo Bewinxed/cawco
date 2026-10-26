@@ -42,6 +42,7 @@
     HTMLInputAttributes,
     HTMLInputTypeAttribute,
   } from "svelte/elements";
+  import FieldArea from "#lib/components/ui/field-area.svelte";
   import { IconUnfold } from "#lib/icons.js";
   import { cn, type WithElementRef } from "#lib/utils.js";
 
@@ -123,11 +124,6 @@
   );
 
   /** A press on the area beside the field: the field's own focus. */
-  function focusField(event: MouseEvent): void {
-    if (event.target === event.currentTarget) {
-      ref?.focus();
-    }
-  }
 </script>
 
 {#snippet control()}
@@ -154,19 +150,10 @@
 {/snippet}
 
 {#if area}
-  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions: the field's touch area round it; the field itself is the control and takes the focus -->
-  <!-- biome-ignore lint/a11y/noStaticElementInteractions: the field's touch area round it; the field itself is the control and takes the focus. -->
-  <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: the field's touch area round it; the field itself is the control and takes the focus. -->
-  <!-- biome-ignore lint/a11y/useKeyWithClickEvents: a keyboard reaches the field itself; only a finger lands on the area. -->
-  <span
-    class={cn(
-      "touch-hit hit-under inline-flex w-full min-w-0",
-      suggests && "relative",
-      looks.box(),
-      className
-    )}
-    data-slot="input-area"
-    onclick={focusField}
+  <FieldArea
+    class={[suggests && "relative", looks.box(), className]}
+    field={ref}
+    slot="input-area"
   >
     {@render control()}
     {#if suggests}
@@ -176,7 +163,7 @@
         data-slot="input-suggests"
       />
     {/if}
-  </span>
+  </FieldArea>
 {:else}
   {@render control()}
 {/if}

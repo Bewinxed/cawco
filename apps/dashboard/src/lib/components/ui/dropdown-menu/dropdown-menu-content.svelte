@@ -20,13 +20,8 @@
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
   import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
-  import {
-    drawn,
-    own,
-    pressable,
-    pressedAway,
-  } from "#lib/components/ui/floating-presence.js";
-  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import FloatingBody from "#lib/components/ui/floating-body.svelte";
+  import { menuSurface } from "#lib/components/ui/menu-surface.svelte.js";
   import { floatingSurface } from "#lib/components/ui/popover/popover-content.svelte";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
   import { browser } from "$app/env";
@@ -61,23 +56,10 @@
     collisionPadding ?? (browser ? numberOf("--space-5") : 0)
   );
 
-  /* No lock on the page (`preventScroll` false, floating-presence): a press
-     outside closes the menu and lands on what it was pressed on, the focus
-     left there (`pressedAway`). */
-  const away = pressedAway({
+  const away = menuSurface({
     content: () => ref,
     onInteractOutside: () => onInteractOutside,
     onCloseAutoFocus: () => onCloseAutoFocus,
-  });
-
-  // One ghost glides from item to item under the pointer and arrow keys.
-  $effect(() => {
-    if (ref) {
-      return highlight({
-        rows: "[data-menu-item]",
-        hovered: "[data-highlighted]",
-      })(ref);
-    }
   });
 </script>
 
@@ -103,23 +85,7 @@
     {...restProps}
   >
     {#snippet child(snippet)}
-      {#if forceMount || drawn(snippet.props)}
-        {#if callerChild}
-          {@render callerChild(snippet)}
-        {:else}
-          <div
-            {...snippet.wrapperProps}
-            style:pointer-events={pressable(snippet.open)}
-          >
-            <div
-              {...own(snippet.props)}
-              style:pointer-events={pressable(snippet.open)}
-            >
-              {@render children?.()}
-            </div>
-          </div>
-        {/if}
-      {/if}
+      <FloatingBody {callerChild} {children} {forceMount} {snippet} />
     {/snippet}
   </DropdownMenuPrimitive.Content>
 </DropdownMenuPortal>

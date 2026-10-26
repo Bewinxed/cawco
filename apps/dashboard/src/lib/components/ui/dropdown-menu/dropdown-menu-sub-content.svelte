@@ -20,12 +20,9 @@
 <script lang="ts">
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
-  import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
-  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import { submenuSurface } from "#lib/components/ui/menu-surface.svelte.js";
   import { floatingSurface } from "#lib/components/ui/popover/popover-content.svelte";
-  import { submenuSide } from "#lib/components/ui/submenu-side.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
-  import { browser } from "$app/env";
   import DropdownMenuPortal from "./dropdown-menu-portal.svelte";
 
   let {
@@ -42,25 +39,7 @@
       >;
     } = $props();
 
-  // The pages' gutter from the screen's edge, as the popover keeps it.
-  const inset = browser ? numberOf("--space-5") : 0;
-  // Beside its row, or hung from it where neither side holds it (submenu-side).
-  let side = $state<"right" | "bottom">("right");
-  $effect(() => {
-    if (ref) {
-      side = submenuSide(ref, inset);
-    }
-  });
-
-  // One ghost glides from item to item under the pointer and arrow keys.
-  $effect(() => {
-    if (ref) {
-      return highlight({
-        rows: "[data-menu-item]",
-        hovered: "[data-highlighted]",
-      })(ref);
-    }
-  });
+  const surface = submenuSurface(() => ref);
 </script>
 
 <!-- In the top layer's portal, as every kit floating surface is: inside its
@@ -74,9 +53,9 @@
       dropdownMenuSubContentVariants({ width, min }),
       className
     )}
-    collisionPadding={inset}
+    collisionPadding={surface.inset}
     data-slot="dropdown-menu-sub-content"
-    {side}
+    side={surface.side}
     bind:ref
     {...restProps}
   />

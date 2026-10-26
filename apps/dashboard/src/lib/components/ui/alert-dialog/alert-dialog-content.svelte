@@ -4,7 +4,7 @@
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { dialogTrayVariants } from "#lib/components/ui/dialog/dialog-content.svelte";
   import { grabberVariants } from "#lib/components/ui/drawer/drawer-content.svelte";
-  import { pressable } from "#lib/components/ui/floating-presence.js";
+  import SheetFrame from "#lib/components/ui/sheet/sheet-frame.svelte";
   import {
     cn,
     type WithoutChild,
@@ -52,14 +52,8 @@
     bind:ref
     {...restProps}
   >
-    <!-- Drawn through `child`: bits-ui then holds the body's lock only while
-         it is open, and clears it at once (floating-presence). -->
     {#snippet child({ props, open })}
-      <div
-        {...props}
-        style:pointer-events={pressable(open)}
-        style:--sheet-away="translate3d(0, 100%, 0)"
-      >
+      <SheetFrame away="translate3d(0, 100%, 0)" {open} {props}>
         <!-- One column no wider than the tray: a row's unwrapping title is cut
              to it, never pushes past it. -->
         <div
@@ -77,7 +71,7 @@
           ></div>
           {@render children?.()}
         </div>
-      </div>
+      </SheetFrame>
     {/snippet}
   </AlertDialogPrimitive.Content>
 </AlertDialogPortal>

@@ -29,11 +29,11 @@
   import { dragToDismiss } from "#lib/cawco/motion/drag.svelte.js";
   import { mirror } from "#lib/cawco/page-marks.js";
   import { sheetHeadVariants } from "#lib/components/ui/drawer/sheet-head.js";
-  import { pressable } from "#lib/components/ui/floating-presence.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { IconClose } from "#lib/icons.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
   import { closer } from "./sheet.svelte";
+  import SheetFrame from "./sheet-frame.svelte";
   import SheetOverlay from "./sheet-overlay.svelte";
   import SheetPortal from "./sheet-portal.svelte";
 
@@ -138,14 +138,8 @@
     bind:ref
     {...restProps}
   >
-    <!-- Drawn through `child`: bits-ui then holds the body's lock only while
-         it is open, and clears it at once (floating-presence). -->
     {#snippet child({ props, open })}
-      <div
-        {...props}
-        style:pointer-events={pressable(open)}
-        style:--sheet-away={AWAY[side]}
-      >
+      <SheetFrame away={AWAY[side]} {open} {props}>
         <div
           class={cn(
             head.head(),
@@ -169,7 +163,7 @@
           </SheetPrimitive.Close>
         </div>
         {@render children?.()}
-      </div>
+      </SheetFrame>
     {/snippet}
   </SheetPrimitive.Content>
 </SheetPortal>

@@ -18,6 +18,7 @@
  *   {#if root.present}<X.Portal … />{/if}
  */
 import { createContext } from "svelte";
+import { rootOpen } from "./root-open.svelte.js";
 
 const [presence, providePresence] = createContext<{
   readonly present: boolean;
@@ -44,5 +45,36 @@ export function rootPresence(shown: () => boolean): (open: boolean) => void {
     if (!open) {
       settled = true;
     }
+  };
+}
+
+/**
+ * A kit dialog Root wrapper's whole wiring (the dialog's, the alert
+ * dialog's, the sheet's): its `open` handed to the Root once the wrapper
+ * has mounted (root-open), and its presence provided to its Portal, then
+ * `theirs`, the caller's own `onOpenChangeComplete`.
+ *
+ *   const root = overlayRoot(() => open, (value) => { open = value; }, () => onOpenChangeComplete);
+ *   <X.Root bind:open={root.get, root.set} onOpenChangeComplete={root.complete} {...restProps} />
+ */
+export function overlayRoot(
+  open: () => boolean,
+  set: (open: boolean) => void,
+  theirs: () => ((open: boolean) => void) | undefined
+): {
+  complete: (open: boolean) => void;
+  get: () => boolean;
+  set: (open: boolean) => void;
+} {
+  const root = rootOpen();
+  const shown = $derived(root.ready && open());
+  const complete = rootPresence(() => shown);
+  return {
+    get: () => shown,
+    set,
+    complete: (value) => {
+      complete(value);
+      theirs()?.(value);
+    },
   };
 }

@@ -32,6 +32,7 @@
 <script lang="ts">
   import type { ClassValue, HTMLTextareaAttributes } from "svelte/elements";
   import { autosize } from "#lib/cawco/motion/autosize.svelte.js";
+  import FieldArea from "#lib/components/ui/field-area.svelte";
   import { cn, type WithElementRef, type WithoutChildren } from "#lib/utils.js";
 
   let {
@@ -61,11 +62,6 @@
     } = $props();
 
   /** A press on the area beside the field: the field's own focus. */
-  function focusField(event: MouseEvent): void {
-    if (event.target === event.currentTarget) {
-      ref?.focus();
-    }
-  }
 </script>
 
 {#snippet control(placement?: ClassValue | null)}
@@ -93,17 +89,9 @@
 {/snippet}
 
 {#if area}
-  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions: the field's touch area round it; the field itself is the control and takes the focus -->
-  <!-- biome-ignore lint/a11y/noStaticElementInteractions: the field's touch area round it; the field itself is the control and takes the focus. -->
-  <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: the field's touch area round it; the field itself is the control and takes the focus. -->
-  <!-- biome-ignore lint/a11y/useKeyWithClickEvents: a keyboard reaches the field itself; only a finger lands on the area. -->
-  <span
-    class={cn("touch-hit hit-under inline-flex w-full min-w-0", className)}
-    data-slot="textarea-area"
-    onclick={focusField}
-  >
+  <FieldArea class={className} field={ref} slot="textarea-area">
     {@render control(undefined)}
-  </span>
+  </FieldArea>
 {:else}
   {@render control(className)}
 {/if}

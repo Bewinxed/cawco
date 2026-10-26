@@ -121,7 +121,7 @@ const LAYS_OUT_TOKEN = /^(?:inline-)?(?:flex|grid|table)$/u;
  * (WORDS_COMPONENT): each element at their top is a run the recipe trims.
  */
 const WORDS_FILE =
-  /(?:^|\/)(?:pending-content|morph-text|JumpMatch|dropdown-menu-shortcut|context-menu-shortcut)\.svelte$/u;
+  /(?:^|\/)(?:pending-content|morph-text|JumpMatch|menu-shortcut)\.svelte$/u;
 const STYLE = /<style\b[^>]*>([\s\S]*?)<\/style>/u;
 const RULE = /([^{}]*)\{([^{}]*)\}/gu;
 /**
