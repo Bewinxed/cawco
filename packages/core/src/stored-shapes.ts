@@ -704,30 +704,6 @@ export const StageErrorShape = z.object({
 });
 export const StageErrorSchema: z.ZodType<StageErrorType> = StageErrorShape;
 
-export const ReleaseManifestShape = z.object({
-  artifacts: z.array(
-    z.object({
-      target: z.string(),
-      archive: z.string(),
-      sha256: z.string(),
-      size: z.number(),
-      binarySha256: z.string(),
-      binarySize: z.number(),
-    })
-  ),
-  channel: z.enum(["stable", "nightly"]),
-  commit: z.string(),
-  notes: z.string(),
-  protocol: z.object({ min: z.number(), max: z.number() }),
-  schemaVersion: z.number(),
-  sequence: z.number(),
-  sessiondProtocol: z.string(),
-  testSigned: z.boolean(),
-  version: z.string(),
-});
-export const ReleaseManifestSchema: z.ZodType<ReleaseManifestType> =
-  ReleaseManifestShape;
-
 export const AuthStateShape = z.enum([
   "authenticated",
   "unauthenticated",
@@ -1259,6 +1235,30 @@ export const RelayViewShape = z.object({
   testedAt: z.number().nullable(),
 });
 export const RelayViewSchema: z.ZodType<RelayViewType> = RelayViewShape;
+
+export const ReleaseManifestShape = z.object({
+  artifacts: z.array(
+    z.object({
+      target: z.string(),
+      archive: z.string(),
+      sha256: z.string(),
+      size: z.number(),
+      binarySha256: z.string(),
+      binarySize: z.number(),
+    })
+  ),
+  channel: z.enum(["stable", "nightly"]),
+  commit: z.string(),
+  notes: z.string(),
+  protocol: z.object({ min: z.number(), max: z.number() }),
+  schemaVersion: z.number(),
+  sequence: z.number(),
+  sessiondProtocol: z.string(),
+  testSigned: z.boolean(),
+  version: z.string(),
+});
+export const ReleaseManifestSchema: z.ZodType<ReleaseManifestType> =
+  ReleaseManifestShape;
 
 export const ArtifactThumbnailShape = z.object({
   at: z.string(),
@@ -2529,7 +2529,6 @@ export const proved: [
   Same<z.output<typeof SessiondServerMessageShape>, SessiondServerMessageType>,
   Same<z.output<typeof StageErrorKindShape>, StageErrorKindType>,
   Same<z.output<typeof StageErrorShape>, StageErrorType>,
-  Same<z.output<typeof ReleaseManifestShape>, ReleaseManifestType>,
   Same<z.output<typeof AuthStateShape>, AuthStateType>,
   Same<z.output<typeof BinaryUpdatePolicyShape>, BinaryUpdatePolicyType>,
   Same<z.output<typeof RestartHoldReasonShape>, RestartHoldReasonType>,
@@ -2574,6 +2573,7 @@ export const proved: [
   Same<z.output<typeof RelayProviderShape>, RelayProviderType>,
   Same<z.output<typeof RelayStateShape>, RelayStateType>,
   Same<z.output<typeof RelayViewShape>, RelayViewType>,
+  Same<z.output<typeof ReleaseManifestShape>, ReleaseManifestType>,
   Same<z.output<typeof ArtifactThumbnailShape>, ArtifactThumbnailType>,
   Same<z.output<typeof CompactStageShape>, CompactStageType>,
   Same<z.output<typeof AccountHueShape>, AccountHueType>,

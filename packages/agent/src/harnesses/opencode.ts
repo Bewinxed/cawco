@@ -64,6 +64,7 @@ import {
 } from "@cawco/core";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { canonicalJson } from "@cawco/core/canonical-json";
 import { detach } from "@cawco/core/detach";
 import { LONG_CALL_WALL_MS } from "@cawco/core/long-calls";
 import {
@@ -497,28 +498,6 @@ const RECOVERY_RETRY_MAX_MS = 30_000;
 const DIRECTORY_RELEASE_RETRY_MS = 30_000;
 
 /**
- * Deterministic JSON: object keys sorted at every level, so logically
- * identical configs always hash the same whatever the key order.
- */
-const canonicalizeJson = (value: unknown): string => {
-  if (value === null || value === undefined) {
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map(canonicalizeJson).join(",")}]`;
-  }
-  if (typeof value === "object") {
-    const obj = value as Record<string, unknown>;
-    return `{${Object.keys(obj)
-      .sort()
-      .filter((k) => obj[k] !== undefined)
-      .map((k) => `${JSON.stringify(k)}:${canonicalizeJson(obj[k])}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
-};
-
-/**
  * The fingerprint of the machine's `opencode.json`: the whole document,
  * canonical, and the static policy. A running server reloads a changed
  * `opencode.json` in its booted locations itself ({@link syncOpencodeMcp});
@@ -528,7 +507,7 @@ const canonicalizeJson = (value: unknown): string => {
  */
 const configHash = (config: Record<string, unknown>): string =>
   createHash("sha256")
-    .update(canonicalizeJson({ config, _policy: STATIC_POLICY }))
+    .update(canonicalJson({ config, _policy: STATIC_POLICY }))
     .digest("hex");
 
 /**
@@ -540,7 +519,7 @@ const configHash = (config: Record<string, unknown>): string =>
 const fleetDigest = (config: Record<string, unknown>): string => {
   const { cawco: _own, ...fleet } = recordOf(recordOf(config.mcp).servers);
   return createHash("sha256")
-    .update(canonicalizeJson(fleet))
+    .update(canonicalJson(fleet))
     .digest("hex")
     .slice(0, 16);
 };
@@ -918,7 +897,7 @@ const serversByPlace = (placed: PlacedMcp): Map<string, string> => {
     byPlace.set(cwd, { ...byPlace.get(cwd), [name]: entry });
   }
   return new Map(
-    [...byPlace].map(([cwd, servers]) => [cwd, canonicalizeJson(servers)])
+    [...byPlace].map(([cwd, servers]) => [cwd, canonicalJson(servers)])
   );
 };
 
@@ -1026,7 +1005,7 @@ const placeOpencodeMcp = async (
     await writeStateFile(
       OPENCODE_PLACED_REVISION,
       createHash("sha256")
-        .update(`${revision}\u0000${canonicalizeJson(placed)}`)
+        .update(`${revision}\u0000${canonicalJson(placed)}`)
         .digest("hex")
         .slice(0, 16)
     );
@@ -2281,7 +2260,7 @@ export class OpencodeHarness implements Harness {
       hash.update(`placed:${placed}`);
     }
     if (fleet && Object.keys(fleet).length > 0) {
-      hash.update(`fleet:${canonicalizeJson(fleet)}`);
+      hash.update(`fleet:${canonicalJson(fleet)}`);
     }
     return hash.update(catalog).digest("hex");
   }
@@ -6305,7 +6284,7 @@ export class OpencodeHarness implements Harness {
       ),
       at: Date.now(),
     };
-    const serversBefore = canonicalizeJson(
+    const serversBefore = canonicalJson(
       await readJson<Record<string, unknown>>(OPENCODE_FLEET_MCP)
     );
     const mcp = await syncOpencodeMcp(
@@ -6338,7 +6317,7 @@ export class OpencodeHarness implements Harness {
       return report;
     }
     const serversMoved =
-      canonicalizeJson(
+      canonicalJson(
         await readJson<Record<string, unknown>>(OPENCODE_FLEET_MCP)
       ) !== serversBefore;
     // Poke the watcher now rather than up to 2 s later.

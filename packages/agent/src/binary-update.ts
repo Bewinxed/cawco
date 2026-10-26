@@ -1285,19 +1285,24 @@ export class BinaryUpdater {
         };
       }
     );
-    verifyManifest(body.manifest, body.signature);
-    if (body.manifest.channel !== this.#policy.channel) {
+    // The hub carries the manifest as the JSON of its signed text, read here
+    // with no schema between: its compact form is that text again.
+    const manifest = verifyManifest(
+      JSON.stringify(body.manifest),
+      body.signature
+    );
+    if (manifest.channel !== this.#policy.channel) {
       throw new Error("The hub offered a build from another channel");
     }
     // The hub's machine replaces its hub with the build; every other machine
     // runs it beside the hub as it is, so their wire protocols must overlap.
     return {
-      release: body,
+      release: { manifest, signature: body.signature },
       dbSchemaVersion: body.dbSchemaVersion,
       hubWait:
         installation.role === "hub"
           ? undefined
-          : await hubWaitFor(hub, body.manifest.protocol),
+          : await hubWaitFor(hub, manifest.protocol),
     };
   }
 

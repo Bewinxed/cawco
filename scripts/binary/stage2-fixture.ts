@@ -129,11 +129,12 @@ if (verb === "keys") {
     fault === "bad-signature"
       ? keyPair().privateKey
       : await Bun.file(privateKey).text();
-  await writeFile(join(directory, "release.json"), JSON.stringify(manifest));
+  const signed = signManifest(manifest, signingKey);
+  await writeFile(join(directory, "release.json"), signed.text);
   if (fault !== "no-signature") {
     await writeFile(
       join(directory, "release.json.sig"),
-      `${signManifest(manifest, signingKey)}\n`
+      `${signed.signature}\n`
     );
   }
 } else if (verb === "broken-binary") {

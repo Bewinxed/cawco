@@ -206,7 +206,7 @@ export async function discoverRelease(
     manifestUrl = manifest.browser_download_url;
     signatureUrl = signature.browser_download_url;
   }
-  const { manifest, signature } = await fromReleaseHost(
+  const { text, signature } = await fromReleaseHost(
     RELEASE_HOST_MS,
     `${manifestUrl} and its signature`,
     async (signal) => {
@@ -222,13 +222,14 @@ export async function discoverRelease(
           "The release manifest or its signature could not be read"
         );
       }
+      // The manifest's bytes as published: what its signature is over.
       return {
-        manifest: (await manifestResponse.json()) as ReleaseManifest,
+        text: await manifestResponse.text(),
         signature: (await signatureResponse.text()).trim(),
       };
     }
   );
-  verifyManifest(manifest, signature);
+  const manifest = verifyManifest(text, signature);
   if (manifest.channel !== channel) {
     throw new Error(`The signed release belongs to ${manifest.channel}`);
   }

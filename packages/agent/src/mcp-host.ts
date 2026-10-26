@@ -82,6 +82,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { FleetMcpConfig } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
+import { canonicalJson } from "@cawco/core/canonical-json";
 import {
   cawcoDataDir,
   sessionIdentityDir,
@@ -197,9 +198,14 @@ const startedFile = (): string => join(hostDir(), "started.json");
 /** The shared servers the last fleet sync named, each with its command ({@link McpHost.restore}). */
 const sharedFile = (): string => join(hostDir(), "shared.json");
 
-/** A config's key: its command, arguments and environment as written. */
+/**
+ * A config's key: its command, arguments and environment, whatever order
+ * their keys come in. The kept set ({@link McpHost.restore}) is read through
+ * its schema, which orders keys its own way, and the fleet's sync hands the
+ * same config in the hub's order: both are one key.
+ */
 const keyOf = (config: HostedConfig): string =>
-  createHash("sha256").update(JSON.stringify(config)).digest("hex");
+  createHash("sha256").update(canonicalJson(config)).digest("hex");
 
 let key: string | undefined;
 

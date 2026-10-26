@@ -57,18 +57,18 @@ if (verb === "proof-stack") {
       testSigned: true,
       artifacts: [],
     };
-    writeFileSync(join(dir, "release.json"), JSON.stringify(manifest));
-    const signature = signManifest(manifest, keys.privateKey);
+    const { text, signature } = signManifest(manifest, keys.privateKey);
+    writeFileSync(join(dir, "release.json"), text);
     let refused = false;
     try {
-      verifyManifest(manifest, signature);
+      verifyManifest(text, signature);
     } catch (error) {
       refused = String(error).includes("Test-signed release refused");
     }
     if (!refused) {
       throw new Error("Test key accepted without explicit public key");
     }
-    verifyManifest(manifest, signature, keys.publicKey);
+    verifyManifest(text, signature, keys.publicKey);
     console.log(
       "test-signed manifest refused by default; explicit test public key verifies"
     );

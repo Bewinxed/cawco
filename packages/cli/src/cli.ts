@@ -900,7 +900,7 @@ const run = async (argv: string[]): Promise<number> => {
       }
       const { verifyManifest } = await import("@cawco/core/release-manifest");
       verifyManifest(
-        await Bun.file(args.action).json(),
+        await Bun.file(args.action).text(),
         (await Bun.file(args.rest[0]).text()).trim(),
         args.rest[1] ? await Bun.file(args.rest[1]).text() : undefined
       );

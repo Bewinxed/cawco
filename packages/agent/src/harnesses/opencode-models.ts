@@ -30,6 +30,7 @@ import { readFile, stat, utimes } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
+import { canonicalJson } from "@cawco/core/canonical-json";
 import { writeStateFile } from "@cawco/core/state-file";
 import { delegationHubUrl } from "../delegation";
 
@@ -87,22 +88,6 @@ export const catalogLaunchEnv = (): Record<string, string> =>
 
 const said = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
-
-/** Deterministic JSON: object keys sorted at every level. */
-const canonical = (value: unknown): string => {
-  if (Array.isArray(value)) {
-    return `[${value.map(canonical).join(",")}]`;
-  }
-  if (value !== null && typeof value === "object") {
-    const record = value as Record<string, unknown>;
-    return `{${Object.keys(record)
-      .sort()
-      .filter((key) => record[key] !== undefined)
-      .map((key) => `${JSON.stringify(key)}:${canonical(record[key])}`)
-      .join(",")}}`;
-  }
-  return value === undefined ? "null" : JSON.stringify(value);
-};
 
 class OpencodeModels {
   #catalog: Catalog | undefined;
@@ -255,7 +240,7 @@ class OpencodeModels {
       ids.map((id) => [id, catalog[id] ?? null])
     );
     const value = createHash("sha256")
-      .update(canonical(entries))
+      .update(canonicalJson(entries))
       .digest("hex")
       .slice(0, 16);
     this.#digested = { catalog: this.#catalog, key, value };

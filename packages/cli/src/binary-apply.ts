@@ -101,7 +101,6 @@ import {
   readRecord,
   writeStateFile,
 } from "@cawco/core/state-file";
-import { ReleaseManifestSchema } from "@cawco/core/stored-shapes";
 import { z } from "zod";
 import { recordApply } from "./apply-record";
 import { binaryLayout } from "./binary-install";
@@ -237,20 +236,18 @@ async function migrationRunning(db: string | undefined): Promise<boolean> {
 
 async function readStaged(version: string): Promise<ReleaseManifest> {
   const directory = versionDirectory(version);
-  const manifestFile = join(directory, "release.json");
-  const manifest = parseRecord(
-    manifestFile,
-    await readFile(manifestFile, "utf8"),
-    ReleaseManifestSchema
-  );
   const signatureFile = join(directory, "release.signature.json");
   const { signature } = parseRecord(
     signatureFile,
     await readFile(signatureFile, "utf8"),
     z.object({ signature: z.string() })
   );
-  verifyManifest(manifest, signature);
-  return manifest;
+  // Checked over the file's own bytes, as the agent staged them: the signed
+  // text and the line end its write adds.
+  return verifyManifest(
+    (await readFile(join(directory, "release.json"), "utf8")).trimEnd(),
+    signature
+  );
 }
 
 /**

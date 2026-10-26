@@ -998,15 +998,14 @@ const promote = async (
     manifest.artifacts.map((a) => `${a.sha256}  ${a.archive}\n`).join("")
   );
   const privatePem = signingPem(secrets.manifestKey);
-  const signature = signManifest(manifest, privatePem);
+  const { text: manifestText, signature } = signManifest(manifest, privatePem);
   verifyManifest(
-    manifest,
+    manifestText,
     signature,
     createPublicKey(privatePem)
       .export({ type: "spki", format: "pem" })
       .toString()
   );
-  const manifestText = JSON.stringify(manifest);
   // The installer reads the version off the front of the signed text.
   if (!manifestText.startsWith(`{"version":"${manifest.version}",`)) {
     throw new Error("The manifest must begin with its version");
