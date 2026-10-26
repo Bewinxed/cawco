@@ -2511,6 +2511,19 @@ async function loadDelegateEvents(instanceId: string): Promise<void> {
 /** Views whose delegate tray has been read — frames keep it after that. */
 const trayRead = new Set<string>();
 
+/**
+ * A reconnect: the work-item frames broadcast while the socket was away are
+ * lost, so every tray read so far is read again.
+ */
+function rereadTrays(): void {
+  const read = [...trayRead];
+  trayRead.clear();
+  for (const instanceId of read) {
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the tray fills in when the read lands
+    void loadWorkItems(instanceId);
+  }
+}
+
 /** The work items a view's delegate tray opens with (`GET /api/work-items`). */
 async function loadWorkItems(instanceId: string): Promise<void> {
   if (trayRead.has(instanceId)) {
@@ -5661,6 +5674,9 @@ function hubReached(): void {
   // biome-ignore lint/complexity/noVoid: fire-and-forget — the band and Add machine's window draw what lands
   void readInstalls();
   rereadFollowed();
+  if (connections > 1) {
+    rereadTrays();
+  }
   lastPlanFollowKey = "";
   syncPlanFollows();
   resumePendingSends(streamState, streamHost);

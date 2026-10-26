@@ -7,8 +7,9 @@
    * chip enters the first time its card leaves the view (tray.svelte.ts),
    * shows what the child is doing in words and one mark, opens a panel with
    * the detail on hover or press, and leaves on its own once the work is
-   * done: a delegate's work item, a started session's turn. A started
-   * session's next turn brings its chip back.
+   * done: a delegate's work item, a started session's turn. Work that
+   * starts again (a started session's next turn, a delegate's item reopened
+   * after it reported) brings its chip back.
    *
    * The row has two zones. Working delegates stand at its start in the order
    * they were made, never reordered as their state changes, and those that
@@ -247,10 +248,11 @@
   function admitWaiting(now: number): void {
     for (const item of items) {
       known.set(item.id, known.get(item.id) ?? now);
-      // A started session at work again after its chip had its hold: the
-      // chip comes back, its hold counted afresh when this turn ends.
+      // A child at work again after its chip had its hold (a started
+      // session's next turn, a delegate's item reopened by a hand-off after
+      // it reported): the chip comes back, its hold counted afresh when this
+      // run ends.
       if (
-        item.work === null &&
         left.has(item.id) &&
         (item.state === "starting" || item.state === "running")
       ) {
