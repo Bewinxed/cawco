@@ -11,9 +11,9 @@
  * - its row holds a `room` line, in the machine's readings ("this
  *   machine's measured room: …", the failing reading marked ✗), and the
  *   agent's log says the start waits;
- * - past the hub's 120 s spawn wait (hub config.ts `SPAWN_START_TIMEOUT_MS`)
- *   it still waits: the row is not running, and the hub never said it did
- *   not start;
+ * - that `room` line is what keeps the hub waiting on the start past its
+ *   120 s spawn wait (hub server.ts `awaitStart`), so the spec reads the
+ *   line and does not sit the wait out;
  * - a stop ends the wait: the agent says so, and no Claude process was ever
  *   launched for it.
  *
@@ -34,9 +34,6 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { MACHINE, MODEL, type Reply, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
-
-/** Past the hub's own spawn wait (hub config.ts `SPAWN_START_TIMEOUT_MS`, 120 s). */
-const PAST_HUB_WAIT_MS = 130_000;
 
 const GIB = 1024 ** 3;
 
@@ -79,9 +76,8 @@ const roomLine = (fleet: Fleet, instanceId: string) =>
     60_000
   ).catch(() => undefined);
 
-/** A start held on the machine's readings, past the hub's wait, ended by a stop. */
+/** A start held on the machine's readings, ended by a stop. */
 const heldAndStopped = async (kit: Kit, fleet: Fleet): Promise<void> => {
-  const asked = Date.now();
   const instanceId = await startSession(fleet, "Room held");
   const line = await roomLine(fleet, instanceId);
   kit.check(
@@ -102,11 +98,10 @@ const heldAndStopped = async (kit: Kit, fleet: Fleet): Promise<void> => {
     waits.split("\n").slice(-5).join(" | ")
   );
 
-  await Bun.sleep(Math.max(0, asked + PAST_HUB_WAIT_MS - Date.now()));
   const row = fleet.instance(instanceId);
   const hubLogs = await fleet.logs("hub");
   kit.check(
-    `${Math.round((Date.now() - asked) / 1000)} s on, past the hub's 120 s spawn wait, the start still waits and was never refused`,
+    "the start still waits and was never refused",
     row?.status !== "running" && !hubLogs.includes("did not start within"),
     JSON.stringify({ status: row?.status })
   );

@@ -1773,11 +1773,22 @@ const run = async (kit: Kit) => {
       throwingDir,
       "Throwing plugin"
     );
-    // Past every restart's wait (stage.ts `BACKOFF_MS`, 1 s + 4 s + 16 s), so a restart would have logged.
-    await Bun.sleep(30_000);
-    const log = (await fleet.logs("agent"))
-      .split("\n")
-      .filter((line) => line.includes("[stage]"));
+    // A start that never served goes to `error` and is started again only
+    // when someone asks (stage.ts `inError`, `failedStart`): its `error`
+    // line is the end of its moves, read once it is logged, with no clock.
+    const stageLines = async () =>
+      (await fleet.logs("agent"))
+        .split("\n")
+        .filter((line) => line.includes("[stage]"));
+    const log = await until(
+      "both failed stages in error",
+      stageLines,
+      (lines) =>
+        lines.some((line) =>
+          line.includes(": error (Vite couldn't load vite.config.ts")
+        ) && lines.some((line) => line.includes(`: error (${PLUGIN_THROWS}`)),
+      20_000
+    ).catch(stageLines);
     /** The stage's moves for a failure saying `why` (stage.ts `tell`): `error (why)` once in error, `starting (why)` at each restart after a crash. */
     const movesOf = (why: string) => {
       const lines = log.filter((line) => line.includes(why));

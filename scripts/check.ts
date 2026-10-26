@@ -586,7 +586,6 @@ const gated: Gated[] = [
     ...PKG,
     "scripts/probe-kit/",
     "scripts/scratch-fleet.ts",
-    "scripts/probe-waits.baseline.json",
   ]),
   bun("scripts/probe-groups-check.ts", ["scripts/probe-kit/"]),
   bun("scripts/design-rules.ts", DASH, "--check"),

@@ -18,8 +18,8 @@
  *
  * Interrupt hold, on A:
  * h1. A delegate mid-turn (a long `sleep`), interrupted with
- *     interrupt_delegate: past the quiet-turn period it has had no new turn,
- *     and its item is still running, held.
+ *     interrupt_delegate: its item is still running, held, and it has had
+ *     no new turn (a held item is sent no quiet-turn message).
  * h2. A handoff from its parent wakes it.
  *
  * Machine pause, B paused for two minutes:
@@ -385,20 +385,25 @@ const run = async (kit: Kit) => {
   const interruptedAt = Date.now();
   await command("interrupt", hId);
   await until("H's turn closed", () => !turnOpen(hId), Boolean, 60_000);
-  // Past the quiet-turn period: a quiet turn's "still open" message went at
-  // once; three of them failed an item within seconds.
-  await Bun.sleep(30_000);
-  const woke = since("H", interruptedAt);
-  check(
-    "h1: an interrupted delegate has no new turn past the quiet-turn period",
-    woke.length === 0,
-    `its requests since the interrupt: ${lasts(woke)}`
-  );
-  const hItem = itemOf(h.workItemId as string);
+  // A held item is sent no quiet-turn message (hub work-items.ts
+  // `interrupted`): its hold is the state read, not the period sat out. A
+  // quiet turn's "still open" message went at once, before the hold.
+  const hItem = await until(
+    "H's item held",
+    () => itemOf(h.workItemId as string),
+    (item) => typeof item?.held_at === "number",
+    20_000
+  ).catch(() => itemOf(h.workItemId as string));
   check(
     "h1: its item is still running, held",
     hItem?.state === "running" && hItem.held_at !== null,
     JSON.stringify(hItem)
+  );
+  const woke = since("H", interruptedAt);
+  check(
+    "h1: an interrupted delegate, held, has no new turn",
+    woke.length === 0,
+    `its requests since the interrupt: ${lasts(woke)}`
   );
 
   // h2

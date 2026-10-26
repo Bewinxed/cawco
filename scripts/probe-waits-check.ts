@@ -26,11 +26,11 @@
  * on a literal's text catches `65_000` but never `MINUTE + 15_000` or a
  * constant declared elsewhere in the file.
  *
- * The waits that stood when it came in are counted per file in
- * scripts/probe-waits.baseline.json, and may only fall.
+ * Every refusal fails the check: there is no baseline. A spec whose subject
+ * is a product interval of {@link LIMIT_MS} or more waits on a real clock
+ * however it waits; the code is that interval's proof, and the spec goes.
  *
  *   bun scripts/probe-waits-check.ts
- *   bun scripts/probe-waits-check.ts --write-baseline  after a spec's waits go
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
@@ -363,59 +363,23 @@ export const refusalsIn = (file: string, text: string): string[] => {
   return found;
 };
 
-/**
- * The waits that stood when this check came in, counted per file: their
- * number may fall, never rise. A file past its count fails; a count that
- * fell is said, and `--write-baseline` takes it out so it can't come back.
- */
-const BASELINE = join(ROOT, "scripts/probe-waits.baseline.json");
-
 if (import.meta.main) {
   const files = [
     ...filesUnder(join(ROOT, "scripts/probe-kit")),
     join(ROOT, "scripts/scratch-fleet.ts"),
   ];
-  const found = new Map(
-    files.map((file) => [
-      relative(ROOT, file),
-      refusalsIn(file, readFileSync(file, "utf8")),
-    ])
+  const refused = files.flatMap((file) =>
+    refusalsIn(file, readFileSync(file, "utf8")).map(
+      (words) => `${relative(ROOT, file)}:${words}`
+    )
   );
-  const counted = Object.fromEntries(
-    [...found]
-      .filter(([, refusals]) => refusals.length > 0)
-      .map(([file, refusals]) => [file, refusals.length])
-  );
-  if (process.argv.includes("--write-baseline")) {
-    await Bun.write(BASELINE, `${JSON.stringify(counted, null, 2)}\n`);
-    console.log(
-      `probe-waits-check: baseline written, ${Object.values(counted).reduce((a, b) => a + b, 0)} waits in ${Object.keys(counted).length} files`
-    );
-    process.exit(0);
-  }
-  const baseline = (await Bun.file(BASELINE).json()) as Record<string, number>;
-  const over = [...found].filter(
-    ([file, refusals]) => refusals.length > (baseline[file] ?? 0)
-  );
-  const fell = Object.entries(baseline).filter(
-    ([file, count]) => (counted[file] ?? 0) < count
-  );
-  if (fell.length > 0) {
-    console.log(
-      `probe-waits-check: ${fell.length} file(s) wait less than scripts/probe-waits.baseline.json holds; \`bun scripts/probe-waits-check.ts --write-baseline\` takes them out so they can't come back: ${fell.map(([file]) => file).join(", ")}`
-    );
-  }
-  if (over.length > 0) {
+  if (refused.length > 0) {
     console.error(
-      `probe-waits-check: a probe spec waits on a real timer:\n${over
-        .flatMap(([file, refusals]) =>
-          refusals.map((words) => `${file}:${words}`)
-        )
-        .join("\n")}`
+      `probe-waits-check: a probe spec waits on a real timer:\n${refused.join("\n")}`
     );
     process.exit(1);
   }
   console.log(
-    `probe-waits-check: ${files.length} files, no new wait on a real timer (${Object.values(counted).reduce((a, b) => a + b, 0)} older ones held by the baseline, which may only fall)`
+    `probe-waits-check: ${files.length} files, none waits on a real timer`
   );
 }
