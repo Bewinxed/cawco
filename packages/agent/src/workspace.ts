@@ -65,6 +65,7 @@ import {
   workspaceTmpDir,
 } from "@cawco/core/paths";
 import { commandLine, processLineage } from "@cawco/core/process-identity";
+import { runCaptured } from "@cawco/core/run-captured";
 import {
   repositoryConfigProblem,
   SAFE_GIT_ENV,
@@ -191,24 +192,19 @@ export const gitUntil =
       ? access.run(root, safeGitArgv(args))
       : { argv: safeGitArgv(args), cwd: root };
     const ran = await readWithin(remaining, async (signal) => {
-      const child = Bun.spawn(run.argv, {
-        cwd: run.cwd,
-        env: { ...env, ...SAFE_GIT_ENV },
-        stdin: "ignore",
-        stdout: "pipe",
-        stderr: "pipe",
-        signal,
-        killSignal: "SIGKILL",
-      });
-      const [stdout, stderr, code] = await Promise.all([
-        new Response(child.stdout).text(),
-        new Response(child.stderr).text(),
-        child.exited,
-      ]);
+      const { code, signalCode, stdout, stderr } = await runCaptured(
+        run.argv,
+        {
+          cwd: run.cwd,
+          env: { ...env, ...SAFE_GIT_ENV },
+          signal,
+          killSignal: "SIGKILL",
+        }
+      );
       if (code !== 0) {
         throw new Error(
-          child.signalCode
-            ? `git ${args[0]} was ended by ${child.signalCode}`
+          signalCode
+            ? `git ${args[0]} was ended by ${signalCode}`
             : `git ${args[0]} failed: ${withoutCredential(stderr.trim())}`
         );
       }

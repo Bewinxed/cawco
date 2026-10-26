@@ -50,14 +50,8 @@ import {
   removeLaunchdLog,
 } from "@cawco/core/launchd";
 import { commandLine, processLineage } from "@cawco/core/process-identity";
-import { hostEnvironment } from "@cawco/core/session-env";
+import { type Ran, runInC } from "@cawco/core/run-captured";
 import { listedPid, type Pid } from "@cawco/core/signal";
-
-interface Ran {
-  code: number;
-  stderr: string;
-  stdout: string;
-}
 
 const run = async (argv: string[]): Promise<Ran> => {
   // systemd's user manager gives every unit it runs XDG_RUNTIME_DIR, the bus
@@ -67,17 +61,7 @@ const run = async (argv: string[]): Promise<Ran> => {
       `systemd required: ${argv.join(" ")} needs systemd's user manager, and this process has no XDG_RUNTIME_DIR, so none runs it`
     );
   }
-  const child = Bun.spawn(argv, {
-    stdout: "pipe",
-    stderr: "pipe",
-    env: { ...hostEnvironment(), LC_ALL: "C" },
-  });
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
-  return { code, stdout, stderr };
+  return await runInC(argv);
 };
 
 /** Runs `argv`, and throws its own words when it fails. */

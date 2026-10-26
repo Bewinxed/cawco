@@ -5,6 +5,8 @@
   "type": "module",
   "exports": {
     "./runtime": "./src/runtime.ts",
+    "./build-info": "./src/build-info.ts",
+    "./run-captured": "./src/run-captured.ts",
     "./activity": "./src/activity.ts",
     "./artifact-kinds": "./src/artifact-kinds.ts",
     "./find-match": "./src/find-match.ts",

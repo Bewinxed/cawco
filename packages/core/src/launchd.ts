@@ -23,7 +23,7 @@ import { copyFile, readdir, rm, stat, truncate } from "node:fs/promises";
 import { constants, homedir } from "node:os";
 import { join } from "node:path";
 import { bootId } from "./process-identity";
-import { hostEnvironment } from "./session-env";
+import { runInC } from "./run-captured";
 import { isDamagedRecord, readRecord } from "./state-file";
 import { systemProgram } from "./workspace-needs";
 
@@ -238,16 +238,7 @@ const ranSinceStart = async (label: string): Promise<boolean> => {
 
 /** Every job loaded in this user's launchd domain, by label. Throws launchctl's own words when it fails. */
 export async function launchdJobs(): Promise<Map<string, LaunchdRow>> {
-  const child = Bun.spawn(["launchctl", "list"], {
-    stdout: "pipe",
-    stderr: "pipe",
-    env: { ...hostEnvironment(), LC_ALL: "C" },
-  });
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
+  const { code, stdout, stderr } = await runInC(["launchctl", "list"]);
   if (code !== 0) {
     throw new Error(
       `launchctl list exited ${code}: ${stderr.trim() || stdout.trim()}`

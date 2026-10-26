@@ -41,6 +41,7 @@ import { devNull } from "node:os";
 import { basename, dirname, isAbsolute, join, sep } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
 import { hubProjectsDir } from "@cawco/core/paths";
+import { type Ran, runCaptured } from "@cawco/core/run-captured";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import { writeStateFile } from "@cawco/core/state-file";
 import { Elysia, status, t } from "elysia";
@@ -320,22 +321,16 @@ const gitEnv = (): Record<string, string> => {
   return gitEnvironment;
 };
 
-interface GitRun {
-  code: number;
-  stderr: string;
-  stdout: string;
-}
-
 /** One git command against a project folder; answers its exit code and output. */
-const run = async (root: string, args: string[]): Promise<GitRun> => {
+const run = async (root: string, args: string[]): Promise<Ran> => {
   if (!Bun.which("git")) {
     throw new FolderRefusal(
       503,
       "git is not installed on the hub's machine, so project folders cannot keep their history. Install git there, then try again."
     );
   }
-  const ran = await readWithin(GIT_TIMEOUT_MS, async (signal) => {
-    const child = Bun.spawn(
+  const ran = await readWithin(GIT_TIMEOUT_MS, (signal) =>
+    runCaptured(
       [
         "git",
         ...SAFE_GIT_FLAGS,
@@ -353,22 +348,9 @@ const run = async (root: string, args: string[]): Promise<GitRun> => {
         "core.quotePath=false",
         ...args,
       ],
-      {
-        cwd: root,
-        env: gitEnv(),
-        stdin: "ignore",
-        stdout: "pipe",
-        stderr: "pipe",
-        signal,
-      }
-    );
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    return { code, stdout, stderr };
-  });
+      { cwd: root, env: gitEnv(), signal }
+    )
+  );
   switch (ran.kind) {
     case "answered":
       return ran.value;

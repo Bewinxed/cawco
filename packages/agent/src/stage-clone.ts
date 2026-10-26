@@ -66,6 +66,7 @@ import {
 import { readWithin } from "@cawco/core/bounded";
 import { cloneDenies } from "@cawco/core/clone-denies";
 import { workspaceScratchDir, workspaceStateDir } from "@cawco/core/paths";
+import { runCaptured } from "@cawco/core/run-captured";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import {
@@ -154,22 +155,14 @@ const gitRaw = async (
   args: readonly string[]
 ): Promise<string> => {
   const ran = await readWithin(STAGE_CLONE_GIT_MS, async (signal) => {
-    const child = Bun.spawn(
+    const { code, stdout, stderr } = await runCaptured(
       safeGitArgv(["--no-optional-locks", "-C", dir, ...args]),
       {
         env: { ...hostEnvironment(), ...SAFE_GIT_ENV },
-        stdin: "ignore",
-        stdout: "pipe",
-        stderr: "pipe",
         signal,
         killSignal: "SIGKILL",
       }
     );
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
     if (code !== 0) {
       throw new Error(
         `git ${args[0]} failed in ${dir}: ${stderr.trim() || `exit ${code}`}`

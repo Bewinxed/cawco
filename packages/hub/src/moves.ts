@@ -58,6 +58,7 @@ import {
   MachinePathRefused,
   machinePath,
 } from "@cawco/core/machine-path";
+import { runCaptured } from "@cawco/core/run-captured";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { DAY_MS } from "@cawco/core/time";
 import { hubRemoteIdentity, normaliseRemote } from "@cawco/core/upstream-guard";
@@ -277,17 +278,10 @@ const errorOf = (stage: MoveStep, error: unknown): MoveError => {
 };
 
 const runGit = async (args: string[]): Promise<string | null> => {
-  const child = Bun.spawn(["git", ...args], {
+  const ran = await runCaptured(["git", ...args], {
     env: { ...process.env, ...GIT_LOCALE },
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "ignore",
   });
-  const [out, code] = await Promise.all([
-    new Response(child.stdout).text(),
-    child.exited,
-  ]);
-  return code === 0 ? out.trim() : null;
+  return ran.code === 0 ? ran.stdout.trim() : null;
 };
 
 export const createMoves = (deps: MovesDeps) => {

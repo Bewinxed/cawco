@@ -10,6 +10,7 @@ import {
   join,
   relative as relativePath,
 } from "node:path";
+import { runCaptured } from "@cawco/core/run-captured";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import { writeStateFile } from "@cawco/core/state-file";
 import { resolveBin, toolEnv } from "./tools";
@@ -24,16 +25,10 @@ export const gitIn = async (
     return;
   }
   try {
-    const child = Bun.spawn([git, ...SAFE_GIT_FLAGS, "-C", cwd, ...args], {
+    const ran = await runCaptured([git, ...SAFE_GIT_FLAGS, "-C", cwd, ...args], {
       env: { ...toolEnv(), ...SAFE_GIT_ENV },
-      stdout: "pipe",
-      stderr: "ignore",
     });
-    const [out, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      child.exited,
-    ]);
-    return code === 0 ? out.trim() : undefined;
+    return ran.code === 0 ? ran.stdout.trim() : undefined;
   } catch {
     // No git to run, or it could not start: not a checkout cawco can tell.
     return undefined;

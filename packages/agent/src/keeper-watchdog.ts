@@ -45,7 +45,7 @@ import {
   etimeText,
   processTable as readProcessTable,
 } from "@cawco/core/process-identity";
-import { hostEnvironment } from "@cawco/core/session-env";
+import { type Ran, runInC } from "@cawco/core/run-captured";
 import { isAlive, listedPid, type Pid, signal } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
 import { type KeeperJob, KeeperKept, keeperJob } from "./keeper-jobs";
@@ -78,25 +78,6 @@ const KEEPER_BACK_MS = 30_000;
 /** The restart the dashboard announces (`BinaryUpdateState.keeperRestart`). */
 export type KeeperRestart = NonNullable<BinaryUpdateState["keeperRestart"]>;
 
-interface Run {
-  code: number;
-  stderr: string;
-  stdout: string;
-}
-
-const run = async (argv: string[]): Promise<Run> => {
-  const child = Bun.spawn(argv, {
-    stdout: "pipe",
-    stderr: "pipe",
-    env: { ...hostEnvironment(), LC_ALL: "C" },
-  });
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
-  return { code, stdout, stderr };
-};
 
 interface Row {
   args: string;
@@ -165,7 +146,7 @@ const settled = async (
   await writeStateFile(file, text);
 };
 
-const shown = (ran: Run): string =>
+const shown = (ran: Ran): string =>
   `${ran.stdout}${ran.stderr ? `\n[stderr]\n${ran.stderr}` : ""}\n[exit ${ran.code}]\n`;
 
 /**
@@ -182,7 +163,7 @@ const saveDiagnostics = async (dir: string, pid: number): Promise<void> => {
     saves.push(
       settled(join(dir, "sample.txt"), async () =>
         shown(
-          await run([
+          await runInC([
             "sample",
             String(pid),
             "3",
@@ -193,7 +174,7 @@ const saveDiagnostics = async (dir: string, pid: number): Promise<void> => {
         )
       ),
       settled(join(dir, "lsof.txt"), async () =>
-        shown(await run(["lsof", "-p", String(pid)]))
+        shown(await runInC(["lsof", "-p", String(pid)]))
       )
     );
   } else {

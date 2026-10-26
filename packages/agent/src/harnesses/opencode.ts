@@ -77,6 +77,7 @@ import {
   workspaceSpillDir,
   xdgDataHome,
 } from "@cawco/core/paths";
+import { runCaptured } from "@cawco/core/run-captured";
 import { serverEnvironment } from "@cawco/core/session-env";
 import type { ProcSpec } from "@cawco/core/sessiond";
 import { isAlive, listedPid } from "@cawco/core/signal";
@@ -1773,21 +1774,14 @@ const standaloneRead = async <T>(
 ): Promise<T> => {
   const command = `opencode api --standalone GET ${path}`;
   const read = await readWithin(STANDALONE_READ_MS, async (signal) => {
-    const child = Bun.spawn(
+    const { code, stdout, stderr } = await runCaptured(
       [launch.spec.command, "api", "--standalone", "GET", path],
       {
         cwd: directory,
         env: { ...serverEnvironment(process.env), ...launch.spec.env },
-        stdout: "pipe",
-        stderr: "pipe",
         signal,
       }
     );
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
     if (code !== 0) {
       throw new Error(
         `\`${command}\` exited ${code}: ${stderr.trim().slice(-400) || "it said nothing"}`
