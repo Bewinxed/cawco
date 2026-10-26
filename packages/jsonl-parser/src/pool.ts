@@ -11,12 +11,7 @@
 import { stat } from "node:fs/promises";
 import type { TranscriptDoc } from "./text.ts";
 import type { LocatedRecord } from "./types.ts";
-import {
-  runTask,
-  type WorkerFileResult,
-  type WorkerMessage,
-  type WorkerTask,
-} from "./worker.ts";
+import { runTask, type WorkerFileResult, type WorkerMessage, type WorkerTask } from "./worker.ts";
 const STANDALONE = typeof Bun !== "undefined" && Bun.isStandaloneExecutable;
 
 export interface ParseManyOptions extends Omit<WorkerTask, "files"> {
@@ -131,7 +126,10 @@ export async function parseMany(
           };
           worker.onerror = (event) => {
             worker.terminate();
-            if (STANDALONE) { reject(new Error(`Transcript worker unavailable: ${event.message}`)); return; }
+            if (STANDALONE) {
+              reject(new Error(`Transcript worker unavailable: ${event.message}`));
+              return;
+            }
             // Worker crashed: fall back to in-process for this shard.
             resolve(runTask({ ...task, files: shard }));
           };

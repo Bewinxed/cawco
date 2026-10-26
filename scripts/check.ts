@@ -665,6 +665,8 @@ const gated: Gated[] = [
   },
   // Its own oxlint: Biome leaves the package out (biome.jsonc).
   run("packages/jsonl-parser", "lint", []),
+  // And its own oxfmt, check-only (`bun run format` there writes).
+  run("packages/jsonl-parser", "format:check", []),
 ];
 for (const check of gated) {
   const inputs = check.inputs.includes("./")

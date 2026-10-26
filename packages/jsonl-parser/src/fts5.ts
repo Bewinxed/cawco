@@ -403,11 +403,7 @@ function contextOf(doc: {
     }
   }
   return best
-    ? uncut(
-        best.marked,
-        Math.max(0, best.at - CONTEXT_CHARS),
-        best.at + 2 * CONTEXT_CHARS,
-      )
+    ? uncut(best.marked, Math.max(0, best.at - CONTEXT_CHARS), best.at + 2 * CONTEXT_CHARS)
     : undefined;
 }
 
@@ -457,7 +453,6 @@ const MARKED_CHARS = 4 * CONTEXT_CHARS;
  */
 const PLACES_PER_WORD = 512;
 const WORD_CHAR = /[\p{L}\p{N}]/u;
-
 
 /**
  * Where in `column` its marked stretch starts ({@link MARKED_CHARS}): the
@@ -718,9 +713,9 @@ export class TranscriptIndex {
       ["usermerge", FTS_USERMERGE],
       ["crisismerge", FTS_CRISISMERGE],
     ] as const) {
-      const held = this.db
-        .query("SELECT v FROM docs_fts_config WHERE k = ?")
-        .get(key) as { v: number } | null;
+      const held = this.db.query("SELECT v FROM docs_fts_config WHERE k = ?").get(key) as {
+        v: number;
+      } | null;
       if (held?.v !== value) {
         this.db.query("INSERT INTO docs_fts(docs_fts, rank) VALUES (?, ?)").run(key, value);
       }
@@ -1300,8 +1295,7 @@ export class TranscriptIndex {
     }
     // What tools answered is matched only when asked for: else every phrase
     // reads what was said, thought and called alone.
-    const scoped = (match: string) =>
-      options.toolOutput ? match : `${SAID_COLUMNS} : (${match})`;
+    const scoped = (match: string) => (options.toolOutput ? match : `${SAID_COLUMNS} : (${match})`);
     const lower = words.map((word) => word.toLowerCase());
     const pass = (asPrefix: boolean) => ({
       match: scoped(phrases(words, asPrefix, " ")),
@@ -1335,7 +1329,13 @@ export class TranscriptIndex {
       filters += " AND d.ts <= ?";
       params.push(options.before);
     }
-    const ranked = this.#rankedPasses(pass(false), prefix ? pass(true) : null, filters, params, limit);
+    const ranked = this.#rankedPasses(
+      pass(false),
+      prefix ? pass(true) : null,
+      filters,
+      params,
+      limit,
+    );
     const described = this.#described(ranked.map((row) => row.id));
     const kept = this.#moments(ranked, described);
     const marked = new Map<number, Marked>();
@@ -1521,8 +1521,7 @@ export class TranscriptIndex {
     const named = (step: Step) =>
       mine(step) &&
       docId !== undefined &&
-      (step.docId === docId ||
-        (docId.length >= DOC_ID_PREFIX_MIN && step.docId.startsWith(docId)));
+      (step.docId === docId || (docId.length >= DOC_ID_PREFIX_MIN && step.docId.startsWith(docId)));
     const from =
       docId !== undefined && options.at !== undefined
         ? { key: new Date(options.at + AT_MARGIN_MS + 1000).toISOString(), docId: "" }

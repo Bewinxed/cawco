@@ -90,7 +90,10 @@ export interface ScanFileOptions<T> extends Omit<ScanOptions, "baseOffset" | "ba
  * chunks and after each {@link PARSE_SLICE_MS} of parsing. A last line with
  * no newline yet is left for the next scan.
  */
-export async function scanFile<T>(path: string, options: ScanFileOptions<T>): Promise<ScanResult<T>> {
+export async function scanFile<T>(
+  path: string,
+  options: ScanFileOptions<T>,
+): Promise<ScanResult<T>> {
   const handle = await open(path, "r");
   try {
     const { size } = await handle.stat();

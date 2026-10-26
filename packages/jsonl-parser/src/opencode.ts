@@ -41,7 +41,9 @@ function toolOutputOf(state: ToolState | undefined, cap: number): string {
     state.status === "error"
       ? (state.error?.message ?? "")
       : (state.content ?? [])
-          .flatMap((part) => (part.type === "text" && typeof part.text === "string" ? [part.text] : []))
+          .flatMap((part) =>
+            part.type === "text" && typeof part.text === "string" ? [part.text] : [],
+          )
           .join("\n");
   return words.trim().slice(0, cap);
 }
@@ -173,9 +175,7 @@ export async function readOpenCodeDocs(
   try {
     const since = options.since ?? 0;
     if (
-      !db
-        .query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'session_v2'")
-        .get()
+      !db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'session_v2'").get()
     ) {
       return { docs: [], watermark: since };
     }
