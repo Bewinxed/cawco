@@ -2432,6 +2432,23 @@ export const CONTROL_WORKSPACE_ARCHIVE = "workspaceArchive";
 export const CONTROL_WORKSPACE_DISCARD = "workspaceDiscard";
 
 /**
+ * The files of a closing workspace's `$TMPDIR/outputs/` ({@link OUTPUTS_DIR}),
+ * read on its machine's host as {@link CONTROL_WORKSPACE_ARCHIVE} reads its
+ * copy: its boundary killed first with every process in it, never started
+ * (one that is down, or cannot start, stays down), so nothing writes the
+ * folder while it is read, and no link in it is followed. The hub sends it as
+ * a workspace closes, before the archive, and keeps the files in the
+ * project's folder (hub work-items.ts `keepScratchOutputs`). Args
+ * `[WorkspaceRef]`; answers {@link WorkspaceOutputs}. Only the hub sends it.
+ */
+export const CONTROL_WORKSPACE_OUTPUTS = "workspaceOutputs";
+
+/** What {@link CONTROL_WORKSPACE_OUTPUTS} answers: each regular file, by its path under `outputs/`, with base64 of its bytes. */
+export interface WorkspaceOutputs {
+  files: { content: string; path: string }[];
+}
+
+/**
  * Ends what the sessions of a workspace's ended items left running in its
  * boundary (agent boundary.ts `endSessionWork`, as an interrupt and a stop
  * of a session do), in each session's lane: the boundary runs on, and each

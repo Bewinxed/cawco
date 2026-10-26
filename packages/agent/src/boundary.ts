@@ -6288,11 +6288,53 @@ const closeLeftRetiring = async (ids: readonly string[]): Promise<number> => {
   // A look begun before they were added may have passed them by.
   await staleLook;
   await lookOnce();
+  // A look passes over a workspace whose boundary is starting
+  // ({@link closeRetiring}), as one is while a session there is launched
+  // again at start-up (a turn its killed process left): the pass waits that
+  // start out and looks again, so it closes what it leaves behind idle.
+  const pending = left.flatMap((id) => {
+    const start = starting.get(id);
+    return start ? [start.catch(() => undefined)] : [];
+  });
+  if (pending.length > 0) {
+    await Promise.all(pending);
+    await staleLook;
+    await lookOnce();
+  }
   const after = await Promise.all(
     left.map(async (id) => (await readRetiring(id)).length)
   );
+  await sayWhyLeft(left.filter((_, at) => (after[at] ?? 0) > 0));
   const before = counts.reduce((sum, count) => sum + count, 0);
   return before - after.reduce((sum, count) => sum + count, 0);
+};
+
+/**
+ * Why the start-up pass left each older boundary of workspaces `ids`
+ * running ({@link closeLeftRetiring}), in the log: a start of the
+ * workspace's boundary under way, which the look passes over, or what still
+ * runs in it ({@link busyOld}).
+ */
+const sayWhyLeft = async (ids: readonly string[]): Promise<void> => {
+  if (ids.length === 0) {
+    return;
+  }
+  const seen = await snapshot();
+  for (const id of ids) {
+    for (const old of await readRetiring(id)) {
+      // biome-ignore lint/performance/noAwaitInLoops: one older boundary at a time, as the look reads them
+      const [commands, work] = await Promise.all([
+        commandsIn(seen, id, old.gen),
+        workProcesses(seen, id, old),
+      ]);
+      const why = starting.has(id)
+        ? "a start of its boundary is under way"
+        : `commands ${commands.join(", ") || "none"}, processes ${work.join(", ") || "none"} run in it`;
+      console.info(
+        `[workspace] ${id}: its older boundary ${old.pid} (form ${old.form ?? "none"}) stays up past the start-up pass: ${why}`
+      );
+    }
+  }
 };
 
 /** Hands workspace `ref`'s boundary, of an older form, over at the next look. */

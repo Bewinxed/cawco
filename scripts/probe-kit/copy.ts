@@ -86,11 +86,26 @@ const isWhiteout = (path: string): boolean => {
 };
 
 /**
+ * Whether there is an entry at `path`, its last component never followed: a
+ * link is there whether or not it resolves where it stands. A relative link
+ * in a view's upper (pnpm's `node_modules/zod -> ../../…/store/…`) resolves
+ * only at the folder's path, in the view, never at the upper's.
+ */
+const entryAt = (path: string): boolean => {
+  try {
+    lstatSync(path);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
  * Where `rel` of workspace `ws`'s copy is on the host, or nothing when the
  * copy has no such path: in a view, the upper's entry the delegate wrote
  * (nothing when that is a whiteout, its deletion), else the folder's own;
  * in a copy of its own, the path under it. A view whose layer is gone reads
- * as its folder.
+ * as its folder. A link is an entry wherever it leads ({@link entryAt}).
  */
 export const copyPath = (
   fleet: CopyFleet,
@@ -108,12 +123,12 @@ export const copyPath = (
       if (isWhiteout(upper)) {
         return;
       }
-      if (existsSync(upper)) {
+      if (entryAt(upper)) {
         return upper;
       }
     }
   }
-  return existsSync(at) ? at : undefined;
+  return entryAt(at) ? at : undefined;
 };
 
 /** Whether `rel` is in workspace `ws`'s copy ({@link copyPath}). */

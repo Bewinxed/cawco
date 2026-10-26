@@ -71,6 +71,7 @@ import type {
   WorkspaceCut,
   WorkspaceFirstSession,
   WorkspaceHolding,
+  WorkspaceOutputs,
   WorkspaceRef,
   WorkspaceUnlanded,
   WorkspaceWorkEnd,
@@ -92,6 +93,7 @@ import {
   CONTROL_WORKSPACE_CHANGES,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
+  CONTROL_WORKSPACE_OUTPUTS,
   CONTROL_WORKSPACE_WORK_END,
   decisionLink,
   handoffMarker,
@@ -3884,7 +3886,10 @@ export const createWorkItems = ({
    * closes, `$TMPDIR` with it ({@link closeWorkspace}): an item that ended
    * without finishing (cancelled, failed, reopened and left) collected
    * nothing at finish_item, and on 2026-10-25 a delegate's report there went
-   * with its workspace. A copy that fails keeps the workspace: closing is
+   * with its workspace. Read on its machine's host with its boundary killed
+   * first ({@link CONTROL_WORKSPACE_OUTPUTS}), as the archive after it reads
+   * the copy: a workspace whose boundary cannot start closes all the same.
+   * A copy that fails keeps the workspace: closing is
    * refused with why, and the next settle tries again. A gate workspace and
    * a host-scope one have no scratch outputs; an item of no project has no
    * folder to copy into.
@@ -3899,7 +3904,13 @@ export const createWorkItems = ({
     }
     const folder = outputsFolder(item);
     try {
-      const files = await scratchOutputFiles(workspace, item, folder);
+      const read = (await call(workspace.machineId, CONTROL_WORKSPACE_OUTPUTS, [
+        refOf(workspace),
+      ])) as WorkspaceOutputs;
+      const files = read.files.map((one) => ({
+        path: `${folder}/${one.path}`,
+        content: Buffer.from(one.content, "base64"),
+      }));
       if (files.length === 0) {
         return;
       }

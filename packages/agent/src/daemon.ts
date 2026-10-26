@@ -68,6 +68,7 @@ import {
   CONTROL_WORKSPACE_CHANGES,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
+  CONTROL_WORKSPACE_OUTPUTS,
   CONTROL_WORKSPACE_WORK_END,
   type HarnessKind,
   invariant,
@@ -413,6 +414,7 @@ import {
   workspaceBoundary,
   workspaceBundle,
   workspaceChanges,
+  workspaceOutputs,
 } from "./workspace";
 import { workspaceNeeds } from "./workspace-needs";
 import { cloneHolding, workspaceRefs } from "./workspace-records";
@@ -3629,6 +3631,12 @@ export const startDaemon = (rediscover = false) =>
         ref as { id?: string; path?: string; skip?: string[] } | null,
         archiveWorkspace
       )
+    );
+    // A closing workspace's `$TMPDIR/outputs/`, read on this host with its
+    // boundary killed first, before the hub archives it.
+    supervisor.registerDaemonFunction(
+      CONTROL_WORKSPACE_OUTPUTS,
+      workspaceOutputs
     );
     // An archive whose unlanded work a person let go: a carry first.
     supervisor.registerDaemonFunction(CONTROL_WORKSPACE_DISCARD, (ref) =>

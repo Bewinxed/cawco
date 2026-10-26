@@ -38,12 +38,14 @@ import type {
   WorkspaceConflict,
   WorkspaceCut,
   WorkspaceHolding,
+  WorkspaceOutputs,
   WorkspaceRef,
   WorkspaceUnlanded,
 } from "@cawco/core";
 import {
   holdingWords,
   holdsNothing,
+  OUTPUTS_DIR,
   WORKSPACE_GIT_TIMEOUT_MS,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
@@ -2187,6 +2189,56 @@ export const archiveWorkspace = (ref: unknown): Promise<WorkspaceArchived> =>
  */
 export const discardWorkspace = (ref: unknown): Promise<WorkspaceArchived> =>
   closeClone({ ...(ref as WorkspaceArchive), unlanded: "keep" }, true);
+
+/**
+ * {@link CONTROL_WORKSPACE_OUTPUTS}: the regular files of a closing
+ * workspace's `$TMPDIR/outputs/`, read on this host as {@link closeClone}
+ * reads its copy: its boundary killed first and never started, and every
+ * process left running from it ended, so nothing writes the folder while it
+ * is read. Nothing in it is followed: a link (the folder itself included) is
+ * passed over, as the hub passes one over in what it keeps. A workspace whose
+ * boundary cannot start (a damaged record) is read all the same.
+ */
+export const workspaceOutputs = async (
+  ref: unknown
+): Promise<WorkspaceOutputs> => {
+  const workspace = ref as WorkspaceRef;
+  await stopWorkspaceBoundary(workspace);
+  await endLeftInside(workspace);
+  const root = join(workspaceScratchDir(workspace.id), OUTPUTS_DIR);
+  const files: WorkspaceOutputs["files"] = [];
+  const down = async (rel: string): Promise<void> => {
+    const entries = await readdir(join(root, rel), {
+      withFileTypes: true,
+    }).catch(() => []);
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      const inner = rel ? join(rel, entry.name) : entry.name;
+      if (entry.isDirectory()) {
+        // biome-ignore lint/performance/noAwaitInLoops: one folder at a time, down the tree
+        await down(inner);
+      } else if (entry.isFile()) {
+        const handle = await open(
+          join(root, inner),
+          // biome-ignore lint/suspicious/noBitwiseOperators: open(2) takes its flags as one bit set
+          constants.O_RDONLY | constants.O_NOFOLLOW
+        );
+        try {
+          files.push({
+            path: inner,
+            content: (await handle.readFile()).toString("base64"),
+          });
+        } finally {
+          await handle.close();
+        }
+      }
+    }
+  };
+  const top = await lstat(root).catch(() => undefined);
+  if (top?.isDirectory()) {
+    await down("");
+  }
+  return { files };
+};
 
 /** How many times {@link endLeftInside} reads and kills: enough for a process forked between a reading and its kill. */
 const LEFT_INSIDE_PASSES = 5;

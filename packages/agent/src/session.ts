@@ -88,6 +88,7 @@ import {
   CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
+  CONTROL_WORKSPACE_OUTPUTS,
   CONTROL_WORKSPACE_WORK_END,
   type ContinuationReadOptions,
   cacheHit,
@@ -1515,6 +1516,7 @@ export class SessionSupervisor {
     } else if (
       control?.method === CONTROL_WORKSPACE_ARCHIVE ||
       control?.method === CONTROL_WORKSPACE_DISCARD ||
+      control?.method === CONTROL_WORKSPACE_OUTPUTS ||
       control?.method === CONTROL_WORKSPACE_WORK_END ||
       control?.method === CONTROL_WORKSPACE_BUNDLE ||
       control?.method === CONTROL_WORKSPACE_AT

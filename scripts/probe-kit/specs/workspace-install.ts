@@ -206,6 +206,29 @@ const nodeModulesOf = async (clone: string): Promise<string[]> =>
     .split("\0")
     .filter(Boolean);
 
+/** KiB on disk under each folder in `root`, one `du -sk` each: where a count grew. */
+const eachIn = async (root: string): Promise<Record<string, number>> => {
+  const names = await readdir(root).catch(() => [] as string[]);
+  const sizes = await Promise.all(
+    names.map(async (name) => {
+      const out = await Bun.$`du -sk ${join(root, name)}`.quiet().nothrow();
+      return [name, Number(out.stdout.toString().split("\t")[0])] as const;
+    })
+  );
+  return Object.fromEntries(sizes);
+};
+
+/** How the files under `dir` stand: how many, and how many have no other link (a copy, not a hard link). */
+const linksOf = async (dir: string): Promise<string> => {
+  const count = async (...args: string[]) =>
+    (await Bun.$`find ${dir} -type f ${args}`.quiet().nothrow()).stdout
+      .toString()
+      .split("\n")
+      .filter(Boolean).length;
+  const [all, alone] = await Promise.all([count(), count("-links", "1")]);
+  return `${all} files under ${dir}, ${alone} of them with no other link`;
+};
+
 /** KiB on disk under `paths` together, each inode counted once (`du -sck`). */
 const unique = async (paths: readonly string[]): Promise<number> => {
   const out = await Bun.$`du -sck ${paths}`.quiet().nothrow();
@@ -447,10 +470,13 @@ const runLeg = async (
   let before: number;
   let after: number;
   let b: Delegated;
+  let sizesBefore: Record<string, number> = {};
+  let grew = "";
   try {
     aDone = await installed(kit, fleet, leg, tagA, a);
     const aModules = await nodeModulesOf(ownWritesOf(fleet, a));
     before = await unique([leg.cache, ...aModules]);
+    sizesBefore = await eachIn(leg.cache);
 
     b = await delegate(fleet, parent, repo, tagB);
     bDone = await installed(kit, fleet, leg, tagB, b);
@@ -459,6 +485,15 @@ const runLeg = async (
       ...aModules,
       ...(await nodeModulesOf(ownWritesOf(fleet, b))),
     ]);
+    const sizesAfter = await eachIn(leg.cache);
+    grew = Object.entries(sizesAfter)
+      .map(([name, kib]) => [name, kib - (sizesBefore[name] ?? 0)] as const)
+      .filter(([, kib]) => kib !== 0)
+      .map(([name, kib]) => `${name} ${kib > 0 ? "+" : ""}${kib} KiB`)
+      .join(", ");
+    if (leg.modulesIn) {
+      grew += `; ${await linksOf(join(leg.modulesIn, b.id, "node_modules"))}`;
+    }
   } finally {
     release(tagA, tagB);
   }
@@ -471,7 +506,7 @@ const runLeg = async (
   kit.check(
     `${leg.name}: ${tagB}, the second clone, adds under ${SECOND_CLONE_LIMIT_KB / 1024} MiB counted by unique inodes (the cache and ${tagA}'s node_modules, then with ${tagB}'s)`,
     aDone && bDone && measured && added < SECOND_CLONE_LIMIT_KB,
-    `before ${tagB}: ${before} KiB; after: ${after} KiB; ${tagB} added ${added} KiB${added < 0 ? " (the count fell: the store shrank as it installed)" : ""}`
+    `before ${tagB}: ${before} KiB; after: ${after} KiB; ${tagB} added ${added} KiB${added < 0 ? " (the count fell: the store shrank as it installed)" : ""}; each folder of the cache, apart: ${grew || "none grew"}`
   );
   kit.note(
     `${leg.name}: the cache and ${tagA}'s node_modules came to ${(before / 1024).toFixed(0)} MiB; ${tagB} added ${(added / 1024).toFixed(1)} MiB`
