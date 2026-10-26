@@ -108,10 +108,7 @@ import { atMost } from "@cawco/core/at-most";
 import { binaryRoot, readUpdateState } from "@cawco/core/binary-installation";
 import { nestedSeatbeltRefusal } from "@cawco/core/boundary-nesting";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
-import {
-  PROTECTED_CONFIG,
-  PROTECTED_FIND_TESTS,
-} from "@cawco/core/clone-denies";
+import { GUARDED_CONFIG, protectedFindTests } from "@cawco/core/clone-denies";
 import { isGitDir, isGitDirSync } from "@cawco/core/git-dir";
 import {
   type HandoverCommand,
@@ -3989,9 +3986,9 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
 const perlWords = (words: readonly string[]): string =>
   words.map((word) => `'${word}'`).join(", ");
 
-/** The most names a {@link PROTECTED_CONFIG} path has: how far back from each name the guard looks for one. */
-const PROTECTED_DEPTH = Math.max(
-  ...PROTECTED_CONFIG.map((path) => path.split("/").length)
+/** The most names a {@link GUARDED_CONFIG} path has: how far back from each name the guard looks for one. */
+const GUARDED_DEPTH = Math.max(
+  ...GUARDED_CONFIG.map((path) => path.split("/").length)
 );
 
 /**
@@ -4003,7 +4000,8 @@ const PROTECTED_DEPTH = Math.max(
  * judged here, by the place's real path, once the command and everything it
  * started is over (`LAUNCH`):
  *
- * - A protected entry ({@link PROTECTED_CONFIG}, at any depth) that
+ * - A protected entry ({@link GUARDED_CONFIG}, at any depth: never one the
+ *   fleet places, which it writes from outside while a command runs) that
  *   is new, by any means (written, `mv`, `ln`, a link), or that changed while
  *   no bind held it, is moved to the place's scratch dir
  *   (`.cawco-moved/<stamp>/<path>`), never deleted, and the command fails
@@ -4028,9 +4026,9 @@ use File::Find ();
 use File::Path ();
 use JSON::PP ();
 
-my %PROTECTED = map { $_ => 1 } (${perlWords(PROTECTED_CONFIG)});
-my $DEPTH = ${PROTECTED_DEPTH};
-my @TESTS = (${perlWords(PROTECTED_FIND_TESTS)});
+my %PROTECTED = map { $_ => 1 } (${perlWords(GUARDED_CONFIG)});
+my $DEPTH = ${GUARDED_DEPTH};
+my @TESTS = (${perlWords(protectedFindTests(GUARDED_CONFIG))});
 my %SAFE_GIT = map { $_ => 1 } qw(core.repositoryformatversion core.filemode core.bare core.logallrefupdates core.ignorecase core.precomposeunicode core.symlinks extensions.objectformat extensions.refstorage lfs.repositoryformatversion);
 
 my ($mode, $req, $given, $scratch, $policy, $home) = @ARGV;

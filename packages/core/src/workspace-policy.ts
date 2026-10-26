@@ -50,8 +50,8 @@ import {
   type CloneDeny,
   cloneDenies,
   PROTECTED_CONFIG,
-  PROTECTED_FIND_TESTS,
   PROTECTED_PARENTS,
+  protectedFindTests,
 } from "./clone-denies";
 import type { WorkspaceRef } from "./harness";
 import {
@@ -308,10 +308,10 @@ const anyPath = (paths: readonly string[]): string[] =>
 const DIR_OR_FILE = ["(", "-type", "d", "-o", "-type", "f", ")"];
 
 /**
- * The protected config a place has now ({@link PROTECTED_CONFIG}), anywhere in it but below the dirs its project
+ * The protected config a place has now ({@link PROTECTED_CONFIG}, what the
+ * fleet places included), anywhere in it but below the dirs its project
  * ignores ({@link ignoredDirs}; an ignored dir that is protected config
- * itself is found): each a dir
- * or file of its own, which srt binds onto itself and so leaves nothing on
+ * itself is found): each a dir or file of its own, which srt binds onto itself and so leaves nothing on
  * the host. One that is absent is never denied to srt, which would make its
  * mount point in the person's folder.
  *
@@ -325,7 +325,7 @@ const protectedIn = async (root: string): Promise<string[]> =>
   findIn(
     root,
     [
-      ...PROTECTED_FIND_TESTS,
+      ...protectedFindTests(PROTECTED_CONFIG),
       ...DIR_OR_FILE,
       "-print0",
       "-prune",

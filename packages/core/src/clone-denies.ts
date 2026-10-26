@@ -171,34 +171,62 @@ const GIT_EMPTY: Readonly<Record<string, CloneDenyEmpty>> = {
 };
 
 /**
- * The config a host program loads from a folder outside any boundary, by its
- * path from the dir it is found in: git's ({@link GIT_EMPTY}), the
- * harnesses' ({@link HARNESS_CONFIG}) and srt's mandatory names: every clone
- * deny but what the fleet places itself. A place (a person's own folder,
- * workspace-policy.ts `isPlace`) protects each at any depth: its policy
- * hands this list to its judge, which refuses writing one (workspace-judge.ts
- * `protectedConfig`), its boundary binds each one the place has (`protectedIn`),
- * and its guard moves aside one a command made (agent boundary.ts
- * `placeGuard`).
+ * What the fleet places in a folder from outside any boundary, by path from
+ * the folder: the project's skills and the store their links land in
+ * (claude-dirs.ts `PLACED_SYNCED`), and its memory documents
+ * (`PLACED_MEMORY`). The agent writes each whenever the fleet syncs, a
+ * command running in the folder or not.
  */
-export const PROTECTED_CONFIG: readonly string[] = [
-  ...Object.keys(GIT_EMPTY),
-  ...HARNESS_CONFIG,
-  ...SRT_FILES,
-  ...SRT_DIRS,
+export const FLEET_PLACED: readonly string[] = [
+  ...PLACED_SYNCED,
+  PLACED_MEMORY,
 ];
 
-/** `find`'s tests for an entry at one of {@link PROTECTED_CONFIG}'s paths, at any depth: a one-name path by its name, a longer one by its path's end. */
-export const PROTECTED_FIND_TESTS: readonly string[] = [
+/**
+ * The config a host program loads from a folder outside any boundary, by its
+ * path from the dir it is found in: git's ({@link GIT_EMPTY}), the
+ * harnesses' ({@link HARNESS_CONFIG}), what the fleet places
+ * ({@link FLEET_PLACED}) and srt's mandatory names: every clone deny's path.
+ * A place (a person's own folder, workspace-policy.ts `isPlace`) protects
+ * each at any depth from what runs inside it: its policy hands this list to
+ * its judge, which refuses writing one (workspace-judge.ts
+ * `protectedConfig`), and its boundary binds each one the place has
+ * (`protectedIn`). Its guard holds a command to {@link GUARDED_CONFIG}.
+ */
+export const PROTECTED_CONFIG: readonly string[] = [
+  ...new Set([
+    ...Object.keys(GIT_EMPTY),
+    ...HARNESS_CONFIG,
+    ...FLEET_PLACED,
+    ...SRT_FILES,
+    ...SRT_DIRS,
+  ]),
+];
+
+/**
+ * What a place's guard moves aside when a command made or changed it while
+ * no bind held it (agent boundary.ts `placeGuard`): {@link PROTECTED_CONFIG}
+ * but what the fleet places. The guard tells who wrote an entry only by
+ * whether it changed while the command ran, and the fleet writes its
+ * placements from outside at any time, a first skill into a folder that had
+ * none included, so a placement is never the command's doing to it. The
+ * judge and the bind still keep the workspace from writing one.
+ */
+export const GUARDED_CONFIG: readonly string[] = PROTECTED_CONFIG.filter(
+  (path) => !FLEET_PLACED.includes(path)
+);
+
+/** `find`'s tests for an entry at one of `paths`, at any depth: a one-name path by its name, a longer one by its path's end. */
+export const protectedFindTests = (paths: readonly string[]): string[] => [
   "(",
-  ...PROTECTED_CONFIG.flatMap((path, at) => [
+  ...paths.flatMap((path, at) => [
     ...(at > 0 ? ["-o"] : []),
     ...(path.includes("/") ? ["-path", `*/${path}`] : ["-name", path]),
   ]),
   ")",
 ];
 
-/** The dir names a {@link PROTECTED_CONFIG} path lies under (`.git`, `.claude`, `.agents`): a dir of one of these names holds protected config below it. */
+/** The dir names a {@link PROTECTED_CONFIG} path lies under (`.git`, `.claude`, `.agents`, `rules`): a dir of one of these names holds protected config below it. */
 export const PROTECTED_PARENTS: ReadonlySet<string> = new Set(
   PROTECTED_CONFIG.flatMap((path) => path.split("/").slice(0, -1))
 );
@@ -211,9 +239,8 @@ export const PROTECTED_PARENTS: ReadonlySet<string> = new Set(
  * the harness project config the host
  * loads at the workspace's next session, outside any boundary, at the clone's
  * root ({@link HARNESS_CONFIG_EMPTY}: Claude Code's, OpenCode's and pi's);
- * the project skills, where the fleet places a project's skills with the
- * store their links land in (claude-dirs.ts `PLACED_SYNCED`); and the
- * project's memory documents as the fleet places them (`PLACED_MEMORY`).
+ * and what the fleet places ({@link FLEET_PLACED}): the project skills with
+ * the store their links land in, and the project's memory documents.
  * On Linux a link in a dir the sandbox writes can be swapped for another,
  * so the whole skills dir is held, as `commands` and `agents` are. srt binds
  * literal paths alone ("`allowWrite` / `denyWrite` take literal paths",
@@ -240,12 +267,11 @@ export const cloneDenies = (clone: string): readonly CloneDeny[] => {
       path: join(clone, name),
       empty,
     })),
-    // The skills the fleet places in the clone, and the store their links
-    // land in: a fleet skill, never the delegate's to change.
-    ...PLACED_SYNCED.map((name) => ({ path: join(clone, name), empty: DIR })),
-    // The project's memory documents as the fleet places them: instructions
-    // Claude Code loads at launch, never the delegate's to change.
-    { path: join(clone, PLACED_MEMORY), empty: DIR },
+    // The skills the fleet places in the clone, the store their links land
+    // in, and the project's memory documents as the fleet places them:
+    // a fleet skill, and instructions Claude Code loads at launch, never the
+    // delegate's to change.
+    ...FLEET_PLACED.map((name) => ({ path: join(clone, name), empty: DIR })),
     ...srtDenies(clone),
   ];
   const seen = new Set<string>();
