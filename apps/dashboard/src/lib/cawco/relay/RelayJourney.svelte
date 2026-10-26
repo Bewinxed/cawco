@@ -472,6 +472,17 @@
   </div>
 {/snippet}
 
+<!-- The name step's way past it: no name, the machine's own address. -->
+{#snippet skipName()}
+  <Button
+    disabled={pending !== null}
+    label={words.skipName}
+    onclick={() => act("skip-name")}
+    size="sm"
+    variant="secondary"
+  />
+{/snippet}
+
 {#snippet refused()}
   {#if refusal}
     <p class={FAIL} data-relay-refusal role="alert">{refusal}</p>
@@ -544,13 +555,7 @@
         pending={pending === "name"}
         size="sm"
       />
-      <Button
-        disabled={pending !== null}
-        label={words.skipName}
-        onclick={() => act("skip-name")}
-        size="sm"
-        variant="secondary"
-      />
+      {@render skipName()}
     </div>
   {:else}
     {#if step.state === "checking"}
@@ -584,13 +589,7 @@
           variant="secondary"
         />
       {/if}
-      <Button
-        disabled={pending !== null}
-        label={words.skipName}
-        onclick={() => act("skip-name")}
-        size="sm"
-        variant="secondary"
-      />
+      {@render skipName()}
     </div>
     {#if step.state !== "checking" && zone && tokenOpen}
       <div class="flex min-w-0 flex-col gap-space-2" in:unfold out:unfold>
@@ -670,13 +669,7 @@
           pendingLabel={words.checkingToken}
           size="sm"
         />
-        <Button
-          disabled={pending !== null}
-          label={words.skipName}
-          onclick={() => act("skip-name")}
-          size="sm"
-          variant="secondary"
-        />
+        {@render skipName()}
       </div>
     {:else if step.state === "failed"}
       <p class={FAIL}>{step.why}</p>

@@ -639,6 +639,13 @@
   }
 </script>
 
+<!-- A machine signed in to another account than the one being set up. -->
+{#snippet someoneElse()}
+  <IconWarningTriangle aria-hidden="true" class="size-icon-sm" /><span
+    >{words.someoneElse}</span
+  >
+{/snippet}
+
 <SectionFrame title={words.title}>
   {#snippet actions()}
     <Button
@@ -982,10 +989,7 @@
                 style:--area="st"
               >
                 {#if !done && state === "mismatch"}
-                  <IconWarningTriangle
-                    aria-hidden="true"
-                    class="size-icon-sm"
-                  /><span>{words.someoneElse}</span>
+                  {@render someoneElse()}
                 {:else if !online}
                   <span>{words.offline}</span>
                 {/if}
@@ -1019,10 +1023,7 @@
                     class="size-icon-sm text-status-done-glyph"
                   /><span>{words.signedIn}</span>
                 {:else if paste?.phase === "mismatch" || state === "mismatch"}
-                  <IconWarningTriangle
-                    aria-hidden="true"
-                    class="size-icon-sm"
-                  /><span>{words.someoneElse}</span>
+                  {@render someoneElse()}
                 {:else if !online}
                   <span>{words.offline}</span>
                 {:else if !(asked || block)}

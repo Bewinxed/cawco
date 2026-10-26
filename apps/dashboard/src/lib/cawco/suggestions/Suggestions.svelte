@@ -97,8 +97,14 @@
   const slots = $derived(Array.from({ length: loading }, (_, i) => i));
   /** An empty panel's items are words alone: its empty state's mark is its one glyph. */
   const glyphed = $derived(placement !== "panel");
-  const glyphOf = (suggestion: Suggestion) =>
-    glyphed && suggestion.glyph ? GLYPHS[suggestion.glyph] : null;
+  /** Each suggestion as a look draws it: its key, and its glyph where items carry one. */
+  const items = $derived(
+    suggestions.map((suggestion, i) => ({
+      key: `${i}:${suggestion.text}`,
+      suggestion,
+      Glyph: glyphed && suggestion.glyph ? GLYPHS[suggestion.glyph] : null,
+    }))
+  );
 </script>
 
 <!-- A sentence's skeleton line in its type role, as long as sentences run, varied by its slot. -->
@@ -143,8 +149,7 @@
           </li>
         {/each}
       {:else}
-        {#each suggestions as suggestion, i (`${i}:${suggestion.text}`)}
-          {@const Glyph = glyphOf(suggestion)}
+        {#each items as { key, suggestion, Glyph } (key)}
           <li class="not-last:border-b not-last:border-border-hairline">
             <button
               data-slot="suggestion"
@@ -227,8 +232,7 @@
           </li>
         {/each}
       {:else}
-        {#each suggestions as suggestion, i (`${i}:${suggestion.text}`)}
-          {@const Glyph = glyphOf(suggestion)}
+        {#each items as { key, suggestion, Glyph } (key)}
           <li>
             <button
               data-slot="suggestion"
@@ -299,8 +303,7 @@
           </li>
         {/each}
       {:else}
-        {#each suggestions as suggestion, i (`${i}:${suggestion.text}`)}
-          {@const Glyph = glyphOf(suggestion)}
+        {#each items as { key, suggestion, Glyph } (key)}
           <li
             class={[
               "flex",

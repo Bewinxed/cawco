@@ -254,6 +254,21 @@
   );
 </script>
 
+<!-- Each view as a tab, with its mark; `linked`, each one's page. -->
+{#snippet tabItems(list: BarView[], linked: boolean)}
+  {#each list as view (view.value)}
+    <TabItem
+      href={linked ? hrefOf(view.value) : undefined}
+      label={view.label}
+      value={view.value}
+    >
+      {#snippet trail()}
+        {@render viewMark(view)}
+      {/snippet}
+    </TabItem>
+  {/each}
+{/snippet}
+
 {#snippet viewMark(view: BarView)}
   {#if view.draft}
     <!-- The tag stands after the view's name, never over it. -->
@@ -321,17 +336,7 @@
     <div class="min-w-0 overflow-x-clip">
       <Tabs onValueChange={onchoose} value={current}>
         <TabsList aria-label="Views">
-          {#each tabs as view (view.value)}
-            <TabItem
-              href={hrefOf(view.value)}
-              label={view.label}
-              value={view.value}
-            >
-              {#snippet trail()}
-                {@render viewMark(view)}
-              {/snippet}
-            </TabItem>
-          {/each}
+          {@render tabItems(tabs, true)}
         </TabsList>
       </Tabs>
     </div>
@@ -384,13 +389,7 @@
          shrink to nothing. -->
     <Tabs class="w-max" value={current}>
       <TabsList>
-        {#each views as view (view.value)}
-          <TabItem label={view.label} value={view.value}>
-            {#snippet trail()}
-              {@render viewMark(view)}
-            {/snippet}
-          </TabItem>
-        {/each}
+        {@render tabItems(views, false)}
       </TabsList>
     </Tabs>
     <span class="block size-c-btn-h-sm" data-ruler-more></span>
