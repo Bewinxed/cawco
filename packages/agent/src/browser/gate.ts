@@ -62,6 +62,7 @@ import { workspaceProjectFile, workspaceStateDir } from "@cawco/core/paths";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import type { Server, ServerWebSocket } from "bun";
 import { z } from "zod";
+import { CdpCalls } from "./cdp-calls";
 import { browserDir } from "./state";
 
 /** What a refusal says, one sentence each. */
@@ -282,58 +283,18 @@ const WORKSPACE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/u;
 // ---------------------------------------------------------------------------
 // One CDP connection to Chromium
 
-/** The gate's own calls on a connection to Chromium, beside the agent's. */
-class Wire {
-  readonly #socket: WebSocket;
-  #next = GATE_IDS;
-  readonly #waiting = new Map<
-    number,
-    { resolve: (result: Json) => void; reject: (error: Error) => void }
-  >();
+/** The gate's own calls on a connection to Chromium, beside the agent's: numbered from {@link GATE_IDS}. */
+const gateCalls = (socket: WebSocket): CdpCalls =>
+  new CdpCalls((line) => socket.send(line), GATE_IDS);
 
-  constructor(socket: WebSocket) {
-    this.#socket = socket;
+/** Settles one of the gate's own calls with `message`; false for anything else. */
+const answered = (calls: CdpCalls, message: Cdp): boolean => {
+  if (typeof message.id !== "number" || message.id < GATE_IDS) {
+    return false;
   }
-
-  call(method: string, params: Json = {}, sessionId?: string): Promise<Json> {
-    const id = this.#next;
-    this.#next += 1;
-    return new Promise<Json>((resolve, reject) => {
-      this.#waiting.set(id, { resolve, reject });
-      this.#socket.send(
-        JSON.stringify({
-          id,
-          method,
-          params,
-          ...(sessionId ? { sessionId } : {}),
-        })
-      );
-    });
-  }
-
-  /** Answers one of the gate's own calls; false for anything else. */
-  answered(message: Cdp): boolean {
-    if (typeof message.id !== "number" || message.id < GATE_IDS) {
-      return false;
-    }
-    const waiting = this.#waiting.get(message.id);
-    this.#waiting.delete(message.id);
-    if (message.error) {
-      waiting?.reject(new Error(message.error.message));
-    } else {
-      waiting?.resolve(message.result ?? {});
-    }
-    return true;
-  }
-
-  /** Fails every call still waiting: the connection is gone. */
-  ended(): void {
-    for (const waiting of this.#waiting.values()) {
-      waiting.reject(new Error(GATE_WORDS.stopped));
-    }
-    this.#waiting.clear();
-  }
-}
+  calls.settle(message.id, message);
+  return true;
+};
 
 /** A connection to Chromium at `url`, once it is open. */
 const dial = (url: string): Promise<WebSocket> =>
@@ -343,6 +304,22 @@ const dial = (url: string): Promise<WebSocket> =>
     socket.onerror = () => reject(new Error(`${url} did not open.`));
     socket.onclose = () => reject(new Error(`${url} closed as it opened.`));
   });
+
+/** A connection to Chromium at `url` that carries the gate's own calls alone, for a few calls and closed after. */
+const dialCalls = async (
+  url: string
+): Promise<{ calls: CdpCalls; socket: WebSocket }> => {
+  const socket = await dial(url);
+  const calls = gateCalls(socket);
+  socket.onmessage = (event) => {
+    const message = parse(said(event.data as string));
+    if (message) {
+      answered(calls, message);
+    }
+  };
+  socket.onclose = () => calls.fail(GATE_WORDS.stopped);
+  return { calls, socket };
+};
 
 // ---------------------------------------------------------------------------
 // The gate
@@ -379,7 +356,7 @@ interface Watch {
   ready: Promise<void>;
   socket?: WebSocket;
   /** The gate's calls on it, once it is open: a page's mark goes on its session here. */
-  wire?: Wire;
+  wire?: CdpCalls;
 }
 
 export class Gate {
@@ -484,15 +461,7 @@ export class Gate {
     if (!url) {
       return;
     }
-    const socket = await dial(url);
-    const wire = new Wire(socket);
-    socket.onmessage = (event) => {
-      const message = parse(said(event.data as string));
-      if (message) {
-        wire.answered(message);
-      }
-    };
-    socket.onclose = () => wire.ended();
+    const { calls: wire, socket } = await dialCalls(url);
     // A tab's page closes with it: the pages alone are named.
     await Promise.allSettled([
       ...targets.map((targetId) =>
@@ -742,15 +711,7 @@ export class Gate {
       return;
     }
     const browser = await this.#browserUrl(false);
-    const socket = await dial(browser);
-    const once = new Wire(socket);
-    socket.onmessage = (event) => {
-      const message = parse(said(event.data as string));
-      if (message) {
-        once.answered(message);
-      }
-    };
-    socket.onclose = () => once.ended();
+    const { calls: once, socket } = await dialCalls(browser);
     try {
       const attached = await once.call("Target.attachToTarget", {
         targetId: page,
@@ -880,16 +841,16 @@ export class Gate {
         socket.close();
         return;
       }
-      const wire = new Wire(socket);
+      const wire = gateCalls(socket);
       watch.wire = wire;
       socket.onmessage = (event) => {
         const message = parse(said(event.data as string));
-        if (message && !wire.answered(message)) {
+        if (message && !answered(wire, message)) {
           this.#watched(message, wire, tabsAttached);
         }
       };
       socket.onclose = () => {
-        wire.ended();
+        wire.fail(GATE_WORDS.stopped);
         if (this.#watch === watch) {
           this.#watch = undefined;
           this.#tabSessions.clear();
@@ -931,7 +892,11 @@ export class Gate {
     return watch;
   }
 
-  #watched(message: Cdp, wire: Wire, tabsAttached: Promise<unknown>[]): void {
+  #watched(
+    message: Cdp,
+    wire: CdpCalls,
+    tabsAttached: Promise<unknown>[]
+  ): void {
     const params = message.params ?? {};
     switch (message.method) {
       case "Target.targetCreated":
@@ -967,7 +932,7 @@ export class Gate {
   /** The watch attached to a tab (and asks for its page), or to a tab's page (which it then knows the tab holds). */
   #watchedAttach(
     message: Cdp,
-    wire: Wire,
+    wire: CdpCalls,
     tabsAttached: Promise<unknown>[]
   ): void {
     const params = message.params ?? {};
@@ -1031,7 +996,7 @@ class Link {
   readonly workspace: string;
   #socket: ServerWebSocket<LinkData> | undefined;
   #up: WebSocket | undefined;
-  #wire: Wire | undefined;
+  #wire: CdpCalls | undefined;
   #queue: string[] = [];
   #chain: Promise<void> = Promise.resolve();
   /** The agent asked for targets' news, and through which filter. */
@@ -1074,10 +1039,10 @@ class Link {
           return;
         }
         this.#up = up;
-        this.#wire = new Wire(up);
+        this.#wire = gateCalls(up);
         up.onmessage = (event) => this.#fromBrowser(said(event.data as string));
         up.onclose = () => {
-          this.#wire?.ended();
+          this.#wire?.fail(GATE_WORDS.stopped);
           this.close(1001, GATE_WORDS.stopped);
         };
         for (const queued of this.#queue) {
@@ -1357,7 +1322,7 @@ class Link {
 
   #fromBrowser(data: string): void {
     const message = parse(data);
-    if (!message || this.#wire?.answered(message)) {
+    if (!message || (this.#wire && answered(this.#wire, message))) {
       return;
     }
     if (typeof message.id === "number") {

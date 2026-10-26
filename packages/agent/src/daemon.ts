@@ -1927,6 +1927,20 @@ const attach = (
     let reportedProviderAccounts = providerAccountReports();
     /** The fingerprint of pi's and OpenCode's own stores this connection last sent; undefined until one is read. */
     let reportedHomeStores: string | undefined;
+    /** `part` sent on a beat of its own when the link is open; the hub keeps what it leaves out. */
+    const beat = (part: Partial<HeartbeatPayload>): void => {
+      if (socket.readyState === WebSocket.OPEN) {
+        send(socket, {
+          verb: "heartbeat",
+          machineId: identity.machineId,
+          payload: {
+            at: Date.now(),
+            instances: supervisor.instanceIds,
+            ...part,
+          } satisfies HeartbeatPayload,
+        });
+      }
+    };
     /** `report` in place of the one of its harness this connection last read, or beside the others. */
     const keepReport = (report: MachineHarnessReport): void => {
       // A machine with no Claude Code has its sentence in the report's
@@ -1950,17 +1964,7 @@ const attach = (
       }
       lastPiCheck = Date.now();
       keepReport(await pi.detect());
-      if (socket.readyState === WebSocket.OPEN) {
-        send(socket, {
-          verb: "heartbeat",
-          machineId: identity.machineId,
-          payload: {
-            at: Date.now(),
-            instances: supervisor.instanceIds,
-            harnesses: reportedHarnesses,
-          } satisfies HeartbeatPayload,
-        });
-      }
+      beat({ harnesses: reportedHarnesses });
     };
     // A burst of changes (a write and its rename) is read once, a second on.
     let piSoon: ReturnType<typeof setTimeout> | undefined;
@@ -2034,16 +2038,8 @@ const attach = (
       }
       readPart("the machine's capabilities", probeCapabilities)
         .then((machineCapabilities) => {
-          if (machineCapabilities && socket.readyState === WebSocket.OPEN) {
-            send(socket, {
-              verb: "heartbeat",
-              machineId: identity.machineId,
-              payload: {
-                at: Date.now(),
-                instances: supervisor.instanceIds,
-                machineCapabilities,
-              } satisfies HeartbeatPayload,
-            });
+          if (machineCapabilities) {
+            beat({ machineCapabilities });
           }
         })
         .catch(() => undefined);
@@ -2067,19 +2063,6 @@ const attach = (
     // absent `tools` merge nothing, and a harness absent from `providers`
     // leaves its last list (`machineProviders`).
     supervisor.reannounce = () => {
-      const beat = (part: Partial<HeartbeatPayload>): void => {
-        if (socket.readyState === WebSocket.OPEN) {
-          send(socket, {
-            verb: "heartbeat",
-            machineId: identity.machineId,
-            payload: {
-              at: Date.now(),
-              instances: supervisor.instanceIds,
-              ...part,
-            } satisfies HeartbeatPayload,
-          });
-        }
-      };
       detach(
         (async () => {
           reportedProviderAccounts = providerAccountReports();
@@ -2137,18 +2120,10 @@ const attach = (
     providerAccountsChanged = (homeStores?: string) => {
       reportedProviderAccounts = providerAccountReports();
       reportedHomeStores = homeStores ?? reportedHomeStores;
-      if (socket.readyState === WebSocket.OPEN) {
-        send(socket, {
-          verb: "heartbeat",
-          machineId: identity.machineId,
-          payload: {
-            at: Date.now(),
-            instances: supervisor.instanceIds,
-            providerAccounts: reportedProviderAccounts,
-            ...(reportedHomeStores ? { homeStores: reportedHomeStores } : {}),
-          } satisfies HeartbeatPayload,
-        });
-      }
+      beat({
+        providerAccounts: reportedProviderAccounts,
+        ...(reportedHomeStores ? { homeStores: reportedHomeStores } : {}),
+      });
       tellOpencodeAccountsChanged();
       reportPiSoon();
       if (homeStores === undefined) {
@@ -2188,16 +2163,10 @@ const attach = (
       for (const report of read) {
         keepReport(report);
       }
-      if ((tools || read.length > 0) && socket.readyState === WebSocket.OPEN) {
-        send(socket, {
-          verb: "heartbeat",
-          machineId: identity.machineId,
-          payload: {
-            at: Date.now(),
-            instances: supervisor.instanceIds,
-            ...(tools ? { tools } : {}),
-            ...(read.length > 0 ? { harnesses: read } : {}),
-          } satisfies HeartbeatPayload,
+      if (tools || read.length > 0) {
+        beat({
+          ...(tools ? { tools } : {}),
+          ...(read.length > 0 ? { harnesses: read } : {}),
         });
       }
     };
@@ -2311,17 +2280,7 @@ const attach = (
       }
       const report = await claude.detect();
       keepReport(report);
-      if (socket.readyState === WebSocket.OPEN) {
-        send(socket, {
-          verb: "heartbeat",
-          machineId: identity.machineId,
-          payload: {
-            at: Date.now(),
-            instances: supervisor.instanceIds,
-            harnesses: [report],
-          } satisfies HeartbeatPayload,
-        });
-      }
+      beat({ harnesses: [report] });
       return report.auth;
     });
 
@@ -2358,17 +2317,7 @@ const attach = (
             return;
           }
           keepReport(claude);
-          if (socket.readyState === WebSocket.OPEN) {
-            send(socket, {
-              verb: "heartbeat",
-              machineId: identity.machineId,
-              payload: {
-                at: Date.now(),
-                instances: supervisor.instanceIds,
-                harnesses: reportedHarnesses,
-              } satisfies HeartbeatPayload,
-            });
-          }
+          beat({ harnesses: reportedHarnesses });
         }),
         Schedule.spaced(Duration.millis(CLAUDE_LOGIN_CHECK_INTERVAL_MS))
       )
@@ -3094,19 +3043,19 @@ const attach = (
       }
       // The hub's answer to a beat: the sessions it keeps awake.
       if (envelope.verb === "heartbeat") {
-        const beat = envelope.payload as
+        const ack = envelope.payload as
           Partial<HeartbeatAckPayload> | undefined;
-        supervisor.keepAwake(beat?.keepAwake);
-        liveWorkItems(beat?.liveWorkspaces);
+        supervisor.keepAwake(ack?.keepAwake);
+        liveWorkItems(ack?.liveWorkspaces);
         // Once the hub has said which workspaces are live: the clones cuts of
         // an earlier build left behind are cleared (workspace.ts). Once per
         // agent; it never throws.
-        clearUnmarkedHusks(beat?.liveWorkspaces);
-        takeSessionLimits(beat?.sessionLimits);
-        takeUpstream(beat?.upstream);
-        followHub(beat?.tailnetHttps);
-        reportActivity(beat?.reportActivity === true);
-        supervisor.acknowledged(beat);
+        clearUnmarkedHusks(ack?.liveWorkspaces);
+        takeSessionLimits(ack?.sessionLimits);
+        takeUpstream(ack?.upstream);
+        followHub(ack?.tailnetHttps);
+        reportActivity(ack?.reportActivity === true);
+        supervisor.acknowledged(ack);
         return;
       }
       if (!waitsForCustody(envelope)) {
@@ -3189,11 +3138,9 @@ const attach = (
           // reconcile session truth continuously — see HeartbeatPayload.
           // `binaryUpdate` rides it for the same reason: it is a live fact
           // that changes without anybody reconnecting.
-          const beat = {
-            at: Date.now(),
+          const part = {
             damagedRecords: await damagedRecords(),
             sessionAddresses: supervisor.sessionAddresses,
-            instances: supervisor.instanceIds,
             custody: await readCustody(supervisor.stopSequence, [
               ...supervisor.custodyInstanceIds,
               ...undecided.keys(),
@@ -3204,17 +3151,10 @@ const attach = (
               : {}),
             ...activityNow(),
             activityReadable: desktopReadable(),
-          } satisfies HeartbeatPayload;
+          } satisfies Partial<HeartbeatPayload>;
           // A connection waiting to be admitted says nothing more until it is
           // (`send`).
-          if (socket.readyState !== WebSocket.OPEN) {
-            return;
-          }
-          send(socket, {
-            verb: "heartbeat",
-            machineId: identity.machineId,
-            payload: beat,
-          });
+          beat(part);
         }),
         Schedule.spaced(HEARTBEAT_INTERVAL)
       )
@@ -3222,17 +3162,7 @@ const attach = (
 
     // The desktop's change of state goes at once, on a beat of its own.
     const tellActivity = (activity: MachineActivity): void => {
-      if (socket.readyState === WebSocket.OPEN) {
-        send(socket, {
-          verb: "heartbeat",
-          machineId: identity.machineId,
-          payload: {
-            at: Date.now(),
-            instances: supervisor.instanceIds,
-            activity,
-          } satisfies HeartbeatPayload,
-        });
-      }
+      beat({ activity });
     };
     activityHeard.add(tellActivity);
     socket.addEventListener("close", () => activityHeard.delete(tellActivity), {

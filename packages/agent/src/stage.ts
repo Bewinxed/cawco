@@ -529,16 +529,8 @@ function notInstalled(
   return null;
 }
 
-/**
- * The stage a story file runs on: the nearest toolchain root above it (a
- * Vite, Astro or Nuxt config's dir), its framework, runtime and port. A
- * toolchain a sheet does not run on is refused by name.
- */
-function stageFor(
-  tree: Tree,
-  story: string,
-  rootOnly = false
-): Omit<
+/** What says where and how a stage runs; the rest of {@link Stage} is its life. */
+type StagePlace = Omit<
   Stage,
   | "status"
   | "errors"
@@ -547,7 +539,30 @@ function stageFor(
   | "slept"
   | "stopping"
   | "viewers"
-> {
+>;
+
+/** A stage at `found`, new and not yet started, kept in `stages`. */
+function newStage(found: StagePlace): Stage {
+  const stage: Stage = {
+    ...found,
+    status: "starting",
+    errors: [],
+    restarts: 0,
+    lastUse: Date.now(),
+    slept: false,
+    stopping: false,
+    viewers: 0,
+  };
+  stages.set(found.key, stage);
+  return stage;
+}
+
+/**
+ * The stage a story file runs on: the nearest toolchain root above it (a
+ * Vite, Astro or Nuxt config's dir), its framework, runtime and port. A
+ * toolchain a sheet does not run on is refused by name.
+ */
+function stageFor(tree: Tree, story: string, rootOnly = false): StagePlace {
   const top = tree.folder;
   let root: string | undefined;
   let toolchain: StageToolchain | null = null;
@@ -642,19 +657,7 @@ const serveKey = (workspace: string, port: number) => `${workspace}@${port}`;
  * The stage a preview's server runs as: `cwd` inside the workspace's clone
  * and a folder, the command one bounded line; refused with why otherwise.
  */
-function servedFor(
-  workspace: WorkspaceRef,
-  serve: ServeSpec
-): Omit<
-  Stage,
-  | "status"
-  | "errors"
-  | "restarts"
-  | "lastUse"
-  | "slept"
-  | "stopping"
-  | "viewers"
-> {
+function servedFor(workspace: WorkspaceRef, serve: ServeSpec): StagePlace {
   const command = serve.command.trim();
   if (command.length === 0 || command.length > SERVE_COMMAND_LIMIT) {
     throw new StageRefusal(
@@ -1230,26 +1233,13 @@ async function start(stage: Stage): Promise<void> {
 }
 
 /** The stage at `found`'s toolchain root, kept from before or made now; started or woken by `by`, and waited on. */
-async function stageAtRoot(
-  found: ReturnType<typeof stageFor>,
-  by: string
-): Promise<Stage> {
+async function stageAtRoot(found: StagePlace, by: string): Promise<Stage> {
   let stage = stages.get(found.key);
   if (!stage) {
     if (isPlace(found.workspace.id)) {
       await keepPlace(found.workspace);
     }
-    stage = {
-      ...found,
-      status: "starting",
-      errors: [],
-      restarts: 0,
-      lastUse: Date.now(),
-      slept: false,
-      stopping: false,
-      viewers: 0,
-    };
-    stages.set(found.key, stage);
+    stage = newStage(found);
   }
   await wake(stage, by);
   return stage;
@@ -1584,19 +1574,7 @@ export async function ensureServed(
     stage = undefined;
   }
   const fresh = !stage;
-  if (!stage) {
-    stage = {
-      ...found,
-      status: "starting",
-      errors: [],
-      restarts: 0,
-      lastUse: Date.now(),
-      slept: false,
-      stopping: false,
-      viewers: 0,
-    };
-    stages.set(found.key, stage);
-  }
+  stage ??= newStage(found);
   try {
     await wake(stage, "artifact_create's serve");
   } catch (error) {
