@@ -1,17 +1,15 @@
 <script lang="ts">
   import { projectWords } from "@cawco/core";
   import { land, waiting } from "#lib/cawco/motion/share.svelte.js";
-  import {
-    flagsOf,
-    type StageKind,
-    type TaskSummary,
-  } from "#lib/cawco/project-tasks.js";
+  import { flagsOf, type TaskSummary } from "#lib/cawco/project-tasks.js";
   import TaskRing from "#lib/cawco/TaskRing.svelte";
   import { isRetry } from "#lib/cawco/tasks/retry.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   /**
    * One task on the board: its id, its title, and only what it has to say
-   * past that — an attempt running or failed, what it waits on, its to-dos.
+   * past that — an attempt running or failed, what it still waits on (the
+   * hub's waits, a task by its id, a card, pin or pull request by its
+   * name), its to-dos.
    * A task with nothing to say is two lines (The Idle Has No Fill Rule).
    * Its footer speaks only of live state: an attempt working or trying
    * again, a wait on you, or the date it is set for. Its head says when an
@@ -38,7 +36,6 @@
   let {
     task,
     href,
-    kindOf,
     onopen,
     date = null,
     movable = true,
@@ -53,8 +50,6 @@
     href: string;
     /** The date the task's file sets it for, said short ("Thu 09:30"). */
     date?: string | null;
-    /** The kind of another task's stage, to say whether what it waits on has landed. */
-    kindOf: (id: string) => StageKind | null | undefined;
     /** Opens it in place; left out, the card is a plain link. */
     onopen?: (id: string) => void;
     /**
@@ -73,17 +68,8 @@
     project ? actionsOf(project(), task.id).length > 0 : false
   );
   const retry = $derived(isRetry(task));
-  /**
-   * What it waits on that has not landed: the hub's word when it gives one,
-   * else its `after` edges whose task is not in a done stage.
-   */
-  const waitsOn = $derived(
-    task.blockedBy ??
-      task.after.filter((id) => {
-        const kind = kindOf(id);
-        return kind !== "done" && kind !== "dropped";
-      })
-  );
+  /** What it still waits on, its own and its whole's, as the hub settles it: a task by its id, anything else by its name. */
+  const waitsOn = $derived(flags.waiting);
   const key = $derived(`task:${task.id}`);
   /** A card arriving by a move flies in; it is not uncovered as a new row. */
   const flying = $derived(waiting(key));
@@ -215,12 +201,29 @@
         </span>
       {/if}
       {#if waitsOn.length > 0}
-        <span class="mark-line inline-flex items-center gap-space-1">
-          <IconLock aria-hidden="true" class="size-icon-sm" />
-          <span>after</span>
-          <span class="font-(family-name:--font-mono) liga-none text-ink-strong"
-            >{waitsOn[0]}</span
+        <span
+          class="mark-line inline-flex min-w-0 items-center gap-space-1"
+          title={waitsOn
+            .map((wait) =>
+              wait.flag ? `Blocked: ${wait.label} ${wait.flag}` : wait.label
+            )
+            .join(", ")}
+        >
+          <IconLock aria-hidden="true" class="size-icon-sm flex-none" />
+          <span class="flex-none"
+            >{waitsOn[0]?.flag ? "blocked" : "waits on"}</span
           >
+          {#if waitsOn[0]?.kind === "task"}
+            <span
+              class="font-(family-name:--font-mono) liga-none text-ink-strong"
+              >{waitsOn[0].target}</span
+            >
+          {:else}
+            <span
+              class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong"
+              >{waitsOn[0]?.label}</span
+            >
+          {/if}
           {#if waitsOn.length > 1}
             <span data-slot="num" class="num">+{waitsOn.length - 1}</span>
           {/if}

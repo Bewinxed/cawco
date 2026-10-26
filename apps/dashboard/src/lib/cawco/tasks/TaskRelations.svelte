@@ -1,17 +1,23 @@
 <script lang="ts">
   /**
-   * A task's relations to others. After and Parent always stand (they are
-   * what a session reads first); Related, Found in, Children and Waited on
-   * by stand only when the task has one, and so does Duplicate of. One "Link ▾" sets any edge: pick
-   * which, then the task. Children and Waited on by are the other tasks'
-   * edges, read off the list, so they are opened, not unlinked, here.
+   * A task's relations. Waits on and Unblocks always stand (what a session reads
+   * first): every wait, its own and its whole's, unsettled first, each by
+   * the house's chip for what it is (a task's row, a decision card's or a
+   * pin's chip, a session's, a pull request's or run's link) and where it
+   * stands, a flagged one as "Blocked: … closed unmerged". Part of, Parts,
+   * Found in and Duplicate of stand only when the task has one. One "Link ▾"
+   * writes a link: pick what, then the task, or paste a card, a pin or a
+   * GitHub link. Unblocks and Parts are other tasks' links, read off the
+   * hub's flags, so they are opened, not unlinked, here.
    */
   import Choice from "#lib/cawco/config/Choice.svelte";
   import type {
-    TaskEdge,
+    TaskLinks,
     TaskSummary,
     TaskView,
+    TaskWait,
   } from "#lib/cawco/project-tasks.js";
+  import { referenceOf } from "#lib/cawco/references.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
@@ -28,40 +34,46 @@
   }: {
     task: TaskView;
     tasks: TaskSummary[];
-    /** Sets or takes out one edge; throws the hub's refusal. */
-    onlink: (edge: TaskEdge, to: string, remove?: boolean) => Promise<void>;
+    /** Writes one link change; throws the hub's refusal. */
+    onlink: (links: TaskLinks) => Promise<void>;
     onopen: (id: string) => void;
   } = $props();
 
   const byId = $derived(new Map(tasks.map((each) => [each.id, each])));
-  const children = $derived(
-    tasks.filter((each) => each.parent === task.id).map((each) => each.id)
-  );
-  const waitedOnBy = $derived(
-    tasks.filter((each) => each.after.includes(task.id)).map((each) => each.id)
-  );
 
+  type LinkKind = "waitsOn" | "partOf" | "duplicateOf";
   let open = $state(false);
-  let edge = $state<TaskEdge>("after");
+  let kind = $state<LinkKind>("waitsOn");
   let query = $state("");
   const candidates = $derived(
     tasks.filter(
       (each) =>
         each.id !== task.id &&
-        !task.after.includes(each.id) &&
-        !task.related.includes(each.id) &&
-        each.id !== task.parent &&
+        !task.waitsOn.includes(each.id) &&
+        each.id !== task.partOf &&
         `${each.id} ${each.title}`.toLowerCase().includes(query.toLowerCase())
     )
   );
+  /** A pasted card (`page#card`), pin (`page/3`), session or GitHub link: only a wait takes one. */
+  const pasted = $derived(
+    kind === "waitsOn" && /[#/]|^https?:/i.test(query.trim())
+      ? query.trim()
+      : null
+  );
 
-  const EDGES: { value: TaskEdge; label: string }[] = [
-    { value: "after", label: "After" },
-    { value: "parent", label: "Parent" },
-    { value: "related", label: "Related" },
-    { value: "found_in", label: "Found in" },
-    { value: "duplicate_of", label: "Duplicate of" },
+  const KINDS: { value: LinkKind; label: string }[] = [
+    { value: "waitsOn", label: "Waits on" },
+    { value: "partOf", label: "Part of" },
+    { value: "duplicateOf", label: "Duplicate of" },
   ];
+
+  async function write(target: string) {
+    open = false;
+    query = "";
+    await onlink(
+      kind === "waitsOn" ? { waitsOn: [target] } : { [kind]: target }
+    );
+  }
 </script>
 
 {#snippet ref(id: string, remove?: () => void)}
@@ -95,7 +107,56 @@
   </span>
 {/snippet}
 
-{#snippet row(name: string, ids: string[], edgeName: TaskEdge | null)}
+{#snippet wait(one: TaskWait)}
+  {#if one.kind === "task" && byId.has(one.target)}
+    {@render ref(
+      one.target,
+      one.via
+        ? undefined
+        : () => onlink({ waitsOn: [one.target], remove: true })
+    )}
+  {:else}
+    {@const drawn = one.href.startsWith("cawco:")
+      ? referenceOf(one.href)
+      : null}
+    <span
+      class="flex items-center gap-space-1 min-h-c-btn-h-sm min-w-0 px-space-2 pe-space-1 rounded-sm bg-surface-recess"
+    >
+      <span class="flex-auto min-w-0 overflow-clip text-ellipsis type-label">
+        {#if drawn?.draw === "element"}
+          <drawn.element id={drawn.id} kind={drawn.kind} label={one.label} />
+        {:else if one.href.startsWith("http")}
+          <a
+            class="text-ink-strong"
+            href={one.href}
+            rel="noreferrer"
+            target="_blank">{one.label}</a
+          >
+        {:else}
+          <span class="text-ink-strong">{one.label}</span>
+        {/if}
+      </span>
+      {#if !one.via}
+        <Button
+          aria-label="Unlink {one.label}"
+          onclick={() => onlink({ waitsOn: [one.target], remove: true })}
+          size="icon-xs"
+          variant="ghost"><IconClose /></Button
+        >
+      {/if}
+    </span>
+  {/if}
+  <span class="ps-space-2 type-meta text-ink-muted">
+    {one.flag ? `Blocked: ${one.label} ${one.flag}` : one.state}{#if one.via}
+      · through {byId.get(one.via)?.title ?? one.via}{/if}
+  </span>
+{/snippet}
+
+{#snippet row(
+  name: string,
+  ids: string[],
+  remove: ((id: string) => void) | null
+)}
   <div
     class="grid grid-cols-(--edge-cols) items-box-start gap-space-2"
     style:--edge-cols="var(--c-task-edge-label-w) minmax(0, 1fr)"
@@ -103,10 +164,7 @@
     <span class="pt-space-1 type-label text-ink-muted">{name}</span>
     <div data-slot="edge-list" class="flex flex-col gap-space-1 min-w-0">
       {#each ids as id (id)}
-        {@render ref(
-          id,
-          edgeName ? () => onlink(edgeName, id, true) : undefined
-        )}
+        {@render ref(id, remove ? () => remove(id) : undefined)}
       {:else}
         <span class="pt-space-1 type-meta text-ink-subtle">None</span>
       {/each}
@@ -132,20 +190,42 @@
           <Choice
             label="Edge"
             onchange={(next) => {
-              edge = next as TaskEdge;
+              kind = next as LinkKind;
             }}
-            options={EDGES}
-            value={edge}
+            options={KINDS}
+            value={kind}
           />
           <Input
-            aria-label="Find a task"
+            aria-label={kind === "waitsOn"
+              ? "Find a task, or paste a card, pin or GitHub link"
+              : "Find a task"}
             autocomplete="off"
-            placeholder="Find a task…"
+            placeholder={kind === "waitsOn"
+              ? "Find a task, or paste a link…"
+              : "Find a task…"}
             bind:value={query}
           />
           <ul
             class="flex flex-col max-h-c-task-candidates-max-h m-0 p-0 overflow-y-auto list-none"
           >
+            {#if pasted}
+              <li>
+                <button
+                  class={menuItemVariants({
+                    class:
+                      "select-none flex items-center gap-space-2 w-full text-start",
+                  })}
+                  data-menu-item
+                  onclick={() => write(pasted)}
+                  type="button"
+                >
+                  <span
+                    class="min-w-0 overflow-clip type-label text-ink-strong text-ellipsis whitespace-nowrap"
+                    >Wait on {pasted}</span
+                  >
+                </button>
+              </li>
+            {/if}
             {#each candidates as each (each.id)}
               <li>
                 <button
@@ -154,11 +234,7 @@
                       "select-none flex items-center gap-space-2 w-full text-start",
                   })}
                   data-menu-item
-                  onclick={async () => {
-                    open = false;
-                    query = "";
-                    await onlink(edge, each.id);
-                  }}
+                  onclick={() => write(each.id)}
                   type="button"
                 >
                   <span
@@ -172,30 +248,45 @@
                 </button>
               </li>
             {:else}
-              <li class="pt-space-1 type-meta text-ink-subtle">
-                No task matches.
-              </li>
+              {#if !pasted}
+                <li class="pt-space-1 type-meta text-ink-subtle">
+                  No task matches.
+                </li>
+              {/if}
             {/each}
           </ul>
         </div>
       </Popover.Content>
     </Popover.Root>
   </div>
-  {@render row("After", task.after, "after")}
-  {@render row("Parent", task.parent ? [task.parent] : [], "parent")}
-  {#if task.related.length > 0}
-    {@render row("Related", task.related, "related")}
+  <div
+    class="grid grid-cols-(--edge-cols) items-box-start gap-space-2"
+    style:--edge-cols="var(--c-task-edge-label-w) minmax(0, 1fr)"
+  >
+    <span class="pt-space-1 type-label text-ink-muted">Waits on</span>
+    <div data-slot="edge-list" class="flex flex-col gap-space-1 min-w-0">
+      {#each task.waits as one (one.target)}
+        <div class="flex flex-col min-w-0">{@render wait(one)}</div>
+      {:else}
+        <span class="pt-space-1 type-meta text-ink-subtle">None</span>
+      {/each}
+    </div>
+  </div>
+  {@render row("Unblocks", task.unblocks, null)}
+  {#if task.partOf}
+    {@render row("Part of", [task.partOf], (id) =>
+      onlink({ partOf: id, remove: true })
+    )}
   {/if}
-  {#if task.foundIn}
-    {@render row("Found in", [task.foundIn], "found_in")}
+  {#if task.parts.length > 0}
+    {@render row("Parts", task.parts, null)}
+  {/if}
+  {#if task.foundIn && byId.has(task.foundIn)}
+    {@render row("Found in", [task.foundIn], null)}
   {/if}
   {#if task.duplicateOf}
-    {@render row("Duplicate of", [task.duplicateOf], "duplicate_of")}
-  {/if}
-  {#if children.length > 0}
-    {@render row("Children", children, null)}
-  {/if}
-  {#if waitedOnBy.length > 0}
-    {@render row("Waited on by", waitedOnBy, null)}
+    {@render row("Duplicate of", [task.duplicateOf], (id) =>
+      onlink({ duplicateOf: id, remove: true })
+    )}
   {/if}
 </section>

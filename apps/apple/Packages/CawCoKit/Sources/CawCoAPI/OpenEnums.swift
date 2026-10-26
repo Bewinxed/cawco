@@ -1254,6 +1254,44 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/BuiltOnSince`.
+    public enum BuiltOnSince: OpenEnum {
+        case decidedDifferently
+        case reopened
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "decided differently": self = .decidedDifferently
+            case "reopened": self = .reopened
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .decidedDifferently: "decided differently"
+            case .reopened: "reopened"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.decidedDifferently, .reopened]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/CallerKind`.
     public enum CallerKind: OpenEnum {
         case anonymous
@@ -8448,6 +8486,56 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.off, .on]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/WaitKind`.
+    public enum WaitKind: OpenEnum {
+        case card
+        case pin
+        case pr
+        case run
+        case session
+        case task
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "card": self = .card
+            case "pin": self = .pin
+            case "pr": self = .pr
+            case "run": self = .run
+            case "session": self = .session
+            case "task": self = .task
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .card: "card"
+            case .pin: "pin"
+            case .pr: "pr"
+            case .run: "run"
+            case .session: "session"
+            case .task: "task"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.card, .pin, .pr, .run, .session, .task]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

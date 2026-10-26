@@ -15,7 +15,6 @@
     data as {
       task: TaskSummary;
       href: string;
-      kindOf: (id: string) => StageKind | null | undefined;
       onopen: (id: string) => void;
       flow: Flow;
     }
@@ -56,7 +55,6 @@
   />
   <TaskCard
     href={node.href}
-    kindOf={node.kindOf}
     movable={false}
     onopen={node.onopen}
     task={node.task}

@@ -1,10 +1,10 @@
 <script lang="ts">
   /**
    * The Canvas view (PRD §5.2): the project's tasks as the graph their files
-   * draw — `after`, `parent`, `related`, `found_in` — on Svelte Flow, set up
+   * draw — `waits_on`, `part_of`, `found_in` — on Svelte Flow, set up
    * as every graph canvas is (its fit, zoom, theme and tools).
    *
-   * Only tasks that meet an edge are on it. dagre lays it out along `after`
+   * Only tasks that meet an edge are on it. dagre lays it out along `waits_on`
    * (task-graph.ts) from the cards' measured sizes, left to right; top to
    * bottom only when across would set the cards under the readable floor
    * and downward holds them larger. Nothing is placed by hand and nothing
@@ -45,18 +45,16 @@
   let {
     tasks,
     hrefOf,
-    kindOf,
     onopen,
   }: {
     tasks: TaskSummary[];
     hrefOf: (id: string) => string;
-    kindOf: (id: string) => StageKind | null | undefined;
     onopen: (id: string) => void;
   } = $props();
 
   const nodeTypes = { task: TaskNode };
   const edgeTypes = { task: TaskEdgeLine };
-  /** The arrow `after` edges end in: one marker per canvas, its own id. */
+  /** The arrow `waits_on` edges end in: one marker per canvas, its own id. */
   const uid = $props.id();
   const marker = `task-after-${uid}`;
 
@@ -162,7 +160,7 @@
       draggable: false,
       connectable: false,
       selectable: false,
-      data: { task, href: hrefOf(task.id), kindOf, onopen, flow },
+      data: { task, href: hrefOf(task.id), onopen, flow },
     }));
     const kinds = new Map(tasks.map((task) => [task.id, task.kind]));
     edges = graphEdges.map((edge) => ({
@@ -215,7 +213,7 @@
   data-slot="view-canvas"
   {@attach measureCanvas}
 >
-  <!-- The arrow every `after` edge ends in, filled from the tokens. -->
+  <!-- The arrow every `waits_on` edge ends in, filled from the tokens. -->
   <svg aria-hidden="true" class="absolute h-0 w-0">
     <defs>
       <marker

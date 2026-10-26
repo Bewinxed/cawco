@@ -17,9 +17,22 @@
  *   project's lead, its Caw (caw.ts), takes the reports of every attempt
  *   nobody asked for, its session started for the first one while Caw is
  *   on. With Caw off there is no lead: such an attempt does not start.
- * - **The frontier** (tasks.ts `onFrontier`): tasks in a `todo` stage whose
- *   every `after` task is in a `done` stage, with no live attempt, whose last
- *   attempt neither failed nor was stopped, in rank order. A failed or
+ * - **The frontier** (tasks.ts `onFrontier`): the ready tasks (in a `todo`
+ *   stage, every wait of theirs and their `part_of` chain settled, no live
+ *   attempt, no coordinator holding them; task-waits.ts settles each) that
+ *   have no parts, whose last attempt neither failed nor was stopped, in
+ *   rank order.
+ * - **Coordinators.** A whole (a task with parts) is never dispatched as a
+ *   plain worker. Started by you or a session, its attempt is a
+ *   coordinator: it may delegate, its brief lists its parts, and it starts
+ *   and steers them with task_start; while it is live the hub starts none of
+ *   them. The whole closes once every part is done and its coordinator has
+ *   reported; one nobody coordinates closes on its own when its last part
+ *   is done (tasks.ts `closeWhole`).
+ * - **Witnesses.** An attempt keeps each card and pin its task waits on, its
+ *   own and its chain's, with the value it settled with
+ *   (`work_items.waited_on`): a card answered differently since tells its
+ *   live session once, and a done task shows it was built on it. A failed or
  *   stopped attempt is its starter's business: its report goes to the
  *   session that started it, the lead for the dispatcher's own (work-items
  *   `reportees`), who retries it or moves on. It never waits for the person,
@@ -90,6 +103,7 @@ import {
   type InstanceRow,
   type LandsMode,
   machinesCalled,
+  markdownLink,
   POST_OUTPUT_RULE,
   planWaitOf,
   sessionLink,
@@ -99,7 +113,7 @@ import {
 import { detach } from "@cawco/core/detach";
 import { Elysia, status, t } from "elysia";
 import type { DbShape, PlaceRow, ProjectRow, WorkItemRow } from "./db";
-import type { Origin, WorkBudget } from "./db/schema";
+import type { Origin, WaitWitness, WorkBudget } from "./db/schema";
 import { needsDesignSystem } from "./design-offers";
 import type { JevAccess } from "./jev";
 import {
@@ -395,6 +409,14 @@ const checksSection = (task: TaskView): string =>
     ? `## Checks\n\nThe task lists these commands. Run each one and quote its real output in your finish_item summary, cut to the lines that show the result; list any you could not run inside your boundary under "Not run:", with why.\n\n${task.checks.map(checkLine).join("\n")}`
     : "## Checks\n\nThe task lists no commands. Prove the work with the commands that show it (build, lint, typecheck, the specs it touches), and quote their real output in your finish_item summary.";
 
+/** The cards and pins a task waits on, its own and its chain's, with the value each settled with now: the attempt's witnesses. */
+const witnessesOf = (task: TaskView): WaitWitness[] =>
+  task.waits.flatMap((wait) =>
+    (wait.kind === "card" || wait.kind === "pin") && wait.value !== null
+      ? [{ target: wait.target, value: wait.value }]
+      : []
+  );
+
 /** What of a task an attempt's work item carries as it is: outputs, group, owned files, the pages it builds from, budget. */
 const taskLimits = (
   task: TaskView
@@ -481,6 +503,9 @@ const briefOf = (
       ? `${taskLink(project.id, id, other.title)} (${other.stage})`
       : `${id} (not in the project)`;
   };
+  /** A wait as the brief names it: its link, where it stands, a card's pick, whose chain it is from. */
+  const waitLine = (wait: TaskView["waits"][number]): string =>
+    `${markdownLink(wait.label, wait.href)}, ${wait.flag ? `blocked: ${wait.flag}` : wait.state}${wait.kind === "card" && wait.value ? `, picked ${wait.value}` : ""}${wait.via ? ` (through ${line(wait.via)})` : ""}`;
   const open = task.todos.filter((todo) => !todo.done);
   const todos =
     open.length > 0
@@ -493,15 +518,14 @@ const briefOf = (
             "\n"
           )}\n\nWhen a step whose id is a to-do's is completed, the hub ticks that to-do; you can also tick it with todo_write. Add the steps you find. finish_item lists the to-dos still open once: tick or explain each in your summary. Steps you leave open become proposed to-dos on the task.`
       : "The task has no open to-dos. Add the steps you find with todo_write as you go; plan items you leave open become proposed to-dos on the task.";
-  const waiting = all.filter((each) => each.after.includes(task.id));
   const sits = [
-    ...(task.after.length > 0
-      ? [`It waits for: ${task.after.map(line).join("; ")}.`]
+    ...(task.waits.length > 0
+      ? [`It waits on: ${task.waits.map(waitLine).join("; ")}.`]
       : []),
-    ...(waiting.length > 0
-      ? [`Waiting on it: ${waiting.map((each) => line(each.id)).join("; ")}.`]
+    ...(task.unblocks.length > 0
+      ? [`It unblocks: ${task.unblocks.map(line).join("; ")}.`]
       : []),
-    ...(task.parent ? [`Its parent: ${line(task.parent)}.`] : []),
+    ...(task.partOf ? [`It is a part of ${line(task.partOf)}.`] : []),
     ...(task.outputs.length > 0
       ? [`It produces: ${task.outputs.join(", ")}.`]
       : []),
@@ -522,7 +546,8 @@ const briefOf = (
       : []),
     `## To-dos\n\n${todos}`,
     `${checksSection(task)}\n\n${AT_FINISH[lands]}`,
-    `## Where it sits\n\n${sits.length > 0 ? sits.join("\n") : "Nothing waits on it, and it waits for nothing."}`,
+    `## Where it sits\n\n${sits.length > 0 ? sits.join("\n") : "Nothing waits on it, and it waits on nothing."}`,
+    ...(task.parts.length > 0 ? [partsSection(task.parts.map(line))] : []),
     `## Handing it in\n\n${RESULT_LINE}`,
     ...(context ? [context] : []),
     ...(design ? [design] : []),
@@ -530,6 +555,14 @@ const briefOf = (
     ...(comments.length > 0 ? [commentsSection(comments)] : []),
   ].join("\n\n");
 };
+
+/**
+ * A coordinator's section of the brief: its parts, and how it runs them.
+ * The hub starts none of them while it is live; the whole closes once every
+ * part is done and it has reported.
+ */
+const partsSection = (parts: string[]): string =>
+  `## Your parts\n\nThis task is a whole, and you coordinate it. Start each part with task_start when it is ready (each attempt reports to you), steer them with handoff, and read their reports. While you run, the hub starts none of them itself. The task closes once every part is done and you have called finish_item.\n\n${parts.map((part) => `- ${part}`).join("\n")}`;
 
 /**
  * How an attempt hands in its work (task-tools.ts `task_result`): what the
@@ -808,6 +841,38 @@ export const createDispatcher = ({
     console.warn(`[dispatch] ${task.id} in project ${projectId}: ${message}`);
   };
 
+  /**
+   * Whether `parent` is a coordinator of `task`: its work item is the live
+   * attempt at one of the task's `part_of` ancestors, so it starts and
+   * steers the task as a part of its whole.
+   */
+  const coordinates = async (
+    projectId: string,
+    parent: InstanceRow,
+    task: TaskView
+  ): Promise<boolean> => {
+    const item = parent.workItemId
+      ? liveAttempts(projectId).find((each) => each.id === parent.workItemId)
+      : undefined;
+    if (!item?.taskId) {
+      return false;
+    }
+    const { tasks: all } = await tasks.list(projectId);
+    const byId = new Map(all.map((each) => [each.id, each]));
+    const seen = new Set([task.id]);
+    for (
+      let at = task.partOf;
+      at && !seen.has(at);
+      at = byId.get(at)?.partOf ?? null
+    ) {
+      if (at === item.taskId) {
+        return true;
+      }
+      seen.add(at);
+    }
+    return false;
+  };
+
   /** Refuses an attempt at a task that has a live one, or is done or dropped. */
   const startable = (projectId: string, task: TaskView): void => {
     const live = liveAttempts(projectId).find(
@@ -930,7 +995,7 @@ export const createDispatcher = ({
     );
     const access = placement.access();
     return access
-      ? await readyByJev(project, access, views, all)
+      ? await readyByJev(project, access, views)
       : readyByLead(project, views, byId);
   };
 
@@ -976,8 +1041,7 @@ export const createDispatcher = ({
   const judgeFresh = async (
     project: ProjectRow,
     access: JevAccess,
-    views: TaskView[],
-    all: TaskSummary[]
+    views: TaskView[]
   ): Promise<boolean> => {
     const fresh = views.filter(
       (task) => judgements.get(keyOf(project.id, task.id))?.hash !== task.hash
@@ -999,7 +1063,7 @@ export const createDispatcher = ({
           todos: task.todos
             .filter((todo) => !todo.done)
             .map((todo) => todo.text),
-          waiting: all.filter((each) => each.after.includes(task.id)).length,
+          waiting: task.unblocks.length,
         }))
       );
     } catch (error) {
@@ -1027,10 +1091,9 @@ export const createDispatcher = ({
   const readyByJev = async (
     project: ProjectRow,
     access: JevAccess,
-    views: TaskView[],
-    all: TaskSummary[]
+    views: TaskView[]
   ): Promise<string[]> => {
-    if (!(await judgeFresh(project, access, views, all))) {
+    if (!(await judgeFresh(project, access, views))) {
       return [];
     }
     const ready = views
@@ -1102,6 +1165,9 @@ export const createDispatcher = ({
         title: titleOf(task),
         type,
         lands,
+        // A whole's attempt coordinates its parts: it delegates.
+        ...(task.parts.length > 0 ? { canDelegate: true } : {}),
+        waitedOn: witnessesOf(task),
         ...taskLimits(task),
         ...placed,
         ...(origin ? { origin } : {}),
@@ -1161,11 +1227,11 @@ export const createDispatcher = ({
     origin?: Origin
   ): Promise<AttemptStart> => {
     const project = projectOf(projectId);
+    const task = await tasks.get(projectId, ref);
     const unfit = parentProblem(parent, projectId, parent.id);
-    if (unfit) {
+    if (unfit && !(await coordinates(projectId, parent, task))) {
       refuse(403, unfit);
     }
-    const task = await tasks.get(projectId, ref);
     const key = keyOf(projectId, task.id);
     if (starting.has(key)) {
       refuse(409, "An attempt at this task is starting already.");
@@ -1672,6 +1738,19 @@ export const createDispatcher = ({
       return;
     }
     await noteFollowUp(projectId, taskId, item);
+    await (task.parts.length > 0
+      ? settleWhole(projectId, task, item, stages)
+      : settleOne(projectId, task, item, stages));
+  };
+
+  /** {@link settle} for a task with no parts: done, review, or back to todo, as its attempt ended. */
+  const settleOne = async (
+    projectId: string,
+    task: TaskView,
+    item: WorkItemRow,
+    stages: { stages: readonly Stage[] }
+  ): Promise<void> => {
+    const taskId = task.id;
     const criteria = criteriaOf(task.acceptance);
     const judged = await kindAfterJudged(projectId, task, criteria, item);
     // The lead judges: the task stays where it is until he moves it.
@@ -1698,6 +1777,45 @@ export const createDispatcher = ({
         { tickCriteria: closedMet(judged, kind, criteria.length) }
       );
     }
+  };
+
+  /**
+   * A coordinator ended: its whole closes once every part is done or
+   * dropped, however it ended (it has reported). With parts still open, a
+   * coordinator that finished leaves the whole where it is, to close on its
+   * own when its last part is done; one that failed or was stopped sends it
+   * back to its first `todo` stage, marked as such, as any attempt does.
+   */
+  const settleWhole = async (
+    projectId: string,
+    task: TaskView,
+    item: WorkItemRow,
+    stages: { stages: readonly Stage[] }
+  ): Promise<void> => {
+    const { tasks: all } = await tasks.list(projectId);
+    const closed = task.parts.every((id) => {
+      const kind = all.find((each) => each.id === id)?.kind;
+      return kind === "done" || kind === "dropped";
+    });
+    // A coordinator that finished with parts open leaves the whole where it is.
+    if (!closed && item.state === "done") {
+      return;
+    }
+    const kind = closed ? "done" : "todo";
+    const target = stages.stages.find((each) => each.kind === kind);
+    if (!target || target.name === task.stage || target.hooks.by === "action") {
+      return;
+    }
+    await tasks.move(
+      projectId,
+      task.id,
+      target.name,
+      hubActor(
+        closed
+          ? `its coordinator ${short(item.id)} reported and every part is done`
+          : `its coordinator ${short(item.id)} ${item.state}`
+      )
+    );
   };
 
   /**

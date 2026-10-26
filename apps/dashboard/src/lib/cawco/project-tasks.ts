@@ -9,6 +9,7 @@
  * Not to be confused with a session's own plan (WORDS.md: plan), which is
  * the hub's too, held in the client by `plan.ts`.
  */
+import type { taskLinkWords } from "@cawco/core";
 import { type AttemptResult, outputArtifacts } from "@cawco/core/deliverables";
 import type { ProjectGate } from "@cawco/core/project-gate";
 import type {
@@ -191,12 +192,45 @@ export function reviewOf(
 /** Where an attempt's work lands (`@cawco/core`'s `LandsMode`). */
 export type LandsMode = "main" | "branch" | "pr" | "none";
 
+/**
+ * One wait of a task, its own or its whole's (the hub's `TaskWait`, settled
+ * by its one resolver, task-waits.ts): a task, a decision card, a pin, a
+ * pull request, an Actions run or a session.
+ */
+export interface TaskWait {
+  /** Why it is blocked until someone removes or re-points it (`closed unmerged`); null when it is not. */
+  flag: string | null;
+  /** Where it opens: its `cawco:` reference, or the pull request's or run's page. */
+  href: string;
+  kind: "task" | "card" | "pin" | "pr" | "run" | "session";
+  /** A task's title, a card's question, what a pin stands on, `PR #418`. */
+  label: string;
+  settled: boolean;
+  /** Where it stands: `doing`, `open`, `picked`, `merged`, `red`. */
+  state: string;
+  /** The wait as the task's file keeps it: what a link write takes out. */
+  target: string;
+  /** The whole it is inherited from; null for the task's own. */
+  via: string | null;
+}
+
+/** A card or pin a done task was built on that moved since (the hub's `BuiltOn`). */
+export interface BuiltOn {
+  href: string;
+  label: string;
+  since:
+    typeof taskLinkWords.decidedDifferently | typeof taskLinkWords.reopened;
+  target: string;
+}
+
 /** What the hub works out per task from its attempts and edges, on every read. */
 interface TaskFlags {
   /** Newest first. */
   attempts: TaskAttempt[];
-  /** The tasks it waits on that have not landed. */
-  blockedBy: string[];
+  /** A done task's cards and pins that moved since its attempt was dispatched on them. */
+  builtOn: BuiltOn[];
+  /** The whole whose live coordinator holds it from the hub's dispatch; null when none. */
+  heldBy: string | null;
   /**
    * Its newest attempt failed, and it is not done or dropped since: its
    * starter's business, never Needs you.
@@ -206,10 +240,18 @@ interface TaskFlags {
   lastAttemptStopped: boolean;
   /** An attempt at it is starting or running. */
   liveAttempt: boolean;
+  /** Its parts: the tasks part of it, by id. */
+  parts: string[];
   /** Its stage's `runs:` hook asked for an attempt, which waits for a slot. */
   queuedStart: boolean;
+  /** In a to-do stage, every wait settled, no live attempt, no coordinator holding it. */
+  ready: boolean;
   /** Why the hub could not start an attempt the last time it tried. */
   startProblem: string | null;
+  /** The tasks that wait on it, by id. */
+  unblocks: string[];
+  /** Every wait, its own and its whole's, unsettled first. */
+  waits: TaskWait[];
 }
 
 /**
@@ -230,12 +272,11 @@ export interface AttemptStart {
 
 /** One task as a list shows it: the hub's index row. */
 export interface TaskSummary extends TaskFlags, TaskTimes {
-  after: string[];
   /** The task it repeats (`duplicate_of`); null when none. */
   duplicateOf: string | null;
   /** The fields its file carries beyond a task file's own that hold one scalar (`priority: high`), as written. */
   fields: Record<string, string>;
-  /** The task it was found in (`found_in`); null when none. */
+  /** The task or pin it was found in (`found_in`), as kept; null when none. */
   foundIn: string | null;
   id: string;
   kind: StageKind | null;
@@ -244,17 +285,18 @@ export interface TaskSummary extends TaskFlags, TaskTimes {
   number: number;
   /** The project folder files its work produces (`outputs:`). */
   outputs: string[];
-  parent: string | null;
+  /** The whole it is a part of (`part_of`); null when none. */
+  partOf: string | null;
   path: string;
   problem: string | null;
   rank: string | null;
-  /** The tasks it is related to (`related`). */
-  related: string[];
   stage: string;
   title: string;
   /** Its agreed to-dos ticked, of all agreed (core `todoProgress`): offered ones are left out. */
   todos: { done: number; total: number };
   type: string | null;
+  /** What it waits on (`waits_on`), as its file keeps it. */
+  waitsOn: string[];
 }
 
 /** When a task was made and last changed, ms epoch, from its file's commits (the hub's `TaskTimes`). */
@@ -286,7 +328,6 @@ export interface Todo {
 /** One task, its file read whole. */
 export interface TaskView extends TaskFlags, TaskTimes {
   acceptance: string;
-  after: string[];
   checks: string[];
   /** Its `## Comments`, oldest first: each written by the hub with who and when. */
   comments: TaskComment[];
@@ -308,11 +349,10 @@ export interface TaskView extends TaskFlags, TaskTimes {
   needsYou: boolean;
   number: number;
   outputs: string[];
-  parent: string | null;
+  partOf: string | null;
   path: string;
   problems: string[];
   rank: string | null;
-  related: string[];
   /** What its newest finished attempt handed back; null until one has. */
   result: TaskResult | null;
   /** The body's other `## ` sections, as written. */
@@ -321,6 +361,7 @@ export interface TaskView extends TaskFlags, TaskTimes {
   title: string;
   todos: Todo[];
   type: string | null;
+  waitsOn: string[];
 }
 
 /** Who wrote a comment or made a change (the hub's `TaskHistoryActor`). */
@@ -385,9 +426,17 @@ export interface TaskPatch {
   title?: string;
 }
 
-/** The edges the hub sets between tasks (its links route). */
-export type TaskEdge =
-  "after" | "parent" | "related" | "found_in" | "duplicate_of";
+/**
+ * One write of a task's links (the hub's links route, `task_link`'s): what
+ * it waits on, the whole it is part of, the task it repeats; `remove` takes
+ * the named ones out.
+ */
+export interface TaskLinks {
+  duplicateOf?: string;
+  partOf?: string;
+  remove?: boolean;
+  waitsOn?: string[];
+}
 
 /** What the hub said went wrong, in one sentence without its stop (hub-read `hubFailure`). */
 async function said(response: Response): Promise<string> {
@@ -550,7 +599,7 @@ export const archiveTask = (
 export const linkTask = (
   projectId: string,
   taskId: string,
-  link: { edge: TaskEdge; to: string; remove?: boolean }
+  link: TaskLinks
 ): Promise<TaskView> =>
   send(`${one(projectId, taskId)}/links`, json("POST", link));
 
@@ -725,7 +774,8 @@ export const sendBackTarget = (
 
 /** What a card and a row say about a task's attempts and edges. */
 export function flagsOf(task: TaskSummary | TaskView): {
-  blockedBy: string[];
+  /** Its waits not settled yet: what it still waits on. */
+  waiting: TaskWait[];
   failed: boolean;
   live: boolean;
   queued: boolean;
@@ -734,7 +784,7 @@ export function flagsOf(task: TaskSummary | TaskView): {
 } {
   return {
     live: task.liveAttempt,
-    blockedBy: task.blockedBy,
+    waiting: task.waits.filter((wait) => !wait.settled),
     failed: task.lastAttemptFailed,
     stopped: task.lastAttemptStopped,
     queued: task.queuedStart,

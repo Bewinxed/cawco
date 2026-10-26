@@ -70,8 +70,8 @@
     type StagesView,
     stageLabel,
     syncTracker,
-    type TaskEdge,
     type TaskHistoryEvent,
+    type TaskLinks,
     type TaskSummary,
     type TaskView,
     updateTask,
@@ -153,7 +153,7 @@
           stopped: false,
           queued: false,
           startProblem: null,
-          blockedBy: [] as string[],
+          waiting: [],
         };
   });
   const allowed = $derived(
@@ -349,13 +349,13 @@
     }
   }
 
-  async function link(edge: TaskEdge, to: string, remove = false) {
+  async function link(links: TaskLinks) {
     if (!shown) {
       return;
     }
     edgeProblem = null;
     try {
-      took(await linkTask(projectId, shown.id, { edge, to, remove }));
+      took(await linkTask(projectId, shown.id, links));
     } catch (error) {
       edgeProblem = message(error);
     }
@@ -653,6 +653,9 @@
           onchanged={took}
           {onopen}
           {projectId}
+          reopenTo={stages.stages.find(
+            (stage) => stage.kind === "todo" && allowed.has(stage.name)
+          )?.name ?? null}
           task={shown}
           {tasks}
         />

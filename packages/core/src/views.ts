@@ -54,8 +54,6 @@ export type ViewToolName = (typeof VIEW_TOOLS)[number];
 
 /** One task as the `tasks` tool answers it: the board's row, and its dates. */
 export interface ViewTask {
-  /** The tasks it waits on that have not landed, by id. */
-  blockedBy: string[];
   /**
    * Its dates, ms epoch, by name: `createdAt` and `updatedAt` always (the
    * commit that added its file, and its file's last change: its last commit,
@@ -80,6 +78,8 @@ export interface ViewTask {
   title: string;
   todos: { done: number; total: number };
   type: string | null;
+  /** Every wait it has, its own and its whole's, unsettled first: what it is called, where it stands, whether it is settled. */
+  waits: { label: string; settled: boolean; state: string }[];
 }
 
 /** What the `tasks` tool takes: filters, each optional. */

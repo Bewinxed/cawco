@@ -7,9 +7,8 @@
  * stage: draft
  * issue: "https://github.com/acme/app/issues/12"
  * type: writer
- * after: [138]
- * parent: 120
- * related: [131]
+ * waits_on: [138, "<artifact id>#head", "https://github.com/acme/app/pull/418"]
+ * part_of: 120
  * found_in: 140
  * duplicate_of: 101
  * checks: ["bun test", "bun run lint"]
@@ -45,8 +44,10 @@
  *   its title at creation: `tasks/tsk-12-persist-the-theme-toggle.md`. The
  *   slug never changes; a later title lives in the file.
  * - **Edges** in the front matter name tasks by number, as the spec writes
- *   them (`after: [138]`); `tsk-138` and `#138` read the same. Everything
- *   else (the API, the tools) says `tsk-138`.
+ *   them (`waits_on: [138]`); `tsk-138` and `#138` read the same. Everything
+ *   else (the API, the tools) says `tsk-138`. `waits_on` also names a
+ *   decision card, a pin, a pull request, an Actions run or a session, each
+ *   as wait-targets.ts keeps it; `found_in` names a task or a pin.
  * - **Checks** are shell commands the attempt's brief lists for it to run
  *   and quote in its finish_item report (dispatch.ts `checksSection`); the
  *   hub runs only its landing gate. One written `host: <command>` cannot
@@ -74,6 +75,8 @@ import {
   LANDS_MODES,
   type LandsMode,
   type TaskTodo,
+  waitHandle,
+  waitTarget,
 } from "@cawco/core";
 import type { WorkBudget } from "./db/schema";
 
@@ -82,9 +85,8 @@ export const TASK_FIELDS = [
   "stage",
   "issue",
   "type",
-  "after",
-  "parent",
-  "related",
+  "waits_on",
+  "part_of",
   "found_in",
   "duplicate_of",
   "checks",
@@ -103,30 +105,26 @@ export const TASK_FIELDS = [
 export type TaskField = (typeof TASK_FIELDS)[number];
 
 /**
- * The edges a task can have to another (beads'). `duplicate_of` names the
- * task this one repeats: linking it drops this one, and a task waiting on it
- * waits on that one's being done instead.
+ * A task's edges (tasks.ts carries out what each makes the hub do):
+ * `waits_on`, what it waits on, any kind wait-targets.ts reads; `part_of`,
+ * the task it is a part of, whose waits it inherits; `found_in`, the task
+ * or pin it was found in, written by the hub; `duplicate_of`, the task it
+ * repeats, which closes it.
  */
 export const EDGES = [
-  "after",
-  "parent",
-  "related",
+  "waits_on",
+  "part_of",
   "found_in",
   "duplicate_of",
 ] as const;
 export type Edge = (typeof EDGES)[number];
-/** The edges that name one task; the others name a list. */
-const SINGLE_EDGES: ReadonlySet<Edge> = new Set([
-  "parent",
-  "found_in",
-  "duplicate_of",
-]);
-export const isSingleEdge = (edge: Edge): boolean => SINGLE_EDGES.has(edge);
+
+/** The keys a task file carried before task links were one blocking edge: tasks.ts `migrateLinks` takes them out. */
+export const LEGACY_LINK_KEYS = ["after", "parent", "related"] as const;
 
 export interface TaskFields {
   /** The accounts its attempts may run on (account ids); empty: every account. */
   accounts: string[];
-  after: string[];
   /** What an attempt may spend before the hub stops it; null: the project's default. */
   budget: WorkBudget | null;
   /**
@@ -140,6 +138,7 @@ export interface TaskFields {
   context: string[];
   /** The task this one repeats (`duplicate_of`); null when none. */
   duplicateOf: string | null;
+  /** The task or pin it was found in (`found_in`, `tsk-12` or `<artifact id>/<n>`); null when none. */
   foundIn: string | null;
   /** Its attempts' group under their parent: one combined report once all have ended. */
   group: string | null;
@@ -154,13 +153,15 @@ export interface TaskFields {
   outputs: string[];
   /** Globs of the repository's files its attempt owns: no overlapping live item runs beside it. */
   owns: string[];
-  parent: string | null;
+  /** The task it is a part of (`part_of`); null when none. */
+  partOf: string | null;
   rank: string | null;
-  related: string[];
   /** Where its attempts run (runs-on.ts): a machine, or a capability like `apple`; null: the project's. */
   runsOn: string | null;
   stage: string | null;
   type: string | null;
+  /** What it waits on (`waits_on`), each as wait-targets.ts keeps it: `tsk-12`, a card, a pin, a PR, a run, a session. */
+  waitsOn: string[];
 }
 
 /** One to-do, flat in file order. */
@@ -393,7 +394,7 @@ const renderItem = (value: string): string =>
     ? value
     : JSON.stringify(value);
 
-/** An edge's target as the file writes it: the bare number. */
+/** An edge's target as the file writes it: a task as its bare number, any other target as kept. */
 const renderEdge = (ref: string): string =>
   String(taskNumber(ref) ?? renderItem(ref));
 
@@ -401,9 +402,8 @@ const FIELD_KEYS = {
   stage: "stage",
   issue: "issue",
   type: "type",
-  after: "after",
-  parent: "parent",
-  related: "related",
+  waits_on: "waitsOn",
+  part_of: "partOf",
   found_in: "foundIn",
   duplicate_of: "duplicateOf",
   checks: "checks",
@@ -456,9 +456,8 @@ const emptyFields = (): TaskFields => ({
   stage: null,
   issue: null,
   type: null,
-  after: [],
-  parent: null,
-  related: [],
+  waitsOn: [],
+  partOf: null,
   foundIn: null,
   duplicateOf: null,
   checks: [],
@@ -475,30 +474,30 @@ const emptyFields = (): TaskFields => ({
   accounts: [],
 });
 
-/** A list of task ids (`after`, `related`); what is not one goes to `problems`. */
-const readEdgeList = (
-  field: string,
-  line: FrontMatterLine,
-  problems: string[]
-): string[] => {
+/** `waits_on:`, each target as wait-targets.ts keeps it; what reads as none goes to `problems`. */
+const readWaits = (line: FrontMatterLine, problems: string[]): string[] => {
   const items = listOf(line);
   if (!items) {
-    problems.push(`${field}: is not a list like [138, 140].`);
+    problems.push(
+      'waits_on: is not a list like [138, "<artifact id>#<card>"].'
+    );
     return [];
   }
-  const refs: string[] = [];
+  const kept: string[] = [];
   for (const item of items) {
-    const ref = normaliseTaskRef(item);
-    if (ref) {
-      refs.push(ref);
+    const target = waitTarget(item);
+    if (target) {
+      kept.push(waitHandle(target));
     } else {
-      problems.push(`${field}: “${item}” is not a task id like 138.`);
+      problems.push(
+        `waits_on: “${item}” is not a task, card, pin, pull request, Actions run or session.`
+      );
     }
   }
-  return [...new Set(refs)];
+  return [...new Set(kept)];
 };
 
-/** One task id (`parent`, `found_in`, `duplicate_of`); what is not one goes to `problems`. */
+/** One task id (`part_of`, `duplicate_of`); what is not one goes to `problems`. */
 const readEdge = (
   field: string,
   line: FrontMatterLine,
@@ -510,6 +509,23 @@ const readEdge = (
     problems.push(`${field}: “${value}” is not a task id like 120.`);
   }
   return ref ?? null;
+};
+
+/** `found_in:`, a task (`tsk-12`) or a pin (`<artifact id>/<n>`); what is neither goes to `problems`. */
+const readFoundIn = (
+  line: FrontMatterLine,
+  problems: string[]
+): string | null => {
+  const value = scalarOf(line);
+  if (value === null) {
+    return null;
+  }
+  const target = waitTarget(value);
+  if (target?.kind === "task" || target?.kind === "pin") {
+    return waitHandle(target);
+  }
+  problems.push(`found_in: “${value}” is neither a task nor a pin.`);
+  return null;
 };
 
 const readList = (
@@ -606,12 +622,12 @@ const readField = (
   line: FrontMatterLine,
   problems: string[]
 ): boolean => {
-  if (field === "after" || field === "related") {
-    fields[field] = readEdgeList(field, line, problems);
-  } else if (field === "parent") {
-    fields.parent = readEdge(field, line, problems);
+  if (field === "waits_on") {
+    fields.waitsOn = readWaits(line, problems);
+  } else if (field === "part_of") {
+    fields.partOf = readEdge(field, line, problems);
   } else if (field === "found_in") {
-    fields.foundIn = readEdge(field, line, problems);
+    fields.foundIn = readFoundIn(line, problems);
   } else if (field === "duplicate_of") {
     fields.duplicateOf = readEdge(field, line, problems);
   } else if (field === "builds_from") {
@@ -1054,6 +1070,40 @@ export class TaskDoc {
       }
     }
     lines.splice(after + 1, 0, written);
+  }
+
+  /**
+   * The links this file carries under the keys task files used before task
+   * links were one blocking edge (`after`, `parent`, `related`), each read
+   * as a task id; taken out of the front matter. Undefined, nothing taken,
+   * when it carries none of them: tasks.ts `migrateLinks` rewrites them.
+   */
+  takeLegacyLinks():
+    { after: string[]; parent: string | null; related: string[] } | undefined {
+    const lines = this.front ?? [];
+    const legacy = new Set<string>(LEGACY_LINK_KEYS);
+    const found = lines.filter(
+      (line) => line.key !== undefined && legacy.has(line.key)
+    );
+    if (found.length === 0) {
+      return;
+    }
+    const tasks = (key: string): string[] => {
+      const line = found.find((each) => each.key === key);
+      return [
+        ...new Set(
+          (line ? (listOf(line) ?? []) : [])
+            .map((item) => normaliseTaskRef(item))
+            .filter((ref): ref is string => ref !== undefined)
+        ),
+      ];
+    };
+    this.front = lines.filter((line) => !found.includes(line));
+    return {
+      after: tasks("after"),
+      parent: tasks("parent")[0] ?? null,
+      related: tasks("related"),
+    };
   }
 
   /**

@@ -463,8 +463,6 @@
       readTasks().catch(() => undefined);
     });
   });
-  const kindOf = (id: string): StageKind | null | undefined =>
-    tasks.find((task) => task.id === id)?.kind;
   /**
    * The head over a reply's cards: how many he filed and the stage they
    * stand in ("Filed 6 tasks · Draft"), or each stage's count where they
@@ -937,7 +935,6 @@
           >
             <TaskCard
               href={taskHref(task.id)}
-              {kindOf}
               onopen={openTaskOf}
               {task}
               titleFirst

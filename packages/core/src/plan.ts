@@ -27,6 +27,7 @@
  * applied in sequence. `rev` orders them: a delta is for `rev - 1`, and a
  * client holding anything else sends {@link PlanResync} for a snapshot.
  */
+import { waitArtifact } from "./wait-targets";
 
 export const PLAN_STEP_STATUSES = [
   "pending",
@@ -46,15 +47,8 @@ export interface PlanComment {
 }
 
 /**
- * A step waiting on the person: the card it asked on a decision page, set
- * by the session as it asks (`todo_write`'s `waitsOn`), or the whole
- * artifact, set by the hub on the session's current step when its
- * `artifact_create` or `artifact_update` with `does: pick` or `judge`
- * returns (hub plans.ts `waitOn`). The plan draws it "Waiting on you" with a
- * link to the card or the artifact; it stops waiting when the page's Send
- * carries a pick for that card, or once nothing on the artifact waits on
- * the person (core artifact-needs.ts). While it waits, the artifact's
- * Needs-you item stands; once the step is ticked or removed, it goes.
+ * A page, or one card of it, a build builds from (`builds_from`, a work
+ * item's `buildsFrom`): its landing waits on the person's picks there.
  */
 export interface PlanWait {
   /** The artifact's id. */
@@ -86,9 +80,39 @@ export interface PlanStep {
   id: string;
   priority?: PlanStepPriority;
   status: PlanStepStatus;
-  /** It waits on the person's pick on a decision page. */
+  /**
+   * What it waits on, set by the session (`todo_write`'s `waitsOn`): a
+   * task, a card, a pin, a pull request, a run or a session, as a task's
+   * `waits_on` keeps it (wait-targets.ts), settled by the hub's one resolver
+   * (hub task-waits.ts). The hub drops it once it settles.
+   */
+  wait?: string;
+  /**
+   * Sent for TestFlight ios 20261018 alone, which reads a step's wait in
+   * this shape (hub wire-compat.ts BRIDGES): a card wait, or the page whole.
+   * The hub fills it from `wait` and `waitsOnPage` as it sends a plan;
+   * nothing reads it. It goes once that build is no longer installable,
+   * 2027-01-16.
+   */
   waitsOn?: PlanWait;
+  /**
+   * The page it waits on the person on, whole, by its artifact id: set by
+   * the hub on the session's current step when its `artifact_create` or
+   * `artifact_update` with `does: pick` or `judge` returns (hub plans.ts
+   * `waitOn`), gone once nothing on the page waits on the person (core
+   * artifact-needs.ts). While it waits, the page's Needs-you item stands.
+   */
+  waitsOnPage?: string;
 }
+
+/** Whether an open step waits on artifact `artifactId`: on the page whole, or on a card or pin of it. */
+export const stepWaitsOnArtifact = (
+  step: PlanStep,
+  artifactId: string
+): boolean =>
+  step.status !== "completed" &&
+  (step.waitsOnPage === artifactId ||
+    (step.wait !== undefined && waitArtifact(step.wait) === artifactId));
 
 /** The person's changes to a plan, by what they do. */
 export const PLAN_EDIT_KINDS = [

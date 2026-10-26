@@ -33,7 +33,6 @@
     kind,
     cards,
     hrefOf,
-    kindOf,
     dateOf = () => null,
     onopen,
     closed = false,
@@ -59,7 +58,6 @@
     kind: StageKind | null;
     cards: TaskSummary[];
     hrefOf: (id: string) => string;
-    kindOf: (id: string) => StageKind | null | undefined;
     dateOf?: (id: string) => string | null;
     onopen: (id: string) => void;
     /** A card in the air may not come here: the column steps back. */
@@ -178,7 +176,6 @@
         <TaskCard
           date={dateOf(task.id)}
           href={hrefOf(task.id)}
-          {kindOf}
           {onopen}
           {task}
         />

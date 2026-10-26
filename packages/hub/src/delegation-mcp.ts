@@ -123,6 +123,10 @@ declare const __CAWCO_RELEASE__: boolean | undefined;
 const searcher = (row: InstanceRow | undefined): boolean =>
   row !== undefined && memoryRoleOf(row) === "orchestrator";
 
+/** Whether `row` files and links tasks: its core task tools load upfront together ({@link loadsUpfront}). */
+const filesTasks = (row: InstanceRow | undefined): boolean =>
+  row !== undefined && allows(roleOf(row), "task_link");
+
 /**
  * A tool as `tools/list` answers it to `row`. One that loads upfront for it
  * ({@link loadsUpfront}) asks Claude Code to: "To control how one of your
@@ -147,7 +151,7 @@ const listedFor =
     description,
     inputSchema: inputSchema as { type: "object" },
     ...("annotations" in entry ? { annotations: entry.annotations } : {}),
-    ...(loadsUpfront(name, searcher(row))
+    ...(loadsUpfront(name, searcher(row), filesTasks(row))
       ? { _meta: { "anthropic/alwaysLoad": true } }
       : {}),
   });
@@ -228,6 +232,10 @@ export function createDelegationMcp(options: {
   tasks?: Tasks;
   /** The task a work item is an attempt at, if any. */
   workItemTask?: (workItemId: string) => string | null | undefined;
+  /** Where a task a session files was found (tasks.ts `found_in`): its work item's task, else the pin thread its ask came from. */
+  foundIn?: (actor: InstanceRow) => string | null;
+  /** A plan step's wait as a session writes it, read as a task's wait is and kept as a file keeps it (task-waits.ts `readWait`). */
+  stepWait?: (actor: InstanceRow, written: string) => Promise<string>;
   /** Where a work item lands: what its session's finish_item says happens. */
   workItemLands?: (workItemId: string) => ItemEnd | undefined;
   /** "Build the design system" filed in the hub's words (design-offers.ts `fileBuild`). */
@@ -636,6 +644,13 @@ export function createDelegationMcp(options: {
         workItemTask: actor.workItemId
           ? (options.workItemTask?.(actor.workItemId) ?? null)
           : null,
+        foundIn: options.foundIn?.(actor) ?? null,
+        ...(options.stepWait
+          ? {
+              stepWait: (written: string) =>
+                options.stepWait?.(actor, written) ?? Promise.resolve(written),
+            }
+          : {}),
       }).find((tool) => tool.name === name);
     if (!entry) {
       throw new Error(`Unknown tool ${name}`);
@@ -1039,7 +1054,11 @@ export function createDelegationMcp(options: {
     const namesOf = (row: InstanceRow | undefined) =>
       toolsFor(row).map((tool) => tool.name);
     const upfrontOf = (listed: string[]) =>
-      new Set(listed.filter((name) => loadsUpfront(name, searcher(bound))));
+      new Set(
+        listed.filter((name) =>
+          loadsUpfront(name, searcher(bound), filesTasks(bound))
+        )
+      );
     if (!bound) {
       const names = namesOf(undefined);
       return {

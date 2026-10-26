@@ -50,13 +50,21 @@ const LABEL_SYNTAX = /[\\[\]]/g;
 /** What would end a link's destination early, past what `encodeURI` escapes. */
 const DESTINATION_SYNTAX = /[()]/g;
 
+/** A reference's destination: `cawco:<kind>/<id>`, the id escaped as a link's destination takes it. */
+export const referenceHref = (kind: ReferenceKind, id: string): string =>
+  `${SCHEME}${kind}/${encodeURI(id).replace(DESTINATION_SYNTAX, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)}`;
+
 /** A reference's markdown: `[label](cawco:<kind>/<id>)`. */
 export const referenceLink = (
   kind: ReferenceKind,
   id: string,
   label: string
 ): string =>
-  `[${label.replace(/\s+/g, " ").trim().replace(LABEL_SYNTAX, "\\$&") || id}](${SCHEME}${kind}/${encodeURI(id).replace(DESTINATION_SYNTAX, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)})`;
+  `[${label.replace(/\s+/g, " ").trim().replace(LABEL_SYNTAX, "\\$&") || id}](${referenceHref(kind, id)})`;
+
+/** A link in markdown to any destination, its label escaped as {@link referenceLink} escapes it. */
+export const markdownLink = (label: string, href: string): string =>
+  `[${label.replace(/\s+/g, " ").trim().replace(LABEL_SYNTAX, "\\$&") || href}](${href})`;
 
 /**
  * A session, delegate or Caw thread named by its full id (or, as the

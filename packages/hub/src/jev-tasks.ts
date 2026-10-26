@@ -182,12 +182,7 @@ export const createJevTasks = ({
     why: string
   ): Promise<string | undefined> => {
     try {
-      await tasks.link(
-        projectId,
-        task.id,
-        { edge: "duplicate_of", to: of },
-        hubActor(why)
-      );
+      await tasks.link(projectId, task.id, { duplicateOf: of }, hubActor(why));
     } catch (error) {
       if (error instanceof FolderRefusal) {
         return error.message;

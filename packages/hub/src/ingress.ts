@@ -41,8 +41,21 @@
  *   close it, after a sentence that says it is untrusted content.
  * - **A merged pull request** an attempt opened moves its task on
  *   (dispatch.ts `pullRequestMerged`), once, since only the insert calls it.
+ * - **Waits on GitHub** (task-waits.ts): each pull request and Actions run a
+ *   task or plan step waits on is read by the project's own poll, with its
+ *   poller's connection, until it settles (merged, green); its state is
+ *   what the resolver reads ({@link Ingress.githubWait}), and a change tells
+ *   the project's tasks ({@link IngressDeps.waitsMoved}). A project with no
+ *   GitHub poller is refused such a wait where it is written.
  */
-import { configurePage, type InstanceRow, readsGitHubApi } from "@cawco/core";
+import {
+  configurePage,
+  githubTarget,
+  type InstanceRow,
+  readsGitHubApi,
+  type WaitTarget,
+} from "@cawco/core";
+import { readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { Elysia, status, t } from "elysia";
 import { RE2JS } from "re2js";
@@ -72,6 +85,7 @@ import {
   routeWords,
 } from "./presenters/project";
 import type { Routines } from "./routines";
+import type { GitHubWaitState } from "./task-waits";
 
 /** One event as every path normalises it before the store. */
 export interface InboundEvent {
@@ -415,7 +429,20 @@ export interface IngressDeps {
   readonly lifetime: HubLifetimeShape;
   /** Runs a routine once with an event as its input (routines.ts). */
   readonly routines: Pick<Routines, "runForEvent">;
+  /** A pull request or run a project waits on changed state: its tasks look again (tasks.ts `waitsMoved`). */
+  readonly waitsMoved?: (projectId: string) => void;
 }
+
+/** How long a pull request or run nobody has asked about stays on the poll's list. Our choice. */
+const WAIT_ASKED_MS = 60 * 60_000;
+/** The states a wait on GitHub keeps for good: the poll stops asking. */
+const FINAL_WAITS: ReadonlySet<GitHubWaitState> = new Set(["merged", "green"]);
+/** An Actions run's conclusions that settle it: every other completed one is red. */
+const GREEN_RUNS: ReadonlySet<string> = new Set([
+  "success",
+  "skipped",
+  "neutral",
+]);
 
 /** Each route's last delivery by its id (`IngressDb.deliveries`). */
 const deliveredBy = (deliveries: Delivery[]): Map<string, number> =>
@@ -481,8 +508,22 @@ export const createIngress = ({
   jevAccess,
   lifetime,
   routines,
+  waitsMoved,
 }: IngressDeps) => {
   const store = db.ingress;
+  /**
+   * Each pull request and run waited on, by URL: the project that asked,
+   * when it last asked, and its state as the last poll read it.
+   */
+  const waits = new Map<
+    string,
+    {
+      asked: number;
+      projectId: string;
+      state: GitHubWaitState;
+      title: string | null;
+    }
+  >();
   /** Polls under way, by `github:<project>` or `conn:<poll id>`: one at a time each. */
   const running = new Map<string, Promise<void>>();
   let timer: HubTimer | undefined;
@@ -689,6 +730,7 @@ export const createIngress = ({
       octokit,
       repo,
     });
+    await readWaits(projectId, octokit);
     const source = `github:${repo.toLowerCase()}`;
     const landed = polled.events
       .filter((event) => event.source === source)
@@ -696,6 +738,87 @@ export const createIngress = ({
       .map((event) => ingest(event, "poll", projectId))
       .filter(Boolean).length;
     keepGitHubPoll(projectId, repo, now, poller.reason, polled, landed);
+  };
+
+  /** One pull request's or run's state, read now with the project's client; undefined when GitHub did not answer. */
+  const waitStateOf = async (
+    octokit: ReturnType<Connections["githubClient"]>,
+    target: Extract<WaitTarget, { kind: "pr" | "run" }>
+  ): Promise<{ state: GitHubWaitState; title: string | null } | undefined> => {
+    const [owner = "", repo = ""] = target.repo.split("/");
+    const read = await readWithin(
+      30_000,
+      (signal): Promise<{ state: GitHubWaitState; title: string | null }> =>
+        target.kind === "pr"
+          ? octokit.rest.pulls
+              .get({
+                owner,
+                repo,
+                pull_number: target.number,
+                request: { signal },
+              })
+              .then(({ data }) => {
+                let state: GitHubWaitState = "open";
+                if (data.merged) {
+                  state = "merged";
+                } else if (data.state === "closed") {
+                  state = "closed";
+                }
+                return { state, title: data.title };
+              })
+          : octokit.rest.actions
+              .getWorkflowRun({
+                owner,
+                repo,
+                run_id: Number(target.id),
+                request: { signal },
+              })
+              .then(({ data }) => {
+                let state: GitHubWaitState = "running";
+                if (data.status === "completed") {
+                  state = GREEN_RUNS.has(data.conclusion ?? "")
+                    ? "green"
+                    : "red";
+                }
+                return { state, title: data.name ?? null };
+              })
+    );
+    return read.kind === "answered" ? read.value : undefined;
+  };
+
+  /**
+   * The pull requests and runs project `projectId` waits on, read with its
+   * poller's client, each until it settles; one nobody asked about for an
+   * hour leaves the list. A state that moved tells the project's tasks.
+   */
+  const readWaits = async (
+    projectId: string,
+    octokit: ReturnType<Connections["githubClient"]>
+  ): Promise<void> => {
+    const now = Date.now();
+    let moved = false;
+    for (const [url, wait] of waits) {
+      if (wait.projectId !== projectId || FINAL_WAITS.has(wait.state)) {
+        continue;
+      }
+      if (now - wait.asked > WAIT_ASKED_MS) {
+        waits.delete(url);
+        continue;
+      }
+      const target = githubTarget(url);
+      if (!target) {
+        continue;
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: a project's few waits, one request at a time against its rate limit
+      const read = await waitStateOf(octokit, target).catch(() => undefined);
+      if (read && (read.state !== wait.state || read.title !== wait.title)) {
+        waits.set(url, { ...wait, ...read });
+        moved = true;
+      }
+    }
+    if (moved) {
+      waitsMoved?.(projectId);
+    }
   };
 
   /**
@@ -1500,6 +1623,30 @@ export const createIngress = ({
   lifetime.onClose(() => lifetime.cancel(timer));
 
   return {
+    /**
+     * A pull request's or run's state as project `projectId`'s poll last
+     * read it (task-waits.ts `settled`); asking puts it on the poll's list,
+     * so a wait first read says `checking` until the next poll.
+     */
+    githubWait(
+      projectId: string,
+      target: Extract<WaitTarget, { kind: "pr" | "run" }>
+    ): { state: GitHubWaitState; title: string | null } {
+      const known = waits.get(target.url);
+      waits.set(target.url, {
+        projectId,
+        state: known?.state ?? "checking",
+        title: known?.title ?? null,
+        asked: Date.now(),
+      });
+      return known ?? { state: "checking", title: null };
+    },
+    /** Why project `projectId` cannot wait on a pull request or run: no GitHub poller to read it; nothing when it can. */
+    githubWaitRefusal(projectId: string): string | undefined {
+      return store.githubPoller(projectId)
+        ? undefined
+        : "the project has no GitHub connection to read it. Connect GitHub for the project first.";
+    },
     createPoll,
     createRoute,
     deletePoll,

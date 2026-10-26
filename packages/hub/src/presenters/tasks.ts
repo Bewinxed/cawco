@@ -6,11 +6,15 @@
  * (`tsk-12`, `td-3`, a step's) inside the link's destination: the person
  * cannot read an id, and an agent names things as its tools answered them.
  * A to-do with no marker yet by its position (`2.1`). What a task leaves
- * unset reads as the default it falls back to.
+ * unset reads as the default it falls back to. A task's links are two lines
+ * and appear nowhere else: "Waits on" (every wait, unsettled first, each
+ * with where it stands) and "Unblocks"; a write of them, a filing and a
+ * close each answer in three lines at most.
  */
 import {
   type AttemptResult,
   artifactLink,
+  markdownLink,
   planLink,
   type ResultArtifact,
   type SessionPlan,
@@ -18,13 +22,22 @@ import {
   stepLink,
   type TaskTodo,
   taskLink,
+  taskLinkWords,
   todoLink,
 } from "@cawco/core";
 import type { AttemptStart } from "../dispatch";
 import type { DuplicateOutcome } from "../jev-tasks";
 import type { TaskComment } from "../task-file";
 import type { TaskHistoryEvent } from "../task-history";
-import type { StagesView, TaskList, TaskView } from "../tasks";
+import type { WaitState } from "../task-waits";
+import type {
+  Closing,
+  LinkOutcome,
+  StagesView,
+  TaskList,
+  TaskView,
+  TaskWait,
+} from "../tasks";
 import { ago, count, handle, lines, listed, quote, valueWords } from "./words";
 
 type TaskLine = TaskList["tasks"][number];
@@ -72,6 +85,51 @@ const edgeName = (links: LinkScope, id: string): string => {
 const edgesNamed = (links: LinkScope, ids: readonly string[]): string =>
   listed(ids.map((id) => edgeName(links, id)));
 
+/** A wait's target by its link, labelled by its title, question or name; with no project (discovery), its words in quotes. */
+const waitLink = (wait: WaitState, links: LinkScope): string =>
+  links.project && wait.href
+    ? markdownLink(cut(wait.label, 120), wait.href)
+    : quote(wait.label, 120);
+
+/**
+ * One wait, as every answer says it: its link and where it stands (`open`,
+ * `doing`, `merged`), the chain it is inherited through, or "Blocked: …
+ * closed unmerged" while a flag holds it.
+ */
+const waitWords = (wait: TaskWait, links: LinkScope): string =>
+  `${wait.flag ? `Blocked: ${waitLink(wait, links)} ${wait.flag}` : `${waitLink(wait, links)}, ${wait.state}`}${wait.via ? ` (through ${edgeName(links, wait.via)})` : ""}`;
+
+/** A task's "Waits on" line: every wait, unsettled first; nothing when it waits on none. */
+const waitsLine = (task: Pick<TaskView, "waits">, links: LinkScope): string =>
+  task.waits.length > 0
+    ? `${taskLinkWords.waitsOn} ${task.waits.map((wait) => waitWords(wait, links)).join("; ")}.`
+    : "";
+
+/** A task's "Unblocks" line: the tasks that wait on it; nothing when none does. */
+const unblocksLine = (
+  task: Pick<TaskView, "unblocks">,
+  links: LinkScope
+): string =>
+  task.unblocks.length > 0
+    ? `${taskLinkWords.unblocks} ${edgesNamed(links, task.unblocks)}.`
+    : "";
+
+/** When a to-do task is ready, said once: now, when its waits settle, or once its coordinator lets it go. */
+const readyWords = (
+  task: Pick<TaskView, "heldBy" | "kind" | "ready" | "waits">,
+  links: LinkScope
+): string => {
+  if (task.kind !== "todo") {
+    return "";
+  }
+  if (task.heldBy) {
+    return `Its coordinator, ${edgeName(links, task.heldBy)}, starts it.`;
+  }
+  return taskLinkWords.ready(
+    task.ready ? 0 : task.waits.filter((wait) => !wait.settled).length
+  );
+};
+
 /** A stage as a model reads it: `draft (active, runs writer)`. */
 const stageWords = ({ name, kind, hooks }: StagesView["stages"][number]) => {
   const said = [
@@ -118,18 +176,19 @@ const taskLine = (task: TaskLine, now: number, links: LinkScope): string => {
     ...(task.todos.total > 0
       ? [`to-dos ${task.todos.done}/${task.todos.total}`]
       : []),
-    ...(task.blockedBy.length > 0
-      ? [`waits for ${edgesNamed(links, task.blockedBy)}`]
+    ...(task.waits.some((wait) => !wait.settled)
+      ? [
+          `waits on ${task.waits
+            .filter((wait) => !wait.settled)
+            .map((wait) => waitLink(wait, links))
+            .join(", ")}`,
+        ]
       : []),
     ...attemptWords(task),
     ...(task.startProblem ? [`won't start: ${task.startProblem}`] : []),
     ...(task.type ? [`type ${task.type}`] : []),
-    ...(task.parent ? [`under ${edgeName(links, task.parent)}`] : []),
     ...(task.labels.length > 0 ? [`labels ${task.labels.join(", ")}`] : []),
     ...Object.entries(task.fields).map(([key, value]) => `${key} ${value}`),
-    ...(task.duplicateOf
-      ? [`duplicates ${edgeName(links, task.duplicateOf)}`]
-      : []),
     ...(task.problem ? [`its file: ${task.problem}`] : []),
     `changed ${ago(task.updatedAt, now)}${task.updatedBy ? ` by ${task.updatedBy.name}` : ""}`,
   ];
@@ -226,23 +285,16 @@ const commentLine = (comment: TaskComment, now: number): string =>
 const historyLine = (event: TaskHistoryEvent, now: number): string =>
   `- ${ago(event.at, now)}, ${event.actor.name}: ${event.what}${event.reason ? ` (${event.reason})` : ""}`;
 
-/** A task's edges to other tasks, each by its link. */
-const edgeWords = (task: TaskView, links: LinkScope): string[] => [
-  ...(task.after.length > 0
-    ? [`waits for ${edgesNamed(links, task.after)}`]
-    : []),
-  ...(task.blockedBy.length > 0
-    ? [`blocked by ${edgesNamed(links, task.blockedBy)}`]
-    : []),
-  ...(task.parent ? [`under ${edgeName(links, task.parent)}`] : []),
-  ...(task.related.length > 0
-    ? [`related to ${edgesNamed(links, task.related)}`]
-    : []),
-  ...(task.foundIn ? [`found in ${edgeName(links, task.foundIn)}`] : []),
-  ...(task.duplicateOf
-    ? [`duplicates ${edgeName(links, task.duplicateOf)}`]
-    : []),
-];
+/** A done task's cards and pins that moved since its attempt built on them. */
+const builtOnLine = (task: TaskView): string =>
+  task.builtOn.length > 0
+    ? task.builtOn
+        .map(
+          (moved) =>
+            `Built on ${markdownLink(cut(moved.label, 120), moved.href)}, ${moved.since} since: reopen it with task_update if that changes the work.`
+        )
+        .join(" ")
+    : "";
 
 /** How a task's attempts run, each unset setting as the default it falls back to. */
 const runWords = (task: TaskView): string[] => [
@@ -334,10 +386,11 @@ const standsWords = (task: TaskView): string =>
 /** A task whole below its first line: its fields, sections, to-dos, attempts, result and comments. */
 const taskBody = (task: TaskAnswer, links: LinkScope): string => {
   const now = Date.now();
-  const edges = edgeWords(task, links);
   return lines(
     timeWords(task, now),
-    edges.length > 0 && `Edges: ${edges.join("; ")}.`,
+    waitsLine(task, links),
+    unblocksLine(task, links),
+    builtOnLine(task),
     `Runs: ${runWords(task).join("; ")}.`,
     fileLines(task, links),
     workLines(task, now)
@@ -377,30 +430,136 @@ const duplicateWords = (
   return outcome.note ?? false;
 };
 
-/** `task_create`: the task filed, by its link, and what Jev or the hub suggests of it. */
+/** Where a task stands on a filing's first line: its stage, its whole, where it was found. */
+const filedWhere = (task: TaskAnswer, links: LinkScope): string =>
+  [
+    ` in ${task.stage}`,
+    ...(task.partOf ? [`part of ${edgeName(links, task.partOf)}`] : []),
+    ...(task.foundInNamed ? [`found in ${foundInName(task, links)}`] : []),
+  ].join(", ");
+
+/** Where a task was found: a task or a pin, by its link, labelled by its title or what the pin stands on. */
+const foundInName = (task: TaskAnswer, links: LinkScope): string => {
+  const named = task.foundInNamed;
+  if (named && links.project) {
+    return markdownLink(cut(named.label, 120), named.href);
+  }
+  return named ? quote(named.label, 120) : "";
+};
+
+/**
+ * `task_create`, in three lines at most: the task filed, by its link, with
+ * its stage, its whole and where it was found; what it waits on; when it is
+ * ready, and what Jev or the hub suggests of it.
+ */
 export const taskCreatedWords = (
   created: TaskAnswer & { duplicates?: DuplicateOutcome; suggest?: unknown },
   links: LinkScope = NO_LINKS
 ): string => {
   const scope = scopeOf(created, links);
   return lines(
-    `Filed ${taskName(scope, created.id, created.title, 200)} in ${standsWords(created)}.`,
-    taskBody(created, scope),
-    created.duplicates && duplicateWords(created.duplicates, scope),
-    created.suggest !== undefined &&
-      `Suggested, not set: ${valueWords(created.suggest, 600)}`
+    `Filed ${taskName(scope, created.id, created.title, 200)}${filedWhere(created, scope)}.`,
+    waitsLine(created, scope),
+    [
+      readyWords(created, scope),
+      created.duplicates ? duplicateWords(created.duplicates, scope) : "",
+      created.suggest === undefined
+        ? ""
+        : `Suggested, not set: ${valueWords(created.suggest, 600)}`,
+    ]
+      .filter(Boolean)
+      .join(" ")
   );
 };
 
-/** `task_update` and `task_link`: the task as it stands now, led by its link. */
+/** What still waits after a close: each task by its link, on what. */
+const stillWords = (still: Closing["stillWaiting"], links: LinkScope): string =>
+  still
+    .map(
+      (each) =>
+        `${edgeName(links, each.id)} on ${listed(each.on.map((wait) => waitLink(wait, links)))}`
+    )
+    .join("; ");
+
+/**
+ * A close, in three lines at most: the task and its new stage, a drop's
+ * waits taken out and a whole it closed; what became ready; what still
+ * waits, on what.
+ */
+const closedWords = (
+  task: TaskAnswer & { closing: Closing },
+  links: LinkScope
+): string => {
+  const { closing } = task;
+  const first = [
+    `${taskName(links, task.id, task.title, 200)} is ${task.kind === "dropped" ? `dropped, in ${task.stage}` : task.stage}.`,
+    closing.unwaited.length > 0
+      ? `It is out of the waits of ${edgesNamed(links, closing.unwaited)}.`
+      : "",
+    closing.wholeClosed
+      ? `Its whole, ${edgeName(links, closing.wholeClosed)}, is done too.`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return lines(
+    first,
+    closing.nowReady.length > 0 &&
+      `Now ready: ${edgesNamed(links, closing.nowReady)}.`,
+    closing.stillWaiting.length > 0 &&
+      `Still waiting: ${stillWords(closing.stillWaiting, links)}.`
+  );
+};
+
+/** `task_update`: the task as it stands now, led by its link; a close says what it did around it. */
 export const taskChangedWords = (
-  task: TaskAnswer,
+  task: TaskAnswer & { closing?: Closing },
   links: LinkScope = NO_LINKS
 ): string => {
   const scope = scopeOf(task, links);
+  if (task.closing) {
+    return closedWords({ ...task, closing: task.closing }, scope);
+  }
   return lines(
     `${taskName(scope, task.id, task.title, 200)} now: ${standsWords(task)}`,
     taskBody(task, scope)
+  );
+};
+
+/** The waits a link write leaves, said after its first words: how many, then each. */
+const waitsLeft = (task: TaskAnswer, links: LinkScope): string =>
+  task.waits.length > 0
+    ? `waits on ${task.waits.length}: ${task.waits.map((wait) => waitWords(wait, links)).join("; ")}`
+    : "waits on nothing";
+
+/**
+ * `task_link`, in three lines at most: what the write did and what the task
+ * waits on now (or the duplicate closed and the waits it moved); what it
+ * unblocks; when it is ready.
+ */
+export const taskLinkedWords = (
+  task: TaskAnswer & { linked: LinkOutcome },
+  links: LinkScope = NO_LINKS
+): string => {
+  const scope = scopeOf(task, links);
+  const name = taskName(scope, task.id, task.title, 200);
+  const { linked } = task;
+  if (linked.duplicateOf) {
+    return `${name} closed as a duplicate of ${edgeName(scope, linked.duplicateOf)}.${linked.moved.length > 0 ? ` ${count(linked.moved.length, "wait")} moved to it: ${edgesNamed(scope, linked.moved)}.` : ""}`;
+  }
+  const did = [
+    ...(linked.removed.length > 0
+      ? [
+          `no longer waits on ${listed(linked.removed.map((wait) => waitLink(wait, scope)))}`,
+        ]
+      : []),
+    ...(linked.partOf === null ? ["is part of nothing now"] : []),
+    ...(linked.partOf ? [`is part of ${edgeName(scope, linked.partOf)}`] : []),
+  ];
+  return lines(
+    `${name} ${[...did, waitsLeft(task, scope)].join("; ")}.`,
+    unblocksLine(task, scope),
+    readyWords(task, scope)
   );
 };
 

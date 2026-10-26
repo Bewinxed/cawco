@@ -23,12 +23,7 @@
 
 {#if task}
   <div class="flex flex-col gap-space-1">
-    <TaskCard
-      href={view.hrefOf(task.id)}
-      kindOf={() => undefined}
-      onopen={view.onopen}
-      {task}
-    />
+    <TaskCard href={view.hrefOf(task.id)} onopen={view.onopen} {task} />
     {#if extra.length > 0}
       <p class="type-meta px-space-3 text-ink-muted">{extra.join(" · ")}</p>
     {/if}

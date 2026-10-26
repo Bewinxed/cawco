@@ -37,13 +37,15 @@ import {
   taskChangedWords,
   taskCommentedWords,
   taskCreatedWords,
+  taskLinkedWords,
   taskReadWords,
   taskResultWords,
   todoWrittenWords,
 } from "./presenters/tasks";
 import { appleSuggestion } from "./runs-on";
-import { EDGES, normaliseTaskRef } from "./task-file";
+import { normaliseTaskRef } from "./task-file";
 import {
+  type Closing,
   sessionActor,
   type TaskActor,
   type Tasks,
@@ -84,6 +86,12 @@ export interface TaskToolContext {
    * `filed`): Jev's verdict, or the candidates the session compares.
    */
   duplicates?: (projectId: string, task: TaskView) => Promise<DuplicateOutcome>;
+  /**
+   * Where a task this session files was found, as the hub reads it (tasks.ts
+   * `found_in`): its work item's task, else the pin thread its ask came
+   * from; null when neither.
+   */
+  foundIn?: string | null;
   /** Its role files tasks (roles.ts): it may name any task's to-dos, not only its own work item's. */
   mainline: boolean;
   /** The project's own `runs_on` (dispatch settings): a task filed under one is not told to set its own. */
@@ -100,6 +108,8 @@ export interface TaskToolContext {
     ref: string,
     parent: InstanceRow
   ) => Promise<AttemptStart>;
+  /** A plan step's wait as this session writes it, read as a task's wait is (task-waits.ts `readWait`) and kept as a file keeps it. */
+  stepWait?: (written: string) => Promise<string>;
   tasks: Tasks;
   /** The task the session's work item is an attempt at, if it has one. */
   workItemTask: string | null;
@@ -168,15 +178,19 @@ const taskRef = () =>
       "A task id, like tsk-12: what ends its link, cawco:task/<project>/tsk-12."
     );
 
-/** Whether a task's answer names other tasks: its edges, or a to-do promoted to one. */
+/** Whether a task's answer names other tasks: its links, or a to-do promoted to one. */
 const namesTasks = (task: TaskView): boolean =>
-  task.after.length > 0 ||
-  task.blockedBy.length > 0 ||
-  task.related.length > 0 ||
-  task.parent !== null ||
+  task.waits.some((wait) => wait.via !== null) ||
+  task.unblocks.length > 0 ||
+  task.partOf !== null ||
   task.foundIn !== null ||
   task.duplicateOf !== null ||
+  task.heldBy !== null ||
   task.todos.some((todo) => todo.promoted);
+
+/** What a wait names, as every task tool takes it: the one grammar task-waits.ts reads. */
+const WAIT_TARGETS =
+  "tsk-12; a card <page>#<card>; a pin <page>/<number>; a GitHub pull request or Actions run URL; a session handle like cockpit#5a167bde";
 const landsParameter = () =>
   z
     .enum(LANDS_MODES as [LandsMode, ...LandsMode[]])
@@ -231,38 +245,25 @@ const stepParameter = () =>
     waitsOn: z
       .string()
       .optional()
-      .describe("Card it waits on: <artifact>#<card>; '' clears."),
+      .describe(
+        `What it waits on, as task_link's waits_on takes it: ${WAIT_TARGETS}. '' clears.`
+      ),
   });
-
-/** A step's `waitsOn` as written: `<artifact>#<card>`, the artifact by its name, handle or id; or '' to clear it. */
-const waitOf = (
-  written: string,
-  artifactNamed: (asked: string) => string
-): PlanWait | null => {
-  if (written === "") {
-    return null;
-  }
-  const at = written.indexOf("#");
-  if (at <= 0 || at === written.length - 1) {
-    throw new Error(
-      `waitsOn “${written}” names no card: write the page's name, #, and the card's id.`
-    );
-  }
-  return {
-    artifactId: artifactNamed(written.slice(0, at)),
-    card: written.slice(at + 1),
-  };
-};
 
 /**
  * Steps as written, nested by depth: each one at most one deeper than the
  * one before, and each without an id given its position (`2`, `2.1`).
  */
-const stepsOf = (
+const stepsOf = async (
   written: z.infer<ReturnType<typeof stepParameter>>[],
-  artifactNamed: (asked: string) => string
-): WrittenStep[] => {
+  stepWait: (written: string) => Promise<string>
+): Promise<WrittenStep[]> => {
   const counts: number[] = [];
+  const waits = await Promise.all(
+    written.map((step) =>
+      step.waitsOn?.trim() ? stepWait(step.waitsOn) : undefined
+    )
+  );
   return written.map((step, index) => {
     const depth = step.depth ?? 0;
     if (depth > counts.length) {
@@ -278,9 +279,7 @@ const stepsOf = (
       status: step.status,
       depth,
       ...(step.priority ? { priority: step.priority } : {}),
-      ...(step.waitsOn === undefined
-        ? {}
-        : { waitsOn: waitOf(step.waitsOn, artifactNamed) }),
+      ...(step.waitsOn === undefined ? {} : { wait: waits[index] ?? null }),
     };
   });
 };
@@ -405,7 +404,7 @@ export function taskTools(context: TaskToolContext | undefined) {
   return [
     tool(
       "task_read",
-      "Your project's tasks: the stages and a line per task, filtered by the other parameters; with `id`, one task whole (`history` adds its changes).",
+      "Your project's tasks: the stages and a line per task, filtered by the other parameters; with `id`, one task whole, its Waits on and Unblocks lines included (`history` adds its changes).",
       {
         id: taskRef().optional(),
         history: z.boolean().optional(),
@@ -413,13 +412,14 @@ export function taskTools(context: TaskToolContext | undefined) {
         q: z.string().optional(),
         label: z.string().optional(),
         type: z.string().optional(),
-        parent: z.string().optional(),
+        part_of: z.string().optional().describe("The whole: lists its parts."),
         fields: z.record(z.string(), z.string()).optional(),
         blocked: z.boolean().optional(),
         needsYou: z.boolean().optional(),
         archived: z.boolean().optional(),
       },
-      async ({ id, history, ...filter }, format) => {
+      async ({ id, history, part_of, ...rest }, format) => {
+        const filter = { ...rest, partOf: part_of };
         const { projectId, tasks } = scope();
         if (id) {
           const task = await titled(
@@ -449,7 +449,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_create",
-      "File a task: work that must outlive this conversation or run without you. Answers its link, its id (tsk-12) ending it, and any duplicates to act on.",
+      "File a task: work that must outlive this conversation or run without you. waits_on holds it until every target settles; part_of makes it a part of a whole, inheriting the whole's waits. The hub records where it was found. Answers its link (its id, tsk-12, ends it), what it waits on, when it is ready, and any duplicates to act on.",
       {
         title: z.string().describe("Verb first."),
         description: z.string().optional(),
@@ -460,13 +460,13 @@ export function taskTools(context: TaskToolContext | undefined) {
         todos: lines("Top-level to-dos."),
         stage: z.string().optional(),
         type: z.string().optional().describe("The delegate type to run it."),
-        after: lines("Tasks it waits for."),
-        parent: z.string().optional(),
-        related: lines("Tasks it relates to, not waiting."),
-        found_in: z
-          .string()
+        waits_on: z
+          .array(z.string())
           .optional()
-          .describe("The task whose work turned it up."),
+          .describe(`What holds it until settled: ${WAIT_TARGETS}.`),
+        part_of: taskRef()
+          .optional()
+          .describe("The whole it is a part of: it inherits every wait of it."),
         checks: lines(
           "Commands whose output proves the work; `host: <command>` needs the host."
         ),
@@ -481,7 +481,7 @@ export function taskTools(context: TaskToolContext | undefined) {
         labels: lines(),
         fields: fieldsParameter(),
       },
-      async ({ found_in, runs_on, builds_from, ...draft }, format) => {
+      async ({ waits_on, part_of, runs_on, builds_from, ...draft }, format) => {
         const { projectId, tasks, actor } = scope();
         // The design system's build carries the hub's words, never the filer's.
         if (draft.title.trim() === BUILD_TITLE && context?.designBuild) {
@@ -491,7 +491,9 @@ export function taskTools(context: TaskToolContext | undefined) {
           projectId,
           {
             ...draft,
-            foundIn: found_in,
+            waitsOn: waits_on,
+            partOf: part_of,
+            ...(context?.foundIn ? { foundIn: context.foundIn } : {}),
             runsOn: runs_on,
             buildsFrom: pagesOf(builds_from, context?.buildsFrom),
           },
@@ -559,7 +561,7 @@ export function taskTools(context: TaskToolContext | undefined) {
         const fields = Object.values(patch).some(
           (value) => value !== undefined
         );
-        let task = fields
+        let task: (TaskView & { closing?: Closing }) | undefined = fields
           ? await tasks.update(projectId, id, patch, actor)
           : undefined;
         if (stage !== undefined) {
@@ -568,29 +570,50 @@ export function taskTools(context: TaskToolContext | undefined) {
         return await titled(
           projectId,
           task ?? (await tasks.get(projectId, id)),
-          format
+          format,
+          task?.closing !== undefined
         );
       },
       (said) => taskChangedWords(said, linkScope())
     ),
     tool(
       "task_link",
-      "Add or remove an edge: after (it waits for that task), parent, related, found_in, or duplicate_of (it is dropped, its waiters moved to that task).",
+      "Link a task. waits_on: the hub holds it until every target settles (a task done, a card picked, a pin resolved, a pull request merged, a run green, a session's work finished), then dispatch may start it. part_of: it becomes a part of that whole and inherits every wait of it; the whole closes when its last part is done. duplicate_of: it closes as a duplicate and every wait on it moves to the survivor. remove: the named links come out. Refuses a cycle, naming its path. Answers what it waits on and unblocks.",
       {
-        id: taskRef(),
-        edge: z.enum(EDGES),
-        to: taskRef(),
-        remove: z.boolean().optional(),
+        task: taskRef(),
+        waits_on: z
+          .array(z.string())
+          .optional()
+          .describe(`Targets to wait on: ${WAIT_TARGETS}.`),
+        part_of: taskRef().optional().describe("The whole it is a part of."),
+        duplicate_of: taskRef()
+          .optional()
+          .describe("The task it repeats: the survivor."),
+        remove: z
+          .boolean()
+          .optional()
+          .describe("Take the named links out instead."),
       },
-      async ({ id, edge, to, remove }, format) => {
+      async ({ task, waits_on, part_of, duplicate_of, remove }, format) => {
         const { projectId, tasks, actor } = scope();
         return await titled(
           projectId,
-          await tasks.link(projectId, id, { edge, to, remove }, actor),
-          format
+          await tasks.link(
+            projectId,
+            task,
+            {
+              ...(waits_on ? { waitsOn: waits_on } : {}),
+              ...(part_of ? { partOf: part_of } : {}),
+              ...(duplicate_of ? { duplicateOf: duplicate_of } : {}),
+              ...(remove ? { remove } : {}),
+            },
+            actor
+          ),
+          format,
+          true
         );
       },
-      (said) => taskChangedWords(said, linkScope())
+      (said) => taskLinkedWords(said, linkScope())
     ),
     tool(
       "task_start",
@@ -654,7 +677,12 @@ export function taskTools(context: TaskToolContext | undefined) {
           }
           return await context.writePlan(context.actor, {
             ...(steps
-              ? { steps: stepsOf(steps, context.artifactNamed ?? same) }
+              ? {
+                  steps: await stepsOf(
+                    steps,
+                    context.stepWait ?? ((written) => Promise.resolve(written))
+                  ),
+                }
               : {}),
             ...(spec === undefined ? {} : { spec }),
           });

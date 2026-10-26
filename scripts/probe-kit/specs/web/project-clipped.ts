@@ -169,7 +169,7 @@ const setUp = async (kit: Kit): Promise<Setup> => {
       title: `${TITLES[n % TITLES.length]}${n > TITLES.length ? ` (${n})` : ""}`,
       stage: placed[n % placed.length],
       labels: TAGS[n % TAGS.length],
-      ...(n > 3 && n % 4 === 0 ? { after: [`tsk-${n - 3}`] } : {}),
+      ...(n > 3 && n % 4 === 0 ? { waitsOn: [`tsk-${n - 3}`] } : {}),
       ...(n % 5 === 0 ? { fields: { due: `2026-11-${day}` } } : {}),
       ...(n % 7 === 0 ? { outputs: ["notes.md"] } : {}),
       ...(n % 3 === 0 ? { todos: ["Read the feed", "Write the table"] } : {}),

@@ -7,7 +7,6 @@
   import { stageLabel } from "#lib/cawco/project-tasks.js";
   import TaskColumn from "#lib/cawco/tasks/TaskColumn.svelte";
   import {
-    kindsOf,
     rowsOf,
     type ViewStageRow,
     type ViewTaskRow,
@@ -29,7 +28,6 @@
   {cards}
   hrefOf={view.hrefOf}
   kind={props.stage?.kind ?? null}
-  kindOf={kindsOf(rows)}
   label={stageLabel(name)}
   onopen={view.onopen}
 />

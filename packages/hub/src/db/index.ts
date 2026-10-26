@@ -388,10 +388,8 @@ export type ProjectRow = Omit<
 };
 /** One task file as a project's task index holds it (tasks.ts). */
 export type TaskIndexRow = typeof projectTasks.$inferSelect & {
-  /** The tasks it waits for (`tsk-…`), as its file lists them. */
-  after: string[];
-  /** The tasks it is related to: the canvas's other edges. */
-  related: string[];
+  /** What it waits on (`waits_on`), as its file lists them: a task as `tsk-12`, any other target as wait-targets.ts keeps it. */
+  waitsOn: string[];
   labels: string[];
   /** Its file's own scalar fields (`priority`, `due`), as written. */
   fields: Record<string, string>;
@@ -2347,7 +2345,7 @@ export interface DbShape {
   ) => { projectId: string; taskId: string } | undefined;
   /** Every row of a project's task index, in id order. */
   readonly taskIndex: (projectId: string) => TaskIndexRow[];
-  /** The indexed tasks that wait for `taskId` (`after:`), by number: an indexed lookup. */
+  /** The indexed tasks that wait on `target` (`waits_on:`, a task as `tsk-12`), by number: an indexed lookup. */
   readonly taskWaiters: (
     projectId: string,
     taskId: string
@@ -8633,17 +8631,18 @@ const make = async (path: string): Promise<DbShape> => {
     taskIndex: (projectId) => {
       const ofTask = new Map<
         string,
-        Pick<TaskIndexRow, "after" | "related" | "labels" | "fields">
+        Pick<TaskIndexRow, "waitsOn" | "labels" | "fields">
       >();
       const lists = (file: string) => {
         const known = ofTask.get(file);
         if (known) {
           return known;
         }
-        const made: Pick<
-          TaskIndexRow,
-          "after" | "related" | "labels" | "fields"
-        > = { after: [], related: [], labels: [], fields: {} };
+        const made: Pick<TaskIndexRow, "waitsOn" | "labels" | "fields"> = {
+          waitsOn: [],
+          labels: [],
+          fields: {},
+        };
         ofTask.set(file, made);
         return made;
       };
@@ -8653,7 +8652,7 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(projectTaskEdges.projectId, projectId))
         .orderBy(sql`rowid`)
         .all()) {
-        lists(edge.path)[edge.kind].push(edge.otherId);
+        lists(edge.path).waitsOn.push(edge.otherId);
       }
       for (const labelled of db
         .select()
@@ -8693,7 +8692,7 @@ const make = async (path: string): Promise<DbShape> => {
         .where(
           and(
             eq(projectTaskEdges.projectId, projectId),
-            eq(projectTaskEdges.kind, "after"),
+            eq(projectTaskEdges.kind, "waits_on"),
             eq(projectTaskEdges.otherId, taskId)
           )
         )
@@ -8716,8 +8715,8 @@ const make = async (path: string): Promise<DbShape> => {
             .all()
             .map((project) => project.id)
         );
-        for (const { after, related, labels, fields, ...row } of rows.filter(
-          (r) => live.has(r.projectId)
+        for (const { waitsOn, labels, fields, ...row } of rows.filter((r) =>
+          live.has(r.projectId)
         )) {
           const { projectId, path: file } = row;
           tx.insert(projectTasks)
@@ -8737,16 +8736,10 @@ const make = async (path: string): Promise<DbShape> => {
           tx.delete(projectTaskEdges).where(ofIt(projectTaskEdges)).run();
           tx.delete(projectTaskLabels).where(ofIt(projectTaskLabels)).run();
           tx.delete(projectTaskFields).where(ofIt(projectTaskFields)).run();
-          const edges = [
-            ...[...new Set(after)].map((otherId) => ({
-              kind: "after" as const,
-              otherId,
-            })),
-            ...[...new Set(related)].map((otherId) => ({
-              kind: "related" as const,
-              otherId,
-            })),
-          ];
+          const edges = [...new Set(waitsOn)].map((otherId) => ({
+            kind: "waits_on" as const,
+            otherId,
+          }));
           if (edges.length > 0) {
             tx.insert(projectTaskEdges)
               .values(edges.map((edge) => ({ projectId, path: file, ...edge })))
