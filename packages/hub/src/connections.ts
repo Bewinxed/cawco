@@ -602,7 +602,7 @@ const ALIAS_HASH = 6;
  * tool. A session calls only what it was listed, so the hub reads the real
  * name back through its listing.
  */
-export const sessionToolName = (connection: string, tool: string): string => {
+const sessionToolName = (connection: string, tool: string): string => {
   const plain = connectionToolName(connection, tool);
   if (
     TOOL_NAME_SAFE.test(tool) &&

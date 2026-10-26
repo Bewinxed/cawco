@@ -110,24 +110,26 @@ export default {
       entry: [
         // golar's CLI reads golar.config.ts from its cwd (node_modules/golar/dist/cli.js:15), run at scripts/check.ts:427 and scripts/lint/golar-lint.ts:66.
         "golar.config.ts",
-        // scripts/check.ts:459
+        // scripts/check.ts:458
         "scripts/lint/golar-lint.ts",
-        // scripts/check.ts:534
+        // scripts/check.ts:533
         "scripts/case-clash-check.ts",
-        // scripts/check.ts:539
+        // scripts/check.ts:538
         "scripts/runtime-bundles-check.ts",
-        // scripts/check.ts:556
+        // scripts/check.ts:555
         "scripts/style-residual-check.ts",
-        // scripts/check.ts:557
+        // scripts/check.ts:556
         "scripts/relics-check.ts",
-        // scripts/check.ts:558
+        // scripts/check.ts:557
         "scripts/style-greps.ts",
-        // scripts/check.ts:559
+        // scripts/check.ts:558
         "scripts/tool-answer-check.ts",
-        // scripts/check.ts:560
+        // scripts/check.ts:559
         "scripts/icon-imports-check.ts",
-        // scripts/check.ts:561
+        // scripts/check.ts:560
         "scripts/docker-client-check.ts",
+        // scripts/check.ts:561
+        "scripts/fixed-ports-check.ts",
         // scripts/check.ts:562
         "scripts/border-width-check.ts",
         // scripts/check.ts:575
@@ -138,9 +140,9 @@ export default {
         "scripts/probe-words-check.ts",
         // scripts/check.ts:586
         "scripts/probe-waits-check.ts",
-        // scripts/check.ts:592
+        // scripts/check.ts:591
         "scripts/probe-groups-check.ts",
-        // scripts/check.ts:626
+        // scripts/check.ts:632
         "scripts/resolution-check.ts",
         // scripts/ship.sh:86
         "scripts/release.ts",
@@ -179,6 +181,8 @@ export default {
         "scripts/stand-ins/{hub-upstreams,canvas-host-plugins}.ts",
         // Loaded by path in place of agent canvas-host/bound.ts: scripts/stand-ins/canvas-host-plugins.ts:16.
         "scripts/stand-ins/canvas-bound.ts",
+        // The stored-shape check over a whole hub database, as packages/core/src/stored-json.ts:108 and packages/hub/scripts/stored-rows.ts:5 name it.
+        "scripts/stored-json-check.ts",
         // Spawned by the spec that proves the hub's one writer: scripts/probe-kit/specs/hub-one-writer.ts:34.
         "scripts/repair-account-history.ts",
         // The probe kit's runner: scripts/probe-kit/README.md:10.
@@ -278,13 +282,13 @@ export default {
         "src/lib/cawco/decisions/host/host.css",
         // `$app/env` in the address preview build, an alias Knip does not follow: scripts/address-preview.vite.ts:42-43.
         "src/lib/cawco/address/flow/kit-env.ts",
-        // scripts/check.ts:545
+        // scripts/check.ts:544
         "scripts/specificity-trap.ts",
-        // scripts/check.ts:546
+        // scripts/check.ts:545
         "scripts/lib-import-check.ts",
-        // scripts/check.ts:547
+        // scripts/check.ts:546
         "scripts/svelte-unused-css.ts",
-        // scripts/check.ts:548
+        // scripts/check.ts:547
         "scripts/spacing-ratchet.ts",
       ],
       project: [
@@ -350,6 +354,8 @@ export default {
         "skills/decision-page/kit/dials.js",
         // The decision-page skill tells the agent to run it: skills/decision-page/SKILL.md:74.
         "skills/decision-page/scripts/preview.mjs",
+        // The decision-page skill tells the agent it records a mockup as a webm clip: skills/decision-page/SKILL.md:74.
+        "skills/decision-page/scripts/record.mjs",
       ],
       project: [
         // Knip's default.

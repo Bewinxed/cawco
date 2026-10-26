@@ -1,9 +1,8 @@
 /**
  * Three decision pages in a scratch fleet's project, as sessions publish
  * them (programs over the decision library, as the decision-page skill
- * writes them; the hub serves each in its host page), for the
- * Decisions tab's preview (run.ts) and the probes that seed a project with
- * them (probe-kit specs/web/safari-blurs.ts):
+ * writes them; the hub serves each in its host page), for the probes that
+ * seed a project with them (probe-kit specs/web/safari-blurs.ts):
  *
  * - **landing** — "Landing page hero", 12 cards, 5 picked and 2 noted: the
  *   tab says `5 of 12 picked · 2 notes`.
@@ -40,7 +39,7 @@ interface SeedCard {
   why: string;
 }
 
-export interface SeedPage {
+interface SeedPage {
   /** The panel head's one line: what the person picks here. */
   ask: string;
   cards: SeedCard[];
@@ -57,7 +56,7 @@ const option = (
   recommended = false
 ): SeedOption => ({ id, label, line, recommended });
 
-export const LANDING: SeedPage = {
+const LANDING: SeedPage = {
   name: "landing",
   title: "Landing page hero",
   writer: "Orchestrate the landing",
@@ -219,10 +218,7 @@ export const LANDING: SeedPage = {
 };
 
 /** The landing's picks: 5 of its 12, two with notes. */
-export const LANDING_PICKS: Record<
-  string,
-  { note?: string; options: string[] }
-> = {
+const LANDING_PICKS: Record<string, { note?: string; options: string[] }> = {
   "hero-lead": { options: ["lead-fleet"], note: "fits the phone first" },
   "head-words": { options: ["words-board"] },
   "main-act": { options: ["act-install"], note: "the install is the product" },
@@ -230,7 +226,7 @@ export const LANDING_PICKS: Record<
   "hero-motion": { options: ["motion-loop"] },
 };
 
-export const PRICING: SeedPage = {
+const PRICING: SeedPage = {
   name: "pricing",
   title: "Price the hosted plan",
   writer: "Price the hosted plan",
@@ -326,7 +322,7 @@ export const PRICING: SeedPage = {
 };
 
 /** The pricing picks: five decided, one left open, notes and a dial. */
-export const PRICING_PICKS: Record<
+const PRICING_PICKS: Record<
   string,
   { note?: string; options: string[]; value?: unknown }
 > = {
@@ -354,7 +350,7 @@ const PRICING_TASKS = [
   { card: "spend-cap", title: "Cap spend on the project page" },
 ];
 
-export const ONBOARDING: SeedPage = {
+const ONBOARDING: SeedPage = {
   name: "onboarding",
   title: "Shape onboarding",
   writer: "Shape onboarding",
@@ -432,10 +428,7 @@ export const ONBOARDING: SeedPage = {
   ],
 };
 
-export const ONBOARDING_PICKS: Record<
-  string,
-  { note?: string; options: string[] }
-> = {
+const ONBOARDING_PICKS: Record<string, { note?: string; options: string[] }> = {
   "first-screen": { options: ["first-board"] },
   "join-second": { options: ["join-now"], note: "the fleet is the point" },
 };
@@ -447,7 +440,7 @@ const say = (text: string): string => JSON.stringify(text);
  * each card a Decision (its diagram, `after` and Section as written), its
  * options in order, the recommended one marked.
  */
-export const pageProgram = (page: SeedPage): string => {
+const pageProgram = (page: SeedPage): string => {
   const lines: string[] = [];
   const top: string[] = [];
   const sections = new Map<string, string[]>();

@@ -22,9 +22,7 @@ export const DASHBOARD = path.join(ROOT, "apps/dashboard");
 export const SRC_LIB = path.join(DASHBOARD, "src/lib");
 
 /** A module the dashboard depends on, resolved from it (svelte, tailwind). */
-const fromDashboard = createRequire(
-  path.join(DASHBOARD, "package.json")
-);
+const fromDashboard = createRequire(path.join(DASHBOARD, "package.json"));
 const fromSvelte = createRequire(fromDashboard.resolve("svelte/package.json"));
 const load = (require, name) =>
   import(pathToFileURL(require.resolve(name)).href);

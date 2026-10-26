@@ -11,7 +11,7 @@ import { toolGate } from "../tools";
 import { PI_SPEC, PiProfile } from "./pi-services";
 import { adoptPi, piKeepers, piSnapshot, spawnPi } from "./pi-sessiond";
 
-export class PiHarness extends PiProfile implements Harness {
+class PiHarness extends PiProfile implements Harness {
   /**
    * pi's bash saves the whole output of a command it cuts to its host's
    * `TMPDIR` ("Full output: <tmpdir>/pi-bash-<id>.log", output-accumulator.js

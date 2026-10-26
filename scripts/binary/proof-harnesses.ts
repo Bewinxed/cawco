@@ -437,6 +437,3 @@ for (const kind of HARNESSES) {
 export const harnesses = (): Harness[] => [...registry.values()];
 export const harness = (kind: HarnessKind): Harness | undefined =>
   registry.get(kind);
-export const registerHarness = (adapter: Harness): void => {
-  registry.set(adapter.kind, adapter);
-};

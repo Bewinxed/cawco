@@ -129,7 +129,7 @@ const TEMPLATE = new Set([
 ]);
 const SKIPPED_KEYS = new Set(["attributes", "metadata", "parent"]);
 /** The dashboard's class helpers: calls whose strings are classes; tv's object keys are variant names, the others' are classes. */
-export const CLASS_CALLS: ReadonlySet<string> = new Set([
+const CLASS_CALLS: ReadonlySet<string> = new Set([
   "cn",
   "clsx",
   "twMerge",

@@ -224,7 +224,7 @@ const staleHosts = new Map<string, string>();
 
 declare const __CAWCO_RELEASE__: boolean | undefined;
 
-export class PiRemoteSession implements HarnessSession {
+class PiRemoteSession implements HarnessSession {
   readonly harness = "pi" as const;
   sessionId: string | null = null;
   readonly #pending = new Map<

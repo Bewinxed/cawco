@@ -528,7 +528,7 @@ export class PortPool {
  * A read that throws counts as no reading yet (a service still starting), and
  * so does one that returns `undefined`: `accept` never sees it, and it is
  * never returned. So a wait for something to be gone cannot return
- * `undefined` as its "gone"; that is `untilGone`, built on this.
+ * `undefined` as its "gone".
  */
 export async function until<T>(
   label: string,
@@ -2041,23 +2041,6 @@ async function standUp(
                 name: "Mock OC",
                 capabilities: { tools: true },
                 limit: { context: 100_000, output: 4000 },
-              },
-            },
-          },
-          // PRICED_OPENCODE_MODEL, on the mock. OpenCode speaks Anthropic
-          // messages to Zen's Claude models, whatever the package says.
-          opencode: {
-            name: "Mock Zen",
-            package: "@ai-sdk/openai-compatible",
-            settings: {
-              baseURL: `${mockBase}/v1`,
-              apiKey: "fake-opencode-key",
-            },
-            models: {
-              "claude-haiku-5-5": {
-                name: "Mock Haiku",
-                capabilities: { tools: true },
-                limit: { context: 1_000_000, output: 4000 },
               },
             },
           },

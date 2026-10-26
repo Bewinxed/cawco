@@ -61,7 +61,7 @@ const VIEW_OF: Record<Size, View> = {
 const LEG_MS = 25 * 60_000;
 
 /** A step's outcome did not hold: what it measured. */
-export class Unmet extends Error {}
+class Unmet extends Error {}
 
 /** Fails the step, saying what was measured. */
 export function unmet(measured: string): never {
@@ -245,10 +245,7 @@ async function furnish(fleet: KitFleet, data: Data): Promise<void> {
  * (`PUT /api/fleet/choices`, agents kept off other people's repositories),
  * so what needs them is only what the journey raises.
  */
-async function bootFleet(
-  fleet: KitFleet,
-  hubMachine?: string
-): Promise<void> {
+async function bootFleet(fleet: KitFleet, hubMachine?: string): Promise<void> {
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   await hubUp(fleet, hubMachine);
@@ -269,10 +266,7 @@ async function bootFleet(
 }
 
 /** The hub launched, under `hubMachine` when given, and answering. */
-async function hubUp(
-  fleet: KitFleet,
-  hubMachine?: string
-): Promise<void> {
+async function hubUp(fleet: KitFleet, hubMachine?: string): Promise<void> {
   if (hubMachine) {
     fleet.env.CAWCO_MACHINE_ID = hubMachine;
   }

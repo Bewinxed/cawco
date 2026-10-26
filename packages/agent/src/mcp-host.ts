@@ -214,7 +214,7 @@ export const hostKeyFile = (): string =>
  * once per boot of that directory; the next fleet sync writes it into every
  * config.
  */
-export const hostKey = (): string => {
+const hostKey = (): string => {
   if (key) {
     return key;
   }
