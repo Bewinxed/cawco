@@ -460,22 +460,18 @@ export const awayNotesOf = (
 
 const AWAY_HEADING = /^## Since (\d{1,2}:\d{2})\b/u;
 
-/** Where a choice waiting on the person goes, in the away and elsewhere notices: a decision page, which reaches Needs and the phone. */
-const AWAY_CHOICE =
-  'A choice that waits on them goes on a decision page (artifact_create, does "pick", per the decision-page skill) the moment it appears: it reaches their Needs and their phone. Keep one page and update it in place as choices come and go; give each card a plan step whose waitsOn is that card, named by its link.';
-
 /** What a session reads of the person, at the head of its turn ({@link PresenceSaid}). */
 export const presenceLine = (said: PresenceSaid): string => {
   switch (said.kind) {
     case "on":
       return said.recap
-        ? `[CawCo presence] The person is back on this chat; they were away since ${said.recap.since}. Your plan's notes from while they were away:\n\n${said.recap.notes}${said.recap.waiting?.length ? `\n\nWhat waits on them in your plan now:\n${said.recap.waiting.map(waitLine).join("\n")}\nName each by its link as written here.` : ""}\n\nIf their message asks something specific, answer it in full and point to "Since ${said.recap.section}" in your plan in one line. Otherwise open with a recap of those notes in one to three sentences, every call and caveat among them included, then answer. Then fold that section into the rest of your plan's spec with todo_write; a card still open stays on its page and its step.`
+        ? `[CawCo presence] The person is back on this chat; they were away since ${said.recap.since}. Your plan's notes from while they were away:\n\n${said.recap.notes}${said.recap.waiting?.length ? `\n\nWhat waits on them in your plan now:\n${said.recap.waiting.map(waitLine).join("\n")}\nName each by its link as written here.` : ""}\n\nIf their message asks something specific, answer it in full and point to "Since ${said.recap.section}" in your plan in one line. Otherwise open with a recap of those notes in one to three sentences, then answer. Then fold that section into the rest of your plan's spec with todo_write.`
         : "[CawCo presence] The person is on this chat now: talk to them normally.";
     case "elsewhere":
-      return `[CawCo presence] The person is at their desk but not on this chat. Work quietly and keep your plan current with todo_write: a call you made that they could reverse, a caveat, or something you could not verify is one line in its spec each. ${AWAY_CHOICE}`;
+      return "[CawCo presence] The person is at their desk but not on this chat. Work quietly: keep your plan current with todo_write, and write to them only for what needs them.";
     case "away": {
       const heading = awayNotesHeading(said.since ?? "now");
-      return `[CawCo presence] The person is away${said.since ? ` since ${said.since}` : ""}. Your record is your plan's spec, under "${heading}" at its top, written with todo_write; replies in this chat stay to one line. One line there for each thing you did, each call you made that they could reverse (naming it and why), and each caveat or thing you could not verify. ${AWAY_CHOICE} Tick steps as they finish.`;
+      return `[CawCo presence] The person is away${said.since ? ` since ${said.since}` : ""}. Work without talking: no narration, and no questions in this chat unless you are blocked. Keep what they would want to know in your plan's spec with todo_write, under "${heading}" at its top: one line for each thing done, decided, or waiting on them. Something waiting on them is a step of your plan: name the step by its link as todo_write answers it, labelled by its words, never a copy of its state. Tick steps as they finish.`;
     }
   }
 };
