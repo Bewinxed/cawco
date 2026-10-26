@@ -49,7 +49,7 @@
    * stands in as a quiet context line, not counted and taking no room.
    */
   import type { StatusPair } from "@cawco/core";
-  import { flushSync, untrack } from "svelte";
+  import { untrack } from "svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import type { FoldMeasure } from "#lib/components/ui/fluid-tabs/fold-memory.js";
@@ -72,23 +72,10 @@
   import { type BoardRow, cawco, isFailed } from "../client.svelte";
   import { conversationHref } from "../links";
   import { nestFrom } from "../motion/branch.svelte";
-  import {
-    crossIn,
-    dur,
-    motionOk,
-    reveal,
-    revealOut,
-  } from "../motion/curves.svelte";
+  import { crossIn, reveal, revealOut } from "../motion/curves.svelte";
   import { echoBeat } from "../motion/echo.svelte";
   import { holdWhileInside } from "../motion/held-order.svelte";
-  import { IN_MS, ListSwap } from "../motion/list-swap.svelte";
-  import {
-    boxHeights,
-    driveHeights,
-    onScreen,
-    waitForBoxes,
-  } from "../motion/relay-boxes";
-  import { reflow, reflowsFrom, reread } from "../motion/rows.svelte";
+  import { reflow } from "../motion/rows.svelte";
   import OlderRows from "../OlderRows.svelte";
   import OsMark from "../OsMark.svelte";
   import { failedWords } from "../older";
@@ -96,6 +83,7 @@
   import SessionRow, { ROW_PILL } from "../SessionRow.svelte";
   import { type TreeLine, tree } from "../tree";
   import { workspace } from "../workspace/workspace.svelte";
+  import { GroupRelay } from "./group-relay.svelte";
   import {
     archive,
     byMachine,
@@ -109,7 +97,7 @@
     projectOfRow,
     span,
   } from "./home-state.svelte";
-  import { type Arrival, planRelay, type RelayLine } from "./relay-plan";
+  import type { RelayLine } from "./relay-plan";
   import SessionTree from "./SessionTree.svelte";
   import { TreeView } from "./tree-view.svelte";
   import { type WorkTab, workTab } from "./work-tab.svelte";
@@ -257,18 +245,10 @@
   interface Line extends RelayLine<BoardRow> {
     tab: WorkTab;
   }
-  /** One change of the rows in flight: what leaves, what arrives, when. */
-  interface Plan {
-    /** Each arriving line's place in the cascade, and the earliest it may start. */
-    enter: Map<string, Arrival>;
-    /** Machines whose old rows leave in place of new ones (a layer over them). */
-    layered: Set<string>;
-    /** Each leaving line's place in the cascade. */
-    leave: Map<string, number>;
+  /** What a change keeps of what is drawn, beyond its lines. */
+  interface Kept {
     /** Each machine's "N more" words before the change, while they fade. */
     more: Map<string, string>;
-    /** The groups drawn before the change, as they were drawn. */
-    old: Group[];
     /** The tab the leaving rows came from. */
     tab: WorkTab;
   }
@@ -409,11 +389,15 @@
     return finishedFailed ? "fail" : "done";
   };
 
-  let plan = $state.raw<Plan | null>(null);
-  const swap = new ListSwap<Line>();
-  let listEl = $state<HTMLElement>();
-  let heights: Animation[] = [];
-  let settle: ReturnType<typeof setTimeout> | undefined;
+  const relayed = new GroupRelay<BoardRow, Group, Line, Kept>({
+    groups: () => groups,
+    place,
+    boxes: BOXES,
+    screen: ".group",
+  });
+  const plan = $derived(relayed.plan);
+  const drawn = $derived(relayed.drawn);
+  const { swap, enterAnim, leaveAnim, headAnim, headUnseen } = relayed;
 
   // Another home (the phone's, the rail's) chose: follow, without a relay.
   $effect.pre(() => {
@@ -423,35 +407,9 @@
     }
   });
 
-  /** What is drawn: every machine either side of a change, in one order. */
-  const drawn = $derived.by(() => {
-    const live = new Map(groups.map((g) => [g.machineId, g]));
-    const old = new Map((plan?.old ?? []).map((g) => [g.machineId, g]));
-    const ids = [...new Set([...old.keys(), ...live.keys()])].sort(
-      (a, b) => place(a) - place(b)
-    );
-    return ids.map((id) => {
-      const fresh = live.get(id);
-      const was = old.get(id);
-      let kind: "stay" | "new" | "gone" = "stay";
-      if (plan && !was) {
-        kind = "new";
-      } else if (!fresh) {
-        kind = "gone";
-      }
-      return {
-        group: (fresh ?? was) as Group,
-        rows: fresh?.rows ?? [],
-        gone: swap.leaving.filter((line) => line.machineId === id),
-        kind,
-      };
-    });
-  });
-
   /**
-   * Changes what the list shows, as one relay: `apply` changes the state
-   * (the tab, which machines show in full), and every line, header and
-   * height moves from what is drawn this frame to what that state draws.
+   * Changes what the list shows to tab `next` with the machines `whole`
+   * shows in full, as one relay: `apply` changes the state.
    */
   function relay(
     dir: number,
@@ -459,99 +417,33 @@
     whole: ReadonlySet<string>,
     apply: () => void
   ) {
-    const list = listEl;
-    const before = list ? boxHeights(list, BOXES) : new Map<string, number>();
-    // Mid-change, only what is on screen this frame is drawn: a line not
-    // yet arrived, or still below its opening box, has nothing to leave.
-    const seen = plan && list ? onScreen(list, ".group") : null;
-    const drawnNow = (key: string) => !seen || seen.has(key);
-    // What is drawn now: the groups as they stand, mid-change or not. A
-    // group already closing has said its goodbye; it is not said twice.
-    const old: Group[] = drawn
-      .filter((entry) => entry.kind !== "gone")
-      .map((entry) => ({
-        ...entry.group,
-        rows: entry.rows.filter((row) => drawnNow(row.id)),
-      }));
-    for (const run of heights) {
-      run.cancel();
-    }
-    heights = [];
-
     const after = moreOf(next, whole);
-    const relayed = planRelay(
-      old,
-      listed(next, whole),
-      [...new Set([...more.keys(), ...after.keys()])].map((machineId) => ({
-        key: moreKey(machineId),
-        box: machineId,
-        before: more.get(machineId)?.words ?? null,
-        after: after.get(machineId)?.words ?? null,
-      })),
-      drawnNow
-    );
-    const base = {
-      layered: relayed.layered,
-      leave: relayed.leave,
-      more: new Map(
-        [...more].map(([machineId, line]) => [machineId, line.words])
+    const tab = shown;
+    relayed.relay(dir, {
+      fresh: listed(next, whole),
+      more: [...new Set([...more.keys(), ...after.keys()])].map(
+        (machineId) => ({
+          key: moreKey(machineId),
+          box: machineId,
+          before: more.get(machineId)?.words ?? null,
+          after: after.get(machineId)?.words ?? null,
+        })
       ),
-      old,
-      tab: shown,
-    };
-    const lines = relayed.lines.map((line) => ({ ...line, tab: shown }));
-    const moving = motionOk.current;
-
-    // The list's reflow, and every one around it, lets go of every place:
-    // from here this owns them.
-    reread(reflowsFrom(list ?? null));
-    flushSync(() => {
-      relaying = true;
-      plan = { ...base, enter: relayed.enter };
-      swap.swap(lines, dir, { keep: lines.length });
-      apply();
-    });
-
-    let done = dur("--dur-panel");
-    if (list && moving) {
-      const driven = driveHeights(list, BOXES, before, relayed.lastOut);
-      heights = driven.runs;
-      const enter = waitForBoxes(driven.opened, relayed.enter);
-      done = Math.max(
-        driven.done,
-        ...relayed.lastOut.values(),
-        ...[...enter.values()].map(
-          (at) => ListSwap.enterAt(at.i, at.notBefore) + IN_MS
-        )
-      );
-      flushSync(() => {
-        plan = { ...base, enter };
-      });
-    }
-
-    swap.hold(moving ? done : 0);
-    clearTimeout(settle);
-    settle = setTimeout(
-      () => {
-        // The leaving lines go in this same task as everything else the
-        // change lets go of, so the reflows around the list hear it once,
-        // after they have read where it all stands (`reread`, below).
-        flushSync(() => {
-          plan = null;
-          relaying = false;
-          swap.release();
-        });
-        // Done: every box is at its natural height; a closed one lets go.
-        for (const run of heights) {
-          run.cancel();
-        }
-        heights = [];
-        // Let go: the list and every box around it stand at their own
-        // heights now, with no change to the DOM their reflows would hear.
-        reread(reflowsFrom(listEl ?? null));
+      keep: {
+        more: new Map(
+          [...more].map(([machineId, line]) => [machineId, line.words])
+        ),
+        tab,
       },
-      moving ? done : 0
-    );
+      line: (line) => ({ ...line, tab }),
+      apply: () => {
+        relaying = true;
+        apply();
+      },
+      settled: () => {
+        relaying = false;
+      },
+    });
   }
 
   function choose(next: WorkTab): void {
@@ -578,37 +470,6 @@
       workTab.setShownWhole(shown, machineId, all)
     );
   }
-
-  /** A row's arrival in the swap, as an `animation` value; none when it does not move. */
-  const enterAnim = (key: string): string | undefined => {
-    const at = plan?.enter.get(key);
-    return at ? swap.rowAnim(at.i, at.notBefore) : undefined;
-  };
-  /**
-   * A header's motion: arriving with a new machine, leaving with a gone
-   * one; gone before it ever arrived (a switch mid-change), it has none and
-   * is unseen (`headUnseen`).
-   */
-  const headAnim = (
-    kind: "stay" | "new" | "gone",
-    id: string
-  ): string | undefined => {
-    const key = `head:${id}`;
-    return kind === "gone" ? leaveAnim(key) : enterAnim(key);
-  };
-  const headUnseen = (kind: "stay" | "new" | "gone", id: string): boolean =>
-    kind === "gone" && !plan?.leave.has(`head:${id}`);
-  /**
-   * A row's exit in the swap, as an `animation` value. A leaving row's
-   * nesting line (the list item's pseudo-elements, which the row's own
-   * animation does not reach) takes the same as `--leave`: left alone, the
-   * rows went and their lines stood over the incoming list until the
-   * leaving layer was taken down.
-   */
-  const leaveAnim = (key: string): string | undefined => {
-    const at = plan?.leave.get(key);
-    return at === undefined ? undefined : swap.leaveAnim(at);
-  };
 
   /** A working row's line: its project, then what it is doing now. */
   function workingLine(row: BoardRow): string {
@@ -908,7 +769,7 @@
         <div
           data-slot="list"
           class="col-start-1 row-start-1 flex min-w-0 flex-col overflow-x-clip"
-          bind:this={listEl}
+          bind:this={relayed.list}
           {@attach reflow()}
           {@attach highlight(ROW_PILL)}
           {@attach echoBeat()}

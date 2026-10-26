@@ -8,6 +8,7 @@ import type {
   LimitWindow,
   ProjectCap,
   UsageSpend,
+  UsageSummary,
 } from "@cawco/core";
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 
@@ -39,6 +40,35 @@ export function hubMidnight(
 }
 
 /** Real or notional dollars — two decimals, never more. */
+/**
+ * A reader of the hub's usage summaries (`/api/usage/summary`) for one
+ * surface: each summary is read once, by harness, grouping and start, and
+ * kept for as long as the surface stands.
+ */
+export function summaryReader(): (
+  harness: string,
+  groupBy: string,
+  since: number
+) => Promise<UsageSummary> {
+  const cache = new Map<string, UsageSummary>();
+  return async (harness, groupBy, since) => {
+    const key = `${harness}:${groupBy}:${since}`;
+    const known = cache.get(key);
+    if (known) {
+      return known;
+    }
+    const response = await fetch(
+      `/api/usage/summary?harness=${harness}&groupBy=${groupBy}&since=${since}`
+    );
+    if (!response.ok) {
+      throw new Error(`The hub answered ${response.status}.`);
+    }
+    const summary = (await response.json()) as UsageSummary;
+    cache.set(key, summary);
+    return summary;
+  };
+}
+
 export const usd = (n: number): string => `$${n.toFixed(2)}`;
 
 /** What a reached cap holds back, in words. */

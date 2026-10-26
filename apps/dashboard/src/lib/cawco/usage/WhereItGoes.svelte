@@ -27,7 +27,6 @@
     UsageSummaryRow,
   } from "@cawco/core";
   import { detach } from "@cawco/core/detach";
-  import { flushSync } from "svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
@@ -37,22 +36,16 @@
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
-  import { IconRefresh } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
-  import { type Arrival, planRelay, type RelayLine } from "../home/relay-plan";
+  import { GroupRelay } from "../home/group-relay.svelte";
+  import type { RelayLine } from "../home/relay-plan";
   import { conversationHref } from "../links";
-  import { dur, motionOk, reveal, revealOut } from "../motion/curves.svelte";
-  import { IN_MS, ListSwap } from "../motion/list-swap.svelte";
-  import {
-    boxHeights,
-    driveHeights,
-    onScreen,
-    waitForBoxes,
-  } from "../motion/relay-boxes";
-  import { reflow, reflowsFrom, reread } from "../motion/rows.svelte";
+  import { reveal, revealOut } from "../motion/curves.svelte";
+  import { reflow } from "../motion/rows.svelte";
   import OsMark from "../OsMark.svelte";
   import { type SessionSpend, sessionsCsv } from "../session-export";
-  import { compactNumber, money, totalTokensOf } from "../usage";
+  import { compactNumber, money, summaryReader, totalTokensOf } from "../usage";
+  import ReadFailed from "./ReadFailed.svelte";
 
   /** The harnesses this panel reads spend for. */
   type Harness = Extract<HarnessKind, "claude" | "opencode">;
@@ -87,34 +80,12 @@
     summary: UsageSummary;
   }
 
-  const cache = new Map<string, UsageSummary>();
+  const summaryOf = summaryReader();
   const keyOf = (h: Harness, g: Grouping, s: number) => `${h}:${g}:${s}`;
   /** What the list draws: the last view whose rows were read. */
   let view = $state.raw<View | null>(null);
   let failed = $state<string | null>(null);
-  let retrying = $state(false);
   let latest = "";
-
-  async function summaryOf(
-    h: Harness,
-    g: Grouping,
-    s: number
-  ): Promise<UsageSummary> {
-    const key = keyOf(h, g, s);
-    const known = cache.get(key);
-    if (known) {
-      return known;
-    }
-    const response = await fetch(
-      `/api/usage/summary?harness=${h}&groupBy=${g}&since=${s}`
-    );
-    if (!response.ok) {
-      throw new Error(`The hub answered ${response.status}.`);
-    }
-    const summary = (await response.json()) as UsageSummary;
-    cache.set(key, summary);
-    return summary;
-  }
 
   /** Reads what the switches chose, then shows it: in place, or in a relay. */
   async function read(): Promise<void> {
@@ -147,12 +118,6 @@
   $effect(() => {
     detach(read(), "read");
   });
-
-  async function retry(): Promise<void> {
-    retrying = true;
-    await read();
-    retrying = false;
-  }
 
   /* ---- What a view draws -------------------------------------------- */
 
@@ -251,53 +216,28 @@
 
   /* ---- The relay ---------------------------------------------------- */
 
-  /** One change of the rows in flight: what leaves, what arrives, when. */
-  interface Plan {
-    enter: Map<string, Arrival>;
-    layered: Set<string>;
-    leave: Map<string, number>;
+  /** What a change keeps of what is drawn, beyond its lines: the "more" line's words. */
+  interface Kept {
     more: string | null;
-    old: Group[];
   }
   /** The boxes whose heights a change drives: each group, and the "more" line's. */
   const BOXES =
     ':scope > [data-slot="group"], :scope > [data-slot="more-slot"]';
 
-  let plan = $state.raw<Plan | null>(null);
-  const swap = new ListSwap<Line>();
-  let listEl = $state<HTMLElement>();
-  let heights: Animation[] = [];
-  let settle: ReturnType<typeof setTimeout> | undefined;
-
-  /** Every machine either side of a change, in one order. */
-  const drawn = $derived.by(() => {
-    const live = new Map(groups.map((g) => [g.machineId, g]));
-    const old = new Map((plan?.old ?? []).map((g) => [g.machineId, g]));
-    const ids = [...new Set([...old.keys(), ...live.keys()])].sort(
-      (a, b) => place(a) - place(b)
-    );
-    return ids.map((id) => {
-      const fresh = live.get(id);
-      const was = old.get(id);
-      let kind: "stay" | "new" | "gone" = "stay";
-      if (plan && !was) {
-        kind = "new";
-      } else if (!fresh) {
-        kind = "gone";
-      }
-      return {
-        group: (fresh ?? was) as Group,
-        rows: fresh?.rows ?? [],
-        gone: swap.leaving.filter((line) => line.machineId === id),
-        kind,
-      };
-    });
+  const relayed = new GroupRelay<Item, Group, Line, Kept>({
+    groups: () => groups,
+    place,
+    boxes: BOXES,
+    screen: '[data-slot="group"], [data-slot="more-slot"]',
   });
+  const plan = $derived(relayed.plan);
+  const drawn = $derived(relayed.drawn);
+  const { swap, enterAnim, leaveAnim, headAnim, headUnseen } = relayed;
 
   /** Shows `next`: in place for a new range, in a relay for a new list. */
   function show(next: View): void {
     const was = view;
-    if (!(was && listEl)) {
+    if (!(was && relayed.list)) {
       view = next;
       return;
     }
@@ -315,91 +255,20 @@
     });
   }
 
-  /**
-   * Changes what the list shows, as one relay: `apply` changes the state,
-   * and every line, header and height moves from what is drawn this frame
-   * to what that state draws.
-   */
+  /** Changes what the list shows to `fresh`, as one relay: `apply` changes the state. */
   function relay(
     dir: number,
     fresh: Group[],
     freshMore: string | null,
     apply: () => void
   ): void {
-    const list = listEl;
-    const before = list ? boxHeights(list, BOXES) : new Map<string, number>();
-    // Mid-change, only what is on screen this frame has anything to leave.
-    const seen =
-      plan && list
-        ? onScreen(list, '[data-slot="group"], [data-slot="more-slot"]')
-        : null;
-    const drawnNow = (key: string) => !seen || seen.has(key);
-    const old: Group[] = drawn
-      .filter((entry) => entry.kind !== "gone")
-      .map((entry) => ({
-        ...entry.group,
-        rows: entry.rows.filter((row) => drawnNow(row.id)),
-      }));
-    for (const run of heights) {
-      run.cancel();
-    }
-    heights = [];
-
-    const relayed = planRelay(
-      old,
+    relayed.relay(dir, {
       fresh,
-      [{ key: "more", box: "more", before: more, after: freshMore }],
-      drawnNow
-    );
-    const base = {
-      layered: relayed.layered,
-      leave: relayed.leave,
-      more,
-      old,
-    };
-    const moving = motionOk.current;
-
-    reread(reflowsFrom(list ?? null));
-    flushSync(() => {
-      plan = { ...base, enter: relayed.enter };
-      swap.swap(relayed.lines, dir, { keep: relayed.lines.length });
-      apply();
+      more: [{ key: "more", box: "more", before: more, after: freshMore }],
+      keep: { more },
+      line: (line) => line,
+      apply,
     });
-
-    let done = dur("--dur-panel");
-    if (list && moving) {
-      const driven = driveHeights(list, BOXES, before, relayed.lastOut);
-      heights = driven.runs;
-      const enter = waitForBoxes(driven.opened, relayed.enter);
-      done = Math.max(
-        driven.done,
-        ...relayed.lastOut.values(),
-        ...[...enter.values()].map(
-          (at) => ListSwap.enterAt(at.i, at.notBefore) + IN_MS
-        )
-      );
-      flushSync(() => {
-        plan = { ...base, enter };
-      });
-    }
-
-    swap.hold(moving ? done : 0);
-    clearTimeout(settle);
-    settle = setTimeout(
-      () => {
-        // The leaving lines go in this task too (ListSwap `release`).
-        flushSync(() => {
-          plan = null;
-          swap.release();
-        });
-        for (const run of heights) {
-          run.cancel();
-        }
-        heights = [];
-        reread(reflowsFrom(listEl ?? null));
-      },
-      moving ? done : 0
-    );
   }
 
   /** "Show N more": the rest of the rows arrive in place, in the same relay. */
@@ -408,29 +277,6 @@
       all = true;
     });
   }
-
-  const enterAnim = (key: string): string | undefined => {
-    const at = plan?.enter.get(key);
-    return at ? swap.rowAnim(at.i, at.notBefore) : undefined;
-  };
-  const leaveAnim = (key: string): string | undefined => {
-    const at = plan?.leave.get(key);
-    return at === undefined ? undefined : swap.leaveAnim(at);
-  };
-  /** A header arriving with a new machine, leaving with a gone one, or unseen. */
-  const headAnim = (
-    kind: "stay" | "new" | "gone",
-    id: string
-  ): string | undefined => {
-    const key = `head:${id}`;
-    if (kind !== "gone") {
-      return enterAnim(key);
-    }
-    return plan?.leave.has(key) ? leaveAnim(key) : undefined;
-  };
-  /** A gone machine's header with no leave to play stays unseen. */
-  const headHidden = (kind: "stay" | "new" | "gone", id: string): boolean =>
-    kind === "gone" && !plan?.leave.has(`head:${id}`);
 
   /* ---- Export ------------------------------------------------------- */
 
@@ -539,24 +385,7 @@
       {harness === "claude" ? "Claude" : "opencode"}.
     </p>
   {:else if failed && !view}
-    <div
-      data-slot="failed"
-      class="flex flex-wrap items-center gap-space-3"
-      role="alert"
-    >
-      <p data-slot="note" class="type-meta text-ink-muted">
-        Could not read where it goes. {failed}
-      </p>
-      <Button
-        icon={IconRefresh}
-        label="Retry"
-        onclick={retry}
-        pending={retrying}
-        pendingLabel="Retrying…"
-        size="sm"
-        variant="outline"
-      />
-    </div>
+    <ReadFailed {read} said="Could not read where it goes. {failed}" />
   {:else if !view}
     <div
       data-skeleton
@@ -576,7 +405,7 @@
     <div
       data-slot="list"
       class="flex flex-col overflow-x-clip"
-      bind:this={listEl}
+      bind:this={relayed.list}
       in:reveal
       {@attach reflow()}
     >
@@ -596,7 +425,7 @@
               class="mark-line type-label m-0 flex items-center gap-space-2 py-space-1 text-ink-muted"
               data-key="head:{id}"
               style:animation={headAnim(entry.kind, id)}
-              style:opacity={headHidden(entry.kind, id) ? "0" : undefined}
+              style:opacity={headUnseen(entry.kind, id) ? "0" : undefined}
             >
               <OsMark class="size-icon-md shrink-0" os={entry.group.os} />
               <span>{entry.group.name}</span>

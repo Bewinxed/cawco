@@ -9,7 +9,6 @@
   import type { UsageSummary } from "@cawco/core";
   import { detach } from "@cawco/core/detach";
   import { HOUR_MS } from "@cawco/core/time";
-  import { Button } from "#lib/components/ui/button/index.js";
   import {
     TabItem,
     Tabs,
@@ -17,12 +16,12 @@
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
-  import { IconRefresh } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
   import { reveal, revealOut } from "../motion/curves.svelte";
   import { ListSwap } from "../motion/list-swap.svelte";
   import { morph } from "../motion/morph.svelte";
-  import { hubMidnight, money } from "../usage";
+  import { hubMidnight, money, summaryReader } from "../usage";
+  import ReadFailed from "./ReadFailed.svelte";
 
   type Harness = "claude" | "opencode";
 
@@ -56,33 +55,15 @@
     since: Record<Harness, number | null>;
   }
 
-  const cache = new Map<string, UsageSummary>();
+  const summaryOf = summaryReader();
   let shown = $state<Shown | null>(null);
   let failed = $state(false);
-  let retrying = $state(false);
 
-  async function readOne(
+  const readOne = (
     harness: Harness,
     start: number | null
-  ): Promise<UsageSummary | null> {
-    if (start === null) {
-      return null;
-    }
-    const key = `${harness}:${start}`;
-    const known = cache.get(key);
-    if (known) {
-      return known;
-    }
-    const response = await fetch(
-      `/api/usage/summary?harness=${harness}&groupBy=start&since=${start}`
-    );
-    if (!response.ok) {
-      throw new Error(`The hub answered ${response.status}.`);
-    }
-    const summary = (await response.json()) as UsageSummary;
-    cache.set(key, summary);
-    return summary;
-  }
+  ): Promise<UsageSummary | null> =>
+    start === null ? Promise.resolve(null) : summaryOf(harness, "start", start);
 
   let ticket = 0;
   async function read(): Promise<void> {
@@ -116,12 +97,6 @@
   $effect(() => {
     detach(read(), "read");
   });
-
-  async function retry(): Promise<void> {
-    retrying = true;
-    await read();
-    retrying = false;
-  }
 
   /**
    * Every hour from the range's start to now, counted from that start (a
@@ -276,24 +251,7 @@
   </header>
 
   {#if failed && !ready}
-    <div
-      data-slot="failed"
-      class="flex flex-wrap items-center gap-space-3"
-      role="alert"
-    >
-      <p data-slot="note" class="type-meta text-ink-muted">
-        Could not read the history from the hub.
-      </p>
-      <Button
-        icon={IconRefresh}
-        label="Retry"
-        onclick={retry}
-        pending={retrying}
-        pendingLabel="Retrying…"
-        size="sm"
-        variant="outline"
-      />
-    </div>
+    <ReadFailed {read} said="Could not read the history from the hub." />
   {:else}
     <div class="grid grid-cols-2 gap-space-6 max-phone:grid-cols-1">
       {#each charts as chart (chart.harness)}
