@@ -36,6 +36,7 @@ import {
   type HubRoute,
   routesFor,
 } from "./agent-calls";
+import { hubInProcess } from "./hub-in-process";
 import { baseRefOf, checkGate, outsideInputs } from "./openapi-inputs";
 import { type Baseline, publishedNightlies, shippedBaselines } from "./shipped";
 import {
@@ -70,10 +71,7 @@ const CORE = resolve(HUB, "../core/src");
 const OUT = resolve(HUB, "../..", APP_SCHEMA);
 
 const scratch = mkdtempSync(join(tmpdir(), "cawco-openapi-"));
-// Before the hub's modules load: config.ts reads it once, at import.
-process.env.CAWCO_DB_PATH = join(scratch, "hub.db");
 
-const { Effect, Layer } = await import("effect");
 // The schema generator owns its compiler dependency and exports it. A Program
 // built by the repository's newer TypeScript has different TypeFlags and
 // cannot be handed to a generator interpreting them with its own TypeScript
@@ -82,12 +80,6 @@ const TJS = await import("typescript-json-schema");
 const { ts } = TJS;
 const { toOpenAPISchema } = await import("@elysia/openapi");
 const { CAWCO_HUB_PORT, WIRE_PROTOCOL } = await import("@cawco/core");
-const { HUB_VERSION } = await import("../src/config");
-const { Db, DbLayer } = await import("../src/db");
-const { HubLifetime, HubLifetimeLayer } = await import("../src/lifetime");
-const { Pending, PendingLayer } = await import("../src/pending");
-const { Registry, RegistryLayer } = await import("../src/registry");
-const { createServer } = await import("../src/server");
 
 type Schema = Record<string, unknown>;
 interface Operation {
@@ -96,32 +88,10 @@ interface Operation {
   responses?: Record<string, unknown>;
 }
 
-const { hub, lifetime } = await Effect.runPromise(
-  Effect.provide(
-    Effect.gen(function* () {
-      const life = yield* HubLifetime;
-      return {
-        lifetime: life,
-        hub: createServer(
-          {
-            build: { version: HUB_VERSION, startedAt: 0 },
-            registry: yield* Registry,
-            db: yield* Db,
-            pending: yield* Pending,
-            lifetime: life,
-          },
-          // Built only to be read: nothing starts off the boot path to reach
-          // the scratch database after `lifetime.close()` below.
-          { background: false }
-        ),
-      };
-    }),
-    PendingLayer.pipe(
-      Layer.provideMerge(Layer.mergeAll(RegistryLayer, DbLayer)),
-      Layer.provideMerge(HubLifetimeLayer)
-    )
-  )
-);
+// A scratch hub, built only to be read: nothing starts off the boot path to
+// reach the scratch database after `lifetime.close()` below.
+const { hub, lifetime } = await hubInProcess(join(scratch, "hub.db"), scratch);
+const { HUB_VERSION } = await import("../src/config");
 
 // 3.1.0, the 3.1 the Swift generator names; `ws` is not an OpenAPI method.
 const { paths } = toOpenAPISchema(
