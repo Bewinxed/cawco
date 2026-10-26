@@ -295,9 +295,14 @@ const partsText = (content: unknown): string => {
  * What an OpenCode request carries: the person's words (`all`) and every
  * tool's result so far. OpenCode speaks chat completions, where a tool's
  * result is a `tool` message, which `all` leaves out; its shell's output is
- * read there.
+ * read there. A request the mock has let go of (scratch-fleet.ts `SEEN_CHARS`)
+ * holds nothing any more, its body empty: it heard nothing a later one did
+ * not hear too.
  */
 const heardBy = (request: Seen): string => {
+  if (request.letGo) {
+    return "";
+  }
   const { messages } = JSON.parse(request.body) as {
     messages?: { role: string; content: unknown }[];
   };
