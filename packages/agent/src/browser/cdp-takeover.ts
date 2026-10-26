@@ -19,6 +19,7 @@
 
 import { readWithin } from "@cawco/core/bounded";
 import { BROWSER_SCREEN } from "@cawco/core/browser";
+import { CdpCalls } from "./cdp-calls";
 
 /** What a view sends: the person's pointer, keys and words, in the page's CSS pixels. */
 export type CdpInput =
@@ -67,16 +68,13 @@ const CALL_MS = 15_000;
  */
 export class CdpLink {
   readonly #socket: WebSocket;
-  #next = 1;
-  readonly #waiting = new Map<
-    number,
-    { resolve: (result: Json) => void; reject: (error: Error) => void }
-  >();
+  readonly #calls: CdpCalls;
   onEvent: (message: Message) => void = () => undefined;
   onClose: () => void = () => undefined;
 
   private constructor(socket: WebSocket) {
     this.#socket = socket;
+    this.#calls = new CdpCalls((text) => socket.send(text));
     socket.onmessage = (event) => {
       let message: Message;
       try {
@@ -85,22 +83,13 @@ export class CdpLink {
         return;
       }
       if (typeof message.id === "number") {
-        const waiting = this.#waiting.get(message.id);
-        this.#waiting.delete(message.id);
-        if (message.error) {
-          waiting?.reject(new Error(message.error.message));
-        } else {
-          waiting?.resolve(message.result ?? {});
-        }
+        this.#calls.settle(message.id, message);
         return;
       }
       this.onEvent(message);
     };
     socket.onclose = () => {
-      for (const waiting of this.#waiting.values()) {
-        waiting.reject(new Error("The browser's DevTools connection closed."));
-      }
-      this.#waiting.clear();
+      this.#calls.fail("The browser's DevTools connection closed.");
       this.onClose();
     };
   }
@@ -137,23 +126,8 @@ export class CdpLink {
     sessionId?: string,
     ms = CALL_MS
   ): Promise<Json> {
-    const id = this.#next;
-    this.#next += 1;
-    const read = await readWithin(
-      ms,
-      (signal) =>
-        new Promise<Json>((resolve, reject) => {
-          signal.addEventListener("abort", () => this.#waiting.delete(id));
-          this.#waiting.set(id, { resolve, reject });
-          this.#socket.send(
-            JSON.stringify({
-              id,
-              method,
-              params,
-              ...(sessionId ? { sessionId } : {}),
-            })
-          );
-        })
+    const read = await readWithin(ms, (signal) =>
+      this.#calls.call(method, params, sessionId, signal)
     );
     if (read.kind === "unanswered") {
       throw new Error(`${method} got no answer within ${ms / 1000} s.`);
@@ -167,16 +141,7 @@ export class CdpLink {
    * response), where the caller must not wait on it.
    */
   post(method: string, params: Json = {}, sessionId?: string): void {
-    const id = this.#next;
-    this.#next += 1;
-    this.#socket.send(
-      JSON.stringify({
-        id,
-        method,
-        params,
-        ...(sessionId ? { sessionId } : {}),
-      })
-    );
+    this.#calls.post(method, params, sessionId);
   }
 
   /** A flat session on `targetId`. */

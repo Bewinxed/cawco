@@ -28,7 +28,6 @@ import {
   authStatusIn,
   bareEnv,
   linkUserLayer,
-  noAuthAnswer,
   probeAccount,
   removeAccountDir,
 } from "./accounts";
@@ -462,28 +461,19 @@ const finishSignIn = async (account: string, code: string): Promise<void> => {
     dir
   );
   switch (status.kind) {
-    case "unanswered":
-      throw new Error(noAuthAnswer(dir, status));
-    case "answered":
-      switch (status.value.kind) {
-        case "signin":
-          if (!status.value.loggedIn) {
-            throw new Error(
-              `Claude Code's sign-in on this machine finished, but \`claude auth status\` says it isn't signed in. ${screen}`
-            );
-          }
-          return;
-        case "unread":
-        case "locked":
-          throw new Error(status.value.why);
-        default: {
-          const unhandled: never = status.value;
-          throw new Error(`unhandled status: ${JSON.stringify(unhandled)}`);
-        }
+    case "signin":
+      if (!status.loggedIn) {
+        throw new Error(
+          `Claude Code's sign-in on this machine finished, but \`claude auth status\` says it isn't signed in. ${screen}`
+        );
       }
+      return;
+    case "unread":
+    case "locked":
+      throw new Error(status.why);
     default: {
       const unhandled: never = status;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      throw new Error(`unhandled status: ${JSON.stringify(unhandled)}`);
     }
   }
 };

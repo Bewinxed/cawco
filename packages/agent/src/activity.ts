@@ -48,6 +48,7 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { createInterface } from "node:readline";
 import {
   type MachineActivity,
   type MachineState,
@@ -68,6 +69,22 @@ const IDLE_AFTER_MS = 60_000;
 /** How long a D-Bus call may take before its read counts as none. */
 const CALL_MS = 3000;
 
+/** Both notifier requests take the same arguments: the new notification, its timeout and the seat. */
+const NOTIFICATION_REQUEST = {
+  description: "",
+  summary: "create a notification object",
+  args: [
+    {
+      name: "id",
+      type: "new_id",
+      interface: "ext_idle_notification_v1",
+      summary: "",
+    },
+    { name: "timeout", type: "uint", summary: "" },
+    { name: "seat", type: "object", interface: "wl_seat", summary: "" },
+  ],
+};
+
 /**
  * ext-idle-notify-v1 (wayland-protocols staging), as wayland-client reads a
  * protocol: version 2's two notifier requests and the notification's two
@@ -87,36 +104,11 @@ const IDLE_NOTIFY = [
         summary: "destroy the manager",
         args: [],
       },
-      {
-        name: "get_idle_notification",
-        description: "",
-        summary: "create a notification object",
-        args: [
-          {
-            name: "id",
-            type: "new_id",
-            interface: "ext_idle_notification_v1",
-            summary: "",
-          },
-          { name: "timeout", type: "uint", summary: "" },
-          { name: "seat", type: "object", interface: "wl_seat", summary: "" },
-        ],
-      },
+      { name: "get_idle_notification", ...NOTIFICATION_REQUEST },
       {
         name: "get_input_idle_notification",
         since: 2,
-        description: "",
-        summary: "create a notification object",
-        args: [
-          {
-            name: "id",
-            type: "new_id",
-            interface: "ext_idle_notification_v1",
-            summary: "",
-          },
-          { name: "timeout", type: "uint", summary: "" },
-          { name: "seat", type: "object", interface: "wl_seat", summary: "" },
-        ],
+        ...NOTIFICATION_REQUEST,
       },
     ],
     events: [],
@@ -206,16 +198,15 @@ interface IdleSource {
   readonly read: () => Promise<number | undefined>;
 }
 
-/** A D-Bus call's answer through `busctl --json=short`: its `data`, or undefined. */
-const busctl = (args: readonly string[]): Promise<unknown[] | undefined> =>
+/** A short call's stdout, or undefined when it failed to start, timed out or exited non-zero. */
+const callOut = (
+  bin: string,
+  args: readonly string[],
+  env?: NodeJS.ProcessEnv
+): Promise<string | undefined> =>
   new Promise((resolve) => {
-    const bin = resolveBin("busctl");
-    if (!bin) {
-      resolve(undefined);
-      return;
-    }
-    const child = spawn(bin, ["--json=short", ...args], {
-      env: toolEnv(),
+    const child = spawn(bin, args, {
+      env,
       stdio: ["ignore", "pipe", "ignore"],
       timeout: CALL_MS,
     });
@@ -224,19 +215,27 @@ const busctl = (args: readonly string[]): Promise<unknown[] | undefined> =>
       out += chunk.toString("utf8");
     });
     child.on("error", () => resolve(undefined));
-    child.on("close", (code) => {
-      if (code !== 0) {
-        resolve(undefined);
-        return;
-      }
-      try {
-        const answer = JSON.parse(out) as { data?: unknown };
-        resolve(Array.isArray(answer.data) ? answer.data : [answer.data]);
-      } catch {
-        resolve(undefined);
-      }
-    });
+    child.on("close", (code) => resolve(code === 0 ? out : undefined));
   });
+
+/** A D-Bus call's answer through `busctl --json=short`: its `data`, or undefined. */
+const busctl = async (
+  args: readonly string[]
+): Promise<unknown[] | undefined> => {
+  const bin = resolveBin("busctl");
+  const out = bin
+    ? await callOut(bin, ["--json=short", ...args], toolEnv())
+    : undefined;
+  if (out === undefined) {
+    return;
+  }
+  try {
+    const answer = JSON.parse(out) as { data?: unknown };
+    return Array.isArray(answer.data) ? answer.data : [answer.data];
+  } catch {
+    // An answer that is not JSON is no answer.
+  }
+};
 
 /** The Wayland socket the agent's session names: `$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY`. */
 const waylandSocket = (): string | undefined => {
@@ -498,18 +497,13 @@ export const hearSleep = (
   child.unref();
   child.stdin.on("error", () => undefined);
   child.stdout.on("end", () => child.stdin.end());
-  let carry = "";
-  child.stdout.on("data", (chunk: Buffer) => {
-    const lines = (carry + chunk.toString("utf8")).split("\n");
-    carry = lines.pop() ?? "";
-    for (const line of lines) {
-      if (line.startsWith("Monitoring signals")) {
-        listening();
-      }
-      const said = PREPARE_FOR_SLEEP.exec(line);
-      if (said) {
-        onSleep(said[1] === "true");
-      }
+  createInterface({ input: child.stdout }).on("line", (line) => {
+    if (line.startsWith("Monitoring signals")) {
+      listening();
+    }
+    const said = PREPARE_FOR_SLEEP.exec(line);
+    if (said) {
+      onSleep(said[1] === "true");
     }
   });
   child.on("error", () => undefined);
@@ -585,16 +579,11 @@ const hearMacSleep = (
     }
   );
   child.unref();
-  let carry = "";
-  child.stdout.on("data", (chunk: Buffer) => {
-    const lines = (carry + chunk.toString("utf8")).split("\n");
-    carry = lines.pop() ?? "";
-    for (const line of lines) {
-      if (line === "listening") {
-        listening();
-      } else if (line === "sleep" || line === "wake") {
-        onSleep(line === "sleep");
-      }
+  createInterface({ input: child.stdout }).on("line", (line) => {
+    if (line === "listening") {
+      listening();
+    } else if (line === "sleep" || line === "wake") {
+      onSleep(line === "sleep");
     }
   });
   child.on("error", () => undefined);
@@ -603,28 +592,16 @@ const hearMacSleep = (
 };
 
 /** macOS: whether the console user's screen is locked, as `ioreg` lists IOConsoleUsers. */
-const macLocked = (): Promise<boolean | undefined> =>
-  new Promise((resolve) => {
-    const child = spawn(systemProgram("ioreg"), ["-n", "Root", "-d1"], {
-      stdio: ["ignore", "pipe", "ignore"],
-      timeout: CALL_MS,
-    });
-    let out = "";
-    child.stdout.on("data", (chunk: Buffer) => {
-      out += chunk.toString("utf8");
-    });
-    child.on("error", () => resolve(undefined));
-    child.on("close", (code) => {
-      if (code !== 0 || !out.includes("IOConsoleUsers")) {
-        resolve(undefined);
-        return;
-      }
-      resolve(
-        out.includes('"CGSSessionScreenIsLocked"=Yes') ||
-          out.includes('"kCGSSessionOnConsoleKey"=No')
-      );
-    });
-  });
+const macLocked = async (): Promise<boolean | undefined> => {
+  const out = await callOut(systemProgram("ioreg"), ["-n", "Root", "-d1"]);
+  if (!out?.includes("IOConsoleUsers")) {
+    return;
+  }
+  return (
+    out.includes('"CGSSessionScreenIsLocked"=Yes') ||
+    out.includes('"kCGSSessionOnConsoleKey"=No')
+  );
+};
 
 /** The state a reading says: asleep and locked first, then idle past the threshold. */
 const stateOf = (

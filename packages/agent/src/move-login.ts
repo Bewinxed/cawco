@@ -26,7 +26,6 @@ import {
   keychainUser,
   kindOf,
   linkUserLayer,
-  noAuthAnswer,
   removeAccountDir,
 } from "./accounts";
 import { inFleetQueue, writeAtomic } from "./fleet";
@@ -84,27 +83,16 @@ const signinIn = async (
   authMethod?: string;
   identity?: AccountIdentity;
 }> => {
-  const read = await authStatusIn(env, dir);
-  switch (read.kind) {
-    case "unanswered":
-      throw new Error(noAuthAnswer(dir, read));
-    case "answered": {
-      const status = read.value;
-      switch (status.kind) {
-        case "unread":
-        case "locked":
-          throw new Error(status.why);
-        case "signin":
-          return status;
-        default: {
-          const unhandled: never = status;
-          throw new Error(`unhandled status: ${JSON.stringify(unhandled)}`);
-        }
-      }
-    }
+  const status = await authStatusIn(env, dir);
+  switch (status.kind) {
+    case "unread":
+    case "locked":
+      throw new Error(status.why);
+    case "signin":
+      return status;
     default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      const unhandled: never = status;
+      throw new Error(`unhandled status: ${JSON.stringify(unhandled)}`);
     }
   }
 };

@@ -162,7 +162,7 @@ const signedInAs = (
 };
 
 /** The sentence for a sign-in read of `dir` that gave no answer in time, or ended before it answered. */
-export const noAuthAnswer = (
+const noAuthAnswer = (
   dir: string,
   { after, reason }: { after: number; reason: "timeout" | "dead" }
 ): string =>
@@ -198,10 +198,21 @@ const statusIn = (
  * `dir`): signed in, how, and as whom ({@link AuthStatus}). Unanswered when
  * the read ran out of {@link AUTH_STATUS_TIMEOUT_MS} (the keychain looks
  * included, and however the process then took its end), or something else
- * ended it before it answered (`dead`). Not run, and `locked`, when the
- * dir's login is in the locked login keychain ({@link lockedAway}).
+ * ended it before it answered: `unread`, with {@link noAuthAnswer}'s
+ * sentence. Not run, and `locked`, when the dir's login is in the locked
+ * login keychain ({@link lockedAway}).
  */
 export const authStatusIn = async (
+  env: Record<string, string | undefined>,
+  dir: string
+): Promise<AuthStatus> => {
+  const read = await authStatusRead(env, dir);
+  return read.kind === "answered"
+    ? read.value
+    : { kind: "unread", why: noAuthAnswer(dir, read) };
+};
+
+const authStatusRead = async (
   env: Record<string, string | undefined>,
   dir: string
 ): Promise<Bounded<AuthStatus>> => {
@@ -353,36 +364,25 @@ const readAccount = async (
   account: string
 ): Promise<AccountReport | Unread> => {
   const dir = accountConfigDir(account);
-  const read = await authStatusIn(envFor(account), dir);
-  switch (read.kind) {
-    case "unanswered":
-      return unreadAccount(account, noAuthAnswer(dir, read), false);
-    case "answered": {
-      const status = read.value;
-      switch (status.kind) {
-        case "unread":
-          return unreadAccount(account, status.why, false);
-        case "locked":
-          return unreadAccount(account, status.why, true);
-        case "signin": {
-          unanswered.delete(account);
-          const kind = kindOf(status.authMethod);
-          return {
-            account,
-            loggedIn: status.loggedIn,
-            ...(kind ? { kind } : {}),
-            ...(status.identity ? { identity: status.identity } : {}),
-          };
-        }
-        default: {
-          const unhandled: never = status;
-          throw new Error(`unhandled status: ${JSON.stringify(unhandled)}`);
-        }
-      }
+  const status = await authStatusIn(envFor(account), dir);
+  switch (status.kind) {
+    case "unread":
+      return unreadAccount(account, status.why, false);
+    case "locked":
+      return unreadAccount(account, status.why, true);
+    case "signin": {
+      unanswered.delete(account);
+      const kind = kindOf(status.authMethod);
+      return {
+        account,
+        loggedIn: status.loggedIn,
+        ...(kind ? { kind } : {}),
+        ...(status.identity ? { identity: status.identity } : {}),
+      };
     }
     default: {
-      const unhandled: never = read;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      const unhandled: never = status;
+      throw new Error(`unhandled status: ${JSON.stringify(unhandled)}`);
     }
   }
 };

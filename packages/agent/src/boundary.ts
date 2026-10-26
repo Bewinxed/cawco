@@ -2461,7 +2461,15 @@ export const boundaryFor = async (
  */
 export const addSpill = async (id: string, dir: string): Promise<void> => {
   await keepSpill(dir);
-  const file = workspaceSpillsFile(id);
+  await addListed(id, workspaceSpillsFile(id), dir);
+};
+
+/** Adds `item` to the workspace's list record at `file` unless it is listed already. */
+const addListed = async (
+  id: string,
+  file: string,
+  item: string
+): Promise<void> => {
   const listed = await reported(
     readRecord<unknown>(file).then((record = []) => {
       if (!Array.isArray(record)) {
@@ -2470,11 +2478,11 @@ export const addSpill = async (id: string, dir: string): Promise<void> => {
       return record as string[];
     })
   );
-  if (listed.includes(dir)) {
+  if (listed.includes(item)) {
     return;
   }
   await mkdir(stateDir(id), { recursive: true });
-  await writeWhole(file, `${JSON.stringify([...listed, dir])}\n`, 0o644);
+  await writeWhole(file, `${JSON.stringify([...listed, item])}\n`, 0o644);
 };
 
 /**
@@ -2571,25 +2579,8 @@ export const setProject = async (
  * another account may still be running on the first until it relaunches,
  * and what each adds is only that account's links to the user layer.
  */
-export const addAccount = async (
-  id: string,
-  account: string
-): Promise<void> => {
-  const file = workspaceAccountsFile(id);
-  const listed = await reported(
-    readRecord<unknown>(file).then((record = []) => {
-      if (!Array.isArray(record)) {
-        throw new DamagedRecord(file, "it is not a list");
-      }
-      return record as string[];
-    })
-  );
-  if (listed.includes(account)) {
-    return;
-  }
-  await mkdir(stateDir(id), { recursive: true });
-  await writeWhole(file, `${JSON.stringify([...listed, account])}\n`, 0o644);
-};
+export const addAccount = (id: string, account: string): Promise<void> =>
+  addListed(id, workspaceAccountsFile(id), account);
 
 /** The machine's keeper endpoint: its directory, where every keeper's endpoint is, is hidden from a bounded command. */
 const sessiondPath = machineEndpoint;
@@ -5584,14 +5575,10 @@ const replaceNarrowed = async (
     const stopped: WorkProcess[] = [];
     for (const boundary of stopping) {
       stopped.push(...(await workIn(ref.id, boundary)));
-      const place = await readPlace(ref.id, boundary.gen);
-      await stopBoundary(ref.id, boundary);
-      if (!(await sandboxesGone(place ? [place.inner] : []))) {
-        throw new Error(
-          `its sandbox ${place?.inner} was still there ${STOP_TIMEOUT_MS / 1000}s after it was stopped`
-        );
+      const stuck = await stopGeneration(ref.id, boundary);
+      if (stuck) {
+        throw new Error(stuck);
       }
-      await cleanGeneration(ref.id, boundary);
       await rm(retiringFileOf(ref.id, boundary), { force: true });
     }
     const runs =
@@ -6146,14 +6133,10 @@ const restartIfIdle = (
     if (work) {
       return { kept: work };
     }
-    const place = await readPlace(ref.id, held.gen);
-    await stopBoundary(ref.id, held);
-    if (!(await sandboxesGone(place ? [place.inner] : []))) {
-      throw new Error(
-        `its sandbox ${place?.inner} was still there ${STOP_TIMEOUT_MS / 1000}s after it was stopped`
-      );
+    const stuck = await stopGeneration(ref.id, held);
+    if (stuck) {
+      throw new Error(stuck);
     }
-    await cleanGeneration(ref.id, held);
     const fresh = await start(await sessiond(), ref);
     forgetStubbed(ref.id);
     console.info(
@@ -8187,6 +8170,23 @@ const stopBoundary = async (
 };
 
 /**
+ * Stops the boundary `held` names ({@link stopBoundary}) and, once its
+ * sandbox is gone, removes its files ({@link cleanGeneration}). Answers why
+ * not when the sandbox is still there after {@link STOP_TIMEOUT_MS}.
+ */
+const stopGeneration = async (
+  id: string,
+  held: Pick<Held, "gen">
+): Promise<string | undefined> => {
+  const place = await readPlace(id, held.gen);
+  await stopBoundary(id, held);
+  if (!(await sandboxesGone(place ? [place.inner] : []))) {
+    return `its sandbox ${place?.inner} was still there ${STOP_TIMEOUT_MS / 1000}s after it was stopped`;
+  }
+  await cleanGeneration(id, held);
+};
+
+/**
  * Removes the files of the stopped boundary `held` names: its generation's
  * dir, FIFO and srt temp dir.
  */
@@ -8453,15 +8453,13 @@ export const whileSandboxDown = <T>(
       if (busy) {
         return { busy };
       }
-      const place = await readPlace(ref.id, held.gen);
-      await stopBoundary(ref.id, held);
-      if (!(await sandboxesGone(place ? [place.inner] : []))) {
+      const stuck = await stopGeneration(ref.id, held);
+      if (stuck) {
         throw refusal(
           ref.id,
-          `its sandbox ${place?.inner} was still there ${STOP_TIMEOUT_MS / 1000}s after it was stopped, so nothing was written into its clone on the host`
+          `${stuck}, so nothing was written into its clone on the host`
         );
       }
-      await cleanGeneration(ref.id, held);
       try {
         return { ran: await work() };
       } finally {
