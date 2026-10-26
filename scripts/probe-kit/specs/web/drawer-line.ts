@@ -600,11 +600,18 @@ const measureEveryRow = (page: Page): Promise<void> =>
       );
     const atEnd = (el: HTMLElement) =>
       el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+    /**
+     * Each step a reader's: a wheel's input first (a transcript takes a
+     * scroll for the reader's only after their input).
+     */
+    const hand = (el: HTMLElement) => el.dispatchEvent(new WheelEvent("wheel"));
     /** Top to end, half a view a step, each step drawn before the next. */
     const walk = async (el: HTMLElement) => {
+      hand(el);
       el.scrollTop = 0;
       await frames();
       for (let step = 0; step < 400 && !atEnd(el); step += 1) {
+        hand(el);
         el.scrollTop += Math.max(1, Math.floor(el.clientHeight / 2));
         // biome-ignore lint/performance/noAwaitInLoops: each step is measured before the next
         await frames();
@@ -614,6 +621,7 @@ const measureEveryRow = (page: Page): Promise<void> =>
     const toEnd = async (el: HTMLElement) => {
       for (let step = 0; step < 20; step += 1) {
         const end = el.scrollHeight;
+        hand(el);
         el.scrollTop = end;
         // biome-ignore lint/performance/noAwaitInLoops: each try reads the height the last one left
         await frames();
@@ -639,6 +647,7 @@ const measureEveryRow = (page: Page): Promise<void> =>
       if (restedAtEnd) {
         await toEnd(el);
       } else {
+        hand(el);
         el.scrollTop = rested;
         await frames();
       }

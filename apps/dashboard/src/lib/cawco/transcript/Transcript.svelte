@@ -58,6 +58,7 @@
     reconnectingNow,
     type SessionState,
   } from "../client.svelte";
+  import { devNote } from "../dev-debug";
   import EmptyAsk from "../EmptyAsk.svelte";
   import { askFirst, EMPTY_LINES, firstAskLabel } from "../empty-asks";
   import {
@@ -2744,9 +2745,16 @@
     // Its last pixel at the view's top, it is drawn, measured, and the next
     // write goes as far into it as the place says.
     const reach = Math.min(into, Math.max(0, list.getItemSize(index) - 1));
-    const target = Math.min(
-      Math.max(0, start + list.getItemOffset(index) + reach),
-      scroller.scrollHeight - scroller.clientHeight
+    // Rounded to a whole pixel: WebKit drops the fraction of a `scrollTop`
+    // written to it, so 2075.72 landed at 2075, and with the row's own snap
+    // to the device's pixels the place stood 1.3px short (transcript-holds'
+    // landings, WebKit at 390), where the nearest pixel is half a pixel off
+    // at most.
+    const target = Math.round(
+      Math.min(
+        Math.max(0, start + list.getItemOffset(index) + reach),
+        scroller.scrollHeight - scroller.clientHeight
+      )
     );
     const now = scroller.scrollTop;
     if (
@@ -3200,34 +3208,107 @@
   /** The scroll height the last scroll event saw — what tells a clamp from a reader. */
   let lastHeight = 0;
   /**
-   * The row at the top of the view and how far below the view's top it
-   * stood at the last scroll event, from virtua's sizes: what tells the
-   * reader's scrolling from virtua's corrections (see `onscroll`). Taken at
-   * scroll events only — never at this component's own writes — because
-   * that is the offset virtua corrects from: its jump fix is written as the
-   * offset it last saw plus what the rows above grew, and a write of ours
-   * that landed since is simply replaced.
+   * THE READER'S SCROLL FOLLOWS THE READER'S INPUT. A scroll is theirs only
+   * while their own input is under way — a wheel, a finger, a key that moves
+   * the view, a mouse press (the scrollbar's, a selection dragged past an
+   * edge) — and for `FLING_MS` after it ends, so a
+   * fling's momentum and a key's smooth scroll are still theirs; each scroll
+   * of theirs in that time holds it on. Any other scroll is the list's own
+   * (virtua keeping the rows on screen where they stand while rows above
+   * them measure), and moves nothing of the reader's. Told by where the rows
+   * stand instead, an iPhone's landing let go of its place: virtua 0.53.4
+   * there holds back its correction for rows measured above the view while
+   * the view counts as scrolling, which the landing's own writes start
+   * (`p() && 0 !== I ? b += t : S += t`), and writes it with `scrollBy` when
+   * its 150ms scroll-end timer fires; while it is pending `getItemOffset`
+   * subtracts it and `findItemIndex` does not, so the row read at the view's
+   * top stood hundreds of pixels above it, and the correction's own scroll,
+   * 172–252ms after the landing's last write, read as the reader's in 14 of
+   * 20 landings (transcript-cold-load demo, WebKit at 390).
    */
-  let onScreen: { key: string; at: number } | null = null;
-  function rowAt(top: number): { key: string; at: number } | null {
-    if (!list || renderedRows.length === 0) {
-      return null;
-    }
-    const index = list.findItemIndex(top);
-    return {
-      key: renderedRows[index].key,
-      at: listStart + list.getItemOffset(index) - top,
-    };
+  let inputOn = false;
+  /** The timer that ends `inputOn` once the input has ended. */
+  let inputOff: ReturnType<typeof setTimeout> | undefined;
+  /** How long a scroll is still the reader's once their input ends, ms: a fling's momentum. Our own call. */
+  const FLING_MS = 1000;
+  function inputBegins(): void {
+    clearTimeout(inputOff);
+    inputOff = undefined;
+    inputOn = true;
   }
-  /** Whether that row still stands where it stood in the view, at `top`. */
-  function stillAt(was: { key: string; at: number }, top: number): boolean {
-    const index = renderedRows.findIndex((row) => row.key === was.key);
-
-    return (
-      !!list &&
-      index >= 0 &&
-      Math.abs(listStart + list.getItemOffset(index) - top - was.at) <= 1
-    );
+  /** The input ended: what it scrolls is the reader's for `FLING_MS` more. */
+  function inputEnds(): void {
+    clearTimeout(inputOff);
+    inputOff = setTimeout(() => {
+      inputOn = false;
+      inputOff = undefined;
+    }, FLING_MS);
+  }
+  /** Keys that move the view: the scroll keys, and Tab bringing what it focuses into view. */
+  const movesView = (key: string): boolean =>
+    SCROLL_KEYS.has(key) || key === "Tab";
+  /** The reader's input on the scroller, and on the page for keys and a press let go anywhere. */
+  function readerInput(node: HTMLElement): () => void {
+    const options = { passive: true } as const;
+    const wheel = (): void => {
+      inputBegins();
+      inputEnds();
+    };
+    const touch = (): void => inputBegins();
+    const lift = (event: TouchEvent): void => {
+      if (event.touches.length === 0) {
+        inputEnds();
+      }
+    };
+    // A finger is read by its touch events: its pointer is cancelled as the
+    // scroll takes it over, ahead of the scroll it makes.
+    const press = (event: PointerEvent): void => {
+      if (event.pointerType === "mouse") {
+        inputBegins();
+      }
+    };
+    const release = (event: PointerEvent): void => {
+      if (event.pointerType === "mouse" && inputOn) {
+        inputEnds();
+      }
+    };
+    const key = (event: KeyboardEvent): void => {
+      const target = event.target as Node | null;
+      if (
+        movesView(event.key) &&
+        (target === document.body || node.contains(target))
+      ) {
+        inputBegins();
+      }
+    };
+    const keyUp = (event: KeyboardEvent): void => {
+      if (movesView(event.key) && inputOn) {
+        inputEnds();
+      }
+    };
+    node.addEventListener("wheel", wheel, options);
+    node.addEventListener("touchstart", touch, options);
+    node.addEventListener("touchmove", touch, options);
+    node.addEventListener("touchend", lift, options);
+    node.addEventListener("touchcancel", lift, options);
+    node.addEventListener("pointerdown", press, options);
+    addEventListener("pointerup", release, options);
+    addEventListener("pointercancel", release, options);
+    addEventListener("keydown", key, options);
+    addEventListener("keyup", keyUp, options);
+    return () => {
+      clearTimeout(inputOff);
+      node.removeEventListener("wheel", wheel);
+      node.removeEventListener("touchstart", touch);
+      node.removeEventListener("touchmove", touch);
+      node.removeEventListener("touchend", lift);
+      node.removeEventListener("touchcancel", lift);
+      node.removeEventListener("pointerdown", press);
+      removeEventListener("pointerup", release);
+      removeEventListener("pointercancel", release);
+      removeEventListener("keydown", key);
+      removeEventListener("keyup", keyUp);
+    };
   }
   /**
    * The frame a pane is shown in, from `visible` rising to the task after
@@ -3311,8 +3392,6 @@
       (listing?.getBoundingClientRect().top ?? 0) -
       scroller.getBoundingClientRect().top +
       offset;
-    const was = onScreen;
-    onScreen = rowAt(lastTop);
     // Until the reveal the list is laid out but not painted: nothing on it
     // is the reader's to have scrolled. virtua's own writes land here while
     // it measures the rows the store's read brings in — untagged, and at a
@@ -3332,27 +3411,33 @@
     // Every write this component makes is tagged with the position it wrote.
     // An event that matches the tag is our OWN motion — the paced follow, or
     // the pin holding the bottom while a row opens — and says nothing about
-    // where the reader is looking. Neither does the browser clamping the
-    // offset because the content under it got shorter (a tail row folding
-    // shut): that event comes with a smaller scroll height and leaves the
-    // offset at its end. Nor does virtua keeping the rows on screen where
-    // they are while rows above them change size — measured as they mount
-    // under a ride to the tail, a history chunk put in front: the offset
-    // moves by what they grew, and the rows on screen do not move at all.
-    // virtua writes that correction from the offset it saw at the last
-    // scroll event, over the top of any write of ours since, so the rows
-    // stand where they stood THEN. Taken for the reader, one of those let go
-    // of the tail in the middle of a returning pane's catch-up and left it
-    // 2,800px short for good. Anything
-    // that moves what is on screen is the READER: wheel, scrollbar drag,
+    // where the reader is looking, even under their finger. Neither does the
+    // browser clamping the offset because the content under it got shorter
+    // (a tail row folding shut): that event comes with a smaller scroll
+    // height and leaves the offset at its end. Nor does any scroll that
+    // follows none of the reader's input (`inputOn`): virtua keeping the rows
+    // on screen where they are while rows above them change size, measured
+    // as they mount under a ride to the tail or a landing, a history chunk
+    // put in front. Taken for the reader, one of those let go of the tail in
+    // the middle of a returning pane's catch-up and left it 2,800px short for
+    // good. A scroll their input makes is the READER: wheel, scrollbar drag,
     // keyboard, a finger, its momentum and its bounce.
     const clamped = shrank && offset >= height - scroller.clientHeight - 1;
 
-    if ((lastWrite !== null && Math.abs(offset - lastWrite) <= 1) || clamped) {
+    if (
+      (lastWrite !== null && Math.abs(offset - lastWrite) <= 1) ||
+      clamped ||
+      !inputOn
+    ) {
       return;
     }
-    if (was && stillAt(was, lastTop)) {
-      return;
+    // A fling goes on after the finger lifts: each scroll of it holds on.
+    if (inputOff !== undefined) {
+      inputEnds();
+    }
+    // Each scroll taken for the reader's, for a probe to count (dev only).
+    if (import.meta.env.DEV) {
+      devNote("readerScrolls", { view: session.instanceId, top: offset });
     }
     readerMoved += 1;
     holdUntil = 0;
@@ -3429,8 +3514,7 @@
    */
   /** The frame the next write to the tail is waiting for, and this
    *  component's LAST WRITE — the tag that tells its own scroll events from
-   *  the reader's without caring which input device made them (a scrollbar
-   *  drag fires no wheel event; a tagged write needs no event taxonomy). */
+   *  the reader's while their input is under way (`inputOn`). */
   let following: number | null = null;
   let landingFrame: number | null = null;
   // Null until the first write: a number here (it was -1) is within a pixel
@@ -4702,6 +4786,7 @@
   role="log"
   bind:this={scroller}
   {@attach measureView}
+  {@attach readerInput}
 >
   <!-- Empty is what is drawn: a conversation whose one row is folding away
        as its retry comes in is not empty for the frame between the two, and

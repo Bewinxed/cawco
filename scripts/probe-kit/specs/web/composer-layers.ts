@@ -40,6 +40,7 @@
  */
 import type { Page } from "playwright-core";
 import { spawnWords } from "../../../../packages/core/src/words/spawn";
+import { asReader } from "../../frames";
 import {
   COMPOSER,
   type Engine,
@@ -445,12 +446,14 @@ const SURFACES: Surface[] = [
       }
       await parkAsk(page, true);
       await settle(page, 800);
-      await page.evaluate((log) => {
-        const s = document.querySelector<HTMLElement>(log);
-        if (s) {
+      await asReader(
+        page,
+        (s) => {
           s.scrollTop = s.scrollHeight;
-        }
-      }, LOG);
+        },
+        undefined,
+        LOG
+      );
       await settle(page, 800);
       return null;
     },
@@ -1263,18 +1266,16 @@ async function modePicker(
   await page.close();
 }
 
-/** Puts the transcript at its end, or halfway through what it holds. */
+/** Puts the transcript at its end, or halfway through what it holds, as its reader scrolls it. */
 async function place(page: Page, where: Leg["place"]): Promise<void> {
-  await page.evaluate(
-    ([log, at]) => {
-      const scroller = document.querySelector<HTMLElement>(log);
-      if (!scroller) {
-        return;
-      }
+  await asReader(
+    page,
+    (scroller, at) => {
       const end = scroller.scrollHeight - scroller.clientHeight;
       scroller.scrollTop = at === "end" ? end : Math.round(end / 2);
     },
-    [LOG, where] as const
+    where,
+    LOG
   );
   await settle(page, 600);
   // The jump brings rows virtua has only estimated into its range: it

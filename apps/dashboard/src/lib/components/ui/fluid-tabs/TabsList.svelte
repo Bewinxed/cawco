@@ -100,6 +100,7 @@
   import { type Snippet, untrack } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
   import { motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { msOf } from "#lib/cawco/motion/time.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { cn } from "#lib/utils.js";
   import {
@@ -423,12 +424,6 @@
     }
     return timing?.progress ?? 0;
   };
-  /** A length token on the track in ms (the minifier writes `280ms` as `.28s`). */
-  const msOf = (style: CSSStyleDeclaration, name: string) => {
-    const value = style.getPropertyValue(name).trim();
-    const n = Number.parseFloat(value) || 0;
-    return value.endsWith("ms") ? n : n * 1000;
-  };
   /** The track's tokens a switch and the edge fades are drawn with. */
   interface Measures {
     duration: number;
@@ -447,7 +442,7 @@
     const px = (name: string) =>
       Number.parseFloat(style.getPropertyValue(name)) || 0;
     return {
-      duration: msOf(style, "--choose-dur"),
+      duration: msOf(style.getPropertyValue("--choose-dur")) || 0,
       easing: style.getPropertyValue("--choose-ease").trim() || "ease",
       flare: px("--flare"),
       overlap: px("--overlap"),

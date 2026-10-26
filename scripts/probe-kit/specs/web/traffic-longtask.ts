@@ -24,6 +24,7 @@
  */
 import type { Page } from "playwright-core";
 import {
+  asReader,
   type MainThread,
   SCROLLER,
   taskOf,
@@ -153,12 +154,9 @@ const hold = async (page: Page) => {
   await page.waitForTimeout(1500);
   // The reader near the top of what is held, as a reader is when a page is
   // asked for: the run's first calls in view.
-  await page.evaluate((sel) => {
-    const scroller = document.querySelector<HTMLElement>(sel);
-    if (scroller) {
-      scroller.scrollTop = 0;
-    }
-  }, SCROLLER);
+  await asReader(page, (scroller) => {
+    scroller.scrollTop = 0;
+  });
   await page.waitForTimeout(1000);
 };
 

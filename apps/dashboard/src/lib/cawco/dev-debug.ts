@@ -19,3 +19,17 @@ export function devDebug(parts: Record<string, unknown>): void {
     );
   }
 }
+
+/** One more `entry` on the `name` list, for a probe to count. */
+export function devNote(name: string, entry: unknown): void {
+  if (typeof window !== "undefined") {
+    const debug = globalThis.__cawcoDebug ?? {};
+    globalThis.__cawcoDebug = debug;
+    const list = debug[name];
+    if (Array.isArray(list)) {
+      list.push(entry);
+    } else {
+      debug[name] = [entry];
+    }
+  }
+}

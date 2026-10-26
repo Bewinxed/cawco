@@ -45,6 +45,7 @@ import {
 } from "../client.svelte";
 import type { CawStatus } from "../home/caw-status";
 import { dur } from "../motion/curves.svelte";
+import { msOf } from "../motion/time";
 import type { TaskSummary } from "../project-tasks";
 import { store, stored } from "../storage";
 import { isRetry } from "../tasks/retry";
@@ -75,11 +76,11 @@ export const HEAD_NEXT: CawStatus[] = [
 
 /** `--breath` in ms (`calc(var(--c-500) * 4)`), read from the root. */
 function breathMs(): number {
-  const token = getComputedStyle(document.documentElement)
-    .getPropertyValue("--c-500")
-    .trim();
-  const value = Number.parseFloat(token);
-  return (token.endsWith("ms") ? value : value * 1000) * 4;
+  return (
+    msOf(
+      getComputedStyle(document.documentElement).getPropertyValue("--c-500")
+    ) * 4
+  );
 }
 
 /** What the head's line says when Caw has something: words, or his ask as a link. */

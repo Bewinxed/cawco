@@ -18,6 +18,7 @@
  * tween read as one or two heights (`[[59],[58]]`), while the same run held
  * and sought reads its whole opening on either engine.
  */
+import { asReader } from "../../frames";
 import { HouseRules } from "../../house-rules";
 import {
   type Engine,
@@ -399,10 +400,16 @@ async function lifecycle(kit: Kit, engine: Engine, view: View) {
   );
   await page.waitForTimeout(350);
 
-  await page.evaluate(() => {
-    (document.querySelector('[data-slot="tr"]') as HTMLElement).scrollTop -=
-      450;
-  });
+  // The reader's own scroll (the transcript takes a scroll for the
+  // reader's only after their input).
+  await asReader(
+    page,
+    (scroller) => {
+      scroller.scrollTop -= 450;
+    },
+    undefined,
+    '[data-slot="tr"]'
+  );
   await page.waitForTimeout(100);
   const before = await page
     .locator('[data-slot="tr"]')
@@ -421,9 +428,14 @@ async function lifecycle(kit: Kit, engine: Engine, view: View) {
   );
 
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.evaluate(() => {
-    (document.querySelector('[data-slot="tr"]') as HTMLElement).scrollTop = 1e7;
-  });
+  await asReader(
+    page,
+    (scroller) => {
+      scroller.scrollTop = 1e7;
+    },
+    undefined,
+    '[data-slot="tr"]'
+  );
   await page.waitForTimeout(150);
   await page.evaluate(() => window.__traffic.thinking(null));
   await page.waitForTimeout(100);

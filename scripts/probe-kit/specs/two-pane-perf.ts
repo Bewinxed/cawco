@@ -63,7 +63,13 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Locator, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
-import { type MainTask, type MainThread, SCROLLER, traceMain } from "../frames";
+import {
+  asReader,
+  type MainTask,
+  type MainThread,
+  SCROLLER,
+  traceMain,
+} from "../frames";
 import { COMPOSER, type Kit, open, type Spec } from "../kit";
 import { machineQuiet, quietLeg, quietWords } from "../quiet";
 
@@ -367,23 +373,19 @@ const layoutOf = (mode: Layout, ids: Record<string, string>) => {
       };
 };
 
-/** Every visible transcript scrolled to its top, then all of them to their ends. */
+/** Every visible transcript scrolled to its top, then all of them to their ends, as their reader scrolls them. */
 async function readOlder(page: Page): Promise<void> {
   for (let p = 0; p < PAGES; p += 1) {
-    await page.evaluate((sel) => {
-      for (const s of document.querySelectorAll<HTMLElement>(sel)) {
-        if (s.getBoundingClientRect().width > 0) {
-          s.scrollTop = 0;
-        }
+    await asReader(page, (s) => {
+      if (s.getBoundingClientRect().width > 0) {
+        s.scrollTop = 0;
       }
-    }, SCROLLER);
+    });
     await page.waitForTimeout(1500);
   }
-  await page.evaluate((sel) => {
-    for (const s of document.querySelectorAll<HTMLElement>(sel)) {
-      s.scrollTop = s.scrollHeight;
-    }
-  }, SCROLLER);
+  await asReader(page, (s) => {
+    s.scrollTop = s.scrollHeight;
+  });
   await page.waitForTimeout(4000);
 }
 

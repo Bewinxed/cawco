@@ -23,6 +23,7 @@
   } from "@cawco/core";
   import { type Component, untrack } from "svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
+  import { msOf } from "#lib/cawco/motion/time.js";
   import {
     Alert,
     AlertDescription,
@@ -257,7 +258,7 @@
     document.body.append(probe);
     const value = getComputedStyle(probe).transitionDuration;
     probe.remove();
-    return Number.parseFloat(value) * (value.endsWith("ms") ? 1 : 1000);
+    return msOf(value);
   }
   let samples: { at: number; bytes: number }[] = [];
   let sampledStage = "";

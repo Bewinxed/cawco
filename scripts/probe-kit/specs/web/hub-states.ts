@@ -1543,6 +1543,9 @@ async function conversationLeg(
         ["auto", "scroll"].includes(getComputedStyle(el).overflowY)
     );
     if (scroller) {
+      // The reader's own scroll: a wheel's input first (the transcript takes
+      // a scroll for the reader's only after their input).
+      scroller.dispatchEvent(new WheelEvent("wheel"));
       scroller.scrollTop = (scroller.scrollHeight - scroller.clientHeight) / 2;
     }
   });

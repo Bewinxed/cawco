@@ -197,7 +197,10 @@ const readRows = (page: Page): Promise<Read> =>
     };
     const atEnd = (box: HTMLElement) =>
       box.scrollTop + box.clientHeight >= box.scrollHeight - 2;
+    // Each step the reader's own: a wheel's input first (the transcript
+    // takes a scroll for the reader's only after their input).
     if (scroller) {
+      scroller.dispatchEvent(new WheelEvent("wheel"));
       scroller.scrollTop = 0;
     }
     for (let at = 0; at < 60; at += 1) {
@@ -207,6 +210,7 @@ const readRows = (page: Page): Promise<Read> =>
       if (!scroller || atEnd(scroller)) {
         break;
       }
+      scroller.dispatchEvent(new WheelEvent("wheel"));
       scroller.scrollTop += Math.max(100, scroller.clientHeight * 0.5);
     }
     return { by, artifacts: [...artifacts] };
@@ -442,16 +446,21 @@ const openNotice = (
       ?.closest('[role="log"]') as HTMLElement | null;
     // The list is virtual: a row scrolled out of view is not mounted, so it
     // is looked for from the top a part at a time.
+    // Each step the reader's own: a wheel's input first (the transcript
+    // takes a scroll for the reader's only after their input).
     if (scroller && !document.querySelector(selector)) {
+      scroller.dispatchEvent(new WheelEvent("wheel"));
       scroller.scrollTop = 0;
     }
     for (let at = 0; at < 60 && !document.querySelector(selector); at += 1) {
       // biome-ignore lint/performance/noAwaitInLoops: one part of the list at a time
       await new Promise((done) => setTimeout(done, 150));
       if (scroller && !document.querySelector(selector)) {
+        scroller.dispatchEvent(new WheelEvent("wheel"));
         scroller.scrollTop += Math.max(100, scroller.clientHeight * 0.5);
       }
     }
+    scroller?.dispatchEvent(new WheelEvent("wheel"));
     document.querySelector(selector)?.scrollIntoView({ block: "center" });
     await new Promise((done) => setTimeout(done, 150));
     const button = document.querySelector(selector)?.querySelector("button");

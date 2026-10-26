@@ -12,6 +12,7 @@
  */
 import { MediaQuery } from "svelte/reactivity";
 import type { TransitionConfig } from "svelte/transition";
+import { msOf } from "./time";
 
 export const motionOk = new MediaQuery(
   "(prefers-reduced-motion: no-preference)"
@@ -153,13 +154,8 @@ const rootToken = (name: string): string => {
   }
   return tokens.get(name) as string;
 };
-export const dur = (name: `--dur-${string}`): number => {
-  // In the unit it is written in: the built stylesheet's minifier rewrites
-  // `280ms` as `.28s`, so the number alone is not milliseconds.
-  const token = rootToken(name);
-  const value = Number.parseFloat(token);
-  return token.endsWith("ms") ? value : value * 1000;
-};
+/** A `--dur-*` token on the root, in ms. */
+export const dur = (name: `--dur-${string}`): number => msOf(rootToken(name));
 export const ease = (name: `--ease-${string}`): string => rootToken(name);
 export const popScale = (): number =>
   Number.parseFloat(rootToken("--pop-scale"));

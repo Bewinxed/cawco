@@ -444,7 +444,9 @@ async function walkOne(
     `${harness}: "1 needs you" brings the card into view`,
     async () => {
       // The transcript read back to its top, as a person scrolls away
-      // (no wheel on a phone's WebKit): the card is out of view.
+      // (no wheel on a phone's WebKit; a wheel's input first, as the
+      // transcript takes a scroll for the reader's only after their input):
+      // the card is out of view.
       await card(page)
         .first()
         .evaluate((node) => {
@@ -452,6 +454,7 @@ async function walkOne(
           while (scroller && scroller.scrollHeight <= scroller.clientHeight) {
             scroller = scroller.parentElement;
           }
+          scroller?.dispatchEvent(new WheelEvent("wheel"));
           scroller?.scrollTo({ top: 0 });
         });
       await needsYou().click();

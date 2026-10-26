@@ -583,6 +583,9 @@ async function pageOpen(live: Live, host: string) {
     window.__pf.perfReset(true, false);
     const begun = performance.now();
     while (box && performance.now() - begun < 10_000) {
+      // A wheel's input first: the reader's scroll (a transcript takes one
+      // for the reader's only after their input).
+      box.dispatchEvent(new WheelEvent("wheel"));
       box.scrollBy({ top: 100, behavior: "instant" });
       await new Promise((done) => setTimeout(done, 100));
     }

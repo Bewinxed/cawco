@@ -58,7 +58,12 @@
  *
  *   bun scripts/probe-kit/run.ts web transcript-holds
  *
- * `PROBE_LEGS=chromium 1440,webkit 390` runs those legs alone;
+ * Then, on WebKit at 390 with the iPhone's agent, {@link LANDINGS} reloads
+ * at a place mid-conversation (`landingsLeg`): no scroll is taken for the
+ * reader's, and the place holds within 1 px once the landing's hold ends.
+ *
+ * `PROBE_LEGS=chromium 1440,webkit 390` runs those legs alone (the landings
+ * leg is `webkit 390 landings`);
  * `PROBE_IDLE=0` leaves the idle sweep out (it waits eleven minutes).
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one turn, one event at a time, as a person takes them
@@ -67,7 +72,7 @@ import { join } from "node:path";
 import type { Page, Route } from "playwright-core";
 import { CLAUDE_JSON_NAME } from "../../../../packages/core/src/claude-dirs";
 import { ACCOUNT, until } from "../../../scratch-fleet";
-import { type MainThread, SCROLLER, traceMain } from "../../frames";
+import { asReader, type MainThread, SCROLLER, traceMain } from "../../frames";
 import {
   type Engine,
   type Kit,
@@ -118,6 +123,24 @@ const LEGS: { engine: Engine; view: View; label: string }[] = [
   { engine: "chromium", view: "phone", label: "chromium 390" },
   { engine: "webkit", view: "phone", label: "webkit 390" },
 ];
+/**
+ * The landings leg: WebKit at 390 with the iPhone's agent (kit.ts
+ * `PHONE_AGENT`), so virtua takes its iOS path and holds back its
+ * correction while the view counts as scrolling.
+ */
+const LANDINGS_LEG: Leg = {
+  engine: "webkit",
+  view: "phone",
+  label: "webkit 390 landings",
+};
+/** Reloads at a place mid-conversation, each at its own turn. */
+const LANDINGS = 20;
+/**
+ * From the list drawn to its place no longer held: Transcript.svelte's
+ * `LANDING_HOLD_MS` and `FILLED_HOLD_MS` past the buffer filling, and room
+ * for that filling on a loaded WebKit.
+ */
+const HOLD_ENDS_MS = 4000;
 
 const treeOf = (tabs: string[]) =>
   JSON.stringify({
@@ -942,16 +965,13 @@ const anchorRead = (page: Page) =>
 /**
  * A notch of scroll as the leg's device gives it: the mouse's wheel, over
  * the transcript; on a phone's WebKit, which Playwright gives no wheel and
- * no touch drag ("Mouse wheel is not supported in mobile WebKit"), the same
- * distance scrolled from code, as pin-working's code scroll is.
+ * no touch drag ("Mouse wheel is not supported in mobile WebKit"), a
+ * finger's touchstart, the same distance scrolled from code, and its
+ * touchend (`asReader`).
  */
 const notch = (page: Page, leg: { engine: Engine; view: View }, dy: number) =>
   leg.engine === "webkit" && leg.view === "phone"
-    ? page.evaluate(
-        ([sel, by]) =>
-          document.querySelector<HTMLElement>(sel)?.scrollBy(0, by),
-        [SCROLLER, dy] as const
-      )
+    ? asReader(page, (scroller, by) => scroller.scrollBy(0, by), dy)
     : page.mouse.wheel(0, dy);
 
 /**
@@ -1259,14 +1279,11 @@ async function readToStart(page: Page): Promise<void> {
   let still = 0;
   let height = -1;
   for (let tries = 0; tries < 200 && still < 5; tries += 1) {
-    const now = await page.evaluate(() => {
-      const scroller = document.querySelector<HTMLElement>('[data-slot="tr"]');
-      if (!scroller) {
-        return -1;
-      }
-      scroller.scrollTop = 0;
-      return scroller.scrollHeight;
-    });
+    const now =
+      (await asReader(page, (scroller) => {
+        scroller.scrollTop = 0;
+        return scroller.scrollHeight;
+      })) ?? -1;
     await page.waitForTimeout(700);
     still = now === height ? still + 1 : 0;
     height = now;
@@ -1275,14 +1292,15 @@ async function readToStart(page: Page): Promise<void> {
 
 /** The view put `fraction` of the way down, as a reader scrolling there. */
 async function scrollTo(page: Page, fraction: number): Promise<void> {
-  await page.evaluate((at) => {
-    const scroller = document.querySelector<HTMLElement>('[data-slot="tr"]');
-    if (scroller) {
+  await asReader(
+    page,
+    (scroller, at) => {
       scroller.scrollTop = Math.round(
         (scroller.scrollHeight - scroller.clientHeight) * at
       );
-    }
-  }, fraction);
+    },
+    fraction
+  );
   await page.waitForTimeout(400);
 }
 
@@ -1293,11 +1311,7 @@ async function scrollTo(page: Page, fraction: number): Promise<void> {
  */
 async function scrollIntoTurn(page: Page, fraction: number): Promise<void> {
   await scrollTo(page, fraction);
-  await page.evaluate(() => {
-    const scroller = document.querySelector<HTMLElement>('[data-slot="tr"]');
-    if (!scroller) {
-      return;
-    }
+  await asReader(page, (scroller) => {
     const view = scroller.getBoundingClientRect();
     const turn = [...scroller.querySelectorAll<HTMLElement>("[data-row]")]
       .filter((one) => one.querySelector('section[data-slot="turn"][data-you]'))
@@ -1835,6 +1849,128 @@ async function legOf(
   return errors;
 }
 
+/** Each scroll the page's transcripts took for the reader's (dev's `__cawcoDebug.readerScrolls`). */
+const readerScrolls = (page: Page): Promise<{ view: string; top: number }[]> =>
+  page.evaluate(
+    () =>
+      ((globalThis as unknown as { __cawcoDebug?: Record<string, unknown> })
+        .__cawcoDebug?.readerScrolls ?? []) as { view: string; top: number }[]
+  );
+
+/** Each frame for `ms` the row at the top of the view stood somewhere new: when (ms) and how far into it. */
+const pathOf = (page: Page, ms: number): Promise<[number, number][]> =>
+  page.evaluate(
+    ([sel, span]) =>
+      new Promise<[number, number][]>((done) => {
+        const scroller = document.querySelector<HTMLElement>(sel);
+        const path: [number, number][] = [];
+        const start = performance.now();
+        let last = "";
+        const step = () => {
+          const now = performance.now() - start;
+          if (scroller) {
+            const view = scroller.getBoundingClientRect();
+            const [top] = [
+              ...scroller.querySelectorAll<HTMLElement>("[data-row]"),
+            ]
+              .map((one) => ({ one, box: one.getBoundingClientRect() }))
+              .filter(({ box }) => box.height > 0 && box.bottom > view.top + 1)
+              .sort((a, b) => a.box.top - b.box.top);
+            const into = top
+              ? Number((view.top - top.box.top).toFixed(1))
+              : Number.NaN;
+            const said = `${top?.one.dataset.row}:${into}`;
+            if (said !== last && path.length < 40) {
+              path.push([Math.round(now), into]);
+              last = said;
+            }
+          }
+          if (now < span) {
+            requestAnimationFrame(step);
+          } else {
+            done(path);
+          }
+        };
+        requestAnimationFrame(step);
+      }),
+    [SCROLLER, ms] as const
+  );
+
+/**
+ * A reload holds the reader's place until they scroll, on an iPhone too:
+ * {@link LANDINGS} times, the view put by the reader's finger on a turn
+ * mid-conversation (a step further down each time), the page reloaded, and
+ * nothing touched once it is drawn. No scroll in any landing is taken for
+ * the reader's (virtua's own correction, written on its scroll end, among
+ * them), and once the landing's hold has ended the same row stands at the
+ * top, as far into it within 1 px.
+ */
+async function landingsLeg(
+  kit: Kit,
+  base: string,
+  source: string
+): Promise<string[]> {
+  const leg = LANDINGS_LEG;
+  const watched = await sessionPage(kit, base, source, leg);
+  const { page } = watched;
+  await readToStart(page);
+  const runs: {
+    at: number;
+    before: Place["top"] | undefined;
+    held: Place["top"] | undefined;
+    /** The place the page kept as it went (its `pagehide`). */
+    kept: string | null;
+    /** Where the top row stood each time it moved once drawn: ms, into. */
+    path: [number, number][];
+    taken: number;
+  }[] = [];
+  for (let n = 0; n < LANDINGS; n += 1) {
+    const at = Number((0.25 + (0.5 * n) / (LANDINGS - 1)).toFixed(3));
+    await scrollIntoTurn(page, at);
+    const before = (await standing(page))?.top;
+    const kept = await page.evaluate((viewId) => {
+      dispatchEvent(new Event("pagehide"));
+      return sessionStorage.getItem(`cawco:landing:${viewId}`);
+    }, source);
+    const drawn = await reload(page);
+    const path = drawn ? await pathOf(page, HOLD_ENDS_MS) : [];
+    const held = drawn ? (await page.evaluate(placeNow))?.top : undefined;
+    const taken = (await readerScrolls(page)).filter(
+      (one) => one.view === source
+    ).length;
+    runs.push({ at, before, held, kept, path, taken });
+  }
+  const taken = runs.reduce((sum, run) => sum + run.taken, 0);
+  kit.check(
+    `${leg.label}: in ${LANDINGS} reloads mid-conversation, no scroll is taken for the reader's (${taken})`,
+    runs.length === LANDINGS && taken === 0,
+    JSON.stringify(runs.filter((run) => run.taken > 0))
+  );
+  const off = runs.filter(
+    (run) =>
+      !(
+        run.before &&
+        run.held?.key === run.before.key &&
+        Math.abs(run.held.into - run.before.into) <= 1
+      )
+  );
+  const worst = Math.max(
+    0,
+    ...runs.map((run) =>
+      run.before && run.held?.key === run.before.key
+        ? Math.abs(run.held.into - run.before.into)
+        : Number.POSITIVE_INFINITY
+    )
+  );
+  kit.check(
+    `${leg.label}: in ${LANDINGS} reloads mid-conversation, once the hold has ended the same row stands at the top, as far into it within 1 px (worst ${worst.toFixed(1)} px)`,
+    runs.length === LANDINGS && off.length === 0,
+    JSON.stringify(off)
+  );
+  await page.close();
+  return watched.errors.map((one) => `${leg.label}: ${one}`);
+}
+
 /** The hub's idle time and its sweep (hub transcripts.ts IDLE_MS, SWEEP_MS), and a minute's room. */
 const IDLE_WAIT_MS = 11 * 60_000 + 30_000;
 
@@ -1936,6 +2072,9 @@ const spec: Spec = {
       errors.push(
         ...(await legOf(kit, fleet, base, source, lead, leg, engineFirst))
       );
+    }
+    if (!only || only.includes(LANDINGS_LEG.label)) {
+      errors.push(...(await landingsLeg(kit, base, source.id)));
     }
     if (process.env.PROBE_IDLE !== "0") {
       errors.push(...(await idleLeg(kit, fleet, base, source.id)));

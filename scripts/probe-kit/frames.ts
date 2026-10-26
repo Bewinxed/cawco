@@ -45,6 +45,45 @@ let traced = 0;
 
 /** The transcript's scroller, as every transcript spec reads it. */
 export const SCROLLER = '[aria-label="Session transcript"]';
+
+/**
+ * A scroll of the transcript made from code as the reader's own: a finger's
+ * touchstart on each scroller `selector` finds, `scroll` run on it, and the
+ * touchend (a wheel event where the engine has no touch events: a desk's
+ * Firefox). The transcript takes a scroll for the reader's only after their
+ * input (Transcript.svelte `inputOn`, held 1s past its end for a fling); a
+ * scroll from code alone is the list's own, and moves nothing of the
+ * reader's. The way to scroll as the reader where Playwright has no wheel
+ * (mobile WebKit), and to put the view further than a wheel goes. `scroll`
+ * runs in the page: it closes over nothing, and `arg` is handed to it as
+ * JSON. What the first scroller's `scroll` returns; null with none.
+ */
+export function asReader<R, A = undefined>(
+  page: Page,
+  scroll: (scroller: HTMLElement, arg: A) => R,
+  arg?: A,
+  selector: string = SCROLLER
+): Promise<R | null> {
+  return page.evaluate(`(() => {
+    const scroll = ${scroll.toString()};
+    const finger = typeof TouchEvent === "function";
+    let first = null;
+    [...document.querySelectorAll(${JSON.stringify(selector)})].forEach((scroller, n) => {
+      scroller.dispatchEvent(finger ? new TouchEvent("touchstart") : new WheelEvent("wheel"));
+      try {
+        const out = scroll(scroller, ${JSON.stringify(arg ?? null)});
+        if (n === 0) {
+          first = out;
+        }
+      } finally {
+        if (finger) {
+          scroller.dispatchEvent(new TouchEvent("touchend"));
+        }
+      }
+    });
+    return first;
+  })()`) as Promise<R | null>;
+}
 /** A trace's node name's class attribute, cut to its first class. */
 const CLASS_ATTRIBUTE = / class='([^' ]*)[^']*'/;
 /** A style invalidation that restyles a container's whole subtree. */

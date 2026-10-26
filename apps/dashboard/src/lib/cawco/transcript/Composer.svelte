@@ -94,6 +94,7 @@
   import { popOut } from "#lib/cawco/motion/pop.svelte.js";
   import { handOver, reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { departBox } from "#lib/cawco/motion/share.svelte.js";
+  import { msOf } from "#lib/cawco/motion/time.js";
   import { Button, sendVariants } from "#lib/components/ui/button/index.js";
   import { whileIdle } from "#lib/components/ui/button/pending-content.svelte";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
@@ -699,9 +700,7 @@
     if (at < 0) {
       return 0;
     }
-    const token = durations[at % durations.length];
-    const value = Number.parseFloat(token);
-    return token.endsWith("ms") ? value : value * 1000;
+    return msOf(durations[at % durations.length]);
   }
 
   /**
