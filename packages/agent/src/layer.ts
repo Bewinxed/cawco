@@ -14,9 +14,10 @@
  *   (`~/.cawco/workspaces/<id>/layer/mounts/<n>`), never a tmpfs. The
  *   overlay is mounted once per workspace, in a mount namespace of its own
  *   (the view): the distro's bwrap makes the view's namespaces and one
- *   holder process keeps them ({@link ensureView}), CawCo's own
- *   `view-mount` mounts the overlay there with mount(2) (view-mount.ts),
- *   on any bubblewrap and on Linux 5.11 or later, and every process of the
+ *   holder process keeps them ({@link ensureView}), a perl process of
+ *   CawCo's joins them and mounts the overlay there with mount(2)
+ *   ({@link MOUNTER}), on any bubblewrap and util-linux and on Linux 5.11 or
+ *   later, and every process of the
  *   workspace (its sessions' harnesses, its boundary's srt host, the agent's
  *   own git there) enters that namespace by `nsenter` ({@link viewArgv}), so
  *   they all read and write through one mount: two overlay mounts sharing
@@ -68,7 +69,7 @@ import {
   utimes,
   writeFile,
 } from "node:fs/promises";
-import { homedir } from "node:os";
+import { constants, homedir, release } from "node:os";
 import { basename, dirname, join, relative } from "node:path";
 import type {
   ChangedPath,
@@ -79,13 +80,11 @@ import type {
 } from "@cawco/core";
 import { claudeHome, workspacesDir } from "@cawco/core/paths";
 import { commandLine } from "@cawco/core/process-identity";
-import { ownedCommand } from "@cawco/core/runtime";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { listedPid, signal as signalPid } from "@cawco/core/signal";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { cloneDenies } from "@cawco/core/workspace-policy";
 import { removeTree } from "./remove-tree";
-import type { ViewMount } from "./view-mount";
 import { SYSTEM_PATH } from "./workspace-needs";
 
 /**
@@ -318,9 +317,13 @@ const PASSTHROUGH = (): string[] => [
   ].map((name) => join(homedir(), name)),
 ];
 
+/** One mount of a view: an overlay of `overlay` (its lower dir and mount point), or `bind` bound onto itself from the host's tree. */
+type ViewMount =
+  { overlay: string; upper: string; work: string } | { bind: string };
+
 /**
- * The mounts of workspace `id`'s view of `layer`, in the order view-mount.ts
- * makes them: each of its overlays, shallowest first, then what under F is
+ * The mounts of workspace `id`'s view of `layer`, in the order the mounter
+ * ({@link MOUNTER}) makes them: each of its overlays, shallowest first, then what under F is
  * the host's again, then its mark ({@link viewMarked}). Each later mount
  * goes on top of the overlays it lies under.
  */
@@ -466,8 +469,8 @@ const VIEW_START_MS = 10_000;
 
 /**
  * Workspace `id`'s view, running: a live member's pid. With none, the
- * holder starts it, detached from the agent, and view-mount.ts mounts it
- * there once, only when no process holds an earlier mount of the same upper.
+ * holder starts it, detached from the agent, and the mounter
+ * ({@link mountView}) mounts it there once, only when no process holds an earlier mount of the same upper.
  */
 export const ensureView = (id: string, layer: Layer): Promise<number> => {
   const member = viewMember(id);
@@ -520,7 +523,7 @@ const startView = async (id: string, layer: Layer): Promise<number> => {
     const record = readViewRecord(id);
     if (record && nsOf(record.pid, "mnt") === record.mnt) {
       // biome-ignore lint/performance/noAwaitInLoops: once, as the holder names its namespaces
-      const said = await mountView(record.pid, viewPlan(id, layer), env);
+      const said = await mountView(record, viewPlan(id, layer), env);
       if (said !== undefined) {
         return await refuse(`was not mounted: ${said}`);
       }
@@ -543,30 +546,172 @@ const startView = async (id: string, layer: Layer): Promise<number> => {
 };
 
 /**
- * `mounts` made in the view whose holder is `pid`, by CawCo's own
- * `view-mount` entered into its namespaces ({@link mountArgv}); its
- * refusal's words when it refused, none when all are made.
+ * The setns(2) and mount(2) syscall numbers of each architecture CawCo
+ * runs on: x86_64's `arch/x86/entry/syscalls/syscall_64.tbl` ("308 common
+ * setns", "165 common mount") and the generic table aarch64 uses,
+ * `include/uapi/asm-generic/unistd.h` (`__NR_setns 268`, `__NR_mount 40`).
+ * The mounter ({@link MOUNTER}) is handed them and knows no architecture.
+ */
+const SYSCALLS: Readonly<
+  Record<"x64" | "arm64", { mount: number; setns: number }>
+> = {
+  x64: { setns: 308, mount: 165 },
+  arm64: { setns: 268, mount: 40 },
+};
+
+/**
+ * The view's mounter: one single-threaded perl process (perl-base, which
+ * the Linux boundary runs on already) that joins the holder's user and
+ * mount namespaces with setns(2) and makes every mount of the plan with
+ * mount(2) itself, then exits. It never execs: joining a user namespace
+ * grants every capability in it (kernel/user_namespace.c
+ * `set_cred_user_ns`), and an exec by a uid that is not 0 there clears
+ * them (capabilities(7)), so the process that joined is the one that
+ * mounts. The agent cannot join itself: a multithreaded process may not
+ * setns into a user namespace (setns(2)).
+ *
+ * Its words: the setns and mount numbers ({@link SYSCALLS}), the holder's
+ * pid, then the namespaces it joins (`user`, when the view's is not the
+ * agent's own, then `mnt`). Its stdin: the plan as NUL-separated words,
+ * `overlay AT UPPER WORK` or `bind PATH` each. Every source is opened
+ * (`O_PATH`) in the view before the first mount and named by its
+ * `/proc/self/fd/<n>`, so it is the host's tree it names: an overlay at F
+ * hides what is mounted under F. Targets resolve as the view stands at
+ * each mount. Answers nothing on success; a mount refused, one line
+ * `ERRNO KIND AT` on stdout (errno as its number) and exit 1; a join or an
+ * open that fails, its own words on stderr.
+ */
+const MOUNTER = String.raw`
+use strict; use warnings; use POSIX ();
+my ($setns, $mount, $pid, @join) = @ARGV;
+my %flag = (user => 0x1000_0000, mnt => 0x0002_0000);
+my ($O_PATH, $O_CLOEXEC, $MS_BIND, $MS_REC) = (0x20_0000, 0x8_0000, 4096, 16_384);
+local $/ = "\0";
+my @word = map { chomp; $_ } <STDIN>;
+my @plan;
+while (@word) {
+  my $kind = shift @word;
+  push @plan, [$kind, splice @word, 0, $kind eq "overlay" ? 3 : 1];
+}
+for my $ns (@join) {
+  my $fd = POSIX::open("/proc/$pid/ns/$ns", $O_CLOEXEC);
+  defined $fd or die "/proc/$pid/ns/$ns could not be opened: $!\n";
+  syscall($setns, $fd, $flag{$ns}) == 0 or die "joining the view's $ns namespace failed: $!\n";
+}
+my $source = sub {
+  my $fd = POSIX::open($_[0], $O_PATH | $O_CLOEXEC);
+  defined $fd or die "$_[0] could not be opened in the view: $!\n";
+  "/proc/self/fd/$fd";
+};
+my @call = map {
+  my ($kind, $at, $upper, $work) = @$_;
+  $kind eq "overlay"
+    ? [$kind, $at, "overlay", $at, "overlay", 0, "lowerdir=" . $source->($at) . ",upperdir=" . $source->($upper) . ",workdir=" . $source->($work) . ",userxattr"]
+    : [$kind, $at, $source->($at), $at, 0, $MS_BIND | $MS_REC, 0];
+} @plan;
+for my $c (@call) {
+  my ($kind, $at, @args) = @$c;
+  next if syscall($mount, @args) == 0;
+  print $! + 0, " $kind $at\n";
+  exit 1;
+}
+`;
+
+/** The first Linux that mounts an overlay in a user namespace: "allows non-privileged users to make use of Overlayfs" (kernelnewbies.org/Linux_5.11). */
+const USERNS_OVERLAY: readonly [number, number] = [5, 11];
+
+const kernelBelowFloor = (): boolean => {
+  const [major = 0, minor = 0] = release().split(".").map(Number);
+  const [floorMajor, floorMinor] = USERNS_OVERLAY;
+  return major < floorMajor || (major === floorMajor && minor < floorMinor);
+};
+
+/** The mounter's one line for a refused mount ({@link MOUNTER}). */
+const REFUSED = /^(\d+) (overlay|bind) (.+)$/u;
+
+/**
+ * The sentence for mount(2)'s `errno` at `at`: its cause and what fixes it.
+ * The mounter is the process that joined, so it holds every capability in
+ * the view's user namespace: EPERM is a kernel too old for an overlay of its
+ * user's own, or else a security module's refusal.
+ */
+const refusal = (at: string, code: number, overlay: boolean): string => {
+  const errno =
+    Object.entries(constants.errno).find(([, value]) => value === code)?.[0] ??
+    `errno ${code}`;
+  const instead =
+    "or delegate in a git repository, whose workspace is a clone of its own";
+  if (errno === "EPERM" && overlay && kernelBelowFloor()) {
+    return `${at} could not be layered: this machine runs Linux ${release()}, and a user's own overlay mount needs Linux ${USERNS_OVERLAY.join(".")} or later. Upgrade the kernel, ${instead}.`;
+  }
+  if (errno === "EPERM") {
+    return `${at} could not be mounted in the view: Linux ${release()} refused CawCo's mount in the view's user namespace, though the mounter held the capability to mount there: a security module (AppArmor, SELinux) or a seccomp filter on the agent denies mount(2) there. Allow the agent's user to mount in a user namespace of its own, ${instead}.`;
+  }
+  if (errno === "ENODEV" && overlay) {
+    return `${at} could not be layered: this machine's kernel has no overlay filesystem. Load it with \`sudo modprobe overlay\` (and name \`overlay\` in /etc/modules-load.d to keep it), ${instead}.`;
+  }
+  return `${at} could not be mounted in the view: mount(2) said ${errno}.`;
+};
+
+/**
+ * `mounts` made in the view `record` names, by the mounter
+ * ({@link MOUNTER}) joined to its holder: the process inside the view that
+ * wrote the record, never bwrap's own, which stays in the host's
+ * namespaces. Its refusal's words when it refused, none when all are made.
  */
 const mountView = async (
-  pid: number,
+  record: ViewRecord,
   mounts: readonly ViewMount[],
   env: Record<string, string>
 ): Promise<string | undefined> => {
-  const { command, args } = ownedCommand(
-    "view-mount",
-    join(import.meta.dir, "view-mount.ts")
+  const numbers =
+    process.arch === "x64" || process.arch === "arm64"
+      ? SYSCALLS[process.arch]
+      : undefined;
+  if (!numbers) {
+    return `CawCo mounts a view on x86_64 and aarch64 only, and this machine is ${process.arch}`;
+  }
+  const words = mounts.flatMap((mount) =>
+    "bind" in mount
+      ? ["bind", mount.bind]
+      : ["overlay", mount.overlay, mount.upper, mount.work]
   );
-  const mounter = Bun.spawn(mountArgv(pid, [command, ...args]), {
-    env,
-    stdin: new Blob([JSON.stringify(mounts)]),
-    stdout: "ignore",
-    stderr: "pipe",
-  });
-  const [code, said] = await Promise.all([
+  const perl = systemTool("perl");
+  if (!existsSync(perl)) {
+    return `${perl} is not there, and CawCo mounts a view with it: install perl`;
+  }
+  const mounter = Bun.spawn(
+    [
+      perl,
+      "-e",
+      MOUNTER,
+      String(numbers.setns),
+      String(numbers.mount),
+      String(record.pid),
+      ...(record.user === nsOf(process.pid, "user") ? [] : ["user"]),
+      "mnt",
+    ],
+    {
+      env,
+      stdin: new Blob([words.map((word) => `${word}\0`).join("")]),
+      stdout: "pipe",
+      stderr: "pipe",
+    }
+  );
+  const [code, said, failed] = await Promise.all([
     mounter.exited,
+    new Response(mounter.stdout).text(),
     new Response(mounter.stderr).text(),
   ]);
-  return code === 0 ? undefined : said.trim() || `view-mount exited ${code}`;
+  if (code === 0) {
+    return;
+  }
+  const refused = REFUSED.exec(said.trim());
+  if (refused) {
+    const [, errno = "0", kind, at = ""] = refused;
+    return refusal(at, Number(errno), kind === "overlay");
+  }
+  return failed.trim() || `the mounter exited ${code}`;
 };
 
 /**
@@ -594,50 +739,29 @@ const openWorkDirs = async (layer: Layer): Promise<void> => {
 };
 
 /**
- * `nsenter` into member `pid`'s mount namespace (which starts it at the
- * namespace's root), and its user namespace when that is not ours (an agent
- * run as root makes none), keeping our uid (`--preserve-credentials`), with
- * `options` of its own; the program follows.
- */
-const enterView = (pid: number, options: readonly string[]): string[] => [
-  systemTool("nsenter"),
-  "-t",
-  String(pid),
-  ...(nsOf(pid, "user") === nsOf(process.pid, "user") ? [] : ["-U"]),
-  "-m",
-  "--preserve-credentials",
-  ...options,
-  "--",
-];
-
-/**
- * `argv` run in workspace `id`'s view, in `cwd` there ({@link enterView}),
- * with no capability in it: `cwd` is entered as the view has it
- * ({@link VIEW_CD}) and `argv` replaces that shell.
+ * `argv` run in workspace `id`'s view, in `cwd` there: `nsenter` into its
+ * member `pid`'s mount namespace (which starts it at the namespace's root),
+ * and its user namespace when that is not ours (an agent run as root makes
+ * none), keeping our uid (`--preserve-credentials`); then `cwd` is entered
+ * as the view has it ({@link VIEW_CD}) and `argv` replaces that shell.
  */
 export const viewArgv = (
   pid: number,
   cwd: string,
   argv: readonly string[]
 ): string[] => [
-  ...enterView(pid, []),
+  systemTool("nsenter"),
+  "-t",
+  String(pid),
+  ...(nsOf(pid, "user") === nsOf(process.pid, "user") ? [] : ["-U"]),
+  "-m",
+  "--preserve-credentials",
+  "--",
   "/bin/sh",
   "-c",
   VIEW_CD,
   "cawco-view",
   cwd,
-  ...argv,
-];
-
-/**
- * `argv` run in the view whose member is `pid` with the capabilities that
- * joining its user namespace grants (setns(2)), for view-mount.ts alone:
- * the exec after the join drops them, our uid being no root there
- * (capabilities(7)), unless nsenter keeps them as ambient ones
- * (`--keep-caps`, {@link KEEP_CAPS}).
- */
-const mountArgv = (pid: number, argv: readonly string[]): string[] => [
-  ...enterView(pid, ["--keep-caps"]),
   ...argv,
 ];
 
@@ -831,37 +955,6 @@ export const ownModules = (id: string): Promise<void> => {
 
 // --------------------------------------------------------------- the making
 
-/** The util-linux whose nsenter first keeps the capabilities a join grants ("nsenter: add --keep-caps", v2.40 release notes). */
-const KEEP_CAPS = "2.40";
-
-/**
- * Refuses a Linux view of `folder` where this machine's nsenter has no
- * `--keep-caps` ({@link mountArgv}), before anything of the layer is made,
- * in words naming util-linux and the release it needs. Asked of nsenter
- * itself: `--keep-caps --version` answers 0 only where the option is known.
- */
-const refuseNsenterWithoutKeepCaps = (folder: string): void => {
-  const env = { ...hostEnvironment(), PATH: SYSTEM_PATH };
-  const ask = (argv: string[]) => {
-    try {
-      return Bun.spawnSync([systemTool("nsenter"), ...argv], {
-        env,
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-    } catch {
-      // No nsenter at all: it keeps nothing.
-    }
-  };
-  if (ask(["--keep-caps", "--version"])?.exitCode === 0) {
-    return;
-  }
-  const has = ask(["--version"])?.stdout.toString().trim();
-  throw new Error(
-    `${folder} is no git repository, so its workspace is a private view of it, which CawCo mounts through nsenter's --keep-caps, new in util-linux ${KEEP_CAPS}; this machine has ${has || "no nsenter"}. Install util-linux ${KEEP_CAPS} or later, or delegate in a git repository, whose workspace is a clone of its own.`
-  );
-};
-
 /**
  * Workspace `id`'s layer of `folder`, made: on Linux its view's dirs and
  * record, nothing copied, and its view mounted; on macOS the clone at
@@ -876,7 +969,6 @@ export const makeLayer = async (
   const kind: WorkspaceKind = "folder";
   const started = Date.now();
   if (process.platform === "linux") {
-    refuseNsenterWithoutKeepCaps(folder);
     const dir = layerDir(id);
     const mounts = [folder, ...mountsUnder(folder).layered].map((at, n) => ({
       at,

@@ -817,21 +817,18 @@ const runBrowserCommand = async (args: Args): Promise<number> => {
 };
 
 /**
- * A process the agent starts from this build: a pi session's host
- * (pi-host.ts), pi's own `mcp list` (pi-mcp-list.ts), or the mounts of a
- * Linux view of a folder, made inside it (view-mount.ts, which reads them
- * on stdin). The last two say how it went in their exit code.
+ * A pi process the agent starts from this build: a session's host
+ * (pi-host.ts), or pi's own `mcp list` (pi-mcp-list.ts), which says how it
+ * went in its exit code.
  */
-const runAgentEntry = async (
-  command: "pi-host" | "pi-mcp-list" | "view-mount"
+const runPiEntry = async (
+  command: "pi-host" | "pi-mcp-list"
 ): Promise<number> => {
   if (command === "pi-host") {
     await import("@cawco/agent/pi-host");
     return 0;
   }
-  await (command === "view-mount"
-    ? import("@cawco/agent/view-mount")
-    : import("@cawco/agent/pi-mcp-list"));
+  await import("@cawco/agent/pi-mcp-list");
   return Number(process.exitCode ?? 0);
 };
 
@@ -913,8 +910,7 @@ const run = async (argv: string[]): Promise<number> => {
       return 0;
     case "pi-host":
     case "pi-mcp-list":
-    case "view-mount":
-      return runAgentEntry(args.command);
+      return runPiEntry(args.command);
     case "capabilities": {
       const { probeCapabilities } = await import("@cawco/agent/capabilities");
       console.log(JSON.stringify(await probeCapabilities(), null, 2));
