@@ -17,24 +17,54 @@ const DASHBOARD_URL_OVERRIDE = Bun.env.CAWCO_DASHBOARD_URL;
  */
 let tailnetDashboard: string | null = null;
 
+/** An IPv6 host's brackets, as `URL.hostname` keeps them. */
+const IPV6_BRACKETS = /^\[|\]$/gu;
+
+/** The names that are the delegate's browser's own machine, not the hub's. */
+const LOOPBACK = new Set(["localhost", "127.0.0.1", "::1"]);
+
 /** HTTPS on the tailnet name began (its dashboard address) or stopped (null). */
 export const noteTailnetDashboard = (url: string | null): void => {
   tailnetDashboard = url;
 };
 
 /**
- * The dashboard's address a browser off the hub's machine opens, or null
- * when the hub knows none: {@link dashboardUrl} without its guess. A
- * delegate's browser runs in a container (agent browser/container-host.ts),
- * whose loopback is its own, so it is told this address, never 127.0.0.1
- * (work-items.ts, core injected.ts `withDashboardLine`). The guess is no
- * such address: a hostname the container's resolver may not know.
+ * Where a delegate's browser opens the dashboard (core injected.ts
+ * `withDashboardLine`). That browser runs in a container (agent
+ * browser/container-host.ts) whose loopback is its own, and it signs in to
+ * nothing: an address in front of the hub (a tunnel behind an access gate,
+ * the operator's {@link DASHBOARD_URL_OVERRIDE}) may stop it at a sign-in
+ * page. So it is told, in order:
+ * - `own`: an address on the hub machine's own names, which nothing stands
+ *   in front of: the tailnet name's https address while the hub serves it,
+ *   else the newest origin a dashboard reached the hub from whose host is
+ *   one of `ownNames` (its LAN or tailnet address, its hostname);
+ * - `elsewhere`: when it knows none, the override or the newest origin
+ *   observed, an address the person opens that may not open for it;
+ * - `none`: no address at all. The hostname guess {@link dashboardUrl}
+ *   falls back to is never one: the container's resolver may not know it.
  */
-export const reachableDashboardUrl = (registry: RegistryShape): string | null =>
-  DASHBOARD_URL_OVERRIDE ??
-  tailnetDashboard ??
-  registry.dashboardOrigin() ??
-  null;
+export const delegateDashboard = (
+  registry: RegistryShape,
+  ownNames: readonly string[]
+): { kind: "own" | "elsewhere"; url: string } | { kind: "none" } => {
+  const own = new Set(
+    ownNames
+      .map((name) => name.toLowerCase())
+      .filter((name) => !LOOPBACK.has(name))
+  );
+  const onOwnName = [DASHBOARD_URL_OVERRIDE, ...registry.dashboardOrigins()]
+    .filter((one): one is string => one !== undefined && URL.canParse(one))
+    .find((one) =>
+      own.has(new URL(one).hostname.replace(IPV6_BRACKETS, "").toLowerCase())
+    );
+  const ownUrl = tailnetDashboard ?? onOwnName;
+  if (ownUrl) {
+    return { kind: "own", url: ownUrl };
+  }
+  const elsewhere = DASHBOARD_URL_OVERRIDE ?? registry.dashboardOrigins()[0];
+  return elsewhere ? { kind: "elsewhere", url: elsewhere } : { kind: "none" };
+};
 
 /**
  * Where a link the hub hands out (a session's page, the app's web dashboard)
@@ -57,7 +87,10 @@ export const reachableDashboardUrl = (registry: RegistryShape): string | null =>
  * dashboard has ever connected to, and better than no link at all.
  */
 export const dashboardUrl = (registry: RegistryShape): string =>
-  reachableDashboardUrl(registry) ?? `http://${hostname()}:${DASHBOARD_PORT}`;
+  DASHBOARD_URL_OVERRIDE ??
+  tailnetDashboard ??
+  registry.dashboardOrigins()[0] ??
+  `http://${hostname()}:${DASHBOARD_PORT}`;
 
 /**
  * The dashboard's https address, or null when none is known: where a sign-in

@@ -621,8 +621,8 @@ import { damagedRecordsOf, peekDamagedRecords } from "./damaged-rows";
 import { dashboardErrorsRoutes } from "./dashboard-errors";
 import {
   dashboardUrl,
+  delegateDashboard,
   noteTailnetDashboard,
-  reachableDashboardUrl,
   secureDashboardUrl,
 } from "./dashboard-url";
 import type {
@@ -24151,13 +24151,13 @@ export const createServer = (
       )) {
         return;
       }
-      const url = reachableDashboardUrl(registry);
-      if (!url) {
-        return { kind: "none" };
+      const reach = delegateDashboard(registry, hubOwnNames());
+      if (reach.kind === "none") {
+        return reach;
       }
       return hubAuth.mode() === "pairing"
-        ? { kind: "paired", url }
-        : { kind: "open", url };
+        ? { kind: "paired", url: reach.url }
+        : reach;
     },
     // Undecided while the machine is away or has not read its custody since
     // it came back, and while it holds the session's process alive: neither

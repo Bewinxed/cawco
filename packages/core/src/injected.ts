@@ -324,16 +324,20 @@ export const withInputsLine = (
 
 /**
  * Where a delegate's browser opens the live dashboard (hub dashboard-url.ts
- * `reachableDashboardUrl`): its browser runs in a container whose loopback
- * is its own, so only an address off the hub's machine reaches it.
- * - `open`: at `url`, as any device of the person's network does;
+ * `delegateDashboard`): its browser runs in a container whose loopback is
+ * its own and signs in to nothing, so it is told an address on the hub's own
+ * names, which nothing stands in front of.
+ * - `own`: at `url`, the hub's tailnet or LAN address;
  * - `paired`: at `url`, which lets in only the person's paired devices
  *   (hub-auth.ts, "Require paired devices");
- * - `none`: the hub knows no such address.
+ * - `elsewhere`: the hub knows only `url`, an address the person opens (a
+ *   proxy, a tunnel), which may stop the browser at a sign-in;
+ * - `none`: the hub knows no address of its dashboard.
  */
 export type DashboardReach =
-  | { kind: "open"; url: string }
+  | { kind: "own"; url: string }
   | { kind: "paired"; url: string }
+  | { kind: "elsewhere"; url: string }
   | { kind: "none" };
 
 /**
@@ -346,7 +350,7 @@ export const withDashboardLine = (
   reach: DashboardReach
 ): string => {
   switch (reach.kind) {
-    case "open":
+    case "own":
       return afterMarker(
         text,
         `Your browser tools open the live dashboard at ${reach.url}; 127.0.0.1 and localhost in your browser are the browser's own, never the hub.`
@@ -355,6 +359,11 @@ export const withDashboardLine = (
       return afterMarker(
         text,
         `The live dashboard at ${reach.url} lets in only the person's paired devices, so your browser tools can't open it.`
+      );
+    case "elsewhere":
+      return afterMarker(
+        text,
+        `The hub knows its live dashboard only at ${reach.url}, an address the person opens that may stop your browser at a sign-in; 127.0.0.1 and localhost in your browser are the browser's own, never the hub.`
       );
     case "none":
       return afterMarker(

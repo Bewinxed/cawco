@@ -59,8 +59,8 @@ export interface RegistryShape {
   readonly broadcastBoard: (delta: Envelope, snapshot: () => Envelope) => void;
   /** A hub frame that is not an envelope (`{ type, … }`), to every dashboard and app socket. */
   readonly broadcastTyped: (frame: { readonly type: string }) => void;
-  /** The most recent usable dashboard origin, or nothing if none has connected. */
-  readonly dashboardOrigin: () => string | undefined;
+  /** Every usable dashboard origin seen since the hub started, newest first: empty if none has connected. */
+  readonly dashboardOrigins: () => readonly string[];
   /** Returns the machine the socket was registered as, if it was an agent. */
   readonly dropAgent: (socketId: string) => string | undefined;
   readonly dropDashboard: (socket: HubSocket) => void;
@@ -135,6 +135,9 @@ const usableOrigin = (origin: string | undefined): string | undefined => {
   return url.origin;
 };
 
+/** How many dashboard origins the hub keeps: a person's few addresses, and no more for a client that sends many. Our choice. */
+const KEPT_DASHBOARD_ORIGINS = 16;
+
 /** A control whose reply never came stops being routable after this. */
 const REQUESTER_TTL_MS = 5 * 60_000;
 const SWEEP_INTERVAL_MS = 60_000;
@@ -152,12 +155,15 @@ const make = (lifetime: HubLifetimeShape): RegistryShape => {
   const older = new Set<string>();
   const requesters = new Map<string, { socket: HubSocket; at: number }>();
   /**
-   * The last origin a dashboard reached this hub from. Kept rather than derived
-   * because the hub has no other way to learn it — see `dashboardUrl` in
-   * `dashboard-url.ts`. Newest wins: an operator who has moved to a new hostname is
-   * telling the hub so by opening the dashboard there.
+   * Every origin a dashboard reached this hub from, newest first, each once.
+   * Kept rather than derived because the hub has no other way to learn them —
+   * see `dashboardUrl` in `dashboard-url.ts`. Newest leads: an operator who has
+   * moved to a new hostname is telling the hub so by opening the dashboard
+   * there. The rest stay for a reader that wants one on the hub's own names
+   * (`delegateDashboard`): a person's phone through a public proxy is the
+   * newest as often as not.
    */
-  let lastDashboardOrigin: string | undefined;
+  let dashboardOrigins: string[] = [];
   /**
    * The last of those on https, kept apart: the address a person is linked to
    * is the one that reached the hub last, whatever its scheme, but a sign-in
@@ -248,13 +254,16 @@ const make = (lifetime: HubLifetimeShape): RegistryShape => {
     noteDashboardOrigin: (origin) => {
       const usable = usableOrigin(origin);
       if (usable) {
-        lastDashboardOrigin = usable;
+        dashboardOrigins = [
+          usable,
+          ...dashboardOrigins.filter((one) => one !== usable),
+        ].slice(0, KEPT_DASHBOARD_ORIGINS);
         if (usable.startsWith("https://")) {
           lastSecureDashboardOrigin = usable;
         }
       }
     },
-    dashboardOrigin: () => lastDashboardOrigin,
+    dashboardOrigins: () => dashboardOrigins,
     secureDashboardOrigin: () => lastSecureDashboardOrigin,
     rememberRequester: (requestId, socket) => {
       requesters.set(requestId, { socket, at: Date.now() });
