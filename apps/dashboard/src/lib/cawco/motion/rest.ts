@@ -7,10 +7,13 @@
  * it carries (`loops`): the mark is what lets a flip of either attribute
  * restyle only the loops, not every element under it.
  *
- * `data-offscreen` has two writers: {@link restOffscreen} here, on an
- * element scrolled out of view, and PaneLeaf, on a pane put away
+ * `data-offscreen` has three writers: {@link restOffscreen} here, on an
+ * element scrolled out of view; PaneLeaf, on a pane put away
  * (`.pane-hidden`), whose skipped subtree would otherwise run its loops on
- * ({@link holdSkipped} carries the hold into it).
+ * ({@link holdSkipped} carries the hold into it); and a canvas frame's own
+ * runtime (agent canvas runtime `holdWhileAway`), on its root while its
+ * pane is away or none of it stands in view: a frame is a document of its
+ * own, which neither of the others reaches.
  */
 import { CANVAS_AWAY } from "@cawco/core/stage";
 

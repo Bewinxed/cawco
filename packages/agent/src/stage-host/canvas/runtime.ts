@@ -404,11 +404,31 @@ export const bridge = (): Bridge | undefined =>
  * nothing in the frame can tell it is skipped. A held callback is the one
  * the page asked for, run on the next frame it is seen: what a person sees
  * is the same.
+ *
+ * And the canvas at rest while nobody can see it: its root marked
+ * `data-offscreen` while its pane is away or none of its frame stands in
+ * the top page's view (the implicit root of an observer in a frame), which
+ * holds a dashboard canvas's loops as the dashboard holds its own scrolled
+ * out of view (its design.css: `:where([data-offscreen]) .loops` paused;
+ * motion/rest.ts). WebKit renders every frame of the page it shares a
+ * process with, whatever stands in view: a decision page of 33 Previews,
+ * untouched, held its web process at 23% of a core, its frames' loops (9
+ * spinners and skeleton pulses, all in frames scrolled away) the only
+ * thing running (canvas-cost `page`, its census), and at 2% held here
+ * (56,310 ms of CPU over 240 s, then 5,130); Chromium draws no
+ * cross-origin frame out of view.
  */
 function holdWhileAway(): void {
   const ask = window.requestAnimationFrame.bind(window);
   const cancel = window.cancelAnimationFrame.bind(window);
   let away = false;
+  let unseen = false;
+  const rest = () =>
+    document.documentElement.toggleAttribute("data-offscreen", away || unseen);
+  new IntersectionObserver(([entry]) => {
+    unseen = !entry?.isIntersecting;
+    rest();
+  }).observe(document.documentElement);
   /** Callbacks asked for while away, by the id the page was given (negative: none the browser gives). */
   const held = new Map<number, FrameRequestCallback>();
   /** A held callback asked for once back: the browser's id for it, by the page's. */
@@ -436,6 +456,7 @@ function holdWhileAway(): void {
       return;
     }
     away = said.away === true;
+    rest();
     if (away) {
       return;
     }
