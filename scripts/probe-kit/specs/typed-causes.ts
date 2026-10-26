@@ -11,9 +11,9 @@
  *   no "No conversation found" is said.
  * - B, a 429 limit: a real pi session whose provider answers 429 in German
  *   ends its turn at the account's limit, by the answer's status.
- * - C, a non-English git: a folder in no repository, made a place by a dry
- *   run of `placeRepo` while git speaks German. It is read as in no
- *   repository by `rev-parse --is-inside-work-tree`'s exit, and planned.
+ * - C, a non-English git: a folder in no repository, made a place by
+ *   `placeRepo` while git speaks German. It is read as in no repository by
+ *   `rev-parse --is-inside-work-tree`'s exit, and made one.
  * - D, a lost push race: a landing (`land`) whose first push loses to
  *   someone who pushed in between, while git speaks German. It is decided
  *   by origin's branch having moved, and lands on the second try.
@@ -410,14 +410,14 @@ const germanPlace = async (kit: Kit, scratch: string): Promise<void> => {
   try {
     const { placeRepo } =
       await import("../../../packages/agent/src/place-repo");
-    const planned = await placeRepo(place, true).then(
+    const made = await placeRepo(place).then(
       (answer) => ({ answer }),
       (error: unknown) => ({ error: String(error) })
     );
     kit.check(
-      "C: a folder in no repository is planned as a place while git speaks German",
-      "answer" in planned && planned.answer.state === "plan",
-      JSON.stringify(planned).slice(0, 400)
+      "C: a folder in no repository is made a place while git speaks German",
+      "answer" in made && made.answer.state === "made",
+      JSON.stringify(made).slice(0, 400)
     );
   } finally {
     Object.assign(process.env, before);

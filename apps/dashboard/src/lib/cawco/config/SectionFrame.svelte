@@ -120,7 +120,9 @@
   const settled = $derived(ready && !problem && cawco.hub === "connected");
 </script>
 
-<svelte:head><title>{configureWords.documentTitle(section.label)}</title></svelte:head>
+<svelte:head
+  ><title>{configureWords.documentTitle(section.label)}</title></svelte:head
+>
 
 {#snippet fault(text: string)}
   <Alert.Root variant="destructive">

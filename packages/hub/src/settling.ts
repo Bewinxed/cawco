@@ -1,15 +1,14 @@
 /**
  * Who decides, at the hub (PRD §5.8, core decides.ts): each card a session
  * writes is routed by the project's table (decides-file.ts), the route said
- * back to it with the tool's answer, one line per card ({@link
- * Settling.routed}). A card routed to an advisor or to common practice is
+ * back to it with the tool's answer, one line per card (`routed`). A card routed to an advisor or to common practice is
  * handed to a delegate the hub starts for it: the advisor's type from the
  * table, or `research` for common practice, run `lands: none` under the
  * session that wrote the card, through the same work item start dispatch
  * uses (work-items.ts `start`). The cards of one page routed the same way
  * go as one run.
  *
- * Who may `settle` a card ({@link Settling.settler}): on a route to the
+ * Who may `settle` a card (`settler`): on a route to the
  * agent, the session that wrote it; on a route to an advisor or common
  * practice, only the delegate the hub started for it (`card_settlings`);
  * on a route to the person, no one. The pick itself is written by
@@ -299,5 +298,3 @@ export const createSettling = (deps: SettlingDeps) => {
     },
   };
 };
-
-type Settling = ReturnType<typeof createSettling>;

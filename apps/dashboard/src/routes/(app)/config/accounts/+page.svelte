@@ -23,10 +23,7 @@
   const groups = $derived(groupsOf());
 </script>
 
-<SectionFrame
-  ready={cawco.accounts !== null}
-  {section}
->
+<SectionFrame ready={cawco.accounts !== null} {section}>
   {#snippet actions(down)}
     <Button
       disabled={down !== null}

@@ -91,11 +91,7 @@
   }
 </script>
 
-<SectionFrame
-  problem={store.fleet.error}
-  ready={fleet !== null}
-  {section}
->
+<SectionFrame problem={store.fleet.error} ready={fleet !== null} {section}>
   {#snippet actions(down)}
     <NewMemoryPopover
       {down}

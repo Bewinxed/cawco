@@ -83,7 +83,7 @@ interface TypeFileProblem {
   problem: string;
 }
 
-interface DelegateCatalog {
+export interface DelegateCatalog {
   problems: TypeFileProblem[];
   types: CatalogType[];
 }

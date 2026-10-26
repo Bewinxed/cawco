@@ -1053,11 +1053,7 @@
   </form>
 {/snippet}
 
-<SectionFrame
-  problem={readError}
-  ready={loaded}
-  {section}
->
+<SectionFrame problem={readError} ready={loaded} {section}>
   {#snippet actions(blocked)}
     {#if rows.length > 0}
       {@render signInMenu(blocked)}

@@ -164,11 +164,7 @@
   });
 </script>
 
-<SectionFrame
-  problem={loaded ? null : readError}
-  ready={loaded}
-  {section}
->
+<SectionFrame problem={loaded ? null : readError} ready={loaded} {section}>
   <div data-slot="group" class="flex flex-col gap-space-2">
     <SectionHeader hue={HUE} icon={IconLock} label="Pairing" />
     <!-- The switch shows the change while it is confirmed, and goes back on Cancel. -->

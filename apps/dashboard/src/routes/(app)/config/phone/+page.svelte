@@ -126,11 +126,7 @@
   });
 </script>
 
-<SectionFrame
-  problem={loaded ? null : readError}
-  ready={loaded}
-  {section}
->
+<SectionFrame problem={loaded ? null : readError} ready={loaded} {section}>
   <div data-slot="group" class="flex flex-col gap-space-2">
     <SectionHeader hue={section.hue} icon={IconPhone} label="Devices">
       {#snippet right()}

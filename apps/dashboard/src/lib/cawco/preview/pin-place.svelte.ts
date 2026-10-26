@@ -148,10 +148,7 @@ interface Placing {
  * else beside its pill alone; else under or over the pill, whichever holds
  * more. At the well's top-right with nothing seen.
  */
-const decide = (
-  at: Seen | null,
-  { clear, gap, room, size }: Placing
-): Plan => {
+const decide = (at: Seen | null, { clear, gap, room, size }: Placing): Plan => {
   const full = Math.max(0, room.h - 2 * gap);
   /** Its height as it will stand beside the pill: what it holds, up to the well's. */
   const tall = Math.min(size.natural || size.height, full);
@@ -282,12 +279,12 @@ export class FloatPlace {
     return this.#seenOf(mark, box);
   });
 
-  readonly #placing: Placing = $derived({
+  readonly #placing: Placing = $derived.by(() => ({
     clear: this.clear,
     gap: this.gap,
     room: this.#over().room,
     size: { width: this.width, height: this.height, natural: this.natural },
-  });
+  }));
 
   /** Where it stands. */
   readonly plan: Plan = $derived(this.#hold(this.seen, this.#placing));
