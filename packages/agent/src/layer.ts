@@ -317,9 +317,89 @@ const PASSTHROUGH = (): string[] => [
   ].map((name) => join(homedir(), name)),
 ];
 
-/** One mount of a view: an overlay of `overlay` (its lower dir and mount point), or `bind` bound onto itself from the host's tree. */
+/**
+ * One mount of a view: an overlay of `overlay` (F or a mount under it: its
+ * top lower dir and mount point) over its stand-ins ({@link standInsOf}), or `bind` bound onto
+ * itself from the host's tree.
+ */
 type ViewMount =
-  { overlay: string; upper: string; work: string } | { bind: string };
+  | { overlay: string; standIns: string; upper: string; work: string }
+  | { bind: string };
+
+/**
+ * Where one overlay of a view keeps its stand-ins: beside its upper and
+ * work dirs, CawCo's own, and its lowest layer ({@link makeStandIns}).
+ */
+const standInsOf = (mount: LayerMount): string =>
+  join(dirname(mount.upper), "stand-ins");
+
+/**
+ * What stands in for each of CawCo's and srt's own paths at F that F lacks
+ * (core workspace-policy.ts `cloneDenies`, the one list a clone's stand-ins
+ * and the change set's exclusions read too), made fresh in each overlay's
+ * own stand-ins dir before the view is mounted: that dir is the overlay's
+ * lowest layer, under F, so the view shows each where F has none, F's own
+ * wins wherever it has one, and none is ever in an upper, the change set.
+ * srt then binds each onto itself as it finds it, which leaves nothing in
+ * the view, where a deny path it found absent would get a mount point made
+ * through the overlay, into the upper. `.git/config`, which a clone always
+ * has and so never gets a stand-in, gets an empty one here: F is no
+ * repository, and with `.git/hooks` standing in it would be the one absent
+ * deny path. Nothing is made under a path F holds as anything but a folder.
+ */
+const makeStandIns = async (layer: Layer): Promise<void> => {
+  const mounts = layer.mounts ?? [];
+  await Promise.all(
+    mounts.map(async (mount) => {
+      await removeTree(standInsOf(mount));
+      await mkdir(standInsOf(mount), { recursive: true, mode: 0o700 });
+    })
+  );
+  const readOnly: string[] = [];
+  for (const deny of cloneDenies(layer.folder)) {
+    const mount = [...mounts]
+      .reverse()
+      .find((each) => within(deny.path, each.at));
+    // biome-ignore lint/performance/noAwaitInLoops: one path at a time, its folders made before it
+    if (!(mount && (await absentUnderFolders(mount.at, deny.path)))) {
+      continue;
+    }
+    const at = join(standInsOf(mount), relative(mount.at, deny.path));
+    await mkdir(dirname(at), { recursive: true, mode: 0o755 });
+    if (deny.empty.kind === "dir") {
+      await mkdir(at, { recursive: true, mode: 0o755 });
+      if (deny.empty.readOnly) {
+        readOnly.push(at);
+      }
+    } else {
+      await writeFile(at, deny.empty.kind === "file" ? deny.empty.text : "", {
+        mode: 0o644,
+      });
+    }
+  }
+  await Promise.all(readOnly.map((dir) => chmod(dir, 0o555)));
+};
+
+/** Whether `path` is absent from the host's tree and each folder above it, up to `root`, is a folder or absent. */
+const absentUnderFolders = async (
+  root: string,
+  path: string
+): Promise<boolean> => {
+  if (await lstat(path).catch(() => undefined)) {
+    return false;
+  }
+  for (let dir = dirname(path); within(dir, root); dir = dirname(dir)) {
+    // biome-ignore lint/performance/noAwaitInLoops: a few folders, nearest first
+    const info = await lstat(dir).catch(() => undefined);
+    if (info && !info.isDirectory()) {
+      return false;
+    }
+    if (dir === root) {
+      break;
+    }
+  }
+  return true;
+};
 
 /**
  * The mounts of workspace `id`'s view of `layer`, in the order the mounter
@@ -335,6 +415,7 @@ const viewPlan = (id: string, layer: Layer): ViewMount[] => {
   return [
     ...(layer.mounts ?? []).map((mount) => ({
       overlay: mount.at,
+      standIns: standInsOf(mount),
       upper: mount.upper,
       work: mount.work,
     })),
@@ -492,6 +573,7 @@ const startView = async (id: string, layer: Layer): Promise<number> => {
     await mkdir(mount.upper, { recursive: true, mode: 0o700 });
     await mkdir(mount.work, { recursive: true, mode: 0o700 });
   }
+  await makeStandIns(layer);
   await rm(viewFile(id), { force: true });
   const env = { ...hostEnvironment(), PATH: SYSTEM_PATH };
   const holder = Bun.spawn(
@@ -573,7 +655,8 @@ const SYSCALLS: Readonly<
  * Its words: the setns and mount numbers ({@link SYSCALLS}), the holder's
  * pid, then the namespaces it joins (`user`, when the view's is not the
  * agent's own, then `mnt`). Its stdin: the plan as NUL-separated words,
- * `overlay AT UPPER WORK` or `bind PATH` each. Every source is opened
+ * `overlay AT STAND-INS UPPER WORK` (F over its stand-ins) or `bind PATH`
+ * each. Every source is opened
  * (`O_PATH`) in the view before the first mount and named by its
  * `/proc/self/fd/<n>`, so it is the host's tree it names: an overlay at F
  * hides what is mounted under F. Targets resolve as the view stands at
@@ -591,7 +674,7 @@ my @word = map { chomp; $_ } <STDIN>;
 my @plan;
 while (@word) {
   my $kind = shift @word;
-  push @plan, [$kind, splice @word, 0, $kind eq "overlay" ? 3 : 1];
+  push @plan, [$kind, splice @word, 0, $kind eq "overlay" ? 4 : 1];
 }
 for my $ns (@join) {
   my $fd = POSIX::open("/proc/$pid/ns/$ns", $O_CLOEXEC);
@@ -604,9 +687,9 @@ my $source = sub {
   "/proc/self/fd/$fd";
 };
 my @call = map {
-  my ($kind, $at, $upper, $work) = @$_;
+  my ($kind, $at, $under, $upper, $work) = @$_;
   $kind eq "overlay"
-    ? [$kind, $at, "overlay", $at, "overlay", 0, "lowerdir=" . $source->($at) . ",upperdir=" . $source->($upper) . ",workdir=" . $source->($work) . ",userxattr"]
+    ? [$kind, $at, "overlay", $at, "overlay", 0, "lowerdir=" . $source->($at) . ":" . $source->($under) . ",upperdir=" . $source->($upper) . ",workdir=" . $source->($work) . ",userxattr"]
     : [$kind, $at, $source->($at), $at, 0, $MS_BIND | $MS_REC, 0];
 } @plan;
 for my $c (@call) {
@@ -674,7 +757,7 @@ const mountView = async (
   const words = mounts.flatMap((mount) =>
     "bind" in mount
       ? ["bind", mount.bind]
-      : ["overlay", mount.overlay, mount.upper, mount.work]
+      : ["overlay", mount.overlay, mount.standIns, mount.upper, mount.work]
   );
   const perl = systemTool("perl");
   if (!existsSync(perl)) {

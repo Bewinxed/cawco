@@ -502,8 +502,16 @@ const markLfs = (): void => {
  * (`listStandIns` in stand-ins.ts). A file's stand-in is 0644: one with no
  * write bits is what this host takes for a mount point an earlier sandbox
  * left ({@link leftMountPoint}), and makes again at every start.
+ *
+ * Nothing in a folder's view (`CAWCO_FOLDER`): what this host writes there
+ * lands in the view's upper, the delegate's change set, so the view's
+ * stand-ins are a layer of their own beneath the folder (agent layer.ts
+ * `makeStandIns`), and its folder is no repository for git-lfs to mark.
  */
 const standIn = (): void => {
+  if (process.env.CAWCO_FOLDER === "1") {
+    return;
+  }
   markLfs();
   for (const { path, empty } of denies) {
     const found = lstatOf(path);
