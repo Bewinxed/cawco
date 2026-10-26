@@ -66,7 +66,7 @@ export const isServiceAction = (
  * checkout as you are editing it. Only the hub and the dashboard have a dev
  * flavour — see {@link DEV}.
  */
-export type ServiceMode = "prod" | "dev";
+type ServiceMode = "prod" | "dev";
 
 /**
  * Written into a dev unit and read back out of it by `status`, which is the only
@@ -76,7 +76,7 @@ export type ServiceMode = "prod" | "dev";
 const MODE_ENV = CAWCO_ENV.serviceMode;
 
 /** Thrown for anything the caller can fix — a wrong platform, a failed launchctl. */
-export class ServiceError extends Error {}
+class ServiceError extends Error {}
 
 /**
  * systemd wants a name, launchd wants a reverse-DNS label; they are one
@@ -797,7 +797,7 @@ export const awaitFirstMachineReady = async (
   }
 };
 
-export interface ServiceSpec {
+interface ServiceSpec {
   /** systemd ordering only — launchd has none, see {@link plist}. */
   readonly after: readonly string[];
   /** systemd ordering only: the units this one starts before. */
@@ -1540,7 +1540,7 @@ const loadLaunchAgent = async (
  * Exported so a throwaway probe can go through this exact path to show what a
  * service the installer starts can do on a given Mac.
  */
-export const installLaunchAgents = async (
+const installLaunchAgents = async (
   specs: ServiceSpec[],
   note: (line: string) => void
 ): Promise<void> => {
@@ -1983,9 +1983,9 @@ const agentCut = async (fenceMs?: number): Promise<Cut> => {
  * why when nobody could say. For the agent, the work it carries itself; for
  * sessiond, the sessions mid-turn.
  */
-export type Cut = readonly string[] | { readonly unknown: string };
+type Cut = readonly string[] | { readonly unknown: string };
 
-export interface RestartRequest {
+interface RestartRequest {
   readonly cut: Cut;
   readonly force: boolean;
   /** Which session-hosting service is being restarted: what that costs differs. */
@@ -1993,7 +1993,7 @@ export interface RestartRequest {
   readonly whenIdle: boolean;
 }
 
-export type RestartDecision =
+type RestartDecision =
   | { readonly kind: "go" }
   | { readonly kind: "wait"; readonly cut: readonly string[] }
   | { readonly kind: "refuse"; readonly reason: string };
@@ -2018,7 +2018,7 @@ const RESTART_COST: Record<"agent" | "sessiond", string> = {
  * The only way to restart one while it would cut something — or while nobody
  * can say — is to ask for that outright.
  */
-export const restartDecision = ({
+const restartDecision = ({
   cut,
   whenIdle,
   force,

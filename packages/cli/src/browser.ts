@@ -5,7 +5,7 @@
  */
 import { type BrowserRow, isBrowserKey } from "@cawco/core/browser";
 
-export class BrowserCommandError extends Error {}
+class BrowserCommandError extends Error {}
 
 const ACTIONS = ["list", "start", "stop", "remove"] as const;
 type Action = (typeof ACTIONS)[number];

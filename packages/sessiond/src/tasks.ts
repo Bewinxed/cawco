@@ -40,7 +40,7 @@ export const TASK_RESERVE = 64;
 export const START_ROOM = 64;
 
 /** How many more tasks fit under the tightest limit, and which limit that is, in words. */
-export interface Headroom {
+interface Headroom {
   free: number;
   what: string;
 }
@@ -128,7 +128,7 @@ async function cgroupRoom(): Promise<Headroom | undefined> {
 }
 
 /** How many more tasks the keeper and its children can start, under the tightest limit; undefined when nothing limits them. */
-export async function taskHeadroom(): Promise<Headroom | undefined> {
+async function taskHeadroom(): Promise<Headroom | undefined> {
   if (process.platform !== "linux") {
     return undefined;
   }

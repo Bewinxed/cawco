@@ -19,7 +19,7 @@ import { ConnectionKeyError, pipedKey, typedKey } from "./connections";
 import { OwnerApprovalError, ownerFetch } from "./owner";
 import { callTool, toolDoor } from "./tools";
 
-export class RelayError extends Error {}
+class RelayError extends Error {}
 
 export interface RelayArgs {
   action?: string;

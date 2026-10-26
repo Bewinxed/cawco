@@ -101,11 +101,11 @@ import type { ChildLimit, SessionLimits } from "@cawco/core";
 import { TASK_RESERVE } from "./tasks";
 
 /** Where the keeper runs inside its delegated cgroup: the unit's `DelegateSubgroup=`. */
-export const KEEPER_LEAF = "keeper";
+const KEEPER_LEAF = "keeper";
 /** Where its children's groups are. */
-export const CHILDREN_GROUP = "children";
+const CHILDREN_GROUP = "children";
 /** Inside `children`, where the groups of the workspaces' own processes are (core `ProcSpec` `workspace`). */
-export const WORKSPACES_GROUP = "workspaces";
+const WORKSPACES_GROUP = "workspaces";
 /**
  * The share of the machine's memory the workspaces' processes hold before
  * they are throttled and reclaimed inside their own group: `memory.high`,
@@ -117,14 +117,14 @@ export const WORKSPACES_GROUP = "workspaces";
  * obelisk (188 GB) those held about 37 GB on 2026-10-25, and 15% is 28 GB
  * with the services' page cache reclaimable. Our call.
  */
-export const WORKSPACES_MEMORY_SHARE = 0.85;
+const WORKSPACES_MEMORY_SHARE = 0.85;
 /**
  * Each child's task ceiling: about 17 times the largest child tree measured
  * on obelisk (469 tasks, 2026-10-13; the largest Claude session was 199, an
  * OpenCode server 117), and far below the 92,000 threads the runaway that day
  * reached. Threads count: the kernel's pids controller counts TIDs.
  */
-export const CHILD_TASKS = 8192;
+const CHILD_TASKS = 8192;
 /**
  * The keeper leaf's `cpu.weight`, against the children's group at the
  * kernel's default 100: the kernel's cgroup v2 document, cpu.weight: "The
@@ -136,7 +136,7 @@ export const CHILD_TASKS = 8192;
  * keeper uses little CPU, so it takes what it needs and the rest stays the
  * sessions'.
  */
-export const KEEPER_CPU_WEIGHT = 1000;
+const KEEPER_CPU_WEIGHT = 1000;
 /** cpu.max's period, the kernel's own default ("max 100000"), in µs. */
 const CPU_PERIOD_US = 100_000;
 const BLANKS = /\s+/u;
@@ -235,7 +235,7 @@ const askSystemd: CgroupSystem["delegation"] = async (unit, manager) => {
 };
 
 /** This machine, as the keeper finds it. */
-export const LINUX: CgroupSystem = {
+const LINUX: CgroupSystem = {
   root: "/sys/fs/cgroup",
   memory: totalmem(),
   pid: process.pid,
@@ -466,7 +466,7 @@ export interface Machine {
   memory: number;
 }
 
-export const THIS_MACHINE: Machine = {
+const THIS_MACHINE: Machine = {
   cores: availableParallelism(),
   memory: totalmem(),
 };

@@ -95,9 +95,9 @@ import { capChildTasks, START_ROOM, spawnRefusal, TASK_RESERVE } from "./tasks";
  * them. `SessionRing` takes the bound as a constructor argument so the two
  * callers can disagree without either forking the class.
  */
-export const SESSIOND_RING_LINES = 4096;
+const SESSIOND_RING_LINES = 4096;
 
-export const RING_BYTES = 8 * 1024 * 1024;
+const RING_BYTES = 8 * 1024 * 1024;
 
 /**
  * How much of a child's stderr is kept, its last bytes, to hand on with its
@@ -107,7 +107,7 @@ export const RING_BYTES = 8 * 1024 * 1024;
  * for a stack trace's head and the sentence under it, and nothing a chatty
  * child's long life can grow.
  */
-export const STDERR_TAIL_BYTES = 4096;
+const STDERR_TAIL_BYTES = 4096;
 
 /** What every welcome says this keeper speaks: the protocol, and `release`. */
 const CAPABILITIES = [SESSIOND_V1, SESSIOND_RELEASE];
@@ -117,7 +117,7 @@ const CAPABILITIES = [SESSIOND_V1, SESSIOND_RELEASE];
  * the agent's existing drain discipline (`agent/src/session.ts:57`,
  * `DRAIN_TIMEOUT_MS = 8_000`).
  */
-export const DRAIN_TIMEOUT_MS = 8000;
+const DRAIN_TIMEOUT_MS = 8000;
 
 /**
  * How long what a child started gets to end by itself once the child is gone,
@@ -126,7 +126,7 @@ export const DRAIN_TIMEOUT_MS = 8000;
  * a loaded machine, and short enough that a stopped session's memory is back
  * before anyone looks.
  */
-export const SWEEP_GRACE_MS = 2000;
+const SWEEP_GRACE_MS = 2000;
 
 /**
  * How often every live child's tree is read, so a child that dies unasked
@@ -137,7 +137,7 @@ export const SWEEP_GRACE_MS = 2000;
  * the child's end finds it by its tree mark ({@link SessiondServer}
  * `readTree`).
  */
-export const SURVEY_INTERVAL_MS = 30_000;
+const SURVEY_INTERVAL_MS = 30_000;
 
 /**
  * How often each child's cgroup is read for a limit it reached, and for
@@ -146,7 +146,7 @@ export const SURVEY_INTERVAL_MS = 30_000;
  * and two seconds is soon enough that the operator reads it while the
  * session is still in the turn that ran it.
  */
-export const LIMIT_WATCH_MS = 2000;
+const LIMIT_WATCH_MS = 2000;
 
 /** A child's cgroup, watched for its limits until it is empty and removed ({@link SessiondServer.watchGroups}). */
 interface Watched {

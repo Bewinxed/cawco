@@ -10,7 +10,7 @@
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { processArgs, processLineage } from "@cawco/core/process-identity";
 
-export interface TableRow {
+interface TableRow {
   /** Its command line, its arguments joined by a space: read only for a process that carries a tree mark. */
   command?: string;
   pgid: number;

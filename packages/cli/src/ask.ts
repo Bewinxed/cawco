@@ -35,7 +35,7 @@ const open = () => {
 export type Asked<T> = Bounded<T> | { kind: "not asked" };
 
 /** One line typed at the terminal. */
-export async function ask(
+async function ask(
   text: string,
   timeoutMs = ANSWER_TIMEOUT_MS
 ): Promise<Asked<string>> {

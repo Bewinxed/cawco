@@ -23,7 +23,7 @@ import { binaryRoot } from "@cawco/core/binary-installation";
 import { writeStateFile } from "@cawco/core/state-file";
 
 /** The file in the binary root that holds {@link ApplyEvent}s. */
-export const APPLY_RECORD_FILE = "apply-record.json";
+const APPLY_RECORD_FILE = "apply-record.json";
 
 /** How many of the latest events the record keeps. Ours: many updates' worth, each a handful. */
 const EVENTS_KEPT = 256;

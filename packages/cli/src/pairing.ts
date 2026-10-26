@@ -36,7 +36,7 @@ import {
 } from "@cawco/core/paths";
 
 /** Thrown when there is no hub here to change: a sentence for the person. */
-export class PairingError extends Error {}
+class PairingError extends Error {}
 
 /** How long the running hub has to answer: it answers in milliseconds, so past this it is stuck. */
 const ANSWER_WITHIN_MS = 30_000;

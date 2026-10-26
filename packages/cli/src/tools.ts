@@ -26,12 +26,12 @@ import {
 } from "@cawco/core/tool-answer";
 
 /** Where the CLI reads the session it acts as, and that session's credential: every session's shell has both. */
-export const TOOL_ENV = {
+const TOOL_ENV = {
   instance: CAWCO_ENV.instanceId,
   credential: CAWCO_ENV.sessionCredential,
 } as const;
 
-export class ToolError extends Error {}
+class ToolError extends Error {}
 
 /**
  * Inside a workspace's boundary, which reaches no hub: the agent's tool door
