@@ -4877,11 +4877,18 @@
        the well's four corners (MessageRow, Well; The Concentric Rule), and
        the pill glides to the next one chosen. No ghost: under the pointer a
        message shows its strip. -->
+  <!-- Its rows take the pointer while the list scrolls: virtua sets
+       `pointer-events: none` on its container whenever it reads the
+       scroller as scrolling (Virtualizer.svelte `isScrolling`), and this
+       scroller is moved by the reader and by the tail's follow alike, so
+       while a turn grew under a reader at the tail every row's link and
+       button (a review card's Open and More, a message's pictures) went
+       dead. Only what set itself `pointer-events-auto` answered. -->
   <div
     data-transcript-shown={shown || undefined}
     data-slot="listing"
     data-shown={shown || undefined}
-    class="isolate not-data-shown:invisible"
+    class="isolate not-data-shown:invisible *:pointer-events-auto!"
     bind:this={listing}
     style:padding-top={spare ? `${spare}px` : undefined}
     {@attach wholeHeight}
