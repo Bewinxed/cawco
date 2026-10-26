@@ -1,3 +1,5 @@
+import type { HarnessKind } from "./harness";
+
 /** Optional machine tools. Reporting never installs or impersonates a tool. */
 export interface MachineCapability {
   /** `public-address` only: the machine's global unicast addresses, outside private, link-local and CGNAT ranges. */
@@ -5,9 +7,7 @@ export interface MachineCapability {
   available: boolean;
   id:
     | "git"
-    | "claude"
-    | "opencode"
-    | "pi"
+    | HarnessKind
     | "node"
     | "browser"
     | "container-runtime"

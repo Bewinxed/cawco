@@ -106,6 +106,7 @@ import {
   markdownLink,
   POST_OUTPUT_RULE,
   planWaitOf,
+  type StageKind,
   sessionLink,
   taskLink,
   todoLink,
@@ -687,6 +688,9 @@ const failure = (
   // Anything else is the machine's: offline, or git turning the clone down.
   return { code: 502, message };
 };
+
+/** The stage kinds an ended attempt sends its task to: done, `you`, or back to todo. */
+type AttemptLanding = Extract<StageKind, "done" | "todo" | "you">;
 
 export const createDispatcher = ({
   context,
@@ -1669,7 +1673,7 @@ export const createDispatcher = ({
    * follow-up of its landed work ended without landing (its `error`,
    * work-items.ts `finish`); back to todo when it failed or was cancelled.
    */
-  const kindAfter = (item: WorkItemRow): "done" | "todo" | "you" => {
+  const kindAfter = (item: WorkItemRow): AttemptLanding => {
     if (item.state !== "done") {
       return "todo";
     }
@@ -1837,8 +1841,8 @@ export const createDispatcher = ({
    * says so ({@link movedBecause}) and its move ticks them (tasks.ts `move`).
    */
   const closedMet = (
-    judged: "done" | "todo" | "you",
-    kind: "done" | "todo" | "you",
+    judged: AttemptLanding,
+    kind: AttemptLanding,
     criteria: number
   ): boolean => judged === "done" && kind === "done" && criteria > 0;
 
@@ -1849,8 +1853,8 @@ export const createDispatcher = ({
    */
   const movedBecause = (
     item: WorkItemRow,
-    judged: "done" | "todo" | "you",
-    kind: "done" | "todo" | "you",
+    judged: AttemptLanding,
+    kind: AttemptLanding,
     criteria: number
   ): string => {
     if (judged === "done" && kind === "you") {

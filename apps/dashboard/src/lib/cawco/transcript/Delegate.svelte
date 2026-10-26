@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { DelegateAskStatus } from "@cawco/core";
+  import type { Activity, DelegateAskStatus } from "@cawco/core";
   import { detach } from "@cawco/core/detach";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   /**
@@ -254,12 +254,11 @@
   const activity = $derived(id ? cawco.activityOf(id) : "idle");
   const currentTool = $derived(id ? cawco.currentToolOf(id) : null);
 
+  /** A delegate card's phase: what its session is doing, or where it is in its life. */
   type Phase =
+    | Activity
     | "spawning"
-    | "working"
-    | "blocked"
     | "reported"
-    | "idle"
     | "sleeping"
     | "stopping"
     | "stopped"

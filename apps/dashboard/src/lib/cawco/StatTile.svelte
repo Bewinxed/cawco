@@ -8,6 +8,7 @@
    * moves the figure or the tile's height. `action` is a control the figure
    * is changed with (the budget's Set budget), under the figure in the well.
    */
+  import type { ViewTone } from "@cawco/core";
   import type { Snippet } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
@@ -20,7 +21,7 @@
      * reading's data colour (`caution` data-warn, `bad` data-bad: a budget's
      * share, never a status pair); none by default.
      */
-    tone?: "neutral" | "live" | "attn" | "done" | "fail" | "caution" | "bad";
+    tone?: ViewTone | "caution" | "bad";
     unit?: string;
     value: string | number;
   }

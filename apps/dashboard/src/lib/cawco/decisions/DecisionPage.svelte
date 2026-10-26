@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { StageKind } from "@cawco/core";
   /**
    * A decision page opened in the Decisions tab's pane (Open Page Rule: in
    * place, nothing modal). Its bar is one row with no ground of its own
@@ -30,7 +31,6 @@
     reveal,
     revealOut,
   } from "#lib/cawco/motion/curves.svelte.js";
-  import type { StageKind } from "#lib/cawco/project-tasks.js";
   import TaskRing from "#lib/cawco/TaskRing.svelte";
   import FootFade from "#lib/cawco/transcript/FootFade.svelte";
   import { Button } from "#lib/components/ui/button/index.js";

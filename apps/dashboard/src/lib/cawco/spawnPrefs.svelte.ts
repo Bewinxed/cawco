@@ -1,5 +1,10 @@
 // biome-ignore lint/style/useFilenamingConvention: renaming would break the "./spawnPrefs.svelte" import path used by routes/project/[id]/+page.svelte, a file this batch does not own
-import type { EffortLevel, HarnessKind, PermissionMode } from "@cawco/core";
+import {
+  type EffortLevel,
+  type HarnessKind,
+  harnessNamed,
+  type PermissionMode,
+} from "@cawco/core";
 import { MODEL_DEFAULT } from "./models.svelte";
 import { readJson, writeJson } from "./storage";
 
@@ -46,9 +51,7 @@ const load = (): SpawnPrefs => {
   if (!parsed || typeof parsed !== "object") {
     return FALLBACK;
   }
-  const harness = ["claude", "opencode", "pi"].includes(parsed.harness ?? "")
-    ? parsed.harness
-    : undefined;
+  const harness = harnessNamed(parsed.harness);
   return {
     harness: harness ?? FALLBACK.harness,
     model:

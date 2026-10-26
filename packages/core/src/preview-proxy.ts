@@ -7,9 +7,9 @@ import { dataUrlBytes, deskCaptures } from "./captures";
 import { HOP_BY_HOP_HEADERS } from "./hop-headers";
 import {
   PREVIEW_DOWN_META,
+  PREVIEW_DOWNS,
   PREVIEW_WHY_META,
   type PreviewDown,
-  SHOWN_FAILURES,
 } from "./index";
 import { embeddedFile, standalone } from "./runtime";
 
@@ -272,10 +272,6 @@ const DOWN_META = new RegExp(
   `<meta name="${PREVIEW_DOWN_META}" content="([a-z]+)">`,
   "u"
 );
-/** The hops a proxy's page may name: every way a view fails but `page`, which no proxy says. */
-const DOWNS: ReadonlySet<string> = new Set(
-  SHOWN_FAILURES.filter((failure) => failure !== "page")
-);
 const WHY_META = new RegExp(
   `<meta name="${PREVIEW_WHY_META}" content="([^"]*)">`,
   "u"
@@ -294,10 +290,10 @@ export function downOf(
   html: string
 ): { down: PreviewDown; why: string | null } | null {
   const named = DOWN_META.exec(html)?.[1];
-  if (!(named && DOWNS.has(named))) {
+  const down = PREVIEW_DOWNS.find((hop) => hop === named);
+  if (!down) {
     return null;
   }
-  const down = named as PreviewDown;
   const why = WHY_META.exec(html)?.[1];
   return {
     down,

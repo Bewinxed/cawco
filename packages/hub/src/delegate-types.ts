@@ -10,7 +10,11 @@
  */
 import type { Database } from "bun:sqlite";
 import type { DelegateType } from "@cawco/core";
-import { DEFAULT_DELEGATE_TYPES, delegateTypeProblem } from "@cawco/core";
+import {
+  DEFAULT_DELEGATE_TYPES,
+  delegateTypeProblem,
+  HARNESSES,
+} from "@cawco/core";
 import { Elysia, t } from "elysia";
 import { undoable } from "./db/trash";
 
@@ -187,11 +191,7 @@ export const delegateTypesRoutes = (
       {
         body: t.Object({
           description: t.String(),
-          harness: t.Union([
-            t.Literal("claude"),
-            t.Literal("opencode"),
-            t.Literal("pi"),
-          ]),
+          harness: t.Union(HARNESSES.map((harness) => t.Literal(harness))),
           model: t.String(),
           effort: t.Optional(
             t.Union([

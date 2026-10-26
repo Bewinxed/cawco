@@ -7,6 +7,9 @@
  * commit or a file.
  */
 
+import type { CawStatus, ThreadStatus } from "./threads";
+import type { StageKind } from "./views";
+
 /** Who a transcript's words are (the index's `author`): only `owner` is "said by me". */
 export type TranscriptAuthor = "owner" | "agent" | "report" | "injected";
 
@@ -158,7 +161,9 @@ export type FindKind = (typeof FIND_KINDS)[number];
  * connected, or the hub never ran it: a session started from a terminal).
  */
 export type FindLiveState =
-  "working" | "needs-you" | "idle" | "sleeping" | "ended" | "unknown";
+  | Extract<CawStatus, "working" | "needs-you" | "idle" | "sleeping">
+  | "ended"
+  | "unknown";
 
 /** Which of a result's recognisers its words matched. */
 export type FindField =
@@ -302,14 +307,14 @@ export interface FindThread extends FindBase {
   /** Its best messages that matched, best first: present when its words did. */
   moments: FindMoment[];
   /** Caw on it now: working, waiting on you, or ready. */
-  state: "working" | "needs-you" | "ready";
+  state: ThreadStatus;
 }
 
 export interface FindTask extends FindBase {
   kind: "task";
   stage: string;
   /** Its stage's kind (`you`: it waits on you); null while the project's stages are unread or it names no stage of them. */
-  stageKind: "todo" | "active" | "waiting" | "you" | "done" | "dropped" | null;
+  stageKind: StageKind | null;
   /** `tsk-142`. */
   taskId: string;
   todos: { done: number; total: number };

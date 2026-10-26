@@ -53,6 +53,7 @@ import {
 import { CONTROL_PROBE_ACCOUNT } from "../../packages/core/src/accounts";
 import {
   CAPABILITIES_NONE,
+  HARNESSES,
   MESSAGES_READ,
 } from "../../packages/core/src/harness";
 import {
@@ -313,7 +314,7 @@ const claudeFleet: Pick<
 };
 
 const registry = new Map<HarnessKind, Harness>();
-for (const kind of ["claude", "opencode", "pi"] as const) {
+for (const kind of HARNESSES) {
   const held = kind === "opencode" ? undefined : kind;
   // What the supervisor's reattach reaches on a sessiond-backed adapter,
   // checked against the shape it reads.

@@ -11,7 +11,8 @@
    * sequence a scenario and record what was drawn. The controls below are
    * the same primitives for driving it by hand.
    */
-  import Caw, { type CawStatus } from "#lib/cawco/home/Caw.svelte";
+  import type { CawStatus } from "@cawco/core";
+  import Caw from "#lib/cawco/home/Caw.svelte";
 
   const STATUSES: CawStatus[] = [
     "loading",

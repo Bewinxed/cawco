@@ -6,12 +6,14 @@
  * transcript (thread-transcript.ts). The shapes the routes answer, the
  * `thread.upsert` frame carries, and the dashboard draws.
  */
+
 import type {
   HarnessKind,
   PlaceLfsRow,
   UserAnswers,
   UserQuestion,
 } from "./harness";
+import type { ItemEnd } from "./work-items";
 
 /**
  * Why Caw can't start when no machine is online, and how to fix it, in the
@@ -74,11 +76,33 @@ export interface CawRunning {
 export type CawInitiated = "finish" | "stop";
 
 /**
+ * What Caw shows: the product's status words, each drawn as its own file,
+ * assets/mascot/caw/<status>.riv. A thread's status and a conversation's
+ * live state (find.ts `FindLiveState`) are said in these words.
+ */
+export const CAW_STATUSES = [
+  "ready",
+  "working",
+  "needs-you",
+  "idle",
+  "done",
+  "trying",
+  "loading",
+  "reconnecting",
+  "sleeping",
+  "compacted",
+] as const;
+export type CawStatus = (typeof CAW_STATUSES)[number];
+
+/**
  * Where a thread stands, derived on every read and never stored: `working`
  * while the lead session is busy on a turn that thread woke, `needs-you`
  * while a question the lead asked in it is parked, else `ready`.
  */
-export type ThreadStatus = "working" | "needs-you" | "ready";
+export type ThreadStatus = Extract<
+  CawStatus,
+  "working" | "needs-you" | "ready"
+>;
 
 /** How a thread is addressed wherever a session is addressed by its id: `thread:<id>`. */
 export const THREAD_TARGET = "thread:";
@@ -185,9 +209,6 @@ export interface RoutineSchedule {
   /** "At 03:00, every day (Europe/London)". */
   words: string;
 }
-
-/** How an attempt or a delegate's work item ended. */
-export type ItemEnd = "done" | "failed" | "cancelled";
 
 /**
  * What a thread's event is, as typed data: the ids the dashboard looks

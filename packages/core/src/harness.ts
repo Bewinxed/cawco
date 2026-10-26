@@ -24,8 +24,10 @@ import { CLAUDE_PROVIDER } from "./accounts";
 import { HOUR_MS } from "./time";
 import { harnessWords } from "./words/harness";
 
+/** Every harness, in the order a machine's are named and brought up: Claude Code first, which every machine runs. */
+export const HARNESSES = ["claude", "opencode", "pi"] as const;
 /** The harnesses cawco can spawn sessions on. Adding one is a new adapter. */
-export type HarnessKind = "claude" | "opencode" | "pi";
+export type HarnessKind = (typeof HARNESSES)[number];
 
 /**
  * Each harness's CLI, by its tool catalog id (core tools.ts `TOOL_CATALOG`):
@@ -91,12 +93,20 @@ export interface SessionCredentialInstall {
   instanceId: string;
 }
 
-export const HARNESSES: readonly HarnessKind[] = ["claude", "opencode", "pi"];
-
 /** The harness a value off the wire, a URL or storage names, when it names one CawCo runs. */
 export const harnessNamed = (value: unknown): HarnessKind | undefined =>
   HARNESSES.find((harness) => harness === value);
 
+/** Every permission mode the wire may name ({@link PermissionMode}). */
+export const WIRE_PERMISSION_MODES = [
+  "default",
+  "acceptEdits",
+  "bypassPermissions",
+  "plan",
+  "dontAsk",
+  "auto",
+  "fullSend",
+] as const;
 /**
  * How a session answers tool permissions. The union is Claude Code's, plus
  * `fullSend`, CawCo's own: bypass, with every approval approved for the
@@ -107,14 +117,7 @@ export const harnessNamed = (value: unknown): HarnessKind | undefined =>
  * fleet-denied tool still never runs. Each adapter maps `fullSend` onto its
  * harness; none hands it to an SDK as is.
  */
-export type PermissionMode =
-  | "default"
-  | "acceptEdits"
-  | "bypassPermissions"
-  | "plan"
-  | "dontAsk"
-  | "auto"
-  | "fullSend";
+export type PermissionMode = (typeof WIRE_PERMISSION_MODES)[number];
 
 /**
  * The permission modes CawCo offers: the one list every machine reports for

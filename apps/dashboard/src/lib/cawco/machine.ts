@@ -2,6 +2,7 @@
 import {
   type AgentRow,
   configurePage,
+  type HarnessKind,
   machineLabel,
   machineWords,
 } from "@cawco/core";
@@ -41,7 +42,7 @@ export function machineOs(os: string) {
  */
 export function signInWarning(
   machine: AgentRow,
-  harness: "claude" | "pi" | "opencode" = "claude"
+  harness: HarnessKind = "claude"
 ): string | undefined {
   const report = machine.harnesses?.find((one) => one.harness === harness);
   if (harness === "claude" && report?.installed && report.authReason) {

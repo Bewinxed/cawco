@@ -21,6 +21,7 @@
 
 <script lang="ts">
   import { commonWords, threadWords, transcriptWords } from "@cawco/core";
+  import type { Activity } from "@cawco/core/activity";
   import { Popover } from "bits-ui";
   /**
    * One group's tabs: a segmented control (the Fluid Functionalism tabs,
@@ -77,12 +78,7 @@
   } from "#lib/icons.js";
   import { page } from "$app/state";
   import AccountSubmenu from "../accounts/AccountSubmenu.svelte";
-  import {
-    ACTIVITY_LABEL,
-    type Activity,
-    FAILED_LABEL,
-    UNKNOWN_LABEL,
-  } from "../activity";
+  import { ACTIVITY_LABEL, FAILED_LABEL, UNKNOWN_LABEL } from "../activity";
   import { cawco, isFailed, isStale } from "../client.svelte";
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
   import { frameSize } from "../frame-observer";

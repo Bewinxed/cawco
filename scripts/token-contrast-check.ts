@@ -26,6 +26,7 @@
  */
 import { join } from "node:path";
 import Color from "colorjs.io";
+import { STATUS_PAIRS } from "../packages/core/src/views";
 import { buildTokens, evaluatorOf } from "../packages/hub/src/design-tokens";
 
 const DIR = join(import.meta.dir, "../design/tokens");
@@ -55,7 +56,6 @@ interface Pair {
   source: string;
 }
 
-const STATUSES = ["live", "attn", "done", "fail"] as const;
 const TOOLS = [
   "run",
   "mcp",
@@ -229,7 +229,7 @@ const PAIRS: Pair[] = [
     floor: TEXT,
     source: S.inkSolid,
   },
-  ...STATUSES.map((s) => ({
+  ...STATUS_PAIRS.map((s) => ({
     label: `status-${s}-ink on status-${s}-bg`,
     fg: `status-${s}-ink`,
     bg: [`status-${s}-bg`],
@@ -319,7 +319,7 @@ const PAIRS: Pair[] = [
     floor: UI,
     source: S.hairline,
   },
-  ...STATUSES.flatMap((s) =>
+  ...STATUS_PAIRS.flatMap((s) =>
     [
       ["surface-raised"],
       ["surface-page"],

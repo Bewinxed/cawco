@@ -24,6 +24,7 @@
  * panel says it too (project-caps.ts in the hub).
  */
 
+import type { CawStatus } from "@cawco/core";
 import {
   CAW_NO_MACHINE,
   type CawInitiated,
@@ -43,7 +44,6 @@ import {
   type ProjectRow,
   threadsOf,
 } from "../client.svelte";
-import type { CawStatus } from "../home/caw-status";
 import { dur } from "../motion/curves.svelte";
 import { msOf } from "../motion/time";
 import type { TaskSummary } from "../project-tasks";

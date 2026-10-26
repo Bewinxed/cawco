@@ -20,6 +20,7 @@ import { Database } from "bun:sqlite";
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { HARNESSES } from "@cawco/core/harness";
 import { machinePath } from "@cawco/core/machine-path";
 import { HOUR_MS } from "@cawco/core/time";
 import { hubInProcess } from "./hub-in-process";
@@ -48,7 +49,6 @@ const id = (prefix: string, n: number): string =>
   `${prefix}-${n.toString(36).padStart(5, "0")}-${Math.floor(next() * 1e9).toString(36)}`;
 
 const MACHINES = ["obsidian", "lumen", "quarry", "marlin"];
-const HARNESSES = ["claude", "opencode", "pi"] as const;
 const WORDS =
   "fix the board's scroll after a reconnect; tidy the preview pane; make the release proof faster; answer the queued ask; the rail shows the wrong title; move tasks to the new stage; check the migration on a real database; the canvas loses its pins".split(
     "; "

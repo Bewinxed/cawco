@@ -1051,6 +1051,30 @@ export const placeOfKey = (
   return path === undefined ? undefined : { key: key.slice(0, at), path };
 };
 
+/**
+ * The sections of a {@link FleetSyncReport} that say what each row came to
+ * on the machine: one {@link FleetItemState} per row, or the one for the
+ * user-scope memory.
+ */
+export const FLEET_REPORT_SECTIONS = [
+  "mcp",
+  "marketplaces",
+  "plugins",
+  "skills",
+  "memory",
+  "memoryDocs",
+  "hooks",
+  "harnessConfig",
+] as const;
+export type FleetReportSection = (typeof FLEET_REPORT_SECTIONS)[number];
+
+/**
+ * The sections a fault is shown and settled in: each has its Configure page
+ * (the dashboard's fleet-faults.ts `SCOPE_ANCHOR`). The fleet's harness
+ * config has none, so its rows are said on the machine, never as a fault.
+ */
+export type FaultScope = Exclude<FleetReportSection, "harnessConfig">;
+
 /** The report sections a project's rows are said in, per place ({@link FleetSyncReport.placed}). */
 export const PLACED_SECTIONS = [
   "mcp",
@@ -1058,7 +1082,7 @@ export const PLACED_SECTIONS = [
   "memoryDocs",
   "hooks",
   "harnessConfig",
-] as const;
+] as const satisfies readonly FleetReportSection[];
 export type PlacedSection = (typeof PLACED_SECTIONS)[number];
 
 /**
@@ -1112,6 +1136,38 @@ export const placedApart = (report: FleetSyncReport): FleetSyncReport => {
 };
 
 /**
+ * Every cause a fault is named by: the ones a machine names in its report
+ * ({@link FleetFaultCause}), and the ones only a reader of the report can
+ * name (the dashboard's fleet-faults.ts):
+ * - `auth-discovery`: the hub could not discover an MCP server's
+ *   authorization (its row's `auth`);
+ * - `needs-auth`: a server waits on a sign-in (a row's `needs-auth` state);
+ * - `ssh-refused`: git fell back to ssh and had nothing to authenticate
+ *   with, read off the words of a row the machine said `unknown` of;
+ * - `unfetchable`: a row the hub could not fetch, which reached no machine.
+ */
+export const FAULT_CAUSES = [
+  "auth-discovery",
+  "needs-auth",
+  "cli-too-old",
+  "cli-missing",
+  "ssh-refused",
+  "marketplace-unlinked",
+  "hub-only",
+  "drifted",
+  "absent",
+  "unparsable",
+  "unwritable",
+  "timed-out",
+  "no-checkout",
+  "missing-bytes",
+  "unsafe-path",
+  "unfetchable",
+  "unknown",
+] as const;
+export type FaultCause = (typeof FAULT_CAUSES)[number];
+
+/**
  * Why one entry did not converge on a machine, named where it failed:
  * - `cli-too-old`: the claude CLI the sync ran is older than
  *   `CLAUDE_VERSION_FLOOR` (agent claude-version.ts), by its version;
@@ -1128,20 +1184,10 @@ export const placedApart = (report: FleetSyncReport): FleetSyncReport => {
  * - `unsafe-path`: a file the hub sent names a path outside its directory;
  * - `unknown`: anything else, said as it was in `detail`.
  */
-export type FleetFaultCause =
-  | "cli-too-old"
-  | "cli-missing"
-  | "marketplace-unlinked"
-  | "hub-only"
-  | "drifted"
-  | "absent"
-  | "unparsable"
-  | "unwritable"
-  | "timed-out"
-  | "no-checkout"
-  | "missing-bytes"
-  | "unsafe-path"
-  | "unknown";
+export type FleetFaultCause = Exclude<
+  FaultCause,
+  "auth-discovery" | "needs-auth" | "ssh-refused" | "unfetchable"
+>;
 
 /**
  * What one desired entry came to on one machine. `removed` is a success: the

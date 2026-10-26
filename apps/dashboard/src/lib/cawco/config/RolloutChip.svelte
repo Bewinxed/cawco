@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { commonWords, machineLabel } from "@cawco/core";
+  import { commonWords, type FaultScope, machineLabel } from "@cawco/core";
   /**
    * Where one row has landed: "2/2 machines" on the row, and machine by
    * machine in the popover. A machine that refused it opens the full fault —
@@ -31,7 +31,7 @@
   import AddMachineLink from "../connect/AddMachineLink.svelte";
   import FleetFault from "../FleetFault.svelte";
   import { syncFleet } from "../fleet";
-  import { causeOf, type FaultScope } from "../fleet-faults";
+  import { causeOf } from "../fleet-faults";
   import { machineOs } from "../machine";
   import { appear } from "../motion/curves.svelte";
 
@@ -44,16 +44,7 @@
   }: {
     machines: Machine[];
     /** Which record of the machine's report this row lives in. */
-    kind: Extract<
-      FaultScope,
-      | "mcp"
-      | "marketplaces"
-      | "plugins"
-      | "skills"
-      | "memoryDocs"
-      | "hooks"
-      | "memory"
-    >;
+    kind: FaultScope;
     /** The row's key in that record; ignored for the singular memory row. */
     name: string;
     what: string;

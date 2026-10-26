@@ -8,7 +8,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { platform, tmpdir } from "node:os";
 import { join } from "node:path";
 import { probeCapabilities } from "@cawco/agent/capabilities";
-import { CAWCO_ENV, INSTALL_JOINED, INSTALL_STEP_PREFIX } from "@cawco/core";
+import {
+  CAWCO_ENV,
+  HARNESSES,
+  INSTALL_JOINED,
+  INSTALL_STEP_PREFIX,
+} from "@cawco/core";
 import {
   type BinaryInstallation,
   binaryRoot,
@@ -41,7 +46,7 @@ import {
 } from "./service";
 
 /** Tools offered at install: what CawCo uses, none of it required to start. */
-const OFFERED = ["git", "claude", "opencode", "pi"] as const;
+const OFFERED = ["git", ...HARNESSES] as const;
 
 export interface BinaryInstallOptions {
   /** Ask in this terminal before installing a missing tool. */

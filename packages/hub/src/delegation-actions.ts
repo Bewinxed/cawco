@@ -14,6 +14,7 @@ import type {
   DelegateType,
   Envelope,
   GeneratedImage,
+  HarnessKind,
   ImageGenerationRequest,
   InstanceRow,
   LandsMode,
@@ -766,7 +767,7 @@ export interface HandoffDeps {
    * `formerIds`). A target named by one reaches its session.
    */
   readonly formerIds: () => Record<string, string>;
-  readonly harness?: "claude" | "opencode" | "pi";
+  readonly harness?: HarnessKind;
   /**
    * Whether this session has a parent (it was started by another session):
    * artifact_create then offers `to: "parent"`.
@@ -856,9 +857,9 @@ export interface HandoffActions {
   readonly continueSession: (input: {
     session: string;
     from?: "summary" | "asks";
-    summarizer_harness?: "claude" | "opencode" | "pi";
+    summarizer_harness?: HarnessKind;
     summarizer_model?: string;
-    target_harness: "claude" | "opencode" | "pi";
+    target_harness: HarnessKind;
     target_model: string;
     target_permission_mode?: SessionChosenMode;
     note?: string;
@@ -881,7 +882,7 @@ export interface HandoffActions {
       cwd?: string;
       /** The machine it runs on, by hostname or machineId; the caller's by default. */
       machine?: string;
-      harness?: "claude" | "opencode" | "pi";
+      harness?: HarnessKind;
       model?: string;
       /** The account it runs on, by label or id; placed by the hub when omitted. */
       account?: string;

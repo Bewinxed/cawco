@@ -9,6 +9,8 @@
  * (assets/mascot/loops/<loop>/timing.json); a drawing holds two.
  */
 
+import type { CawStatus } from "@cawco/core/threads";
+
 /** Frames a second in every loop's animation. */
 export const FPS = 24;
 
@@ -20,7 +22,7 @@ export interface Shot {
   /** The frame the still is. */
   frame: number;
   /** The status file it is drawn from. */
-  status: "needs-you" | "sleeping" | "idle";
+  status: Extract<CawStatus, "needs-you" | "sleeping" | "idle">;
 }
 
 /** A still's box: his 220-unit head fills the tile. */

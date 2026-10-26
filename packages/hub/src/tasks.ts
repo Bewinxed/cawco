@@ -52,6 +52,7 @@
  */
 import {
   type AttemptResult,
+  CLOSED_STAGE_KINDS,
   type EndedBy,
   type InstanceRow,
   type IssueTracker,
@@ -60,6 +61,7 @@ import {
   type ProjectStarter,
   type ResultArtifact,
   STARTER_PLACES,
+  type StageKind,
   type StarterPlace,
   type TaskIssueLink,
   taskLink,
@@ -119,7 +121,6 @@ import {
   ruledStages,
   STAGE_NAME,
   type Stage,
-  type StageKind,
   type StageMove,
   type Stages,
   type StagesReading,
@@ -774,7 +775,7 @@ export interface LinkMigration {
 }
 
 /** The stage kinds that close a task. */
-const CLOSED_KINDS: ReadonlySet<StageKind> = new Set(["done", "dropped"]);
+const CLOSED_KINDS: ReadonlySet<StageKind> = new Set(CLOSED_STAGE_KINDS);
 
 /** A change to a task's fields and owned sections; what is left out stays. Null clears. */
 export interface TaskPatch {

@@ -41,6 +41,7 @@
  *
  *   bun scripts/probe-kit/run.ts fleet-reads
  */
+
 import { existsSync } from "node:fs";
 import {
   copyFile,
@@ -57,8 +58,8 @@ import {
   projectClaudeRelative,
   TREE_STORE_DIR,
 } from "../../../packages/core/src/claude-dirs";
+import type { HarnessKind } from "../../../packages/core/src/harness";
 import {
-  type Harness,
   MACHINE,
   MODEL,
   type Reply,
@@ -100,7 +101,7 @@ interface Root {
 
 /** One delegate: its harness, and the roots it reads through. */
 interface Leg {
-  readonly harness: Harness;
+  readonly harness: HarnessKind;
   /** Paths the boundary hides, each read and expected refused. */
   readonly hidden?: Record<string, string>;
   readonly key: string;

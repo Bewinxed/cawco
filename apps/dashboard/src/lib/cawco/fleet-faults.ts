@@ -23,42 +23,14 @@
  *    keeps its raw text and says so, rather than being guessed at.
  */
 import type {
+  FaultCause,
+  FaultScope,
   FleetItemState,
   FleetPlugin,
   FleetSkillMeta,
   FleetSyncReport,
   HarnessKind,
 } from "@cawco/core";
-
-/** Which fleet panel a fault belongs to — the key its report is stored under. */
-export type FaultScope =
-  | "mcp"
-  | "marketplaces"
-  | "plugins"
-  | "skills"
-  | "memory"
-  | "memoryDocs"
-  | "hooks";
-
-/** The named causes. `unknown` is not a failure of this table — it is a fault we refuse to guess at. */
-export type FaultCause =
-  | "auth-discovery"
-  | "needs-auth"
-  | "cli-too-old"
-  | "cli-missing"
-  | "ssh-refused"
-  | "marketplace-unlinked"
-  | "hub-only"
-  | "drifted"
-  | "absent"
-  | "unparsable"
-  | "unwritable"
-  | "timed-out"
-  | "no-checkout"
-  | "missing-bytes"
-  | "unsafe-path"
-  | "unfetchable"
-  | "unknown";
 
 /**
  * What a cause means and what to do about it, in the operator's language.

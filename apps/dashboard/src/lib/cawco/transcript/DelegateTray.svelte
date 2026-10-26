@@ -31,6 +31,7 @@
    * a work item's: a started session that failed runs none, so its chip
    * stays in the work zone, says "failed", and leaves as a finished one does.
    */
+  import type { WorkItemState } from "@cawco/core";
   import { tick, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { SvelteMap } from "svelte/reactivity";
@@ -137,14 +138,8 @@
     return Math.ceil(ruler.measureText(shown).width) + 1;
   }
 
-  type Tone =
-    | "starting"
-    | "running"
-    | "asked"
-    | "needs"
-    | "done"
-    | "cancelled"
-    | "failed";
+  /** A chip's tone: its work item's state, or the ask it waits on (`asked`: put to this session; `needs`: to you). */
+  type Tone = WorkItemState | "asked" | "needs";
   interface Chip {
     entry: Entry;
     item: TrayChild;

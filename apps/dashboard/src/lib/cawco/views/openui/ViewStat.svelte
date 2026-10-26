@@ -1,5 +1,6 @@
 <script lang="ts">
   /** One figure with its label: the app's StatTile. */
+  import { VIEW_TONES } from "@cawco/core";
   import StatTile from "#lib/cawco/StatTile.svelte";
   import type { OpenUIRenderProps } from "./OpenUiRenderer.svelte";
 
@@ -11,8 +12,9 @@
     tone?: string;
     unit?: unknown;
   }> = $props();
-  const TONES = ["neutral", "live", "attn", "done", "fail"] as const;
-  const tone = $derived(TONES.find((each) => each === props.tone) ?? "neutral");
+  const tone = $derived(
+    VIEW_TONES.find((each) => each === props.tone) ?? "neutral"
+  );
 </script>
 
 <div class="min-w-c-stat-min shrink grow basis-c-stat-min">

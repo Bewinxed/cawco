@@ -13,6 +13,7 @@ import {
   RESTART_WAIT_CAP_MS,
   type RetiringKeeper,
 } from "@cawco/core/binary-updates";
+import type { CawStatus } from "@cawco/core/threads";
 import { downloadWords } from "@cawco/core/words/downloads";
 import { updatesWords } from "@cawco/core/words/updates";
 
@@ -405,7 +406,7 @@ export interface Notice {
   /** The primary button, when the notice has one. */
   action?: "retry" | "install-all";
   /** Caw: a still mark, or (needs-you) the one that moves. */
-  caw: { moves: boolean; status: string };
+  caw: { moves: boolean; status: CawStatus };
   /** Machines the notice stands for, by id. */
   closing?: string;
   /** `Configure update behaviour` (Configure › Updates) is offered. */

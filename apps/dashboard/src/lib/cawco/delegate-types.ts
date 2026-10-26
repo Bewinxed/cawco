@@ -1,5 +1,4 @@
 import type { DelegateType, Deleted } from "@cawco/core";
-import { HARNESSES } from "@cawco/core";
 import { hubFailure } from "#lib/cawco/hub-read.js";
 
 /**
@@ -13,9 +12,6 @@ import { hubFailure } from "#lib/cawco/hub-read.js";
  */
 
 export type { DelegateType } from "@cawco/core";
-
-/** `DelegateType['harness']` is the same three-value union `HARNESSES` already is. */
-export const DELEGATE_HARNESSES = HARNESSES;
 
 export interface DelegateTypesPayload {
   types: DelegateType[];

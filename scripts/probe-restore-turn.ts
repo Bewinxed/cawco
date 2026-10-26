@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { HARNESSES, type HarnessKind } from "../packages/core/src/harness";
 import { HOUR_MS } from "../packages/core/src/time";
 /**
  * Restore probe: a session whose turn was running when its process died is
@@ -24,12 +25,11 @@ import { HOUR_MS } from "../packages/core/src/time";
  * restart` per harness that passed, and exits 0 only if every one did.
  */
 import { ensureDeps } from "./lib/deps";
-import type { Harness, Seen } from "./scratch-fleet";
+import type { Seen } from "./scratch-fleet";
 
 // The dependencies first (lib/deps.ts): the fleet loads after them.
 await ensureDeps();
-const { delay, HARNESSES, MODEL, scratchFleet, until } =
-  await import("./scratch-fleet");
+const { delay, MODEL, scratchFleet, until } = await import("./scratch-fleet");
 
 const HAND_BACK =
   /CawCo restarted this session's process|A restart cut your turn/u;
@@ -37,11 +37,11 @@ const TAG = /SLOW-PROBE ([\w-]+)/u;
 const SLOW_WORDS = Array.from({ length: 240 }, (_, i) => `word${i} `);
 
 const wanted = (() => {
-  const named: Harness[] = [];
+  const named: HarnessKind[] = [];
   const argv = process.argv.slice(2);
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === "--harness") {
-      named.push(argv[i + 1] as Harness);
+      named.push(argv[i + 1] as HarnessKind);
       i += 1;
     }
   }
@@ -98,7 +98,7 @@ try {
   }
 
   // ── A. Cut mid-turn by a sessiond and agent stop ──────────────────────
-  const sessions = new Map<Harness, string>();
+  const sessions = new Map<HarnessKind, string>();
   for (const harness of wanted) {
     try {
       const id = await fleet.spawn(harness, `Restore probe ${harness}`);
@@ -150,7 +150,7 @@ try {
     }
   }
   await delay(20_000);
-  const afterRestore = new Map<Harness, { seen: number; stored: number }>();
+  const afterRestore = new Map<HarnessKind, { seen: number; stored: number }>();
   for (const [harness, id] of sessions) {
     afterRestore.set(harness, {
       seen: handBacksSeen(harness),

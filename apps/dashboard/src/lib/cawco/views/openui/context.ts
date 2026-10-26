@@ -5,12 +5,9 @@
  * around the view (ViewOpenUI) sets this, so a card in a drawn view opens
  * the same sheet as the board's.
  */
+import type { StageKind } from "@cawco/core";
 import { getContext, setContext } from "svelte";
-import {
-  type StageKind,
-  stageLabel,
-  type TaskSummary,
-} from "#lib/cawco/project-tasks.js";
+import { stageLabel, type TaskSummary } from "#lib/cawco/project-tasks.js";
 import { dateTimeText } from "#lib/cawco/usage.js";
 
 /** One row of the `tasks` view tool: the board's task, its file's own fields and its dates (hub views.ts `ViewTaskRow`). */

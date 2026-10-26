@@ -20,6 +20,7 @@
   import {
     CAPABILITIES_NONE,
     type InstanceRow,
+    PERMISSION_MODES,
     type PulseFrame,
     type WorkItemSummary,
   } from "@cawco/core";
@@ -184,13 +185,7 @@
           capabilities: {
             ...CAPABILITIES_NONE,
             effort: true,
-            permissionModes: [
-              "default",
-              "plan",
-              "acceptEdits",
-              "bypassPermissions",
-              "fullSend",
-            ],
+            permissionModes: [...PERMISSION_MODES],
           },
           harness: "claude",
           installed: true,

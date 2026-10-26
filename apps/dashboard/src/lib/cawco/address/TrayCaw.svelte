@@ -24,7 +24,6 @@
     ARTBOARD,
     BOX,
     type CawFile,
-    type CawStatus,
     LEDGE_LINE,
     stageCaw,
   } from "#lib/cawco/home/Caw.svelte";
@@ -38,7 +37,7 @@
     pinned,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { theme } from "#lib/theme.svelte.js";
-  import type { TrayPose } from "./tray.svelte";
+  import { TRAY_STATUSES, type TrayPose } from "./tray.svelte";
 
   let {
     pose,
@@ -51,14 +50,6 @@
     size: number;
     ledge?: boolean;
   } = $props();
-
-  const STATUSES: readonly TrayPose[] = [
-    "ready",
-    "idle",
-    "loading",
-    "done",
-    "needs-you",
-  ];
 
   /** Without a ledge to climb from, the climb is his idle. */
   const files = $derived(
@@ -79,9 +70,11 @@
    * What mounts him: the peek (a ready Caw behind the ledge), any other
    * status (one `Caw` that changes its own file), or a file of its own.
    */
+  /** The status `file` is drawn from, when it is a status's. */
+  const status = $derived(TRAY_STATUSES.find((one) => one === file));
   const family = $derived.by(() => {
-    if (STATUSES.includes(file)) {
-      return ledge && file === "ready" ? "peek" : "status";
+    if (status) {
+      return ledge && status === "ready" ? "peek" : "status";
     }
     return file;
   });
@@ -177,14 +170,14 @@
           {size}
           status="ready"
         />
-      {:else if family === "status"}
+      {:else if family === "status" && status}
         <!-- One Caw for every status in a row: the file changes, he stays. -->
         <div class="absolute top-0 start-0">
           <Caw
             next={["idle", "loading", "done", "needs-you"]}
             onentered={landed}
             {size}
-            status={file as CawStatus}
+            {status}
           />
         </div>
       {:else}

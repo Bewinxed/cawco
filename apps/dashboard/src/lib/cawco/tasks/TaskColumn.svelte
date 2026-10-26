@@ -8,6 +8,7 @@
    * so the status reads glyph, then word, then hue, and coral stays the
    * action's (DESIGN.md, The Coral Is Where You Act Rule).
    */
+  import type { StageKind } from "@cawco/core";
   import { type Snippet, tick } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
@@ -16,11 +17,7 @@
     reflowsFrom,
     reread,
   } from "#lib/cawco/motion/rows.svelte.js";
-  import {
-    KIND_LABEL,
-    type StageKind,
-    type TaskSummary,
-  } from "#lib/cawco/project-tasks.js";
+  import { KIND_LABEL, type TaskSummary } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";

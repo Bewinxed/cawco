@@ -10,7 +10,7 @@
  * Stopped, Failed, Unreachable) and WORDS.md's nouns (session, delegate,
  * thread, task, routine, preview, decision, report, machine, project).
  */
-import type { ArtifactKind } from "@cawco/core";
+import type { ArtifactKind, StatusPair } from "@cawco/core";
 import type { FindSecrets, SecretSpan } from "@cawco/core/find";
 import { markedRuns } from "@cawco/core/find-match";
 import { findSecretWords } from "@cawco/core/words/find-secrets";
@@ -53,7 +53,7 @@ import type {
 } from "./find-client";
 
 /** How a word on line 2 is tinted: only a state that asks something takes a hue. */
-export type Tone = "live" | "attn" | "fail" | "quiet";
+export type Tone = Extract<StatusPair, "live" | "attn" | "fail"> | "quiet";
 
 /**
  * One run of words a row draws: matched ones strong; one that is part of a

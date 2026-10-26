@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { StageKind } from "@cawco/core";
   /**
    * One card of a decided page, settled: the record is the cards the person
    * picked on, nothing restated in a block of its own (the decided record's
@@ -13,7 +14,6 @@
   import { decisionsWords as words } from "@cawco/core";
   import type { RecordCard } from "@cawco/core/decisions";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
-  import type { StageKind } from "#lib/cawco/project-tasks.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";

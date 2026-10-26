@@ -7,14 +7,13 @@
  * it (its delegates).
  */
 
-/** What a session is doing now: a turn, an ask waiting on the owner, or nothing. */
-export type Doing = "working" | "blocked" | "idle";
+import type { Activity } from "./activity";
 
 export interface ArchiveView {
   /** Sessions directly under `id`. */
   childrenOf: (id: string) => readonly string[];
   /** What `id` is doing now. */
-  doing: (id: string) => Doing;
+  doing: (id: string) => Activity;
 }
 
 /**

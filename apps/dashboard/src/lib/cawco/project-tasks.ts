@@ -9,7 +9,7 @@
  * Not to be confused with a session's own plan (WORDS.md: plan), which is
  * the hub's too, held in the client by `plan.ts`.
  */
-import type { taskLinkWords } from "@cawco/core";
+import type { StageKind, taskLinkWords, WorkItemState } from "@cawco/core";
 import { type AttemptResult, outputArtifacts } from "@cawco/core/deliverables";
 import type { ProjectGate } from "@cawco/core/project-gate";
 import type {
@@ -32,10 +32,6 @@ import {
   noAnswer,
   unreachedAnswer,
 } from "./hub-read";
-
-/** The fixed kinds a stage belongs to (WORDS.md: kind). */
-export type StageKind =
-  "todo" | "active" | "waiting" | "you" | "done" | "dropped";
 
 /** Who moves a task: you, the project's lead, a session, an approved action, a routine. */
 export type Mover = "you" | "lead" | "session" | "action" | "routine";
@@ -104,10 +100,6 @@ export interface StagesTemplateView {
   stages: Stage[];
 }
 
-/** A work item's life, as the hub's `WorkItemState` names it. */
-export type AttemptState =
-  "starting" | "running" | "done" | "failed" | "cancelled";
-
 /** One try at a task (WORDS.md: attempt): a work item whose task it is. */
 export interface TaskAttempt {
   /** When it ended, ms epoch; null while it is live. */
@@ -126,7 +118,7 @@ export interface TaskAttempt {
   result: AttemptResult | null;
   /** When it was filed, ms epoch. */
   startedAt: number;
-  state: AttemptState;
+  state: WorkItemState;
   workItemId: string;
 }
 
@@ -823,7 +815,7 @@ export async function readOutputText(
 }
 
 /** A session's state on a task as a status word (WORDS.md: working / done / failed). */
-export const attemptWord = (state: AttemptState): string =>
+export const attemptWord = (state: WorkItemState): string =>
   ({
     starting: "Working",
     running: "Working",

@@ -43,6 +43,7 @@ import { readWithin } from "../packages/core/src/bounded";
 import { CLAUDE_JSON_NAME } from "../packages/core/src/claude-dirs";
 import { openLockFile, tryLock, unlock } from "../packages/core/src/flock";
 import type { FleetFetchFrame } from "../packages/core/src/frames";
+import { HARNESSES, type HarnessKind } from "../packages/core/src/harness";
 import {
   darwinUserDirs,
   socketPathProblem,
@@ -97,9 +98,6 @@ const GIT_REPOSITORY_ENV = [
 for (const name of GIT_REPOSITORY_ENV) {
   delete process.env[name];
 }
-
-export type Harness = "claude" | "opencode" | "pi";
-export const HARNESSES: Harness[] = ["claude", "opencode", "pi"];
 
 /** A launch's stderr file, whose stdout is the same name in `.log`. */
 const ERR_SUFFIX = /\.err$/u;
@@ -1577,7 +1575,7 @@ export async function sweepDeadFleets(): Promise<string[]> {
 
 export const MACHINE = "scratch-fleet";
 export const ACCOUNT = "acct-scratch-fleet";
-export const MODEL: Record<Harness, string> = {
+export const MODEL: Record<HarnessKind, string> = {
   claude: "claude-haiku-4-5",
   opencode: "mockoc/mock-oc",
   pi: "mockpi/mock-pi",
@@ -2556,7 +2554,7 @@ async function standUp(
     ms = 60_000,
     instanceId?: string,
     /** The harness a machine-scoped catalog call is addressed at (`getSessionMessages`, say). */
-    harness?: Harness
+    harness?: HarnessKind
   ): Promise<{ error?: string; ok: boolean; result?: unknown }> => {
     const ws = await dashboard();
     const requestId = crypto.randomUUID();
@@ -3107,7 +3105,7 @@ async function standUp(
     )[0];
 
   const spawn = async (
-    harness: Harness,
+    harness: HarnessKind,
     title: string,
     cwd = workdir,
     /** More of the spawn's payload (its `projectId`). */

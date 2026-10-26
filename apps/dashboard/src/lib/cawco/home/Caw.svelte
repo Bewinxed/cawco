@@ -1,10 +1,8 @@
 <script lang="ts" module>
+  import type { CawStatus } from "@cawco/core";
   import type { Rive } from "@rive-app/canvas";
   import riveWasm from "@rive-app/canvas/rive.wasm?url";
   import rests from "../../../../../../assets/mascot/loops/rests.json";
-  import type { CawStatus } from "./caw-status";
-
-  export type { CawStatus } from "./caw-status";
 
   /**
    * A New project template card's Caw, with the template's prop: a rest,

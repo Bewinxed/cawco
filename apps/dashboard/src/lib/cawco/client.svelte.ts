@@ -44,6 +44,7 @@ import type {
   RebalanceNotice,
 } from "@cawco/core/accounts";
 import type { ApprovedActionView } from "@cawco/core/actions";
+import type { Activity } from "@cawco/core/activity";
 import type {
   ArtifactNeed,
   ArtifactNeedNotice,
@@ -163,7 +164,6 @@ import {
 import type { SubagentState } from "#lib/utils/flow-types.js";
 import { browser } from "$app/env";
 import { page as servedPage } from "$app/state";
-import type { Activity } from "./activity";
 import { activityOf, runningSubagents } from "./activity";
 import { deletePreview } from "./artifact-api";
 import { Keyed, Pulse, type PulseReading, unlessSame } from "./board.svelte";

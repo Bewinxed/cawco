@@ -48,9 +48,6 @@
 import { STAGE_KINDS as KINDS, type StageKind } from "@cawco/core";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 
-/** The fixed kinds a stage belongs to (WORDS.md: kind), core's: a view binds to them too. */
-export type { StageKind } from "@cawco/core";
-
 /** Who moves a task: you, the project's lead, a session, an approved action, a routine. */
 export const MOVERS = ["you", "lead", "session", "action", "routine"] as const;
 export type Mover = (typeof MOVERS)[number];

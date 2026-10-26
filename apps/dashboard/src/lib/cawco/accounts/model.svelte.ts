@@ -22,7 +22,7 @@ import {
   type RebalanceNotice,
   type SigninState,
 } from "@cawco/core/accounts";
-import type { HarnessKind } from "@cawco/core/harness";
+import { HARNESSES, type HarnessKind } from "@cawco/core/harness";
 import { machineLabel } from "@cawco/core/machine-names";
 import { accountsWords as words } from "@cawco/core/words/accounts";
 import { cawco } from "../client.svelte";
@@ -95,13 +95,10 @@ function providerHarnesses(provider: AccountProvider): HarnessKind[] {
 export const providerLimits = (provider: AccountProvider): boolean =>
   LIMITED_PROVIDERS.includes(provider);
 
-/** The order harnesses are named in: "OpenCode and pi". */
-const HARNESS_ORDER: readonly HarnessKind[] = ["claude", "opencode", "pi"];
-
 /** "Claude Code", "OpenCode and pi": the harnesses that use a provider's accounts. */
 export const harnessWords = (provider: AccountProvider): string =>
   words.harnessList(
-    HARNESS_ORDER.filter((harness) =>
+    HARNESSES.filter((harness) =>
       providerHarnesses(provider).includes(harness)
     ).map((harness) => words.harnesses[harness])
   );

@@ -27,6 +27,7 @@
    * of the folder (FolderFile) opens the same way, in the task's place: one
    * stands beside the view at a time.
    */
+  import type { StageKind } from "@cawco/core";
   import {
     BLOCK_PAGE_TITLES,
     type ShownBlockPage as BlockPageId,
@@ -91,7 +92,6 @@
     movesFrom,
     moveTask,
     readStages,
-    type StageKind,
     type StagesView,
     stageLabel,
     type TaskList,

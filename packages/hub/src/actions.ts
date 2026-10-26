@@ -34,7 +34,12 @@
  * only if it reads that key; the hub's own at-most-once does not depend on it.
  */
 import { createHash } from "node:crypto";
-import type { ApprovedActionView, InstanceRow, SessionRole } from "@cawco/core";
+import {
+  ACTION_STATES,
+  type ApprovedActionView,
+  type InstanceRow,
+  type SessionRole,
+} from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { DAY_MS } from "@cawco/core/time";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
@@ -879,18 +884,7 @@ export const createActions = ({
         "action_list",
         "Your project's approved actions, newest first: each one's call, time, state (proposed, approved, denied, running, done, failed, unknown, cancelled), result or error, and stage move.",
         {
-          state: z
-            .enum([
-              "proposed",
-              "approved",
-              "denied",
-              "running",
-              "done",
-              "failed",
-              "unknown",
-              "cancelled",
-            ])
-            .optional(),
+          state: z.enum(ACTION_STATES).optional(),
         },
         ({ state }) =>
           run(async () => {

@@ -6,7 +6,7 @@
  * sees every attempt in its project beside its own delegates, as co-parent
  * (§5.3 lead authority).
  */
-import type { InstanceRow } from "@cawco/core";
+import type { InstanceRow, WorkItemState } from "@cawco/core";
 import { HOUR_MS } from "@cawco/core/time";
 import type { DbShape, WorkItemRow } from "./db";
 import type { KeepAliveRow } from "./keep-alive";
@@ -61,14 +61,7 @@ export interface DelegateNode {
   /** When its session's first item started. */
   startedAt: string;
   /** `stalled` while {@link stalled} says so: never `running` at its limit. */
-  state:
-    | "starting"
-    | "running"
-    | "stalled"
-    | "waiting"
-    | "done"
-    | "failed"
-    | "cancelled";
+  state: WorkItemState | "stalled" | "waiting";
   title: string;
   waitingOn?: { reason: string; until?: string };
   workspaceId: string;

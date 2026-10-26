@@ -19,6 +19,7 @@
  * default; https lives only at the long name; the clipboard only on https.
  */
 
+import type { CawStatus } from "@cawco/core/threads";
 import { DAY_MS } from "@cawco/core/time";
 
 export type Network = "tailscale" | "headscale" | "netbird";
@@ -51,13 +52,18 @@ export type Cause =
   | "expired"
   | "certs-off";
 
+/** The status files Caw is drawn from in the tray. */
+export const TRAY_STATUSES = [
+  "ready",
+  "idle",
+  "loading",
+  "done",
+  "needs-you",
+] as const satisfies readonly CawStatus[];
+
 /** A file Caw is drawn from in the tray, or the pose still to be drawn. */
 export type TrayPose =
-  | "ready"
-  | "idle"
-  | "loading"
-  | "done"
-  | "needs-you"
+  | (typeof TRAY_STATUSES)[number]
   | "climb"
   | "head-smile"
   | "head-unsmile"

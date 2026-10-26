@@ -77,8 +77,9 @@ export interface ProviderInfo {
   pi?: string;
 }
 
+// Every harness has one: an `Extract` of its own, so the wire schema keeps naming it `HomeStore`.
 /** Where a credential moved into an account came from: a harness's own store on the machine. */
-export type HomeStore = "claude" | "pi" | "opencode";
+export type HomeStore = Extract<import("./harness").HarnessKind, string>;
 
 /**
  * How an account of a kind signs in on a machine. `paste-code`: a link to

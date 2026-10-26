@@ -2,6 +2,7 @@
   import {
     delegateTypeProblem,
     EFFORT_LEVELS,
+    HARNESSES,
     delegateTypesWords as words,
   } from "@cawco/core";
   import { detach } from "@cawco/core/detach";
@@ -15,7 +16,6 @@
   import { page } from "$app/state";
   import {
     blankDelegateType,
-    DELEGATE_HARNESSES,
     type DelegateType,
     saveDelegateType,
   } from "../../delegate-types";
@@ -248,7 +248,7 @@
       onchange={(next) => {
         draft.harness = next as DelegateType["harness"];
       }}
-      options={DELEGATE_HARNESSES.map((harness) => ({
+      options={HARNESSES.map((harness) => ({
         value: harness,
         label: harness,
       }))}

@@ -13,7 +13,7 @@
  */
 
 import type { Bounded } from "@cawco/core/bounded";
-import { HARNESS_TOOL, type HarnessKind } from "@cawco/core/harness";
+import { HARNESS_TOOL, HARNESSES, type HarnessKind } from "@cawco/core/harness";
 import { machineLabel } from "@cawco/core/machine-names";
 import {
   type ToolSpec,
@@ -31,9 +31,6 @@ import { failureWords } from "./hub-read";
 import { TabDraft } from "./tab-draft.svelte";
 import { installTool } from "./tools";
 import { TRY_AGAIN } from "./unanswered";
-
-/** Every harness, in the order a machine's blocks are said. */
-export const HARNESSES: readonly HarnessKind[] = ["claude", "opencode", "pi"];
 
 /** Where the fix stands, as the hub's cell for it says. */
 export type HarnessFix =

@@ -5,6 +5,7 @@
     commentWords,
     commonWords,
     machineLabel,
+    PREVIEW_DOWNS,
     PREVIEW_LOCKED_MESSAGE,
     type PreviewDown,
     type PreviewSettings,
@@ -722,16 +723,9 @@
   let down = $state<PreviewDown | null>(null);
   /** The machine's own words for a `reach` failure, from the proxy's page. */
   let downWhy = $state<string | null>(null);
-  const DOWN_KINDS: readonly PreviewDown[] = [
-    "server",
-    "machine",
-    "workspace",
-    "reach",
-    "closed",
-  ];
   /** The proxy's page says which hop failed (`cawco:down`): the pane cannot read a preview origin's document. */
   function heardDown(message: { down?: unknown; why?: unknown }) {
-    const said = DOWN_KINDS.find((kind) => kind === message.down);
+    const said = PREVIEW_DOWNS.find((kind) => kind === message.down);
     if (!said) {
       return;
     }

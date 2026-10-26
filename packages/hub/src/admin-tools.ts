@@ -12,6 +12,7 @@ import {
   type FleetMemoryDoc,
   type FleetPlugin,
   type FleetSkillMeta,
+  HARNESSES,
   type MarketplaceLink,
   MCP_PLATFORMS,
   MEMORY_ROLES,
@@ -347,7 +348,7 @@ export function adminTools() {
           .optional()
           .describe("What this type is for. Required for put."),
         harness: z
-          .enum(["claude", "opencode", "pi"])
+          .enum(HARNESSES)
           .optional()
           .describe(
             "Which runtime runs delegates of this type. Required for put."

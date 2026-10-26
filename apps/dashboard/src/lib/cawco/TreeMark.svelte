@@ -1,6 +1,8 @@
 <script lang="ts" module>
+  import type { StatusPair } from "@cawco/core";
+
   /** What a row is doing, as its mark says it. */
-  export type MarkStatus = "live" | "attn" | "done" | "fail" | "idle";
+  export type MarkStatus = StatusPair | "idle";
 </script>
 
 <script lang="ts">

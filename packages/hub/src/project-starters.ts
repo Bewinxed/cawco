@@ -48,9 +48,11 @@
  */
 import { createHash } from "node:crypto";
 import {
+  CLOSED_STAGE_KINDS,
   type CommandResult,
   type ProjectStarter,
   STARTER_PLACES,
+  type StageKind,
   type StarterPlace,
   type StartersChangedFrame,
 } from "@cawco/core";
@@ -117,7 +119,9 @@ export interface ProjectStartersDeps {
   tasks: Tasks;
 }
 
-const OPEN_KINDS = new Set(["todo", "active", "waiting", "you"]);
+/** A task still to do, under way or waiting: its stage's kind is none of the closed ones. */
+const isOpen = (kind: StageKind): boolean =>
+  !(CLOSED_STAGE_KINDS as readonly StageKind[]).includes(kind);
 /** The tasks Jev reads first: waiting on you, then failed, then under way, then the newest changed. */
 const weight = (task: TaskSummary): number =>
   (task.needsYou ? 4 : 0) +
@@ -245,7 +249,7 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
     const { repo } = landed;
     const now = Date.now();
     const open = all
-      .filter((task) => task.kind !== null && OPEN_KINDS.has(task.kind))
+      .filter((task) => task.kind !== null && isOpen(task.kind))
       .sort((a, b) => weight(b) - weight(a) || b.updatedAt - a.updatedAt);
     const starterTasks: StarterTask[] = open.map((task) => ({
       id: task.id,

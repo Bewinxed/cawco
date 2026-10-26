@@ -28,6 +28,7 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { HarnessKind } from "./harness";
 
 export type Access = "read" | "write";
 
@@ -88,7 +89,7 @@ export type Verdict =
 export interface Call {
   /** The directory the harness resolves a relative path against. */
   readonly cwd: string;
-  readonly harness: "claude" | "opencode" | "pi";
+  readonly harness: HarnessKind;
   readonly input: unknown;
   readonly tool: string;
   /**

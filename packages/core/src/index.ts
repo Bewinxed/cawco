@@ -1,18 +1,21 @@
 // The registry of CawCo's environment variables, in a file of its own that
 // imports nothing (cawco-env.ts), re-exported here as every caller reads it,
 // and read here by the readers below it.
+import type { ACTIVITIES } from "./activity";
 import { CAWCO_ENV, readEnv } from "./cawco-env";
 import { CAWCO_MCP_DEFAULT_PORT, type FleetSyncReport } from "./fleet";
 import type { MachineHarnessReport } from "./harness";
 import type { PlanWait } from "./plan";
 import type { LastErrorKind } from "./relaunch";
 import type { ToolStatus } from "./tools";
+import type { WORK_ITEM_STATES } from "./work-items";
 
 // Accounts: several sign-ins per provider, and which one a session runs on.
 export * from "./accounts";
 // Connections: outside services the hub signs in to and calls for sessions.
 export * from "./actions";
 // "Continue in new session": the size rules the hub and the dashboard share.
+export * from "./activity";
 export * from "./archive";
 // What waits on the person among the artifacts: Needs you's artifact items.
 export * from "./artifact-needs";
@@ -151,6 +154,7 @@ export * from "./usage";
 // outputs. The OpenUI library itself is `@cawco/core/views-library`.
 export * from "./views";
 export * from "./wait-targets";
+export * from "./work-items";
 
 // sessiond's protocol types are deliberately NOT re-exported here. That module
 // reaches for `node:os` and `node:path` to derive its endpoint, and this barrel
@@ -1437,7 +1441,8 @@ export interface WorkItemSummary {
    * otherwise.
    */
   stalled: string | null;
-  state: "starting" | "running" | "done" | "failed" | "cancelled";
+  // Indexed off the owner: the apps' schema names this field's enum by the hub's `WorkItemState`.
+  state: (typeof WORK_ITEM_STATES)[number];
   title: string;
   waitReason: string | null;
   /** A declared wait's deadline in epoch ms. */
@@ -1511,8 +1516,9 @@ export type DelegateEventPayload = DelegateEvent["payload"];
  * signals separate so a reader can still tell "blocked" from "working".
  */
 export interface SessionPulse {
+  // Indexed off the owner, not `Activity`: the apps' schema names this field's enum.
   /** Coarse now-state the rail draws without frames. */
-  activity: "working" | "blocked" | "idle";
+  activity: (typeof ACTIVITIES)[number];
   /** ms epoch of the last frame that changed this pulse. */
   at: number;
   busy: boolean;
@@ -1795,6 +1801,14 @@ export interface ArtifactPromotion {
   commit: string;
 }
 
+/** Every hop a preview's page can say did not answer ({@link PreviewDown}). */
+export const PREVIEW_DOWNS = [
+  "server",
+  "machine",
+  "workspace",
+  "reach",
+  "closed",
+] as const;
 /**
  * A preview whose page nothing serves: the hop that did not answer, as the
  * proxy's own page names it in a `<meta name="cawco-preview-down">` (core
@@ -1809,8 +1823,7 @@ export interface ArtifactPromotion {
  * why in {@link PREVIEW_WHY_META}. `closed`: the session shows no preview
  * now (it was closed, or the session ended).
  */
-export type PreviewDown =
-  "server" | "machine" | "workspace" | "reach" | "closed";
+export type PreviewDown = (typeof PREVIEW_DOWNS)[number];
 export const PREVIEW_DOWN_META = "cawco-preview-down";
 /** The machine's own words for a `reach` failure, on the proxy's page beside {@link PREVIEW_DOWN_META}. */
 export const PREVIEW_WHY_META = "cawco-preview-why";
@@ -1821,14 +1834,7 @@ export const PREVIEW_WHY_META = "cawco-preview-why";
  * answer ({@link PreviewDown}), or `page`: something answered, but with no
  * page the panel can show (no CawCo overlay said it was ready).
  */
-export const SHOWN_FAILURES = [
-  "server",
-  "machine",
-  "workspace",
-  "reach",
-  "closed",
-  "page",
-] as const;
+export const SHOWN_FAILURES = [...PREVIEW_DOWNS, "page"] as const;
 export type ShownFailure = (typeof SHOWN_FAILURES)[number];
 
 export interface PreviewElement {

@@ -21,8 +21,8 @@
  *   go one level deeper in a description and two in a comment, and back, so
  *   both sides keep every byte (an H6 is seven or eight #s in the file).
  */
-import type { TrackerTarget } from "@cawco/core";
-import type { Stage, StageKind } from "./stages";
+import type { StageKind, TrackerTarget } from "@cawco/core";
+import type { Stage } from "./stages";
 
 /** Linear's six categories, which GitHub's states take too. */
 export type StateType =

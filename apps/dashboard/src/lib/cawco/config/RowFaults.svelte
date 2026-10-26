@@ -5,14 +5,10 @@
    * mark of the row list's `reflow()`: a fault that clears closes away and
    * the rows below slide up; one that arrives opens.
    */
+  import type { FaultScope } from "@cawco/core";
   import type { Machine } from "../client.svelte";
   import FleetFault from "../FleetFault.svelte";
-  import {
-    type Fault,
-    type FaultScope,
-    groupFaults,
-    machineFaults,
-  } from "../fleet-faults";
+  import { type Fault, groupFaults, machineFaults } from "../fleet-faults";
   import RowFault from "../RowFault.svelte";
 
   let {

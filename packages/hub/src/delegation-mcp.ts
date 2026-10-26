@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { unwatchFile, watchFile } from "node:fs";
 import {
   type Envelope,
+  type HarnessKind,
   type InstanceRow,
   type PlanWait,
   parseConnectionTool,
@@ -927,7 +928,7 @@ export function createDelegationMcp(options: {
       authorization,
       callId,
       cwd: actor.cwd,
-      harness: actor.harness as "claude" | "opencode" | "pi",
+      harness: actor.harness as HarnessKind,
       canDelegate: actor.canDelegate ?? undefined,
       hasParent: !!actor.parentInstanceId,
       lands: landsOf(actor),
@@ -1091,7 +1092,7 @@ export function createDelegationMcp(options: {
         formerIds: options.formerIds,
         fleet: options.fleet,
         cwd: bound?.cwd ?? "",
-        harness: bound?.harness as "claude" | "opencode" | "pi" | undefined,
+        harness: bound?.harness as HarnessKind | undefined,
         canDelegate,
         deliver: () => {
           throw new Error("Instructions send nothing");

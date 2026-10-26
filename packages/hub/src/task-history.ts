@@ -23,12 +23,13 @@
  *   it; one the history never held still does.
  */
 
+import type { StageKind } from "@cawco/core";
 import type {
   FolderFileChange,
   FolderFileTimes,
   FolderTimes,
 } from "./project-folder";
-import { MOVERS, type StageKind, type Stages, stageNamed } from "./stages";
+import { MOVERS, type Stages, stageNamed } from "./stages";
 import { ARCHIVE_DIR, fileTaskNumber, taskId } from "./task-file";
 
 /** The trailers the hub writes under a task commit's subject. */

@@ -48,6 +48,7 @@
    * each under the session that started it; a parent the tab does not list
    * stands in as a quiet context line, not counted and taking no room.
    */
+  import type { StatusPair } from "@cawco/core";
   import { flushSync, untrack } from "svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -399,7 +400,9 @@
   /** Whether a top-level session listed as finished failed: its count says so. */
   const finishedFailed = $derived(topOf("finished").some(isFailed));
   /** A tab's count's status pair (DESIGN.md, Badge). */
-  const pairOf = (tab: WorkTab): "live" | "done" | "fail" => {
+  const pairOf = (
+    tab: WorkTab
+  ): Extract<StatusPair, "live" | "done" | "fail"> => {
     if (tab === "working") {
       return "live";
     }

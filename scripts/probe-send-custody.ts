@@ -73,18 +73,18 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Socket, SocketHandler } from "bun";
 import { detach } from "../packages/core/src/detach";
+import { HARNESSES, type HarnessKind } from "../packages/core/src/harness";
 import { processStart } from "../packages/core/src/process-identity";
 import { signal } from "../packages/core/src/signal";
 import { startedPath } from "../packages/core/src/workspace-needs";
 import { ensureDeps } from "./lib/deps";
-import type { Harness } from "./scratch-fleet";
 
 // The dependencies first (lib/deps.ts): what needs them loads after.
 await ensureDeps();
 const { SessiondClient } =
   await import("../packages/agent/src/sessiond-client");
 const { welcomed } = await import("./lib/keeper-dial");
-const { ACCOUNT, HARNESSES, MACHINE, MODEL, scratchFleet, until } =
+const { ACCOUNT, MACHINE, MODEL, scratchFleet, until } =
   await import("./scratch-fleet");
 
 type Case =
@@ -103,7 +103,7 @@ type Case =
   | "stopped-dies"
   | "needs-auth"
   | "mcp-late";
-const CASES: Record<Harness, Case[]> = {
+const CASES: Record<HarnessKind, Case[]> = {
   claude: [
     "sleep",
     "exit",
@@ -133,7 +133,7 @@ const named = (flag: string): string[] => {
   );
 };
 const wanted = named("--harness").length
-  ? (named("--harness") as Harness[])
+  ? (named("--harness") as HarnessKind[])
   : HARNESSES;
 const casesWanted = new Set(named("--case"));
 
@@ -200,7 +200,7 @@ const report = (name: string, ok: boolean, detail: unknown, line: string) => {
 };
 
 /** A marker unique to one send of one case. */
-const mark = (harness: Harness, name: string, what: string) =>
+const mark = (harness: HarnessKind, name: string, what: string) =>
   `CUSTODY-${harness}-${name}-${what}-${crypto.randomUUID().slice(0, 6)}`;
 
 /** Starts a slow turn in `id` and waits until the mock is streaming it. */
@@ -229,7 +229,7 @@ const readOnce = async (uuid: string, marker: string) => {
 };
 
 /** When a case left the session failed, a person's message wakes it, as it wakes any failed session. */
-const wakeIfFailed = async (harness: Harness, name: string, id: string) => {
+const wakeIfFailed = async (harness: HarnessKind, name: string, id: string) => {
   const row = fleet.instance(id);
   if (row?.status !== "error") {
     return;
@@ -291,7 +291,7 @@ const killOwn = async (label: string, id: string) => {
 };
 
 /** The dashboard starting a running session again on its conversation. */
-const relaunch = async (harness: Harness, id: string) => {
+const relaunch = async (harness: HarnessKind, id: string) => {
   const [row] = fleet.query<{ session_id: string; cwd: string }>(
     "SELECT session_id, cwd FROM instances WHERE id = ?",
     id
@@ -363,7 +363,7 @@ const predeploy = async (
 
 /** The case's process goes away, with `queued` on its way or waiting; that send's uuid. */
 const tearDown = async (
-  harness: Harness,
+  harness: HarnessKind,
   name: Case,
   id: string,
   slow: string,
@@ -1515,7 +1515,7 @@ const mcpLateCase = async (label: string) => {
   }
 };
 
-const runCase = async (harness: Harness, name: Case) => {
+const runCase = async (harness: HarnessKind, name: Case) => {
   if (name === "needs-auth") {
     await needsAuthCase(`${harness} ${name}`);
     return;

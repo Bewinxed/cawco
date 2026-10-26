@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { StageKind } from "@cawco/core";
   /**
    * The project page's Decisions tab: its decision pages as one list
    * (DecisionsList, the owner's pick of 10-24), each row opening its page in
@@ -17,7 +18,7 @@
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
   import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import StarterCards from "#lib/cawco/project/StarterCards.svelte";
-  import type { ProjectStarter, StageKind } from "#lib/cawco/project-tasks.js";
+  import type { ProjectStarter } from "#lib/cawco/project-tasks.js";
   import { newSession } from "#lib/cawco/spawn/new-session.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";

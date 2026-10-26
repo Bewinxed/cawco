@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./runtime": "./src/runtime.ts",
+    "./activity": "./src/activity.ts",
     "./find-match": "./src/find-match.ts",
     "./bundle-css-guard": "./src/bundle-css-guard.ts",
     "./bundled": "./src/bundled.ts",
@@ -166,6 +167,7 @@
     "./actions": "./src/actions.ts",
     "./artifact-needs": "./src/artifact-needs.ts",
     "./threads": "./src/threads.ts",
+    "./work-items": "./src/work-items.ts",
     "./usage/types": "./src/usage/types.ts",
     "./stream": "./src/stream.ts",
     "./connections": "./src/connections.ts",

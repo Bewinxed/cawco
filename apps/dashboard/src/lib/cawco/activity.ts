@@ -1,10 +1,10 @@
-import { commonWords } from "@cawco/core/words/common";
 /**
- * What a session needs from you right now — the fleet view's whole vocabulary
- * (NEW.md §8 Phase 3). Kept out of the runes module so it stays a plain rule
- * anything can call, including a script driving the hub.
+ * What a session needs from you right now (core activity.ts), read and
+ * worded. Kept out of the runes module so it stays a plain rule anything can
+ * call, including a script driving the hub.
  */
-export type Activity = "working" | "blocked" | "idle";
+import type { Activity } from "@cawco/core/activity";
+import { commonWords } from "@cawco/core/words/common";
 
 /**
  * Blocked wins over working: a session with a parked permission is not making

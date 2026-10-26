@@ -10,6 +10,7 @@ import type {
   MachineCapabilities,
   MachineCapability,
 } from "@cawco/core/capabilities";
+import { HARNESSES } from "@cawco/core/harness";
 import { isPublicAddress } from "@cawco/core/public-address";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { packageInstall, workspaceNeeds } from "@cawco/core/workspace-needs";
@@ -149,13 +150,7 @@ function linuxInstall(pkg: string): string {
   );
 }
 
-const VERSIONED: readonly string[] = [
-  "git",
-  "claude",
-  "opencode",
-  "pi",
-  "node",
-];
+const VERSIONED: readonly string[] = ["git", ...HARNESSES, "node"];
 const VERSION = /\d+\.\d+\.\d+(?:[-+][\w.-]+)?/u;
 
 /**

@@ -52,7 +52,6 @@
    */
   import { page } from "$app/state";
   import ReleaseNotes from "../updates/ReleaseNotes.svelte";
-  import type { CawStatus } from "./Caw.svelte";
   import CawMark from "./CawMark.svelte";
   import NoticeRow from "./NoticeRow.svelte";
 
@@ -201,7 +200,7 @@
   {ondismiss}
 >
   {#snippet lead()}
-    <CawMark size={28} status={notice.caw.status as CawStatus} />
+    <CawMark size={28} status={notice.caw.status} />
   {/snippet}
   <div data-slot="update-card-card" class="flex min-w-0 flex-col gap-space-row">
     <h2

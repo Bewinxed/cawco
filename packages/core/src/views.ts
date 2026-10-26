@@ -17,9 +17,25 @@ export const STAGE_KINDS = [
 ] as const;
 export type StageKind = (typeof STAGE_KINDS)[number];
 
+/**
+ * DESIGN.md's status pairs: each a `status-<pair>` fill and ink, the only
+ * hues a status is said in (The Reserved Hue Rule).
+ */
+export const STATUS_PAIRS = ["live", "attn", "done", "fail"] as const;
+export type StatusPair = (typeof STATUS_PAIRS)[number];
+
 /** The tones a badge or stat tile takes: DESIGN.md's status pairs, or none. */
-export const VIEW_TONES = ["neutral", "live", "attn", "done", "fail"] as const;
+export const VIEW_TONES = ["neutral", ...STATUS_PAIRS] as const;
 export type ViewTone = (typeof VIEW_TONES)[number];
+
+/**
+ * The stages a task is closed in: it was done, or dropped. Every other
+ * kind is open: still to do, under way, or waiting on someone.
+ */
+export const CLOSED_STAGE_KINDS = [
+  "done",
+  "dropped",
+] as const satisfies readonly StageKind[];
 
 /** Text roles a view may set: DESIGN.md's (The Role, Not Size Rule). */
 export const VIEW_TEXT_ROLES = ["title", "label", "body", "meta"] as const;

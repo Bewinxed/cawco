@@ -1,4 +1,5 @@
 import {
+  HARNESSES,
   IMAGE_GENERATION_DESCRIPTION,
   LANDS_MODES,
   type LandsMode,
@@ -462,7 +463,7 @@ export function handoffTools(deps: HandoffDeps) {
             "From list_delegate_types: sets harness, model, effort and skills. Default: Jev's pick, else 'medium'."
           ),
         harness: z
-          .enum(["claude", "opencode", "pi"])
+          .enum(HARNESSES)
           .optional()
           .describe(
             "Overrides the type's. opencode with model opencode-go/deepseek-v4-pro runs DeepSeek."
@@ -675,7 +676,7 @@ export function handoffTools(deps: HandoffDeps) {
             '"asks": the messages it was asked alone (a delegate\'s brief and hand-offs), nothing summarised.'
           ),
         summarizer_harness: z
-          .enum(["claude", "opencode", "pi"])
+          .enum(HARNESSES)
           .optional()
           .describe("The harness that writes the summary."),
         summarizer_model: z
@@ -684,7 +685,7 @@ export function handoffTools(deps: HandoffDeps) {
           .optional()
           .describe("Like opencode-go/deepseek-v4.1-flash."),
         target_harness: z
-          .enum(["claude", "opencode", "pi"])
+          .enum(HARNESSES)
           .describe("The harness the new session runs on."),
         target_model: z
           .string()

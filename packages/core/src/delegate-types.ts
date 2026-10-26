@@ -6,7 +6,12 @@
  * builds a `SpawnPayload`.
  */
 
-import { EFFORT_LEVELS, type EffortLevel, type HarnessKind } from "./harness";
+import {
+  EFFORT_LEVELS,
+  type EffortLevel,
+  type HarnessKind,
+  harnessNamed,
+} from "./harness";
 import { delegateTypesWords } from "./words/delegate-types";
 
 /** One named preset. `name` is the key a `delegate` call's `type` asks for. */
@@ -96,9 +101,7 @@ export const delegateTypeProblem = (
   if (!draft.description?.trim()) {
     return delegateTypesWords.problemDescription;
   }
-  if (!(
-    draft.harness && ["claude", "opencode", "pi"].includes(draft.harness)
-  )) {
+  if (!(draft.harness && harnessNamed(draft.harness))) {
     return delegateTypesWords.problemHarness(String(draft.harness));
   }
   if (!draft.model?.trim()) {

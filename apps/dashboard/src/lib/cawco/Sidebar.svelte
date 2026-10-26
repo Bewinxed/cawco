@@ -1,5 +1,6 @@
 <script lang="ts">
   import { machineLabel, sidebarWords, topsIn } from "@cawco/core";
+  import type { Activity } from "@cawco/core/activity";
   /**
    * Fleet sidebar — reimplemented on top of the shadcn-svelte sidebar primitives
    * (ui/sidebar/*), following the Fluid Functionalism inset preset pattern:
@@ -40,7 +41,6 @@
   } from "#lib/icons.js";
   import { formatAgeShort, formatDistanceToNow } from "#lib/utils/time.js";
   import { page } from "$app/state";
-  import type { Activity } from "./activity";
   import {
     type BoardRow,
     cawco,

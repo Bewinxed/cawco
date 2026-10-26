@@ -23,8 +23,9 @@
     SvelteFlow,
   } from "@xyflow/svelte";
   import "#lib/vendor-css/xyflow.css";
+  import type { StageKind } from "@cawco/core";
   import { onMount, untrack } from "svelte";
-  import type { StageKind, TaskSummary } from "#lib/cawco/project-tasks.js";
+  import type { TaskSummary } from "#lib/cawco/project-tasks.js";
   import FlowCanvasTools from "#lib/components/features/flow/FlowCanvasTools.svelte";
   import FlowZoomTracker from "#lib/components/features/flow/FlowZoomTracker.svelte";
   import { FIT, ZOOM } from "#lib/components/features/flow/fit.js";

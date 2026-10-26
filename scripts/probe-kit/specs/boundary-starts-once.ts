@@ -31,6 +31,10 @@
 import { readFile, realpath } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import {
+  HARNESSES,
+  type HarnessKind,
+} from "../../../packages/core/src/harness";
+import {
   MACHINE,
   MODEL,
   type Reply,
@@ -40,14 +44,10 @@ import {
 import { decisionsOf } from "../agent-records";
 import type { Kit, Spec } from "../kit";
 
-type Harness = keyof typeof MODEL;
-
-const HARNESSES: readonly Harness[] = ["claude", "opencode", "pi"];
-
-const tagOf = (harness: Harness) => `PROBE-ONCE-${harness.toUpperCase()}:`;
+const tagOf = (harness: HarnessKind) => `PROBE-ONCE-${harness.toUpperCase()}:`;
 const TAG = /PROBE-ONCE-([A-Z]+):/u;
 /** The command's mark, spelled apart in the command so only its output carries it whole. */
-const ranMark = (harness: Harness) => `ONCE-RAN-${harness.toUpperCase()}`;
+const ranMark = (harness: HarnessKind) => `ONCE-RAN-${harness.toUpperCase()}`;
 
 /** OpenCode's Code Mode tool, which runs MCP tools from a script (source-burst's leg 6 calls `set_title` by it). */
 const CODE_MODE = "execute";
@@ -83,7 +83,7 @@ const shellCall = (
 /** Each delegate runs its one command, then rests in a wait, its item live. */
 const respond = (request: Seen): Reply => {
   const harness = request.tools
-    ? (TAG.exec(request.all)?.[1]?.toLowerCase() as Harness | undefined)
+    ? (TAG.exec(request.all)?.[1]?.toLowerCase() as HarnessKind | undefined)
     : undefined;
   if (!(harness && HARNESSES.includes(harness))) {
     return text(request.tools ? "ok" : "Probe title");
@@ -146,7 +146,7 @@ const oneHarness = async (
   home: string,
   parent: string,
   src: string,
-  harness: Harness
+  harness: HarnessKind
 ): Promise<void> => {
   const started = await fleet.api<{
     instanceId: string;

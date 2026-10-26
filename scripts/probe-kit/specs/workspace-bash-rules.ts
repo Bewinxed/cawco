@@ -49,6 +49,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Boundary } from "../../../packages/agent/src/boundary";
 import { BROWSER_GATE_PORT } from "../../../packages/core/src/browser";
+import type { HarnessKind } from "../../../packages/core/src/harness";
 import { projectClaudeDir } from "../../../packages/core/src/paths";
 import {
   MACHINE,
@@ -586,7 +587,7 @@ const standUp = async (kit: Kit) => {
   });
   /** A delegate of the parent on `harness` in `cwd`, its first turn over. */
   const delegate = async (
-    harness: "claude" | "opencode" | "pi",
+    harness: HarnessKind,
     cwd: string,
     title: string
   ): Promise<Delegate> => {

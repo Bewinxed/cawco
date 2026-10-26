@@ -51,6 +51,7 @@
  *
  *   bun scripts/probe-kit/run.ts user-bun
  */
+
 import { existsSync } from "node:fs";
 import {
   chmod,
@@ -62,16 +63,11 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { delimiter, dirname, join } from "node:path";
+import type { HarnessKind } from "../../../packages/core/src/harness";
 import { sheetWords } from "../../../packages/core/src/words/sheet";
 import { workWords } from "../../../packages/core/src/words/work";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
-import {
-  type Harness,
-  MODEL,
-  type Reply,
-  type Seen,
-  until,
-} from "../../scratch-fleet";
+import { MODEL, type Reply, type Seen, until } from "../../scratch-fleet";
 import { declareGate, JS_GATE } from "../gate";
 import type { Kit, Spec } from "../kit";
 
@@ -107,7 +103,7 @@ const FILES: Record<"A" | "C", string> = {
   C: "src/c.ts",
 };
 /** The delegates on the other harnesses, which only install: OpenCode's, pi's. */
-const HARNESS_OF: Record<"O" | "P", Harness> = { O: "opencode", P: "pi" };
+const HARNESS_OF: Record<"O" | "P", HarnessKind> = { O: "opencode", P: "pi" };
 
 /** `marker` spelled apart in a command, so only the command's output carries it whole. */
 const apart = (marker: string): string =>
@@ -401,7 +397,7 @@ const run = async (kit: Kit) => {
       "SELECT state, error, result FROM work_items WHERE id = ?",
       id
     )[0];
-  const delegate = (tag: Tag, harness: Harness = "claude") =>
+  const delegate = (tag: Tag, harness: HarnessKind = "claude") =>
     fleet.api<{ workItemId: string }>("/api/work-items", {
       parentInstanceId: parent,
       title: `User bun ${tag}`,

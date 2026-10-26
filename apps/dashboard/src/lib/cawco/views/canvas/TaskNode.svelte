@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { StageKind } from "@cawco/core";
   /**
    * A task on the Canvas: the board's own card, with its live footer and,
    * waiting on you, the `you` column's wash around it. A click opens its
@@ -6,7 +7,7 @@
    * card is not movable here. Its handles are where edges meet it, unseen.
    */
   import { Handle, type NodeProps, Position } from "@xyflow/svelte";
-  import type { StageKind, TaskSummary } from "#lib/cawco/project-tasks.js";
+  import type { TaskSummary } from "#lib/cawco/project-tasks.js";
   import TaskCard from "#lib/cawco/tasks/TaskCard.svelte";
   import type { Flow } from "../task-graph";
 

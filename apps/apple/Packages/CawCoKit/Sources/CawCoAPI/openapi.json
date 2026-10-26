@@ -44942,19 +44942,6 @@
           "thinking"
         ]
       },
-      "PermissionMode": {
-        "description": "How a session answers tool permissions. The union is Claude Code's, plus\n`fullSend`, CawCo's own: bypass, with every approval approved for the\nsession (the owner, 2026-10-22: \"FULL SEND LITERALLY MEANS FULL SEND\"):\non Claude Code the host answers the checks and ask rules the CLI still\nraises in bypass, and on every harness the hub approves CawCo's admin\nwrites (hub admin-asks.ts). A question to the person still asks; a\nfleet-denied tool still never runs. Each adapter maps `fullSend` onto its\nharness; none hands it to an SDK as is.",
-        "type": "string",
-        "enum": [
-          "acceptEdits",
-          "auto",
-          "bypassPermissions",
-          "default",
-          "dontAsk",
-          "fullSend",
-          "plan"
-        ]
-      },
       "EffortLevel": {
         "description": "How hard the model thinks, and how much it spends doing it: Claude Code's\neffort scale, in its own order. Hand-written rather than tunnelled from the\nSDK — nothing in this file imports a harness SDK, and `@cawco/core` has no\ndependencies at all — but it is the SDK's `EffortLevel` verbatim, so the\nclaude adapter hands it straight on.\n\nEffort is not only thinking depth. A lower level also buys fewer and more\nconsolidated tool calls, less preamble and terser confirmations; a higher one\nspends tokens in all of those places. A harness with no such knob reports\n`effort: false` rather than mapping onto this.",
         "type": "string",
@@ -48716,12 +48703,12 @@
           },
           "state": {
             "description": "Caw on it now: working, waiting on you, or ready.",
+            "type": "string",
             "enum": [
               "needs-you",
               "ready",
               "working"
-            ],
-            "type": "string"
+            ]
           },
           "handle": {
             "description": "What a mention of it carries, which the hub resolves to exactly it:\n`<dir>#<id8>` for a conversation, `thread#<id8>` for a thread, the\nhostname for a machine, `tsk-142` for a task, the id for anything else.\nNull for what nothing can name (a conversation the hub never started).",
@@ -57104,6 +57091,19 @@
           "projectSettings",
           "session",
           "userSettings"
+        ]
+      },
+      "PermissionMode": {
+        "description": "How a session answers tool permissions. The union is Claude Code's, plus\n`fullSend`, CawCo's own: bypass, with every approval approved for the\nsession (the owner, 2026-10-22: \"FULL SEND LITERALLY MEANS FULL SEND\"):\non Claude Code the host answers the checks and ask rules the CLI still\nraises in bypass, and on every harness the hub approves CawCo's admin\nwrites (hub admin-asks.ts). A question to the person still asks; a\nfleet-denied tool still never runs. Each adapter maps `fullSend` onto its\nharness; none hands it to an SDK as is.",
+        "type": "string",
+        "enum": [
+          "acceptEdits",
+          "auto",
+          "bypassPermissions",
+          "default",
+          "dontAsk",
+          "fullSend",
+          "plan"
         ]
       },
       "PermissionSettledFrame": {

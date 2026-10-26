@@ -37,14 +37,15 @@
  *
  *   bun scripts/probe-kit/run.ts host-delegates
  */
+
 import { readFileSync, readlinkSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { sessionEnv } from "../../../packages/agent/src/harnesses/claude";
+import type { HarnessKind } from "../../../packages/core/src/harness";
 import { workWords } from "../../../packages/core/src/index";
 import { listRoleTools } from "../../../packages/hub/src/role-budgets";
 import {
-  type Harness,
   MACHINE,
   MODEL,
   type Reply,
@@ -290,7 +291,7 @@ const itemOf = (
 const probe = async (
   fleet: KitFleet,
   parent: string,
-  harness: Harness,
+  harness: HarnessKind,
   tag: string,
   how: { host: true } | { cwd: string },
   /** Run as soon as the item is filed, while it is live. */

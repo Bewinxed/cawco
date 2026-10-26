@@ -378,6 +378,7 @@ import {
   undeliveredNotice,
   unparked,
   unshownAskMessage,
+  WIRE_PERMISSION_MODES,
   WIRE_PROTOCOL,
   WITHDRAW_PERMISSION,
   WORK_ITEM_ORIGIN,
@@ -1534,12 +1535,15 @@ const accountProvider = t.String({
   minLength: 1,
   pattern: "^[a-z0-9][a-z0-9._-]*$",
 });
-/** One of a machine's own stores a credential is moved out of. */
-const homeStore = t.Union([
-  t.Literal("claude"),
-  t.Literal("pi"),
-  t.Literal("opencode"),
-]);
+/**
+ * One of a machine's own stores a credential is moved out of, in the order
+ * the apps' generated schema has it.
+ */
+const homeStore = t.Union(
+  (["claude", "pi", "opencode"] as const satisfies readonly HomeStore[]).map(
+    (store) => t.Literal(store)
+  )
+);
 const strategyChoice = t.Object({
   strategy: t.Union(PLACEMENT_STRATEGIES.map((one) => t.Literal(one))),
   pinnedAccountId: t.Optional(t.String()),
@@ -1724,26 +1728,16 @@ const TITLE_WINDOW = 40;
  * and strictly by `ruleProblem`, so the form and the hub refuse in the same
  * sentences.
  */
-const harnessSchema = t.Union([
-  t.Literal("claude"),
-  t.Literal("opencode"),
-  t.Literal("pi"),
-]);
+const harnessSchema = t.Union(HARNESSES.map((harness) => t.Literal(harness)));
 /**
  * A permission mode as a route takes it: core's `PermissionMode`, the
  * offered `PERMISSION_MODES` and the two the installable TestFlight builds
  * were built to send. `settleMode` refuses a mode the machine does not
  * report, in the machine's own list.
  */
-const permissionModeSchema = t.Union([
-  t.Literal("default"),
-  t.Literal("acceptEdits"),
-  t.Literal("bypassPermissions"),
-  t.Literal("plan"),
-  t.Literal("dontAsk"),
-  t.Literal("auto"),
-  t.Literal("fullSend"),
-]);
+const permissionModeSchema = t.Union(
+  WIRE_PERMISSION_MODES.map((mode) => t.Literal(mode))
+);
 
 /** Continue in new session: every field of the summariser and target is the caller's to name. */
 const continueBody = t.Object({
@@ -20135,7 +20129,7 @@ export const createServer = (
     }
     const runs: string[] = [];
     const failed: string[] = [];
-    for (const harness of HARNESS_KINDS) {
+    for (const harness of HARNESSES) {
       const brought = await readyHarness(machineId, harness, tools, say);
       if ("runs" in brought) {
         runs.push(brought.runs);
@@ -20149,9 +20143,6 @@ export const createServer = (
     }
     return ran || `Nothing to bring up on ${name}.`;
   };
-
-  /** Each harness, in the order a machine's are brought up: Claude Code first, which every machine runs. */
-  const HARNESS_KINDS: HarnessKind[] = ["claude", "opencode", "pi"];
 
   /**
    * One harness on a joined machine (`readyHarnesses`): what runs, brought
