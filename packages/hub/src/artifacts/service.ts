@@ -146,7 +146,8 @@ import {
   type StageUnreached,
   type StoryOp,
 } from "@cawco/core/stage";
-import { writeStateFileSync } from "@cawco/core/state-file";
+import { parseRecord, writeStateFileSync } from "@cawco/core/state-file";
+import { ArtifactThumbnailSchema } from "@cawco/core/stored-shapes";
 import { DAY_MS } from "@cawco/core/time";
 import { applyPatch, type Operation } from "rfc6902";
 import type { Doc, YMapEvent } from "yjs";
@@ -214,8 +215,6 @@ import {
   sceneChanges,
 } from "./page-changes";
 import { picturePath, thumbnailPath } from "./sync";
-import { ArtifactThumbnailSchema } from "@cawco/core/stored-shapes";
-import { parseRecord } from "@cawco/core/state-file";
 
 export class ArtifactRefusal extends Error {
   readonly status: 400 | 403 | 404 | 409 | 413 | 422 | 503 | 504;

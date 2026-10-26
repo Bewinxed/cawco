@@ -3,9 +3,9 @@ import { mkdir, readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { Elysia, t } from "elysia";
+import { z } from "zod";
 import { DB_PATH } from "./config";
 import { hidden } from "./hidden";
-import { z } from "zod";
 
 /**
  * What the Apple app's MetricKit hands over: its diagnostic payloads (hangs,
@@ -37,7 +37,11 @@ const StoredSchema = z.object({
   /** The payload's window, as MetricKit dated it. */
   from: z.string().nullable(),
   id: z.string(),
-  kind: z.enum([KINDS.hangDiagnostics, KINDS.crashDiagnostics, KINDS.cpuExceptionDiagnostics]),
+  kind: z.enum([
+    KINDS.hangDiagnostics,
+    KINDS.crashDiagnostics,
+    KINDS.cpuExceptionDiagnostics,
+  ]),
   os: z.string(),
   /** When the hub received it, ms epoch. */
   receivedAt: z.number(),

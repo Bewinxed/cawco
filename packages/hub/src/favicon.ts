@@ -24,13 +24,12 @@ import type { LookupFunction } from "node:net";
 import { dirname, join } from "node:path";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { isPublicDestination } from "@cawco/core/public-address";
-import { writeStateFile } from "@cawco/core/state-file";
+import { parseRecord, writeStateFile } from "@cawco/core/state-file";
 import { DAY_MS } from "@cawco/core/time";
 import { faviconReachable } from "@cawco/core/tool-presentation";
 import { Elysia, t } from "elysia";
-import { DB_PATH } from "./config";
 import { z } from "zod";
-import { parseRecord } from "@cawco/core/state-file";
+import { DB_PATH } from "./config";
 
 const DIR = join(dirname(DB_PATH), "favicons");
 

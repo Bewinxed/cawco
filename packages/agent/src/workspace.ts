@@ -89,6 +89,7 @@ import {
   IGNORED_STATUS,
   isPlace,
 } from "@cawco/core/workspace-policy";
+import { z } from "zod";
 import {
   addAccount,
   addSpill,
@@ -165,7 +166,6 @@ import { keeperChildren } from "./sessiond-client";
 import { noRepositoryAt, straysIn } from "./stand-ins";
 import { workspaceModulesRoot } from "./workspace-modules";
 import { cloneHolding } from "./workspace-records";
-import { z } from "zod";
 
 type Git = (root: string, ...args: string[]) => Promise<string>;
 

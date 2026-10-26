@@ -44,6 +44,7 @@ import {
   TAKEOVER_UNWATCHED_MS,
 } from "@cawco/core/browser";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
+import { z } from "zod";
 import { browserRows, browsersChanged, startBrowser } from "./browsers";
 import {
   CdpLink,
@@ -64,7 +65,6 @@ import {
   withBrowser,
   writeBrowser,
 } from "./state";
-import { z } from "zod";
 
 /** How often a take-over's views are counted against {@link TAKEOVER_UNWATCHED_MS}. */
 const WATCH_MS = 5000;

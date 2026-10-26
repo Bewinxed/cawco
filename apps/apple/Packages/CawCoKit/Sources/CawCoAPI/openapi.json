@@ -51418,6 +51418,10 @@
           "workspaceId"
         ]
       },
+      "PlacePath": {
+        "description": "Where a place is: a folder on its machine, or (kind `hub`) the project's\nfolder on the hub. A plain string on the wire, as both sides are; a union\nleft unnamed reaches the API's schema as an anyOf its clients wrap.",
+        "type": "string"
+      },
       "PlaceKind": {
         "description": "What a place is: a checkout on a machine, or the project's folder on the\nhub (its\n`machineId` is `\"hub\"` (db `HUB_PLACE_MACHINE`) and its path `projects/<id>`, relative\nto the hub's data folder; every project has one from the moment it is\nmade).",
         "type": "string",
@@ -51425,10 +51429,6 @@
           "checkout",
           "hub"
         ]
-      },
-      "PlacePath": {
-        "description": "Where a place is: a folder on its machine, or (kind `hub`) the project's\nfolder on the hub. A plain string on the wire, as both sides are; a union\nleft unnamed reaches the API's schema as an anyOf its clients wrap.",
-        "type": "string"
       },
       "RunningSession": {
         "description": "One running session of a project, in tree order (parents first).",

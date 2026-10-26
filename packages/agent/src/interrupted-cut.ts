@@ -24,16 +24,16 @@
 import type { Stats } from "node:fs";
 import { lstat, readdir, readFile, readlink, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
+import type { WorkspaceCut } from "@cawco/core";
 import { isGitDir } from "@cawco/core/git-dir";
 import { isSecretFileName, workspacesDir } from "@cawco/core/paths";
 import { repositoryConfigProblem } from "@cawco/core/safe-git";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
+import { WorkspaceCutSchema } from "@cawco/core/stored-shapes";
+import { z } from "zod";
 import { placedAsMade } from "./fleet";
 import { hostGit } from "./host-git";
 import { straysAmong } from "./stand-ins";
-import { z } from "zod";
-import type { WorkspaceCut } from "@cawco/core";
-import { WorkspaceCutSchema } from "@cawco/core/stored-shapes";
 
 /** A cut under way: the clone's path, the repository it is cut from, and the commit a cut again starts at (none for a first cut). */
 export const CutMarkSchema = z.object({

@@ -61,8 +61,8 @@ import { machineId } from "@cawco/core/machine-id";
 import { workspaceProjectFile, workspaceStateDir } from "@cawco/core/paths";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import type { Server, ServerWebSocket } from "bun";
-import { browserDir } from "./state";
 import { z } from "zod";
+import { browserDir } from "./state";
 
 /** What a refusal says, one sentence each. */
 const GATE_WORDS = {
@@ -274,8 +274,7 @@ export const keyOfWorkspace = async (
   const project = await readRecord(workspaceProjectFile(id), z.string()).catch(
     () => undefined
   );
-  return project ? `project:${project}`
-    : `machine:${machine}`;
+  return project ? `project:${project}` : `machine:${machine}`;
 };
 
 const WORKSPACE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/u;

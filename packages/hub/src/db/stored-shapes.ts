@@ -4,24 +4,24 @@
  * output is proved below to be its type exactly.
  */
 import {
-  EffortLevelSchema,
-  ExtractedSchema,
-  HarnessKindSchema,
-  InstallDraftSchema,
-  InstallSchema,
-  MachinePathSchema,
-  ModeAskSchema,
-  MoveAskSchema,
-  MoveErrorSchema,
-  MoveJobSchema,
-  MoveLargeFileSchema,
-  MoveLfsResultSchema,
-  MoveSnapshotResultSchema,
-  MoveStepSchema,
-  PermissionModeSchema,
-  SendAttachmentSchema,
-  SendPayloadSchema,
-  SendRefusalSchema,
+  EffortLevelShape,
+  ExtractedShape,
+  HarnessKindShape,
+  InstallDraftShape,
+  InstallShape,
+  MachinePathShape,
+  ModeAskShape,
+  MoveAskShape,
+  MoveErrorShape,
+  MoveJobShape,
+  MoveLargeFileShape,
+  MoveLfsResultShape,
+  MoveSnapshotResultShape,
+  MoveStepShape,
+  PermissionModeShape,
+  SendAttachmentShape,
+  SendPayloadShape,
+  SendRefusalShape,
 } from "@cawco/core/stored-shapes";
 import type {
   OAuthDiscoveryState as OAuthDiscoveryStateType,
@@ -77,17 +77,23 @@ import type {
   WorkspaceFrom as WorkspaceFromType,
 } from "./schema";
 
-export const OAuthMetadataSchema = OAuthMetadataPublished;
+export const OAuthMetadataShape = OAuthMetadataPublished;
+export const OAuthMetadataSchema: z.ZodType<OAuthMetadataType> =
+  OAuthMetadataShape;
 
-export const OpenIdProviderDiscoveryMetadataSchema =
+export const OpenIdProviderDiscoveryMetadataShape =
   OpenIdProviderDiscoveryMetadataPublished;
+export const OpenIdProviderDiscoveryMetadataSchema: z.ZodType<OpenIdProviderDiscoveryMetadataType> =
+  OpenIdProviderDiscoveryMetadataShape;
 
-export const AuthorizationServerMetadataSchema = z.union([
-  OAuthMetadataSchema,
-  OpenIdProviderDiscoveryMetadataSchema,
+export const AuthorizationServerMetadataShape = z.union([
+  OAuthMetadataShape,
+  OpenIdProviderDiscoveryMetadataShape,
 ]);
+export const AuthorizationServerMetadataSchema: z.ZodType<AuthorizationServerMetadataType> =
+  AuthorizationServerMetadataShape;
 
-export const ConnectionAppSecretSchema = z.union([
+export const ConnectionAppSecretShape = z.union([
   z.object({
     appId: z.string(),
     clientId: z.string().optional(),
@@ -104,22 +110,31 @@ export const ConnectionAppSecretSchema = z.union([
     service: z.literal("linear"),
   }),
 ]);
+export const ConnectionAppSecretSchema: z.ZodType<ConnectionAppSecretType> =
+  ConnectionAppSecretShape;
 
-export const OAuthClientInformationSchema = OAuthClientInformationPublished;
+export const OAuthClientInformationShape = OAuthClientInformationPublished;
+export const OAuthClientInformationSchema: z.ZodType<OAuthClientInformationType> =
+  OAuthClientInformationShape;
 
-export const OAuthClientInformationFullSchema =
+export const OAuthClientInformationFullShape =
   OAuthClientInformationFullPublished;
+export const OAuthClientInformationFullSchema: z.ZodType<OAuthClientInformationFullType> =
+  OAuthClientInformationFullShape;
 
-export const OAuthClientInformationMixedSchema = z.union([
-  OAuthClientInformationFullSchema,
-  OAuthClientInformationSchema,
+export const OAuthClientInformationMixedShape = z.union([
+  OAuthClientInformationFullShape,
+  OAuthClientInformationShape,
 ]);
+export const OAuthClientInformationMixedSchema: z.ZodType<OAuthClientInformationMixedType> =
+  OAuthClientInformationMixedShape;
 
-export const OAuthTokensSchema = OAuthTokensPublished;
+export const OAuthTokensShape = OAuthTokensPublished;
+export const OAuthTokensSchema: z.ZodType<OAuthTokensType> = OAuthTokensShape;
 
-export const ConnectionSecretSchema = z.object({
-  app: ConnectionAppSecretSchema.optional(),
-  client: OAuthClientInformationMixedSchema.optional(),
+export const ConnectionSecretShape = z.object({
+  app: ConnectionAppSecretShape.optional(),
+  client: OAuthClientInformationMixedShape.optional(),
   device: z
     .object({
       deviceCode: z.string(),
@@ -134,24 +149,28 @@ export const ConnectionSecretSchema = z.object({
     .optional(),
   key: z.string().optional(),
   org: z.string().optional(),
-  tokens: OAuthTokensSchema.optional(),
+  tokens: OAuthTokensShape.optional(),
   verifier: z.string().optional(),
 });
+export const ConnectionSecretSchema: z.ZodType<ConnectionSecretType> =
+  ConnectionSecretShape;
 
-export const ContinuationAskerSchema = z.union([
+export const ContinuationAskerShape = z.union([
   z.object({ kind: z.literal("person") }),
   z.object({ kind: z.literal("session"), id: z.string() }),
   z.object({ kind: z.literal("task"), id: z.string() }),
 ]);
+export const ContinuationAskerSchema: z.ZodType<ContinuationAskerType> =
+  ContinuationAskerShape;
 
-export const ContinueRequestSchema = z.object({
+export const ContinueRequestShape = z.object({
   asksOnly: z.literal(true).optional(),
-  attachments: z.array(SendAttachmentSchema).optional(),
-  images: SendPayloadSchema.shape.images.optional(),
+  attachments: z.array(SendAttachmentShape).optional(),
+  images: SendPayloadShape.shape.images.optional(),
   note: z.string().optional(),
   summarizer: z
     .object({
-      harness: HarnessKindSchema,
+      harness: HarnessKindShape,
       model: z.string().optional(),
       account: z.string().optional(),
     })
@@ -160,12 +179,12 @@ export const ContinueRequestSchema = z.object({
     account: z.string().optional(),
     bootstrap: z.object({ repo: z.string(), baseDir: z.string() }).optional(),
     cwd: z.string().optional(),
-    effort: EffortLevelSchema.optional(),
-    harness: HarnessKindSchema,
+    effort: EffortLevelShape.optional(),
+    harness: HarnessKindShape,
     machineId: z.string().optional(),
     model: z.string().optional(),
-    permissionMode: PermissionModeSchema.optional(),
-    fallbackPermissionMode: PermissionModeSchema.optional(),
+    permissionMode: PermissionModeShape.optional(),
+    fallbackPermissionMode: PermissionModeShape.optional(),
     projectId: z.string().optional(),
     scratch: z
       .object({
@@ -175,114 +194,138 @@ export const ContinueRequestSchema = z.object({
       .optional(),
   }),
 });
+export const ContinueRequestSchema: z.ZodType<ContinueRequestType> =
+  ContinueRequestShape;
 
-export const DesignFindingSchema = z.object({
+export const DesignFindingShape = z.object({
   file: z.string(),
   line: z.number(),
   problem: z.string(),
   selector: z.string(),
 });
+export const DesignFindingSchema: z.ZodType<DesignFindingType> =
+  DesignFindingShape;
 
-export const DesignPickSchema = z.object({
+export const DesignPickShape = z.object({
   variant: z.string(),
   why: z.string(),
 });
+export const DesignPickSchema: z.ZodType<DesignPickType> = DesignPickShape;
 
-export const DesignProposalFileSchema = z.object({
+export const DesignProposalFileShape = z.object({
   after: z.string(),
   before: z.string(),
   path: z.string(),
 });
+export const DesignProposalFileSchema: z.ZodType<DesignProposalFileType> =
+  DesignProposalFileShape;
 
-export const GatePassSchema = z.object({
+export const GatePassShape = z.object({
   command: z.string(),
   stage: z.string(),
 });
+export const GatePassSchema: z.ZodType<GatePassType> = GatePassShape;
 
-export const ItemBlockSchema = z.object({
+export const ItemBlockShape = z.object({
   kind: z.enum(["type", "machine", "account"]),
   name: z.string(),
   since: z.number(),
 });
+export const ItemBlockSchema: z.ZodType<ItemBlockType> = ItemBlockShape;
 
-export const MoveStateSchema = z.object({
+export const MoveStateShape = z.object({
   approved: z.boolean().optional(),
-  ask: MoveAskSchema.optional(),
+  ask: MoveAskShape.optional(),
   askId: z.string().optional(),
-  bigFiles: z.array(MoveLargeFileSchema),
+  bigFiles: z.array(MoveLargeFileShape),
   bytes: z.number(),
   cloneCredential: z.literal(true).optional(),
   cloneUrl: z.string().optional(),
-  error: MoveErrorSchema.optional(),
-  from: MoveJobSchema.shape.from,
+  error: MoveErrorShape.optional(),
+  from: MoveJobShape.shape.from,
   ignoredSecrets: z.array(z.string()),
   ignores: z.boolean(),
   kept: z.string().optional(),
-  lfs: MoveLfsResultSchema.optional(),
-  lfsFile: MoveJobSchema.shape.lfsFile.optional(),
+  lfs: MoveLfsResultShape.optional(),
+  lfsFile: MoveJobShape.shape.lfsFile.optional(),
   moved: z.string().optional(),
-  progress: MoveJobSchema.shape.progress.optional(),
+  progress: MoveJobShape.shape.progress.optional(),
   promptUuid: z.string(),
-  snapshot: MoveSnapshotResultSchema.optional(),
+  snapshot: MoveSnapshotResultShape.optional(),
   snapshotBranch: z.string(),
   sourceHome: z.string(),
   sourceMachineId: z.string(),
   sourcePath: z.string(),
   stayed: z.string().optional(),
-  steps: z.array(MoveStepSchema),
+  steps: z.array(MoveStepShape),
   stopOn: z.string().optional(),
-  stoppedAt: MoveStepSchema.optional(),
+  stoppedAt: MoveStepShape.optional(),
   targetHome: z.string(),
   targetInstanceId: z.string(),
   targetMachineId: z.string(),
-  targetPath: MachinePathSchema,
+  targetPath: MachinePathShape,
 });
+export const MoveStateSchema: z.ZodType<MoveStateType> = MoveStateShape;
 
-export const OAuthProtectedResourceMetadataSchema =
+export const OAuthProtectedResourceMetadataShape =
   OAuthProtectedResourceMetadataPublished;
+export const OAuthProtectedResourceMetadataSchema: z.ZodType<OAuthProtectedResourceMetadataType> =
+  OAuthProtectedResourceMetadataShape;
 
-export const OAuthServerInfoSchema = z.object({
+export const OAuthServerInfoShape = z.object({
   authorizationServerUrl: z.string(),
-  authorizationServerMetadata: AuthorizationServerMetadataSchema.optional(),
-  resourceMetadata: OAuthProtectedResourceMetadataSchema.optional(),
+  authorizationServerMetadata: AuthorizationServerMetadataShape.optional(),
+  resourceMetadata: OAuthProtectedResourceMetadataShape.optional(),
 });
+export const OAuthServerInfoSchema: z.ZodType<OAuthServerInfoType> =
+  OAuthServerInfoShape;
 
-export const OAuthDiscoveryStateSchema = OAuthServerInfoSchema.extend({
+export const OAuthDiscoveryStateShape = OAuthServerInfoShape.extend({
   resourceMetadataUrl: z.string().optional(),
 });
+export const OAuthDiscoveryStateSchema: z.ZodType<OAuthDiscoveryStateType> =
+  OAuthDiscoveryStateShape;
 
-export const ContinuationSourceSchema = z.object({
+export const ContinuationSourceShape = z.object({
   cwd: z.string(),
-  harness: HarnessKindSchema,
+  harness: HarnessKindShape,
   instanceId: z.string(),
   model: z.string(),
   title: z.string(),
 });
+export const ContinuationSourceSchema: z.ZodType<ContinuationSourceType> =
+  ContinuationSourceShape;
 
-export const PreparedContinuationSchema = z.object({
+export const PreparedContinuationShape = z.object({
   compacted: z.boolean(),
   entries: z.object({ live: z.number(), whole: z.number(), scope: z.number() }),
-  extracted: ExtractedSchema,
+  extracted: ExtractedShape,
   liveContextTokens: z.number(),
   openingTokens: z.number(),
   prompt: z.string().or(z.undefined()),
-  source: ContinuationSourceSchema.extend({ machineId: z.string() }),
+  source: ContinuationSourceShape.extend({ machineId: z.string() }),
   summariseInputTokens: z.number(),
 });
+export const PreparedContinuationSchema: z.ZodType<PreparedContinuationType> =
+  PreparedContinuationShape;
 
-export const StoredSendRefusalSchema = z.union([
-  SendRefusalSchema,
-  z.intersection(z.object({ kind: z.literal("mode-ask") }), ModeAskSchema),
+export const StoredSendRefusalShape = z.union([
+  SendRefusalShape,
+  z.intersection(z.object({ kind: z.literal("mode-ask") }), ModeAskShape),
 ]);
+export const StoredSendRefusalSchema: z.ZodType<StoredSendRefusalType> =
+  StoredSendRefusalShape;
 
-export const TrackerCursorSchema = z.object({
+export const TrackerCursorShape = z.object({
   commentsEtag: z.string().nullable(),
   commentsSince: z.number(),
   etag: z.string().nullable(),
   since: z.number(),
 });
+export const TrackerCursorSchema: z.ZodType<TrackerCursorType> =
+  TrackerCursorShape;
 
-export const TrackerSyncedSchema = z.object({
+export const TrackerSyncedShape = z.object({
   description: z.string(),
   labels: z.array(z.string()),
   stage: z.string(),
@@ -290,26 +333,31 @@ export const TrackerSyncedSchema = z.object({
   status: z.string().nullable().optional(),
   title: z.string(),
 });
+export const TrackerSyncedSchema: z.ZodType<TrackerSyncedType> =
+  TrackerSyncedShape;
 
-export const TrashedRowsSchema = z.object({
+export const TrashedRowsShape = z.object({
   rows: z.array(
     z.record(z.string(), z.union([z.string(), z.number()]).nullable())
   ),
   table: z.string(),
 });
+export const TrashedRowsSchema: z.ZodType<TrashedRowsType> = TrashedRowsShape;
 
-export const WaitWitnessSchema = z.object({
+export const WaitWitnessShape = z.object({
   target: z.string(),
   value: z.string(),
 });
+export const WaitWitnessSchema: z.ZodType<WaitWitnessType> = WaitWitnessShape;
 
-export const WorkBudgetSchema = z.object({
+export const WorkBudgetShape = z.object({
   minutes: z.number().optional(),
   turns: z.number().optional(),
   usd: z.number().optional(),
 });
+export const WorkBudgetSchema: z.ZodType<WorkBudgetType> = WorkBudgetShape;
 
-export const WorkItemSubmissionSchema = z.object({
+export const WorkItemSubmissionShape = z.object({
   blocked: z.object({ command: z.string(), error: z.string() }).optional(),
   findings: z
     .array(z.object({ title: z.string(), detail: z.string() }))
@@ -318,40 +366,49 @@ export const WorkItemSubmissionSchema = z.object({
   ship: z.object({ notes: z.string() }).optional(),
   summary: z.string(),
 });
+export const WorkItemSubmissionSchema: z.ZodType<WorkItemSubmissionType> =
+  WorkItemSubmissionShape;
 
-export const WorkLandingSchema = z.object({
+export const WorkLandingShape = z.object({
   at: z.number().optional(),
   gate: z.object({ passed: z.array(z.string()), tree: z.string() }).optional(),
   onto: z.string().nullable(),
   sha: z.string(),
 });
+export const WorkLandingSchema: z.ZodType<WorkLandingType> = WorkLandingShape;
 
-export const WorkspaceFromSchema = z.object({
+export const WorkspaceFromShape = z.object({
   commit: z.string(),
   landed: z.boolean(),
   workspace: z.string(),
 });
+export const WorkspaceFromSchema: z.ZodType<WorkspaceFromType> =
+  WorkspaceFromShape;
 
-export const InstallsRecordSchema = z.object({
-  draft: InstallDraftSchema.nullable(),
+export const InstallsRecordShape = z.object({
+  draft: InstallDraftShape.nullable(),
   installs: z.array(
-    InstallSchema.omit({ keys: true }).extend({
+    InstallShape.omit({ keys: true }).extend({
       code: z.string().nullable().optional(),
-      keys: InstallSchema.shape.keys.optional(),
+      keys: InstallShape.shape.keys.optional(),
     })
   ),
 });
+export const InstallsRecordSchema: z.ZodType<InstallsRecordType> =
+  InstallsRecordShape;
 
-export const ProposalFileSchema = z.object({
+export const ProposalFileShape = z.object({
   before: z.string(),
   content: z.string(),
   path: z.string(),
 });
+export const ProposalFileSchema: z.ZodType<ProposalFileType> =
+  ProposalFileShape;
 
-export const ProposalSchema = z.object({
+export const ProposalShape = z.object({
   base: z.string(),
   by: z.string(),
-  files: z.array(ProposalFileSchema),
+  files: z.array(ProposalFileShape),
   id: z.string(),
   kind: z.enum(["archive", "rewrite"]).optional(),
   notes: z.array(z.string()),
@@ -363,6 +420,7 @@ export const ProposalSchema = z.object({
   why: z.string(),
   withdraws: z.string().optional(),
 });
+export const ProposalSchema: z.ZodType<ProposalType> = ProposalShape;
 
 /**
  * Each property, through every level, as a plain object type. `readonly`
@@ -383,58 +441,58 @@ type Same<A, B> =
 
 /** Every schema of an exported type, proved against that type. */
 export const proved: [
-  Same<z.output<typeof OAuthMetadataSchema>, OAuthMetadataType>,
+  Same<z.output<typeof OAuthMetadataShape>, OAuthMetadataType>,
   Same<
-    z.output<typeof OpenIdProviderDiscoveryMetadataSchema>,
+    z.output<typeof OpenIdProviderDiscoveryMetadataShape>,
     OpenIdProviderDiscoveryMetadataType
   >,
   Same<
-    z.output<typeof AuthorizationServerMetadataSchema>,
+    z.output<typeof AuthorizationServerMetadataShape>,
     AuthorizationServerMetadataType
   >,
-  Same<z.output<typeof ConnectionAppSecretSchema>, ConnectionAppSecretType>,
+  Same<z.output<typeof ConnectionAppSecretShape>, ConnectionAppSecretType>,
   Same<
-    z.output<typeof OAuthClientInformationSchema>,
+    z.output<typeof OAuthClientInformationShape>,
     OAuthClientInformationType
   >,
   Same<
-    z.output<typeof OAuthClientInformationFullSchema>,
+    z.output<typeof OAuthClientInformationFullShape>,
     OAuthClientInformationFullType
   >,
   Same<
-    z.output<typeof OAuthClientInformationMixedSchema>,
+    z.output<typeof OAuthClientInformationMixedShape>,
     OAuthClientInformationMixedType
   >,
-  Same<z.output<typeof OAuthTokensSchema>, OAuthTokensType>,
-  Same<z.output<typeof ConnectionSecretSchema>, ConnectionSecretType>,
-  Same<z.output<typeof ContinuationAskerSchema>, ContinuationAskerType>,
-  Same<z.output<typeof ContinueRequestSchema>, ContinueRequestType>,
-  Same<z.output<typeof DesignFindingSchema>, DesignFindingType>,
-  Same<z.output<typeof DesignPickSchema>, DesignPickType>,
-  Same<z.output<typeof DesignProposalFileSchema>, DesignProposalFileType>,
-  Same<z.output<typeof GatePassSchema>, GatePassType>,
-  Same<z.output<typeof ItemBlockSchema>, ItemBlockType>,
-  Same<z.output<typeof MoveStateSchema>, MoveStateType>,
+  Same<z.output<typeof OAuthTokensShape>, OAuthTokensType>,
+  Same<z.output<typeof ConnectionSecretShape>, ConnectionSecretType>,
+  Same<z.output<typeof ContinuationAskerShape>, ContinuationAskerType>,
+  Same<z.output<typeof ContinueRequestShape>, ContinueRequestType>,
+  Same<z.output<typeof DesignFindingShape>, DesignFindingType>,
+  Same<z.output<typeof DesignPickShape>, DesignPickType>,
+  Same<z.output<typeof DesignProposalFileShape>, DesignProposalFileType>,
+  Same<z.output<typeof GatePassShape>, GatePassType>,
+  Same<z.output<typeof ItemBlockShape>, ItemBlockType>,
+  Same<z.output<typeof MoveStateShape>, MoveStateType>,
   Same<
-    z.output<typeof OAuthProtectedResourceMetadataSchema>,
+    z.output<typeof OAuthProtectedResourceMetadataShape>,
     OAuthProtectedResourceMetadataType
   >,
-  Same<z.output<typeof OAuthServerInfoSchema>, OAuthServerInfoType>,
-  Same<z.output<typeof OAuthDiscoveryStateSchema>, OAuthDiscoveryStateType>,
-  Same<z.output<typeof ContinuationSourceSchema>, ContinuationSourceType>,
-  Same<z.output<typeof PreparedContinuationSchema>, PreparedContinuationType>,
-  Same<z.output<typeof StoredSendRefusalSchema>, StoredSendRefusalType>,
-  Same<z.output<typeof TrackerCursorSchema>, TrackerCursorType>,
-  Same<z.output<typeof TrackerSyncedSchema>, TrackerSyncedType>,
-  Same<z.output<typeof TrashedRowsSchema>, TrashedRowsType>,
-  Same<z.output<typeof WaitWitnessSchema>, WaitWitnessType>,
-  Same<z.output<typeof WorkBudgetSchema>, WorkBudgetType>,
-  Same<z.output<typeof WorkItemSubmissionSchema>, WorkItemSubmissionType>,
-  Same<z.output<typeof WorkLandingSchema>, WorkLandingType>,
-  Same<z.output<typeof WorkspaceFromSchema>, WorkspaceFromType>,
-  Same<z.output<typeof InstallsRecordSchema>, InstallsRecordType>,
-  Same<z.output<typeof ProposalFileSchema>, ProposalFileType>,
-  Same<z.output<typeof ProposalSchema>, ProposalType>,
+  Same<z.output<typeof OAuthServerInfoShape>, OAuthServerInfoType>,
+  Same<z.output<typeof OAuthDiscoveryStateShape>, OAuthDiscoveryStateType>,
+  Same<z.output<typeof ContinuationSourceShape>, ContinuationSourceType>,
+  Same<z.output<typeof PreparedContinuationShape>, PreparedContinuationType>,
+  Same<z.output<typeof StoredSendRefusalShape>, StoredSendRefusalType>,
+  Same<z.output<typeof TrackerCursorShape>, TrackerCursorType>,
+  Same<z.output<typeof TrackerSyncedShape>, TrackerSyncedType>,
+  Same<z.output<typeof TrashedRowsShape>, TrashedRowsType>,
+  Same<z.output<typeof WaitWitnessShape>, WaitWitnessType>,
+  Same<z.output<typeof WorkBudgetShape>, WorkBudgetType>,
+  Same<z.output<typeof WorkItemSubmissionShape>, WorkItemSubmissionType>,
+  Same<z.output<typeof WorkLandingShape>, WorkLandingType>,
+  Same<z.output<typeof WorkspaceFromShape>, WorkspaceFromType>,
+  Same<z.output<typeof InstallsRecordShape>, InstallsRecordType>,
+  Same<z.output<typeof ProposalFileShape>, ProposalFileType>,
+  Same<z.output<typeof ProposalShape>, ProposalType>,
 ] = [
   true,
   true,

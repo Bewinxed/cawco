@@ -28,6 +28,7 @@
 
 import { spawnSync } from "node:child_process";
 import { readdir } from "node:fs/promises";
+import { z } from "zod";
 import { takeUpstreamRules } from "../../packages/agent/src/boundary";
 import { upstreamRule } from "../../packages/agent/src/github-door";
 import {
@@ -81,9 +82,11 @@ const heldRules = async (): Promise<UpstreamRules> => {
     if (!rule) {
       continue;
     }
-    const project = await readRecord<unknown>(workspaceProjectFile(id)).catch(
-      () => undefined
-    );
+    // biome-ignore lint/performance/noAwaitInLoops: one small record per workspace
+    const project = await readRecord(
+      workspaceProjectFile(id),
+      z.unknown()
+    ).catch(() => undefined);
     if (typeof project === "string") {
       projects[project] = rule;
     } else {

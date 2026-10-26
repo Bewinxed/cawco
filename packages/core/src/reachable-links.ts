@@ -91,15 +91,16 @@ const IpLinkSchema = z.object({
 /** Linux: iproute2's own report of every link in this network namespace. */
 const linuxLinks = async (): Promise<ReachableLink[]> => {
   const report = (await Bun.$`ip -details -json link show`.quiet()).stdout;
-  const links: Link[] = z.array(IpLinkSchema).parse(JSON.parse(report.toString())).map(
-    (link) => ({
+  const links: Link[] = z
+    .array(IpLinkSchema)
+    .parse(JSON.parse(report.toString()))
+    .map((link) => ({
       name: link.ifname,
       flags: link.flags,
       master: link.master,
       kind: link.linkinfo?.info_kind,
       masterKind: link.linkinfo?.info_slave_kind,
-    })
-  );
+    }));
   return reachable(links, (port) => !GUEST.has(port.kind ?? ""));
 };
 

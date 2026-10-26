@@ -1,6 +1,6 @@
+import { z } from "zod";
 import { readWithin } from "../bounded";
 import type { LimitWindow } from "./types";
-import { z } from "zod";
 
 /**
  * A ChatGPT subscription's live windows, as ChatGPT's own usage endpoint

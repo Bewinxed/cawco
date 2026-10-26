@@ -80,7 +80,7 @@ import {
 } from "@cawco/core/resumable-download";
 import { runtimeVersion } from "@cawco/core/runtime";
 import { hostEnvironment } from "@cawco/core/session-env";
-import { ArchiveFetchingSchema } from "@cawco/core/stored-shapes";
+import { ArchiveFetchingShape } from "@cawco/core/stored-shapes";
 import { downloadWords } from "@cawco/core/words/downloads";
 import { updatesWords } from "@cawco/core/words/updates";
 import { leaveRetiringKeepers } from "./boundary";
@@ -424,7 +424,7 @@ async function hubAnswered(
   if (response.status === 503) {
     const { fetching } = ((): Partial<ArchiveFetching> => {
       try {
-        return ArchiveFetchingSchema.partial().parse(JSON.parse(text));
+        return ArchiveFetchingShape.partial().parse(JSON.parse(text));
       } catch {
         return {};
       }

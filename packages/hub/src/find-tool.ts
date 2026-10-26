@@ -174,9 +174,7 @@ const listedFrom = (cursor: string | undefined): ListedAt | undefined => {
   try {
     const read = z
       .object({ at: z.number(), doc: z.string() })
-      .safeParse(
-        JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"))
-      );
+      .safeParse(JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")));
     if (read.success) {
       return read.data;
     }

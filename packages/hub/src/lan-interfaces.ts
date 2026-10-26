@@ -93,17 +93,16 @@ const networkOf = (name: string): string => {
 /** The interface the default route leaves by, IPv4's first, else IPv6's. */
 const defaultRoute = async (): Promise<string | undefined> => {
   const [v4, v6] = await Promise.all(
-    ["-4", "-6"].map(
-      async (family) =>
-        z
-          .array(z.object({ dev: z.string().optional() }))
-          .parse(
-            JSON.parse(
-              (
-                await Bun.$`ip ${family} -json route show default`.quiet()
-              ).stdout.toString()
-            )
+    ["-4", "-6"].map(async (family) =>
+      z
+        .array(z.object({ dev: z.string().optional() }))
+        .parse(
+          JSON.parse(
+            (
+              await Bun.$`ip ${family} -json route show default`.quiet()
+            ).stdout.toString()
           )
+        )
     )
   );
   return [...(v4 ?? []), ...(v6 ?? [])].find((route) => route.dev)?.dev;

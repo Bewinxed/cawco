@@ -50,10 +50,10 @@ import {
   proxyHeaders,
   upgradePreview,
 } from "@cawco/core/preview-proxy";
+import { z } from "zod";
 import type { HubLifetimeShape } from "./lifetime";
 import { openTailnetDoor, type TailnetDoor } from "./tailnet-door";
 import { firstLine, runTailscale } from "./tailscale-cli";
-import { z } from "zod";
 
 /** How often the hub reads Tailscale's state and certificate again, for a renewal or a change. Our choice. */
 const CHECK_MS = 30_000;
@@ -69,7 +69,9 @@ const TRAILING_DOT = /\.$/u;
 const StatusSchema = z.object({
   BackendState: z.string().optional(),
   CertDomains: z.array(z.string()).nullish(),
-  CurrentTailnet: z.object({ MagicDNSEnabled: z.boolean().optional() }).nullish(),
+  CurrentTailnet: z
+    .object({ MagicDNSEnabled: z.boolean().optional() })
+    .nullish(),
   Self: z
     .object({
       DNSName: z.string().optional(),

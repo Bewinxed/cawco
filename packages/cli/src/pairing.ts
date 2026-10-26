@@ -30,7 +30,6 @@ import {
 } from "@cawco/core/db-lock";
 import {
   hubDbPath,
-  type PairingOffAnswer,
   pairingOffAnswerPath,
   pairingOffRequestPath,
 } from "@cawco/core/paths";

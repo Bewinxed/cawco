@@ -28,7 +28,7 @@ import {
 import { fleetHarnessSetFile } from "@cawco/core/paths";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { within } from "./fleet-mcp-set";
-import { FleetHarnessSetSchema } from "./stored-shapes";
+import { FleetHarnessSetShape } from "./stored-shapes";
 
 /** One hook as a session runs it: a command hook's `command` is its script's path on this machine. */
 export interface SetHook {
@@ -102,7 +102,7 @@ export const readFleetHarnessSet = async (): Promise<FleetHarnessSet> => {
   try {
     const stored = await readRecord(
       fleetHarnessSetFile(),
-      FleetHarnessSetSchema.partial()
+      FleetHarnessSetShape.partial()
     );
     return { ...EMPTY, ...stored };
   } catch (error) {

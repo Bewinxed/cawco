@@ -41,8 +41,8 @@ const SDK =
 const check = process.argv.includes("--check");
 const JS = /\.js$/u;
 const TS_FILE = /\.ts$/u;
-const SCHEMA_SUFFIX = /Schema$/u;
-const SCHEMA_NAME = /\b\w+Schema\b/gu;
+const SCHEMA_SUFFIX = /(?:Schema|Shape)$/u;
+const SHAPE_NAME = /\b\w+Shape\b/gu;
 const SHAPES_IMPORT =
   /import\s*\{([^}]*)\}\s*from\s*"(?:@cawco\/core|\.{1,2}(?:\/[\w.-]+)*)\/stored-shapes"/gu;
 const TEST_FILE = /\.test\.ts$/u;
@@ -60,7 +60,7 @@ const WRITTEN: Record<string, { schema: string; values: [string, string][] }> =
     // registration parsed as that would lose every field but the id's.
     OAuthClientInformationMixed: {
       schema:
-        "z.union([OAuthClientInformationFullSchema, OAuthClientInformationSchema])",
+        "z.union([OAuthClientInformationFullShape, OAuthClientInformationShape])",
       values: [],
     },
     // Stored apart from its kind (delegate_events keeps that in its own
@@ -68,7 +68,7 @@ const WRITTEN: Record<string, { schema: string; values: [string, string][] }> =
     // take, and strip, any other.
     DelegateEventPayload: {
       schema:
-        "z.union([DelegateEventSchema.options[2].shape.payload, DelegateEventSchema.options[1].shape.payload, DelegateEventSchema.options[0].shape.payload])",
+        "z.union([DelegateEventShape.options[2].shape.payload, DelegateEventShape.options[1].shape.payload, DelegateEventShape.options[0].shape.payload])",
       values: [],
     },
   };
@@ -550,7 +550,7 @@ const referenceOf = (
   if (args.length > 0) {
     return refuse(node, "a generic type given arguments");
   }
-  return `${declaration.name.text}Schema`;
+  return `${declaration.name.text}Shape`;
 };
 
 /** `(typeof X)[number]`, a const list's members; `T["k"]`, one property of T. */
@@ -645,7 +645,7 @@ const schemaOf = (node: ts.TypeNode, scope: Scope): string => {
   if (ts.isImportTypeNode(node) && node.qualifier) {
     const [declaration] = declarationsOf(node.qualifier);
     return declaration
-      ? `${declaration.name.text}Schema`
+      ? `${declaration.name.text}Shape`
       : refuse(node, "an import with no declaration");
   }
   return refuse(node, ts.SyntaxKind[node.kind]);
@@ -692,11 +692,14 @@ const declarationSchema = (declaration: Declaration): string => {
   return `${first}${rest.map((base) => `.extend(${base}.shape)`).join("")}.extend(${fields})`;
 };
 
-/** Each file's schemas, in order, and the core schemas the hub's read. */
+/** How a generated file names the declared type it proves a schema against. */
+const alias = (name: string) => `${name}Type`;
+
+/** Each file's schemas, in order, and the core schemas the others read. */
 const made = new Map<string, string[]>(OUTS.map((out) => [out, []]));
 const proved = new Map<string, string[]>(OUTS.map((out) => [out, []]));
 const coreNames = new Set(
-  order.filter((d) => outOf(d) === CORE_OUT).map((d) => `${d.name.text}Schema`)
+  order.filter((d) => outOf(d) === CORE_OUT).map((d) => `${d.name.text}Shape`)
 );
 for (const declaration of order) {
   const name = declaration.name.text;
@@ -707,13 +710,22 @@ for (const declaration of order) {
   }
   const schema = declarationSchema(declaration);
   if (target !== CORE_OUT) {
-    for (const [used] of schema.matchAll(SCHEMA_NAME)) {
+    for (const [used] of schema.matchAll(SHAPE_NAME)) {
       if (coreNames.has(used)) {
         add("values", CORE_OUT, used);
       }
     }
   }
-  made.get(target)?.push(`export const ${name}Schema = ${schema};`);
+  // The shape is the schema as made, whose combinators (`.extend`, `.shape`,
+  // `.partial`) other schemas use; `XSchema` is the same schema typed as `X`,
+  // so a column or a read of it is typed by the declared name, which the
+  // OpenAPI document reads.
+  const typed = isExported(declaration) || roots.has(name);
+  made
+    .get(target)
+    ?.push(
+      `export const ${name}Shape = ${schema};${typed ? `\nexport const ${name}Schema: z.ZodType<${alias(name)}> = ${name}Shape;` : ""}`
+    );
 }
 
 /* ---------------------------------------------------------- the file */
@@ -739,7 +751,6 @@ type Same<A, B> =
     ? true
     : false;`;
 
-const alias = (name: string) => `${name}Type`;
 /** Biome's import order: packages, then `../`, then `./`; a module's types before its values. */
 const rank = (from: string): number => {
   if (from.startsWith("./")) {
@@ -805,7 +816,7 @@ ${(made.get(out) ?? []).join("\n\n")}
 ${PROOF}
 
 /** Every schema of an exported type, proved against that type. */
-export const proved: [${names.map((name) => `Same<z.output<typeof ${name}Schema>, ${alias(name)}>`).join(", ")}] = [${names.map(() => "true").join(", ")}];
+export const proved: [${names.map((name) => `Same<z.output<typeof ${name}Shape>, ${alias(name)}>`).join(", ")}] = [${names.map(() => "true").join(", ")}];
 `;
 };
 

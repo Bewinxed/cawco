@@ -87,6 +87,7 @@ import type {
   SessionMessageInfo,
   V2Event,
 } from "@opencode/client";
+import { z } from "zod";
 import type { OpencodeRule } from "../denied-tools";
 import type { HarnessContext, HarnessSession } from "../harness";
 import { placedMemoryIn } from "../placed-memory";
@@ -117,7 +118,6 @@ import {
   toolNameOf,
   toolResultOf,
 } from "./opencode-transcript";
-import { z } from "zod";
 
 /** Recovery cancels the actual HTTP operation, never races an abandoned promise. */
 const RECOVERY_TIMEOUT_MS = 10_000;
@@ -413,7 +413,9 @@ const OPEN_TURNS_PATH = join(OPENCODE_DIR, "cawco-open-turns.json");
 let openTurns: Set<string> | undefined;
 
 const loadOpenTurns = (): Set<string> => {
-  openTurns ??= new Set(readRecordSync(OPEN_TURNS_PATH, z.array(z.string())) ?? []);
+  openTurns ??= new Set(
+    readRecordSync(OPEN_TURNS_PATH, z.array(z.string())) ?? []
+  );
   return openTurns;
 };
 
@@ -452,7 +454,10 @@ let backgroundJobs: Map<string, readonly string[]> | undefined;
 const loadBackground = (): Map<string, readonly string[]> => {
   backgroundJobs ??= new Map(
     Object.entries(
-      readRecordSync(BACKGROUND_PATH, z.record(z.string(), z.array(z.string()))) ?? {}
+      readRecordSync(
+        BACKGROUND_PATH,
+        z.record(z.string(), z.array(z.string()))
+      ) ?? {}
     )
   );
   return backgroundJobs;

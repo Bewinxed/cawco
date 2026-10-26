@@ -4,18 +4,18 @@
  * output is proved below to be its type exactly.
  */
 import {
-  BrowserHostKindSchema,
-  BrowserKeySchema,
-  BrowserPortsSchema,
-  BrowserRelaySchema,
-  BrowserRowSchema,
-  BrowserStateSchema,
-  FleetMcpConfigSchema,
-  HarnessConfigKindSchema,
-  HookEventSchema,
-  HookHandlerSchema,
-  HookMatchTestSchema,
-  MediaPathSchema,
+  BrowserHostKindShape,
+  BrowserKeyShape,
+  BrowserPortsShape,
+  BrowserRelayShape,
+  BrowserRowShape,
+  BrowserStateShape,
+  FleetMcpConfigShape,
+  HarnessConfigKindShape,
+  HookEventShape,
+  HookHandlerShape,
+  HookMatchTestShape,
+  MediaPathShape,
 } from "@cawco/core/stored-shapes";
 import { z } from "zod";
 import type { MediaMeasurement as MediaMeasurementType } from "./browser/media-forwarding";
@@ -32,23 +32,25 @@ import type {
   PlacedFleetMcp as PlacedFleetMcpType,
 } from "./fleet-mcp-set";
 
-export const MediaMeasurementSchema = z.object({
+export const MediaMeasurementShape = z.object({
   at: z.number(),
   endpoint: z.string(),
-  media: MediaPathSchema,
+  media: MediaPathShape,
   socket: z.string(),
 });
+export const MediaMeasurementSchema: z.ZodType<MediaMeasurementType> =
+  MediaMeasurementShape;
 
-export const BrowserRecordSchema = z.object({
+export const BrowserRecordShape = z.object({
   container: z
     .object({
       address: z.string().optional(),
       adminPassword: z.string(),
       id: z.string(),
       image: z.string(),
-      media: MediaPathSchema,
+      media: MediaPathShape,
       hostRules: z.string().optional(),
-      ports: BrowserPortsSchema.optional(),
+      ports: BrowserPortsShape.optional(),
       runtime: z
         .object({ endpoint: z.string(), kind: z.enum(["docker", "podman"]) })
         .optional(),
@@ -57,8 +59,8 @@ export const BrowserRecordSchema = z.object({
       volume: z.string(),
     })
     .optional(),
-  host: BrowserHostKindSchema,
-  key: BrowserKeySchema,
+  host: BrowserHostKindShape,
+  key: BrowserKeyShape,
   lastUsedAt: z.number(),
   local: z
     .object({
@@ -68,59 +70,73 @@ export const BrowserRecordSchema = z.object({
     })
     .optional(),
   name: z.string(),
-  relay: BrowserRelaySchema.optional(),
+  relay: BrowserRelayShape.optional(),
   relayExpiresAt: z.number().optional(),
   relayKey: z.string().optional(),
   runtimeAway: z.literal(true).optional(),
   slot: z.number().optional(),
-  state: BrowserStateSchema,
-  takeover: BrowserRowSchema.shape.takeover,
+  state: BrowserStateShape,
+  takeover: BrowserRowShape.shape.takeover,
   why: z.string().optional(),
 });
+export const BrowserRecordSchema: z.ZodType<BrowserRecordType> =
+  BrowserRecordShape;
 
-export const SetHarnessConfigSchema = z.object({
+export const SetHarnessConfigShape = z.object({
   cwd: z.string().optional(),
   entry: z.string().optional(),
-  kind: HarnessConfigKindSchema,
+  kind: HarnessConfigKindShape,
   name: z.string(),
   settings: z.record(z.string(), z.unknown()).optional(),
 });
+export const SetHarnessConfigSchema: z.ZodType<SetHarnessConfigType> =
+  SetHarnessConfigShape;
 
-export const SetHookSchema = z.object({
-  event: HookEventSchema,
-  handler: HookHandlerSchema,
+export const SetHookShape = z.object({
+  event: HookEventShape,
+  handler: HookHandlerShape,
   id: z.string(),
   matcher: z.string().optional(),
   name: z.string(),
-  test: HookMatchTestSchema,
+  test: HookMatchTestShape,
 });
+export const SetHookSchema: z.ZodType<SetHookType> = SetHookShape;
 
-export const PlacedSetHookSchema = SetHookSchema.extend({ cwd: z.string() });
+export const PlacedSetHookShape = SetHookShape.extend({ cwd: z.string() });
+export const PlacedSetHookSchema: z.ZodType<PlacedSetHookType> =
+  PlacedSetHookShape;
 
-export const PlacedSetSkillSchema = z.object({
+export const PlacedSetSkillShape = z.object({
   cwd: z.string(),
   dir: z.string(),
   name: z.string(),
 });
+export const PlacedSetSkillSchema: z.ZodType<PlacedSetSkillType> =
+  PlacedSetSkillShape;
 
-export const FleetHarnessSetSchema = z.object({
-  config: z.record(z.string(), SetHarnessConfigSchema),
-  hooks: z.record(z.string(), SetHookSchema),
-  placedHooks: z.record(z.string(), PlacedSetHookSchema),
-  placedSkills: z.record(z.string(), PlacedSetSkillSchema),
+export const FleetHarnessSetShape = z.object({
+  config: z.record(z.string(), SetHarnessConfigShape),
+  hooks: z.record(z.string(), SetHookShape),
+  placedHooks: z.record(z.string(), PlacedSetHookShape),
+  placedSkills: z.record(z.string(), PlacedSetSkillShape),
 });
+export const FleetHarnessSetSchema: z.ZodType<FleetHarnessSetType> =
+  FleetHarnessSetShape;
 
-export const PlacedFleetMcpSchema = z.object({
-  config: FleetMcpConfigSchema,
+export const PlacedFleetMcpShape = z.object({
+  config: FleetMcpConfigShape,
   cwd: z.string(),
   name: z.string(),
 });
+export const PlacedFleetMcpSchema: z.ZodType<PlacedFleetMcpType> =
+  PlacedFleetMcpShape;
 
-export const FleetMcpSetSchema = z.object({
-  placed: z.record(z.string(), PlacedFleetMcpSchema),
-  servers: z.record(z.string(), FleetMcpConfigSchema),
+export const FleetMcpSetShape = z.object({
+  placed: z.record(z.string(), PlacedFleetMcpShape),
+  servers: z.record(z.string(), FleetMcpConfigShape),
   signedOut: z.array(z.string()),
 });
+export const FleetMcpSetSchema: z.ZodType<FleetMcpSetType> = FleetMcpSetShape;
 
 /**
  * Each property, through every level, as a plain object type. `readonly`
@@ -141,13 +157,13 @@ type Same<A, B> =
 
 /** Every schema of an exported type, proved against that type. */
 export const proved: [
-  Same<z.output<typeof MediaMeasurementSchema>, MediaMeasurementType>,
-  Same<z.output<typeof BrowserRecordSchema>, BrowserRecordType>,
-  Same<z.output<typeof SetHarnessConfigSchema>, SetHarnessConfigType>,
-  Same<z.output<typeof SetHookSchema>, SetHookType>,
-  Same<z.output<typeof PlacedSetHookSchema>, PlacedSetHookType>,
-  Same<z.output<typeof PlacedSetSkillSchema>, PlacedSetSkillType>,
-  Same<z.output<typeof FleetHarnessSetSchema>, FleetHarnessSetType>,
-  Same<z.output<typeof PlacedFleetMcpSchema>, PlacedFleetMcpType>,
-  Same<z.output<typeof FleetMcpSetSchema>, FleetMcpSetType>,
+  Same<z.output<typeof MediaMeasurementShape>, MediaMeasurementType>,
+  Same<z.output<typeof BrowserRecordShape>, BrowserRecordType>,
+  Same<z.output<typeof SetHarnessConfigShape>, SetHarnessConfigType>,
+  Same<z.output<typeof SetHookShape>, SetHookType>,
+  Same<z.output<typeof PlacedSetHookShape>, PlacedSetHookType>,
+  Same<z.output<typeof PlacedSetSkillShape>, PlacedSetSkillType>,
+  Same<z.output<typeof FleetHarnessSetShape>, FleetHarnessSetType>,
+  Same<z.output<typeof PlacedFleetMcpShape>, PlacedFleetMcpType>,
+  Same<z.output<typeof FleetMcpSetShape>, FleetMcpSetType>,
 ] = [true, true, true, true, true, true, true, true, true];

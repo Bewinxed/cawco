@@ -56,11 +56,11 @@ import { runCaptured } from "@cawco/core/run-captured";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { Elysia, t } from "elysia";
+import { z } from "zod";
 import { DB_PATH, HUB_PORT } from "./config";
 import { INSTALL_CODE, type Installs } from "./installs";
 import { localHubName } from "./mdns";
 import { CONNECT_S } from "./ssh-tunnels";
-import { z } from "zod";
 
 /** How long a short command gets to answer. Our choice. */
 const OUTPUT_MS = 3000;

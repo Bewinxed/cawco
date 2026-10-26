@@ -13,6 +13,7 @@ import type {
   DelegateAskStatus,
   DelegateEventKind,
   EffortLevel,
+  Envelope,
   FleetScope,
   HarnessConfigKind,
   HarnessKind,
@@ -35,10 +36,12 @@ import type {
   RuleTiming,
   RuleWatch,
   SendMode,
+  SendPayload,
   SendRefusal,
   SendState,
   SessionEffort,
   SigninState,
+  SpawnPayload,
   StarterGlyph,
   StarterOutcome,
   StarterPlace,
@@ -62,6 +65,7 @@ import {
   DelegateEventPayloadSchema,
   EndedBySchema,
   EnvelopeSchema,
+  EnvelopeShape,
   FleetItemStatusSchema,
   FleetMcpConfigSchema,
   FleetRefreshSchema,
@@ -85,9 +89,11 @@ import {
   RelayReachSchema,
   ScratchWorktreeSchema,
   SendAttachmentSchema,
+  SendPayloadSchema,
   SessionCommandsSchema,
   SessionToolingSchema,
   SkillFileSchema,
+  SpawnPayloadSchema,
   StoppedCommandsSchema,
   ThreadAnswerSchema,
   ThreadEventSchema,
@@ -127,7 +133,7 @@ import {
   DesignProposalFileSchema,
   GatePassSchema,
   ItemBlockSchema,
-  MoveStateSchema,
+  MoveStateShape,
   OAuthClientInformationFullSchema,
   OAuthDiscoveryStateSchema,
   OAuthProtectedResourceMetadataSchema,
@@ -143,7 +149,6 @@ import {
   WorkLandingSchema,
   WorkspaceFromSchema,
 } from "./stored-shapes";
-import { SendPayloadSchema, SpawnPayloadSchema } from "@cawco/core/stored-shapes";
 
 const timestamp = (column: string) => integer(column, { mode: "timestamp_ms" });
 
@@ -169,11 +174,11 @@ const sealedJson = <S extends z.ZodType>(schema: S) =>
   });
 
 /** A send as its machine is handed it (`Envelope<SendPayload>`). */
-const SendEnvelopeSchema = EnvelopeSchema.extend({ payload: SendPayloadSchema });
+const SendEnvelopeSchema: z.ZodType<Envelope<SendPayload>> =
+  EnvelopeShape.extend({ payload: SendPayloadSchema });
 /** A session's start as its machine is handed it (`Envelope<SpawnPayload>`). */
-const SpawnEnvelopeSchema = EnvelopeSchema.extend({
-  payload: SpawnPayloadSchema,
-});
+const SpawnEnvelopeSchema: z.ZodType<Envelope<SpawnPayload>> =
+  EnvelopeShape.extend({ payload: SpawnPayloadSchema });
 
 /**
  * One harness conversation a session had before the one it runs now
@@ -3557,7 +3562,7 @@ export const moves = sqliteTable(
      * and written whole, but the machines it names, which are its columns.
      */
     state: storedJson(
-      MoveStateSchema.omit({
+      MoveStateShape.omit({
         sourceMachineId: true,
         targetMachineId: true,
         stopOn: true,

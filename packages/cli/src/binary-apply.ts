@@ -85,7 +85,11 @@ import {
 } from "@cawco/core/keepers";
 import { machineId } from "@cawco/core/machine-id";
 import { hubDbPath } from "@cawco/core/paths";
-import { markerIsLive, ownIdentity } from "@cawco/core/process-identity";
+import {
+  markerIsLive,
+  ownIdentity,
+  ProcessMarkerSchema,
+} from "@cawco/core/process-identity";
 import {
   type ReleaseManifest,
   verifyManifest,
@@ -93,9 +97,12 @@ import {
 import { runtimeVersion } from "@cawco/core/runtime";
 import {
   isDamagedRecord,
+  parseRecord,
   readRecord,
   writeStateFile,
 } from "@cawco/core/state-file";
+import { ReleaseManifestSchema } from "@cawco/core/stored-shapes";
+import { z } from "zod";
 import { recordApply } from "./apply-record";
 import { binaryLayout } from "./binary-install";
 import { service, stopService } from "./service";
@@ -144,16 +151,18 @@ async function takeLock(version: string): Promise<boolean> {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
         throw error;
       }
-      const held = await readRecord(lockPath(), ProcessMarkerSchema).catch(async (damage: unknown) => {
-        if (!isDamagedRecord(damage)) {
-          throw damage;
+      const held = await readRecord(lockPath(), ProcessMarkerSchema).catch(
+        async (damage: unknown) => {
+          if (!isDamagedRecord(damage)) {
+            throw damage;
+          }
+          // Every lock is written whole: a damaged one is from before a crash,
+          // and names no process that could still hold it.
+          await say(
+            `${damage.message}: no process holds it, so it is taken over`
+          );
         }
-        // Every lock is written whole: a damaged one is from before a crash,
-        // and names no process that could still hold it.
-        await say(
-          `${damage.message}: no process holds it, so it is taken over`
-        );
-      });
+      );
       // Live only if that very process is still running: a killed helper's pid may be reused.
       if (held && (await markerIsLive(held))) {
         return false;
@@ -220,11 +229,13 @@ async function migrationRunning(db: string | undefined): Promise<boolean> {
   }
   // Every marker is written whole: a damaged one is from before a crash, and
   // names no migration still running.
-  const marker = await readRecord(`${db}.migrating`, ProcessMarkerSchema).catch((error: unknown) => {
-    if (!isDamagedRecord(error)) {
-      throw error;
+  const marker = await readRecord(`${db}.migrating`, ProcessMarkerSchema).catch(
+    (error: unknown) => {
+      if (!isDamagedRecord(error)) {
+        throw error;
+      }
     }
-  });
+  );
   return marker ? await markerIsLive(marker) : false;
 }
 

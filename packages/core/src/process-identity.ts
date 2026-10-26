@@ -19,8 +19,8 @@
 import { dlopen, FFIType, read as readMemory } from "bun:ffi";
 import { readFileSync } from "node:fs";
 import { readdir, readFile, readlink } from "node:fs/promises";
-import { hostEnvironment } from "./session-env";
 import { z } from "zod";
+import { hostEnvironment } from "./session-env";
 
 // ── macOS: libSystem ─────────────────────────────────────────────────────
 

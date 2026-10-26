@@ -20,6 +20,7 @@ import {
 import { ownerAsk } from "./owner";
 import { z } from "zod";
 import { ConnectionViewSchema } from "@cawco/core/stored-shapes";
+import { OwnerApprovalError, ownerFetch } from "./owner";
 
 export class ConnectionKeyError extends Error {}
 

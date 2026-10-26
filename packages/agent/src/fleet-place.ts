@@ -34,9 +34,9 @@ import { fleetConfigOf } from "@cawco/core/fleet-items";
 import { fleetProjectRowsFile, workspaceProjectFile } from "@cawco/core/paths";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { isPlace } from "@cawco/core/workspace-policy";
+import { z } from "zod";
 import { ownFolderSync } from "./layer";
 import { workspaceRefs } from "./workspace-records";
-import { z } from "zod";
 
 /** One place of a project on this machine: a checkout the hub named, or a clone this agent cut. */
 export interface FleetPlace {

@@ -1125,7 +1125,10 @@ export interface DbShape {
   /** The listed sessions whose keep-alive is on: the only ones it schedules. */
   readonly keepAliveInstances: () => PublicInstanceRow[];
   /** Keeps a pending send whole, as its machine was handed it. */
-  readonly keepEnvelope: (uuid: string, envelope: Envelope<SendPayload>) => void;
+  readonly keepEnvelope: (
+    uuid: string,
+    envelope: Envelope<SendPayload>
+  ) => void;
   /** A skill about to be deleted: its files kept in its history first, as a hook's are. */
   readonly keepSkillVersion: (name: string) => void;
   /** The items whose landing's gate passed on `tree` (WorkLanding `gate`). */

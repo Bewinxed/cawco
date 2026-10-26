@@ -10,6 +10,7 @@
  */
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
+import { z } from "zod";
 import { MACHINE_PROOF_HEADER } from "./hub-auth";
 import { machineId as hostMachineId } from "./machine-id";
 import { cawcoConfigDir } from "./paths";
@@ -18,7 +19,6 @@ import {
   writeStateFile,
   writeStateFileSync,
 } from "./state-file";
-import { z } from "zod";
 
 /** Where a machine keeps its key. */
 export const machineKeyPath = (): string =>
@@ -56,9 +56,7 @@ export const refusalSince = (
   const said = z
     .object({ at: z.number(), message: z.string() })
     .safeParse(JSON.parse(text));
-  return said.success && said.data.at >= since
-    ? said.data.message
-    : undefined;
+  return said.success && said.data.at >= since ? said.data.message : undefined;
 };
 
 /** This machine's key, or undefined before it was admitted. */

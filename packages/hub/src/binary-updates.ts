@@ -42,17 +42,16 @@ import type {
 } from "@cawco/core/binary-updates";
 import { hubUpdatePolicyPath } from "@cawco/core/paths";
 import {
-  DamagedRecord,
   isDamagedRecord,
+  parseRecord,
   readRecordSync,
   writeStateFileSync,
 } from "@cawco/core/state-file";
+import { BinaryUpdatePolicySchema } from "@cawco/core/stored-shapes";
 import { Elysia, t } from "elysia";
+import { z } from "zod";
 import { hidden } from "./hidden";
 import { fenceHub, hubRestartReadiness } from "./restart-holds";
-import { BinaryUpdatePolicySchema } from "@cawco/core/stored-shapes";
-import { z } from "zod";
-import { parseRecord } from "@cawco/core/state-file";
 
 /** How long a discovered release is served before the host is asked again. */
 const RELEASE_TTL_MS = 15 * 60_000;

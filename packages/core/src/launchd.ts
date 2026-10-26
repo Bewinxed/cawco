@@ -22,11 +22,11 @@
 import { copyFile, readdir, rm, stat, truncate } from "node:fs/promises";
 import { constants, homedir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
 import { bootId } from "./process-identity";
 import { runInC } from "./run-captured";
 import { isDamagedRecord, readRecord } from "./state-file";
 import { systemProgram } from "./workspace-needs";
-import { z } from "zod";
 
 /** Every CawCo job's label: `dev.cawco.<name>`, `<name>` its service's. */
 const CAWCO_LABEL = /^dev\.cawco\.(.+)$/u;
@@ -226,15 +226,13 @@ const ranSinceStart = async (label: string): Promise<boolean> => {
   const record = await readRecord(
     launchdStartPath(label),
     LaunchdStartSchema
-  ).catch(
-    (error: unknown): LaunchdStart => {
-      // Written whole: a damaged one is a crash's, from a run that began.
-      if (isDamagedRecord(error)) {
-        return {};
-      }
-      throw error;
+  ).catch((error: unknown): LaunchdStart => {
+    // Written whole: a damaged one is a crash's, from a run that began.
+    if (isDamagedRecord(error)) {
+      return {};
     }
-  );
+    throw error;
+  });
   if (!record) {
     return false;
   }

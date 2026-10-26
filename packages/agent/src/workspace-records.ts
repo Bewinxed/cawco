@@ -16,9 +16,9 @@ import {
   writeStateFile,
 } from "@cawco/core/state-file";
 import { isPlace } from "@cawco/core/workspace-policy";
+import { z } from "zod";
 import { reportDamaged } from "./damaged-records";
 import { ownFolderSync } from "./layer";
-import { z } from "zod";
 
 interface Scan {
   refs: WorkspaceRef[];

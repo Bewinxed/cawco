@@ -20,6 +20,8 @@ import {
 import { SERVICE_IDS } from "@cawco/core/binary-installation";
 import { hubCredentialSocket } from "@cawco/core/paths";
 import { protocolRange, runtimeCommit } from "@cawco/core/runtime";
+import { AgentRowSchema } from "@cawco/core/stored-shapes";
+import { z } from "zod";
 import { discoverHub, findExistingHub, type Hub } from "./discover";
 import { OwnerApprovalError, ownerFetch } from "./owner";
 import { pairingOff } from "./pairing";
@@ -30,8 +32,6 @@ import {
   service,
 } from "./service";
 import { callTool, listTools, sessionOf, toolDoor } from "./tools";
-import { z } from "zod";
-import { AgentRowSchema } from "@cawco/core/stored-shapes";
 
 /** Reported by `--version`; keep in sync with package.json. */
 /**

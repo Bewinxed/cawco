@@ -9,6 +9,7 @@
  * never the key.
  */
 import { CAWCO_ENV, readEnv } from "@cawco/core";
+import { z } from "zod";
 import { ConnectionKeyError, pipedKey, typedKey } from "./connections";
 import { ownerAsk } from "./owner";
 import { z } from "zod";
@@ -17,7 +18,9 @@ import { z } from "zod";
 const JevViewSchema = z.object({
   route: z.enum(["typesafe", "openrouter"]).nullable(),
   suggestWhileTyping: z.boolean(),
-  typesafe: z.object({ ends: z.string(), setAt: z.number().nullable() }).nullable(),
+  typesafe: z
+    .object({ ends: z.string(), setAt: z.number().nullable() })
+    .nullable(),
 });
 type JevView = z.infer<typeof JevViewSchema>;
 

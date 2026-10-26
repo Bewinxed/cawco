@@ -17,7 +17,7 @@ import {
 } from "@cawco/core";
 import { fleetMcpSetFile } from "@cawco/core/paths";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
-import { FleetMcpSetSchema } from "./stored-shapes";
+import { FleetMcpSetShape } from "./stored-shapes";
 
 /** One project's server, placed at one of its folders on this machine. */
 interface PlacedFleetMcp {
@@ -48,7 +48,7 @@ export const readFleetMcpSet = async (): Promise<FleetMcpSet> => {
   try {
     const stored = await readRecord(
       fleetMcpSetFile(),
-      FleetMcpSetSchema.partial()
+      FleetMcpSetShape.partial()
     );
     return { ...EMPTY, ...stored };
   } catch (error) {

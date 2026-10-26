@@ -153,7 +153,9 @@ export const toolRecord = async <T>(
   const answer = await call(session, name, args, "record", options);
   return answer.refused
     ? { refused: true, status: answer.status, text: answer.text }
-    : { ...answer, refused: false, // A probe's own reading of the record it asked for.
+    : {
+        ...answer,
+        refused: false, // A probe's own reading of the record it asked for.
         record: recordOf(name, answer.text) as T,
       };
 };

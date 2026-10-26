@@ -26,8 +26,8 @@
  */
 import { link, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { markerIsLive, ownIdentity } from "./process-identity";
 import { z } from "zod";
+import { markerIsLive, ownIdentity } from "./process-identity";
 import { parseRecord } from "./state-file";
 
 const HolderSchema = z

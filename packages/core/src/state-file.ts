@@ -275,7 +275,6 @@ export const parseRecord = <S extends z.ZodType>(
   }
   const parsed = schema.safeParse(value);
   if (!parsed.success) {
-    // biome-ignore lint/style/useErrorCause: the cause is passed, in the options third argument
     throw new DamagedRecord(file, z.prettifyError(parsed.error), {
       cause: parsed.error,
     });

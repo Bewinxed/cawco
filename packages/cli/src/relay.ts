@@ -15,11 +15,11 @@
  *   whose transcript a secret must never reach. Nothing prints it back.
  */
 import { CAWCO_ENV, type RelayView, readEnv } from "@cawco/core";
+import { RelayViewSchema } from "@cawco/core/stored-shapes";
+import { z } from "zod";
 import { ConnectionKeyError, pipedKey, typedKey } from "./connections";
 import { ownerAsk } from "./owner";
 import { callTool, toolDoor } from "./tools";
-import { z } from "zod";
-import { RelayViewSchema } from "@cawco/core/stored-shapes";
 
 class RelayError extends Error {}
 
@@ -241,17 +241,19 @@ export const runRelay = async (args: RelayArgs): Promise<string[]> => {
         throw new RelayError("off needs the relay's id");
       }
       const said = session
-        ? z.object({ github: z.string(), relay: RelayViewSchema }).parse(
-            JSON.parse(
-              await callTool(
-                args.hub,
-                session,
-                "relay_remove",
-                JSON.stringify({ id }),
-                "record"
+        ? z
+            .object({ github: z.string(), relay: RelayViewSchema })
+            .parse(
+              JSON.parse(
+                await callTool(
+                  args.hub,
+                  session,
+                  "relay_remove",
+                  JSON.stringify({ id }),
+                  "record"
+                )
               )
             )
-          )
         : ((await call(args.hub, "DELETE", `/api/relays/${id}`)) as {
             github: string;
             relay: RelayView;

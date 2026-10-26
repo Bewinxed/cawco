@@ -117,9 +117,9 @@ export const readPolicy = (file: string): Policy => {
   }
   const lists = (key: string): readonly string[] => {
     const list: unknown = Reflect.get(policy, key);
-    if (
-      !(Array.isArray(list) && list.every((one) => typeof one === "string"))
-    ) {
+    if (!(
+      Array.isArray(list) && list.every((one) => typeof one === "string")
+    )) {
       throw new Error(`${file} has no ${key} list`);
     }
     return list;

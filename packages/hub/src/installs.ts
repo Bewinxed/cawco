@@ -61,6 +61,7 @@ import {
   readRecordSync,
   writeStateFileSync,
 } from "@cawco/core/state-file";
+import { InstallsRecordSchema } from "./db/stored-shapes";
 import {
   ASKPASS_ENV,
   beforeSsh,
@@ -87,7 +88,6 @@ import {
   type TunnelOpen,
   type TunnelOutcome,
 } from "./ssh-tunnels";
-import { InstallsRecordSchema } from "./db/stored-shapes";
 
 /** Output kept per install. The steps are a dozen lines; a package manager's is the bulk. */
 const MAX_LINES = 2000;

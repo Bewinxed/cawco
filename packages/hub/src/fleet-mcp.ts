@@ -19,10 +19,10 @@ import {
 } from "@modelcontextprotocol/sdk/client/auth.js";
 import { OAuthError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
 import type { DbShape } from "./db";
 import { type Exchange, FleetMcpRelay } from "./fleet-mcp-relay";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
-import { z } from "zod";
 
 const SHARED_CLIENT_ID = `${CAWCO_OAUTH_URL}/client.json`;
 /**

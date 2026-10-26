@@ -37,8 +37,8 @@
  */
 import { hostname, userInfo } from "node:os";
 import type { Bounded } from "@cawco/core/bounded";
-import { firstLine, type Heard, type Ran, runTailscale } from "./tailscale-cli";
 import { z } from "zod";
+import { firstLine, type Heard, type Ran, runTailscale } from "./tailscale-cli";
 
 /** The Funnel port the relay owns: one of the three Funnel allows, and nothing else of the hub's. */
 export const FUNNEL_PORT = 10_000;

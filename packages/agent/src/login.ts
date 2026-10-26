@@ -11,7 +11,11 @@ import {
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { accountConfigDir, accountIds, accountsRoot } from "@cawco/core/paths";
-import { bootId, processStart } from "@cawco/core/process-identity";
+import {
+  bootId,
+  ProcessMarkerSchema,
+  processStart,
+} from "@cawco/core/process-identity";
 import {
   identifiedPid,
   isSignalRefused,
@@ -23,6 +27,7 @@ import {
   writeStateFile,
 } from "@cawco/core/state-file";
 import type { Subprocess } from "bun";
+import type { z } from "zod";
 import {
   accountEnv,
   authStatusIn,
@@ -32,8 +37,6 @@ import {
   removeAccountDir,
 } from "./accounts";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
-import { z } from "zod";
-import { ProcessMarkerSchema } from "@cawco/core/process-identity";
 
 /**
  * Signing an account in on a machine from the dashboard, over the tunnel, in

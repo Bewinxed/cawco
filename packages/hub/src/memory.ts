@@ -109,12 +109,13 @@ import {
 } from "@cawco/core";
 import type { JevChoiceAnswer, JevQuestion } from "@cawco/core/jev";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
-import { writeStateFile } from "@cawco/core/state-file";
+import { parseRecord, writeStateFile } from "@cawco/core/state-file";
 import { Elysia, status, t } from "elysia";
 import { z } from "zod";
 import { MEMORY_ARCHIVE_DAYS, MEMORY_FILE_CHARS } from "./config";
 import type { DbShape, ProjectRow, SessionTaintRow } from "./db";
 import { useKey } from "./db/memory-facts";
+import { ProposalSchema } from "./db/stored-shapes";
 import { type JevAccess, jevAccess } from "./jev";
 import { askRow, offLine, type PlacementRow } from "./jev-placement";
 import { boardTitle } from "./labels";
@@ -179,8 +180,6 @@ import { redactSecrets } from "./secret-filter";
 import { listOf, scalarOf } from "./task-file";
 import { readsWeb, type WebContext } from "./web-reads";
 import { isRoutineParent } from "./work-items";
-import { ProposalSchema } from "./db/stored-shapes";
-import { parseRecord } from "@cawco/core/state-file";
 
 export const AGENTS_FILE = "AGENTS.md";
 const MEMORY_DIR = "memory";

@@ -22,9 +22,9 @@ import { readWithin } from "@cawco/core/bounded";
 import { harnessConfigKey } from "@cawco/core/fleet-items";
 import { fleetPlacedDir } from "@cawco/core/paths";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
+import { z } from "zod";
 import type { SetHarnessConfig } from "./fleet-harness-set";
 import { resolveBin, toolEnv } from "./tools";
-import { z } from "zod";
 
 /** How long one package's `npm install` gets: a first install of a package with its dependencies, as an MCP server's (mcp-install.ts). */
 const NPM_INSTALL_MS = 180_000;
@@ -144,9 +144,10 @@ const installedPackage = async (
   const dir = packageDir(pkg.name, pkg.version);
   kept.add(dir);
   const root = join(dir, "node_modules", pkg.name);
-  const held = await readRecord(join(root, "package.json"), PackageJsonSchema).catch(
-    () => undefined
-  );
+  const held = await readRecord(
+    join(root, "package.json"),
+    PackageJsonSchema
+  ).catch(() => undefined);
   if (held?.version !== pkg.version) {
     const said = await install(pkg.name, pkg.version, dir);
     if (said) {

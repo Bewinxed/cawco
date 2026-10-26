@@ -89,9 +89,9 @@ import {
   type PreviewTicket,
 } from "@cawco/core";
 import { DAY_MS } from "@cawco/core/time";
+import { z } from "zod";
 import type { PreviewPassesDb, PreviewPassRow } from "./db/preview-passes";
 import { hubSecrets } from "./secret-box";
-import { z } from "zod";
 
 /** How long a ticket stands: a client spends it at once, in the load it was asked for. */
 export const TICKET_MS = 60_000;

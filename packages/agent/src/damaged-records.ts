@@ -135,7 +135,8 @@ export const damagedRecords = async (): Promise<DamagedRecordReport[]> => {
 
 /** Reads one record; a damaged one is reported, a missing one or one that cannot be read at all is left. */
 /** A record read for whether it parses at all: its own reader checks its shape. */
-const anyRecord = (file: string): Promise<unknown> => readRecord(file, z.unknown());
+const anyRecord = (file: string): Promise<unknown> =>
+  readRecord(file, z.unknown());
 
 const check = async (
   file: string,

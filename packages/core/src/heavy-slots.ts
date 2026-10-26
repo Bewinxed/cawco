@@ -61,6 +61,7 @@ import {
 } from "node:fs";
 import { cpus, getPriority, setPriority, totalmem } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
 import { openLockFile, tryLock, unlock } from "./flock";
 import { workspaceCacheDir } from "./paths";
 import { HOUR_MS } from "./time";

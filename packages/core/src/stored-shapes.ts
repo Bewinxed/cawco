@@ -250,16 +250,20 @@ import type {
 } from "./usage/types";
 import type { Policy as PolicyType } from "./workspace-judge";
 
-export const DownloadProgressSchema = z.object({
+export const DownloadProgressShape = z.object({
   received: z.number(),
   total: z.number(),
 });
+export const DownloadProgressSchema: z.ZodType<DownloadProgressType> =
+  DownloadProgressShape;
 
-export const ArchiveFetchingSchema = z.object({
-  fetching: DownloadProgressSchema,
+export const ArchiveFetchingShape = z.object({
+  fetching: DownloadProgressShape,
 });
+export const ArchiveFetchingSchema: z.ZodType<ArchiveFetchingType> =
+  ArchiveFetchingShape;
 
-export const PolicySchema = z.object({
+export const PolicyShape = z.object({
   allowRead: z.array(z.string()).readonly(),
   allowWrite: z.array(z.string()).readonly(),
   clone: z.string(),
@@ -269,36 +273,47 @@ export const PolicySchema = z.object({
   protectConfig: z.boolean().optional(),
   scratch: z.string(),
 });
+export const PolicySchema: z.ZodType<PolicyType> = PolicyShape;
 
-export const MediaPathSchema = z.enum(["udp+tcp", "tcp", "none"]);
+export const MediaPathShape = z.enum(["udp+tcp", "tcp", "none"]);
+export const MediaPathSchema: z.ZodType<MediaPathType> = MediaPathShape;
 
-export const BrowserPortsSchema = z.object({
+export const BrowserPortsShape = z.object({
   devtools: z.number(),
   http: z.number().optional(),
   media: z.number().optional(),
 });
+export const BrowserPortsSchema: z.ZodType<BrowserPortsType> =
+  BrowserPortsShape;
 
-export const BrowserHostKindSchema = z.enum(["container", "local"]);
+export const BrowserHostKindShape = z.enum(["container", "local"]);
+export const BrowserHostKindSchema: z.ZodType<BrowserHostKindType> =
+  BrowserHostKindShape;
 
-export const BrowserKeySchema = z.union([
+export const BrowserKeyShape = z.union([
   z.templateLiteral(["project:", z.string()]),
   z.templateLiteral(["machine:", z.string()]),
 ]);
+export const BrowserKeySchema: z.ZodType<BrowserKeyType> = BrowserKeyShape;
 
-export const BrowserRelayReachSchema = z.object({
+export const BrowserRelayReachShape = z.object({
   lan: z.array(z.string()),
   machineId: z.string(),
   tailnet: z.array(z.string()),
 });
+export const BrowserRelayReachSchema: z.ZodType<BrowserRelayReachType> =
+  BrowserRelayReachShape;
 
-export const BrowserRelaySchema = z.object({
+export const BrowserRelayShape = z.object({
   credential: z.string(),
-  reach: BrowserRelayReachSchema.optional(),
+  reach: BrowserRelayReachShape.optional(),
   urls: z.array(z.string()),
   username: z.string(),
 });
+export const BrowserRelaySchema: z.ZodType<BrowserRelayType> =
+  BrowserRelayShape;
 
-export const BrowserStateSchema = z.enum([
+export const BrowserStateShape = z.enum([
   "pulling",
   "building",
   "starting",
@@ -307,18 +322,20 @@ export const BrowserStateSchema = z.enum([
   "asleep",
   "failed",
 ]);
+export const BrowserStateSchema: z.ZodType<BrowserStateType> =
+  BrowserStateShape;
 
-export const BrowserRowSchema = z.object({
-  host: BrowserHostKindSchema,
-  key: BrowserKeySchema,
+export const BrowserRowShape = z.object({
+  host: BrowserHostKindShape,
+  key: BrowserKeyShape,
   lastUsedAt: z.number(),
   name: z.string(),
   origin: z.string().optional(),
-  ports: BrowserPortsSchema.optional(),
+  ports: BrowserPortsShape.optional(),
   progress: z
     .object({ done: z.number(), total: z.number(), what: z.literal("image") })
     .optional(),
-  state: BrowserStateSchema,
+  state: BrowserStateShape,
   takeover: z
     .object({
       by: z.string().nullable(),
@@ -329,10 +346,13 @@ export const BrowserRowSchema = z.object({
   viewers: z.number(),
   why: z.string().optional(),
 });
+export const BrowserRowSchema: z.ZodType<BrowserRowType> = BrowserRowShape;
 
-export const HarnessConfigKindSchema = z.enum(HARNESS_CONFIG_KINDS);
+export const HarnessConfigKindShape = z.enum(HARNESS_CONFIG_KINDS);
+export const HarnessConfigKindSchema: z.ZodType<HarnessConfigKindType> =
+  HarnessConfigKindShape;
 
-export const HookEventSchema = z.enum([
+export const HookEventShape = z.enum([
   "SessionStart",
   "Setup",
   "InstructionsLoaded",
@@ -365,14 +385,15 @@ export const HookEventSchema = z.enum([
   "Elicitation",
   "ElicitationResult",
 ]);
+export const HookEventSchema: z.ZodType<HookEventType> = HookEventShape;
 
-export const HookHandlerBaseSchema = z.object({
+export const HookHandlerBaseShape = z.object({
   if: z.string().optional(),
   statusMessage: z.string().optional(),
   timeout: z.number().optional(),
 });
 
-export const HookCommandHandlerSchema = HookHandlerBaseSchema.extend({
+export const HookCommandHandlerShape = HookHandlerBaseShape.extend({
   args: z.array(z.string()).optional(),
   async: z.boolean().optional(),
   asyncRewake: z.boolean().optional(),
@@ -380,44 +401,57 @@ export const HookCommandHandlerSchema = HookHandlerBaseSchema.extend({
   shell: z.enum(["bash", "powershell"]).optional(),
   type: z.literal("command"),
 });
+export const HookCommandHandlerSchema: z.ZodType<HookCommandHandlerType> =
+  HookCommandHandlerShape;
 
-export const HookHttpHandlerSchema = HookHandlerBaseSchema.extend({
+export const HookHttpHandlerShape = HookHandlerBaseShape.extend({
   type: z.literal("http"),
   url: z.string(),
 });
+export const HookHttpHandlerSchema: z.ZodType<HookHttpHandlerType> =
+  HookHttpHandlerShape;
 
-export const HookMcpToolHandlerSchema = HookHandlerBaseSchema.extend({
+export const HookMcpToolHandlerShape = HookHandlerBaseShape.extend({
   mcp_server_name: z.string(),
   tool_name: z.string(),
   type: z.literal("mcp_tool"),
 });
+export const HookMcpToolHandlerSchema: z.ZodType<HookMcpToolHandlerType> =
+  HookMcpToolHandlerShape;
 
-export const HookPromptHandlerSchema = HookHandlerBaseSchema.extend({
+export const HookPromptHandlerShape = HookHandlerBaseShape.extend({
   prompt: z.string(),
   type: z.literal("prompt"),
 });
+export const HookPromptHandlerSchema: z.ZodType<HookPromptHandlerType> =
+  HookPromptHandlerShape;
 
-export const HookAgentHandlerSchema = HookHandlerBaseSchema.extend({
+export const HookAgentHandlerShape = HookHandlerBaseShape.extend({
   agent: z.string().optional(),
   prompt: z.string(),
   type: z.literal("agent"),
 });
+export const HookAgentHandlerSchema: z.ZodType<HookAgentHandlerType> =
+  HookAgentHandlerShape;
 
-export const HookHandlerSchema = z.union([
-  HookCommandHandlerSchema,
-  HookHttpHandlerSchema,
-  HookMcpToolHandlerSchema,
-  HookPromptHandlerSchema,
-  HookAgentHandlerSchema,
+export const HookHandlerShape = z.union([
+  HookCommandHandlerShape,
+  HookHttpHandlerShape,
+  HookMcpToolHandlerShape,
+  HookPromptHandlerShape,
+  HookAgentHandlerShape,
 ]);
+export const HookHandlerSchema: z.ZodType<HookHandlerType> = HookHandlerShape;
 
-export const HookMatchTestSchema = z.union([
+export const HookMatchTestShape = z.union([
   z.object({ all: z.literal(true) }),
   z.object({ exact: z.array(z.string()) }),
   z.object({ regex: z.string() }),
 ]);
+export const HookMatchTestSchema: z.ZodType<HookMatchTestType> =
+  HookMatchTestShape;
 
-export const McpStdioServerConfigSchema = z.object({
+export const McpStdioServerConfigShape = z.object({
   alwaysLoad: z.boolean().optional(),
   args: z.array(z.string()).optional(),
   command: z.string(),
@@ -425,75 +459,91 @@ export const McpStdioServerConfigSchema = z.object({
   timeout: z.number().optional(),
   type: z.literal("stdio").optional(),
 });
+export const McpStdioServerConfigSchema: z.ZodType<McpStdioServerConfigType> =
+  McpStdioServerConfigShape;
 
-export const McpSSEServerConfigSchema = z.object({
+export const McpSSEServerConfigShape = z.object({
   alwaysLoad: z.boolean().optional(),
   headers: z.record(z.string(), z.string()).optional(),
   timeout: z.number().optional(),
   type: z.literal("sse"),
   url: z.string(),
 });
+export const McpSSEServerConfigSchema: z.ZodType<McpSSEServerConfigType> =
+  McpSSEServerConfigShape;
 
-export const McpHttpServerConfigSchema = z.object({
+export const McpHttpServerConfigShape = z.object({
   alwaysLoad: z.boolean().optional(),
   headers: z.record(z.string(), z.string()).optional(),
   timeout: z.number().optional(),
   type: z.literal("http"),
   url: z.string(),
 });
+export const McpHttpServerConfigSchema: z.ZodType<McpHttpServerConfigType> =
+  McpHttpServerConfigShape;
 
-export const FleetMcpConfigSchema = z.union([
-  McpSSEServerConfigSchema,
-  McpHttpServerConfigSchema,
-  McpStdioServerConfigSchema,
+export const FleetMcpConfigShape = z.union([
+  McpSSEServerConfigShape,
+  McpHttpServerConfigShape,
+  McpStdioServerConfigShape,
 ]);
+export const FleetMcpConfigSchema: z.ZodType<FleetMcpConfigType> =
+  FleetMcpConfigShape;
 
-export const EffortLevelSchema = z.enum([
+export const EffortLevelShape = z.enum([
   "low",
   "medium",
   "high",
   "xhigh",
   "max",
 ]);
+export const EffortLevelSchema: z.ZodType<EffortLevelType> = EffortLevelShape;
 
-export const ModelInfoSchema = z.object({
+export const ModelInfoShape = z.object({
   contextWindow: z.number().optional(),
-  defaultEffort: EffortLevelSchema.nullable().optional(),
+  defaultEffort: EffortLevelShape.nullable().optional(),
   description: z.string().optional(),
   displayName: z.string(),
   released: z.string().optional(),
   resolvedModel: z.string().optional(),
-  supportedEffortLevels: z.array(EffortLevelSchema).optional(),
+  supportedEffortLevels: z.array(EffortLevelShape).optional(),
   supportsAdaptiveThinking: z.boolean().optional(),
   supportsAutoMode: z.boolean().optional(),
   supportsEffort: z.boolean().optional(),
   supportsFastMode: z.boolean().optional(),
   value: z.string(),
 });
+export const ModelInfoSchema: z.ZodType<ModelInfoType> = ModelInfoShape;
 
-export const SignInFaultSchema = z.object({
+export const SignInFaultShape = z.object({
   at: z.number(),
   provider: z.string(),
   words: z.string(),
 });
+export const SignInFaultSchema: z.ZodType<SignInFaultType> = SignInFaultShape;
 
-export const WorkspaceCutSchema = z.object({
+export const WorkspaceCutShape = z.object({
   branch: z.string(),
   carry: z.string().optional(),
   commit: z.string(),
 });
+export const WorkspaceCutSchema: z.ZodType<WorkspaceCutType> =
+  WorkspaceCutShape;
 
-export const WorkspaceKindSchema = z.enum(["repo", "folder"]);
+export const WorkspaceKindShape = z.enum(["repo", "folder"]);
+export const WorkspaceKindSchema: z.ZodType<WorkspaceKindType> =
+  WorkspaceKindShape;
 
-export const BuildInfoSchema = z.object({
+export const BuildInfoShape = z.object({
   commit: z.string().optional(),
   dirty: z.boolean().optional(),
   protocol: z.object({ min: z.number(), max: z.number() }).optional(),
   startedAt: z.number(),
   version: z.string(),
 });
+export const BuildInfoSchema: z.ZodType<BuildInfoType> = BuildInfoShape;
 
-export const SignalsSchema = z.enum([
+export const SignalsShape = z.enum([
   "SIGABRT",
   "SIGALRM",
   "SIGBUS",
@@ -533,104 +583,129 @@ export const SignalsSchema = z.enum([
   "SIGINFO",
 ]);
 
-export const SessiondProcInfoSchema = z.object({
+export const SessiondProcInfoShape = z.object({
   alive: z.boolean(),
   cwd: z.string().optional(),
   exitCode: z.number().optional(),
   head: z.number(),
   pid: z.number(),
   procId: z.string(),
-  signal: SignalsSchema.optional(),
+  signal: SignalsShape.optional(),
   stderr: z.string().optional(),
 });
+export const SessiondProcInfoSchema: z.ZodType<SessiondProcInfoType> =
+  SessiondProcInfoShape;
 
-export const SessiondWelcomeSchema = z.object({
-  build: BuildInfoSchema,
+export const SessiondWelcomeShape = z.object({
+  build: BuildInfoShape,
   capabilities: z.array(z.string()).readonly(),
   cgroup: z.string().optional(),
   epoch: z.string(),
-  procs: z.array(SessiondProcInfoSchema),
+  procs: z.array(SessiondProcInfoShape),
   type: z.literal("welcome"),
 });
+export const SessiondWelcomeSchema: z.ZodType<SessiondWelcomeType> =
+  SessiondWelcomeShape;
 
-export const SessiondLineSchema = z.object({
+export const SessiondLineShape = z.object({
   data: z.string(),
   procId: z.string(),
   seq: z.number(),
 });
+export const SessiondLineSchema: z.ZodType<SessiondLineType> =
+  SessiondLineShape;
 
-export const SessiondDeltaSchema = z.object({
-  event: SessiondLineSchema,
+export const SessiondDeltaShape = z.object({
+  event: SessiondLineShape,
   type: z.literal("proc.line"),
 });
+export const SessiondDeltaSchema: z.ZodType<SessiondDeltaType> =
+  SessiondDeltaShape;
 
-export const SessiondBacklogSchema = z.object({
-  events: z.array(SessiondLineSchema),
+export const SessiondBacklogShape = z.object({
+  events: z.array(SessiondLineShape),
   procId: z.string(),
   type: z.literal("proc.backlog"),
 });
+export const SessiondBacklogSchema: z.ZodType<SessiondBacklogType> =
+  SessiondBacklogShape;
 
-export const SessiondResetSchema = z.object({
+export const SessiondResetShape = z.object({
   nextSeq: z.number(),
   oldest: z.number().optional(),
   procId: z.string(),
   type: z.literal("proc.reset"),
 });
+export const SessiondResetSchema: z.ZodType<SessiondResetType> =
+  SessiondResetShape;
 
-export const SessiondExitSchema = z.object({
+export const SessiondExitShape = z.object({
   exitCode: z.number().nullable(),
   pid: z.number().optional(),
   procId: z.string(),
-  signal: SignalsSchema.nullable(),
+  signal: SignalsShape.nullable(),
   stderr: z.string().optional(),
   type: z.literal("proc.exit"),
 });
+export const SessiondExitSchema: z.ZodType<SessiondExitType> =
+  SessiondExitShape;
 
-export const ChildLimitSchema = z.enum(["tasks", "memory"]);
+export const ChildLimitShape = z.enum(["tasks", "memory"]);
+export const ChildLimitSchema: z.ZodType<ChildLimitType> = ChildLimitShape;
 
-export const SessiondLimitSchema = z.object({
+export const SessiondLimitShape = z.object({
   count: z.number(),
   group: z.string(),
-  limit: ChildLimitSchema,
+  limit: ChildLimitShape,
   max: z.number(),
   pid: z.number(),
   procId: z.string(),
   type: z.literal("proc.limit"),
 });
+export const SessiondLimitSchema: z.ZodType<SessiondLimitType> =
+  SessiondLimitShape;
 
-export const SessiondAckSchema = z.object({
+export const SessiondAckShape = z.object({
   commandId: z.string(),
   reason: z.string().optional(),
   stage: z.enum(["accepted", "applied", "failed"]),
   type: z.literal("ack"),
 });
+export const SessiondAckSchema: z.ZodType<SessiondAckType> = SessiondAckShape;
 
-export const SessiondDrainingSchema = z.object({ type: z.literal("draining") });
+export const SessiondDrainingShape = z.object({ type: z.literal("draining") });
+export const SessiondDrainingSchema: z.ZodType<SessiondDrainingType> =
+  SessiondDrainingShape;
 
-export const SessiondServerMessageSchema = z.union([
-  SessiondWelcomeSchema,
-  SessiondDeltaSchema,
-  SessiondBacklogSchema,
-  SessiondResetSchema,
-  SessiondExitSchema,
-  SessiondLimitSchema,
-  SessiondAckSchema,
-  SessiondDrainingSchema,
+export const SessiondServerMessageShape = z.union([
+  SessiondWelcomeShape,
+  SessiondDeltaShape,
+  SessiondBacklogShape,
+  SessiondResetShape,
+  SessiondExitShape,
+  SessiondLimitShape,
+  SessiondAckShape,
+  SessiondDrainingShape,
 ]);
+export const SessiondServerMessageSchema: z.ZodType<SessiondServerMessageType> =
+  SessiondServerMessageShape;
 
-export const StageErrorKindSchema = z.enum(["missing", "compile", "page"]);
+export const StageErrorKindShape = z.enum(["missing", "compile", "page"]);
+export const StageErrorKindSchema: z.ZodType<StageErrorKindType> =
+  StageErrorKindShape;
 
-export const StageErrorSchema = z.object({
+export const StageErrorShape = z.object({
   column: z.number().nullable(),
   file: z.string(),
   frame: z.string().nullable(),
-  kind: StageErrorKindSchema.optional(),
+  kind: StageErrorKindShape.optional(),
   line: z.number().nullable(),
   message: z.string(),
   sheets: z.array(z.string()),
 });
+export const StageErrorSchema: z.ZodType<StageErrorType> = StageErrorShape;
 
-export const ReleaseManifestSchema = z.object({
+export const ReleaseManifestShape = z.object({
   artifacts: z.array(
     z.object({
       target: z.string(),
@@ -651,19 +726,24 @@ export const ReleaseManifestSchema = z.object({
   testSigned: z.boolean(),
   version: z.string(),
 });
+export const ReleaseManifestSchema: z.ZodType<ReleaseManifestType> =
+  ReleaseManifestShape;
 
-export const AuthStateSchema = z.enum([
+export const AuthStateShape = z.enum([
   "authenticated",
   "unauthenticated",
   "unreadable-credentials",
 ]);
+export const AuthStateSchema: z.ZodType<AuthStateType> = AuthStateShape;
 
-export const BinaryUpdatePolicySchema = z.object({
+export const BinaryUpdatePolicyShape = z.object({
   autoUpdate: z.boolean(),
   channel: z.enum(["stable", "nightly"]),
 });
+export const BinaryUpdatePolicySchema: z.ZodType<BinaryUpdatePolicyType> =
+  BinaryUpdatePolicyShape;
 
-export const RestartHoldReasonSchema = z.enum([
+export const RestartHoldReasonShape = z.enum([
   "custody",
   "starting",
   "image",
@@ -677,52 +757,65 @@ export const RestartHoldReasonSchema = z.enum([
   "wake-up",
   "wake-ups-unknown",
 ]);
+export const RestartHoldReasonSchema: z.ZodType<RestartHoldReasonType> =
+  RestartHoldReasonShape;
 
-export const RestartHoldSchema = z.object({
+export const RestartHoldShape = z.object({
   ids: z.array(z.string()),
-  reason: RestartHoldReasonSchema,
+  reason: RestartHoldReasonShape,
 });
+export const RestartHoldSchema: z.ZodType<RestartHoldType> = RestartHoldShape;
 
-export const BinaryDownloadSchema = z.object({
+export const BinaryDownloadShape = z.object({
   received: z.number(),
   total: z.number(),
 });
+export const BinaryDownloadSchema: z.ZodType<BinaryDownloadType> =
+  BinaryDownloadShape;
 
-export const HubWaitSchema = z.enum(["behind", "unanswered", "trial"]);
+export const HubWaitShape = z.enum(["behind", "unanswered", "trial"]);
+export const HubWaitSchema: z.ZodType<HubWaitType> = HubWaitShape;
 
-export const BinaryUpdateLandingSchema = z.object({
+export const BinaryUpdateLandingShape = z.object({
   at: z.number(),
   notes: z.string().optional(),
   outcome: z.enum(["installed", "rolled-back"]),
   version: z.string(),
 });
+export const BinaryUpdateLandingSchema: z.ZodType<BinaryUpdateLandingType> =
+  BinaryUpdateLandingShape;
 
-export const BinaryUpdatePhaseSchema = z.enum(BINARY_UPDATE_PHASES);
+export const BinaryUpdatePhaseShape = z.enum(BINARY_UPDATE_PHASES);
+export const BinaryUpdatePhaseSchema: z.ZodType<BinaryUpdatePhaseType> =
+  BinaryUpdatePhaseShape;
 
-export const KeptProcessSchema = z.object({
+export const KeptProcessShape = z.object({
   command: z.string(),
   pid: z.number(),
 });
+export const KeptProcessSchema: z.ZodType<KeptProcessType> = KeptProcessShape;
 
-export const RetiringKeeperSchema = z.object({
-  kept: z.array(KeptProcessSchema).optional(),
+export const RetiringKeeperShape = z.object({
+  kept: z.array(KeptProcessShape).optional(),
   notAnswering: z.literal(true).optional(),
   sessions: z.number(),
   version: z.string(),
 });
+export const RetiringKeeperSchema: z.ZodType<RetiringKeeperType> =
+  RetiringKeeperShape;
 
-export const BinaryUpdateStateSchema = z.object({
+export const BinaryUpdateStateShape = z.object({
   availableVersion: z.string().optional(),
-  channel: BinaryUpdatePolicySchema.shape.channel,
+  channel: BinaryUpdatePolicyShape.shape.channel,
   commands: z.array(z.string()).optional(),
-  cut: z.array(RestartHoldSchema).optional(),
-  download: BinaryDownloadSchema.optional(),
+  cut: z.array(RestartHoldShape).optional(),
+  download: BinaryDownloadShape.optional(),
   error: z.string().optional(),
   failedVersion: z.string().optional(),
   heldChildren: z.number().optional(),
   hostsHub: z.boolean(),
-  hubFetch: BinaryDownloadSchema.optional(),
-  hubWait: HubWaitSchema.optional(),
+  hubFetch: BinaryDownloadShape.optional(),
+  hubWait: HubWaitShape.optional(),
   installedVersion: z.string(),
   keeperFailedVersion: z.string().optional(),
   keeperRestart: z
@@ -736,20 +829,23 @@ export const BinaryUpdateStateSchema = z.object({
       silentForMs: z.number(),
     })
     .optional(),
-  landed: BinaryUpdateLandingSchema.optional(),
+  landed: BinaryUpdateLandingShape.optional(),
   notes: z.string().optional(),
-  phase: BinaryUpdatePhaseSchema,
-  retiringKeepers: z.array(RetiringKeeperSchema).optional(),
-  sessiondKept: z.array(KeptProcessSchema).optional(),
+  phase: BinaryUpdatePhaseShape,
+  retiringKeepers: z.array(RetiringKeeperShape).optional(),
+  sessiondKept: z.array(KeptProcessShape).optional(),
   sessiondVersion: z.string().optional(),
   updatedAt: z.number(),
-  waitingOn: z.array(RestartHoldSchema).optional(),
+  waitingOn: z.array(RestartHoldShape).optional(),
   waitingSince: z.number().optional(),
 });
+export const BinaryUpdateStateSchema: z.ZodType<BinaryUpdateStateType> =
+  BinaryUpdateStateShape;
 
-export const HarnessKindSchema = z.enum(["claude", "opencode", "pi"]);
+export const HarnessKindShape = z.enum(["claude", "opencode", "pi"]);
+export const HarnessKindSchema: z.ZodType<HarnessKindType> = HarnessKindShape;
 
-export const PermissionModeSchema = z.enum([
+export const PermissionModeShape = z.enum([
   "default",
   "acceptEdits",
   "bypassPermissions",
@@ -758,8 +854,10 @@ export const PermissionModeSchema = z.enum([
   "auto",
   "fullSend",
 ]);
+export const PermissionModeSchema: z.ZodType<PermissionModeType> =
+  PermissionModeShape;
 
-export const SessionCustodySchema = z.union([
+export const SessionCustodyShape = z.union([
   z.object({
     state: z.literal("available"),
     instances: z.array(z.string()),
@@ -770,8 +868,10 @@ export const SessionCustodySchema = z.union([
   }),
   z.object({ state: z.literal("unavailable"), error: z.string() }),
 ]);
+export const SessionCustodySchema: z.ZodType<SessionCustodyType> =
+  SessionCustodyShape;
 
-export const FleetFaultCauseSchema = z.enum([
+export const FleetFaultCauseShape = z.enum([
   "cli-too-old",
   "cli-missing",
   "marketplace-unlinked",
@@ -786,10 +886,12 @@ export const FleetFaultCauseSchema = z.enum([
   "unsafe-path",
   "unknown",
 ]);
+export const FleetFaultCauseSchema: z.ZodType<FleetFaultCauseType> =
+  FleetFaultCauseShape;
 
-export const FleetItemStateSchema = z.union([
+export const FleetItemStateShape = z.union([
   z.object({
-    cause: FleetFaultCauseSchema,
+    cause: FleetFaultCauseShape,
     detail: z.string().optional(),
     state: z.literal("failed"),
   }),
@@ -806,67 +908,79 @@ export const FleetItemStateSchema = z.union([
     ]),
   }),
 ]);
+export const FleetItemStateSchema: z.ZodType<FleetItemStateType> =
+  FleetItemStateShape;
 
-export const PlacedSectionSchema = z.enum(PLACED_SECTIONS);
+export const PlacedSectionShape = z.enum(PLACED_SECTIONS);
+export const PlacedSectionSchema: z.ZodType<PlacedSectionType> =
+  PlacedSectionShape;
 
-export const FleetPlacedStatesSchema = z.partialRecord(
-  PlacedSectionSchema,
-  z.record(z.string(), z.record(z.string(), FleetItemStateSchema))
+export const FleetPlacedStatesShape = z.partialRecord(
+  PlacedSectionShape,
+  z.record(z.string(), z.record(z.string(), FleetItemStateShape))
 );
+export const FleetPlacedStatesSchema: z.ZodType<FleetPlacedStatesType> =
+  FleetPlacedStatesShape;
 
-export const CliInstallSchema = z.object({
+export const CliInstallShape = z.object({
   path: z.string(),
   used: z.boolean().optional(),
   version: z.string().optional(),
 });
+export const CliInstallSchema: z.ZodType<CliInstallType> = CliInstallShape;
 
-export const FleetToolchainSchema = z.object({
-  claude: z.array(CliInstallSchema).optional(),
+export const FleetToolchainShape = z.object({
+  claude: z.array(CliInstallShape).optional(),
 });
+export const FleetToolchainSchema: z.ZodType<FleetToolchainType> =
+  FleetToolchainShape;
 
-export const FleetSyncReportSchema = z.object({
+export const FleetSyncReportShape = z.object({
   at: z.number(),
-  harnessConfig: z.record(z.string(), FleetItemStateSchema).optional(),
+  harnessConfig: z.record(z.string(), FleetItemStateShape).optional(),
   have: z
     .object({
       skills: z.record(z.string(), z.string()).optional(),
       plugins: z.record(z.string(), z.string()).optional(),
     })
     .optional(),
-  hooks: z.record(z.string(), FleetItemStateSchema).optional(),
-  marketplaces: z.record(z.string(), FleetItemStateSchema),
-  mcp: z.record(z.string(), FleetItemStateSchema),
+  hooks: z.record(z.string(), FleetItemStateShape).optional(),
+  marketplaces: z.record(z.string(), FleetItemStateShape),
+  mcp: z.record(z.string(), FleetItemStateShape),
   mcpByHarness: z
-    .partialRecord(
-      HarnessKindSchema,
-      z.record(z.string(), FleetItemStateSchema)
-    )
+    .partialRecord(HarnessKindShape, z.record(z.string(), FleetItemStateShape))
     .optional(),
-  memory: FleetItemStateSchema.optional(),
-  memoryDocs: z.record(z.string(), FleetItemStateSchema).optional(),
-  memoryHook: FleetItemStateSchema.optional(),
-  placed: FleetPlacedStatesSchema.optional(),
-  plugins: z.record(z.string(), FleetItemStateSchema),
-  skills: z.record(z.string(), FleetItemStateSchema).optional(),
-  toolchain: FleetToolchainSchema.optional(),
+  memory: FleetItemStateShape.optional(),
+  memoryDocs: z.record(z.string(), FleetItemStateShape).optional(),
+  memoryHook: FleetItemStateShape.optional(),
+  placed: FleetPlacedStatesShape.optional(),
+  plugins: z.record(z.string(), FleetItemStateShape),
+  skills: z.record(z.string(), FleetItemStateShape).optional(),
+  toolchain: FleetToolchainShape.optional(),
 });
+export const FleetSyncReportSchema: z.ZodType<FleetSyncReportType> =
+  FleetSyncReportShape;
 
-export const FleetConvergeStateSchema = z.enum([
+export const FleetConvergeStateShape = z.enum([
   "pending",
   "running",
   "ok",
   "failed",
 ]);
+export const FleetConvergeStateSchema: z.ZodType<FleetConvergeStateType> =
+  FleetConvergeStateShape;
 
-export const FleetItemStatusSchema = z.object({
+export const FleetItemStatusShape = z.object({
   error: z.string().optional(),
   hash: z.string(),
   id: z.string(),
   ms: z.number().optional(),
-  state: FleetConvergeStateSchema,
+  state: FleetConvergeStateShape,
 });
+export const FleetItemStatusSchema: z.ZodType<FleetItemStatusType> =
+  FleetItemStatusShape;
 
-export const FleetSyncOutcomeSchema = z.union([
+export const FleetSyncOutcomeShape = z.union([
   z.object({
     state: z.literal("sent"),
     rev: z.number(),
@@ -893,31 +1007,40 @@ export const FleetSyncOutcomeSchema = z.union([
     at: z.number(),
   }),
 ]);
+export const FleetSyncOutcomeSchema: z.ZodType<FleetSyncOutcomeType> =
+  FleetSyncOutcomeShape;
 
-export const AccountIdentitySchema = z.object({
+export const AccountIdentityShape = z.object({
   email: z.string(),
   organization: z.string(),
   orgId: z.string().nullable(),
 });
+export const AccountIdentitySchema: z.ZodType<AccountIdentityType> =
+  AccountIdentityShape;
 
-export const AccountKindSchema = z.enum([
+export const AccountKindShape = z.enum([
   "subscription",
   "console",
   "oauth",
   "api_key",
 ]);
+export const AccountKindSchema: z.ZodType<AccountKindType> = AccountKindShape;
 
-export const AccountProviderSchema = z.string();
+export const AccountProviderShape = z.string();
+export const AccountProviderSchema: z.ZodType<AccountProviderType> =
+  AccountProviderShape;
 
-export const AccountReportSchema = z.object({
+export const AccountReportShape = z.object({
   account: z.string(),
-  identity: AccountIdentitySchema.optional(),
-  kind: AccountKindSchema.optional(),
+  identity: AccountIdentityShape.optional(),
+  kind: AccountKindShape.optional(),
   loggedIn: z.boolean(),
-  provider: AccountProviderSchema.optional(),
+  provider: AccountProviderShape.optional(),
 });
+export const AccountReportSchema: z.ZodType<AccountReportType> =
+  AccountReportShape;
 
-export const HarnessCapabilitiesSchema = z.object({
+export const HarnessCapabilitiesShape = z.object({
   compaction: z.boolean(),
   contextUsage: z.boolean(),
   costUsd: z.boolean(),
@@ -933,7 +1056,7 @@ export const HarnessCapabilitiesSchema = z.object({
   listSessions: z.boolean(),
   mcpControl: z.boolean(),
   mcpStatus: z.boolean(),
-  permissionModes: z.array(PermissionModeSchema),
+  permissionModes: z.array(PermissionModeShape),
   plugins: z.boolean(),
   reloadSkills: z.boolean(),
   renameSession: z.boolean(),
@@ -947,31 +1070,37 @@ export const HarnessCapabilitiesSchema = z.object({
   tasks: z.boolean(),
   thinking: z.boolean(),
 });
+export const HarnessCapabilitiesSchema: z.ZodType<HarnessCapabilitiesType> =
+  HarnessCapabilitiesShape;
 
-export const HarnessReportSchema = z.object({
-  accounts: z.array(AccountReportSchema).optional(),
-  auth: AuthStateSchema,
+export const HarnessReportShape = z.object({
+  accounts: z.array(AccountReportShape).optional(),
+  auth: AuthStateShape,
   authReason: z.string().optional(),
-  capabilities: HarnessCapabilitiesSchema,
-  harness: HarnessKindSchema,
+  capabilities: HarnessCapabilitiesShape,
+  harness: HarnessKindShape,
   installed: z.boolean(),
   modelNames: z.record(z.string(), z.string()).optional(),
-  models: z.array(ModelInfoSchema).optional(),
+  models: z.array(ModelInfoShape).optional(),
   modelsUnread: z.string().optional(),
   refused: z.enum(["not-installed", "version"]).optional(),
-  signInFaults: z.array(SignInFaultSchema).optional(),
+  signInFaults: z.array(SignInFaultShape).optional(),
   unreadAccounts: z.array(z.string()).optional(),
   version: z.string().optional(),
 });
+export const HarnessReportSchema: z.ZodType<HarnessReportType> =
+  HarnessReportShape;
 
-export const WorkspaceToolSchema = z.object({
+export const WorkspaceToolShape = z.object({
   command: z.string(),
   lookedIn: z.string(),
   need: z.enum(["walls", "checkout"]),
   package: z.string(),
 });
+export const WorkspaceToolSchema: z.ZodType<WorkspaceToolType> =
+  WorkspaceToolShape;
 
-export const MachineCapabilitySchema = z.object({
+export const MachineCapabilityShape = z.object({
   addresses: z.array(z.string()).optional(),
   available: z.boolean(),
   id: z.enum([
@@ -987,65 +1116,72 @@ export const MachineCapabilitySchema = z.object({
     "workspace",
   ]),
   installCommand: z.string(),
-  media: MediaPathSchema.optional(),
-  missing: z.array(WorkspaceToolSchema).optional(),
+  media: MediaPathShape.optional(),
+  missing: z.array(WorkspaceToolShape).optional(),
   nat: z.object({ address: z.string(), lan: z.string() }).optional(),
   path: z.string().optional(),
   reason: z.string().optional(),
   version: z.string().optional(),
 });
+export const MachineCapabilitySchema: z.ZodType<MachineCapabilityType> =
+  MachineCapabilityShape;
 
-export const MachineCapabilitiesSchema = z.object({
+export const MachineCapabilitiesShape = z.object({
   at: z.number(),
-  items: z.array(MachineCapabilitySchema),
+  items: z.array(MachineCapabilityShape),
   platform: z.string(),
 });
+export const MachineCapabilitiesSchema: z.ZodType<MachineCapabilitiesType> =
+  MachineCapabilitiesShape;
 
-export const ToolStateSchema = z.enum([
+export const ToolStateShape = z.enum([
   "installed",
   "missing",
   "installing",
   "failed",
   "unsupported",
 ]);
+export const ToolStateSchema: z.ZodType<ToolStateType> = ToolStateShape;
 
-export const ToolStatusSchema = z.object({
+export const ToolStatusShape = z.object({
   at: z.number(),
   detail: z.string().optional(),
   id: z.string(),
   method: z.string().optional(),
-  state: ToolStateSchema,
+  state: ToolStateShape,
   version: z.string().optional(),
 });
+export const ToolStatusSchema: z.ZodType<ToolStatusType> = ToolStatusShape;
 
-export const AgentRowSchema = z.object({
-  auth: z.union([AuthStateSchema, z.literal("unknown")]),
-  binaryUpdate: BinaryUpdateStateSchema.optional(),
-  build: BuildInfoSchema.optional(),
+export const AgentRowShape = z.object({
+  auth: z.union([AuthStateShape, z.literal("unknown")]),
+  binaryUpdate: BinaryUpdateStateShape.optional(),
+  build: BuildInfoShape.optional(),
   chosenModes: z
-    .partialRecord(HarnessKindSchema, PermissionModeSchema)
+    .partialRecord(HarnessKindShape, PermissionModeShape)
     .optional(),
-  custody: SessionCustodySchema.optional(),
-  fleet: FleetSyncReportSchema.optional(),
-  fleetItems: z.record(z.string(), FleetItemStatusSchema).optional(),
-  fleetSync: FleetSyncOutcomeSchema.optional(),
-  harnesses: z.array(HarnessReportSchema).optional(),
+  custody: SessionCustodyShape.optional(),
+  fleet: FleetSyncReportShape.optional(),
+  fleetItems: z.record(z.string(), FleetItemStatusShape).optional(),
+  fleetSync: FleetSyncOutcomeShape.optional(),
+  harnesses: z.array(HarnessReportShape).optional(),
   home: z.string().optional(),
   hostname: z.string(),
   hostsHub: z.boolean().optional(),
   lastSeenAt: z.union([z.string(), z.number(), z.coerce.date()]).nullable(),
   lostAt: z.number().nullable().optional(),
-  machineCapabilities: MachineCapabilitiesSchema.optional(),
+  machineCapabilities: MachineCapabilitiesShape.optional(),
   machineId: z.string(),
   os: z.string(),
   pausedUntil: z.number().nullable(),
   pauseStopped: z.string().nullable(),
   reconnectingUntil: z.number().nullable().optional(),
   status: z.string(),
-  tools: z.record(z.string(), ToolStatusSchema).optional(),
+  tools: z.record(z.string(), ToolStatusShape).optional(),
 });
+export const AgentRowSchema: z.ZodType<AgentRowType> = AgentRowShape;
 
-export const ConnectionAppSchema = z.union([
+export const ConnectionAppShape = z.union([
   z.object({
     appId: z.string(),
     installationId: z.string(),
@@ -1054,22 +1190,30 @@ export const ConnectionAppSchema = z.union([
   }),
   z.object({ clientId: z.string(), service: z.literal("linear") }),
 ]);
+export const ConnectionAppSchema: z.ZodType<ConnectionAppType> =
+  ConnectionAppShape;
 
-export const ConnectionAuthSchema = z.enum(CONNECTION_AUTHS);
+export const ConnectionAuthShape = z.enum(CONNECTION_AUTHS);
+export const ConnectionAuthSchema: z.ZodType<ConnectionAuthType> =
+  ConnectionAuthShape;
 
-export const ConnectionStateSchema = z.enum([
+export const ConnectionStateShape = z.enum([
   "signed-in",
   "needs-sign-in",
   "error",
 ]);
+export const ConnectionStateSchema: z.ZodType<ConnectionStateType> =
+  ConnectionStateShape;
 
-export const ConnectionTransportSchema = z.enum(CONNECTION_TRANSPORTS);
+export const ConnectionTransportShape = z.enum(CONNECTION_TRANSPORTS);
+export const ConnectionTransportSchema: z.ZodType<ConnectionTransportType> =
+  ConnectionTransportShape;
 
-export const ConnectionViewSchema = z.object({
+export const ConnectionViewShape = z.object({
   account: z.string(),
-  app: ConnectionAppSchema.optional(),
+  app: ConnectionAppShape.optional(),
   args: z.array(z.string()).optional(),
-  auth: ConnectionAuthSchema,
+  auth: ConnectionAuthShape,
   command: z.string().optional(),
   createdAt: z.number(),
   device: z
@@ -1095,23 +1239,30 @@ export const ConnectionViewSchema = z.object({
   reason: z.string().optional(),
   service: z.string(),
   signIn: z.object({ expiresAt: z.number(), url: z.string() }).optional(),
-  state: ConnectionStateSchema,
+  state: ConnectionStateShape,
   tools: z.array(z.string()).optional(),
-  transport: ConnectionTransportSchema,
+  transport: ConnectionTransportShape,
   updatedAt: z.number(),
   url: z.string().optional(),
 });
+export const ConnectionViewSchema: z.ZodType<ConnectionViewType> =
+  ConnectionViewShape;
 
-export const PairingOffAnswerSchema = z.union([
+export const PairingOffAnswerShape = z.union([
   z.object({ ok: z.literal(true) }),
   z.object({ error: z.string() }),
 ]);
+export const PairingOffAnswerSchema: z.ZodType<PairingOffAnswerType> =
+  PairingOffAnswerShape;
 
-export const RelayProviderSchema = z.enum(RELAY_PROVIDERS);
+export const RelayProviderShape = z.enum(RELAY_PROVIDERS);
+export const RelayProviderSchema: z.ZodType<RelayProviderType> =
+  RelayProviderShape;
 
-export const RelayStateSchema = z.enum(RELAY_STATES);
+export const RelayStateShape = z.enum(RELAY_STATES);
+export const RelayStateSchema: z.ZodType<RelayStateType> = RelayStateShape;
 
-export const RelayViewSchema = z.object({
+export const RelayViewShape = z.object({
   connection: z.string().nullable(),
   createdAt: z.number(),
   createdBy: z.string(),
@@ -1121,29 +1272,34 @@ export const RelayViewSchema = z.object({
   inbound: z.string(),
   lastDeliveryAt: z.number().nullable(),
   projectId: z.string(),
-  provider: RelayProviderSchema,
+  provider: RelayProviderShape,
   publicUrl: z.string().nullable(),
   reason: z.string().nullable(),
   registered: z.boolean(),
-  state: RelayStateSchema,
+  state: RelayStateShape,
   testedAt: z.number().nullable(),
 });
+export const RelayViewSchema: z.ZodType<RelayViewType> = RelayViewShape;
 
-export const ArtifactThumbnailSchema = z.object({
+export const ArtifactThumbnailShape = z.object({
   at: z.string(),
   height: z.number(),
   single: z.boolean(),
   width: z.number(),
 });
+export const ArtifactThumbnailSchema: z.ZodType<ArtifactThumbnailType> =
+  ArtifactThumbnailShape;
 
-export const CompactStageSchema = z.enum([
+export const CompactStageShape = z.enum([
   "filing",
   "compacting",
   "compacted",
   "stopped",
 ]);
+export const CompactStageSchema: z.ZodType<CompactStageType> =
+  CompactStageShape;
 
-export const AccountHueSchema = z.enum([
+export const AccountHueShape = z.enum([
   "amber",
   "blue",
   "cyan",
@@ -1152,14 +1308,17 @@ export const AccountHueSchema = z.enum([
   "rose",
   "violet",
 ]);
+export const AccountHueSchema: z.ZodType<AccountHueType> = AccountHueShape;
 
-export const NamedAccountSchema = z.object({
-  hue: AccountHueSchema,
+export const NamedAccountShape = z.object({
+  hue: AccountHueShape,
   id: z.string(),
   name: z.string(),
 });
+export const NamedAccountSchema: z.ZodType<NamedAccountType> =
+  NamedAccountShape;
 
-export const HeldReasonSchema = z.union([
+export const HeldReasonShape = z.union([
   z.object({ kind: z.literal("signin") }),
   z.object({ kind: z.literal("allowed"), by: z.enum(["project", "task"]) }),
   z.object({ kind: z.literal("benched") }),
@@ -1180,14 +1339,16 @@ export const HeldReasonSchema = z.union([
     leftPct: z.number(),
   }),
 ]);
+export const HeldReasonSchema: z.ZodType<HeldReasonType> = HeldReasonShape;
 
-export const HeldAccountSchema = z.object({
-  account: NamedAccountSchema,
+export const HeldAccountShape = z.object({
+  account: NamedAccountShape,
   backAt: z.number().optional(),
-  reason: HeldReasonSchema,
+  reason: HeldReasonShape,
 });
+export const HeldAccountSchema: z.ZodType<HeldAccountType> = HeldAccountShape;
 
-export const WaitReasonSchema = z.enum([
+export const WaitReasonShape = z.enum([
   "fork",
   "off",
   "full",
@@ -1196,8 +1357,9 @@ export const WaitReasonSchema = z.enum([
   "soon",
   "work",
 ]);
+export const WaitReasonSchema: z.ZodType<WaitReasonType> = WaitReasonShape;
 
-export const EndedBySchema = z.union([
+export const EndedByShape = z.union([
   z.object({ kind: z.literal("person") }),
   z.object({ kind: z.literal("session"), name: z.string() }),
   z.object({ kind: z.literal("hub"), why: z.string() }),
@@ -1207,17 +1369,20 @@ export const EndedBySchema = z.union([
     resumes: z.boolean(),
   }),
 ]);
+export const EndedBySchema: z.ZodType<EndedByType> = EndedByShape;
 
-export const ContinueStepSchema = z.enum(["prepare", "summary", "start"]);
+export const ContinueStepShape = z.enum(["prepare", "summary", "start"]);
+export const ContinueStepSchema: z.ZodType<ContinueStepType> =
+  ContinueStepShape;
 
-export const AccountMoveSchema = z.union([
+export const AccountMoveShape = z.union([
   z.object({
     kind: z.literal("moved"),
     asked: z.literal(true).optional(),
-    compact: CompactStageSchema.optional(),
+    compact: CompactStageShape.optional(),
     relaunched: z.literal(true).optional(),
-    from: NamedAccountSchema,
-    to: NamedAccountSchema,
+    from: NamedAccountShape,
+    to: NamedAccountShape,
     sameOrganization: z.boolean(),
     tokens: z.number().nullable(),
     window: z.string().nullable(),
@@ -1234,18 +1399,18 @@ export const AccountMoveSchema = z.union([
   }),
   z.object({
     kind: z.literal("waiting"),
-    account: NamedAccountSchema,
-    frees: NamedAccountSchema.optional(),
-    accounts: z.array(HeldAccountSchema).optional(),
+    account: NamedAccountShape,
+    frees: NamedAccountShape.optional(),
+    accounts: z.array(HeldAccountShape).optional(),
     until: z.number(),
-    why: WaitReasonSchema,
+    why: WaitReasonShape,
     tokens: z.number().nullable(),
   }),
   z.object({
     kind: z.literal("continued"),
-    from: NamedAccountSchema.nullable(),
-    to: NamedAccountSchema.nullable(),
-    writtenOn: NamedAccountSchema.nullable(),
+    from: NamedAccountShape.nullable(),
+    to: NamedAccountShape.nullable(),
+    writtenOn: NamedAccountShape.nullable(),
     by: z.string().optional(),
     asked: z.literal(true).optional(),
     asks: z.literal(true).optional(),
@@ -1254,75 +1419,85 @@ export const AccountMoveSchema = z.union([
   }),
   z.object({
     kind: z.literal("stopped"),
-    account: NamedAccountSchema,
+    account: NamedAccountShape,
     resetsAt: z.number().nullable(),
   }),
-  z.object({ kind: z.literal("signed-out"), account: NamedAccountSchema }),
-  z.object({ kind: z.literal("ended"), by: EndedBySchema }),
+  z.object({ kind: z.literal("signed-out"), account: NamedAccountShape }),
+  z.object({ kind: z.literal("ended"), by: EndedByShape }),
   z.object({
     kind: z.literal("unmoved"),
     action: z.enum(["move", "continue"]),
     signedOut: z.literal(true).optional(),
-    from: NamedAccountSchema.nullable(),
-    to: NamedAccountSchema.nullable(),
+    from: NamedAccountShape.nullable(),
+    to: NamedAccountShape.nullable(),
     asked: z.literal(true).optional(),
-    step: ContinueStepSchema,
+    step: ContinueStepShape,
     reason: z.string(),
     waits: z.literal(true).optional(),
   }),
 ]);
+export const AccountMoveSchema: z.ZodType<AccountMoveType> = AccountMoveShape;
 
-export const AccountOverageSchema = z.object({
+export const AccountOverageShape = z.object({
   disabledReason: z.string().nullable(),
   inUse: z.boolean(),
   resetsAt: z.string().nullable(),
   status: z.string().nullable(),
 });
+export const AccountOverageSchema: z.ZodType<AccountOverageType> =
+  AccountOverageShape;
 
-export const AtLimitSchema = z.object({
+export const AtLimitShape = z.object({
   delegateWork: z.literal("move"),
   move: z.boolean(),
   moveWholeUnderK: z.number(),
   prepareAtPct: z.number(),
   waitMinutes: z.number(),
 });
+export const AtLimitSchema: z.ZodType<AtLimitType> = AtLimitShape;
 
-export const ArtifactBaseSchema = z.object({
+export const ArtifactBaseShape = z.object({
   name: z.string().optional(),
   primary: z.boolean().optional(),
 });
 
-export const ResultArtifactSchema = z.union([
-  ArtifactBaseSchema.extend({
+export const ResultArtifactShape = z.union([
+  ArtifactBaseShape.extend({
     kind: z.enum(["file", "post"]),
     path: z.string(),
   }),
-  ArtifactBaseSchema.extend({ kind: z.literal("link"), url: z.string() }),
-  ArtifactBaseSchema.extend({
+  ArtifactBaseShape.extend({ kind: z.literal("link"), url: z.string() }),
+  ArtifactBaseShape.extend({
     kind: z.literal("artifact"),
     artifactId: z.string(),
   }),
 ]);
+export const ResultArtifactSchema: z.ZodType<ResultArtifactType> =
+  ResultArtifactShape;
 
-export const AttemptResultSchema = z.object({
-  artifacts: z.array(ResultArtifactSchema),
+export const AttemptResultShape = z.object({
+  artifacts: z.array(ResultArtifactShape),
   at: z.number(),
   check: z.array(z.string()),
   summary: z.string(),
 });
+export const AttemptResultSchema: z.ZodType<AttemptResultType> =
+  AttemptResultShape;
 
-export const CarryRestoredSchema = z.union([
+export const CarryRestoredShape = z.union([
   z.object({ refused: z.string(), why: z.string() }),
   z.object({ applied: z.string() }),
 ]);
+export const CarryRestoredSchema: z.ZodType<CarryRestoredType> =
+  CarryRestoredShape;
 
-export const CheckoutMoveSchema = z.union([
+export const CheckoutMoveShape = z.union([
   z.object({
     branch: z.string(),
     carry: z.string().optional(),
     commit: z.string(),
     kind: z.literal("recut"),
-    restored: CarryRestoredSchema.optional(),
+    restored: CarryRestoredShape.optional(),
   }),
   z.object({
     branch: z.string(),
@@ -1331,47 +1506,51 @@ export const CheckoutMoveSchema = z.union([
     to: z.string(),
   }),
 ]);
+export const CheckoutMoveSchema: z.ZodType<CheckoutMoveType> =
+  CheckoutMoveShape;
 
-export const ClaudeModelUsageSchema = z.object({
+export const ClaudeModelUsageShape = z.object({
   cacheCreationInputTokens: z.number(),
   cacheReadInputTokens: z.number(),
   costUSD: z.number(),
   inputTokens: z.number(),
   outputTokens: z.number(),
 });
+export const ClaudeModelUsageSchema: z.ZodType<ClaudeModelUsageType> =
+  ClaudeModelUsageShape;
 
-export const ConnectAccessSchema = z.enum(["read", "write"]);
+export const ConnectAccessShape = z.enum(["read", "write"]);
+export const ConnectAccessSchema: z.ZodType<ConnectAccessType> =
+  ConnectAccessShape;
 
-export const DelegateAskStatusSchema = z.enum([
-  "pending",
-  "answered",
-  "denied",
-]);
+export const DelegateAskStatusShape = z.enum(["pending", "answered", "denied"]);
+export const DelegateAskStatusSchema: z.ZodType<DelegateAskStatusType> =
+  DelegateAskStatusShape;
 
-export const DelegateEventBaseSchema = z.object({
+export const DelegateEventBaseShape = z.object({
   createdAt: z.string(),
   id: z.number(),
   instanceId: z.string(),
   parentInstanceId: z.string(),
   requestId: z.string().nullable(),
   requestKind: z.enum(["question", "tool"]).nullable(),
-  status: DelegateAskStatusSchema.nullable(),
+  status: DelegateAskStatusShape.nullable(),
   toolName: z.string().nullable(),
 });
 
-export const DelegateEventSchema = z.union([
-  DelegateEventBaseSchema.extend({
+export const DelegateEventShape = z.union([
+  DelegateEventBaseShape.extend({
     kind: z.literal("ask"),
     payload: z.object({ input: z.record(z.string(), z.unknown()).optional() }),
   }),
-  DelegateEventBaseSchema.extend({
+  DelegateEventBaseShape.extend({
     kind: z.literal("answer"),
     payload: z.object({
       behavior: z.string(),
       answers: z.record(z.string(), z.unknown()).optional(),
     }),
   }),
-  DelegateEventBaseSchema.extend({
+  DelegateEventBaseShape.extend({
     kind: z.literal("report"),
     payload: z.object({
       body: z.string(),
@@ -1382,14 +1561,18 @@ export const DelegateEventSchema = z.union([
     }),
   }),
 ]);
+export const DelegateEventSchema: z.ZodType<DelegateEventType> =
+  DelegateEventShape;
 
-export const DelegateEventPayloadSchema = z.union([
-  DelegateEventSchema.options[2].shape.payload,
-  DelegateEventSchema.options[1].shape.payload,
-  DelegateEventSchema.options[0].shape.payload,
+export const DelegateEventPayloadShape = z.union([
+  DelegateEventShape.options[2].shape.payload,
+  DelegateEventShape.options[1].shape.payload,
+  DelegateEventShape.options[0].shape.payload,
 ]);
+export const DelegateEventPayloadSchema: z.ZodType<DelegateEventPayloadType> =
+  DelegateEventPayloadShape;
 
-export const VerbSchema = z.enum([
+export const VerbShape = z.enum([
   "register",
   "heartbeat",
   "spawn",
@@ -1402,16 +1585,18 @@ export const VerbSchema = z.enum([
   "launch",
   "admission",
 ]);
+export const VerbSchema: z.ZodType<VerbType> = VerbShape;
 
-export const EnvelopeSchema = z.object({
+export const EnvelopeShape = z.object({
   instanceId: z.string().optional(),
   machineId: z.string(),
   payload: z.unknown(),
   requestId: z.string().optional(),
-  verb: VerbSchema,
+  verb: VerbShape,
 });
+export const EnvelopeSchema: z.ZodType<EnvelopeType> = EnvelopeShape;
 
-export const FleetRefreshSchema = z.object({
+export const FleetRefreshShape = z.object({
   at: z.number(),
   error: z.string().optional(),
   fromHash: z.string().optional(),
@@ -1420,59 +1605,71 @@ export const FleetRefreshSchema = z.object({
   toHash: z.string().optional(),
   toVersion: z.string().optional(),
 });
+export const FleetRefreshSchema: z.ZodType<FleetRefreshType> =
+  FleetRefreshShape;
 
-export const StatusOptionSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-});
+export const StatusOptionShape = z.object({ id: z.string(), name: z.string() });
+export const StatusOptionSchema: z.ZodType<StatusOptionType> =
+  StatusOptionShape;
 
-export const GithubProjectSchema = z.object({
+export const GithubProjectShape = z.object({
   fieldId: z.string().nullable(),
   id: z.string(),
   map: z.record(z.string(), z.string().nullable()),
   number: z.number(),
-  options: z.array(StatusOptionSchema),
+  options: z.array(StatusOptionShape),
   title: z.string(),
   url: z.string(),
 });
+export const GithubProjectSchema: z.ZodType<GithubProjectType> =
+  GithubProjectShape;
 
-export const McpPlatformSchema = z.enum(MCP_PLATFORMS);
+export const McpPlatformShape = z.enum(MCP_PLATFORMS);
+export const McpPlatformSchema: z.ZodType<McpPlatformType> = McpPlatformShape;
 
-export const EndedTaskSchema = z.object({
+export const EndedTaskShape = z.object({
   description: z.string(),
   output: z.string().optional(),
   outputUnread: z.object({ after: z.number() }).optional(),
   taskId: z.string(),
   type: z.string(),
 });
+export const EndedTaskSchema: z.ZodType<EndedTaskType> = EndedTaskShape;
 
-export const MoveEndedSchema = z.object({
-  tasks: z.array(EndedTaskSchema),
+export const MoveEndedShape = z.object({
+  tasks: z.array(EndedTaskShape),
   wakeups: z.number(),
 });
+export const MoveEndedSchema: z.ZodType<MoveEndedType> = MoveEndedShape;
 
-export const TextAttachmentSchema = z.object({
+export const TextAttachmentShape = z.object({
   content: z.string(),
   kind: z.literal("text"),
   name: z.string(),
 });
+export const TextAttachmentSchema: z.ZodType<TextAttachmentType> =
+  TextAttachmentShape;
 
-export const FileAttachmentSchema = z.object({
+export const FileAttachmentShape = z.object({
   kind: z.literal("file"),
   mediaType: z.string(),
   name: z.string(),
   ref: z.string(),
   size: z.number(),
 });
+export const FileAttachmentSchema: z.ZodType<FileAttachmentType> =
+  FileAttachmentShape;
 
-export const SendAttachmentSchema = z.union([
-  TextAttachmentSchema,
-  FileAttachmentSchema,
+export const SendAttachmentShape = z.union([
+  TextAttachmentShape,
+  FileAttachmentShape,
 ]);
+export const SendAttachmentSchema: z.ZodType<SendAttachmentType> =
+  SendAttachmentShape;
 
-export const MoveRequestSchema = z.object({
+export const MoveRequestShape = z.object({
   approved: z.string().optional(),
-  attachments: z.array(SendAttachmentSchema).optional(),
+  attachments: z.array(SendAttachmentShape).optional(),
   images: z
     .array(z.object({ data: z.string(), mediaType: z.string() }))
     .optional(),
@@ -1481,54 +1678,66 @@ export const MoveRequestSchema = z.object({
   prompt: z.string().optional(),
   spawn: z.object({
     account: z.string().optional(),
-    effort: EffortLevelSchema.optional(),
-    harness: HarnessKindSchema.optional(),
+    effort: EffortLevelShape.optional(),
+    harness: HarnessKindShape.optional(),
     model: z.string().optional(),
-    permissionMode: PermissionModeSchema.optional(),
+    permissionMode: PermissionModeShape.optional(),
     title: z.string().optional(),
   }),
 });
+export const MoveRequestSchema: z.ZodType<MoveRequestType> = MoveRequestShape;
 
-export const NamedMoveRequestSchema = MoveRequestSchema.extend({
-  spawn: MoveRequestSchema.shape.spawn.extend({ harness: HarnessKindSchema }),
+export const NamedMoveRequestShape = MoveRequestShape.extend({
+  spawn: MoveRequestShape.shape.spawn.extend({ harness: HarnessKindShape }),
 });
+export const NamedMoveRequestSchema: z.ZodType<NamedMoveRequestType> =
+  NamedMoveRequestShape;
 
-export const UserAnswersSchema = z.record(
+export const UserAnswersShape = z.record(
   z.string(),
   z.union([z.string(), z.array(z.string())])
 );
+export const UserAnswersSchema: z.ZodType<UserAnswersType> = UserAnswersShape;
 
-export const UserQuestionSchema = z.object({
+export const UserQuestionShape = z.object({
   header: z.string(),
   multiSelect: z.boolean(),
   options: z.array(z.object({ label: z.string(), description: z.string() })),
   question: z.string(),
 });
+export const UserQuestionSchema: z.ZodType<UserQuestionType> =
+  UserQuestionShape;
 
-export const UserQuestionAnsweredSchema = z.object({
+export const UserQuestionAnsweredShape = z.object({
   annotations: z
     .record(
       z.string(),
       z.object({ notes: z.string().optional(), preview: z.string().optional() })
     )
     .optional(),
-  answers: UserAnswersSchema,
+  answers: UserAnswersShape,
   outcome: z.literal("answered"),
-  questions: z.array(UserQuestionSchema),
+  questions: z.array(UserQuestionShape),
   response: z.string().optional(),
 });
+export const UserQuestionAnsweredSchema: z.ZodType<UserQuestionAnsweredType> =
+  UserQuestionAnsweredShape;
 
-export const UserQuestionDismissedSchema = z.object({
+export const UserQuestionDismissedShape = z.object({
   outcome: z.literal("dismissed"),
-  questions: z.array(UserQuestionSchema),
+  questions: z.array(UserQuestionShape),
 });
+export const UserQuestionDismissedSchema: z.ZodType<UserQuestionDismissedType> =
+  UserQuestionDismissedShape;
 
-export const UserQuestionResultSchema = z.union([
-  UserQuestionAnsweredSchema,
-  UserQuestionDismissedSchema,
+export const UserQuestionResultShape = z.union([
+  UserQuestionAnsweredShape,
+  UserQuestionDismissedShape,
 ]);
+export const UserQuestionResultSchema: z.ZodType<UserQuestionResultType> =
+  UserQuestionResultShape;
 
-export const NeutralContentBlockSchema = z.union([
+export const NeutralContentBlockShape = z.union([
   z.object({ type: z.literal("text"), text: z.string() }),
   z.object({
     type: z.literal("thinking"),
@@ -1548,7 +1757,7 @@ export const NeutralContentBlockSchema = z.union([
     content: z.unknown(),
     is_error: z.boolean().optional(),
     structuredContent: z.record(z.string(), z.unknown()).optional(),
-    questionResult: UserQuestionResultSchema.optional(),
+    questionResult: UserQuestionResultShape.optional(),
   }),
   z.object({
     type: z.literal("image"),
@@ -1566,16 +1775,19 @@ export const NeutralContentBlockSchema = z.union([
     ]),
   }),
 ]);
+export const NeutralContentBlockSchema: z.ZodType<NeutralContentBlockType> =
+  NeutralContentBlockShape;
 
-export const HarnessNoteSchema = z.object({
+export const HarnessNoteShape = z.object({
   body: z.string(),
   kind: z.enum(["task-notification", "system-reminder"]),
   status: z.string(),
   title: z.string(),
   toolUseId: z.string().optional(),
 });
+export const HarnessNoteSchema: z.ZodType<HarnessNoteType> = HarnessNoteShape;
 
-export const NeutralOriginSchema = z.union([
+export const NeutralOriginShape = z.union([
   z.object({ kind: z.literal("human") }),
   z.object({
     kind: z.literal("peer"),
@@ -1591,16 +1803,18 @@ export const NeutralOriginSchema = z.union([
     name: z.string().optional(),
   }),
 ]);
+export const NeutralOriginSchema: z.ZodType<NeutralOriginType> =
+  NeutralOriginShape;
 
-export const NeutralUserMessageSchema = z.object({
+export const NeutralUserMessageShape = z.object({
   compactSummary: z.literal(true).optional(),
   keepAlive: z.literal(true).optional(),
   message: z.object({
     role: z.literal("user"),
-    content: z.union([z.string(), z.array(NeutralContentBlockSchema)]),
-    harnessNote: HarnessNoteSchema.optional(),
+    content: z.union([z.string(), z.array(NeutralContentBlockShape)]),
+    harnessNote: HarnessNoteShape.optional(),
   }),
-  origin: NeutralOriginSchema.optional(),
+  origin: NeutralOriginShape.optional(),
   parent_tool_use_id: z.string().nullable().optional(),
   raw: z.unknown().optional(),
   replaces: z.string().optional(),
@@ -1610,8 +1824,10 @@ export const NeutralUserMessageSchema = z.object({
   type: z.literal("user"),
   uuid: z.string().optional(),
 });
+export const NeutralUserMessageSchema: z.ZodType<NeutralUserMessageType> =
+  NeutralUserMessageShape;
 
-export const LimitWindowSchema = z.object({
+export const LimitWindowShape = z.object({
   group: z.union([
     z.literal("session"),
     z.literal("weekly"),
@@ -1630,89 +1846,211 @@ export const LimitWindowSchema = z.object({
     z.string(),
   ]),
 });
+export const LimitWindowSchema: z.ZodType<LimitWindowType> = LimitWindowShape;
 
-export const OpenCodeGoLimitsSchema = z.object({
+export const OpenCodeGoLimitsShape = z.object({
   error: z.string().nullable(),
   fetchedAt: z.number(),
   stale: z.boolean().optional(),
-  windows: z.array(LimitWindowSchema),
+  windows: z.array(LimitWindowShape),
 });
+export const OpenCodeGoLimitsSchema: z.ZodType<OpenCodeGoLimitsType> =
+  OpenCodeGoLimitsShape;
 
-export const PlaceLfsRowSchema = z.object({
+export const PlaceLfsRowShape = z.object({
   bytes: z.number(),
   count: z.number(),
   paths: z.array(z.string()),
   pattern: z.string(),
 });
+export const PlaceLfsRowSchema: z.ZodType<PlaceLfsRowType> = PlaceLfsRowShape;
 
-export const PlanCommentSchema = z.object({ at: z.string(), text: z.string() });
+export const PlanCommentShape = z.object({ at: z.string(), text: z.string() });
+export const PlanCommentSchema: z.ZodType<PlanCommentType> = PlanCommentShape;
 
-export const PlanStepPrioritySchema = z.enum(PLAN_STEP_PRIORITIES);
+export const PlanStepPriorityShape = z.enum(PLAN_STEP_PRIORITIES);
+export const PlanStepPrioritySchema: z.ZodType<PlanStepPriorityType> =
+  PlanStepPriorityShape;
 
-export const PlanStepStatusSchema = z.enum(PLAN_STEP_STATUSES);
+export const PlanStepStatusShape = z.enum(PLAN_STEP_STATUSES);
+export const PlanStepStatusSchema: z.ZodType<PlanStepStatusType> =
+  PlanStepStatusShape;
 
-export const PlanStepSchema = z.object({
-  comments: z.array(PlanCommentSchema).optional(),
+export const PlanStepShape = z.object({
+  comments: z.array(PlanCommentShape).optional(),
   content: z.string(),
   depth: z.number(),
   id: z.string(),
-  priority: PlanStepPrioritySchema.optional(),
-  status: PlanStepStatusSchema,
+  priority: PlanStepPriorityShape.optional(),
+  status: PlanStepStatusShape,
   waitsOn: z.string().optional(),
   waitsOnPage: z.string().optional(),
 });
+export const PlanStepSchema: z.ZodType<PlanStepType> = PlanStepShape;
 
-export const PlanWaitSchema = z.object({
+export const PlanWaitShape = z.object({
   artifactId: z.string(),
   card: z.string().optional(),
 });
+export const PlanWaitSchema: z.ZodType<PlanWaitType> = PlanWaitShape;
 
-export const RelayPortNameSchema = z.enum(["udp 3478", "tcp 3478", "tls 5349"]);
+export const RelayPortNameShape = z.enum(["udp 3478", "tcp 3478", "tls 5349"]);
+export const RelayPortNameSchema: z.ZodType<RelayPortNameType> =
+  RelayPortNameShape;
 
-export const RelayPortHealthSchema = z.object({
+export const RelayPortHealthShape = z.object({
   error: z.string().optional(),
-  port: RelayPortNameSchema,
+  port: RelayPortNameShape,
   up: z.boolean(),
 });
+export const RelayPortHealthSchema: z.ZodType<RelayPortHealthType> =
+  RelayPortHealthShape;
 
-export const RelayPortsSchema = z.object({
+export const RelayPortsShape = z.object({
   tcp: z.boolean(),
   tls: z.boolean(),
   udp: z.boolean(),
 });
+export const RelayPortsSchema: z.ZodType<RelayPortsType> = RelayPortsShape;
 
-export const RelayReachSchema = z.object({
+export const RelayReachShape = z.object({
   lan: z.array(z.string()),
   tailnet: z.array(z.string()),
 });
+export const RelayReachSchema: z.ZodType<RelayReachType> = RelayReachShape;
 
-export const ScratchWorktreeSchema = z.object({
+export const ScratchWorktreeShape = z.object({
   dir: z.string(),
   path: z.string(),
   root: z.string(),
 });
+export const ScratchWorktreeSchema: z.ZodType<ScratchWorktreeType> =
+  ScratchWorktreeShape;
 
-export const SessionCommandsSchema = z.object({
+export const SentMessageShape = NeutralUserMessageShape.extend({
+  origin: NeutralOriginShape,
+  uuid: z.string(),
+});
+export const SentMessageSchema: z.ZodType<SentMessageType> = SentMessageShape;
+
+export const SendPayloadShape = z.object({
+  attachments: z.array(SendAttachmentShape).optional(),
+  delivery: z.string().optional(),
+  from: z.string().optional(),
+  images: z
+    .array(z.object({ mediaType: z.string(), data: z.string() }))
+    .optional(),
+  instanceId: z.string(),
+  message: SentMessageShape,
+  projectId: z.string().optional(),
+});
+export const SendPayloadSchema: z.ZodType<SendPayloadType> = SendPayloadShape;
+
+export const SessionCommandsShape = z.object({
   names: z.array(z.string()),
   skills: z.array(z.string()),
 });
+export const SessionCommandsSchema: z.ZodType<SessionCommandsType> =
+  SessionCommandsShape;
 
-export const SessionToolingSchema = z.object({
+export const SessionToolingShape = z.object({
   servers: z.array(z.object({ name: z.string(), status: z.string() })),
   tools: z.array(z.string()),
 });
+export const SessionToolingSchema: z.ZodType<SessionToolingType> =
+  SessionToolingShape;
 
-export const SkillFileSchema = z.object({
+export const SkillFileShape = z.object({
   contentBase64: z.string(),
   executable: z.boolean(),
   path: z.string(),
 });
+export const SkillFileSchema: z.ZodType<SkillFileType> = SkillFileShape;
 
-export const RunKindSchema = z.enum(["merge check", "command"]);
+export const IngestMarkShape = z.object({
+  epoch: z.string(),
+  srcSeq: z.number(),
+});
+export const IngestMarkSchema: z.ZodType<IngestMarkType> = IngestMarkShape;
 
-export const StoppedCommandsSchema = z.partialRecord(RunKindSchema, z.number());
+export const SessionInstructionShape = z.object({
+  content: z.string(),
+  path: z.string(),
+});
+export const SessionInstructionSchema: z.ZodType<SessionInstructionType> =
+  SessionInstructionShape;
 
-export const ThreadAnswerSchema = z.union([
+export const SessionRoleShape = z.enum(SESSION_ROLES);
+export const SessionRoleSchema: z.ZodType<SessionRoleType> = SessionRoleShape;
+
+export const WorkspaceRefShape = z.object({ id: z.string(), path: z.string() });
+export const WorkspaceRefSchema: z.ZodType<WorkspaceRefType> =
+  WorkspaceRefShape;
+
+export const SpawnPayloadShape = z.object({
+  account: z.string().optional(),
+  accountDir: z.object({ accountId: z.string() }).optional(),
+  bootstrap: z.object({ repo: z.string(), baseDir: z.string() }).optional(),
+  canDelegate: z.boolean().optional(),
+  cwd: z.string(),
+  delegateType: z
+    .object({ name: z.string(), projectId: z.string().optional() })
+    .optional(),
+  denyTools: z.array(z.string()).optional(),
+  effort: EffortLevelShape.optional(),
+  fence: z.literal(true).optional(),
+  harness: HarnessKindShape.optional(),
+  homeLoginMove: z.object({ accountId: z.string() }).optional(),
+  ingested: IngestMarkShape.optional(),
+  instanceId: z.string(),
+  instructions: z.array(SessionInstructionShape).optional(),
+  keepAliveTurn: z.string().optional(),
+  lead: z.literal(true).optional(),
+  model: z.string().optional(),
+  options: z.unknown().optional(),
+  parent: z
+    .object({ instanceId: z.string(), toolUseId: z.string().optional() })
+    .optional(),
+  permissionMode: PermissionModeShape.optional(),
+  persistSession: z.boolean().optional(),
+  processGeneration: z.string().optional(),
+  projectId: z.string().optional(),
+  reattachOnly: z
+    .union([z.boolean(), z.literal("busy"), z.literal("inspect")])
+    .optional(),
+  relaunch: z.literal(true).optional(),
+  requestId: z.string().optional(),
+  resume: z
+    .object({
+      sessionKey: z.string(),
+      fork: z.boolean().optional(),
+      atMessage: z.string().optional(),
+    })
+    .optional(),
+  role: SessionRoleShape.optional(),
+  scratch: z
+    .object({
+      worktree: z.boolean().optional(),
+      baseCwd: z.string().optional(),
+    })
+    .optional(),
+  scratchWorktree: ScratchWorktreeShape.optional(),
+  skills: z.array(z.string()).optional(),
+  spawnedBy: z.object({ instanceId: z.string() }).optional(),
+  title: z.string().optional(),
+  workspace: WorkspaceRefShape.optional(),
+});
+export const SpawnPayloadSchema: z.ZodType<SpawnPayloadType> =
+  SpawnPayloadShape;
+
+export const RunKindShape = z.enum(["merge check", "command"]);
+export const RunKindSchema: z.ZodType<RunKindType> = RunKindShape;
+
+export const StoppedCommandsShape = z.partialRecord(RunKindShape, z.number());
+export const StoppedCommandsSchema: z.ZodType<StoppedCommandsType> =
+  StoppedCommandsShape;
+
+export const ThreadAnswerShape = z.union([
   z.object({
     annotations: z
       .record(
@@ -1723,53 +2061,66 @@ export const ThreadAnswerSchema = z.union([
         })
       )
       .optional(),
-    answers: UserAnswersSchema,
+    answers: UserAnswersShape,
     outcome: z.literal("answered"),
   }),
   z.object({ outcome: z.literal("dismissed") }),
 ]);
+export const ThreadAnswerSchema: z.ZodType<ThreadAnswerType> =
+  ThreadAnswerShape;
 
-export const RoutineScheduleSchema = z.object({
+export const RoutineScheduleShape = z.object({
   cron: z.string(),
   nextAt: z.number().nullable(),
   timeZone: z.string(),
   words: z.string(),
 });
+export const RoutineScheduleSchema: z.ZodType<RoutineScheduleType> =
+  RoutineScheduleShape;
 
-export const ItemEndSchema = z.enum(["done", "failed", "cancelled"]);
+export const ItemEndShape = z.enum(["done", "failed", "cancelled"]);
+export const ItemEndSchema: z.ZodType<ItemEndType> = ItemEndShape;
 
-export const RoutineMadeEventSchema = z.object({
+export const RoutineMadeEventShape = z.object({
   by: z.enum(["caw", "delegate", "session"]),
   expiresAt: z.number().nullable(),
   instanceId: z.string(),
   name: z.string(),
   routineId: z.string(),
-  schedule: RoutineScheduleSchema,
+  schedule: RoutineScheduleShape,
   why: z.string().nullable(),
 });
+export const RoutineMadeEventSchema: z.ZodType<RoutineMadeEventType> =
+  RoutineMadeEventShape;
 
-export const RoutineMadeThreadEventSchema = RoutineMadeEventSchema.extend({
+export const RoutineMadeThreadEventShape = RoutineMadeEventShape.extend({
   kind: z.literal("routine-made"),
 });
+export const RoutineMadeThreadEventSchema: z.ZodType<RoutineMadeThreadEventType> =
+  RoutineMadeThreadEventShape;
 
-export const DesignOfferEventSchema = z.object({
+export const DesignOfferEventShape = z.object({
   projectId: z.string(),
   sources: z.array(z.string()),
   taskId: z.string(),
 });
+export const DesignOfferEventSchema: z.ZodType<DesignOfferEventType> =
+  DesignOfferEventShape;
 
-export const DesignOfferThreadEventSchema = DesignOfferEventSchema.extend({
+export const DesignOfferThreadEventShape = DesignOfferEventShape.extend({
   kind: z.literal("design-offer"),
 });
+export const DesignOfferThreadEventSchema: z.ZodType<DesignOfferThreadEventType> =
+  DesignOfferThreadEventShape;
 
-export const ThreadEventSchema = z.union([
+export const ThreadEventShape = z.union([
   z.object({
     kind: z.literal("routine"),
     name: z.string(),
     phase: z.enum(["started", "delivered", "failed"]),
     routineId: z.string(),
     runId: z.string(),
-    schedule: RoutineScheduleSchema,
+    schedule: RoutineScheduleShape,
     slot: z.string(),
     slotLabel: z.string(),
   }),
@@ -1777,7 +2128,7 @@ export const ThreadEventSchema = z.union([
     instanceId: z.string(),
     kind: z.literal("attempt"),
     phase: z.enum(["ended", "judge"]),
-    state: ItemEndSchema.nullable(),
+    state: ItemEndShape.nullable(),
     taskId: z.string(),
     title: z.string(),
     try: z.number(),
@@ -1786,7 +2137,7 @@ export const ThreadEventSchema = z.union([
   z.object({
     instanceId: z.string(),
     kind: z.literal("delegate"),
-    state: ItemEndSchema,
+    state: ItemEndShape,
     title: z.string(),
     workItemId: z.string(),
   }),
@@ -1845,21 +2196,25 @@ export const ThreadEventSchema = z.union([
     root: z.string(),
   }),
   z.object({ kind: z.literal("hub"), what: z.literal("thread-repaired") }),
-  RoutineMadeThreadEventSchema,
-  DesignOfferThreadEventSchema,
+  RoutineMadeThreadEventShape,
+  DesignOfferThreadEventShape,
 ]);
+export const ThreadEventSchema: z.ZodType<ThreadEventType> = ThreadEventShape;
 
-export const ThreadImageSchema = z.object({
+export const ThreadImageShape = z.object({
   mediaType: z.string(),
   src: z.string(),
 });
+export const ThreadImageSchema: z.ZodType<ThreadImageType> = ThreadImageShape;
 
-export const ThreadQuestionSchema = z.object({
-  questions: z.array(UserQuestionSchema),
+export const ThreadQuestionShape = z.object({
+  questions: z.array(UserQuestionShape),
   toolUseId: z.string().optional(),
 });
+export const ThreadQuestionSchema: z.ZodType<ThreadQuestionType> =
+  ThreadQuestionShape;
 
-export const WorkspaceHoldingSchema = z.object({
+export const WorkspaceHoldingShape = z.object({
   ahead: z.number(),
   bytes: z.number(),
   dirty: z.number(),
@@ -1867,65 +2222,56 @@ export const WorkspaceHoldingSchema = z.object({
   stashes: z.number(),
   strays: z.number().optional(),
 });
+export const WorkspaceHoldingSchema: z.ZodType<WorkspaceHoldingType> =
+  WorkspaceHoldingShape;
 
-export const SentMessageSchema = NeutralUserMessageSchema.extend({
-  origin: NeutralOriginSchema,
-  uuid: z.string(),
-});
-
-export const SendPayloadSchema = z.object({
-  attachments: z.array(SendAttachmentSchema).optional(),
-  delivery: z.string().optional(),
-  from: z.string().optional(),
-  images: z
-    .array(z.object({ mediaType: z.string(), data: z.string() }))
-    .optional(),
-  instanceId: z.string(),
-  message: SentMessageSchema,
-  projectId: z.string().optional(),
-});
-
-export const MoveLargeFileSchema = z.object({
+export const MoveLargeFileShape = z.object({
   bytes: z.number(),
   path: z.string(),
 });
+export const MoveLargeFileSchema: z.ZodType<MoveLargeFileType> =
+  MoveLargeFileShape;
 
-export const MoveAskSchema = z.object({
-  bigFiles: z.array(MoveLargeFileSchema),
+export const MoveAskShape = z.object({
+  bigFiles: z.array(MoveLargeFileShape),
   details: z.array(z.string()),
   gitInit: z.boolean(),
   key: z.string().optional(),
   lines: z.array(z.string()),
   title: z.string(),
 });
+export const MoveAskSchema: z.ZodType<MoveAskType> = MoveAskShape;
 
-export const MoveStepSchema = z.enum([
+export const MoveStepShape = z.enum([
   "approval",
   "snapshot",
   "clone",
   "lfs",
   "start",
 ]);
+export const MoveStepSchema: z.ZodType<MoveStepType> = MoveStepShape;
 
-export const MoveErrorSchema = z.object({
+export const MoveErrorShape = z.object({
   detail: z.string().optional(),
   message: z.string(),
-  stage: MoveStepSchema,
+  stage: MoveStepShape,
 });
+export const MoveErrorSchema: z.ZodType<MoveErrorType> = MoveErrorShape;
 
-export const MoveStageSchema = z.union([
-  MoveStepSchema,
+export const MoveStageShape = z.union([
+  MoveStepShape,
   z.literal("started"),
   z.literal("failed"),
   z.literal("cancelled"),
 ]);
+export const MoveStageSchema: z.ZodType<MoveStageType> = MoveStageShape;
 
-export const MoveJobSchema = z.object({
-  ask: MoveAskSchema.optional(),
+export const MoveJobShape = z.object({
+  ask: MoveAskShape.optional(),
   askId: z.string().optional(),
   bytes: z.number(),
   createdAt: z.string(),
-  error: MoveErrorSchema.optional(),
+  error: MoveErrorShape.optional(),
   from: z.union([
     z.object({ kind: z.literal("hub") }),
     z.object({ kind: z.literal("outside"), host: z.string() }),
@@ -1946,50 +2292,59 @@ export const MoveJobSchema = z.object({
   snapshot: z.object({ branch: z.string(), files: z.number() }).optional(),
   sourceMachineId: z.string(),
   sourcePath: z.string(),
-  stage: MoveStageSchema,
+  stage: MoveStageShape,
   stayed: z.string().optional(),
-  steps: z.array(MoveStepSchema),
-  stoppedAt: MoveStepSchema.optional(),
+  steps: z.array(MoveStepShape),
+  stoppedAt: MoveStepShape.optional(),
   targetInstanceId: z.string(),
   targetMachineId: z.string(),
   targetPath: z.string(),
   updatedAt: z.string(),
 });
+export const MoveJobSchema: z.ZodType<MoveJobType> = MoveJobShape;
 
-export const MoveLfsResultSchema = z.object({
+export const MoveLfsResultShape = z.object({
   bytes: z.number(),
   files: z.number(),
 });
+export const MoveLfsResultSchema: z.ZodType<MoveLfsResultType> =
+  MoveLfsResultShape;
 
-export const MoveLfsObjectSchema = z.object({
+export const MoveLfsObjectShape = z.object({
   oid: z.string(),
   path: z.string(),
   size: z.number(),
 });
+export const MoveLfsObjectSchema: z.ZodType<MoveLfsObjectType> =
+  MoveLfsObjectShape;
 
-export const MoveSnapshotResultSchema = z.object({
+export const MoveSnapshotResultShape = z.object({
   base: z.string().nullable(),
   branch: z.string(),
   commit: z.string(),
   files: z.number(),
-  hubLfs: z.array(MoveLfsObjectSchema).optional(),
+  hubLfs: z.array(MoveLfsObjectShape).optional(),
   sourceBranch: z.string().nullable(),
 });
+export const MoveSnapshotResultSchema: z.ZodType<MoveSnapshotResultType> =
+  MoveSnapshotResultShape;
 
-export const MachinePathSchema = z.custom<MachinePathType>(
+export const MachinePathShape = z.custom<MachinePathType>(
   (value) => typeof value === "string" && isMachinePath(value),
   "an absolute, normalised path"
 );
+export const MachinePathSchema: z.ZodType<MachinePathType> = MachinePathShape;
 
-export const ExtractedSchema = z.object({
+export const ExtractedShape = z.object({
   artifacts: z.string(),
   asks: z.array(z.string()),
   covers: z.string().nullable(),
   middle: z.array(z.string()),
   tail: z.string(),
 });
+export const ExtractedSchema: z.ZodType<ExtractedType> = ExtractedShape;
 
-export const SendRefusalSchema = z.union([
+export const SendRefusalShape = z.union([
   z.object({
     kind: z.literal("account-signed-out"),
     accountId: z.string(),
@@ -2013,100 +2368,39 @@ export const SendRefusalSchema = z.union([
     workspaceId: z.string(),
   }),
 ]);
+export const SendRefusalSchema: z.ZodType<SendRefusalType> = SendRefusalShape;
 
-export const ModeAskSchema = z.object({
-  harness: HarnessKindSchema,
+export const ModeAskShape = z.object({
+  harness: HarnessKindShape,
   machineId: z.string(),
-  refused: PermissionModeSchema.optional(),
+  refused: PermissionModeShape.optional(),
 });
+export const ModeAskSchema: z.ZodType<ModeAskType> = ModeAskShape;
 
-export const IngestMarkSchema = z.object({
-  epoch: z.string(),
-  srcSeq: z.number(),
-});
+export const InstallRouteShape = z.enum(["ssh", "command"]);
+export const InstallRouteSchema: z.ZodType<InstallRouteType> =
+  InstallRouteShape;
 
-export const SessionInstructionSchema = z.object({
-  content: z.string(),
-  path: z.string(),
-});
+export const InstallSignInShape = z.enum(["key", "password", "by-hand"]);
+export const InstallSignInSchema: z.ZodType<InstallSignInType> =
+  InstallSignInShape;
 
-export const SessionRoleSchema = z.enum(SESSION_ROLES);
-
-export const WorkspaceRefSchema = z.object({
-  id: z.string(),
-  path: z.string(),
-});
-
-export const SpawnPayloadSchema = z.object({
-  account: z.string().optional(),
-  accountDir: z.object({ accountId: z.string() }).optional(),
-  bootstrap: z.object({ repo: z.string(), baseDir: z.string() }).optional(),
-  canDelegate: z.boolean().optional(),
-  cwd: z.string(),
-  delegateType: z
-    .object({ name: z.string(), projectId: z.string().optional() })
-    .optional(),
-  denyTools: z.array(z.string()).optional(),
-  effort: EffortLevelSchema.optional(),
-  fence: z.literal(true).optional(),
-  harness: HarnessKindSchema.optional(),
-  homeLoginMove: z.object({ accountId: z.string() }).optional(),
-  ingested: IngestMarkSchema.optional(),
-  instanceId: z.string(),
-  instructions: z.array(SessionInstructionSchema).optional(),
-  keepAliveTurn: z.string().optional(),
-  lead: z.literal(true).optional(),
-  model: z.string().optional(),
-  options: z.unknown().optional(),
-  parent: z
-    .object({ instanceId: z.string(), toolUseId: z.string().optional() })
-    .optional(),
-  permissionMode: PermissionModeSchema.optional(),
-  persistSession: z.boolean().optional(),
-  processGeneration: z.string().optional(),
-  projectId: z.string().optional(),
-  reattachOnly: z
-    .union([z.boolean(), z.literal("busy"), z.literal("inspect")])
-    .optional(),
-  relaunch: z.literal(true).optional(),
-  requestId: z.string().optional(),
-  resume: z
-    .object({
-      sessionKey: z.string(),
-      fork: z.boolean().optional(),
-      atMessage: z.string().optional(),
-    })
-    .optional(),
-  role: SessionRoleSchema.optional(),
-  scratch: z
-    .object({
-      worktree: z.boolean().optional(),
-      baseCwd: z.string().optional(),
-    })
-    .optional(),
-  scratchWorktree: ScratchWorktreeSchema.optional(),
-  skills: z.array(z.string()).optional(),
-  spawnedBy: z.object({ instanceId: z.string() }).optional(),
-  title: z.string().optional(),
-  workspace: WorkspaceRefSchema.optional(),
-});
-
-export const InstallRouteSchema = z.enum(["ssh", "command"]);
-
-export const InstallSignInSchema = z.enum(["key", "password", "by-hand"]);
-
-export const InstallDraftSchema = z.object({
+export const InstallDraftShape = z.object({
   address: z.string().nullable(),
   code: z.string().nullable().optional(),
   port: z.string(),
-  route: InstallRouteSchema.nullable(),
-  signIn: InstallSignInSchema,
+  route: InstallRouteShape.nullable(),
+  signIn: InstallSignInShape,
   target: z.string(),
 });
+export const InstallDraftSchema: z.ZodType<InstallDraftType> =
+  InstallDraftShape;
 
-export const InstallCheckSchema = z.enum(INSTALL_CHECKS);
+export const InstallCheckShape = z.enum(INSTALL_CHECKS);
+export const InstallCheckSchema: z.ZodType<InstallCheckType> =
+  InstallCheckShape;
 
-export const InstallProblemSchema = z.union([
+export const InstallProblemShape = z.union([
   z.object({ kind: z.literal("unreachable"), detail: z.string() }),
   z.object({ kind: z.literal("host-key"), host: z.string() }),
   z.object({ kind: z.literal("penalized") }),
@@ -2120,7 +2414,7 @@ export const InstallProblemSchema = z.union([
   z.object({ kind: z.literal("offer"), said: z.string() }),
   z.object({
     kind: z.literal("check"),
-    check: InstallCheckSchema,
+    check: InstallCheckShape,
     said: z.string(),
     user: z.string().nullable(),
   }),
@@ -2133,29 +2427,35 @@ export const InstallProblemSchema = z.union([
   }),
   z.object({ kind: z.literal("lost") }),
 ]);
+export const InstallProblemSchema: z.ZodType<InstallProblemType> =
+  InstallProblemShape;
 
-export const InstallStepSchema = z.union([
+export const InstallStepShape = z.union([
   z.enum(SSH_STEPS),
   z.enum(COMMAND_STEPS),
 ]);
+export const InstallStepSchema: z.ZodType<InstallStepType> = InstallStepShape;
 
-export const InstallStateSchema = z.enum([
+export const InstallStateShape = z.enum([
   "running",
   "failed",
   "stopped",
   "lost",
   "joined",
 ]);
+export const InstallStateSchema: z.ZodType<InstallStateType> =
+  InstallStateShape;
 
-export const InstallMarkSchema = z.object({
+export const InstallMarkShape = z.object({
   endedAt: z.number().nullable(),
   startedAt: z.number(),
-  step: InstallStepSchema,
+  step: InstallStepShape,
 });
+export const InstallMarkSchema: z.ZodType<InstallMarkType> = InstallMarkShape;
 
-export const InstallSchema = z.object({
+export const InstallShape = z.object({
   address: z.string().nullable(),
-  checks: z.array(z.object({ check: InstallCheckSchema, passed: z.boolean() })),
+  checks: z.array(z.object({ check: InstallCheckShape, passed: z.boolean() })),
   command: z.string().nullable(),
   endedAt: z.number().nullable(),
   hostname: z.string().nullable(),
@@ -2163,20 +2463,21 @@ export const InstallSchema = z.object({
   keys: z.object({ hub: z.boolean(), machine: z.boolean() }),
   machineId: z.string().nullable(),
   port: z.number().nullable(),
-  problem: InstallProblemSchema.nullable(),
-  problemStep: InstallStepSchema.nullable(),
+  problem: InstallProblemShape.nullable(),
+  problemStep: InstallStepShape.nullable(),
   returning: z.string().nullable(),
-  route: InstallRouteSchema,
+  route: InstallRouteShape,
   signedIn: z.boolean(),
-  signIn: InstallSignInSchema.nullable(),
+  signIn: InstallSignInShape.nullable(),
   startedAt: z.number(),
-  state: InstallStateSchema,
-  steps: z.array(InstallMarkSchema),
+  state: InstallStateShape,
+  steps: z.array(InstallMarkShape),
   tail: z.array(z.string()),
   target: z.string(),
 });
+export const InstallSchema: z.ZodType<InstallType> = InstallShape;
 
-export const NeutralSessionInfoSchema = z.object({
+export const NeutralSessionInfoShape = z.object({
   createdAt: z.number().optional(),
   customTitle: z.string().optional(),
   cwd: z.string().optional(),
@@ -2184,12 +2485,14 @@ export const NeutralSessionInfoSchema = z.object({
   firstPrompt: z.string().optional(),
   firstTitle: z.string().optional(),
   gitBranch: z.string().optional(),
-  harness: HarnessKindSchema,
+  harness: HarnessKindShape,
   lastModified: z.number(),
   sessionId: z.string(),
   summary: z.string().optional(),
   tag: z.string().optional(),
 });
+export const NeutralSessionInfoSchema: z.ZodType<NeutralSessionInfoType> =
+  NeutralSessionInfoShape;
 
 /**
  * Each property, through every level, as a plain object type. `readonly`
@@ -2210,204 +2513,204 @@ type Same<A, B> =
 
 /** Every schema of an exported type, proved against that type. */
 export const proved: [
-  Same<z.output<typeof DownloadProgressSchema>, DownloadProgressType>,
-  Same<z.output<typeof ArchiveFetchingSchema>, ArchiveFetchingType>,
-  Same<z.output<typeof PolicySchema>, PolicyType>,
-  Same<z.output<typeof MediaPathSchema>, MediaPathType>,
-  Same<z.output<typeof BrowserPortsSchema>, BrowserPortsType>,
-  Same<z.output<typeof BrowserHostKindSchema>, BrowserHostKindType>,
-  Same<z.output<typeof BrowserKeySchema>, BrowserKeyType>,
-  Same<z.output<typeof BrowserRelayReachSchema>, BrowserRelayReachType>,
-  Same<z.output<typeof BrowserRelaySchema>, BrowserRelayType>,
-  Same<z.output<typeof BrowserStateSchema>, BrowserStateType>,
-  Same<z.output<typeof BrowserRowSchema>, BrowserRowType>,
-  Same<z.output<typeof HarnessConfigKindSchema>, HarnessConfigKindType>,
-  Same<z.output<typeof HookEventSchema>, HookEventType>,
-  Same<z.output<typeof HookCommandHandlerSchema>, HookCommandHandlerType>,
-  Same<z.output<typeof HookHttpHandlerSchema>, HookHttpHandlerType>,
-  Same<z.output<typeof HookMcpToolHandlerSchema>, HookMcpToolHandlerType>,
-  Same<z.output<typeof HookPromptHandlerSchema>, HookPromptHandlerType>,
-  Same<z.output<typeof HookAgentHandlerSchema>, HookAgentHandlerType>,
-  Same<z.output<typeof HookHandlerSchema>, HookHandlerType>,
-  Same<z.output<typeof HookMatchTestSchema>, HookMatchTestType>,
-  Same<z.output<typeof McpStdioServerConfigSchema>, McpStdioServerConfigType>,
-  Same<z.output<typeof McpSSEServerConfigSchema>, McpSSEServerConfigType>,
-  Same<z.output<typeof McpHttpServerConfigSchema>, McpHttpServerConfigType>,
-  Same<z.output<typeof FleetMcpConfigSchema>, FleetMcpConfigType>,
-  Same<z.output<typeof EffortLevelSchema>, EffortLevelType>,
-  Same<z.output<typeof ModelInfoSchema>, ModelInfoType>,
-  Same<z.output<typeof SignInFaultSchema>, SignInFaultType>,
-  Same<z.output<typeof WorkspaceCutSchema>, WorkspaceCutType>,
-  Same<z.output<typeof WorkspaceKindSchema>, WorkspaceKindType>,
-  Same<z.output<typeof BuildInfoSchema>, BuildInfoType>,
-  Same<z.output<typeof SessiondProcInfoSchema>, SessiondProcInfoType>,
-  Same<z.output<typeof SessiondWelcomeSchema>, SessiondWelcomeType>,
-  Same<z.output<typeof SessiondLineSchema>, SessiondLineType>,
-  Same<z.output<typeof SessiondDeltaSchema>, SessiondDeltaType>,
-  Same<z.output<typeof SessiondBacklogSchema>, SessiondBacklogType>,
-  Same<z.output<typeof SessiondResetSchema>, SessiondResetType>,
-  Same<z.output<typeof SessiondExitSchema>, SessiondExitType>,
-  Same<z.output<typeof ChildLimitSchema>, ChildLimitType>,
-  Same<z.output<typeof SessiondLimitSchema>, SessiondLimitType>,
-  Same<z.output<typeof SessiondAckSchema>, SessiondAckType>,
-  Same<z.output<typeof SessiondDrainingSchema>, SessiondDrainingType>,
-  Same<z.output<typeof SessiondServerMessageSchema>, SessiondServerMessageType>,
-  Same<z.output<typeof StageErrorKindSchema>, StageErrorKindType>,
-  Same<z.output<typeof StageErrorSchema>, StageErrorType>,
-  Same<z.output<typeof ReleaseManifestSchema>, ReleaseManifestType>,
-  Same<z.output<typeof AuthStateSchema>, AuthStateType>,
-  Same<z.output<typeof BinaryUpdatePolicySchema>, BinaryUpdatePolicyType>,
-  Same<z.output<typeof RestartHoldReasonSchema>, RestartHoldReasonType>,
-  Same<z.output<typeof RestartHoldSchema>, RestartHoldType>,
-  Same<z.output<typeof BinaryDownloadSchema>, BinaryDownloadType>,
-  Same<z.output<typeof HubWaitSchema>, HubWaitType>,
-  Same<z.output<typeof BinaryUpdateLandingSchema>, BinaryUpdateLandingType>,
-  Same<z.output<typeof BinaryUpdatePhaseSchema>, BinaryUpdatePhaseType>,
-  Same<z.output<typeof KeptProcessSchema>, KeptProcessType>,
-  Same<z.output<typeof RetiringKeeperSchema>, RetiringKeeperType>,
-  Same<z.output<typeof BinaryUpdateStateSchema>, BinaryUpdateStateType>,
-  Same<z.output<typeof HarnessKindSchema>, HarnessKindType>,
-  Same<z.output<typeof PermissionModeSchema>, PermissionModeType>,
-  Same<z.output<typeof SessionCustodySchema>, SessionCustodyType>,
-  Same<z.output<typeof FleetFaultCauseSchema>, FleetFaultCauseType>,
-  Same<z.output<typeof FleetItemStateSchema>, FleetItemStateType>,
-  Same<z.output<typeof PlacedSectionSchema>, PlacedSectionType>,
-  Same<z.output<typeof FleetPlacedStatesSchema>, FleetPlacedStatesType>,
-  Same<z.output<typeof CliInstallSchema>, CliInstallType>,
-  Same<z.output<typeof FleetToolchainSchema>, FleetToolchainType>,
-  Same<z.output<typeof FleetSyncReportSchema>, FleetSyncReportType>,
-  Same<z.output<typeof FleetConvergeStateSchema>, FleetConvergeStateType>,
-  Same<z.output<typeof FleetItemStatusSchema>, FleetItemStatusType>,
-  Same<z.output<typeof FleetSyncOutcomeSchema>, FleetSyncOutcomeType>,
-  Same<z.output<typeof AccountIdentitySchema>, AccountIdentityType>,
-  Same<z.output<typeof AccountKindSchema>, AccountKindType>,
-  Same<z.output<typeof AccountProviderSchema>, AccountProviderType>,
-  Same<z.output<typeof AccountReportSchema>, AccountReportType>,
-  Same<z.output<typeof HarnessCapabilitiesSchema>, HarnessCapabilitiesType>,
-  Same<z.output<typeof HarnessReportSchema>, HarnessReportType>,
-  Same<z.output<typeof WorkspaceToolSchema>, WorkspaceToolType>,
-  Same<z.output<typeof MachineCapabilitySchema>, MachineCapabilityType>,
-  Same<z.output<typeof MachineCapabilitiesSchema>, MachineCapabilitiesType>,
-  Same<z.output<typeof ToolStateSchema>, ToolStateType>,
-  Same<z.output<typeof ToolStatusSchema>, ToolStatusType>,
-  Same<z.output<typeof AgentRowSchema>, AgentRowType>,
-  Same<z.output<typeof ConnectionAppSchema>, ConnectionAppType>,
-  Same<z.output<typeof ConnectionAuthSchema>, ConnectionAuthType>,
-  Same<z.output<typeof ConnectionStateSchema>, ConnectionStateType>,
-  Same<z.output<typeof ConnectionTransportSchema>, ConnectionTransportType>,
-  Same<z.output<typeof ConnectionViewSchema>, ConnectionViewType>,
-  Same<z.output<typeof PairingOffAnswerSchema>, PairingOffAnswerType>,
-  Same<z.output<typeof RelayProviderSchema>, RelayProviderType>,
-  Same<z.output<typeof RelayStateSchema>, RelayStateType>,
-  Same<z.output<typeof RelayViewSchema>, RelayViewType>,
-  Same<z.output<typeof ArtifactThumbnailSchema>, ArtifactThumbnailType>,
-  Same<z.output<typeof CompactStageSchema>, CompactStageType>,
-  Same<z.output<typeof AccountHueSchema>, AccountHueType>,
-  Same<z.output<typeof NamedAccountSchema>, NamedAccountType>,
-  Same<z.output<typeof HeldReasonSchema>, HeldReasonType>,
-  Same<z.output<typeof HeldAccountSchema>, HeldAccountType>,
-  Same<z.output<typeof WaitReasonSchema>, WaitReasonType>,
-  Same<z.output<typeof EndedBySchema>, EndedByType>,
-  Same<z.output<typeof ContinueStepSchema>, ContinueStepType>,
-  Same<z.output<typeof AccountMoveSchema>, AccountMoveType>,
-  Same<z.output<typeof AccountOverageSchema>, AccountOverageType>,
-  Same<z.output<typeof AtLimitSchema>, AtLimitType>,
-  Same<z.output<typeof ResultArtifactSchema>, ResultArtifactType>,
-  Same<z.output<typeof AttemptResultSchema>, AttemptResultType>,
-  Same<z.output<typeof CarryRestoredSchema>, CarryRestoredType>,
-  Same<z.output<typeof CheckoutMoveSchema>, CheckoutMoveType>,
-  Same<z.output<typeof ClaudeModelUsageSchema>, ClaudeModelUsageType>,
-  Same<z.output<typeof ConnectAccessSchema>, ConnectAccessType>,
-  Same<z.output<typeof DelegateAskStatusSchema>, DelegateAskStatusType>,
-  Same<z.output<typeof DelegateEventSchema>, DelegateEventType>,
-  Same<z.output<typeof DelegateEventPayloadSchema>, DelegateEventPayloadType>,
-  Same<z.output<typeof VerbSchema>, VerbType>,
-  Same<z.output<typeof EnvelopeSchema>, EnvelopeType>,
-  Same<z.output<typeof FleetRefreshSchema>, FleetRefreshType>,
-  Same<z.output<typeof StatusOptionSchema>, StatusOptionType>,
-  Same<z.output<typeof GithubProjectSchema>, GithubProjectType>,
-  Same<z.output<typeof McpPlatformSchema>, McpPlatformType>,
-  Same<z.output<typeof EndedTaskSchema>, EndedTaskType>,
-  Same<z.output<typeof MoveEndedSchema>, MoveEndedType>,
-  Same<z.output<typeof TextAttachmentSchema>, TextAttachmentType>,
-  Same<z.output<typeof FileAttachmentSchema>, FileAttachmentType>,
-  Same<z.output<typeof SendAttachmentSchema>, SendAttachmentType>,
-  Same<z.output<typeof MoveRequestSchema>, MoveRequestType>,
-  Same<z.output<typeof NamedMoveRequestSchema>, NamedMoveRequestType>,
-  Same<z.output<typeof UserAnswersSchema>, UserAnswersType>,
-  Same<z.output<typeof UserQuestionSchema>, UserQuestionType>,
-  Same<z.output<typeof UserQuestionAnsweredSchema>, UserQuestionAnsweredType>,
-  Same<z.output<typeof UserQuestionDismissedSchema>, UserQuestionDismissedType>,
-  Same<z.output<typeof UserQuestionResultSchema>, UserQuestionResultType>,
-  Same<z.output<typeof NeutralContentBlockSchema>, NeutralContentBlockType>,
-  Same<z.output<typeof HarnessNoteSchema>, HarnessNoteType>,
-  Same<z.output<typeof NeutralOriginSchema>, NeutralOriginType>,
-  Same<z.output<typeof NeutralUserMessageSchema>, NeutralUserMessageType>,
-  Same<z.output<typeof LimitWindowSchema>, LimitWindowType>,
-  Same<z.output<typeof OpenCodeGoLimitsSchema>, OpenCodeGoLimitsType>,
-  Same<z.output<typeof PlaceLfsRowSchema>, PlaceLfsRowType>,
-  Same<z.output<typeof PlanCommentSchema>, PlanCommentType>,
-  Same<z.output<typeof PlanStepPrioritySchema>, PlanStepPriorityType>,
-  Same<z.output<typeof PlanStepStatusSchema>, PlanStepStatusType>,
-  Same<z.output<typeof PlanStepSchema>, PlanStepType>,
-  Same<z.output<typeof PlanWaitSchema>, PlanWaitType>,
-  Same<z.output<typeof RelayPortNameSchema>, RelayPortNameType>,
-  Same<z.output<typeof RelayPortHealthSchema>, RelayPortHealthType>,
-  Same<z.output<typeof RelayPortsSchema>, RelayPortsType>,
-  Same<z.output<typeof RelayReachSchema>, RelayReachType>,
-  Same<z.output<typeof ScratchWorktreeSchema>, ScratchWorktreeType>,
-  Same<z.output<typeof SessionCommandsSchema>, SessionCommandsType>,
-  Same<z.output<typeof SessionToolingSchema>, SessionToolingType>,
-  Same<z.output<typeof SkillFileSchema>, SkillFileType>,
-  Same<z.output<typeof RunKindSchema>, RunKindType>,
-  Same<z.output<typeof StoppedCommandsSchema>, StoppedCommandsType>,
-  Same<z.output<typeof ThreadAnswerSchema>, ThreadAnswerType>,
-  Same<z.output<typeof RoutineScheduleSchema>, RoutineScheduleType>,
-  Same<z.output<typeof ItemEndSchema>, ItemEndType>,
-  Same<z.output<typeof RoutineMadeEventSchema>, RoutineMadeEventType>,
+  Same<z.output<typeof DownloadProgressShape>, DownloadProgressType>,
+  Same<z.output<typeof ArchiveFetchingShape>, ArchiveFetchingType>,
+  Same<z.output<typeof PolicyShape>, PolicyType>,
+  Same<z.output<typeof MediaPathShape>, MediaPathType>,
+  Same<z.output<typeof BrowserPortsShape>, BrowserPortsType>,
+  Same<z.output<typeof BrowserHostKindShape>, BrowserHostKindType>,
+  Same<z.output<typeof BrowserKeyShape>, BrowserKeyType>,
+  Same<z.output<typeof BrowserRelayReachShape>, BrowserRelayReachType>,
+  Same<z.output<typeof BrowserRelayShape>, BrowserRelayType>,
+  Same<z.output<typeof BrowserStateShape>, BrowserStateType>,
+  Same<z.output<typeof BrowserRowShape>, BrowserRowType>,
+  Same<z.output<typeof HarnessConfigKindShape>, HarnessConfigKindType>,
+  Same<z.output<typeof HookEventShape>, HookEventType>,
+  Same<z.output<typeof HookCommandHandlerShape>, HookCommandHandlerType>,
+  Same<z.output<typeof HookHttpHandlerShape>, HookHttpHandlerType>,
+  Same<z.output<typeof HookMcpToolHandlerShape>, HookMcpToolHandlerType>,
+  Same<z.output<typeof HookPromptHandlerShape>, HookPromptHandlerType>,
+  Same<z.output<typeof HookAgentHandlerShape>, HookAgentHandlerType>,
+  Same<z.output<typeof HookHandlerShape>, HookHandlerType>,
+  Same<z.output<typeof HookMatchTestShape>, HookMatchTestType>,
+  Same<z.output<typeof McpStdioServerConfigShape>, McpStdioServerConfigType>,
+  Same<z.output<typeof McpSSEServerConfigShape>, McpSSEServerConfigType>,
+  Same<z.output<typeof McpHttpServerConfigShape>, McpHttpServerConfigType>,
+  Same<z.output<typeof FleetMcpConfigShape>, FleetMcpConfigType>,
+  Same<z.output<typeof EffortLevelShape>, EffortLevelType>,
+  Same<z.output<typeof ModelInfoShape>, ModelInfoType>,
+  Same<z.output<typeof SignInFaultShape>, SignInFaultType>,
+  Same<z.output<typeof WorkspaceCutShape>, WorkspaceCutType>,
+  Same<z.output<typeof WorkspaceKindShape>, WorkspaceKindType>,
+  Same<z.output<typeof BuildInfoShape>, BuildInfoType>,
+  Same<z.output<typeof SessiondProcInfoShape>, SessiondProcInfoType>,
+  Same<z.output<typeof SessiondWelcomeShape>, SessiondWelcomeType>,
+  Same<z.output<typeof SessiondLineShape>, SessiondLineType>,
+  Same<z.output<typeof SessiondDeltaShape>, SessiondDeltaType>,
+  Same<z.output<typeof SessiondBacklogShape>, SessiondBacklogType>,
+  Same<z.output<typeof SessiondResetShape>, SessiondResetType>,
+  Same<z.output<typeof SessiondExitShape>, SessiondExitType>,
+  Same<z.output<typeof ChildLimitShape>, ChildLimitType>,
+  Same<z.output<typeof SessiondLimitShape>, SessiondLimitType>,
+  Same<z.output<typeof SessiondAckShape>, SessiondAckType>,
+  Same<z.output<typeof SessiondDrainingShape>, SessiondDrainingType>,
+  Same<z.output<typeof SessiondServerMessageShape>, SessiondServerMessageType>,
+  Same<z.output<typeof StageErrorKindShape>, StageErrorKindType>,
+  Same<z.output<typeof StageErrorShape>, StageErrorType>,
+  Same<z.output<typeof ReleaseManifestShape>, ReleaseManifestType>,
+  Same<z.output<typeof AuthStateShape>, AuthStateType>,
+  Same<z.output<typeof BinaryUpdatePolicyShape>, BinaryUpdatePolicyType>,
+  Same<z.output<typeof RestartHoldReasonShape>, RestartHoldReasonType>,
+  Same<z.output<typeof RestartHoldShape>, RestartHoldType>,
+  Same<z.output<typeof BinaryDownloadShape>, BinaryDownloadType>,
+  Same<z.output<typeof HubWaitShape>, HubWaitType>,
+  Same<z.output<typeof BinaryUpdateLandingShape>, BinaryUpdateLandingType>,
+  Same<z.output<typeof BinaryUpdatePhaseShape>, BinaryUpdatePhaseType>,
+  Same<z.output<typeof KeptProcessShape>, KeptProcessType>,
+  Same<z.output<typeof RetiringKeeperShape>, RetiringKeeperType>,
+  Same<z.output<typeof BinaryUpdateStateShape>, BinaryUpdateStateType>,
+  Same<z.output<typeof HarnessKindShape>, HarnessKindType>,
+  Same<z.output<typeof PermissionModeShape>, PermissionModeType>,
+  Same<z.output<typeof SessionCustodyShape>, SessionCustodyType>,
+  Same<z.output<typeof FleetFaultCauseShape>, FleetFaultCauseType>,
+  Same<z.output<typeof FleetItemStateShape>, FleetItemStateType>,
+  Same<z.output<typeof PlacedSectionShape>, PlacedSectionType>,
+  Same<z.output<typeof FleetPlacedStatesShape>, FleetPlacedStatesType>,
+  Same<z.output<typeof CliInstallShape>, CliInstallType>,
+  Same<z.output<typeof FleetToolchainShape>, FleetToolchainType>,
+  Same<z.output<typeof FleetSyncReportShape>, FleetSyncReportType>,
+  Same<z.output<typeof FleetConvergeStateShape>, FleetConvergeStateType>,
+  Same<z.output<typeof FleetItemStatusShape>, FleetItemStatusType>,
+  Same<z.output<typeof FleetSyncOutcomeShape>, FleetSyncOutcomeType>,
+  Same<z.output<typeof AccountIdentityShape>, AccountIdentityType>,
+  Same<z.output<typeof AccountKindShape>, AccountKindType>,
+  Same<z.output<typeof AccountProviderShape>, AccountProviderType>,
+  Same<z.output<typeof AccountReportShape>, AccountReportType>,
+  Same<z.output<typeof HarnessCapabilitiesShape>, HarnessCapabilitiesType>,
+  Same<z.output<typeof HarnessReportShape>, HarnessReportType>,
+  Same<z.output<typeof WorkspaceToolShape>, WorkspaceToolType>,
+  Same<z.output<typeof MachineCapabilityShape>, MachineCapabilityType>,
+  Same<z.output<typeof MachineCapabilitiesShape>, MachineCapabilitiesType>,
+  Same<z.output<typeof ToolStateShape>, ToolStateType>,
+  Same<z.output<typeof ToolStatusShape>, ToolStatusType>,
+  Same<z.output<typeof AgentRowShape>, AgentRowType>,
+  Same<z.output<typeof ConnectionAppShape>, ConnectionAppType>,
+  Same<z.output<typeof ConnectionAuthShape>, ConnectionAuthType>,
+  Same<z.output<typeof ConnectionStateShape>, ConnectionStateType>,
+  Same<z.output<typeof ConnectionTransportShape>, ConnectionTransportType>,
+  Same<z.output<typeof ConnectionViewShape>, ConnectionViewType>,
+  Same<z.output<typeof PairingOffAnswerShape>, PairingOffAnswerType>,
+  Same<z.output<typeof RelayProviderShape>, RelayProviderType>,
+  Same<z.output<typeof RelayStateShape>, RelayStateType>,
+  Same<z.output<typeof RelayViewShape>, RelayViewType>,
+  Same<z.output<typeof ArtifactThumbnailShape>, ArtifactThumbnailType>,
+  Same<z.output<typeof CompactStageShape>, CompactStageType>,
+  Same<z.output<typeof AccountHueShape>, AccountHueType>,
+  Same<z.output<typeof NamedAccountShape>, NamedAccountType>,
+  Same<z.output<typeof HeldReasonShape>, HeldReasonType>,
+  Same<z.output<typeof HeldAccountShape>, HeldAccountType>,
+  Same<z.output<typeof WaitReasonShape>, WaitReasonType>,
+  Same<z.output<typeof EndedByShape>, EndedByType>,
+  Same<z.output<typeof ContinueStepShape>, ContinueStepType>,
+  Same<z.output<typeof AccountMoveShape>, AccountMoveType>,
+  Same<z.output<typeof AccountOverageShape>, AccountOverageType>,
+  Same<z.output<typeof AtLimitShape>, AtLimitType>,
+  Same<z.output<typeof ResultArtifactShape>, ResultArtifactType>,
+  Same<z.output<typeof AttemptResultShape>, AttemptResultType>,
+  Same<z.output<typeof CarryRestoredShape>, CarryRestoredType>,
+  Same<z.output<typeof CheckoutMoveShape>, CheckoutMoveType>,
+  Same<z.output<typeof ClaudeModelUsageShape>, ClaudeModelUsageType>,
+  Same<z.output<typeof ConnectAccessShape>, ConnectAccessType>,
+  Same<z.output<typeof DelegateAskStatusShape>, DelegateAskStatusType>,
+  Same<z.output<typeof DelegateEventShape>, DelegateEventType>,
+  Same<z.output<typeof DelegateEventPayloadShape>, DelegateEventPayloadType>,
+  Same<z.output<typeof VerbShape>, VerbType>,
+  Same<z.output<typeof EnvelopeShape>, EnvelopeType>,
+  Same<z.output<typeof FleetRefreshShape>, FleetRefreshType>,
+  Same<z.output<typeof StatusOptionShape>, StatusOptionType>,
+  Same<z.output<typeof GithubProjectShape>, GithubProjectType>,
+  Same<z.output<typeof McpPlatformShape>, McpPlatformType>,
+  Same<z.output<typeof EndedTaskShape>, EndedTaskType>,
+  Same<z.output<typeof MoveEndedShape>, MoveEndedType>,
+  Same<z.output<typeof TextAttachmentShape>, TextAttachmentType>,
+  Same<z.output<typeof FileAttachmentShape>, FileAttachmentType>,
+  Same<z.output<typeof SendAttachmentShape>, SendAttachmentType>,
+  Same<z.output<typeof MoveRequestShape>, MoveRequestType>,
+  Same<z.output<typeof NamedMoveRequestShape>, NamedMoveRequestType>,
+  Same<z.output<typeof UserAnswersShape>, UserAnswersType>,
+  Same<z.output<typeof UserQuestionShape>, UserQuestionType>,
+  Same<z.output<typeof UserQuestionAnsweredShape>, UserQuestionAnsweredType>,
+  Same<z.output<typeof UserQuestionDismissedShape>, UserQuestionDismissedType>,
+  Same<z.output<typeof UserQuestionResultShape>, UserQuestionResultType>,
+  Same<z.output<typeof NeutralContentBlockShape>, NeutralContentBlockType>,
+  Same<z.output<typeof HarnessNoteShape>, HarnessNoteType>,
+  Same<z.output<typeof NeutralOriginShape>, NeutralOriginType>,
+  Same<z.output<typeof NeutralUserMessageShape>, NeutralUserMessageType>,
+  Same<z.output<typeof LimitWindowShape>, LimitWindowType>,
+  Same<z.output<typeof OpenCodeGoLimitsShape>, OpenCodeGoLimitsType>,
+  Same<z.output<typeof PlaceLfsRowShape>, PlaceLfsRowType>,
+  Same<z.output<typeof PlanCommentShape>, PlanCommentType>,
+  Same<z.output<typeof PlanStepPriorityShape>, PlanStepPriorityType>,
+  Same<z.output<typeof PlanStepStatusShape>, PlanStepStatusType>,
+  Same<z.output<typeof PlanStepShape>, PlanStepType>,
+  Same<z.output<typeof PlanWaitShape>, PlanWaitType>,
+  Same<z.output<typeof RelayPortNameShape>, RelayPortNameType>,
+  Same<z.output<typeof RelayPortHealthShape>, RelayPortHealthType>,
+  Same<z.output<typeof RelayPortsShape>, RelayPortsType>,
+  Same<z.output<typeof RelayReachShape>, RelayReachType>,
+  Same<z.output<typeof ScratchWorktreeShape>, ScratchWorktreeType>,
+  Same<z.output<typeof SentMessageShape>, SentMessageType>,
+  Same<z.output<typeof SendPayloadShape>, SendPayloadType>,
+  Same<z.output<typeof SessionCommandsShape>, SessionCommandsType>,
+  Same<z.output<typeof SessionToolingShape>, SessionToolingType>,
+  Same<z.output<typeof SkillFileShape>, SkillFileType>,
+  Same<z.output<typeof IngestMarkShape>, IngestMarkType>,
+  Same<z.output<typeof SessionInstructionShape>, SessionInstructionType>,
+  Same<z.output<typeof SessionRoleShape>, SessionRoleType>,
+  Same<z.output<typeof WorkspaceRefShape>, WorkspaceRefType>,
+  Same<z.output<typeof SpawnPayloadShape>, SpawnPayloadType>,
+  Same<z.output<typeof RunKindShape>, RunKindType>,
+  Same<z.output<typeof StoppedCommandsShape>, StoppedCommandsType>,
+  Same<z.output<typeof ThreadAnswerShape>, ThreadAnswerType>,
+  Same<z.output<typeof RoutineScheduleShape>, RoutineScheduleType>,
+  Same<z.output<typeof ItemEndShape>, ItemEndType>,
+  Same<z.output<typeof RoutineMadeEventShape>, RoutineMadeEventType>,
   Same<
-    z.output<typeof RoutineMadeThreadEventSchema>,
+    z.output<typeof RoutineMadeThreadEventShape>,
     RoutineMadeThreadEventType
   >,
-  Same<z.output<typeof DesignOfferEventSchema>, DesignOfferEventType>,
+  Same<z.output<typeof DesignOfferEventShape>, DesignOfferEventType>,
   Same<
-    z.output<typeof DesignOfferThreadEventSchema>,
+    z.output<typeof DesignOfferThreadEventShape>,
     DesignOfferThreadEventType
   >,
-  Same<z.output<typeof ThreadEventSchema>, ThreadEventType>,
-  Same<z.output<typeof ThreadImageSchema>, ThreadImageType>,
-  Same<z.output<typeof ThreadQuestionSchema>, ThreadQuestionType>,
-  Same<z.output<typeof WorkspaceHoldingSchema>, WorkspaceHoldingType>,
-  Same<z.output<typeof SentMessageSchema>, SentMessageType>,
-  Same<z.output<typeof SendPayloadSchema>, SendPayloadType>,
-  Same<z.output<typeof MoveLargeFileSchema>, MoveLargeFileType>,
-  Same<z.output<typeof MoveAskSchema>, MoveAskType>,
-  Same<z.output<typeof MoveStepSchema>, MoveStepType>,
-  Same<z.output<typeof MoveErrorSchema>, MoveErrorType>,
-  Same<z.output<typeof MoveStageSchema>, MoveStageType>,
-  Same<z.output<typeof MoveJobSchema>, MoveJobType>,
-  Same<z.output<typeof MoveLfsResultSchema>, MoveLfsResultType>,
-  Same<z.output<typeof MoveLfsObjectSchema>, MoveLfsObjectType>,
-  Same<z.output<typeof MoveSnapshotResultSchema>, MoveSnapshotResultType>,
-  Same<z.output<typeof MachinePathSchema>, MachinePathType>,
-  Same<z.output<typeof ExtractedSchema>, ExtractedType>,
-  Same<z.output<typeof SendRefusalSchema>, SendRefusalType>,
-  Same<z.output<typeof ModeAskSchema>, ModeAskType>,
-  Same<z.output<typeof IngestMarkSchema>, IngestMarkType>,
-  Same<z.output<typeof SessionInstructionSchema>, SessionInstructionType>,
-  Same<z.output<typeof SessionRoleSchema>, SessionRoleType>,
-  Same<z.output<typeof WorkspaceRefSchema>, WorkspaceRefType>,
-  Same<z.output<typeof SpawnPayloadSchema>, SpawnPayloadType>,
-  Same<z.output<typeof InstallRouteSchema>, InstallRouteType>,
-  Same<z.output<typeof InstallSignInSchema>, InstallSignInType>,
-  Same<z.output<typeof InstallDraftSchema>, InstallDraftType>,
-  Same<z.output<typeof InstallCheckSchema>, InstallCheckType>,
-  Same<z.output<typeof InstallProblemSchema>, InstallProblemType>,
-  Same<z.output<typeof InstallStepSchema>, InstallStepType>,
-  Same<z.output<typeof InstallStateSchema>, InstallStateType>,
-  Same<z.output<typeof InstallMarkSchema>, InstallMarkType>,
-  Same<z.output<typeof InstallSchema>, InstallType>,
-  Same<z.output<typeof NeutralSessionInfoSchema>, NeutralSessionInfoType>,
+  Same<z.output<typeof ThreadEventShape>, ThreadEventType>,
+  Same<z.output<typeof ThreadImageShape>, ThreadImageType>,
+  Same<z.output<typeof ThreadQuestionShape>, ThreadQuestionType>,
+  Same<z.output<typeof WorkspaceHoldingShape>, WorkspaceHoldingType>,
+  Same<z.output<typeof MoveLargeFileShape>, MoveLargeFileType>,
+  Same<z.output<typeof MoveAskShape>, MoveAskType>,
+  Same<z.output<typeof MoveStepShape>, MoveStepType>,
+  Same<z.output<typeof MoveErrorShape>, MoveErrorType>,
+  Same<z.output<typeof MoveStageShape>, MoveStageType>,
+  Same<z.output<typeof MoveJobShape>, MoveJobType>,
+  Same<z.output<typeof MoveLfsResultShape>, MoveLfsResultType>,
+  Same<z.output<typeof MoveLfsObjectShape>, MoveLfsObjectType>,
+  Same<z.output<typeof MoveSnapshotResultShape>, MoveSnapshotResultType>,
+  Same<z.output<typeof MachinePathShape>, MachinePathType>,
+  Same<z.output<typeof ExtractedShape>, ExtractedType>,
+  Same<z.output<typeof SendRefusalShape>, SendRefusalType>,
+  Same<z.output<typeof ModeAskShape>, ModeAskType>,
+  Same<z.output<typeof InstallRouteShape>, InstallRouteType>,
+  Same<z.output<typeof InstallSignInShape>, InstallSignInType>,
+  Same<z.output<typeof InstallDraftShape>, InstallDraftType>,
+  Same<z.output<typeof InstallCheckShape>, InstallCheckType>,
+  Same<z.output<typeof InstallProblemShape>, InstallProblemType>,
+  Same<z.output<typeof InstallStepShape>, InstallStepType>,
+  Same<z.output<typeof InstallStateShape>, InstallStateType>,
+  Same<z.output<typeof InstallMarkShape>, InstallMarkType>,
+  Same<z.output<typeof InstallShape>, InstallType>,
+  Same<z.output<typeof NeutralSessionInfoShape>, NeutralSessionInfoType>,
 ] = [
   true,
   true,

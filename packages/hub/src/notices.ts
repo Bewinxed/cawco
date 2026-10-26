@@ -18,7 +18,6 @@ import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { type DamagedHubRecord, damagedHubRecordWords } from "@cawco/core";
 import {
-  DamagedRecord,
   isDamagedRecord,
   readRecordSync,
   writeStateFileSync,

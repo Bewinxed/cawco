@@ -45,6 +45,7 @@ import {
   relative,
   resolve,
 } from "node:path";
+import { z } from "zod";
 import { binaryRoot } from "./binary-installation";
 import {
   type CloneDeny,
@@ -81,10 +82,9 @@ import {
 } from "./paths";
 import { SAFE_GIT_ENV, safeGitArgv } from "./safe-git";
 import { hostEnvironment } from "./session-env";
-import { DamagedRecord, readRecord } from "./state-file";
+import { readRecord } from "./state-file";
 import { type Policy, resolveDenied, resolveReal } from "./workspace-judge";
 import { findProgram, startedPath } from "./workspace-needs";
-import { z } from "zod";
 
 /**
  * What CawCo writes into a clone and keeps out of its status itself, by path

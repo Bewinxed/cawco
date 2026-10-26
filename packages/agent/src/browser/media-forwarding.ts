@@ -34,9 +34,9 @@ import {
   writeStateFile,
 } from "@cawco/core/state-file";
 import { parse } from "yaml";
+import { MediaMeasurementSchema } from "../stored-shapes";
 import type { Runtime } from "./runtime";
 import { browsersDir } from "./state";
-import { MediaMeasurementSchema } from "../stored-shapes";
 
 /** What the runtime forwards to a browser's media port, and when that is short of both, what to tell the person. */
 export interface MediaForwarding {

@@ -33,6 +33,7 @@
  */
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { z } from "zod";
 import {
   isAlive,
   listedPid,
@@ -43,7 +44,6 @@ import { readRecord } from "../../../packages/core/src/state-file";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { decisionsOf } from "../agent-records";
 import type { Kit, Spec } from "../kit";
-import { z } from "zod";
 
 const FINISH = "mcp__cawco__finish_item";
 const TAG = "PROBE-UNASKED";

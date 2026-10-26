@@ -82,6 +82,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
+import { z } from "zod";
 import {
   isAlive,
   listedPid,
@@ -93,7 +94,6 @@ import { workWords } from "../../../packages/core/src/words/work";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { decisionsOf } from "../agent-records";
 import type { Kit, Spec } from "../kit";
-import { z } from "zod";
 
 const FINISH = "mcp__cawco__finish_item";
 const TAG = /PROBE-CUTOFF-([ABCDEFG])/u;
