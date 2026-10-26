@@ -92,10 +92,6 @@ export const readExclude = async (
   return { listed, rest };
 };
 
-/** The stand-ins a clone's `info/exclude` lists in CawCo's block, as last written, relative to the clone. */
-export const excludedStandIns = async (clone: string): Promise<string[]> =>
-  (await readExclude(await excludeFileOf(clone))).listed.filter(Boolean);
-
 /**
  * CawCo's block in a clone's `info/exclude`, written whole: one anchored line
  * for each of `paths` (relative to the clone), the stand-ins it made there,

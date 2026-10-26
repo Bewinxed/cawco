@@ -53,12 +53,7 @@ import { mountedAnywhere } from "@cawco/core/mount-table";
 import { projectClaudeDir, workspaceStateDir } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
 import { isPlace } from "@cawco/core/workspace-policy";
-import {
-  excludedStandIns,
-  excludeStandIns,
-  gitIn,
-  infoExcludeOf,
-} from "./checkout-exclude";
+import { excludeStandIns, gitIn, infoExcludeOf } from "./checkout-exclude";
 
 /**
  * A mount point a sandbox left on the host, as the host tests it
@@ -180,18 +175,13 @@ const asMade = async ({ path, empty, found }: Found): Promise<boolean> => {
  * read then written in place, `crates/hook/src/hook_lib.rs`
  * `ensure_hook_git_excludes`).
  */
-const listedFileOf = (id: string): string =>
+export const listedFileOf = (id: string): string =>
   join(workspaceStateDir(id), "stand-ins.json");
 
-/**
- * What {@link listedFileOf} holds; for a workspace listed before the record
- * was kept, CawCo's block in its `info/exclude` as it stands, read this once.
- */
-const listedOf = async (id: string, clone: string): Promise<string[]> => {
+/** What {@link listedFileOf} holds: none listed when there is no record. */
+const listedOf = async (id: string): Promise<string[]> => {
   const text = await readFile(listedFileOf(id), "utf8").catch(() => undefined);
-  return text === undefined
-    ? await excludedStandIns(clone)
-    : (JSON.parse(text) as string[]);
+  return text === undefined ? [] : (JSON.parse(text) as string[]);
 };
 
 /** Each workspace's listing under way ({@link listStandIns}), by its id: one at a time. */
@@ -237,7 +227,7 @@ const listNow = async (
   if (!(await statOf(join(clone, ".git")))) {
     return;
   }
-  const before = await listedOf(ref.id, clone);
+  const before = await listedOf(ref.id);
   const listed = new Set(before);
   const own: string[] = [];
   for (const one of entries) {
