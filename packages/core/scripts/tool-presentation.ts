@@ -282,18 +282,22 @@ function missingOnClients(): string[] {
  * the app's ToolDescriptor.swift, and nothing here can run the Swift. So the
  * pair is pinned in the generated file, and a change to one side alone fails:
  * whoever changes how one client reads a call changes the other in the same
- * commit. Comments and whitespace are not the rules and are not counted.
+ * commit. Comments and whitespace are not the rules and are not counted, nor
+ * is TypeScript's `export` modifier: which modules import a name changes
+ * nothing about how a call reads (Swift has no such keyword).
  */
 const PIN = /^\/\/ Interpreters: ts ([0-9a-f]{16}) swift ([0-9a-f]{16})$/mu;
 const BLOCK_COMMENT = /^\s*\/\*[\s\S]*?\*\/\s*$/gmu;
 const LINE_COMMENT = /^\s*\/\/.*$/gmu;
 const WHITESPACE = /\s+/gu;
+const EXPORT_MODIFIER = /^export (?=\w)/gmu;
 const PROSE_FIELD_LINE = /^export const PROSE_FIELD = .*$/mu;
 
 function fingerprint(code: string): string {
   const rules = code
     .replace(BLOCK_COMMENT, "")
     .replace(LINE_COMMENT, "")
+    .replace(EXPORT_MODIFIER, "")
     .replace(WHITESPACE, " ")
     .trim();
   return new Bun.CryptoHasher("sha256")

@@ -89,7 +89,7 @@ export interface Piece {
 }
 
 /** A label written with a slot: `Fetched {}` filled by `slot`, `fallback` when it is empty. */
-export interface SlotLabel {
+interface SlotLabel {
   fallback: string;
   slot: Piece;
   template: string;
@@ -762,7 +762,7 @@ export function mcpParts(
 }
 
 /** The kind a tool name is: by its own name (an MCP tool's past its server), else `mcp` or `other`. */
-export function toolKind(toolName: string | undefined): ToolKind {
+function toolKind(toolName: string | undefined): ToolKind {
   const raw = toolName ?? "";
   const known = readKinds.get(raw);
   if (known) {
@@ -1069,7 +1069,7 @@ export function fileChanges(
 }
 
 /** A unified patch's files and the lines each adds and removes. */
-export function patchFiles(patch: string): FileChange[] {
+function patchFiles(patch: string): FileChange[] {
   const files: FileChange[] = [];
   let current: FileChange | undefined;
   for (const line of patch.split("\n")) {
@@ -1162,7 +1162,7 @@ export const memoryKeptWords = (kept: {
   `Kept ${kept.path}: ${plural(kept.lines, "line")}, ${kept.bytes} bytes; the next write's expectedHash takes ${kept.handle}.`;
 
 /** What an agent reads from a `list_docs` that found none. */
-export const NO_MEMORY_DOCS = "No memory documents.";
+const NO_MEMORY_DOCS = "No memory documents.";
 
 /**
  * What an agent reads from a `list_docs`: one line per document, its path
@@ -1375,7 +1375,7 @@ const TLD_LABELS = new Set(["ai", "com", "io", "org", "net"]);
  * out of it, the only place an MCP tool name says who answers it. Two or
  * three labels ending in a real TLD is a domain; anything else is a name.
  */
-export function mcpServer(server: string): { label: string; host?: string } {
+function mcpServer(server: string): { label: string; host?: string } {
   const parts = server.split(SERVER_SEPARATORS).filter(Boolean);
   const at =
     parts.length <= 3
@@ -1508,7 +1508,7 @@ function exponentTrimmed(text: string): string {
  * object or list as `{}` or `[]`. The native app writes it by the same
  * steps (ToolDescriptor.json).
  */
-export function writeJson(value: unknown, indent = ""): string {
+function writeJson(value: unknown, indent = ""): string {
   if (value === null || value === undefined) {
     return "null";
   }
@@ -1557,7 +1557,7 @@ export function inputFields(raw: unknown): Field[] {
  * their order), then the rest by name. Not the order the call wrote them: a
  * client that decodes JSON into a dictionary (the native app) never sees that.
  */
-export function fieldOrder(keys: string[]): string[] {
+function fieldOrder(keys: string[]): string[] {
   const rank = (key: string): number => {
     const at = PRIMARY_FIELDS.indexOf(key);
     return at === -1 ? PRIMARY_FIELDS.length : at;

@@ -530,8 +530,8 @@ const releaseSteps = (
       await run(
         [
           process.execPath,
-          "-e",
-          `const { AGENT_INFO_PLIST } = await import(${JSON.stringify(join(trees.build, "packages/core/src/agent-bundle.ts"))}); await Bun.write(${JSON.stringify(join(bundleFiles, "Info.plist"))}, AGENT_INFO_PLIST);`,
+          "scripts/binary/info-plist.ts",
+          join(bundleFiles, "Info.plist"),
         ],
         trees.build
       );
