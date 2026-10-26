@@ -178,9 +178,6 @@
   }
 }
 
-/* A filed task that needs you: its TaskNeedsFor stack stands inside it. */
-@custom-variant has-needs-stack (&:has([data-slot="task-needs-needs-stack"]));
-
 /* Under a theme switch (theme.svelte.ts marks the root): app.css stops the
    elements' transitions; a pseudo-element names it where it is styled. */
 @custom-variant theme-flip (:root[data-theme-flip] &);

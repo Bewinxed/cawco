@@ -763,10 +763,16 @@
         style:--task-rows="1fr auto"
       >
         {#each filed as task, at (task.id)}
+          <!-- A task that waits on you spans the row, whatever it draws under
+               its card (a review, an ask, an action); its one column is
+               `minmax(0, 1fr)` and its children may shrink, so nothing it
+               holds reaches into the next card's track. -->
+          {@const needsYou = stages !== null && waitsOnYou(projectId, task)}
           <li
             data-slot="filed-task"
-            class="*:mb-space-2 grid row-span-2 grid-rows-subgrid min-w-0 has-needs-stack:col-span-full has-needs-stack:max-w-c-measure motion-safe:data-arrive:animate-filed-rise motion-reduce:data-arrive:animate-filed-fade"
+            class="*:mb-space-2 *:min-w-0 grid grid-cols-1 row-span-2 grid-rows-subgrid min-w-0 data-needs-you:col-span-full data-needs-you:max-w-c-measure motion-safe:data-arrive:animate-filed-rise motion-reduce:data-arrive:animate-filed-fade"
             data-arrive={live || undefined}
+            data-needs-you={needsYou || undefined}
             style:--arrive-delay={live ? `${(at + 1) * step}ms` : undefined}
           >
             <TaskCard
@@ -775,7 +781,7 @@
               {task}
               titleFirst
             />
-            {#if stages && waitsOnYou(projectId, task)}
+            {#if stages && needsYou}
               <TaskNeedsFor
                 onchanged={changedIn}
                 onmove={moveIn}
