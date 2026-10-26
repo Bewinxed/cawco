@@ -76,10 +76,10 @@ import {
 const IMAGE = "cawco-browser";
 
 /** The label every browser container and volume carries: its key. */
-export const BROWSER_LABEL = "dev.cawco.browser";
+const BROWSER_LABEL = "dev.cawco.browser";
 
 /** The label naming the agent whose records keep a browser's container and volume (state.ts `browserOwner`). */
-export const OWNER_LABEL = "dev.cawco.browser.owner";
+const OWNER_LABEL = "dev.cawco.browser.owner";
 
 /** How long a container has to answer once started. */
 const LIVE_MS = 90_000;
@@ -192,7 +192,7 @@ export const removeOwned = async (
 };
 
 /** The relay as neko is given it: the credential, at the URLs composed for this machine. */
-export interface NekoRelay {
+interface NekoRelay {
   credential: string;
   urls: string[];
   username: string;

@@ -498,7 +498,7 @@ export interface CopyAccess {
  * when nothing holds it; its own folder on macOS and for a repository's
  * clone. Nothing when it has no copy there.
  */
-export const accessOf = async (
+const accessOf = async (
   workspace: WorkspaceRef
 ): Promise<CopyAccess | undefined> => {
   const layer = await layerOf(workspace.id, workspace.path);

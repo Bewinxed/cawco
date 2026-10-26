@@ -22,7 +22,7 @@ import type { FramePictureRead, Interaction } from "@cawco/core/stage";
 import type { Page } from "playwright-core";
 
 /** Why a frame's picture can't be taken as it is, in words a tool answers. */
-export class FramePictureRefusal extends Error {}
+class FramePictureRefusal extends Error {}
 
 /** What the canvas answers for its frames' pictures (runtime.ts `CanvasState`). */
 interface Pictures {

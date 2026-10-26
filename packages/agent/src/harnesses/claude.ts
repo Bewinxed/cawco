@@ -263,10 +263,7 @@ import { tailLines } from "./transcript-tail";
  * that ended it, or an exit over 128, a signal the CLI caught and exited on
  * (128 + its number: SIGTERM is 143). Undefined for an exit of its own.
  */
-export const signalOfExit = ({
-  code,
-  signal,
-}: ProcessExit): string | undefined => {
+const signalOfExit = ({ code, signal }: ProcessExit): string | undefined => {
   if (signal) {
     return signal;
   }
@@ -288,7 +285,7 @@ const STDERR_QUOTED_CHARS = 600;
  * the agent says is (redaction.ts `redactText`). Undefined when it said
  * nothing there.
  */
-export const stderrSaid = (stderr: string | undefined): string | undefined => {
+const stderrSaid = (stderr: string | undefined): string | undefined => {
   const lines = (stderr ?? "")
     .split("\n")
     .map((line) => line.trim())
@@ -401,7 +398,7 @@ interface HookFrame {
  * before the interrupt was `started` (read) already, so its later
  * `cancelled` changes nothing.
  */
-export const toNeutral = (
+const toNeutral = (
   sdk: SDKMessage,
   recovered = false
 ): NeutralMessage | null => {
@@ -903,7 +900,7 @@ const requireSessionFile = async (
 const missing = (error: unknown): boolean =>
   (error as { code?: string } | null)?.code === "ENOENT";
 
-export const CLAUDE_CAPABILITIES: HarnessCapabilities = {
+const CLAUDE_CAPABILITIES: HarnessCapabilities = {
   interrupt: true,
   permissionModes: [...PERMISSION_MODES],
   setModel: true,
@@ -990,7 +987,7 @@ function withExtras(
  * about a busy session is decided here: the CLI holds what arrives mid-turn in
  * a queue of its own, and says when it consumed each one ({@link toNeutral}).
  */
-export class InputStream implements AsyncIterable<SDKUserMessage> {
+class InputStream implements AsyncIterable<SDKUserMessage> {
   readonly #queue: SDKUserMessage[] = [];
   #waiting: ((result: IteratorResult<SDKUserMessage>) => void) | null = null;
   #endedValue = false;
@@ -4528,7 +4525,7 @@ const readAsk = (
  */
 const RING_START = 0;
 
-export class ClaudeHarness implements Harness {
+class ClaudeHarness implements Harness {
   readonly kind = "claude" as const;
   readonly capabilities = CLAUDE_CAPABILITIES;
   auth: AuthState = "authenticated";

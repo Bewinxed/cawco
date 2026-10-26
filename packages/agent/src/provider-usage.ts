@@ -18,7 +18,7 @@ import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
 import { freshen, readHeld } from "./provider-accounts";
 
 /** How often a signed-in account's windows are read with nothing running on it. */
-export const PROVIDER_READ_INTERVAL_MS = 5 * 60_000;
+const PROVIDER_READ_INTERVAL_MS = 5 * 60_000;
 
 /** How long after a turn ends its account's windows are read: one read for a burst of turns. */
 const AFTER_TURN_MS = 3000;

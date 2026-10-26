@@ -38,7 +38,7 @@ import { idbRead, idbWrite } from "./sign-ins-page";
  * Chrome lets an origin keep "up to 60% of the total disk space"
  * (web.dev/articles/storage-for-the-web), so no source caps a carry.
  */
-export const IDB_CAP_CHARS = 32 * 1024 * 1024;
+const IDB_CAP_CHARS = 32 * 1024 * 1024;
 
 /** How long a page's script may take to read or write an origin's databases. */
 const IDB_MS = 120_000;

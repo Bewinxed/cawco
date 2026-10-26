@@ -46,14 +46,14 @@ export interface ForgeSignIn {
 }
 
 /** What a forge made, or found already open. */
-export interface ForgeMade {
+interface ForgeMade {
   /** A pull or merge request that was open already for the same branches. */
   readonly existing?: boolean;
   readonly url: string;
 }
 
 /** One repository on one forge, signed in: the writes every forge has. */
-export interface ForgeClient {
+interface ForgeClient {
   /** The login it posts as. */
   readonly account: () => Promise<string>;
   readonly comment: (
@@ -78,7 +78,7 @@ export interface ForgeAdapter {
 }
 
 /** Every forge. A host is the forge whose CLI alone signs in to it ({@link forgeOn}). */
-export const FORGE_ADAPTERS: readonly ForgeAdapter[] = [
+const FORGE_ADAPTERS: readonly ForgeAdapter[] = [
   githubForge,
   gitlabForge,
   giteaForge,

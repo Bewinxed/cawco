@@ -56,7 +56,7 @@ import { dialKeeper, KEEPER_WELCOME_MS } from "./sessiond-client";
  * nothing anyone can measure once a minute, and a minute is fine-grained
  * enough that the wedge is ended within minutes of it starting.
  */
-export const KEEPER_PROBE_MS = 60_000;
+const KEEPER_PROBE_MS = 60_000;
 
 /**
  * Dials in a row without a welcome, from the same live keeper, before it is
@@ -67,7 +67,7 @@ export const KEEPER_PROBE_MS = 60_000;
  * 15:50–15:51 on 8 Oct) each lasted under two minutes, and none of them would
  * have reached five.
  */
-export const KEEPER_WEDGED_DIALS = 5;
+const KEEPER_WEDGED_DIALS = 5;
 
 /** How long the dead keeper gets to be gone before its leftovers are read. */
 const KEEPER_GONE_MS = 30_000;

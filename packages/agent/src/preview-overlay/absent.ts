@@ -7,7 +7,7 @@
  */
 
 /** How long a mark's element may stand missing before the mark is gone. Our call. */
-export const GONE_AFTER_MS = 2000;
+const GONE_AFTER_MS = 2000;
 
 export interface Absences {
   /** The marks a draw missed, `ids`, keep their time: every other (found, or not drawn now) starts over. */

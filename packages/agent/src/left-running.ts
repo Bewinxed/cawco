@@ -283,5 +283,3 @@ export const createLeftRunning = () => {
     },
   };
 };
-
-export type LeftRunning = ReturnType<typeof createLeftRunning>;

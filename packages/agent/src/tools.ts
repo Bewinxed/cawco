@@ -157,7 +157,7 @@ export const onToolsMoved = (listener: () => void): (() => void) => {
 };
 
 /** Tells every {@link onToolsMoved} listener. */
-export const toolsMoved = (): void => {
+const toolsMoved = (): void => {
   for (const listener of movedListeners) {
     listener();
   }
@@ -463,12 +463,6 @@ export const installAdvice = async (
     : { refusal: `${spec.name}: ${noMethod(spec).detail}` };
 };
 
-/** {@link installAdvice} as words to put in a sentence: the command, or why there is none. */
-export const installAdviceText = async (id: string): Promise<string> => {
-  const advice = await installAdvice(id);
-  return "command" in advice ? advice.command : advice.refusal;
-};
-
 /**
  * Asked through the absolute path the probe found rather than the bare command
  * the catalog writes: an installer that edits shell rc files fixed the *user's*
@@ -563,7 +557,7 @@ export const toolGate = async (spec: ToolSpec): Promise<ToolGate> => {
  * still installed — presence is the question, and the version is what we can
  * add about it.
  */
-export const probeTool = async (
+const probeTool = async (
   spec: ToolSpec,
   /** The one version that counts as installed: the build's pin, or the one an install is putting on. */
   want = spec.exactVersion

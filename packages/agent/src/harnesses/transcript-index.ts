@@ -63,7 +63,7 @@ const IDLE_MS = 10 * 60 * 1000;
 const SWEEP_MS = 60 * 1000;
 
 /** Whether `error` says the file is no longer there: a session deleted, or a retired workspace's transcripts with it. */
-export const isGone = (error: unknown): boolean =>
+const isGone = (error: unknown): boolean =>
   (error as { code?: string } | null)?.code === "ENOENT";
 
 /**

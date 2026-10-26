@@ -41,8 +41,7 @@ const hostOf = (network: MediaNetwork, host: number): string => {
 };
 
 /** The network's gateway: the host's own side of the bridge. */
-export const gatewayAddress = (network: MediaNetwork): string =>
-  hostOf(network, 1);
+const gatewayAddress = (network: MediaNetwork): string => hostOf(network, 1);
 
 /** coturn's address on the media network. */
 export const relayMediaAddress = (network: MediaNetwork): string =>

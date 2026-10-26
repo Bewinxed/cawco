@@ -3,7 +3,7 @@ export {
   CONFIG_PATH,
   readConfig,
   writeConfig,
-} from "@cawco/agent";
+} from "@cawco/agent/config";
 export {
   type DiscoverOptions,
   discoverHub,

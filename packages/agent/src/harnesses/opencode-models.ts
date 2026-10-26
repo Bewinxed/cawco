@@ -34,7 +34,7 @@ import { writeStateFile } from "@cawco/core/state-file";
 import { delegationHubUrl } from "../delegation";
 
 /** Where OpenCode 2.0.28 reads its catalog from (`models.url`, else its own `https://models.opencode.ai`). */
-export const OPENCODE_MODELS_SOURCE =
+const OPENCODE_MODELS_SOURCE =
   process.env.OPENCODE_MODELS_URL || "https://models.opencode.ai";
 
 /** How often the held catalog is read again: OpenCode's own refresh period (2.0.28's `ModelsDev` ttl, five minutes). */
@@ -60,7 +60,7 @@ interface CatalogProvider {
 type Catalog = Record<string, CatalogProvider>;
 
 /** The file every server is launched on, beside the plugin it loads: one per hub this agent serves. */
-export const opencodeModelsFile = (): string =>
+const opencodeModelsFile = (): string =>
   join(
     homedir(),
     ".cawco",

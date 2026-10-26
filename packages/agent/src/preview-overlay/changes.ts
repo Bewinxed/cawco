@@ -43,7 +43,7 @@ import { artifact } from "./artifact";
 import type { InkChrome } from "./radial";
 
 /** A ring's ping, as `getAnimations()` names it. */
-export const PING = "cawco-change-ping";
+const PING = "cawco-change-ping";
 
 export interface ChangesDeps {
   chrome: InkChrome;

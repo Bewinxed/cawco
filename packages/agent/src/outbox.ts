@@ -54,7 +54,7 @@ import {
 } from "@cawco/core";
 
 /** How much the outbox keeps, across every session on the machine. */
-export const OUTBOX_BYTES = 32 * 1024 * 1024;
+const OUTBOX_BYTES = 32 * 1024 * 1024;
 
 /** One session frame, as the supervisor hands it to its sink. */
 export interface OutboxFrame {

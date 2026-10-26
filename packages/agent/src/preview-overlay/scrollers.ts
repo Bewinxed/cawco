@@ -32,13 +32,6 @@ interface Band {
   top: number;
 }
 
-/** Whether a disc of radius `r` at the viewport's `x`, `y` meets `box`, with the gap kept round it. */
-export const discMeets = (x: number, y: number, box: ViewBox, r = 10) =>
-  x + r + CLEAR_GAP > box.x &&
-  x - r - CLEAR_GAP < box.x + box.w &&
-  y + r + CLEAR_GAP > box.y &&
-  y - r - CLEAR_GAP < box.y + box.h;
-
 /** The stretches of the viewport's height a disc of radius `r` at the viewport's `x` stands clear of every `covered` box in. */
 export function bandsAt(x: number, covered: ViewBox[], r: number): Band[] {
   let bands: Band[] = [

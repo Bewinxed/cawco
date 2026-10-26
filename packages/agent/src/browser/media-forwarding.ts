@@ -49,7 +49,7 @@ export interface MediaForwarding {
 }
 
 /** A measurement kept for a runtime endpoint. */
-export interface MediaMeasurement {
+interface MediaMeasurement {
   /** When it was measured (ms epoch). */
   at: number;
   /** The runtime endpoint it was measured through. */
@@ -244,7 +244,7 @@ const socketIdentity = (endpoint: string): Promise<string | undefined> =>
   );
 
 /** The measurement kept for `endpoint`, while its socket is the one it was taken on. */
-export const measurementOf = async (
+const measurementOf = async (
   endpoint: string
 ): Promise<MediaMeasurement | undefined> => {
   const [kept, socket] = await Promise.all([

@@ -42,7 +42,7 @@ const shellWord = (word: string): string =>
   `'${word.replaceAll("'", "'\\''")}'`;
 
 /** This build's `cawco <verb>` as argv, the way the keeper is launched (sessiond-client.ts). */
-export const cawcoCommand = (verb: string): string[] => {
+const cawcoCommand = (verb: string): string[] => {
   if (standalone) {
     return [process.execPath, verb];
   }

@@ -21,7 +21,7 @@ export const storeOps = {
   "usage.scan": (now: number) => usageHost.scan(now),
 } satisfies Record<string, (arg: never, tell: Tell) => Promise<unknown>>;
 
-export type StoreOps = typeof storeOps;
+type StoreOps = typeof storeOps;
 export type StoreOp = keyof StoreOps;
 export type StoreArg<K extends StoreOp> = Parameters<StoreOps[K]>[0];
 export type StoreAnswer<K extends StoreOp> = Awaited<ReturnType<StoreOps[K]>>;

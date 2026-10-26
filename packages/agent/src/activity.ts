@@ -64,7 +64,7 @@ const LOOK_MS = 5000;
  * Idle after this long without input: the threshold Chromium's Idle
  * Detection holds as its least (60 s), so a tab and a machine agree.
  */
-export const IDLE_AFTER_MS = 60_000;
+const IDLE_AFTER_MS = 60_000;
 /** How long a D-Bus call may take before its read counts as none. */
 const CALL_MS = 3000;
 

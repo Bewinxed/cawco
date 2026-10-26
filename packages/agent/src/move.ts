@@ -145,7 +145,7 @@ export const holdDeclaredSecret = (basic: string): void => {
  * URL's percent-encoding). Only http(s) URLs carry one: `ssh://git@…` and
  * `git@host:…` name an ssh login, not a secret, and stay as they are.
  */
-export const remoteWithoutCredential = (
+const remoteWithoutCredential = (
   remote: string
 ): { url: string; basic?: string } => {
   let parsed: URL;

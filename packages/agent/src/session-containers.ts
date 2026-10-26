@@ -110,16 +110,16 @@ import { socketPlace } from "./tool-door";
 /** The label naming the session whose work created a container: its instance id. */
 export const SESSION_LABEL = "dev.cawco.session";
 /** The label naming the machine whose agent served that session: its machine id. */
-export const MACHINE_LABEL = "dev.cawco.machine";
+const MACHINE_LABEL = "dev.cawco.machine";
 /**
  * The label naming the hub that agent serves, by its host and port: a
  * machine may run an agent for another hub beside its own (a scratch
  * fleet's, whose machine id is every scratch fleet's), and each sweeps only
  * its own hub's.
  */
-export const HUB_LABEL = "dev.cawco.hub";
+const HUB_LABEL = "dev.cawco.hub";
 /** The label on a container or pod the person named as it was created: it is stopped, not removed. */
-export const NAMED_LABEL = "dev.cawco.named";
+const NAMED_LABEL = "dev.cawco.named";
 /** The labels Compose puts on each container it creates, Docker's and podman-compose's: its names are its own. */
 const COMPOSE_LABELS = [
   "com.docker.compose.project",

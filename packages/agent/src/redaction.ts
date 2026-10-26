@@ -37,7 +37,7 @@ import { WIRE_PART_CHARS } from "@cawco/core/wire";
 import { delegationHubUrl } from "./delegation";
 import { gauge } from "./memory";
 
-export const REDACTED = "[cawco credential]";
+const REDACTED = "[cawco credential]";
 
 const storeFile = (): string =>
   join(

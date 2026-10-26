@@ -97,7 +97,7 @@ import {
 import { type Runtime, runtimeInstallCommand } from "./runtime";
 
 /** coturn's immutable alpine tag ("Once built, it's never updated", its docker README). */
-export const RELAY_IMAGE = "coturn/coturn:4.18.0-r0-alpine";
+const RELAY_IMAGE = "coturn/coturn:4.18.0-r0-alpine";
 /**
  * certbot's newest release on Docker Hub with its Cloudflare DNS plugin
  * ("Official build of EFF's Certbot with its plugin for doing DNS challenges
@@ -105,11 +105,11 @@ export const RELAY_IMAGE = "coturn/coturn:4.18.0-r0-alpine";
  * image for every certbot run: the DNS challenge, the renewal and the
  * certificate's read are the same certbot.
  */
-export const CERTBOT_IMAGE = "certbot/dns-cloudflare:v5.8.0";
+const CERTBOT_IMAGE = "certbot/dns-cloudflare:v5.8.0";
 /** The relay's container on the runtime. */
-export const RELAY_CONTAINER = "cawco-relay";
+const RELAY_CONTAINER = "cawco-relay";
 /** Where the certificate lives, mounted at `/etc/letsencrypt`. */
-export const CERTS_VOLUME = "cawco-relay-certs";
+const CERTS_VOLUME = "cawco-relay-certs";
 /** The label the relay's container carries: the hash of the settings it was made with. */
 const RELAY_LABEL = "dev.cawco.relay";
 /** The label naming the DNS name it was made for, when it has one. */
@@ -185,7 +185,7 @@ const why = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
 /** A relay failure thrown: its sentence as the message, its command kept beside it. */
-export class RelayFailed extends Error {
+class RelayFailed extends Error {
   readonly command: string | undefined;
   constructor(failure: RelayFailure) {
     super(failure.why);
@@ -282,7 +282,7 @@ const processesOf = async (
 };
 
 /** One port held by someone, in words: "TCP 3478 is held by caddy (pid 917)". */
-export interface HeldPort {
+interface HeldPort {
   port: number;
   proto: "tcp" | "udp";
   said: string;
@@ -292,7 +292,7 @@ export interface HeldPort {
  * The ports of `wanted` some process already holds, each named with its
  * process (or its user, for another user's, whose fds this user can't read).
  */
-export const heldPorts = async (
+const heldPorts = async (
   wanted: { proto: "tcp" | "udp"; port: number }[]
 ): Promise<HeldPort[]> => {
   const sockets = [
@@ -329,7 +329,7 @@ export const heldPorts = async (
  * What a container said, its stdout and stderr in order: its last 60 lines,
  * or every line since `window.since` (s epoch).
  */
-export const logsOf = async (
+const logsOf = async (
   container: Docker.Container,
   window: { tail: number } | { since: number } = { tail: 60 }
 ): Promise<string> => {
@@ -473,7 +473,7 @@ const DNS_CHALLENGE = [
  * address, and the machine's public addresses other than the relay's, each
  * denied ({@link otherPublic}).
  */
-export interface RelaySeat {
+interface RelaySeat {
   media: string;
   otherPublic: string[];
 }
@@ -487,7 +487,7 @@ export interface RelaySeat {
  * The relay's public address maps to its one relay address, the only peer it
  * lets through; every range below is denied, as the module's header says.
  */
-export const coturnArgs = (
+const coturnArgs = (
   args: RelayStartArgs,
   certified: boolean,
   seat: RelaySeat
@@ -537,7 +537,7 @@ const otherPublic = async (address: string): Promise<string[]> =>
   );
 
 /** coturn's seat on `docker`'s media network for a relay reached at `address`, the network made when absent. */
-export const relaySeat = async (
+const relaySeat = async (
   docker: Docker,
   address: string
 ): Promise<RelaySeat & { network: string }> => {
@@ -926,7 +926,7 @@ export const startRelay = (args: RelayStartArgs): Promise<RelayFrame> =>
  * A probe names its stand-in ports (`host`). The relay range is never
  * published.
  */
-export const listenerPublished = (
+const listenerPublished = (
   tls: boolean,
   host: { plain: number; tls: number } = {
     plain: STREAM_RELAY_PORT,

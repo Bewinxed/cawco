@@ -9,7 +9,7 @@
  */
 
 /** A token's value as written (`--ease-out` is a `cubic-bezier(…)`). */
-export const tokenValue = (token: string): string =>
+const tokenValue = (token: string): string =>
   getComputedStyle(document.documentElement).getPropertyValue(token).trim();
 
 /** A token's duration in ms (`--dur-fade` is 200ms). */

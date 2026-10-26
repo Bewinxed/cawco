@@ -91,7 +91,7 @@ interface CompactMetadata {
   trigger?: "manual" | "auto";
 }
 
-export interface RawRecord {
+interface RawRecord {
   compactMetadata?: CompactMetadata;
   isMeta?: boolean;
   isSidechain?: boolean;
@@ -115,7 +115,7 @@ export interface RawRecord {
  * ({@link nodeOf}); the record itself is read again only when a read
  * returns it.
  */
-export interface ChainNode {
+interface ChainNode {
   byteLength: number;
   compactMetadata?: CompactMetadata;
   /**
@@ -154,7 +154,7 @@ export interface ChainNode {
  * `queue-operation` lines are on no chain; they say how many queued prompts a
  * user record joins ({@link joinedCounts}).
  */
-export const CHAIN_TYPES = typeFilter(
+const CHAIN_TYPES = typeFilter(
   "user",
   "assistant",
   "system",
@@ -753,7 +753,7 @@ const REMINDER_CLOSE = "</system-reminder>";
  * message's start: a person who types the tag mid-sentence keeps their own
  * voice. Undefined for anything else.
  */
-export const harnessNoteOf = (text: string): HarnessNote | undefined => {
+const harnessNoteOf = (text: string): HarnessNote | undefined => {
   const whole = text.trim();
   if (whole.startsWith(REMINDER_OPEN) && whole.endsWith(REMINDER_CLOSE)) {
     return {
@@ -863,7 +863,7 @@ interface QueuedCommand {
  * command (`isMeta`, never shown) is not one. The prompt is a string, or
  * content blocks when images rode with it; any other shape is not one.
  */
-export function absorbedMessage(r: RawRecord): SDKSessionMessage | null {
+function absorbedMessage(r: RawRecord): SDKSessionMessage | null {
   if (r.type !== "attachment" || r.isSidechain) {
     return null;
   }
@@ -1240,7 +1240,7 @@ function messageFacts(r: RawRecord): Partial<ChainNode> {
 }
 
 /** One scanned line as the index keeps it ({@link ChainNode}). */
-export function nodeOf(located: LocatedRecord): ChainNode {
+function nodeOf(located: LocatedRecord): ChainNode {
   const r = located.record as unknown as RawRecord;
   return {
     type: r.type,

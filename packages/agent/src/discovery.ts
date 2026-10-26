@@ -27,7 +27,7 @@ import { readConfig, writeConfig } from "./config";
 
 /** Long enough for a responder on the link to answer, short enough to not feel stuck. */
 export const MDNS_BROWSE_MS = 2000;
-export const PROBE_TIMEOUT_MS = 1500;
+const PROBE_TIMEOUT_MS = 1500;
 
 const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/u;
 const SCHEME_PREFIX = /^[a-z][a-z0-9+.-]*:\/\//iu;

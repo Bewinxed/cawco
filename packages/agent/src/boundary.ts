@@ -480,7 +480,7 @@ const HOOK_LIMIT_S = HOOK_TIMEOUT_S - 10;
  * That refusal stops only the one call. The model reads the line and runs the
  * command again, and the work item goes on (claude.ts `#watchBoundary`).
  */
-export const BOUNDARY_HOOK_SLOW = "cawco: the boundary hook took longer than";
+const BOUNDARY_HOOK_SLOW = "cawco: the boundary hook took longer than";
 
 /**
  * The perl the hook runs on, as the agent's PATH finds it (core
@@ -1908,7 +1908,7 @@ const armLimit = atMost(REARM_CONCURRENCY);
  * Its reading is tried again every {@link KEEPERS_ASK_AGAIN_MS}, and the
  * refusal lasts until one is whole.
  */
-export class ArmingBlocked extends Error {
+class ArmingBlocked extends Error {
   readonly workspace: string;
   constructor(workspace: string, why: string) {
     super(
@@ -2883,7 +2883,7 @@ export const DECISIONS_FILE = "boundary-decisions.json";
 const DECISIONS_KEPT = 32;
 
 /** A boundary generation as a decision names it. */
-export interface DecidedBoundary {
+interface DecidedBoundary {
   /** Its form ({@link formOf}); null when it has none. */
   readonly form: string | null;
   readonly gen: string;
@@ -2892,7 +2892,7 @@ export interface DecidedBoundary {
 }
 
 /** Why an update decision ({@link BoundaryDecision}) went as it did: each names what held then, the rest none. */
-export interface UpdateReasons {
+interface UpdateReasons {
   /** Its work's commands running, by executor pid ({@link commandsIn}). */
   readonly commands: readonly number[];
   /** Why its grant cannot be compared with this build's policy ({@link unknownGrant}); null when it can. */
@@ -3488,7 +3488,7 @@ const containerSocketDirs = (): string[] => [
  * or into it. `dirs` are runtime dirs, denied whole; `sockets` are the
  * endpoints, which may sit in a dir that holds other things.
  */
-export const containerSockets = async (): Promise<{
+const containerSockets = async (): Promise<{
   dirs: string[];
   sockets: string[];
 }> => {
@@ -4017,7 +4017,7 @@ const GUARDED_DEPTH = Math.max(
  * line per finding (`cawco place-guard: …`) and exits 3 when it moved
  * anything; any other failure refuses the command.
  */
-export const placeGuard = (): string => String.raw`use strict;
+const placeGuard = (): string => String.raw`use strict;
 use warnings;
 use Cwd ();
 use Digest::SHA ();
@@ -6438,7 +6438,7 @@ export const leaveRetiringKeepers = async (): Promise<void> => {
  * instance, its judge and their memory for as long as the workspace lasts:
  * 55 of 76 on obelisk had no live work item (2026-10-15).
  */
-export const QUIET_CLOSE_MS = 10 * 60_000;
+const QUIET_CLOSE_MS = 10 * 60_000;
 
 /** How often the boundaries are looked at for quiet ones. Ours: a minute against {@link QUIET_CLOSE_MS}. */
 const QUIET_SWEEP_MS = 60_000;
@@ -7551,7 +7551,7 @@ export const executorUnsandboxed = async (
  * bunfig and pnpm's config go only into a config home of the scratch dir's
  * own, and yarn's link only into a data home of its own.
  */
-export const makeDirs = async (id: string): Promise<void> => {
+const makeDirs = async (id: string): Promise<void> => {
   const tooLong = scratchSocketProblem(id);
   if (tooLong) {
     console.warn(`[workspace] ${id}: ${tooLong}`);

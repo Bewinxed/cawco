@@ -91,7 +91,7 @@ export interface Link {
 }
 
 /** How long a lost link stands before the canvas refuses the pen: the brief's 5 s. */
-export const LOST_REFUSES_MS = 5000;
+const LOST_REFUSES_MS = 5000;
 
 export interface Watchers {
   /** The ink, its moved groups or its pins changed, here or elsewhere; or the doc was replaced. */

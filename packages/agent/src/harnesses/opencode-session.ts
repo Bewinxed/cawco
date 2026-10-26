@@ -118,7 +118,7 @@ import {
 } from "./opencode-transcript";
 
 /** Recovery cancels the actual HTTP operation, never races an abandoned promise. */
-export const RECOVERY_TIMEOUT_MS = 10_000;
+const RECOVERY_TIMEOUT_MS = 10_000;
 
 /**
  * One OpenCode read given {@link RECOVERY_TIMEOUT_MS} to answer: `read` gets
@@ -143,15 +143,9 @@ export const askOpencode = <T>(
  * legitimately take one or two — 3 minutes sits between "slow" and "stuck".
  * Fires at most once per turn; any server event re-arms it.
  */
-export const STALLED_TURN_MS = 3 * 60_000;
+const STALLED_TURN_MS = 3 * 60_000;
 
-export const EFFORT_LEVELS: EffortLevel[] = [
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-];
+const EFFORT_LEVELS: EffortLevel[] = ["low", "medium", "high", "xhigh", "max"];
 
 const BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 let lastIdMs = 0;
@@ -165,7 +159,7 @@ let idCounter = 0;
  * names the inbox item and the stored user message by it (observed:
  * `session.inbox.enqueued.inboxID` and the message's `id` are the id sent).
  */
-export function messageId(): string {
+function messageId(): string {
   const now = Date.now();
   if (now !== lastIdMs) {
     lastIdMs = now;
@@ -189,7 +183,7 @@ export function messageId(): string {
  * Full Send is bypass here: bypass answers every tool ask OpenCode raises
  * (what Full Send adds, CawCo's admin writes, the hub approves).
  */
-export function autoAllows(
+function autoAllows(
   permissionMode: string | undefined,
   kind: "question" | "tool"
 ): boolean {
@@ -387,7 +381,7 @@ const memoryEntryKey = (kind: "role" | "project", path: string): string =>
  * `OPENCODE_MEMORY`), and a project's `AGENTS.md` OpenCode reads itself, so
  * neither is an entry; another harness's instruction files are none of its.
  */
-export const instructionEntries = async (
+const instructionEntries = async (
   directory: string,
   instructions: readonly SessionInstruction[]
 ): Promise<Record<string, string>> => {

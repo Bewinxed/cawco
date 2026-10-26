@@ -142,7 +142,7 @@ const holdStore = {
 };
 
 /** A word to the dashboard that hosts the canvas (the rail's Dock, Undock, Done and Remove post their own). */
-export const toHost = (what: "dock" | "done" | "pictured") =>
+const toHost = (what: "dock" | "done" | "pictured") =>
   postToHost({ type: `cawco:${what}` });
 
 // What of the canvas's edges the host's chrome takes (`inset`) the overlay

@@ -32,7 +32,7 @@ const INLINE_FLAG = `${MCP_CONFIG_FLAG}=`;
 const FILE_SAFE_ID = /^[A-Za-z0-9-]+$/u;
 
 /** Where Claude sessions' MCP configs are kept: owner-only, hidden from every workspace. */
-export const claudeMcpConfigDir = (): string =>
+const claudeMcpConfigDir = (): string =>
   join(sessionIdentityDir(), "claude-mcp");
 
 /** The instance a config file was written for: its name is `<instanceId>.<launch>.json`. */

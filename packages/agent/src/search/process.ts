@@ -67,7 +67,7 @@ const HOST = standalone
     ];
 
 /** Why a question of the index got no answer: past its limit, let go, or its process gone. */
-export class SearchStopped extends Error {
+class SearchStopped extends Error {
   constructor(message: string) {
     super(message);
     this.name = "SearchStopped";

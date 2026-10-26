@@ -19,7 +19,7 @@ import { fleetMcpSetFile } from "@cawco/core/paths";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 
 /** One project's server, placed at one of its folders on this machine. */
-export interface PlacedFleetMcp {
+interface PlacedFleetMcp {
   config: FleetMcpConfig;
   cwd: string;
   name: string;

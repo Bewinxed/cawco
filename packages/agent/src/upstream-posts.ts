@@ -49,7 +49,7 @@ const ACCOUNT_MS = 15_000;
  * forge CLI alone signs in to, this machine's own git sign-in there, which
  * only its credential helper or ssh knows.
  */
-export const hostAccount = async (repo: string): Promise<string> => {
+const hostAccount = async (repo: string): Promise<string> => {
   const at = repo.indexOf("/");
   const found = await forgeOn(repo.slice(0, at));
   if (typeof found === "string") {

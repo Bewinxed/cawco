@@ -27,7 +27,7 @@ export const HUB_AWAY_BOUND_MS = 90_000;
 const AWAY = new Set([502, 503, 504]);
 
 /** Whether `status` says the hub is away rather than that it answered. */
-export const isHubAway = (status: number): boolean => AWAY.has(status);
+const isHubAway = (status: number): boolean => AWAY.has(status);
 
 /**
  * `tryOnce`'s first response that is not the hub away ({@link isHubAway}),

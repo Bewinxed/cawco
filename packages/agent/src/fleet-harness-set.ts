@@ -42,12 +42,12 @@ export interface SetHook {
 }
 
 /** One project's hook, placed at one of its folders on this machine. */
-export interface PlacedSetHook extends SetHook {
+interface PlacedSetHook extends SetHook {
   cwd: string;
 }
 
 /** One project's skill as the sync placed it in one of its folders here: `<cwd>/.claude/skills/<name>`. */
-export interface PlacedSetSkill {
+interface PlacedSetSkill {
   cwd: string;
   /** The skill's directory, its `SKILL.md` inside. */
   dir: string;

@@ -77,7 +77,7 @@ export const heldSessions = (procs: readonly SessiondProcInfo[]): number =>
  * ({@link keeperEnded}), and a reading of what every keeper holds gives each
  * {@link KEEPER_WELCOME_MS}.
  */
-export const DIAL_TIMEOUT_MS = 2000;
+const DIAL_TIMEOUT_MS = 2000;
 
 /**
  * How long a keeper's welcome is waited on before the keeper is read as not
@@ -114,7 +114,7 @@ const keeperEnded = (what: string): Gone =>
  * second on this fleet; 10 s is generous enough that a loaded machine still
  * wins, short enough that a broken install fails inside one spawn.
  */
-export const ADHOC_START_TIMEOUT_MS = 10_000;
+const ADHOC_START_TIMEOUT_MS = 10_000;
 
 /**
  * Is this process owned by a service manager?
@@ -148,7 +148,7 @@ export const serviceManaged = (
  * caller must not paper over it with an ad-hoc spawn, and the message is the
  * whole fix.
  */
-export class SessiondUnavailableError extends Error {
+class SessiondUnavailableError extends Error {
   readonly endpoint: string;
 
   constructor(endpoint: string) {
@@ -168,7 +168,7 @@ export class SessiondUnavailableError extends Error {
  * answered true when a connect completes, answered false when it is refused
  * (nothing listens), unanswered when it did not complete within `timeoutMs`.
  */
-export const probeEndpoint = (
+const probeEndpoint = (
   endpoint: string,
   timeoutMs = DIAL_TIMEOUT_MS
 ): Promise<Bounded<boolean>> =>
@@ -1067,7 +1067,7 @@ export class SessiondClient {
 }
 
 /** sessiond refused a command; `reason` is the keeper's own words. */
-export class SessiondRefusal extends Error {
+class SessiondRefusal extends Error {
   readonly reason: string;
   constructor(verb: string, reason: string) {
     super(

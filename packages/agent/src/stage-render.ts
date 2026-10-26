@@ -36,10 +36,10 @@ const SETTLE_MS = 600;
 const VIEWPORT = { width: 1440, height: 900 };
 
 /** Why a render can't run on this machine, in the words a tool answers. */
-export class RenderRefusal extends Error {}
+class RenderRefusal extends Error {}
 
 /** One frame a render is asked for: its story and state, for its picture. */
-export interface RenderState {
+interface RenderState {
   interaction?: Interaction;
   scheme?: "light" | "dark";
   /** Its story's name, or `file:Story` where two of the canvas's states files name one story alike. */

@@ -127,7 +127,7 @@ const SKILLS_DIR = claudeSkillsDir();
  * https://code.claude.com/docs/en/plugins-reference) both key on it, so two
  * plugins of one name from two marketplaces need two marketplaces here too.
  */
-export const VENDOR_ROOT = userLayerPath(VENDOR_MARKETPLACES_DIR);
+const VENDOR_ROOT = userLayerPath(VENDOR_MARKETPLACES_DIR);
 
 /** What the vendored copy of fleet marketplace `marketplace` is registered as. */
 const vendorName = (marketplace: string): string => `cawco-${marketplace}`;
@@ -624,7 +624,7 @@ const askVersion = async (path: string): Promise<string | undefined> => {
  * target are one install — but reported under the path that was FOUND, because
  * that is the one an operator has to move out of the way.
  */
-export const claudeInstalls = async (used?: string): Promise<CliInstall[]> => {
+const claudeInstalls = async (used?: string): Promise<CliInstall[]> => {
   const candidates = [
     ...toolPath()
       .split(delimiter)
@@ -674,9 +674,7 @@ export const claudeInstalls = async (used?: string): Promise<CliInstall[]> => {
  */
 let toolchainCache: FleetToolchain | undefined;
 
-export const machineToolchain = async (
-  fresh: boolean
-): Promise<FleetToolchain> => {
+const machineToolchain = async (fresh: boolean): Promise<FleetToolchain> => {
   if (!fresh && toolchainCache) {
     return toolchainCache;
   }
@@ -757,7 +755,7 @@ const isLinked = async (name: string): Promise<boolean> =>
  * "This is the `name` from `marketplace.json`, not the source you passed to
  * `add`").
  */
-export interface KnownMarketplace {
+interface KnownMarketplace {
   installLocation?: string;
   source?: { source?: string; repo?: string; url?: string; path?: string };
 }
@@ -2069,7 +2067,7 @@ const pruneEmptyDirs = async (): Promise<void> => {
  * A fleet that keeps no memory arrives here as an empty `desired`: every
  * managed document is then given back, as the main file is.
  */
-export function memorySetPlan(
+function memorySetPlan(
   desired: readonly { path: string; hash: string; force?: boolean }[],
   onDisk: Readonly<Record<string, string | null>>,
   managed: Readonly<Record<string, string>>
@@ -2375,7 +2373,7 @@ interface HookMatcher {
  * is still found and taken out — a set keyed off today's constants would leave
  * the old one behind forever.
  */
-export function withoutHooks(
+function withoutHooks(
   entries: HookMatcher[],
   commands: string[]
 ): HookMatcher[] {
@@ -3479,7 +3477,7 @@ interface McpScope {
  * local > project > user, so a name defined twice is reported twice — the
  * nearer one plainly, the further one saying which scope took it.
  */
-export function mergeMcp(
+function mergeMcp(
   scopes: McpScope[],
   managed: readonly string[]
 ): DiscoveredMcp[] {
@@ -3515,7 +3513,7 @@ const YAML_BLOCK_SCALAR = /^[|>][-+]?$/u;
 /** A line that continues a YAML block scalar: indented, or blank. */
 const YAML_CONTINUATION = /^\s/u;
 
-export function skillDescription(source: string): string | undefined {
+function skillDescription(source: string): string | undefined {
   if (!source.startsWith("---")) {
     return undefined;
   }
@@ -3542,7 +3540,7 @@ export function skillDescription(source: string): string | undefined {
 }
 
 /** Where an installed plugin's skills live, by the name a session calls them. */
-export function pluginSkillRoots(
+function pluginSkillRoots(
   installed: InstalledPlugins
 ): { plugin: string; root: string }[] {
   const roots: { plugin: string; root: string }[] = [];
@@ -3573,7 +3571,7 @@ export function pluginSkillRoots(
  * its skills under categories (`skills/engineering/<name>/SKILL.md`), which is
  * a layout detail — `/` still lists the skill by its own directory's name.
  */
-export async function skillsIn(
+async function skillsIn(
   root: string,
   scope: DiscoveredSkill["scope"],
   prefix = "",

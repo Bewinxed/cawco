@@ -77,7 +77,7 @@ import { listenOrEnd } from "@cawco/core/listeners";
 import { SOCAT_BACKLOG } from "@cawco/core/socat";
 
 /** The relay's port inside a Linux workspace's sandbox, beside srt's 3128 (HTTP) and 1080 (SOCKS) there. */
-export const RELAY_PORT = 3129;
+const RELAY_PORT = 3129;
 
 /** The relay's socket's name in srt's temp dir. */
 export const RELAY_SOCKET_NAME = "cawco-proxy-relay.sock";

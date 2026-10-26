@@ -95,7 +95,7 @@ import { removeTree } from "./remove-tree";
 export type LayerForm = "overlay" | "copy" | "clone";
 
 /** One overlay of a Linux view: a filesystem at or under F, its upper and work dirs. */
-export interface LayerMount {
+interface LayerMount {
   /** Where it is mounted in the view: F, or a mount point under F. */
   at: string;
   upper: string;
@@ -148,7 +148,7 @@ export const readLayer = (id: string): Promise<Layer | undefined> =>
   readRecord<Layer>(layerFile(id));
 
 /** Writes workspace `id`'s layer record. */
-export const writeLayer = (id: string, layer: Layer): Promise<void> =>
+const writeLayer = (id: string, layer: Layer): Promise<void> =>
   writeStateFile(layerFile(id), `${JSON.stringify(layer, null, 2)}\n`);
 
 /**
@@ -183,10 +183,6 @@ export const layerOf = async (
     started: 0,
   };
 };
-
-/** Whether `layer` is a view of the person's own folder at its real path, which identifies no workspace by path. */
-export const isOverlay = (layer: Layer | undefined): boolean =>
-  layer?.form === "overlay";
 
 /** Workspace `id`'s layer record, read synchronously; none when it has none whole. */
 const layerSync = (id: string): Layer | undefined => {
@@ -980,7 +976,7 @@ const swapPaths = (a: string, b: string): void => {
 };
 
 /** The one dependency tree that is linked, not cloned, as a copy starts. */
-export const LINKED_MODULES = "node_modules";
+const LINKED_MODULES = "node_modules";
 
 /** `cp -c -R -p` of `sources` into `into`: an APFS clone of each, modes and times kept. */
 const cloneInto = async (
@@ -1512,7 +1508,7 @@ const changedInFolder = async (layer: Layer, rel: string): Promise<boolean> => {
 };
 
 /** Each path of `changes` that F changed too since the start, with both versions. */
-export const conflictsOf = async (
+const conflictsOf = async (
   layer: Layer,
   changes: readonly ChangedPath[]
 ): Promise<WorkspaceConflict[]> => {

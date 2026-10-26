@@ -677,6 +677,3 @@ export const restoreShields = async (): Promise<void> => {
   );
   watch();
 };
-
-/** Whether `key` is taken over on this machine now. */
-export const shielded = (key: BrowserKey): boolean => held.has(key);

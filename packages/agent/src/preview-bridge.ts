@@ -150,7 +150,7 @@ Bun.listen({
 `;
 
 /** The relay's own command on `socket` to `port`, and its environment: CawCo's bun (a binary install's runs as bun with `BUN_BE_BUN=1`). */
-export const bridgeRelay = (
+const bridgeRelay = (
   socket: string,
   port: number
 ): { command: string[]; env: Record<string, string> } => ({

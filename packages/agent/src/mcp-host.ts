@@ -771,7 +771,7 @@ const messagesOf = (
 };
 
 /** The machine's shared servers, by name. */
-export class McpHost {
+class McpHost {
   readonly #servers = new Map<string, Hosted>();
 
   /**

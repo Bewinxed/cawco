@@ -40,7 +40,7 @@ export const recordJoinedHub = async (
 };
 
 /** The id of the hub this machine proves itself to. */
-export const provenHubId = async (): Promise<string | undefined> =>
+const provenHubId = async (): Promise<string | undefined> =>
   connected ?? (await readConfig())?.hubId;
 
 /** The headers proving this machine for one request to its hub; none before it was admitted. */

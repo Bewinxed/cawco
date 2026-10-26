@@ -175,7 +175,7 @@ export const applyFleetDenials = (
 };
 
 /** A spawn refused because the fleet's denials are not known here, in words. */
-export class FleetDenialsRefused extends Error {
+class FleetDenialsRefused extends Error {
   constructor(reason: string) {
     super(`Not started: ${reason}.`);
     this.name = "FleetDenialsRefused";
@@ -193,7 +193,7 @@ export class FleetDenialsRefused extends Error {
  * the hub marks a machine online only once it has written the list, so
  * none here is a fault, said in words that say which.
  */
-export const resolvedFleetDenials = async (): Promise<FleetDenials> => {
+const resolvedFleetDenials = async (): Promise<FleetDenials> => {
   await writing;
   const read = await readFleetDenials();
   switch (read.kind) {
@@ -215,7 +215,7 @@ export const resolvedFleetDenials = async (): Promise<FleetDenials> => {
 };
 
 /** What the machine's own `claude` is denied: the baseline, and the own-list set. */
-export const machineDenyList = ({ deniedTools }: FleetDenials): string[] => [
+const machineDenyList = ({ deniedTools }: FleetDenials): string[] => [
   ...new Set([...deniedTools, ...OWN_LIST_DENIED]),
 ];
 
@@ -234,7 +234,7 @@ export const sessionFleetDenials = async (): Promise<string[]> =>
  * out exactly as it went in; only a `deny` that is not a list at all is
  * replaced, because nothing else can be appended to.
  */
-export function withDeniedTools(
+function withDeniedTools(
   settings: unknown,
   deny: readonly string[],
   dropped: readonly string[] = []

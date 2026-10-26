@@ -30,7 +30,7 @@ import {
 } from "@cawco/core/state-file";
 
 /** How many of a session's sends are kept as taken, the latest. */
-export const TAKEN_KEPT = 128;
+const TAKEN_KEPT = 128;
 
 const fileOf = (instanceId: string): string =>
   join(sessionTakenDir(), instanceId);

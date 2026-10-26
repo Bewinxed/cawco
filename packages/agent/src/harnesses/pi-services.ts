@@ -187,7 +187,7 @@ const compactionEntries = (
   },
 ];
 
-export const PI_CAPABILITIES: HarnessCapabilities = {
+const PI_CAPABILITIES: HarnessCapabilities = {
   interrupt: true,
   permissionModes: [],
   setModel: true,
@@ -256,7 +256,7 @@ export const contentOf = (content: unknown): string | NeutralContentBlock[] => {
 };
 
 // biome-ignore lint/suspicious/noExplicitAny: pi's model configuration varies across providers; only id is read
-export const modelIdOf = (model: Model<any>): string =>
+const modelIdOf = (model: Model<any>): string =>
   String((model as { id?: unknown }).id ?? "");
 
 /**
@@ -305,7 +305,7 @@ export const resolvePiModel = async (
  * its accounts ({@link HarnessReport.modelNames}): `resolveCliModel`'s answer
  * for each.
  */
-export const modelNames = async (): Promise<Record<string, string>> => {
+const modelNames = async (): Promise<Record<string, string>> => {
   const { modelRuntime } = await PiProfile.services();
   const available = await modelRuntime.getAvailable();
   const names: Record<string, string> = {};
@@ -336,7 +336,7 @@ export const modelNames = async (): Promise<Record<string, string>> => {
  * it has none: pi then picks among the machine's own providers, which needs
  * no account.
  */
-export const piDefaultModel = async (cwd: string): Promise<string | null> => {
+const piDefaultModel = async (cwd: string): Promise<string | null> => {
   const { modelRuntime } = await PiProfile.services();
   await modelRuntime.getAvailable();
   const settings = SettingsManager.create(cwd, getAgentDir());

@@ -404,9 +404,7 @@ const extensionOf = (path: string): string | undefined => {
  * the sizes of file objects present in the Git history"
  * (git-lfs-migrate(1)): these files are in none.
  */
-export const lfsRowsOf = (
-  large: ReadonlyMap<string, number>
-): PlaceLfsRow[] => {
+const lfsRowsOf = (large: ReadonlyMap<string, number>): PlaceLfsRow[] => {
   const rows = new Map<string, PlaceLfsRow>();
   for (const [path, bytes] of large) {
     const ext = extensionOf(path);

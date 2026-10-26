@@ -41,9 +41,9 @@ export const gitIn = async (
 };
 
 /** Where CawCo's own lines in a clone's `info/exclude` begin and end: it rewrites what lies between. */
-export const BLOCK_START =
+const BLOCK_START =
   "# cawco: the stand-ins it made for the workspace's denied paths";
-export const BLOCK_END = "# cawco: end of stand-ins";
+const BLOCK_END = "# cawco: end of stand-ins";
 
 const LEADING_SLASH = /^\//u;
 
@@ -95,28 +95,6 @@ export const readExclude = async (
 /** The stand-ins a clone's `info/exclude` lists in CawCo's block, as last written, relative to the clone. */
 export const excludedStandIns = async (clone: string): Promise<string[]> =>
   (await readExclude(await excludeFileOf(clone))).listed.filter(Boolean);
-
-/** A line of `info/exclude` that is a pattern, not one path: a glob, a negation or an escape. */
-const PATTERN = /[*?[\\!]/u;
-const TRAILING_SLASHES = /\/+$/u;
-
-/**
- * Every path a clone's `info/exclude` names by an anchored line, relative to
- * the clone: what CawCo wrote into it, each listed there as it was put there
- * (its stand-ins in CawCo's block, a project's placed skills and the hook
- * settings it wrote by {@link excludeFromCheckout}). A line that is a pattern
- * names no one path and is not among them.
- */
-export const excludedPaths = async (clone: string): Promise<string[]> => {
-  const { listed, rest } = await readExclude(await excludeFileOf(clone));
-  const anchored = rest
-    .map((line) => line.trimEnd())
-    .filter((line) => line.startsWith("/") && !PATTERN.test(line))
-    .map((line) => line.replace(LEADING_SLASH, ""));
-  return [...listed, ...anchored]
-    .map((path) => path.replace(TRAILING_SLASHES, ""))
-    .filter(Boolean);
-};
 
 /**
  * CawCo's block in a clone's `info/exclude`, written whole: one anchored line

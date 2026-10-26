@@ -115,7 +115,7 @@ const NS_PID = /^NSpid:\s*(.+)$/mu;
 const BLANKS = /\s+/u;
 
 /** Who a keeper child's leaks are told to, and where its processes run. */
-export interface LeakTarget {
+interface LeakTarget {
   instanceIds: string[];
   /** The workspace whose boundary the child is, when it is one. */
   workspace?: string;

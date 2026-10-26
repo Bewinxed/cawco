@@ -70,7 +70,7 @@ import {
 } from "./state";
 
 /** How long a browser with no agent connection and no viewer stays up. */
-export const BROWSER_IDLE_MS = 30 * 60_000;
+const BROWSER_IDLE_MS = 30 * 60_000;
 
 /** How often the runtime is looked for again while none answers and no browser waits on it. */
 const RUNTIME_RECHECK_MS = 10 * 60_000;
@@ -95,7 +95,7 @@ export const browserRuntime = async (
 const local = new LocalHost();
 
 /** The host a browser being made for the first time is made on: the container host wherever a runtime answers. */
-export const hostFor = async (): Promise<BrowserHost> => {
+const hostFor = async (): Promise<BrowserHost> => {
   const found = await browserRuntime();
   return "missing" in found ? local : new ContainerHost(found);
 };

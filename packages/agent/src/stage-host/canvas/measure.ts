@@ -45,7 +45,7 @@ const nameOfFile = (file: string): string =>
   file.replace(DIR, "").replace(EXTENSION, "");
 
 /** An element as a selector a person reads: its tag, id and first two classes the project wrote. */
-export function describe(el: Element | null): string {
+function describe(el: Element | null): string {
   if (!el) {
     return "?";
   }
@@ -56,7 +56,7 @@ export function describe(el: Element | null): string {
 }
 
 /** Where an element is written, `file:line:column`, when the dev build marks it. */
-export function sourceOf(el: Element, root: string): string | null {
+function sourceOf(el: Element, root: string): string | null {
   const meta = (el as DevElement).__svelte_meta?.loc;
   if (meta) {
     return `${fromRoot(meta.file, root)}:${meta.line}:${meta.column + 1}`;

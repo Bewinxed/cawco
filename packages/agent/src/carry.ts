@@ -126,7 +126,7 @@ export const copyStrays = async (
  * What `read` answers, or undefined when the path it reads is gone (ENOENT):
  * a path listed a moment ago that no longer exists. Any other error throws.
  */
-export const unlessGone = <T>(read: Promise<T>): Promise<T | undefined> =>
+const unlessGone = <T>(read: Promise<T>): Promise<T | undefined> =>
   read.catch((error: NodeJS.ErrnoException): undefined => {
     if (error.code === "ENOENT") {
       return;
@@ -135,7 +135,7 @@ export const unlessGone = <T>(read: Promise<T>): Promise<T | undefined> =>
   });
 
 /** The rev-list arguments naming the commits a checkout alone has. */
-export const LOST_COMMITS: Record<CarryCheckout, string> = {
+const LOST_COMMITS: Record<CarryCheckout, string> = {
   clone: "HEAD --branches --not --remotes",
   worktree: "HEAD --not --remotes --branches",
 };

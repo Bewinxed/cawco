@@ -13,7 +13,7 @@ import { embeddedFile, standalone } from "@cawco/core/runtime";
 import type Docker from "dockerode";
 
 /** The image's inputs, by their name in the build context. */
-export const BROWSER_IMAGE_FILES = [
+const BROWSER_IMAGE_FILES = [
   "Dockerfile",
   "chromium.conf",
   "policies.json",

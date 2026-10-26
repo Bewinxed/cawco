@@ -146,9 +146,7 @@ export const placedConfig = (
 type ProjectItems = Record<string, unknown>;
 
 /** The project rows the items `items` carry. */
-export const projectRowsOf = (
-  items: ProjectItems
-): Record<string, FleetProjectRows> =>
+const projectRowsOf = (items: ProjectItems): Record<string, FleetProjectRows> =>
   fleetConfigOf(new Map(Object.entries(items))).projects;
 
 /** Each write of the rows, one after another, so the last delta's is the one on disk. */

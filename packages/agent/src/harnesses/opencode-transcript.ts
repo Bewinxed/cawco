@@ -39,13 +39,13 @@ type ToolUseBlock = Extract<NeutralContentBlock, { type: "tool_use" }>;
 type ToolResultBlock = Extract<NeutralContentBlock, { type: "tool_result" }>;
 
 /** A tool block of an assistant message, as 2.0 keeps it. */
-export type ToolBlock = Extract<
+type ToolBlock = Extract<
   SessionMessageAssistant["content"][number],
   { type: "tool" }
 >;
 
 /** OpenCode's own name for the tool a question rides on. */
-export const QUESTION_TOOL = "question";
+const QUESTION_TOOL = "question";
 
 /**
  * What a tool call is written down as. OpenCode calls the question tool
@@ -81,7 +81,7 @@ type ContentBlock =
  * its words joined, and each file a `data:` URI carries as a picture after
  * them. A file named by any other URI is said by its URI.
  */
-export const toolContentOf = (
+const toolContentOf = (
   content: readonly ContentBlock[] | undefined
 ): string | NeutralContentBlock[] => {
   const blocks = content ?? [];
@@ -161,7 +161,7 @@ const mcpContentOf = (content: unknown): string | NeutralContentBlock[] => {
 };
 
 /** OpenCode's question shape, which says `multiple` where the fleet says `multiSelect`. */
-export const questionsOf = (raw: unknown): UserQuestion[] | null => {
+const questionsOf = (raw: unknown): UserQuestion[] | null => {
   if (!Array.isArray(raw)) {
     return null;
   }
@@ -198,7 +198,7 @@ export const questionsOf = (raw: unknown): UserQuestion[] | null => {
  * so a reloaded transcript draws the answered card too. `null` for any call
  * that is not a question.
  */
-export const questionResultOf = (
+const questionResultOf = (
   tool: string,
   input: unknown,
   metadata: unknown

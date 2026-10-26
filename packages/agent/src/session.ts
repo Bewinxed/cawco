@@ -634,7 +634,7 @@ const PULSE_THROTTLE_MS = 1000;
  * and 136 MCP server sets were alive when the machine ran out of memory
  * (2026-10-04).
  */
-export const IDLE_SLEEP_MS = 30 * 60_000;
+const IDLE_SLEEP_MS = 30 * 60_000;
 
 /** How often the sessions at rest are looked at. Ours: a minute is as fine as half an hour is read. */
 const IDLE_SWEEP_MS = 60_000;
@@ -867,7 +867,7 @@ export const resumableSessions = async (
  * No claimants agree on nothing, which is the honest answer for a daemon whose
  * harnesses keep no copy: it is then sent everything.
  */
-export const agreedHashes = (
+const agreedHashes = (
   claims: Record<string, string>[]
 ): Record<string, string> => {
   const [first, ...rest] = claims;

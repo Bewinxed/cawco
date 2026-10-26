@@ -131,7 +131,7 @@ const endpointsIn = (clone: string, source: string[]): string[] => {
  * `treeishes` (a commit a checkout or rebase moves to), and in its working
  * tree, which git-lfs reads first.
  */
-export const lfsconfigEndpoints = async (
+const lfsconfigEndpoints = async (
   clone: string,
   treeishes: readonly string[]
 ): Promise<string[]> => {

@@ -38,7 +38,7 @@ export const CLAUDE_MCP_ENV = { MCP_TIMEOUT: String(MCP_CONNECT_MS) };
  * A server it has not connected by then it marks `failed` with its own words,
  * so that verdict, not a clock of ours, is what a slow server is judged by.
  */
-export const claudeMcpConnectMs = (env: Record<string, string | undefined>) => {
+const claudeMcpConnectMs = (env: Record<string, string | undefined>) => {
   const set = Number(env.MCP_TIMEOUT);
   return set > 0 ? Math.min(set, 2_147_483_647) : 30_000;
 };

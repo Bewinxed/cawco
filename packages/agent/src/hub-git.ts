@@ -278,7 +278,7 @@ const TRAILING_SLASHES = /\/+$/u;
  * `.lfsconfig` never sends the host's credential, or the objects, anywhere
  * else.
  */
-export const lfsConfigFor = (url: string): [string, string][] => {
+const lfsConfigFor = (url: string): [string, string][] => {
   let web = false;
   if (SCHEME_URL.test(url)) {
     try {
@@ -846,7 +846,7 @@ export const hostGitEnv = async (): Promise<Record<string, string>> => {
  * or a fetch's large files go nowhere else, and the host's credential goes
  * to no other server.
  */
-export const hostOriginGitEnv = async (
+const hostOriginGitEnv = async (
   origin: string,
   declared?: DeclaredLfs
 ): Promise<Record<string, string>> => {

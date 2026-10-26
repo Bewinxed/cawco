@@ -45,7 +45,7 @@ const CONFIG_MARK_LENGTH = 16;
  * listing the new config's tools. The gate itself runs whatever config the
  * fleet names now (mcp-host.ts `fetchGate`).
  */
-export const gatedEntry = (
+const gatedEntry = (
   gate: McpGate,
   name: string,
   config: FleetMcpConfig

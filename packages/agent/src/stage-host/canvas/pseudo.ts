@@ -137,7 +137,7 @@ const extractPseudoStates = (
 };
 
 /** A selector list split at its top-level commas (Storybook's `splitSelectors`). */
-export function splitSelectors(selectors: string): string[] {
+function splitSelectors(selectors: string): string[] {
   if (selectors.startsWith("@")) {
     return [selectors];
   }

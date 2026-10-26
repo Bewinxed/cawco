@@ -61,7 +61,7 @@ export const EMBED_ARTIFACT = "data-cawco-artifact";
 /** The layer of stand-ins over a frame: the overlay's own, never the page's (ink.ts `OWN`, page.ts `OVERLAY_OWN`). */
 export const STAND_INS = "data-cawco-stand-ins";
 
-export interface Box {
+interface Box {
   h: number;
   w: number;
   x: number;
@@ -84,7 +84,7 @@ export interface Remote {
 }
 
 /** An element at a point, or an anchor found: with what holds it, innermost first, the embed's page as a whole left out. */
-export interface RemoteTarget extends Remote {
+interface RemoteTarget extends Remote {
   by?: AnchorFound<Element>["by"];
   chain: Remote[];
 }
@@ -387,13 +387,13 @@ export interface EmbedsDeps {
 }
 
 /** Where an anchor into an embed stands: on its stand-in, found by what; or not yet answered; or gone from the embed. */
-export type Standing =
+type Standing =
   | { by: AnchorFound<Element>["by"]; el: Element; state: "found" }
   | { state: "waiting" }
   | { state: "gone" };
 
 /** A stand-in, as page.ts reads it in place of the element's own. */
-export interface StandIn {
+interface StandIn {
   /** What holds it, innermost first, each a stand-in. */
   chain: Element[];
   frame: FrameElement;

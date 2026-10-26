@@ -16,7 +16,7 @@ import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 
 /** The checkout this daemon runs out of — up from `packages/agent/src`. */
-export const REPO_ROOT = resolve(
+const REPO_ROOT = resolve(
   Bun.fileURLToPath(new URL("../../..", import.meta.url))
 );
 

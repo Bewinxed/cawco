@@ -10,7 +10,7 @@
  * only what the sidecar names is ever taken away.
  */
 
-import { rm, stat } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import type {
   FleetItemState,
@@ -69,14 +69,6 @@ export const readSidecar = async (path: string): Promise<FleetSidecar> => {
     ...(stored?.planAgentDisabled ? { planAgentDisabled: true as const } : {}),
     mcp: stored?.mcp ?? [],
   };
-};
-
-const dirExists = async (path: string): Promise<boolean> => {
-  try {
-    return (await stat(path)).isDirectory();
-  } catch {
-    return false;
-  }
 };
 
 /** A path a skill's file may take under its own directory. */
@@ -191,7 +183,7 @@ export const syncSkillFiles = async (
 };
 
 /** What is really at the memory file; null is a machine that has none. */
-export const memoryFileHash = async (path: string): Promise<string | null> => {
+const memoryFileHash = async (path: string): Promise<string | null> => {
   const file = Bun.file(path);
   return (await file.exists()) ? hashText(await file.text()) : null;
 };
@@ -246,14 +238,3 @@ export const syncMemory = async (
     return managed;
   }
 };
-
-/** A fleet subagent's file, written whole into the harness's agents directory. */
-export const writeAgent = async (
-  dir: string,
-  name: string,
-  content: string
-): Promise<void> => {
-  await writeStateFile(join(dir, `${name}.md`), content);
-};
-
-export const dirExistsFor = dirExists;

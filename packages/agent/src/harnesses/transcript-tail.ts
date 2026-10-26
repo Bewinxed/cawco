@@ -17,7 +17,7 @@ import { open, stat } from "node:fs/promises";
 import { LineSplitter } from "@cawco/core/lines";
 
 /** How often the file's stat is looked at. Ours: a hook's failure is acted on at rest, so a second late changes nothing. */
-export const TAIL_LOOK_MS = 1000;
+const TAIL_LOOK_MS = 1000;
 
 /**
  * Follows `file` from its end: each whole line appended from here on goes to

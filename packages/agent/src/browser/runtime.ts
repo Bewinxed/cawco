@@ -37,7 +37,7 @@ export interface Runtime {
 }
 
 /** What one endpoint came to. */
-export type EndpointAnswer =
+type EndpointAnswer =
   { runtime: Runtime } | { refused: string } | { absent: true };
 
 /** How long one endpoint has to answer `/_ping`. */
@@ -159,7 +159,7 @@ const MODEM_ENV = [
  * reaches it. The one way a Docker client is made (`bun run check`,
  * scripts/docker-client-check.ts).
  */
-export const dockerAt = (socketPath: string, timeout?: number): Docker => {
+const dockerAt = (socketPath: string, timeout?: number): Docker => {
   const held = MODEM_ENV.map((name) => [name, process.env[name]] as const);
   for (const [name] of held) {
     Reflect.deleteProperty(process.env, name);
@@ -176,9 +176,7 @@ export const dockerAt = (socketPath: string, timeout?: number): Docker => {
 };
 
 /** Asks the runtime at `socketPath` who it is: `/_ping`, `/version`, `/info`. */
-export const probeEndpoint = async (
-  socketPath: string
-): Promise<EndpointAnswer> => {
+const probeEndpoint = async (socketPath: string): Promise<EndpointAnswer> => {
   const docker = dockerAt(socketPath, PING_MS);
   try {
     await docker.ping();

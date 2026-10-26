@@ -35,7 +35,7 @@ export type DenyPaths = "boundary" | "config";
  * in the clone: every clone-side deny path ({@link DenyPaths}) but those in
  * `.git`, which git tracks none of.
  */
-export const denyPaths = async (
+const denyPaths = async (
   workspace: WorkspaceRef,
   which: DenyPaths
 ): Promise<string[]> => {

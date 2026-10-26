@@ -279,7 +279,7 @@ const routeWords = (route: Route): string =>
  * said once and left to it. `tailnet` is the hub's tailnet HTTPS as its
  * register answer says it ({@link routeOf}); `follow` takes each later word.
  */
-export async function startHubLoopback(
+async function startHubLoopback(
   hubUrl: string,
   ports: HubPorts,
   hostsHub: boolean,

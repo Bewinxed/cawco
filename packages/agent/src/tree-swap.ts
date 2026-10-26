@@ -283,7 +283,7 @@ export const removeTree = async (path: string): Promise<void> => {
 };
 
 /** The tree the link at `path` points to; undefined for anything but a link. */
-export const linkedTree = async (path: string): Promise<string | undefined> =>
+const linkedTree = async (path: string): Promise<string | undefined> =>
   (await lstat(path).catch(() => undefined))?.isSymbolicLink()
     ? resolve(dirname(path), await readlink(path))
     : undefined;
@@ -298,7 +298,7 @@ const BYTECODE = /^([^.]+)\.[^.]+(?:\.opt-\d+)?\.pyc$/u;
  * running the fleet's own code, so as much CawCo's as the source it was
  * built from. A `.pyc` of no carried source, and any other file, is not.
  */
-export const carriedBytecode = async (
+const carriedBytecode = async (
   tree: string,
   carried: readonly string[]
 ): Promise<string[]> => {

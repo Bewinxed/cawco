@@ -192,7 +192,7 @@ svg { inline-size: 16px; block-size: 16px; flex: none; }
 `;
 
 /** Light-DOM chrome: frames, labels, section heads, edges and the docks, on classes no project writes. */
-export const PAGE_CSS = `
+const PAGE_CSS = `
 /* The room the chrome takes from the canvas (Chrome #reserve): at the floor (a move's timeline, a phone's dials),
    at the inline end (a desk's outline and dials), and the outline's own width; none until any of them stands. */
 html.cawco-canvas-page { color-scheme: light dark; --cawco-floor: 0px; --cawco-end: 0px; --cawco-outline: 0px; --cawco-timeline-room: 0px; }

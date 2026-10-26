@@ -103,7 +103,7 @@ const PILL_ROOM = 40;
 /** The room a pill needs before its line's start, px: a one- or two-figure pill and its ring, in a page's margin. Our call. */
 const PILL_ROOM_START = 24;
 /** Room round a mark's crop, px. Our call. */
-export const CROP_PAD = 24;
+const CROP_PAD = 24;
 /** How far a pin's crop reaches from the point it was made at, each way, px: a big element is cropped round the point. Our call. */
 const PIN_REACH = { x: 960, y: 640 } as const;
 /** How many pins of a stack stand behind its front one. */
@@ -132,7 +132,7 @@ export interface DraftTarget {
 }
 
 /** The id a parked draft's pill answers to (`data-pin-id`): a press on it opens its composer again. */
-export const DRAFT_PIN = "draft";
+const DRAFT_PIN = "draft";
 
 export interface PinsDeps {
   /** What a page's mark stands on, read from `el` as it is now. */

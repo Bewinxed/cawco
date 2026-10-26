@@ -296,7 +296,7 @@ const providerIdentity = (
 ): AccountIdentity => ({ email, organization, orgId: organization });
 
 /** A key as an identity: its last four characters, and a fingerprint of it. */
-export const keyIdentity = (key: string): AccountIdentity =>
+const keyIdentity = (key: string): AccountIdentity =>
   providerIdentity(
     `…${key.slice(-4)}`,
     `key:${createHash("sha256").update(key).digest("hex").slice(0, 16)}`
@@ -388,7 +388,7 @@ const githubIdentity = async (
  * The credential with who it is kept on it, read from the provider where its
  * token names nobody: Copilot's, from GitHub. Any other as it is.
  */
-export const withIdentity = async (
+const withIdentity = async (
   provider: string,
   credential: Credential
 ): Promise<Credential> =>
@@ -402,7 +402,7 @@ export const withIdentity = async (
     : credential;
 
 /** Who a credential is, as far as it says. */
-export const identityOf = (
+const identityOf = (
   provider: string,
   credential: Credential
 ): AccountIdentity | undefined => {
@@ -462,7 +462,7 @@ const planOf = async (held: Held): Promise<string | null> => {
 const LENDER = "cawcoLender";
 
 /** The machine that lent `credential`, when it is borrowed ({@link BORROWED_REFRESH}). */
-export const lenderOf = (credential: Credential): string | undefined => {
+const lenderOf = (credential: Credential): string | undefined => {
   if (credential.type !== "oauth" || credential.refresh !== BORROWED_REFRESH) {
     return undefined;
   }
@@ -1606,7 +1606,7 @@ export const opencodeProviderOf = (provider: string): string =>
  * refresher, and the agent puts each fresh access token on the server ahead
  * of its expiry. A refresh OpenCode tried with it would fail at the provider.
  */
-export const OPENCODE_MARKER = "cawco-account";
+const OPENCODE_MARKER = "cawco-account";
 
 /**
  * The OpenCode 2.0 sign-in method each sign-in OpenCode has its own provider

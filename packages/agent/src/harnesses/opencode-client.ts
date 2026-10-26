@@ -83,7 +83,7 @@ export const CAWCO_PLUGIN_ID = "cawco.context";
 export const SEND_NOW_METADATA = "cawcoSendNow";
 
 /** The `authorization` header a server launched on `password` takes. */
-export const basicAuth = (password: string): string =>
+const basicAuth = (password: string): string =>
   `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`;
 
 /** A client for one server; `fetch` lets the harness see a connection fail. */
@@ -174,7 +174,7 @@ export const errorText = (error: unknown): string => {
  * then the plugin active ~0.2 s later). Ours: a cold machine's import of the
  * plugin module, with margin.
  */
-export const PLUGIN_LOAD_TIMEOUT_MS = 30_000;
+const PLUGIN_LOAD_TIMEOUT_MS = 30_000;
 
 /**
  * The gate, failing closed: a location whose plugin list does not carry
@@ -239,7 +239,7 @@ export const assertPluginLoaded = async (
  * (opencode.ai/v2/docs/mcp-servers "Timeouts", `startup` default), and the
  * servers connect in parallel; one more 30 s covers a cold machine.
  */
-export const MCP_CONNECT_TIMEOUT_MS = 60_000;
+const MCP_CONNECT_TIMEOUT_MS = 60_000;
 
 /** CawCo's own MCP server, as every server's launch config names it (`mcp.servers.cawco`). */
 export const CAWCO_MCP_SERVER = "cawco";

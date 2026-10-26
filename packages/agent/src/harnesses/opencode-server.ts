@@ -26,7 +26,7 @@ import { OPENCODE_SERVER_PROC_ID } from "../proc-id";
 import type { SessiondClient } from "../sessiond-client";
 import { readJson } from "./fleet-common";
 
-export const SERVER_CUTOVER_TIMEOUT_MS = 60_000;
+const SERVER_CUTOVER_TIMEOUT_MS = 60_000;
 
 /**
  * The environment variable an OpenCode 2.0 server takes its password from
@@ -34,7 +34,7 @@ export const SERVER_CUTOVER_TIMEOUT_MS = 60_000;
  * is launched and kept in its record, which only this user reads; never in
  * its argv.
  */
-export const PASSWORD_ENV = "OPENCODE_SERVER_PASSWORD";
+const PASSWORD_ENV = "OPENCODE_SERVER_PASSWORD";
 
 export interface ServerIdentity {
   epoch: string;
@@ -70,7 +70,7 @@ export interface ServerIdentity {
  * was ever given its URL, so it serves no session: nothing reads its activity
  * (no read can reach it) and nothing waits on it.
  */
-export const neverAnnounced = (identity: ServerIdentity): boolean =>
+const neverAnnounced = (identity: ServerIdentity): boolean =>
   identity.url === "";
 
 /**

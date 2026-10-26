@@ -539,7 +539,7 @@ const lockedAway = async (
  * dirs have not said, and the hub keeps the machine's last word); else
  * unauthenticated. The machine's own `~/.claude` has no say.
  */
-export const claudeAuth = ({
+const claudeAuth = ({
   accounts,
   locked,
   unread,
