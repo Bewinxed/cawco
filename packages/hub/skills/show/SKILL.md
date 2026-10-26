@@ -25,7 +25,7 @@ The person's panel is where they act, never where they look. An artifact is open
    Done when the kind and the skill are named.
 3. **Build it with that skill.** Every word on it is theirs: states named as the product talks, no size or id captions, no legend, nothing decided or rejected left on it. The panel is 600px wide beside the transcript and 390px on a phone; a component canvas and a decision page read at both by themselves, a page of your own must.
 4. **Open it** with `artifact_create({ kind, name, does, ask, … })`. Read the answer: `opened: false` says `why`; a component answers each frame, fix every one not `drawn`; a refusal names what to change.
-5. **End your turn.** The ask stands in the panel's head until they act. Their picks come through `artifact_read`, their pins through `comment_read` with each pin's `file:line` and state; a Send tells you the artifact has new responses. A new round is `artifact_update` with the new `ask`, never a second artifact of the same thing.
+5. **End your turn.** The ask stands in the panel's head until they act. Their picks come through `artifact_read`, their pins arrive by themselves a few seconds after they write them, and `comment_read` gives each pin's `file:line` and state; a Send tells you the page has new picks. A new round is `artifact_update` with the new `ask`, never a second artifact of the same thing.
 
 ## Before you open it
 

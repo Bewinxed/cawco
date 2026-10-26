@@ -170,7 +170,7 @@ it actually means.
 | An artifact that is HTML the agent wrote: a decision page, a form, a mockup | **page** | A page in the artifact panel. | "document", "app" |
 | An artifact that is a drawing, by you or the agent | **canvas** | The canvas the pen's swipe opens; "Draw". | "whiteboard", "artboard", "sketch", "drawing" as the noun |
 | An artifact that is a dev server or folder shown live | **preview** | The preview beside the transcript. | "canvas" (that is a drawing) |
-| A numbered mark on an artifact's element: an annotation, or a comment's anchor | **pin** | "Send 3" sends the unsent pins and comments. | "marker", "selection" |
+| A numbered mark on an artifact's element: an annotation, or a comment's anchor | **pin** | Pins and comments reach the agent by themselves; "Not sent" marks one no one took. | "marker", "selection" |
 | A note pinned to an element in an artifact, with its replies | **comment** | Pins on an artifact and the comment list beside it. | "thread" (a thread is a conversation with Caw), "annotation" |
 | Putting an artifact waiting on you out of Needs you until it is raised again (a revision, a new answer); it stays in Files with its dot | **Not now** | The ✕ on an artifact's Needs-you row ("Not now: Pick the head for the phone project page"). | "Dismiss", "Snooze", "Ignore", "Done" (nothing was answered) |
 | A conversation with Caw in a project | **thread** | The project's threads. | "chat", "comment" |
@@ -335,10 +335,11 @@ turn goes on.
 **The comments' words (recorded):** a comment's composer and a thread's reply are the chat composer,
 under the same exemption: no visible label, the placeholder **"What should change?"** at the element
 (not "…here?": the target chip above it names the place) and **"Reply"** in a thread, **"Reply to
-reopen"** once it is resolved. Their send glyph is labelled **Comment** or **Reply**. Nothing reaches
-the agent until **Send** ("Send 3" counts every pick, comment, reply and stroke the session hasn't
-heard), with the rail's note, **"Add a note for the agent"**. A row says **"Unsent"** while the session
-hasn't heard its comment; while the agent works on it the pill's live dot says so, and a screen reader hears **"The agent is working on it"** (no words on the row); nothing once it is
+reopen"** once it is resolved. Their send glyph is labelled **Comment** or **Reply**. A comment, reply,
+resolve or stroke reaches the agent by itself a few seconds after he stops; **Send** is the page's
+picks alone ("Send 3"), with the rail's note, **"Add a note for the agent"**. A row says **"Unsent"**
+in those seconds before the session hears its comment, and **"Not sent: …"** with **Try again** when
+no one took it; while the agent works on it the pill's live dot says so, and a screen reader hears **"The agent is working on it"** (no words on the row); nothing once it is
 sent and unanswered (its filled pill says so). A thread's status line, once the session has it: **"Sent to"** and the session's chip, then **"· working on it"** after the live dot while the session works on it; never a speaker line under the person's words. A row's place is the element's name, **"Whole page"**
 or **"Element gone"**. The rail: **"Comments"**, **"Search comments"**, **"Sort"** (**"Newest first"**,
 **"Top of page first"**), **"Comment on the whole page"**, **"Close comments"**, Open and Resolved;
