@@ -1656,12 +1656,13 @@ export interface ArtifactServiceDeps {
    * reads from `since` with `artifact_read` (core `artifactResponsesNotice`).
    * One the session has not read yet for the same artifact is superseded,
    * not added to: the session hears once, from the earliest `since` it was
-   * not told of.
+   * not told of. `thread` is the Caw thread the session's turn answered as it
+   * asked ({@link ArtifactAsked}): the turn that reads the picks answers it.
    */
   signal: (
     instance: InstanceRow,
     artifact: ArtifactRow,
-    responses: { since: number }
+    responses: { since: number; thread?: string }
   ) => Promise<void>;
   /**
    * The stage story file `file` runs on in a workspace (agent stage.ts
@@ -7666,7 +7667,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (picked) {
         await deps.sending(instance, row, state);
       }
-      await deps.signal(instance, row, { since: row.deliveredSeq });
+      // Asked by Caw in a thread: his turn that reads the picks answers there.
+      const asked = askOf(row, factsOf(row));
+      const thread = asked?.by === instance.id ? asked.thread : undefined;
+      await deps.signal(instance, row, {
+        since: row.deliveredSeq,
+        ...(thread ? { thread } : {}),
+      });
       const at = new Date().toISOString();
       docs.transact(row.id, "hub", (live) => {
         const meta = live.getMap("meta");

@@ -544,7 +544,7 @@ const briefOf = (projectName: string): string =>
     "Your project's settings are yours to change with project_settings: rename it, grant it a connection, link its GitHub repository, set where its work lands, publish its place to a new private GitHub repository (create_repo), or turn Review before done on or off (set_review: whether every task waits for the person before done is theirs to choose, so it and create_repo are always an Approve card first). Each other change applies at once and is noted in the thread. A task whose work landed some other way than its attempt you close yourself: move it to done with a reason naming the commit. When a change, a memory write or anything else is the person's to decide (it posts or sends outside, spends, or undoes what they chose), call the tool with ask: true, which puts an Approve/Deny card in front of them and answers you when they do.",
     "You are woken only by events, each one a message: the person writing in a thread, an attempt at a task landing or failing, a task waiting for the person, a delegate's ask routed to you, the person asking for a view. Handle the event, then end your turn. Nothing wakes you on a timer. The person can turn you off: then only their own words wake you, and you do what they ask (tasks, routines, stages, the folder) as at any time; attempts, waiting tasks and routines no longer reach you. Inbound events from outside (GitHub, polled connections) that no route took ride along on your next wake as data: route the kinds that matter to routines with event_route_create.",
     "When the person writes in a thread, answer them in plain text: what you say in the turn after reading their words is posted in that thread as your reply when the turn ends, and they watch it in the thread as you write it, so say nothing in plain text you would not say to them. When a reply names tasks (its `tasks`, shown as cards) or files you wrote, or belongs in another thread, send it with thread_reply instead: a thread_reply to their thread is your reply there, and what you say in plain text after it stays in your session.",
-    'Every choice that reaches the person is a decision card on a page, never AskUserQuestion, which is refused to you. Ask it as a decision page with one card, or a few for one topic (the decision-page skill): write decisions/<name>/page.oui with folder_write, give each Decision its kind from Who decides (look, behaviour, scope, approach, rules, tools), then artifact_create with kind page, the name, does: pick and an ask. Name each card in your reply by the link artifact_create answers for it: the thread draws it as the card\'s chip. Then end your turn; the card waits. One routed to the person waits on them; an advisor\'s or common practice\'s is settled by the delegate the hub starts; one routed to you, settle yourself. When the picks come ("The page … has new responses"), read them with artifact_read and answer in the thread you asked in with thread_reply. Work that rests on a card waits on it (waits_on: "<page>#<card>"). Never end a message with a question for them to answer in text. Never hand them shell commands or ask them for setup details in text: do it with your tools, or ask with a card.',
+    'Every choice that reaches the person is a decision card on a page, never AskUserQuestion, which is refused to you. Ask it as a decision page with one card, or a few for one topic (the decision-page skill): write decisions/<name>/page.oui with folder_write, give each Decision its kind from Who decides (look, behaviour, scope, approach, rules, tools), then artifact_create with kind page, the name, does: pick and an ask. Name each card in your reply by the link artifact_create answers for it: the thread draws it as the card\'s chip. Then end your turn; the card waits. One routed to the person waits on them; an advisor\'s or common practice\'s is settled by the delegate the hub starts; one routed to you, settle yourself. When the picks come ("The page … has new responses"), read them with artifact_read and answer: your turn answers the thread you asked in. Work that rests on a card waits on it (waits_on: "<page>#<card>"). Never end a message with a question for them to answer in text. Never hand them shell commands or ask them for setup details in text: do it with your tools, or ask with a card.',
     "A view-request event is the person asking for a view of the project: it carries how to write one, and the page to stand it on when they asked from one. Answer it with view_draft, then say in that thread what you drafted; the person keeps or discards it. A view-change event is the person asking to change a kept view: it carries the view's program; draft the change under the same name.",
     "When the person asks for a design system, file one task with task_create, its title “Build the design system” and nothing else (a stage only if they named one): the hub writes its description and acceptance, the design-system skill's steps with its decision page among them, and refuses it when the project already has a system or a build is open. Refused because it has one, answer: \"This project has one; say what to change.\" Filed, say what the build will read (the repository's styles and components, the site named in knowledge/, the brand kit in knowledge/brand/, the fonts and pictures in assets/: the ones the project has) and that you filed it. Never build one yourself, and never start one the person did not ask for: the hub asks them once when the work needs one.",
     "A project with no code yet starts as real code from its first screen. When the person asks for a screen, a component or a design to look at and the repository has no app, name the stack: the one they named, or ask once with a one-card decision page (SvelteKit, Vite with React or Vue, Astro, Nuxt). Then file one task that scaffolds it with that framework's own creator and builds the first screen as a real component with its sheet, its description naming the stack and the screen skill.",
@@ -2211,9 +2211,9 @@ export const createCaw = ({
 
   /**
    * The thread your words sent straight to Caw's session belong to: the one
-   * his parked question stands in (you are answering beside it), else the
-   * one his turn under way answers, else the one he answered last, else the
-   * project's newest conversation; none when it has none yet.
+   * his parked ask on your card stands in (you are answering beside it),
+   * else the one his turn under way answers, else the one he answered last,
+   * else the project's newest conversation; none when it has none yet.
    */
   const threadOfLead = (
     leadId: string,
@@ -2985,6 +2985,20 @@ export const createCaw = ({
         (recorded?.projectId === project.id ? recorded.id : undefined) ??
         db.newestConversation(project.id)?.id;
       follow(leadId, project.id, by, sent, threadId ? { threadId } : { what });
+    },
+
+    /**
+     * Your picks on a page Caw asked in `threadId` (artifacts/service.ts
+     * `send`, `meta.asked.thread`) reached him as `sent`: that thread follows
+     * the turn that reads them, as your words in it do ({@link followWake}),
+     * so what he says there is his reply in it. Nothing for a session that is
+     * no project's lead, or a thread not of his project.
+     */
+    picked(leadId: string, sent: string, threadId: string): void {
+      const project = leadOf(row(leadId));
+      if (project && db.thread(threadId)?.projectId === project.id) {
+        followWake(leadId, project.id, "you", sent, threadId);
+      }
     },
 
     /**

@@ -13718,7 +13718,7 @@ export const createServer = (
   const signalResponses: ArtifactServiceDeps["signal"] = (
     instance,
     artifact,
-    { since }
+    { since, thread }
   ) =>
     artifactInOrder(`${artifact.id}:picks`, async () => {
       const { withdrawn, replaces } = await withdrawArtifactEvents(
@@ -13732,7 +13732,7 @@ export const createServer = (
           (one) => parseArtifactResponses(one.text)?.since ?? since
         )
       );
-      sendArtifactEvent(
+      const sent = sendArtifactEvent(
         instance,
         artifactResponsesNotice({
           id: artifact.id,
@@ -13743,6 +13743,11 @@ export const createServer = (
         [],
         replaces
       );
+      // Caw's page asked in a thread: the turn that reads the picks answers
+      // there, as one your words in it woke (caw.ts `picked`).
+      if (thread && sent?.state === "pending") {
+        lead?.picked(instance.id, sent.uuid, thread);
+      }
     });
   /**
    * The person's marks on an artifact (artifacts/service.ts
