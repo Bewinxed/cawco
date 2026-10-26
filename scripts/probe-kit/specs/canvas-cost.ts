@@ -33,9 +33,9 @@
  * - `decision`: a decision page of `--embeds` Previews on the decision host,
  *   at the owner's window: its first screen until every Preview in it is
  *   drawn, then scrolled to its end at a person's pace (`--scroll`, px a
- *   second): the time, frames, requests and page memory at each, and every
- *   50 ms while scrolling, whether a Preview in view stood drawn, as its
- *   skeleton, or empty.
+ *   second): the time, frames, requests and page memory at each (WebKit's
+ *   page run with no inspector), and every 50 ms while scrolling, whether a
+ *   Preview in view stood drawn, as its skeleton, or empty.
  * - `raf`: a story running an animation-frame loop, its frame in view, in a
  *   pane the dashboard put away (directly, and through a decision page's
  *   relay) and one below the page's fold: the callbacks each runs in 20 s
@@ -46,9 +46,9 @@
  *   the hub serves one (the preview overlay in every frame): its web
  *   process's memory once drawn, over `--idle` seconds untouched, and each
  *   time it is taken away and opened again (`--rounds`), in WebKit with no
- *   inspector, beside a control page of frames holding plain objects; and
- *   the same under Playwright, whose inspector keeps every frame a page
- *   takes away (`--memory-runs` picks among them).
+ *   inspector, beside a control page of frames holding plain objects; and,
+ *   asked for (`--memory-runs playwright,playwright-control`), the same
+ *   under Playwright, whose inspector keeps every frame a page takes away.
  *
  * Every WebKit memory and idle reading is taken in WebKit with no inspector
  * (`noInspectorWebKit`): Playwright's own WebKit can't show what a page lets
@@ -58,7 +58,7 @@
  * NOTE line. The checks are what a frame owes: it draws, and it loads no
  * module its story's closure does not reach.
  *
- *   bun scripts/probe-kit/run.ts canvas-cost [--legs trace,page,shared,frame,raf,decision,memory] [--engines chromium,webkit] [--embeds 33] [--idle 240] [--story <file>#<story>] [--scroll 1200] [--rounds 6] [--memory-runs uninspected,collected,collected-control,playwright,playwright-control] [--memory-page decision]
+ *   bun scripts/probe-kit/run.ts canvas-cost [--legs trace,page,shared,frame,raf,decision,memory] [--engines chromium,webkit] [--embeds 33] [--idle 240] [--story <file>#<story>] [--scroll 1200] [--rounds 6] [--memory-runs uninspected,collected,collected-control] [--memory-page decision]
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one frame at a time, as the page gives them turns
 import { type ChildProcess, spawn } from "node:child_process";
@@ -66,11 +66,13 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { tmpdir, totalmem } from "node:os";
 import { join, relative } from "node:path";
 import { type CDPSession, type Page, webkit } from "playwright-core";
 import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
@@ -80,12 +82,12 @@ import { until } from "../../scratch-fleet";
 import { scratchCertificate } from "../cloudflare-front";
 import {
   CAWCO_BRIDGE,
+  idOf as decisionId,
   EMBED_FRAME,
   embedOrigin,
-  idOf as decisionId,
   startDecisionStage,
 } from "../decision-embeds";
-import { type Engine, type Kit, ROOT, type Spec } from "../kit";
+import { type Engine, type Kit, ROOT, type Spec, safariParity } from "../kit";
 import { type SafariPage, safariBridge } from "../safari-bridge";
 
 const APP = join(ROOT, "apps/dashboard");
@@ -355,6 +357,44 @@ function cpuMs(pids: number[]): number {
   return ticks * TICK_MS;
 }
 
+/** The CPU of `pids`' threads by their name (`/proc/<pid>/task/<tid>/comm`), ms: where a process's time went. */
+function cpuByThread(pids: number[]): Record<string, number> {
+  const by: Record<string, number> = {};
+  for (const pid of pids) {
+    let tasks: string[] = [];
+    try {
+      tasks = readdirSync(`/proc/${pid}/task`);
+    } catch {
+      // ended
+    }
+    for (const tid of tasks) {
+      try {
+        const name = readFileSync(
+          `/proc/${pid}/task/${tid}/comm`,
+          "utf8"
+        ).trim();
+        const stat = readFileSync(`/proc/${pid}/task/${tid}/stat`, "utf8");
+        const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+        by[name] =
+          (by[name] ?? 0) + (Number(fields[11]) + Number(fields[12])) * TICK_MS;
+      } catch {
+        // ended
+      }
+    }
+  }
+  return by;
+}
+
+/** What each thread name spent from `before` to `after` ({@link cpuByThread}), the most first, those that spent none left out. */
+const threadsSpent = (
+  before: Record<string, number>,
+  after: Record<string, number>
+): [string, number][] =>
+  Object.entries(after)
+    .map(([name, ms]): [string, number] => [name, ms - (before[name] ?? 0)])
+    .filter(([, ms]) => ms > 0)
+    .sort((one, two) => two[1] - one[1]);
+
 /** Proportional memory of `pids` (their PSS; RSS where it doesn't read), MB. */
 function memoryMb(pids: number[]): number {
   let kb = 0;
@@ -374,6 +414,34 @@ function memoryMb(pids: number[]): number {
   return Math.round(kb / 1024);
 }
 
+/** WebKit's own native heap, libpas's pages (WTF FastMalloc.cpp `bmalloc::api::malloc`), as its web process names their mappings. */
+const WEBKIT_HEAP = "[anon:WKFastMalloc]";
+
+/** The proportional memory of `pids`' mappings named `name` (smaps), MB. */
+function namedMb(pids: number[], name: string): number {
+  let kb = 0;
+  for (const pid of pids) {
+    let at = false;
+    try {
+      for (const line of readFileSync(`/proc/${pid}/smaps`, "utf8").split(
+        "\n"
+      )) {
+        if (SMAPS_HEAD.test(line)) {
+          at = line.endsWith(` ${name}`);
+        } else if (at && line.startsWith("Pss:")) {
+          kb += Number(line.split(SPACES)[1]);
+        }
+      }
+    } catch {
+      // ended
+    }
+  }
+  return Math.round(kb / 1024);
+}
+/** A mapping's head line in smaps: its address range first. */
+const SMAPS_HEAD = /^[0-9a-f]+-[0-9a-f]+ /;
+const SPACES = /\s+/;
+
 /** The processes that run pages: Chromium's renderers, WebKit's web processes. */
 const pageProcesses = (pids: number[]): number[] =>
   pids.filter((pid) => {
@@ -382,6 +450,206 @@ const pageProcesses = (pids: number[]): number[] =>
   });
 
 /* --- In the page ---------------------------------------------------------- */
+
+/** One document's census ({@link idleCensus}): what it ran over its last five seconds. */
+interface Census {
+  /** Its animation-frame callbacks. */
+  frames: number;
+  href: string;
+  /** Whether any of it stands in the top document's view. */
+  inView: boolean;
+  /** Its loops running: animations running on an element the dashboard marks as one (`loops`, design.css), which it holds wherever nobody can see them. */
+  loops: number;
+  /** Its animations running, each as `<name> on <element>`. */
+  running: string[];
+  /** Who asked for its animation frames: the callers' stacks, the most asking first, and how many each asked for. */
+  sites: [string, number][];
+  /** Its timers' runs. */
+  timers: number;
+}
+
+/**
+ * Installed in every frame: what it runs while it stands untouched, told
+ * to the top document every five seconds, which keeps each document's
+ * latest (`__census()`): its animation-frame callbacks and its timers' runs
+ * in those five seconds and who asked for the frames, its animations
+ * running and what each animates, and whether any of it stands in the
+ * top's view.
+ */
+function idleCensus(): void {
+  const id = `${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+  let frames = 0;
+  let timers = 0;
+  let sites: Record<string, number> = {};
+  const raf = window.requestAnimationFrame.bind(window);
+  window.requestAnimationFrame = (callback) => {
+    // The callers, this wrapper's own line left out.
+    const site = (new Error("the caller of requestAnimationFrame").stack ?? "")
+      .split("\n")
+      .slice(1, 6)
+      // biome-ignore lint/performance/useTopLevelRegex: this function runs in the page, where none of this module's scope is
+      .map((line) => line.trim().replace(/\/@cawco\/m\/[^/]+/, ""))
+      .join(" < ");
+    sites[site] = (sites[site] ?? 0) + 1;
+    return raf((time) => {
+      frames += 1;
+      callback(time);
+    });
+  };
+  const counted =
+    (handler: TimerHandler): TimerHandler =>
+    (...args: unknown[]) => {
+      timers += 1;
+      if (typeof handler === "function") {
+        handler(...args);
+      }
+    };
+  const later = window.setTimeout.bind(window);
+  const every = window.setInterval.bind(window);
+  window.setTimeout = ((
+    handler: TimerHandler,
+    ms?: number,
+    ...rest: unknown[]
+  ) => later(counted(handler), ms, ...rest)) as typeof setTimeout;
+  window.setInterval = ((
+    handler: TimerHandler,
+    ms?: number,
+    ...rest: unknown[]
+  ) => every(counted(handler), ms, ...rest)) as typeof setInterval;
+  let inView = false;
+  addEventListener("DOMContentLoaded", () => {
+    // In a frame, the implicit root is the top document's view.
+    new IntersectionObserver(([entry]) => {
+      inView = entry?.isIntersecting ?? false;
+    }).observe(document.documentElement);
+  });
+  if (window === top) {
+    const latest = new Map<string, Census>();
+    (window as unknown as { __census: () => Census[] }).__census = () => [
+      ...latest.values(),
+    ];
+    addEventListener("message", (event) => {
+      const said = event.data as
+        ({ type?: unknown; id?: unknown } & Census) | null;
+      if (said?.type === "probe:census" && typeof said.id === "string") {
+        latest.set(said.id, {
+          href: said.href,
+          inView: said.inView,
+          frames: said.frames,
+          timers: said.timers,
+          loops: said.loops,
+          running: said.running,
+          sites: said.sites,
+        });
+      }
+    });
+  }
+  // Its own clock, uncounted.
+  const nameOf = (one: Animation): string => {
+    if (one instanceof CSSAnimation) {
+      return one.animationName;
+    }
+    if (one instanceof CSSTransition) {
+      return `transition ${one.transitionProperty}`;
+    }
+    return one.id || "script";
+  };
+  every(() => {
+    const runs = document
+      .getAnimations()
+      .filter((one) => one.playState === "running");
+    const targetOf = (one: Animation) =>
+      (one.effect as KeyframeEffect | null)?.target ?? null;
+    const loops = runs.filter((one) =>
+      targetOf(one)?.classList.contains("loops")
+    ).length;
+    const running = runs.map((one) => {
+      const target = targetOf(one);
+      const name = nameOf(one);
+      const on = target
+        ? `${target.tagName.toLowerCase()}${target.classList[0] ? `.${target.classList[0]}` : ""}`
+        : "nothing";
+      return `${name} on ${on}`;
+    });
+    top?.postMessage(
+      {
+        type: "probe:census",
+        id,
+        href: location.href,
+        inView,
+        frames,
+        timers,
+        loops,
+        running,
+        sites: Object.entries(sites)
+          .sort((one, two) => two[1] - one[1])
+          .slice(0, 3),
+      },
+      "*"
+    );
+    frames = 0;
+    timers = 0;
+    sites = {};
+  }, 5000);
+}
+
+/** A census's document by what it draws: its states file and story (a canvas's `file=` and `story=`), or its path. */
+const documentOf = (href: string): string => {
+  const at = new URL(href);
+  const file = at.searchParams.get("file");
+  return file ? `${file}#${at.searchParams.get("story") ?? ""}` : at.pathname;
+};
+
+/** The census of every document in words: how many stand in view and out, what they run, and each one that runs anything. */
+function censusWords(all: readonly Census[]): {
+  busy: {
+    document: string;
+    frames: number;
+    inView: boolean;
+    running: string[];
+    sites: [string, number][];
+    timers: number;
+  }[];
+  inView: number;
+  outOfView: number;
+  outOfViewBusy: number;
+  /** Frames out of view running a loop ({@link Census} `loops`). */
+  outOfViewLooping: number;
+  framesPerS: number;
+  timersPerS: number;
+  running: Record<string, number>;
+} {
+  const out = all.filter((one) => !one.inView);
+  const running: Record<string, number> = {};
+  for (const one of all) {
+    for (const name of one.running) {
+      const key = `${one.inView ? "in view" : "out of view"}: ${name}`;
+      running[key] = (running[key] ?? 0) + 1;
+    }
+  }
+  return {
+    inView: all.length - out.length,
+    outOfView: out.length,
+    outOfViewBusy: out.filter((one) => one.frames > 0 || one.running.length > 0)
+      .length,
+    outOfViewLooping: out.filter((one) => one.loops > 0).length,
+    framesPerS: all.reduce((sum, one) => sum + one.frames, 0) / 5,
+    timersPerS: all.reduce((sum, one) => sum + one.timers, 0) / 5,
+    running,
+    busy: all
+      .filter(
+        (one) => one.frames > 0 || one.timers > 0 || one.running.length > 0
+      )
+      .map((one) => ({
+        document: documentOf(one.href),
+        inView: one.inView,
+        frames: one.frames,
+        timers: one.timers,
+        running: one.running,
+        sites: one.sites,
+      })),
+  };
+}
 
 /** Installed before the page's own scripts: when the frame said its shape, and every animation-frame callback it runs. */
 function installCounters(): void {
@@ -948,33 +1216,174 @@ async function latencyLeg(kit: Kit, stages: Stage[]): Promise<void> {
 /* --- WebKit with no inspector ------------------------------------------- */
 
 /**
+ * Every frame asks for motion as a person with Reduce Motion off does
+ * (`prefers-reduced-motion: no-preference`), as Playwright's WebKit pages
+ * do: its contexts override the preference to `no-preference` by default,
+ * and its WebKit with nothing overriding it answers `reduce` (`matchMedia`
+ * in a context with `reducedMotion: null`: true; the MiniBrowser with no
+ * inspector: true), whatever its WPE platform settings say (a
+ * `--config-file` with `/wpe-platform/reduced-motion` false leaves it
+ * `reduce`, where the same file's `interface-contrast` reaches every page).
+ * The dashboard asks in its style sheets (Tailwind's `motion-safe:` and
+ * `motion-reduce:`, nested in their rules, and its own `@media` blocks) and
+ * in its scripts (`matchMedia`): each query of the preference is answered
+ * here as `no-preference` would answer it, a sheet's as it loads or is
+ * written again, as kit.ts `safariParity` reaches them.
+ */
+function fullMotion(): void {
+  const REDUCE = /\(\s*prefers-reduced-motion\s*:\s*reduce\s*\)/gi;
+  const NO_PREFERENCE =
+    /\(\s*prefers-reduced-motion\s*:\s*no-preference\s*\)/gi;
+  // In a boolean context it holds for any value but `no-preference`.
+  const BARE = /\(\s*prefers-reduced-motion\s*\)/gi;
+  const NEVER = "(width < 0px)";
+  const ALWAYS = "(width >= 0px)";
+  const answered = (query: string): string =>
+    query
+      .replace(REDUCE, NEVER)
+      .replace(NO_PREFERENCE, ALWAYS)
+      .replace(BARE, NEVER);
+  const ask = window.matchMedia.bind(window);
+  window.matchMedia = (query: string) => ask(answered(query));
+  const within = (rules: CSSRuleList | undefined) => {
+    for (const rule of rules ?? []) {
+      const media =
+        rule instanceof CSSMediaRule || rule instanceof CSSImportRule
+          ? rule.media
+          : null;
+      if (media) {
+        const text = answered(media.mediaText);
+        if (text !== media.mediaText) {
+          media.mediaText = text;
+        }
+      }
+      // Grouping rules, and a style rule's nested ones (Tailwind's variants).
+      within((rule as Partial<CSSGroupingRule>).cssRules);
+    }
+  };
+  const sheet = (one: CSSStyleSheet | null) => {
+    try {
+      within(one?.cssRules);
+    } catch {
+      // Another origin's: unread, as safariParity leaves it.
+    }
+  };
+  const all = () => {
+    for (const one of document.styleSheets) {
+      sheet(one);
+    }
+  };
+  addEventListener("load", all);
+  document.addEventListener("DOMContentLoaded", () => {
+    all();
+    for (const link of document.querySelectorAll("link")) {
+      link.addEventListener("load", () => sheet(link.sheet));
+    }
+    new MutationObserver((records) => {
+      for (const node of records.flatMap(({ target, addedNodes }) => [
+        target,
+        ...addedNodes,
+      ])) {
+        if (node instanceof HTMLLinkElement) {
+          node.addEventListener("load", () => sheet(node.sheet));
+        }
+        const style =
+          node instanceof HTMLStyleElement ? node : node.parentElement;
+        if (style instanceof HTMLStyleElement) {
+          sheet(style.sheet);
+        }
+      }
+    }).observe(document.head, {
+      characterData: true,
+      childList: true,
+      subtree: true,
+    });
+  });
+}
+
+/**
+ * Every WebKit with no inspector this run started that has not ended
+ * ({@link noInspectorWebKit}), each ended as the process exits, however it
+ * exits but a SIGKILL: a stop signal reaches the exit through
+ * scratch-fleet.ts's handlers, as kit.ts's vites do. Each leads a process
+ * group of its own, which no signal to the run reaches: a run stopped
+ * mid-leg left its MiniBrowser, web and network processes running.
+ */
+const NO_INSPECTOR_ENDS = new Set<() => void>();
+process.on("exit", () => {
+  for (const end of NO_INSPECTOR_ENDS) {
+    end();
+  }
+});
+
+/** How a WebKit with no inspector is started ({@link noInspectorWebKit}). */
+interface NoInspectorOptions {
+  /** JSC's options and the like, for its processes. */
+  env?: Record<string, string>;
+  /** Its certificates taken as trusted: the run's own (cloudflare-front.ts `scratchCertificate`), as kit.page's `ignoreHTTPSErrors` takes them. */
+  ignoreTlsErrors?: boolean;
+  /** Scripts run in every frame before its own, after the kit's WebKit parity and {@link fullMotion}, as kit.page's `init` are. */
+  init?: ((() => void) | { content: string })[];
+  /** Its window. 1440 × 900 unless given. */
+  size?: { height: number; width: number };
+}
+
+/**
  * WebKit as a person runs it, nothing automating it: Playwright's own WebKit
  * build (its MiniBrowser, `webkit.executablePath()`) started headless on
  * `url` with no inspector (no `--inspector-pipe`); `url` carries the kit
- * bridge's agent (safari-bridge.ts), which runs this spec's calls in it.
- * Under Playwright, WebKit's inspector keeps every frame a page takes away,
- * a frame of plain objects as much as an app's, and after
- * `page.requestGC()` too (the memory leg's `playwright-control`), and its
- * page runs the kit's own frame loop (crash-watch.ts `readFrames`): every
- * WebKit memory and idle reading of this spec is taken here.
+ * bridge's agent (safari-bridge.ts), or an `init` script does, which runs
+ * this spec's calls in it. Under Playwright, WebKit's inspector keeps every
+ * frame a page takes away, a frame of plain objects as much as an app's,
+ * and after `page.requestGC()` too (the memory leg's `playwright-control`),
+ * and its page runs the kit's own frame loop (crash-watch.ts
+ * `readFrames`): every WebKit memory and idle reading of this spec is taken
+ * here. Every frame styles as Safari does, as a kit page in WebKit does
+ * (kit.ts `safariParity`), and asks for full motion, as one does
+ * ({@link fullMotion}), its `init` after: the MiniBrowser's start scripts
+ * (`--user-script-at-start`) run in every frame, another origin's too, as a
+ * context's init scripts do.
  */
 function noInspectorWebKit(
   url: string,
-  env: Record<string, string> = {}
+  options: NoInspectorOptions = {}
 ): {
   cpu: () => number;
+  /** Its processes' CPU by thread name ({@link cpuByThread}). */
+  threads: () => Record<string, number>;
   end: () => void;
   memory: () => number;
+  /** Its web processes' native heap ({@link WEBKIT_HEAP}), MB. */
+  heap: () => number;
   /** Each collection JSC's GC log said (where `JSC_logGC` asks for it), in order: its heap, and the live size it left, KB. */
   collections: () => readonly { heap: string; kb: number }[];
 } {
+  const scripts = mkdtempSync(join(tmpdir(), "canvas-cost-webkit-"));
+  const start = join(scripts, "start.js");
+  writeFileSync(
+    start,
+    [safariParity, fullMotion, ...(options.init ?? [])]
+      .map(
+        (script) =>
+          // Each on its own, as each init script is: one that throws stops none after it.
+          `try { ${typeof script === "function" ? `(${script.toString()})();` : script.content} } catch (error) { console.error(error); }`
+      )
+      .join("\n")
+  );
+  const { width, height } = options.size ?? { width: 1440, height: 900 };
   // Its own process group's leader, so the whole browser (its web and network processes) ends with one signal to the group.
   const browser = spawn(
     webkit.executablePath(),
-    ["--headless", "--size=1440x900", url],
+    [
+      "--headless",
+      `--size=${width}x${height}`,
+      `--user-script-at-start=${start}`,
+      ...(options.ignoreTlsErrors ? ["--ignore-tls-errors"] : []),
+      url,
+    ],
     {
       stdio: ["ignore", "ignore", "pipe"],
-      env: { ...process.env, ...env },
+      env: { ...process.env, ...options.env },
       detached: true,
     }
   );
@@ -991,22 +1400,32 @@ function noInspectorWebKit(
     }
   });
   const tree = () => treeOf([browser.pid as number]);
+  const end = () => {
+    NO_INSPECTOR_ENDS.delete(end);
+    const leader = spawnedPid(browser);
+    if (leader) {
+      signalGroup(leader, "SIGTERM");
+    }
+    rmSync(scripts, { recursive: true, force: true });
+  };
+  NO_INSPECTOR_ENDS.add(end);
   return {
     collections: () => collections,
     memory: () => memoryMb(pageProcesses(tree())),
+    heap: () => namedMb(pageProcesses(tree()), WEBKIT_HEAP),
     cpu: () => cpuMs(tree()),
-    end: () => {
-      const leader = spawnedPid(browser);
-      if (leader) {
-        signalGroup(leader, "SIGTERM");
-      }
-    },
+    threads: () => cpuByThread(tree()),
+    end,
   };
 }
 
 /** What the page leg's holder of frames reads in WebKit with no inspector. */
 interface FramesRead {
+  /** What each document ran over the idle's last five seconds ({@link idleCensus}). */
+  census: Census[];
   drawnMb: number;
+  /** Where the idle's CPU went, by thread name, ms. */
+  idleCpuByThread: [string, number][];
   idleCpuMs: number;
   idleMb: [number, number][];
   said: number;
@@ -1016,8 +1435,8 @@ interface FramesRead {
 /**
  * The page leg's holder of `urls` in WebKit with no inspector, each frame
  * in its turn: its web process's memory once every frame said its shape
- * (within {@link DRAW_MS} each), then every 20 s over `idleS` seconds, and
- * the CPU its processes spent in them.
+ * (within {@link DRAW_MS} each), then every 20 s over `idleS` seconds, the
+ * CPU its processes spent in them, and what each frame ran at their end.
  */
 async function framesWithNoInspector(
   urls: string[],
@@ -1029,7 +1448,7 @@ async function framesWithNoInspector(
     HOLDER_STYLE,
     HOLDER_BODY(urls)
   );
-  const browser = noInspectorWebKit(holder);
+  const browser = noInspectorWebKit(holder, { init: [idleCensus] });
   try {
     const page = await bridge.page((href) => href === holder);
     const settled = await page.run(
@@ -1056,6 +1475,7 @@ async function framesWithNoInspector(
     await Bun.sleep(1000);
     const drawnMb = browser.memory();
     const cpu0 = browser.cpu();
+    const threads0 = browser.threads();
     const idleMb: [number, number][] = [];
     const from = Date.now();
     for (let s = 0; s <= idleS; s += 20) {
@@ -1064,12 +1484,12 @@ async function framesWithNoInspector(
         await Bun.sleep(Math.max(0, from + (s + 20) * 1000 - Date.now()));
       }
     }
-    return {
-      ...settled,
-      drawnMb,
-      idleMb,
-      idleCpuMs: Math.round(browser.cpu() - cpu0),
-    };
+    const idleCpuMs = Math.round(browser.cpu() - cpu0);
+    const idleCpuByThread = threadsSpent(threads0, browser.threads());
+    const census = await page.run(() =>
+      (window as unknown as { __census: () => Census[] }).__census()
+    );
+    return { ...settled, drawnMb, idleMb, idleCpuMs, idleCpuByThread, census };
   } finally {
     browser.end();
     bridge.stop();
@@ -1281,7 +1701,8 @@ const list = document.getElementById("list");
 const cards = urls.map(() => { const c = document.createElement("div"); c.className = "card"; list.append(c); return c; });
 const h = window.__holder = { start: performance.now(), intervals: [], said: 0, failed: 0, settledAt: null, turns: [] };
 let last = null;
-const tick = (t) => { if (last !== null && h.settledAt === null) h.intervals.push(t - last); last = t; requestAnimationFrame(tick); };
+// Its cadence read until every frame said its shape, and its loop ended there: a page that asks for every frame makes the browser draw each one, and the idle after is the frames' own.
+const tick = (t) => { if (h.settledAt !== null) return; if (last !== null) h.intervals.push(t - last); last = t; requestAnimationFrame(tick); };
 requestAnimationFrame(tick);
 let at = 0; let current = null; let timer = 0;
 const frames = [];
@@ -1342,21 +1763,30 @@ const sharedUrl = (
   return url.href;
 };
 
-/** The memory of `pids` every 20 s over `idleS` seconds, and the CPU they spent in them. */
+/** The memory of `pids` every 20 s over `idleS` seconds, and the CPU they spent in them, by thread name too. */
 async function idleOf(
   pids: () => number[],
   idleS: number
-): Promise<{ cpuMs: number; memory: [number, number][] }> {
+): Promise<{
+  byThread: [string, number][];
+  cpuMs: number;
+  memory: [number, number][];
+}> {
   const memory: [number, number][] = [];
   const from = Date.now();
   const cpu0 = cpuMs(pids());
+  const threads0 = cpuByThread(pids());
   for (let s = 0; s <= idleS; s += 20) {
     memory.push([s, memoryMb(pageProcesses(pids()))]);
     if (s < idleS) {
       await Bun.sleep(Math.max(0, from + (s + 20) * 1000 - Date.now()));
     }
   }
-  return { cpuMs: Math.round(cpuMs(pids()) - cpu0), memory };
+  return {
+    cpuMs: Math.round(cpuMs(pids()) - cpu0),
+    byThread: threadsSpent(threads0, cpuByThread(pids())),
+    memory,
+  };
 }
 
 /**
@@ -1398,7 +1828,7 @@ async function pageLeg(
         scale: 1,
         engine,
         browser: `canvas-cost-${label}-${engine}`,
-        init: [installCounters],
+        init: [installCounters, idleCensus],
       });
       const mine = () => browserPids(stages).filter((pid) => !before.has(pid));
       const cpu0 = cpuMs(mine());
@@ -1431,13 +1861,28 @@ async function pageLeg(
         )
       ).filter((one): one is Timeline => one !== null);
       // WebKit's memory and idle CPU read with no inspector (noInspectorWebKit), its Playwright page let go first.
-      let idle: { cpuMs: number; memory: [number, number][] };
+      let idle: {
+        byThread: [string, number][];
+        census: Census[];
+        cpuMs: number;
+        memory: [number, number][];
+      };
       if (engine === "webkit") {
         await page.close();
         const read = await framesWithNoInspector(urls, IDLE_S);
-        idle = { cpuMs: read.idleCpuMs, memory: read.idleMb };
+        idle = {
+          cpuMs: read.idleCpuMs,
+          byThread: read.idleCpuByThread,
+          memory: read.idleMb,
+          census: read.census,
+        };
       } else {
-        idle = await idleOf(mine, IDLE_S);
+        idle = {
+          ...(await idleOf(mine, IDLE_S)),
+          census: await page.evaluate(() =>
+            (window as unknown as { __census: () => Census[] }).__census()
+          ),
+        };
         await page.close();
       }
       keep(kit, `page.${label}.${engine}`, {
@@ -1456,12 +1901,27 @@ async function pageLeg(
         failed: per.flatMap((one) => one.failed).slice(0, 5),
         memoryMbOverIdle: idle.memory,
         idleCpuMs: idle.cpuMs,
+        idleCpuByThread: idle.byThread.slice(0, 8),
         idleSeconds: IDLE_S,
         idleRead: engine === "webkit" ? "WebKit with no inspector" : engine,
+        idleRuns: censusWords(idle.census),
       });
       kit.check(
         `page ${label} ${engine}: all ${urls.length} frames of ${EMBEDS} stories said their shape (${held.said}) in ${(settledMs / 1000).toFixed(1)} s`,
         held.said === urls.length
+      );
+      // Nothing animates that nobody can see (motion/rest.ts): a canvas scrolled out of view holds its loops (agent canvas runtime). A page of one frame has none out of view.
+      const runs = censusWords(idle.census);
+      if (urls.length === 1) {
+        continue;
+      }
+      kit.check(
+        `page ${label} ${engine}: no frame out of view runs a loop while the page stands untouched (${runs.outOfViewLooping} of the ${runs.outOfView} out of view do; the page's CPU over ${IDLE_S} s: ${idle.cpuMs} ms)`,
+        runs.outOfView > 0 && runs.outOfViewLooping === 0,
+        runs.busy
+          .filter((one) => !one.inView && one.running.length > 0)
+          .map((one) => `${one.document}: ${one.running.join(", ")}`)
+          .join("; ") || undefined
       );
     }
   } finally {
@@ -1499,6 +1959,13 @@ export const Spins = { args: {}, parameters: { viewport: 400 } };
 `;
 
 /**
+ * A page's answer to each frame's graph (core `CANVAS_EMBED_GRAPH`): its
+ * whole graph its own share and nothing to wait on, as a page with that one
+ * Preview gives it. An embed loads no story before it.
+ */
+const GRAPH_ANSWER = `<script>addEventListener("message", (e) => { if (e.data && e.data.type === "cawco:embed-graph") { e.source.postMessage({ type: "cawco:embed-go", urls: e.data.urls }, "*"); e.source.postMessage({ type: "cawco:embed-ready", urls: [] }, "*"); } });</script>`;
+
+/**
  * Frames of the looping story: one in view; two in a pane put away by the
  * dashboard's own path (PaneLeaf's `data-pane-hidden`, `content-visibility:
  * hidden`, and motion/rest.ts `holdSkipped`, bundled from the dashboard),
@@ -1508,6 +1975,7 @@ export const Spins = { args: {}, parameters: { viewport: 400 } };
 const LOOP_HOLDER = (url: string) => `<!doctype html><meta charset="utf-8">
 <style>body{margin:0}iframe{display:block;inline-size:600px;block-size:200px;border:0}.pane[data-pane-hidden]{content-visibility:hidden;contain-intrinsic-size:auto 400px}</style>
 <script src="/away.js"></script>
+${GRAPH_ANSWER}
 <iframe id="seen" src="${url}"></iframe>
 <div class="pane" id="pane"><iframe id="away" src="${url}"></iframe><iframe id="relay" src="/relay"></iframe></div>
 <div style="block-size:4000px"></div>
@@ -1523,6 +1991,7 @@ window.bringBack = () => { back?.(); pane.removeAttribute("data-pane-hidden"); }
 const RELAY_PAGE = (url: string) => `<!doctype html><meta charset="utf-8">
 <style>body{margin:0}iframe{display:block;inline-size:600px;block-size:200px;border:0}</style>
 <script src="/away.js"></script><script>window.__probeAway.relayAway();</script>
+${GRAPH_ANSWER}
 <iframe id="inner" src="${url}"></iframe>`;
 
 /** The dashboard's pane-away path and the decision page's relay, bundled for the holder. */
@@ -2433,7 +2902,7 @@ function installBootClock(): void {
 const BOOT_HOLDER = (url: string) => `<!doctype html><meta charset="utf-8">
 <style>body{margin:0}iframe{display:block;inline-size:100%;block-size:600px;border:0}</style>
 <iframe src="${url}"></iframe>
-<script>addEventListener("message", (e) => { if (e.data && e.data.type === "cawco:embed-graph") { e.source.postMessage({ type: "cawco:embed-go", urls: e.data.urls }, "*"); e.source.postMessage({ type: "cawco:embed-ready", urls: [] }, "*"); } });</script>`;
+${GRAPH_ANSWER}`;
 
 /**
  * One Preview's frame of `--story` booted on a warm stage in a fresh
@@ -2655,18 +3124,271 @@ function decisionSampler(): void {
 }
 
 /**
+ * Installed in every frame: what its document fetched, by its resource
+ * timing (each resource it loaded, and the document itself), told to the
+ * top document, which keeps each document's last count, a gone one's too
+ * (`__documentRequests`: their sum). WebKit with no inspector says no
+ * request to anything watching; this counts alike in either engine.
+ */
+function documentRequests(): void {
+  const id = `${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+  let fetched = 1;
+  const tell = () =>
+    top?.postMessage({ type: "probe:document-requests", id, fetched }, "*");
+  if (window === top) {
+    const counts = new Map<string, number>();
+    (window as unknown as DocumentRequests).__documentRequests = () =>
+      [...counts.values()].reduce((sum, one) => sum + one, 0);
+    addEventListener("message", (event) => {
+      const said = event.data as {
+        fetched?: unknown;
+        id?: unknown;
+        type?: unknown;
+      } | null;
+      if (
+        said?.type === "probe:document-requests" &&
+        typeof said.id === "string" &&
+        typeof said.fetched === "number"
+      ) {
+        counts.set(said.id, said.fetched);
+      }
+    });
+  }
+  new PerformanceObserver((list) => {
+    fetched += list.getEntries().length;
+    tell();
+  }).observe({ type: "resource", buffered: true });
+  tell();
+}
+
+/** The top document's count of what its documents fetched ({@link documentRequests}). */
+interface DocumentRequests {
+  __documentRequests: () => number;
+}
+
+/** In the page: every Preview in the scroller's view drawn. */
+const firstScreenDrawn = (): boolean => {
+  const scroller = document.querySelector("[data-slot=page-scroll]");
+  const view = scroller?.getBoundingClientRect();
+  const wells = [
+    ...document.querySelectorAll<HTMLElement>("[data-slot=media]"),
+  ].filter((well) => {
+    const box = well.getBoundingClientRect();
+    return view && box.bottom > view.top && box.top < view.bottom;
+  });
+  return (
+    wells.length > 0 &&
+    wells.every((well) => {
+      const frame = well.querySelector<HTMLIFrameElement>(
+        "iframe[data-slot=embed]"
+      );
+      return (
+        frame?.dataset.shape === "drawn" && frame.dataset.drawn !== undefined
+      );
+    })
+  );
+};
+
+/** In the page: its scroller scrolled to its end at `speed` px a second, one step a frame; answers the time it took, ms. */
+const scrolledToEnd = (speed: number): Promise<number> =>
+  new Promise<number>((done) => {
+    const scroller = document.querySelector(
+      "[data-slot=page-scroll]"
+    ) as HTMLElement;
+    const t0 = performance.now();
+    let last = t0;
+    const step = (now: number) => {
+      scroller.scrollTop += (speed * (now - last)) / 1000;
+      last = now;
+      if (
+        scroller.scrollTop + scroller.clientHeight >=
+        scroller.scrollHeight - 1
+      ) {
+        done(Math.round(now - t0));
+        return;
+      }
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  });
+
+/** The scripts the decision leg's page runs before its own, in every frame. */
+const DECISION_INIT = [CAWCO_BRIDGE, decisionSampler, documentRequests];
+
+/**
+ * The decision leg's page in one engine, driven the same in either: a call
+ * run in it, a test waited on, its browser's page processes' memory, and
+ * the requests its page made.
+ */
+interface DecisionPage {
+  close: () => Promise<void>;
+  /** Whether an inspector watches it (Playwright's). */
+  inspected: boolean;
+  memoryMb: () => number;
+  /** Takes the page to `url`, answering once its document has loaded. */
+  open: (url: string) => Promise<void>;
+  /** What its documents fetched ({@link documentRequests}), and, where Playwright watches the page, every request it saw. */
+  requests: () => Promise<{ documentRequests: number; requests?: number }>;
+  run: <A, R>(
+    fn: (value: A) => R | Promise<R>,
+    value: A
+  ) => Promise<Awaited<R>>;
+  /** Answers once `test` holds in the page, asked every `every` ms, within {@link DRAW_MS}. */
+  until: <A>(
+    test: (value: A) => boolean,
+    value: A,
+    every: number
+  ) => Promise<void>;
+}
+
+/** The page under Playwright (the leg's Chromium), in a fresh context at the owner's window. */
+async function inspectedDecisionPage(
+  kit: Kit,
+  engine: Engine
+): Promise<DecisionPage> {
+  const before = new Set(browserPids([]));
+  const page = await kit.page("desk", {
+    scale: 1,
+    engine,
+    browser: `canvas-cost-decision-${engine}`,
+    init: DECISION_INIT,
+    ignoreHTTPSErrors: true,
+  });
+  await page.setViewportSize(PERSON_VIEW);
+  let requests = 0;
+  page.on("request", () => {
+    requests += 1;
+  });
+  return {
+    inspected: true,
+    open: async (url) => {
+      await page.goto(url, { waitUntil: "load" });
+    },
+    // Playwright's types unbox what a call is given (a handle for its object): the leg gives none, so the page's copy of `value` is `value` itself.
+    run: (fn, value) => page.evaluate(fn as never, value) as never,
+    until: async (test, value, every) => {
+      await page.waitForFunction(test as never, value, {
+        timeout: DRAW_MS,
+        polling: every,
+      });
+    },
+    requests: async () => ({
+      requests,
+      documentRequests: await page.evaluate(() =>
+        (window as unknown as DocumentRequests).__documentRequests()
+      ),
+    }),
+    memoryMb: () =>
+      memoryMb(
+        pageProcesses(browserPids([]).filter((pid) => !before.has(pid)))
+      ),
+    close: () => page.close(),
+  };
+}
+
+/**
+ * The page in WebKit with no inspector ({@link noInspectorWebKit}), as a
+ * person runs it: at the owner's window, the run's certificate (`tls`)
+ * trusted, the leg's scripts in every frame as a context's are, and the
+ * kit bridge's agent in its top document beside them, which runs the leg's
+ * calls, the bridge on HTTPS with that certificate as the page is. It
+ * starts on a page of the bridge's own, and `open` takes it on from there
+ * as a link would.
+ */
+async function uninspectedDecisionPage(tls: {
+  cert: string;
+  key: string;
+}): Promise<DecisionPage> {
+  // On HTTPS as the page is: WebKit turns away a secure page's request to an HTTP bridge as mixed content.
+  const bridge = safariBridge(tls);
+  const blank = bridge.html("decision-start", "", "");
+  const browser = noInspectorWebKit(blank, {
+    init: [
+      ...DECISION_INIT,
+      // The bridge's own page carries its agent already.
+      {
+        content: `if (window === top && location.origin !== ${JSON.stringify(bridge.origin)}) {\n${bridge.agent}\n}`,
+      },
+    ],
+    size: PERSON_VIEW,
+    ignoreTlsErrors: true,
+  });
+  const end = () => {
+    browser.end();
+    bridge.stop();
+    return Promise.resolve();
+  };
+  let page: SafariPage;
+  try {
+    page = await bridge.page((href) => href === blank);
+  } catch (error) {
+    await end();
+    throw error;
+  }
+  return {
+    inspected: false,
+    open: async (url) => {
+      // Its answer is lost with the page it leaves (the agent's post of it, cancelled as the next page comes in), so it is not waited on: the next page's agent asking is the answer.
+      page
+        .run(
+          (to: string) => {
+            setTimeout(() => location.assign(to), 0);
+          },
+          [url],
+          5000
+        )
+        .catch(() => undefined);
+      page = await bridge.page((href) => href === url, DRAW_MS);
+      await page.run(
+        () =>
+          document.readyState === "complete"
+            ? undefined
+            : new Promise<undefined>((done) =>
+                addEventListener("load", () => done(undefined), {
+                  once: true,
+                })
+              ),
+        [],
+        DRAW_MS
+      );
+    },
+    run: (fn, value) => page.run(fn, [value], DRAW_MS),
+    until: async (test, value, every) => {
+      // Asked from here, a call at a time: the agent runs what it is given and nothing it would have to build.
+      const by = Date.now() + DRAW_MS;
+      while (!(await page.run(test, [value], DRAW_MS))) {
+        if (Date.now() > by) {
+          throw new Error(`it did not hold within ${DRAW_MS} ms`);
+        }
+        await Bun.sleep(every);
+      }
+    },
+    requests: async () => ({
+      documentRequests: await page.run(
+        () => (window as unknown as DocumentRequests).__documentRequests(),
+        [],
+        DRAW_MS
+      ),
+    }),
+    memoryMb: browser.memory,
+    close: end,
+  };
+}
+
+/**
  * A decision page of `--embeds` Previews, each one story of the dashboard's
  * states files (as the page leg picks them), on the decision host the hub
  * serves (decision-embeds.ts `startDecisionStage`), the embed origin on
  * HTTPS over HTTP/2 holding each answer {@link DECISION_HOLD_MS}, the stage
  * warm and the page's media knowing each Preview's shape (a first page
- * scrolled through told them), each engine in a fresh context at the
- * owner's window: until every
- * Preview in the first screen is drawn, then scrolled to its end at a
- * person's pace ({@link PERSON_SCROLL}) and on until every Preview is
- * drawn. At each: the time, the frames on the page, the requests made, and
- * the browser's page processes' memory; while scrolling, every 50 ms, each
- * Preview in view holds its frame drawn, its skeleton, or nothing.
+ * scrolled through told them), each engine in a fresh browser at the
+ * owner's window (Chromium under Playwright, WebKit with no inspector:
+ * {@link DecisionPage}): until every Preview in the first screen is drawn,
+ * then scrolled to its end at a person's pace ({@link PERSON_SCROLL}) and
+ * on until every Preview is drawn. At each: the time, the frames on the
+ * page, the requests made, and the browser's page processes' memory; while
+ * scrolling, every 50 ms, each Preview in view holds its frame drawn, its
+ * skeleton, or nothing.
  */
 async function decisionLeg(kit: Kit): Promise<void> {
   const files = statesFiles().filter((file) => !file.startsWith(LOOP_DIR));
@@ -2731,149 +3453,105 @@ async function decisionLeg(kit: Kit): Promise<void> {
     }
     await prime.close();
     for (const engine of ENGINES) {
-      const before = new Set(browserPids([]));
-      const page = await kit.page("desk", {
-        scale: 1,
-        engine,
-        browser: `canvas-cost-decision-${engine}`,
-        init: [CAWCO_BRIDGE, decisionSampler],
-        ignoreHTTPSErrors: true,
-      });
-      await page.setViewportSize(PERSON_VIEW);
-      let requests = 0;
-      page.on("request", () => {
-        requests += 1;
-      });
-      const mine = () => browserPids([]).filter((pid) => !before.has(pid));
-      const at = async (label: string, startedAt: number) => {
-        const frames = await page.evaluate(
-          () => document.querySelectorAll("iframe[data-slot=embed]").length
-        );
-        const seen = await page.evaluate(
-          () =>
-            (window as unknown as { __seen: { drawn: number } }).__seen.drawn
-        );
-        return {
+      // WebKit as a person runs it: under Playwright its inspector keeps every frame the page lets go of, and the memory read would be the inspector's.
+      const page =
+        engine === "webkit"
+          ? await uninspectedDecisionPage(tls)
+          : await inspectedDecisionPage(kit, engine);
+      try {
+        const at = async (label: string, startedAt: number) => ({
           label,
           ms: Date.now() - startedAt,
-          frames,
-          drawn: seen,
-          requests,
-          pageProcessMb: memoryMb(pageProcesses(mine())),
+          frames: await page.run(
+            () => document.querySelectorAll("iframe[data-slot=embed]").length,
+            null
+          ),
+          drawn: await page.run(
+            () =>
+              (window as unknown as { __seen: { drawn: number } }).__seen.drawn,
+            null
+          ),
+          ...(await page.requests()),
+          pageProcessMb: page.memoryMb(),
+        });
+        const started = Date.now();
+        await page.open(stage.pageUrl("many", "light"));
+        // The first screen: every Preview in the scroller's view drawn.
+        await page.until(firstScreenDrawn, null, 50);
+        const firstMs = Date.now() - started;
+        // What the first screen set off settles (later turns, fonts).
+        await Bun.sleep(3000);
+        const first = {
+          ...(await at("first screen", started)),
+          settledMs: firstMs,
         };
-      };
-      const started = Date.now();
-      await page.goto(stage.pageUrl("many", "light"), { waitUntil: "load" });
-      // The first screen: every Preview in the scroller's view drawn.
-      await page.waitForFunction(
-        () => {
-          const scroller = document.querySelector("[data-slot=page-scroll]");
-          const view = scroller?.getBoundingClientRect();
-          const wells = [
-            ...document.querySelectorAll<HTMLElement>("[data-slot=media]"),
-          ].filter((well) => {
-            const box = well.getBoundingClientRect();
-            return view && box.bottom > view.top && box.top < view.bottom;
-          });
-          return (
-            wells.length > 0 &&
-            wells.every((well) => {
-              const frame = well.querySelector<HTMLIFrameElement>(
-                "iframe[data-slot=embed]"
-              );
-              return (
-                frame?.dataset.shape === "drawn" &&
-                frame.dataset.drawn !== undefined
-              );
-            })
-          );
-        },
-        undefined,
-        { timeout: DRAW_MS, polling: 50 }
-      );
-      const firstMs = Date.now() - started;
-      // What the first screen set off settles (later turns, fonts).
-      await Bun.sleep(3000);
-      const first = {
-        ...(await at("first screen", started)),
-        settledMs: firstMs,
-      };
-      await page.evaluate(() => {
-        const seen = (
-          window as unknown as {
-            __seen: { samples: number; waiting: number; empty: string[] };
-          }
-        ).__seen;
-        seen.samples = 0;
-        seen.waiting = 0;
-        seen.empty = [];
-      });
-      // Scrolled to its end at a person's pace, one step a frame.
-      const scrolledMs = await page.evaluate(
-        (speed) =>
-          new Promise<number>((done) => {
-            const scroller = document.querySelector(
-              "[data-slot=page-scroll]"
-            ) as HTMLElement;
-            const t0 = performance.now();
-            let last = t0;
-            const step = (now: number) => {
-              scroller.scrollTop += (speed * (now - last)) / 1000;
-              last = now;
-              if (
-                scroller.scrollTop + scroller.clientHeight >=
-                scroller.scrollHeight - 1
-              ) {
-                done(Math.round(now - t0));
-                return;
-              }
-              requestAnimationFrame(step);
-            };
-            requestAnimationFrame(step);
-          }),
-        PERSON_SCROLL
-      );
-      const scrollStart = Date.now();
-      await page.waitForFunction(
-        (count) =>
-          (window as unknown as { __seen: { drawn: number } }).__seen.drawn ===
-          count,
-        picks.length,
-        { timeout: DRAW_MS, polling: 100 }
-      );
-      await Bun.sleep(3000);
-      const end = await at("scrolled to the end", scrollStart);
-      const seen = await page.evaluate(
-        () =>
-          (
+        const shown = await page.run(
+          () => ({ width: innerWidth, height: innerHeight }),
+          null
+        );
+        await page.run(() => {
+          const seen = (
             window as unknown as {
               __seen: { samples: number; waiting: number; empty: string[] };
             }
-          ).__seen
-      );
-      keep(kit, `decision.${engine}`, {
-        previews: picks.length,
-        view: PERSON_VIEW,
-        scrollPxPerS: PERSON_SCROLL,
-        first,
-        scrolledMs,
-        end,
-        whileScrolling: seen,
-      });
-      kit.check(
-        `decision ${engine}: while scrolled at ${PERSON_SCROLL} px/s, no Preview in view is an empty box (${seen.empty.length} of ${seen.samples} samples)`,
-        seen.samples > 0 && seen.empty.length === 0,
-        seen.empty.join("; ") || undefined
-      );
-      kit.check(
-        `decision ${engine}: while scrolled at ${PERSON_SCROLL} px/s, every Preview had drawn before it came into view (${seen.waiting} of ${seen.samples} samples in view still waiting)`,
-        seen.samples > 0 && seen.waiting === 0
-      );
-      kit.check(
-        `decision ${engine}: every one of the ${picks.length} Previews drawn once scrolled to the end (${end.drawn})`,
-        end.drawn === picks.length
-      );
-      await page.close();
+          ).__seen;
+          seen.samples = 0;
+          seen.waiting = 0;
+          seen.empty = [];
+        }, null);
+        // Scrolled to its end at a person's pace, one step a frame.
+        const scrolledMs = await page.run(scrolledToEnd, PERSON_SCROLL);
+        const scrollStart = Date.now();
+        await page.until(
+          (count) =>
+            (window as unknown as { __seen: { drawn: number } }).__seen
+              .drawn === count,
+          picks.length,
+          100
+        );
+        await Bun.sleep(3000);
+        const end = await at("scrolled to the end", scrollStart);
+        const seen = await page.run(
+          () =>
+            (
+              window as unknown as {
+                __seen: { samples: number; waiting: number; empty: string[] };
+              }
+            ).__seen,
+          null
+        );
+        keep(kit, `decision.${engine}`, {
+          previews: picks.length,
+          view: PERSON_VIEW,
+          window: shown,
+          inspector: page.inspected,
+          scrollPxPerS: PERSON_SCROLL,
+          first,
+          scrolledMs,
+          end,
+          whileScrolling: seen,
+        });
+        kit.check(
+          `decision ${engine}: the page stands in the owner's window (${shown.width} × ${shown.height}, his ${PERSON_VIEW.width} × ${PERSON_VIEW.height})`,
+          shown.width === PERSON_VIEW.width &&
+            shown.height === PERSON_VIEW.height
+        );
+        kit.check(
+          `decision ${engine}: while scrolled at ${PERSON_SCROLL} px/s, no Preview in view is an empty box (${seen.empty.length} of ${seen.samples} samples)`,
+          seen.samples > 0 && seen.empty.length === 0,
+          seen.empty.join("; ") || undefined
+        );
+        kit.check(
+          `decision ${engine}: while scrolled at ${PERSON_SCROLL} px/s, every Preview had drawn before it came into view (${seen.waiting} of ${seen.samples} samples in view still waiting)`,
+          seen.samples > 0 && seen.waiting === 0
+        );
+        kit.check(
+          `decision ${engine}: every one of the ${picks.length} Previews drawn once scrolled to the end (${end.drawn})`,
+          end.drawn === picks.length
+        );
+      } finally {
+        await page.close();
+      }
     }
   } finally {
     await stage.stop();
@@ -2895,6 +3573,13 @@ const GONE_S = 60;
  * 440, 552, 715, 336, 510, 1030 MB.
  */
 const MEMORY_ROUNDS = Number(arg("rounds") ?? 6);
+/**
+ * How many of them a run under Playwright reads: three show it keeping
+ * every frame a page took away (the hub's page 977, 1545, 2098 MB after a
+ * full collection), and by the sixth the control's kept frames took its
+ * browser past the kit's 6 GiB cap (killed at 6.01 GiB).
+ */
+const PLAYWRIGHT_ROUNDS = Math.min(MEMORY_ROUNDS, 3);
 /** How long a page opened again stands before it is taken away, s. */
 const MEMORY_REST_S = 20;
 
@@ -2904,12 +3589,12 @@ const MEMORY_REST_S = 20;
  * collection full (`JSC_useGenerationalGC=0`) and the holder going on after
  * each page goes, so what a gone page holds is read, not when JSC next
  * collects; `playwright`: the same page in WebKit under Playwright, as the
- * audit read it; each with `-control`, a page of frames holding plain
- * objects and no app at all, in place of the hub's.
+ * audit read it, whose inspector keeps every frame a page takes away, so
+ * run only when asked for, to show it; each with `-control`, a page of
+ * frames holding plain objects and no app at all, in place of the hub's.
  */
 const MEMORY_RUNS = (
-  arg("memory-runs") ??
-  "uninspected,collected,collected-control,playwright,playwright-control"
+  arg("memory-runs") ?? "uninspected,collected,collected-control"
 ).split(",") as (
   | "uninspected"
   | "uninspected-control"
@@ -3008,11 +3693,11 @@ const PROBES = {
   css: (stage: string) => `import("${stage}/src/app.css").then(ready, ready);`,
 } as const;
 
-/** The canvases alone: a frame of each, counted once it says its shape (`said`), or with `byLoad` once it has loaded (a page that draws nothing). */
+/** The canvases alone: a frame of each, its graph answered as a page with it alone answers it ({@link GRAPH_ANSWER}), counted once it says its shape (`said`), or with `byLoad` once it has loaded (a page that draws nothing). */
 const CANVASES_PAGE = (urls: string[], byLoad = false) =>
   byLoad
-    ? `<!doctype html><script>window.said = 0;</script>${urls.map((url) => `<iframe src="${url}" onload="window.said += 1"></iframe>`).join("")}`
-    : `<!doctype html><script>window.said = 0; const seen = new Set(); addEventListener("message", (event) => { if (event.data && event.data.type === "cawco:embed-size" && !seen.has(event.source)) { seen.add(event.source); window.said = seen.size; } });</script>${urls.map((url) => `<iframe src="${url}"></iframe>`).join("")}`;
+    ? `<!doctype html>${GRAPH_ANSWER}<script>window.said = 0;</script>${urls.map((url) => `<iframe src="${url}" onload="window.said += 1"></iframe>`).join("")}`
+    : `<!doctype html>${GRAPH_ANSWER}<script>window.said = 0; const seen = new Set(); addEventListener("message", (event) => { if (event.data && event.data.type === "cawco:embed-size" && !seen.has(event.source)) { seen.add(event.source); window.said = seen.size; } });</script>${urls.map((url) => `<iframe src="${url}"></iframe>`).join("")}`;
 
 /** What the canvas page's entry imports, at the page's keyed addresses (stage-host host.ts `entryModule`), as the stage served it. */
 interface EntryParts {
@@ -3160,8 +3845,10 @@ const CONTROL_PAGE = (child: string) =>
  * holds one: the frame taken away is the page gone. Served on the page's
  * own origin, so it is read from here alone, through the page's document,
  * with no handle into its frames. `window.memoryPage` opens the page at a
- * URL and answers once it is drawn (every Preview at its drawn shape; the
- * control's frames each holding their objects), `memoryGone` takes it away,
+ * URL and answers once it is drawn (every Preview at its drawn shape, the
+ * page read through to its end a screen each half second, as a person
+ * reading it does: a Preview mounts and draws only as it nears the view;
+ * the control's frames each holding their objects), `memoryGone` takes it away,
  * `memoryFacts` says how the page stands (its visibility, focus, and the
  * animation frames it is given in a second). `?agent=<bridge>` puts the
  * kit's bridge's agent in it (safari-bridge.ts), which runs the leg's calls
@@ -3178,13 +3865,21 @@ const MEMORY_HOLDER = `<!doctype html><meta charset="utf-8"><style>body{margin:0
     if (kind === "canvases" || kind.startsWith("loop") || kind === "vite" || kind === "xorigin" || kind.startsWith("probe-") || kind.startsWith("cut-")) return inner.defaultView.said === ${MEMORY_PREVIEWS};
     return [...inner.querySelectorAll(${JSON.stringify(EMBED_FRAME)})].filter((one) => one.dataset.shape === "drawn").length === ${MEMORY_PREVIEWS};
   };
+  // A decision page read on by a screen: its Previews mount and draw only as they near its view (dashboard decisions host Preview.svelte). A page with no scroller of its own stands as it is.
+  const readOn = (frame) => {
+    const scroller = frame.contentDocument?.querySelector("[data-slot=page-scroll]");
+    if (scroller) scroller.scrollTop += scroller.clientHeight;
+  };
   window.memoryPage = async (url, kind) => {
     const t0 = Date.now();
     const frame = document.createElement("iframe");
     frame.id = "page";
     frame.src = url;
     document.body.append(frame);
-    while (!ready(frame, kind) && Date.now() - t0 < ${MEMORY_PREVIEWS * 60_000}) await wait(500);
+    while (!ready(frame, kind) && Date.now() - t0 < ${MEMORY_PREVIEWS * 60_000}) {
+      readOn(frame);
+      await wait(500);
+    }
     return { drawn: ready(frame, kind), ms: Date.now() - t0 };
   };
   // The page taken away, then the holder goes on for \`ms\` as a dashboard a person goes on using does: short-lived objects, which drive JSC's own collections; what the gone page let go of goes with the next full one. Answers the objects made.
@@ -3230,6 +3925,8 @@ interface MemoryBrowser {
   gc: (() => Promise<void>) | null;
   /** The page taken away, the holder going on {@link GONE_S} s. */
   gone: () => Promise<void>;
+  /** Its web process's native heap ({@link WEBKIT_HEAP}), MB; null where it is not read (under Playwright). */
+  heap: () => number | null;
   /** The JS heap the latest collection since collection `since` left, MB, where the browser says it (JSC's GC log); null where none has run since, or it says none. */
   jsHeap: (since?: number) => number | null;
   memory: () => number;
@@ -3248,10 +3945,11 @@ async function uninspectedWebKit(
   const url = new URL(holder);
   url.searchParams.set("agent", bridge.origin);
   // Every collection full, JSC's own GC log too, for what of the JS heap each leaves (`jsHeap`). Not with the default collector: its eden collections, logged a line each many times a second, stalled the page's main thread past the gone window's answer.
-  const browser = noInspectorWebKit(
-    url.href,
-    everyCollectionFull ? { JSC_useGenerationalGC: "0", JSC_logGC: "1" } : {}
-  );
+  const browser = noInspectorWebKit(url.href, {
+    env: everyCollectionFull
+      ? { JSC_useGenerationalGC: "0", JSC_logGC: "1" }
+      : {},
+  });
   const end = (): Promise<void> => {
     browser.end();
     bridge.stop();
@@ -3282,14 +3980,24 @@ async function uninspectedWebKit(
     facts: () => page.run(() => (window as unknown as Holder).memoryFacts()),
     gc: null,
     memory: browser.memory,
+    heap: browser.heap,
     collections: () => browser.collections().length,
     jsHeap: (since = 0) => jsHeapOf(browser.collections(), since),
     end,
   };
 }
 
-/** A collection's line in JSC's GC log (`JSC_logGC`): its heap, and the live size it leaves (`=> 1669kb`). */
-const GC_LEFT = /^\[GC<(0x[0-9a-f]+)>: M .* => (\d+)kb, p=/;
+/**
+ * A collection's last line in JSC's GC log (`JSC_logGC`): its heap, and the
+ * live size it leaves (`=> 1669kb, p=`). A collection that ran in one go
+ * says it on its `START` line, one the mutator came back to on a line of
+ * its own (`: M a=…`). Read on the second alone, a run's log lost 161 of
+ * its 872, and in the round WebKit released its memory nearly all of them
+ * (107 of the 109 in the minute after the page went, the one it went in
+ * among them): that round read `460 → null` once and `460 → 359` another
+ * time, a collection from before the page went.
+ */
+const GC_LEFT = /^\[GC<(0x[0-9a-f]+)>: .* => (\d+)kb, p=/;
 
 /** The JS heap the latest collection since collection `since` of each of the process's heaps left, MB; null where none has run since. */
 const jsHeapOf = (
@@ -3345,6 +4053,7 @@ async function playwrightWebKit(
     gc: () => page.requestGC(),
     collections: () => 0,
     jsHeap: () => null,
+    heap: () => null,
     memory: () =>
       memoryMb(
         pageProcesses(browserPids([]).filter((pid) => !before.has(pid)))
@@ -3353,8 +4062,26 @@ async function playwrightWebKit(
   };
 }
 
+/** The browser a run reads its page in, and how many rounds it reads there. */
+const memoryRunOf = async (
+  kit: Kit,
+  holder: string,
+  label: (typeof MEMORY_RUNS)[number]
+): Promise<{ browser: MemoryBrowser; rounds: number }> =>
+  label.startsWith("playwright")
+    ? {
+        browser: await playwrightWebKit(kit, holder, label),
+        rounds: PLAYWRIGHT_ROUNDS,
+      }
+    : {
+        browser: await uninspectedWebKit(holder, label.startsWith("collected")),
+        rounds: MEMORY_ROUNDS,
+      };
+
 /** One run's reading: the holder alone, the page drawn and left untouched, then each time it is taken away (and opened again). */
 interface MemoryRead {
+  /** WebKit's native heap with the holder alone, MB (null where it is not read). */
+  aloneHeapMb: number | null;
   /** The JS heap with the holder alone, MB (null where the browser says none). */
   aloneJsMb: number | null;
   aloneMb: number;
@@ -3365,6 +4092,8 @@ interface MemoryRead {
     drawnMb: number;
     gcMb: number | null;
     goneMb: number;
+    /** WebKit's native heap {@link GONE_S} s after the page went, MB (null where it is not read). */
+    goneHeapMb: number | null;
     /** The JS heap the latest collection left while the page stood drawn, MB (null where the browser says none). */
     drawnJsMb: number | null;
     /** The JS heap the latest collection after the page went left, MB (null where none ran after, or the browser says none). */
@@ -3378,7 +4107,7 @@ interface MemoryRead {
 /**
  * The page in `browser`: the holder alone, then the page opened, drawn and
  * left untouched `--idle` s (its memory every 20 s), then
- * {@link MEMORY_ROUNDS} times taken away ({@link GONE_S} s later read, and
+ * `rounds` times taken away ({@link GONE_S} s later read, and
  * again after a full collection where the browser takes one) and, but for
  * the last, opened again and left {@link MEMORY_REST_S} s.
  */
@@ -3386,15 +4115,17 @@ async function memoryRounds(
   browser: MemoryBrowser,
   url: string,
   kind: MemoryPage,
+  rounds: number,
   stageKey: () => Promise<string>
 ): Promise<MemoryRead> {
   await Bun.sleep(3000);
   const aloneMb = browser.memory();
+  const aloneHeapMb = browser.heap();
   const aloneJsMb = browser.jsHeap();
   const facts = await browser.facts();
-  const rounds: MemoryRead["rounds"] = [];
+  const read: MemoryRead["rounds"] = [];
   const idleMb: [number, number][] = [];
-  for (let round = 1; round <= MEMORY_ROUNDS; round += 1) {
+  for (let round = 1; round <= rounds; round += 1) {
     const opened = await browser.open(url, kind);
     const drawnMb = browser.memory();
     const drawnJsMb = browser.jsHeap();
@@ -3413,6 +4144,7 @@ async function memoryRounds(
     const before = browser.collections();
     await browser.gone();
     const goneMb = browser.memory();
+    const goneHeapMb = browser.heap();
     const goneJsMb = browser.jsHeap(before);
     let gcMb: number | null = null;
     if (browser.gc) {
@@ -3420,17 +4152,18 @@ async function memoryRounds(
       await Bun.sleep(5000);
       gcMb = browser.memory();
     }
-    rounds.push({
+    read.push({
       ...opened,
       drawnMb,
       goneMb,
+      goneHeapMb,
       gcMb,
       drawnJsMb,
       goneJsMb,
       key,
     });
   }
-  return { aloneMb, aloneJsMb, facts, idleMb, rounds };
+  return { aloneMb, aloneHeapMb, aloneJsMb, facts, idleMb, rounds: read };
 }
 
 /** A reading in words: alone, drawn, after the idle, and each round's drawn → gone (→ after a full collection). */
@@ -3483,7 +4216,9 @@ async function memoryLeg(kit: Kit): Promise<void> {
   const cuts = Object.fromEntries(
     Object.entries(CUTS).map(([name, rewrite]) => [
       name,
-      embedOrigin(stage.stagePort, null, 0, null, (html) => rewrite(html, entry)),
+      embedOrigin(stage.stagePort, null, 0, null, (html) =>
+        rewrite(html, entry)
+      ),
     ])
   ) as Record<keyof typeof CUTS, ReturnType<typeof embedOrigin>>;
   const elsewhere = Bun.serve({
@@ -3596,24 +4331,25 @@ async function memoryLeg(kit: Kit): Promise<void> {
         ? [{ label, kind: "control" as MemoryPage }]
         : MEMORY_PAGES.map((kind) => ({ label, kind: kind as MemoryPage }))
     );
+    const stageKey = async () => {
+      const page = await (
+        await fetch(
+          embedUrl(`http://127.0.0.1:${stage.stagePort}`, LOOP_FILE, "Spins")
+        )
+      ).text();
+      return page.match(STAGE_KEY)?.[1] ?? "";
+    };
     for (const { label: run, kind } of plan) {
-      const browser = run.startsWith("playwright")
-        ? await playwrightWebKit(kit, holder, run)
-        : await uninspectedWebKit(holder, run.startsWith("collected"));
+      const { browser, rounds } = await memoryRunOf(kit, holder, run);
       let read: MemoryRead;
       try {
-        read = await memoryRounds(browser, addressOf[kind], kind, async () => {
-          const page = await (
-            await fetch(
-              embedUrl(
-                `http://127.0.0.1:${stage.stagePort}`,
-                LOOP_FILE,
-                "Spins"
-              )
-            )
-          ).text();
-          return page.match(STAGE_KEY)?.[1] ?? "";
-        });
+        read = await memoryRounds(
+          browser,
+          addressOf[kind],
+          kind,
+          rounds,
+          stageKey
+        );
       } finally {
         await browser.end();
       }
@@ -3641,6 +4377,20 @@ const IDLE_GROWTH_SHARE = 0.1;
 /** How much of the JS heap a page stood drawn on may stay once it is gone: the holder's own (its bridge's calls, the objects it makes going on) is in both. Our own call: a page kept stays whole. */
 const JS_LEFT_SHARE = 0.1;
 
+/**
+ * WebKit's strict memory threshold on a desk, MB: half the lesser of 3 GB
+ * and the machine's memory (WTF MemoryPressureHandler.cpp
+ * `baseThreshold(std::min(3 * GB, ramSize()))`, `s_strictThresholdFraction
+ * = 0.5`), held against the web process's resident size (wtf/linux
+ * MemoryFootprintLinux.cpp: `return memoryStatus.resident;`), read every
+ * 30 s. Past it, its release is critical (WebCore MemoryRelease.cpp: `if
+ * (critical == Critical::Yes) { // Return unused pages back to the OS now
+ * … WTF::releaseFastMallocFreeMemory(); releaseCriticalMemory(…); }`).
+ */
+const WEBKIT_STRICT_MB = Math.round(
+  (0.5 * Math.min(3 * 1024 ** 3, totalmem())) / 1024 ** 2
+);
+
 /** The least-squares slope of `ys` over their places, a round apart. */
 const slopeOf = (ys: number[]): number => {
   const mean = (list: number[]) =>
@@ -3662,11 +4412,14 @@ const slopeOf = (ys: number[]): number => {
  * grows by no more than {@link IDLE_GROWTH_SHARE} of what it took. With
  * every collection full (`collected`), each time it goes its JS goes with
  * it: the heap a collection leaves once it is gone is no more than
- * {@link JS_LEFT_SHARE} of the heap it stood drawn on, every round. What the web process keeps natively past
- * that is said beside it: WebKit's own caches, which its memory-pressure
- * handler sheds past its threshold (WTF MemoryPressureHandler.cpp:
- * `baseThreshold(std::min(3 * GB, ramSize()))`, conservative at 0.33 of it
- * on a desk, 0.5 on iOS, read every 30 s).
+ * {@link JS_LEFT_SHARE} of the heap it stood drawn on, every round; and
+ * what its web process keeps natively once it is gone, which stands in
+ * WebKit's own heap ({@link WEBKIT_HEAP}: 222, 318, 416 MB over three
+ * rounds, the JS heaps' mappings empty, against 39 MB each round with the
+ * control's frames), WebKit gives back: once a page has stood it past its
+ * strict threshold ({@link WEBKIT_STRICT_MB}), a later round keeps no more
+ * than the first did (here 357, 477, 622, then 265 MB). A page whose
+ * frames something held would keep climbing past it.
  */
 function memoryCheck(
   kit: Kit,
@@ -3682,7 +4435,7 @@ function memoryCheck(
   if (label === "uninspected" && kind === "decision") {
     const idleEnd = read.idleMb.at(-1)?.[1] ?? 0;
     kit.check(
-      `memory uninspected: in WebKit as a person runs it (no inspector), the hub's page of ${MEMORY_PREVIEWS} canvases, drawn each of ${MEMORY_ROUNDS} times, grows by no more than ${IDLE_GROWTH_SHARE * 100}% of the ${took} MB it took while untouched (${idleEnd - drawnMb} MB over ${IDLE_S} s); ${said}`,
+      `memory uninspected: in WebKit as a person runs it (no inspector), the hub's page of ${MEMORY_PREVIEWS} canvases, drawn each of ${read.rounds.length} times, grows by no more than ${IDLE_GROWTH_SHARE * 100}% of the ${took} MB it took while untouched (${idleEnd - drawnMb} MB over ${IDLE_S} s); ${said}`,
       allDrawn && took > 0 && idleEnd - drawnMb <= IDLE_GROWTH_SHARE * took
     );
     return;
@@ -3694,14 +4447,25 @@ function memoryCheck(
         one.goneJsMb !== null &&
         one.goneJsMb <= JS_LEFT_SHARE * one.drawnJsMb
     );
+    const kept = read.rounds.map((one) => one.goneMb - read.aloneMb);
+    const inHeap = read.rounds.map(
+      (one) => (one.goneHeapMb ?? 0) - (read.aloneHeapMb ?? 0)
+    );
+    const peak = Math.max(...read.rounds.map((one) => one.drawnMb));
+    const first = kept[0] ?? 0;
+    const back = kept.slice(1).find((one) => one <= first);
+    const givenBack =
+      back === undefined
+        ? `its page never stood it past WebKit's strict threshold of ${WEBKIT_STRICT_MB} MB (at most ${peak} MB)`
+        : `which WebKit gave back past its strict threshold of ${WEBKIT_STRICT_MB} MB, a later round keeping ${back} MB, no more than the first round's ${first}`;
     kit.check(
-      `memory collected: with every collection full, each time the hub's page of ${MEMORY_PREVIEWS} canvases went its JS went with it, the heap a collection left no more than ${JS_LEFT_SHARE * 100}% of the heap it stood drawn on, every round (drawn → gone ${read.rounds.map((one) => `${one.drawnJsMb} → ${one.goneJsMb}`).join(", ")} MB); what its web process kept natively over the holder alone each round: ${read.rounds.map((one) => one.goneMb - read.aloneMb).join(", ")} MB (WebKit's caches, shed past its memory-pressure threshold); ${said}`,
-      allDrawn && released
+      `memory collected: with every collection full, each time the hub's page of ${MEMORY_PREVIEWS} canvases went its JS went with it, the heap a collection left no more than ${JS_LEFT_SHARE * 100}% of the heap it stood drawn on, every round (drawn → gone ${read.rounds.map((one) => `${one.drawnJsMb} → ${one.goneJsMb}`).join(", ")} MB), and what its web process kept natively over the holder alone each round (${kept.join(", ")} MB; in WebKit's own heap ${inHeap.join(", ")} MB) did not climb: ${givenBack}; ${said}`,
+      allDrawn && released && (back !== undefined || peak < WEBKIT_STRICT_MB)
     );
     return;
   }
   kit.check(
-    `memory ${label} ${kind}: the page drawn each of ${MEMORY_ROUNDS} times (${read.rounds.map((one) => `${(one.ms / 1000).toFixed(1)} s`).join(", ")}); ${said}`,
+    `memory ${label} ${kind}: the page drawn each of ${read.rounds.length} times (${read.rounds.map((one) => `${(one.ms / 1000).toFixed(1)} s`).join(", ")}); ${said}`,
     allDrawn
   );
 }

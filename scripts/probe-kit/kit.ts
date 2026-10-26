@@ -176,9 +176,10 @@ export const COMPOSER = `form[data-slot="cin"] ${COMPOSER_FIELD}`;
  * a full restyle took 344 ms, without it 134 ms (the Safari audit's
  * `parity.js`, 2026-10-24): every WebKit style and layout number read
  * with it was Playwright's own. Sheets of another origin cannot be read and
- * keep it.
+ * keep it. A WebKit run with no inspector (canvas-cost's) puts it in every
+ * frame too.
  */
-function safariParity(): void {
+export function safariParity(): void {
   /** The fallback's `@supports` blocks, last first, from the `properties` layer. */
   const dropIn = (layer: CSSLayerBlockRule) => {
     for (let i = layer.cssRules.length - 1; i >= 0; i -= 1) {

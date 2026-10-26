@@ -10,7 +10,10 @@
  * its own agent instead: a script from this bridge that asks the bridge for
  * the next function to run (`GET /next`, held open until there is one),
  * runs it, and posts back what it returned (`POST /done`). Both are simple
- * requests (no preflight), and the bridge answers every origin.
+ * requests (no preflight), and the bridge answers every origin. A page on
+ * HTTPS reaches it only on HTTPS too (`tls`): WebKit turns away a secure
+ * page's request to `http://127.0.0.1` as mixed content ("Not allowed to
+ * request resource").
  *
  * A page gets the agent two ways:
  *  - `bridge.html(body)`: a page the bridge serves itself, the agent in its head;
@@ -42,6 +45,8 @@ export interface SafariPage {
 }
 
 export interface SafariBridge {
+  /** The agent's own source, for a page that runs it among its init scripts (a browser's start scripts). */
+  agent: string;
   /** A proxy in front of `upstream` (a dashboard's origin) that carries the agent: its origin. */
   front: (upstream: string) => string;
   /** A page of the bridge's own: `body` in a document whose head carries the agent. */
@@ -111,7 +116,14 @@ const agentSource = (origin: string) => `(() => {
   loop();
 })();`;
 
-export function safariBridge(): SafariBridge {
+/**
+ * The bridge, on HTTP, or with `tls` (a certificate and its key, as Bun's
+ * `tls` takes them: cloudflare-front.ts `scratchCertificate`) on HTTPS, for
+ * pages on HTTPS in a browser that takes the certificate.
+ */
+export function safariBridge(
+  tls: { cert: string; key: string } | null = null
+): SafariBridge {
   const agents = new Map<string, Agent>();
   const results = new Map<
     number,
@@ -151,6 +163,7 @@ export function safariBridge(): SafariBridge {
     hostname: "127.0.0.1",
     port: 0,
     idleTimeout: 30,
+    ...(tls ? { tls } : {}),
     fetch: async (req): Promise<Response> => {
       const url = new URL(req.url);
       if (url.pathname === "/agent.js") {
@@ -181,7 +194,7 @@ export function safariBridge(): SafariBridge {
       return new Response("not found", { status: 404, headers: CORS });
     },
   });
-  origin = `http://127.0.0.1:${server.port}`;
+  origin = `${tls ? "https" : "http"}://127.0.0.1:${server.port}`;
   const tag = `<script src="${origin}/agent.js"></script>`;
   const fronts: { stop: (close?: boolean) => void }[] = [];
 
@@ -219,6 +232,7 @@ export function safariBridge(): SafariBridge {
   });
 
   return {
+    agent: agentSource(origin),
     origin,
     html: (name, head, body) => {
       const path = `/${name}`;
