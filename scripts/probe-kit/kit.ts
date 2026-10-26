@@ -12,7 +12,7 @@
  */
 import { existsSync } from "node:fs";
 import { cp, mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
-import { constants } from "node:os";
+import { constants, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   type Browser,
@@ -71,8 +71,9 @@ export const ROOT = resolve(import.meta.dir, "../..");
  * reviewer, its captures included, never into the tree. Emptied as the spec
  * starts. A capture helper outside `run` names it by the spec's name.
  */
-const specOut = (spec: string): string =>
-  join(process.env.TMPDIR ?? join(ROOT, ".probe"), "probe-kit", spec);
+/** The kit's scratch under the OS temp dir, never the checkout it runs from. */
+export const SCRATCH = join(tmpdir(), "probe-kit");
+const specOut = (spec: string): string => join(SCRATCH, spec);
 const DASHBOARD = join(ROOT, "apps", "dashboard");
 const FONTS_CONF = join(import.meta.dir, "fonts.conf");
 
@@ -815,9 +816,8 @@ async function serve(
   host = "127.0.0.1"
 ): Promise<Served> {
   const port = at ?? (await freePort());
-  const logs = join(process.env.TMPDIR ?? join(ROOT, ".probe"), "probe-kit");
-  await mkdir(logs, { recursive: true });
-  const log = join(logs, `vite-${how}-${port}`);
+  await mkdir(SCRATCH, { recursive: true });
+  const log = join(SCRATCH, `vite-${how}-${port}`);
   // A dev server re-bundles its deps: the dashboard pre-bundles @cawco/icons,
   // a linked package, and Vite keeps a pre-bundle while its lockfile and
   // config stay the same ("When making changes to the linked dep, restart the

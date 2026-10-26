@@ -70,8 +70,6 @@ build.bak.*/
 # Each workspace's scratch (probes, renders, review pages).
 .context/
 
-# Probe captures and scratch hubs/agents for live checks
-.probe/
 # Captures a delegate leaves for its parent's screenshot review.
 .captures/
 

@@ -35,11 +35,12 @@
  *   refused read draws.
  */
 import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import type {
   TranscriptBlock,
   TranscriptPage,
 } from "../../../../packages/core/src/transcript-types";
-import type { Kit, Spec } from "../../kit";
+import { type Kit, SCRATCH, type Spec } from "../../kit";
 
 const SESSION = "5e5a1c0d-7b2e-4f6a-9c1d-2b3a4c5d6e7f";
 const MACHINE = "ssr-machine";
@@ -180,7 +181,7 @@ function stubHub(asked: Asked[], phase: () => Asked["phase"]): string {
 
 /** The dev server's stderr from now on (kit.ts `serve`), as lines. */
 async function serverLog(base: string): Promise<() => Promise<string[]>> {
-  const file = `${process.env.TMPDIR ?? ".probe"}/probe-kit/vite-dev-${new URL(base).port}.err.log`;
+  const file = join(SCRATCH, `vite-dev-${new URL(base).port}.err.log`);
   const read = () => readFile(file).catch(() => Buffer.alloc(0));
   const from = (await read()).length;
   return async () =>
