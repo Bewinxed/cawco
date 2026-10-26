@@ -192,8 +192,15 @@ export const createAskPresenter = (
       proposer?: unknown;
       sourceFacts?: SourceFacts;
     };
+    // A Caw call his gate put to you says which rule did (lead-gate.ts).
+    const gated = envelope.requestId
+      ? db.leadCalls.ofRequest(envelope.requestId)
+      : undefined;
     payload.presentation = presentPermission(payload.toolName, payload.input, {
       ...askerOf(envelope.instanceId ?? payload.instanceId, payload),
+      ...(gated?.outcome === "asked" && gated.why
+        ? { askedBecause: gated.why }
+        : {}),
       memory,
       current,
       projectName,

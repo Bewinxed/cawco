@@ -577,6 +577,13 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
         if let command = ask.command, let first = ask.commandLine {
             place(commandBlock(command, first: first), gap: Space.space2)
         }
+        // Why Caw's gate put this call to the person, under the command (hub lead-gate.ts).
+        if let because = presentation.askedBecause {
+            let line = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted, lines: 0)
+            line.role = TypeRole(weight: TypeScale.weightBody, size: TypeScale.typeLabel.size, leading: TypeScale.typeLabel.leading, family: TypeScale.typeLabel.family)
+            line.text = because
+            place(line, gap: Space.space2)
+        }
         // The change itself, open: a grant is made on what it changes.
         for change in presentation.changes {
             place(diff(change), gap: Space.space2)

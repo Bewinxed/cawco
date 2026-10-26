@@ -120,6 +120,7 @@ import type { Origin, WorkOrigin } from "./db/schema";
 import { sendWords } from "./db/words";
 import { byHandle } from "./handles";
 import { inboxText } from "./ingress";
+import type { WakeSource } from "./lead-gate";
 import { sentence, tool } from "./mcp-tool";
 import { mediaBase64 } from "./media";
 import { MAKE_A_NOTE, personsTier, ROUTINE_ORIGIN } from "./memory";
@@ -327,10 +328,18 @@ export interface CawEvent {
 
 /**
  * Whose a wake is, for his gate (lead-gate.ts): your words alone are yours;
- * an event, a routine, or outside events riding on it make it outside.
+ * an event, a routine, or outside events riding on it make it outside, and
+ * an ask in its turn names which.
  */
-const sourceOf = (event: CawEvent, inboxed: number): "owner" | "outside" =>
-  event.by === "you" && !event.routine && inboxed === 0 ? "owner" : "outside";
+const sourceOf = (event: CawEvent, inboxed: number): WakeSource => {
+  if (event.routine) {
+    return "routine";
+  }
+  if (event.by !== "you") {
+    return "event";
+  }
+  return inboxed === 0 ? "owner" : "inbox";
+};
 
 /** What a send carries besides its words: pictures (base64) and attachments. */
 export type Carried = Pick<SendPayload, "attachments" | "images">;
@@ -708,11 +717,11 @@ export interface CawDeps {
    */
   readonly views: Pick<Views, "draft" | "kept" | "query" | "view">;
   /**
-   * A wake went out as send `uuid`: your words alone (`owner`), or with
-   * outside text, an event's or a routine's (`outside`). His gate reads it
-   * when his harness reads the send (lead-gate.ts).
+   * A wake went out as send `uuid`: your words alone (`owner`), or outside
+   * text: an event's, a routine's, or outside events riding on your words.
+   * His gate reads it when his harness reads the send (lead-gate.ts).
    */
-  readonly wakeSent: (uuid: string, kind: "owner" | "outside") => void;
+  readonly wakeSent: (uuid: string, source: WakeSource) => void;
 }
 
 export const createCaw = ({

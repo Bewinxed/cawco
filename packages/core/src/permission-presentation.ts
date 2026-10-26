@@ -40,6 +40,13 @@ export interface PermissionField {
 }
 
 export interface PermissionPresentation {
+  /**
+   * A project's Caw's call his gate put to the person (hub lead-gate.ts):
+   * which rule sent it, in one line ("Asked because this turn was woken by a
+   * routine, and this command writes: `git commit`."), drawn under the
+   * command or the change. Absent on any other ask.
+   */
+  askedBecause?: string;
   /** The session that asked, by the name the board gives it ("Caw" for a project's lead). */
   asker: string;
   /** The changes the call makes, each drawn as a diff. Empty when it changes no text. */
@@ -113,6 +120,8 @@ export interface SourceFacts {
 }
 
 export interface PresentationContext {
+  /** Why the gate put a Caw call to the person ({@link PermissionPresentation.askedBecause}). */
+  askedBecause?: string;
   /** The asking session's name. */
   asker: string;
   /**
@@ -1485,6 +1494,15 @@ const shellCall = (input: Record<string, unknown>): Presented => {
 export const commandOf = (input: Record<string, unknown>): string | null =>
   typeof input.command === "string" ? input.command : null;
 
+/** Who asks, where, and why the gate put it to the person, as every ask's head and reason say. */
+const whoOf = (
+  context: PresentationContext
+): Pick<PermissionPresentation, "askedBecause" | "asker" | "project"> => ({
+  asker: context.asker,
+  ...(context.project ? { project: context.project } : {}),
+  ...(context.askedBecause ? { askedBecause: context.askedBecause } : {}),
+});
+
 /**
  * What a parked tool call will do, for every surface that shows the ask. A
  * question names itself (its questions, joined); an admin write says the
@@ -1496,10 +1514,7 @@ export function presentPermission(
   input: Record<string, unknown>,
   context: PresentationContext
 ): PermissionPresentation {
-  const who = {
-    asker: context.asker,
-    ...(context.project ? { project: context.project } : {}),
-  };
+  const who = whoOf(context);
   const questions = questionsOf(toolName, input);
   if (questions) {
     return {

@@ -4682,7 +4682,7 @@ export const leadCalls = sqliteTable(
     outcome: text("outcome").$type<LeadCallOutcome>().notNull(),
     /** You approved it on its card. */
     approved: integer("approved", { mode: "boolean" }).notNull().default(false),
-    /** Why the hub refused it. */
+    /** Why the hub refused it, or, for one put on your card, the rule that put it there ("Asked because …"). */
     why: text("why"),
     /** Its exit as its result said it: a code, or `failed` for an edit that did not apply. */
     exit: text("exit"),
