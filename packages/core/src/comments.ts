@@ -201,7 +201,8 @@ export interface PageAnchor {
     file: string;
     state?: {
       interaction: Interaction;
-      scheme: Exclude<PreviewScheme, "both">;
+      // Indexed off the array, not a named type: the apps' schema names this field's enum.
+      scheme: (typeof STORY_SCHEMES)[number];
       width: number | null;
     };
     story: string;
@@ -1168,12 +1169,7 @@ export const unheardEntries = (pin: Pin): ThreadEntry[] => {
  * is still being placed, `unsent` while the session has not heard it, `sent`
  * once it has, `resolved` once it is settled.
  */
-export const PIN_STATES = [
-  "provisional",
-  "unsent",
-  "sent",
-  "resolved",
-] as const;
+const PIN_STATES = ["provisional", "unsent", "sent", "resolved"] as const;
 export type PinState = (typeof PIN_STATES)[number];
 
 /**
@@ -1182,6 +1178,13 @@ export type PinState = (typeof PIN_STATES)[number];
  */
 export const PREVIEW_SCHEMES = ["page", "light", "dark", "both"] as const;
 export type PreviewScheme = (typeof PREVIEW_SCHEMES)[number];
+
+/** The schemes one story is drawn in: one at a time, never both. */
+const STORY_SCHEMES = [
+  "page",
+  "light",
+  "dark",
+] as const satisfies readonly PreviewScheme[];
 
 /** Whether the session has heard of a pin at all: delivered or read, or answered in its thread. */
 const pinKnown = (pin: Pin): boolean =>

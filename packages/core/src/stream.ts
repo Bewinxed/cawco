@@ -272,6 +272,10 @@ export interface CommandEnvelope {
   type: "command";
 }
 
+/** Every stage an ack says a command reached ({@link CommandAck}). */
+export const COMMAND_ACK_STAGES = ["accepted", "applied", "failed"] as const;
+export type CommandAckStage = (typeof COMMAND_ACK_STAGES)[number];
+
 /**
  * Hub → client, the command's lifecycle:
  * - `accepted` — validated, the target daemon reachable, dispatched;
@@ -280,10 +284,6 @@ export interface CommandEnvelope {
  *   the stream event reflecting the change is the proof of application;
  * - `failed`   — terminal, with the reason a human can read.
  */
-/** Every stage an ack says a command reached ({@link CommandAck}). */
-export const COMMAND_ACK_STAGES = ["accepted", "applied", "failed"] as const;
-export type CommandAckStage = (typeof COMMAND_ACK_STAGES)[number];
-
 export interface CommandAck {
   commandId: string;
   outcome?: "withdrawn" | "started";

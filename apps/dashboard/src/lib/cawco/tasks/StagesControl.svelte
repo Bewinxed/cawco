@@ -1,7 +1,4 @@
 <script lang="ts">
-  import { projectWords } from "@cawco/core";
-  import { failureWords } from "#lib/cawco/hub-read.js";
-  import { afterSkeleton, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   /**
    * The project has no stages.md, so the code stages stand in. This picks a
    * set of stages for it from the hub's templates (code, launch, SEO, brand,
@@ -14,6 +11,9 @@
    * from the control that asked (`anchor`).
    */
   import type { StagesTemplate } from "@cawco/core";
+  import { projectWords } from "@cawco/core";
+  import { failureWords } from "#lib/cawco/hub-read.js";
+  import { afterSkeleton, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import {
     applyTemplate,
     readTemplates,

@@ -33129,7 +33129,8 @@
                 "type": "string"
               },
               "lands": {
-                "$ref": "#/components/schemas/LandsMode"
+                "$ref": "#/components/schemas/LandsMode",
+                "description": "Where a work item's work goes once it finishes (hub/src/landing.ts):\n`main` onto the repository's default branch, `branch` to a branch of its\nown on origin, `pr` to that branch with a pull request, `none` nowhere (the\nwork is not commits; its outputs are the deliverable)."
               },
               "path": {
                 "description": "The file it was read from, inside the project folder.",
@@ -55386,6 +55387,14 @@
           "type"
         ]
       },
+      "CommandAckStage": {
+        "type": "string",
+        "enum": [
+          "accepted",
+          "applied",
+          "failed"
+        ]
+      },
       "StreamHeartbeat": {
         "description": "Client → hub, and the hub's answer, the same shape: \"are you there?\" and\n\"yes\", sent at once. A client sends one every\n{@link HEARTBEAT_INTERVAL_MS}; when nothing at all arrives on the socket\nwithin {@link HEARTBEAT_DEADLINE_MS} of it, the socket is dead though open\n(a frozen hub, a dropped route that sent no FIN), and the client closes it,\nreconnects and reads again. Application messages, not WebSocket pings:\nURLSession rejects the pong Bun sends on a permessage-deflate socket\n(NSPOSIXErrorDomain 100, \"Protocol error\"), so no client sends a ping.",
         "type": "object",
@@ -58747,14 +58756,6 @@
         "enum": [
           "started",
           "withdrawn"
-        ]
-      },
-      "CommandAckStage": {
-        "type": "string",
-        "enum": [
-          "accepted",
-          "applied",
-          "failed"
         ]
       },
       "CommentAttachmentKind": {
