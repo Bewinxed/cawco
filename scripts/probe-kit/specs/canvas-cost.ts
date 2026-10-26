@@ -3846,8 +3846,9 @@ const CONTROL_PAGE = (child: string) =>
  * own origin, so it is read from here alone, through the page's document,
  * with no handle into its frames. `window.memoryPage` opens the page at a
  * URL and answers once it is drawn (every Preview at its drawn shape, the
- * page read through to its end a screen each half second, as a person
- * reading it does: a Preview mounts and draws only as it nears the view;
+ * page read through to its end a screen at a time, each once what stands
+ * in its view has drawn, as a person reading it does: a Preview mounts and
+ * draws only as it nears the view;
  * the control's frames each holding their objects), `memoryGone` takes it away,
  * `memoryFacts` says how the page stands (its visibility, focus, and the
  * animation frames it is given in a second). `?agent=<bridge>` puts the
@@ -3865,10 +3866,17 @@ const MEMORY_HOLDER = `<!doctype html><meta charset="utf-8"><style>body{margin:0
     if (kind === "canvases" || kind.startsWith("loop") || kind === "vite" || kind === "xorigin" || kind.startsWith("probe-") || kind.startsWith("cut-")) return inner.defaultView.said === ${MEMORY_PREVIEWS};
     return [...inner.querySelectorAll(${JSON.stringify(EMBED_FRAME)})].filter((one) => one.dataset.shape === "drawn").length === ${MEMORY_PREVIEWS};
   };
-  // A decision page read on by a screen: its Previews mount and draw only as they near its view (dashboard decisions host Preview.svelte). A page with no scroller of its own stands as it is.
+  // A decision page read on by a screen once every Preview in its view has drawn: its Previews mount and draw only as they near its view (dashboard decisions host Preview.svelte), and one read past before it drew stood out of reach, never drawn (a cold stage's first open waited out its ten minutes). A page with no scroller of its own stands as it is.
   const readOn = (frame) => {
-    const scroller = frame.contentDocument?.querySelector("[data-slot=page-scroll]");
-    if (scroller) scroller.scrollTop += scroller.clientHeight;
+    const inner = frame.contentDocument;
+    const scroller = inner?.querySelector("[data-slot=page-scroll]");
+    if (!scroller) return;
+    const view = scroller.getBoundingClientRect();
+    const shown = [...inner.querySelectorAll("[data-slot=media]")].filter((well) => {
+      const box = well.getBoundingClientRect();
+      return box.bottom > view.top && box.top < view.bottom;
+    });
+    if (shown.every((well) => well.querySelector("iframe[data-slot=embed]")?.dataset.shape === "drawn")) scroller.scrollTop += scroller.clientHeight;
   };
   window.memoryPage = async (url, kind) => {
     const t0 = Date.now();
