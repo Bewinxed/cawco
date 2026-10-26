@@ -71,6 +71,18 @@
  * `geometrychange` fills the cache"). The foreseen area stands until the
  * real one reaches it; a keyboard that settles elsewhere moves it once, and
  * one that never comes (a hardware keyboard) gives it back.
+ *
+ * A keyboard going down is read to its end from the live visual viewport.
+ * iOS can send its one `resize` while the keyboard is still on its way down
+ * and none after, or none at all: a field in a page's frame (a decision
+ * page's note in the preview sheet) blurs in the frame's document, and this
+ * one hears nothing of it. The area measured from that one event stood at
+ * the keyboard's height for good, and the shell and the sheet with it: the
+ * owner's decision page stayed squashed after its keyboard closed, and the
+ * sheet could not be raised. So every change the visual viewport shows is
+ * followed frame by frame until it has held still for 80ms, and while a
+ * keyboard covers the screen the viewport is read every quarter second, a
+ * new reading measured at once.
  */
 import { flushSync } from "svelte";
 import { store, stored, unstore } from "./storage";
@@ -103,6 +115,8 @@ const SWALLOW_MS = 1000;
 const COVERS = 100;
 /** How long a foreseen keyboard is waited for before the area is given back. */
 const AWAIT_MS = 2000;
+/** How often the viewport is read while a keyboard covers the screen. */
+const COVERED_CHECK_MS = 250;
 /** The keyboards' opening heights, kept across launches (keyboardKey). */
 const KEYBOARD_KEY = "cawco:keyboard:";
 /** What a tap can land in that edits text. */
@@ -270,6 +284,20 @@ export function trackVisibleViewport(): () => void {
   let opened = false;
   /** The tallest the visible area has stood in this orientation. */
   let tallest = { height: 0, orientation: "" };
+  /** The viewports as last read, and since when they have read so. */
+  let read = { height: 0, top: 0, layout: 0, since: 0 };
+  /** The quarter-second reading while a keyboard covers the screen. */
+  let covering = 0;
+  /** Whether the viewports read otherwise than at the last measure. */
+  const moved = (): boolean =>
+    viewport.height !== read.height ||
+    viewport.offsetTop !== read.top ||
+    root.clientHeight !== read.layout;
+  const check = () => {
+    if (moved()) {
+      request();
+    }
+  };
 
   /** The area takes its new place now, so the field is revealed in it. */
   const publish = (top: number, height: number) => {
@@ -284,6 +312,8 @@ export function trackVisibleViewport(): () => void {
     const covered = bottom > 0 && tallest.height - bottom >= COVERS;
     if (covered !== root.hasAttribute("data-keyboard")) {
       root.toggleAttribute("data-keyboard", covered);
+      window.clearInterval(covering);
+      covering = covered ? window.setInterval(check, COVERED_CHECK_MS) : 0;
     }
     if (
       top !== visible.top ||
@@ -352,6 +382,19 @@ export function trackVisibleViewport(): () => void {
   const measure = () => {
     frame = 0;
     const layout = root.clientHeight;
+    const now = performance.now();
+    if (moved()) {
+      read = {
+        height: viewport.height,
+        top: viewport.offsetTop,
+        layout,
+        since: now,
+      };
+    }
+    // A keyboard on its way down or up is followed until it holds still.
+    if (now - read.since < STABLE_MS) {
+      request();
+    }
     const focused = isField(document.activeElement);
     const height = awaited(Math.min(viewport.height, layout), focused);
     const top = Math.min(Math.max(viewport.offsetTop, 0), layout - height);
@@ -550,6 +593,7 @@ export function trackVisibleViewport(): () => void {
   return () => {
     cancelAnimationFrame(frame);
     window.clearTimeout(settling.timer);
+    window.clearInterval(covering);
     stopSwallowing();
     root.removeAttribute("data-keyboard");
     resized.disconnect();

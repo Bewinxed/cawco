@@ -35,6 +35,7 @@
     pinned,
   } from "../motion/curves.svelte";
   import { closeInto, land } from "../motion/share.svelte";
+  import { visible } from "../visible-viewport.svelte";
   import { connect, INSTALL_PARAM, parkedAt, phone } from "./installs.svelte";
   import OutcomeStep from "./OutcomeStep.svelte";
   import OutputSheet from "./OutputSheet.svelte";
@@ -87,27 +88,15 @@
   /**
    * On a phone the sheet stands on the visual viewport's foot, so a
    * keyboard coming up lifts it rather than covering it, and it is never
-   * taller than the room the keyboard leaves.
+   * taller than the room the keyboard leaves: the visible area as
+   * visible-viewport measures it, a keyboard followed to its end.
    */
-  let keyboard = $state(0);
-  let room = $state(0);
-  $effect(() => {
-    const view = window.visualViewport;
-    if (!(connect.open && phone.current && view)) {
-      return;
-    }
-    const follow = () => {
-      keyboard = Math.max(0, innerHeight - (view.height + view.offsetTop));
-      room = view.height;
-    };
-    follow();
-    view.addEventListener("resize", follow);
-    view.addEventListener("scroll", follow);
-    return () => {
-      view.removeEventListener("resize", follow);
-      view.removeEventListener("scroll", follow);
-    };
-  });
+  const keyboard = $derived(
+    visible.height > 0
+      ? Math.max(0, innerHeight - (visible.top + visible.height))
+      : 0
+  );
+  const room = $derived(visible.height);
   /**
    * As tall as it holds, up to the room under the screen's top (its safe
    * area, or `space-7`), as the new-session sheet is: a running install's
