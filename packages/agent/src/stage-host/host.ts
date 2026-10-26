@@ -50,7 +50,6 @@ import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { stripVTControlCharacters } from "node:util";
-import { parse } from "@babel/parser";
 import { PACKAGE_TREES } from "@cawco/core/package-trees";
 import { hostEnvironment } from "@cawco/core/session-env";
 import {
@@ -107,6 +106,7 @@ import {
   type SourceMapInput,
   TraceMap,
 } from "@jridgewell/trace-mapping";
+import { parse as lex, init as lexerReady } from "es-module-lexer";
 import { propsOf } from "./docgen";
 import {
   readStoryFile,
@@ -1290,7 +1290,10 @@ const keyedPage = (html: string, key: string): string =>
 /** Vite's client declares the base its HMR imports a changed module under. */
 const CLIENT_BASE = (base: string) => `const base = ${JSON.stringify(base)} ||`;
 
-/** A string literal a module imports from: its span in the code, its value, and whether it is an `import("…")`. */
+/** The quote a string literal opens with: an `import("…")` of one names a module; of a template or an expression, none the stage reads. */
+const STRING_QUOTE = /^["']$/u;
+
+/** A string literal a module imports from: its span in the code, quotes and all, its value, and whether it is an `import("…")`. */
 interface ImportLiteral {
   dynamic: boolean;
   end: number;
@@ -1298,94 +1301,69 @@ interface ImportLiteral {
   value: string;
 }
 
-/** The string literals `code` imports from (static, re-exported, and `import("…")` of a literal), as their spans in it. */
+/**
+ * The string literals `code` imports from (static, re-exported, and
+ * `import("…")` of a literal), as their spans in it: read by
+ * es-module-lexer, the lexer Vite's own import analysis reads each module
+ * with, where a parse of the whole module (Babel's, before) cost a cold
+ * canvas of NeedsCard 1.1 s of the stage's one thread for its 698 modules,
+ * read twice (its graph walked, then each module keyed as it was served).
+ * Throws where `code` doesn't lex.
+ */
 function importLiterals(code: string): ImportLiteral[] {
-  const { program } = parse(code, {
-    sourceType: "module",
-    errorRecovery: true,
-    allowAwaitOutsideFunction: true,
-    allowImportExportEverywhere: true,
-  });
+  const [imports] = lex(code);
   const spans: ImportLiteral[] = [];
-  const literal = (node: unknown, dynamic: boolean) => {
-    const one = node as
-      | {
-          end?: number;
-          start?: number;
-          type?: string;
-          value?: string;
-        }
-      | null
-      | undefined;
-    if (
-      one?.type === "StringLiteral" &&
-      one.start !== undefined &&
-      one.end !== undefined
+  for (const one of imports) {
+    if (one.type === "static" || one.type === "reexport-star") {
+      // A static import's span is its specifier, inside its quotes.
+      spans.push({
+        start: one.start - 1,
+        end: one.end + 1,
+        value: one.specifier,
+        dynamic: false,
+      });
+    } else if (
+      one.type === "dynamic" &&
+      one.specifier !== undefined &&
+      !one.glob &&
+      STRING_QUOTE.test(code[one.start] ?? "")
     ) {
+      // A dynamic import's span is its argument, quotes and all.
       spans.push({
         start: one.start,
         end: one.end,
-        value: one.value ?? "",
-        dynamic,
+        value: one.specifier,
+        dynamic: true,
       });
     }
-  };
-  const walk = (node: unknown): void => {
-    if (!node || typeof node !== "object") {
-      return;
-    }
-    if (Array.isArray(node)) {
-      for (const one of node) {
-        walk(one);
-      }
-      return;
-    }
-    const one = node as Record<string, unknown> & { type?: string };
-    if (
-      one.type === "ImportDeclaration" ||
-      one.type === "ExportAllDeclaration" ||
-      one.type === "ExportNamedDeclaration"
-    ) {
-      literal(one.source, false);
-    }
-    if (
-      one.type === "CallExpression" &&
-      (one.callee as { type?: string } | undefined)?.type === "Import"
-    ) {
-      literal((one.arguments as unknown[] | undefined)?.[0], true);
-    }
-    for (const [name, value] of Object.entries(one)) {
-      if (
-        name !== "loc" &&
-        name !== "extra" &&
-        value &&
-        typeof value === "object"
-      ) {
-        walk(value);
-      }
-    }
-  };
-  walk(program.body);
+  }
   return spans;
 }
 
-/** `code` with every stage address it imports from at `key`. */
+/** `code` with every stage address it imports from at `key`; as it is where it doesn't lex: the browser says what is wrong with it. */
 function keyedImports(code: string, key: string): string {
   if (!STAGE_IMPORT.test(code)) {
     return code;
   }
-  let out = code;
-  for (const { start, end } of importLiterals(code).sort(
-    (a, b) => b.start - a.start
-  )) {
-    const quote = out[start] as string;
-    const url = out.slice(start + 1, end - 1);
+  let spans: ImportLiteral[];
+  try {
+    spans = importLiterals(code);
+  } catch {
+    return code;
+  }
+  const parts: string[] = [];
+  let at = 0;
+  for (const { start, end } of spans) {
+    const quote = code[start] as string;
+    const url = code.slice(start + 1, end - 1);
     const keyed = keyedUrl(url, key);
     if (keyed !== url) {
-      out = `${out.slice(0, start)}${quote}${keyed}${quote}${out.slice(end)}`;
+      parts.push(code.slice(at, start), quote, keyed, quote);
+      at = end;
     }
   }
-  return out;
+  parts.push(code.slice(at));
+  return parts.join("");
 }
 
 /** A keyed module as served: its body, its type, and the source map Vite wrote into it, kept apart. */
@@ -1622,19 +1600,21 @@ async function closureOf(
     .map((file) =>
       asPage(`/@id/__x00__${VIRTUAL}${encodeURIComponent(file)}.js`)
     );
-  const seen = new Set<string>();
   const order: string[] = [];
-  let level = [asPage(VITE_CLIENT), asPage(CANVAS_ENTRY), ...sections];
-  while (level.length > 0) {
-    const fresh = [...new Set(level)].filter((url) => !seen.has(url));
-    for (const url of fresh) {
-      seen.add(url);
-      order.push(url);
+  const seen = new Set<string>();
+  // Each module's imports walked the moment it is transformed, never held for the rest of its level: the section's module (its sheet's docgen and hash, a second cold) holds back only what it imports.
+  const visit = async (url: string): Promise<void> => {
+    if (seen.has(url)) {
+      return;
     }
-    // One level of imports at a time, each level's modules at once.
-    const next = Promise.all(fresh.map((url) => staticImportsOf(dev, url)));
-    level = (await next).flat();
-  }
+    seen.add(url);
+    order.push(url);
+    const imports = await staticImportsOf(dev, url);
+    await Promise.all(imports.map(visit));
+  };
+  await Promise.all(
+    [asPage(VITE_CLIENT), asPage(CANVAS_ENTRY), ...sections].map(visit)
+  );
   // A section's module is a dynamic import of an address the runtime builds, which Vite asks for with `?import` first.
   return order.map((url) =>
     sections.includes(url) ? withQuery(url, "import", true) : url
@@ -3520,6 +3500,7 @@ const STARTS: Record<StageToolchain, () => Promise<Started>> = {
 };
 
 try {
+  await lexerReady();
   const started = await STARTS[toolchain]();
   say("ready", {
     port: started.port,

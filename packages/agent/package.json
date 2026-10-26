@@ -41,6 +41,7 @@
     "bonjour-service": "^1.4.4",
     "dockerode": "5.0.1",
     "effect": "^4.0.0",
+    "es-module-lexer": "3.0.4",
     "idiomorph": "0.8.0",
     "modern-screenshot": "4.7.0",
     "perfect-freehand": "1.2.3",

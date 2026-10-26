@@ -22,6 +22,7 @@ import {
   searchForWorkspaceRoot,
   type ViteDevServer,
 } from "vite";
+import { z } from "zod";
 import { groupsAsCombinators } from "./group-selectors.ts";
 import { publicOrigin } from "./public-origin.js";
 import { FACES_DIR, writeHouseFaces } from "./scripts/house-faces.ts";
@@ -287,6 +288,40 @@ const VENDOR_COMPONENT_SHEETS = [
   "@xyflow/svelte",
   "svelte-streamdown",
 ];
+/**
+ * The libraries with component sheets that dev compiles like the app's own
+ * components (`optimizeDeps.exclude`; bits-ui stays pre-bundled, below).
+ */
+const COMPILED_LIBRARIES = VENDOR_COMPONENT_SHEETS.filter(
+  (library) => library !== "bits-ui"
+);
+/**
+ * Each compiled library's own dependencies, kept in the pre-bundle, named
+ * through it as Vite's docs name a nested one ("include: ['esm-dep >
+ * cjs-dep']", vite.dev/config/dep-optimization-options). Vite pre-bundles
+ * no dependency imported from a file it serves raw out of `node_modules`
+ * (Vite 8.3.4 `tryNodeResolve`: `skipOptimization` where `importer &&
+ * isInNodeModules(importer)`), so runed, svelte-toolbelt, @tanstack/highlight
+ * and the rest went out a module a file, compiled again on every server
+ * start: a component canvas of the Needs you card loaded 698 modules with
+ * them raw, 525 pre-bundled. The pre-bundle is kept on disk between starts.
+ */
+const LibraryManifest = z.object({
+  dependencies: z.record(z.string(), z.string()).optional(),
+});
+const COMPILED_LIBRARY_DEPS = COMPILED_LIBRARIES.flatMap((library) => {
+  const manifest = LibraryManifest.parse(
+    JSON.parse(
+      readFileSync(
+        join(import.meta.dirname, "node_modules", library, "package.json"),
+        "utf8"
+      )
+    )
+  );
+  return Object.keys(manifest.dependencies ?? {}).map(
+    (dependency) => `${library} > ${dependency}`
+  );
+});
 const VENDOR_IMPORTED_SHEETS = [
   "@event-calendar/core/src/styles",
   "photoswipe/dist",
@@ -540,7 +575,7 @@ export default defineConfig(({ command }) => {
        * stage-host host.ts `rebundleOnChange`).
        */
       // The brand marks (`@cawco/icons/marks`) are a module of their own, loaded by what draws one.
-      include: ["@cawco/icons", "@cawco/icons/marks"],
+      include: ["@cawco/icons", "@cawco/icons/marks", ...COMPILED_LIBRARY_DEPS],
       rolldownOptions: { plugins: [IconsBundled({ compiler: "svelte" })] },
       // The libraries with component sheets are compiled like the app's own
       // components, so their stylesheets pass through streamdownOverlayOwn
@@ -548,9 +583,7 @@ export default defineConfig(({ command }) => {
       // styles are injected from the bundle's JS instead. bits-ui stays
       // prebundled, for its couple of hundred components: its two viewport
       // sheets (select, scroll-area) go unlayered in dev only.
-      exclude: VENDOR_COMPONENT_SHEETS.filter(
-        (library) => library !== "bits-ui"
-      ),
+      exclude: COMPILED_LIBRARIES,
     },
     ssr: {
       // Both ship raw .svelte sources; dev SSR must compile them, not require them.
