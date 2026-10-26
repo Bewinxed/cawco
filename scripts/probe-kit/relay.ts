@@ -48,14 +48,14 @@ const HTTP = /^http/u;
 const IDLE_CUT_MS = 10_000;
 
 /** A request its app left with nothing passing for {@link IDLE_CUT_MS} or more. */
-export interface IdleCut {
+interface IdleCut {
   /** How long nothing had passed when its app left it. */
   idleMs: number;
   method: string;
   path: string;
 }
 
-export interface Pipe {
+interface Pipe {
   /** The app's messages (text, as every one it sends) before the hub's socket opened. */
   held: string[];
   /** The hub's socket, once open; what the app sent before is held. */
@@ -82,7 +82,7 @@ export interface RelayOptions {
 }
 
 /** A request as {@link Relay.breakAnswer}'s `match` reads it. */
-export interface Passing {
+interface Passing {
   body: string;
   method: string;
   path: string;

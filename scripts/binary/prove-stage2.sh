@@ -2211,9 +2211,8 @@ rig_handover() {
 # ---------------------------------------------------------------- Install now on a joined machine
 # The owner's Mac on 2026-10-13: Install now for a joined machine answered `installed`, and the machine then said
 # installing, with no helper and nothing applied, until its agent was restarted by hand. The command had landed while
-# the machine's own auto-update pass was draining for that build. That sweep runs on macOS only (proven there by
-# scripts/binary/probe-helper-jobs-launchd.ts). Here the joined machine updates by its own pass, its agent restarted
-# only by the update's own helper; the drain itself is not held here, as nothing the hub runs on a machine outlasts
+# the machine's own auto-update pass was draining for that build. That sweep runs on macOS only. Here the joined
+# machine updates by its own pass, its agent restarted only by the update's own helper; the drain itself is not held here, as nothing the hub runs on a machine outlasts
 # one now. Then a download its hub cannot supply leaves the machine failed, saying why, never installing, and the
 # same command tries the build again by itself once the hub can.
 # The new build installed on the hub's machine, one update asked for: once the hub runs it, its joined machine looks

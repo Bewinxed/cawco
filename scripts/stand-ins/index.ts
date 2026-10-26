@@ -27,8 +27,6 @@ export interface StandIns {
    * between two of its asks of Jev, in ms (hub project-starters.ts).
    */
   startersPace?: { gap: number; quiet: number };
-  /** TypeSafe's System One URL Jev's typesafe route posts to: the probe kit's Jev mock (jev-mock.ts). */
-  typesafeUrl?: string;
 }
 
 /** The stand-ins this process was handed; none outside a scratch fleet. */

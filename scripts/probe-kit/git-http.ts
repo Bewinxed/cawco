@@ -31,7 +31,7 @@ const LFS_UPLOAD = /^\/lfs-upload\/(.+)\/([0-9a-f]{64})$/u;
 const LFS_JSON = "application/vnd.git-lfs+json";
 
 /** One LFS object a server took: its id and the login that sent it. */
-export interface LfsObject {
+interface LfsObject {
   readonly oid: string;
   readonly user: string;
 }

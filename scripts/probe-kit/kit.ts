@@ -71,7 +71,7 @@ export const ROOT = resolve(import.meta.dir, "../..");
  * reviewer, its captures included, never into the tree. Emptied as the spec
  * starts. A capture helper outside `run` names it by the spec's name.
  */
-export const specOut = (spec: string): string =>
+const specOut = (spec: string): string =>
   join(process.env.TMPDIR ?? join(ROOT, ".probe"), "probe-kit", spec);
 const DASHBOARD = join(ROOT, "apps", "dashboard");
 const FONTS_CONF = join(import.meta.dir, "fonts.conf");
@@ -154,7 +154,7 @@ const PHONE_AGENT: Record<Engine, string | undefined> = {
 export const THEMES = ["light", "dark"] as const;
 export type Theme = (typeof THEMES)[number];
 /** Device pixels per css px, everywhere. */
-export const SCALE = 2;
+const SCALE = 2;
 
 /**
  * A composer's message field (Composer.svelte's MentionField): an editable
@@ -286,7 +286,7 @@ const SANDBOX_REFUSED =
 export const kitsOwnMessage = (text: string): boolean =>
   SANDBOX_REFUSED.test(text);
 
-export interface PageOptions {
+interface PageOptions {
   /**
    * A browser of its own, by name, for a page traced while another page is:
    * DevTools tracing runs one at a time per browser ("Tracing has already
@@ -915,10 +915,6 @@ const benchHub = (): string => {
 export const pagesOf = (browser: Browser): string[] =>
   browser.contexts().flatMap((context) => context.pages().map((p) => p.url()));
 
-/** The addresses a persistent context (`launchPersistentContext`) has open, as {@link pagesOf}. */
-export const contextPagesOf = (context: BrowserContext): string[] =>
-  context.pages().map((p) => p.url());
-
 /**
  * What one run holds across its specs: the browsers, the build and its
  * servers. Each `run.ts` process is a run of its own. It takes the
@@ -1476,32 +1472,6 @@ async function fleetEvidence(fleet: Fleet, dir: string): Promise<void> {
   }
 }
 
-/**
- * In the page: how many elements under `root` (its largest match, else the
- * body) Svelte has adopted. The dev server tags each with `__svelte_meta`;
- * a build marks each one it wires with a symbol-keyed cache (its class,
- * style or attributes, its delegated events: svelte constants.js
- * `CLASS_CACHE`, …). The server's markup carries neither.
- */
-export function adopted(root: string): number {
-  let top: Element = document.body;
-  let most = -1;
-  for (const el of document.querySelectorAll(root)) {
-    const n = el.getElementsByTagName("*").length;
-    if (n > most) {
-      most = n;
-      top = el;
-    }
-  }
-  let count = 0;
-  for (const el of [top, ...top.querySelectorAll("*")]) {
-    if ("__svelte_meta" in el || Object.getOwnPropertySymbols(el).length > 0) {
-      count += 1;
-    }
-  }
-  return count;
-}
-
 /** The reads in a row, a frame apart, the page's layout boxes and adopted count hold for {@link pageReady}. */
 const STILL_FRAMES = 3;
 /** A frame at 60Hz, ms: what {@link pageReady} waits between reads. */
@@ -1553,7 +1523,7 @@ function readiness(): { step: string | null; boxes: string } {
  * that clock on, so the Shell's release (a frame and a task after mount)
  * has come.
  */
-export async function pageReady(page: Page): Promise<void> {
+async function pageReady(page: Page): Promise<void> {
   const deadline = Date.now() + READY_WITHIN_MS;
   let last = "";
   let held = 0;

@@ -29,7 +29,7 @@ export type RecordedState = {
 };
 
 /** What the agent whose data dir is under `env`'s XDG_DATA_HOME holds now; nothing before it recorded anything. */
-export const agentStateOf = async (
+const agentStateOf = async (
   env: Record<string, string | undefined>
 ): Promise<RecordedState> =>
   JSON.parse(

@@ -461,53 +461,6 @@ export const tell = (page: Page, fields: Partial<Watched>): Promise<void> =>
     Object.assign((window as unknown as { __kit: Watched }).__kit, f);
   }, fields);
 
-/**
- * An anchor's painted path against wheels of `wheel` px: on every frame it is
- * drawn it has moved from where it was first drawn by a whole number of
- * wheels, within 2px (with `oneWay`, never back past the most it has reached
- * nor past `total`); in all by `total` wheels within 2px. Its faults, frames
- * and moves.
- */
-export function wholeWheels(
-  ys: [number, number | null][],
-  wheel: number,
-  total: number,
-  oneWay = false
-) {
-  const most = oneWay ? total : Number.POSITIVE_INFINITY;
-  const seen = ys.filter(([, y]) => y !== null) as [number, number][];
-  const first = seen[0]?.[1] ?? 0;
-  const faults: string[] = [];
-  let reached = 0;
-  let widest = 0;
-  seen.forEach(([, y], i) => {
-    const moved = y - first;
-    const whole = Math.round(moved / wheel);
-    widest = Math.max(widest, Math.abs(y - (seen[i - 1]?.[1] ?? y)));
-    if (
-      Math.abs(moved - whole * wheel) > 2 ||
-      (oneWay && whole < reached) ||
-      whole > most
-    ) {
-      faults.push(`frame ${i}: moved ${moved.toFixed(1)}`);
-    }
-    reached = Math.max(reached, whole);
-  });
-  const moved = (seen.at(-1)?.[1] ?? 0) - first;
-  if (seen.length < 2) {
-    faults.push(`${seen.length} frame(s) with it drawn`);
-  } else if (Math.abs(moved - total * wheel) > 2) {
-    faults.push(`moved ${moved.toFixed(1)}px in all, not ${total * wheel}`);
-  }
-  return {
-    faults,
-    frames: seen.length,
-    missing: ys.length - seen.length,
-    moved,
-    widest,
-  };
-}
-
 /** One top-level task of the page's main thread, from a trace. */
 export interface MainTask {
   /** When it started, the trace clock, µs. */
@@ -1262,9 +1215,3 @@ export const taskOf = (
     ? undefined
     : main.tasks.find((task) => task.at <= at && at <= task.end);
 };
-
-/** The longest long task that started at or after `since` (ms, the page's clock), and how many. */
-export function longest(tasks: [number, number][], since: number) {
-  const after = tasks.filter(([at]) => at >= since - 1);
-  return { ms: Math.max(0, ...after.map(([, ms]) => ms)), count: after.length };
-}

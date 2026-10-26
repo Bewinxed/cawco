@@ -96,7 +96,7 @@ async function heardIn(frame: Frame) {
  * hears otherwise. Call again after a frame the check reads has loaded,
  * when it was not there at `emulateMotion`.
  */
-export async function assertMotion(page: Page, motion: Motion): Promise<void> {
+async function assertMotion(page: Page, motion: Motion): Promise<void> {
   const heard = await Promise.all(
     page.frames().map(async (frame) => ({ frame, heard: await heardIn(frame) }))
   );

@@ -23,7 +23,7 @@ import { until } from "../scratch-fleet";
 import { launchEnv } from "./browser-leftovers";
 
 /** How long a hidden tab stands before its chained timers wake once a minute, s (Chromium's own is 5 minutes). */
-export const GRACE_S = 10;
+const GRACE_S = 10;
 
 export interface HiddenTabs {
   /** Brings a new blank tab to the front of the window, so every other tab is hidden. */

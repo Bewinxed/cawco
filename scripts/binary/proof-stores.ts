@@ -22,7 +22,7 @@ import { claudeHome } from "../../packages/core/src/paths";
 /** Transcripts written: more than one, so the index parses them on threads of its own. */
 export const FILES = 4;
 /** A word only these transcripts say. */
-export const WORD = "wombatquill";
+const WORD = "wombatquill";
 
 const transcript = (sessionId: string): string =>
   `${[0, 1]

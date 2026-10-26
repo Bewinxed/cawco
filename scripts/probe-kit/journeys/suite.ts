@@ -41,11 +41,11 @@ import {
 } from "../kit";
 import { scan } from "./scan";
 
-export const ENGINES = ["chromium", "webkit", "firefox"] as const;
-export const SIZES = ["phone", "tablet", "desk"] as const;
-export type Size = (typeof SIZES)[number];
-export const DATA = ["normal", "stretched"] as const;
-export type Data = (typeof DATA)[number];
+const ENGINES = ["chromium", "webkit", "firefox"] as const;
+const SIZES = ["phone", "tablet", "desk"] as const;
+type Size = (typeof SIZES)[number];
+const DATA = ["normal", "stretched"] as const;
+type Data = (typeof DATA)[number];
 
 /** Each size as the kit's viewport. */
 const VIEW_OF: Record<Size, View> = {
@@ -129,20 +129,7 @@ export async function shows(
     .catch(() => unmet(`the page never showed ${what} within ${ms / 1000}s`));
 }
 
-/** Nothing `locator` finds shows on the page, or the step fails saying so. */
-export async function gone(
-  locator: Locator,
-  what: string,
-  ms = 30_000
-): Promise<void> {
-  await locator
-    .filter({ visible: true })
-    .first()
-    .waitFor({ state: "hidden", timeout: ms })
-    .catch(() => unmet(`the page still shows ${what} after ${ms / 1000}s`));
-}
-
-export interface StepOptions {
+interface StepOptions {
   /**
    * The hub is down for some of this step: the browser's own word on a
    * request it could not make (“Failed to load resource”, “WebSocket
@@ -258,7 +245,7 @@ async function furnish(fleet: KitFleet, data: Data): Promise<void> {
  * (`PUT /api/fleet/choices`, agents kept off other people's repositories),
  * so what needs them is only what the journey raises.
  */
-export async function bootFleet(
+async function bootFleet(
   fleet: KitFleet,
   hubMachine?: string
 ): Promise<void> {
@@ -282,7 +269,7 @@ export async function bootFleet(
 }
 
 /** The hub launched, under `hubMachine` when given, and answering. */
-export async function hubUp(
+async function hubUp(
   fleet: KitFleet,
   hubMachine?: string
 ): Promise<void> {

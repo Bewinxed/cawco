@@ -19,7 +19,7 @@ export interface Step {
  * `steps` in an order that puts every step after those it comes after; an
  * unknown name or a cycle is a mistake in the graph, thrown.
  */
-export const orderSteps = (steps: Step[]): Step[] => {
+const orderSteps = (steps: Step[]): Step[] => {
   const byName = new Map(steps.map((step) => [step.name, step]));
   if (byName.size !== steps.length) {
     throw new Error("Two release steps share a name");

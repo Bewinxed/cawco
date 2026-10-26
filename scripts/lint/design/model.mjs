@@ -17,12 +17,12 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-export const ROOT = path.resolve(HERE, "../../..");
+const ROOT = path.resolve(HERE, "../../..");
 export const DASHBOARD = path.join(ROOT, "apps/dashboard");
 export const SRC_LIB = path.join(DASHBOARD, "src/lib");
 
 /** A module the dashboard depends on, resolved from it (svelte, tailwind). */
-export const fromDashboard = createRequire(
+const fromDashboard = createRequire(
   path.join(DASHBOARD, "package.json")
 );
 const fromSvelte = createRequire(fromDashboard.resolve("svelte/package.json"));
@@ -338,12 +338,6 @@ export function eachNode(model, visit) {
 
 /** The parent of a node the file holds. */
 export const parentOf = (model, node) => model.parents.get(node) ?? null;
-
-/** The file's path from the repository's root. */
-export const relative = (file) => path.relative(ROOT, file);
-
-/** The 1-based line `at` stands on. */
-export const lineOf = (text, at) => text.slice(0, at).split("\n").length;
 
 const IGNORE =
   /golar-ignore-next-line\s+([\w/-]+(?:\s*,\s*[\w/-]+)*)\s+--\s+\S/u;

@@ -114,7 +114,7 @@ const SIGNIN_LINE =
  * message:{role:"system",content:e}}` in Claude Code 2.1.299; Caw's
  * session, probe-kit spec `caw-threads`).
  */
-export const MID_TURN = "The user sent a new message while you were working:";
+const MID_TURN = "The user sent a new message while you were working:";
 
 /** Whether a message's content holds a tool's result that was an error (Anthropic's `is_error`). */
 const toolFailed = (content: unknown): boolean =>
@@ -310,7 +310,7 @@ const refusalOf = (reply: Reply, chat: boolean): Response | undefined => {
 };
 
 /** A window Anthropic's unified limit headers name, as a refusal's representative claim. */
-export type LimitClaim =
+type LimitClaim =
   "five_hour" | "overage" | "seven_day" | "seven_day_overage_included";
 
 /** Each claim's header infix, as Claude Code reads them (its `Ct` table). */
@@ -360,7 +360,7 @@ export const delay = (ms: number) => Bun.sleep(ms);
 const SPACES = /\s+/u;
 
 /** How many preview ports a scratch hub gets: one per session that shows a preview or a canvas. */
-export const PREVIEW_PORTS = 12;
+const PREVIEW_PORTS = 12;
 
 /** Where `leasePortRange` picks from, `[LOW, HIGH)`, outside the kernel's ephemeral ports. */
 const PORT_RANGE_LOW = 20_000;
@@ -551,25 +551,6 @@ export async function until<T>(
     }
     await delay(500);
   }
-}
-
-/**
- * Reads until `read` finds nothing (returns `undefined`), every half second,
- * or throws naming `label`: `until` asked whether it is gone, since `until`
- * itself takes an undefined read as no reading yet. A read that throws is
- * still no reading yet, never "gone".
- */
-export async function untilGone(
-  label: string,
-  read: () => unknown,
-  ms = 120_000
-): Promise<void> {
-  await until(
-    label,
-    async () => (await read()) === undefined,
-    (gone) => gone,
-    ms
-  );
 }
 
 const textOf = (content: unknown): string => {
@@ -1396,16 +1377,6 @@ async function removeKept(scratch: string, name?: string): Promise<string[]> {
 
 /** The fleets of this process whose folders still stand. */
 const LIVE = new Set<FleetDirs>();
-/** The fleets' own ending on a stop signal, while it runs. */
-let ending: Promise<unknown> | undefined;
-
-/**
- * Resolves once the fleets' ending on a stop signal is done (at once when
- * none runs): a probe that listens for the signal too, to remove what it
- * made itself, ends the process after this, so its fleets' browsers and
- * folders are gone first.
- */
-export const signalEnding = (): Promise<unknown> => ending ?? Promise.resolve();
 const removeLive = () => {
   for (const one of [...LIVE]) {
     one.removeNow();
@@ -1425,7 +1396,7 @@ for (const [name, number] of Object.entries(END_SIGNALS)) {
     // The browsers first, while the records that name them stand, and what
     // still carries the folders in its environment (a process that left
     // every tree the leash ends), before the folders go.
-    ending = Promise.allSettled(
+    Promise.allSettled(
       [...LIVE].map((one) => one.removeBrowsers().then(() => one.endCarriers()))
     ).finally(() => {
       removeLive();
@@ -1581,19 +1552,12 @@ export const MODEL: Record<HarnessKind, string> = {
   pi: "mockpi/mock-pi",
 };
 
-/**
- * An OpenCode model CawCo's pricing lists, served by the mock: OpenCode Zen's
- * catalog id (`opencode`) and Claude Haiku 5.5, whose price steps up over a
- * 100k prompt. A spec reading what a turn cost spawns on it.
- */
-export const PRICED_OPENCODE_MODEL = "opencode/claude-haiku-5-5";
-
 const ENTRY = {
   hub: "packages/hub/src/index.ts",
   agent: "packages/agent/src/cli.ts",
   sessiond: "packages/sessiond/src/main.ts",
 } as const;
-export type Role = keyof typeof ENTRY;
+type Role = keyof typeof ENTRY;
 
 /**
  * How every service of a fleet starts, the one way: under the leash
@@ -1668,7 +1632,7 @@ const LOG_EXTENSIONS = [".log", ".err"];
  * file, never one offset into their join, which moves as an earlier file
  * grows (a launch's `.err` before its `.log`).
  */
-export interface LogMark {
+interface LogMark {
   /** What each file has gained since the mark, and any file made since, in the order the role's are read. */
   since: () => Promise<string>;
 }
@@ -1714,7 +1678,7 @@ const markLogs = async (
 };
 
 /** A machine `launchMachine` added to the fleet. */
-export interface Machine {
+interface Machine {
   agent: ReturnType<typeof Bun.spawn>;
   /** Its agent's and sessiond's environment. */
   env: Record<string, string>;
@@ -1729,7 +1693,7 @@ export interface Machine {
 }
 
 /** A row of `instances`, as the probes read it. */
-export interface InstanceSnapshot {
+interface InstanceSnapshot {
   last_error: string | null;
   spawned_at: number | null;
   status: string;
@@ -1738,7 +1702,7 @@ export interface InstanceSnapshot {
 }
 
 /** A row of `sent_messages`, as the probes read it. */
-export interface SendSnapshot {
+interface SendSnapshot {
   owed: string | null;
   reason: string | null;
   state: string;

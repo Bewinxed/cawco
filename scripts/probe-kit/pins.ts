@@ -32,7 +32,7 @@ export const pinsOf = (parts: PinParts): Record<string, Pin> => {
 };
 
 /** What writing `pins` puts in each pin map, as the overlay writes them. */
-export const partsOf = (...pins: Pin[]): PinParts => {
+const partsOf = (...pins: Pin[]): PinParts => {
   const doc = new Doc();
   for (const pin of pins) {
     writePin(doc, pin);
@@ -51,7 +51,7 @@ interface PageDoc {
 }
 
 /** The pin maps of the page's doc in `frame`, as plain data. */
-export const pagePinParts = (frame: Frame): Promise<PinParts> =>
+const pagePinParts = (frame: Frame): Promise<PinParts> =>
   frame.evaluate(
     (names) => {
       const { doc } = (window as unknown as { cawcoArtifact: { doc: PageDoc } })

@@ -15,7 +15,7 @@ import { join } from "node:path";
 import type { Interaction, Loaf, Painted } from "./live-page";
 
 /** One frame at 60 Hz, ms. */
-export const FRAME_MS = 1000 / 60;
+const FRAME_MS = 1000 / 60;
 
 const quantile = (sorted: number[], q: number): number =>
   sorted.length === 0
@@ -315,52 +315,6 @@ export function sourceAt(
     .replace(CLIMB, "")
     .replace(PACKAGE, "npm:");
   return `${source}:${(best[2] ?? 0) + 1}`;
-}
-
-const STACK_FRAME = /\(?(https?:\/\/[^\s)]+):(\d+):(\d+)\)?\s*$/u;
-
-/**
- * Slow callbacks (live-page.ts `attributeOn`) by the stack that scheduled
- * them, each frame said at its source line, `depth` frames of the page's
- * own deep: how many, their ms, the most first.
- */
-export function attributed(
-  calls: [string, number, string][],
-  maps: string | undefined,
-  depth = 4
-) {
-  const byKey = new Map<string, { count: number; ms: number }>();
-  for (const [kind, ms, stack] of calls) {
-    const frames: string[] = [];
-    for (const line of stack.split("\n")) {
-      const match = STACK_FRAME.exec(line);
-      if (!match) {
-        continue;
-      }
-      const [, url = "", row = "0", column = "0"] = match;
-      const mapped =
-        (maps &&
-          sourceAt(maps, url, 0, {
-            line: Number(row),
-            column: Number(column),
-          })) ||
-        `${url.split("/").pop()}:${row}:${column}`;
-      if (frames.at(-1) !== mapped) {
-        frames.push(mapped);
-      }
-      if (frames.length >= depth) {
-        break;
-      }
-    }
-    const key = `${kind} ← ${frames.join(" ← ") || "(no page frame)"}`;
-    const held = byKey.get(key) ?? { count: 0, ms: 0 };
-    held.count += 1;
-    held.ms += ms;
-    byKey.set(key, held);
-  }
-  return [...byKey]
-    .map(([key, one]) => ({ key, ...one }))
-    .sort((a, b) => b.ms - a.ms);
 }
 
 /** The scripts of long frames, by what ran them, the most time first: each its ms, forced style and layout, count and source. */

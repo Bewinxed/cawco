@@ -29,7 +29,7 @@ import {
   SRC_LIB,
 } from "./model.mjs";
 
-export const MERGERS = new Set([
+const MERGERS = new Set([
   "cn",
   "cx",
   "clsx",
@@ -37,7 +37,7 @@ export const MERGERS = new Set([
   "twJoin",
   "classNames",
 ]);
-export const RECIPES = new Set(["tv", "cva"]);
+const RECIPES = new Set(["tv", "cva"]);
 const WRAPPERS = new Set([
   "TSAsExpression",
   "TSNonNullExpression",
@@ -51,7 +51,7 @@ const LEADING_SPACE = /^\s/u;
 const TRAILING_SPACE = /\s$/u;
 const LEADING_WORD = /^\S+/u;
 const TRAILING_WORD = /\S+$/u;
-export const CLASS_ATTRIBUTE = /class/iu;
+const CLASS_ATTRIBUTE = /class/iu;
 const KIT_IMPORT = /^#lib\/components\//u;
 
 export function calleeName(call) {
@@ -542,7 +542,7 @@ export const tagName = (tag) => tag?.name ?? "";
 /** A file's imports, by local name. */
 const IMPORT_KINDS = { default: "default", "*": "namespace" };
 
-export function importsOf(model) {
+function importsOf(model) {
   if (!model.imports) {
     model.imports = new Map();
     for (const b of model.bindings) {
@@ -621,7 +621,7 @@ const wrappers = new Map();
  * tag of it a design-system component's for @shadcn/lint ("Only recognized
  * components and their forwarding wrappers are checked").
  */
-export function wrapsKit(file, depth = 0) {
+function wrapsKit(file, depth = 0) {
   if (wrappers.has(file)) {
     return wrappers.get(file);
   }
@@ -657,7 +657,7 @@ export function wrapsKit(file, depth = 0) {
 }
 
 /** The design-system component a tag is, or null: `{ name, file }`. */
-export function kitComponent(model, tag) {
+function kitComponent(model, tag) {
   if (tag?.type !== "Component") {
     return null;
   }

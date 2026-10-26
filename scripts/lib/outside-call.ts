@@ -53,7 +53,7 @@ export interface Patience {
 }
 
 /** Five attempts over up to five minutes: 2s, 4s, 8s, 16s between them. */
-export const PATIENCE: Patience = {
+const PATIENCE: Patience = {
   attempts: 5,
   firstWaitMs: 2000,
   totalMs: 5 * 60_000,

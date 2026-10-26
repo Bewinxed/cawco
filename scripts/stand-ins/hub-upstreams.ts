@@ -19,8 +19,7 @@ export const GITHUB_MCP =
 
 export const LINEAR_API = asked.linearApi ?? "https://api.linear.app";
 
-export const TYPESAFE_URL =
-  asked.typesafeUrl ?? "https://api.typesafe.ai/v1/systemone";
+export const TYPESAFE_URL = "https://api.typesafe.ai/v1/systemone";
 
 export const STARTERS_QUIET_MS = asked.startersPace?.quiet ?? 60_000;
 

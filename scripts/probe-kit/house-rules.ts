@@ -51,7 +51,7 @@ export type HouseRule =
   | "made-up";
 
 /** Each rule, what it holds, and who reads it: the report's words. */
-export const HOUSE_RULES: Record<HouseRule, { says: string; by: string }> = {
+const HOUSE_RULES: Record<HouseRule, { says: string; by: string }> = {
   overflow: {
     says: "nothing spills, clips or overlaps",
     by: "scan.ts + impeccable text-occlusion",
@@ -79,7 +79,7 @@ export const HOUSE_RULES: Record<HouseRule, { says: string; by: string }> = {
 const RULES = Object.keys(HOUSE_RULES) as HouseRule[];
 
 /** One element-level exemption: findings of `rule` on what `selector` matches, whose words hold `text`; either alone, or both together. */
-export interface HouseExcept {
+interface HouseExcept {
   reason: string;
   rule: HouseRule;
   selector?: string;
@@ -110,7 +110,7 @@ export interface HouseOptions {
   views?: string;
 }
 
-export interface HouseFinding {
+interface HouseFinding {
   element: string;
   measured: string;
   rule: HouseRule;
@@ -1862,7 +1862,7 @@ const IMPECCABLE_HOUSE: Record<string, HouseRule> = {
  * settles first (`settle`, or its own); a page still moving is the
  * `settled` rule's finding, not waited out here.
  */
-export async function houseRules(
+async function houseRules(
   page: Page,
   opts: HouseOptions = {}
 ): Promise<HouseRead> {

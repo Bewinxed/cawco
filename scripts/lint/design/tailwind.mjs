@@ -10,7 +10,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { DASHBOARD } from "./model.mjs";
 
-export const THEME = path.join(DASHBOARD, "src/app.css");
+const THEME = path.join(DASHBOARD, "src/app.css");
 
 // @tailwindcss/node is @tailwindcss/vite's dependency; resolved from there.
 const fromVite = createRequire(
@@ -90,7 +90,7 @@ export function isArbitraryValue(token) {
 
 const compiledRules = new Map();
 /** The style rules a class compiles to, through its at-rules (none when Tailwind does not know it). */
-export function compiled(token) {
+function compiled(token) {
   if (!compiledRules.has(token)) {
     let nodes = [];
     try {

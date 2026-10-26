@@ -792,7 +792,7 @@ export function journey(steps: Step[]): string {
 }
 
 /** What `attributeOn` keeps: each slow callback's kind, ms and the stack that scheduled it; JSON.parse's count, ms and characters. */
-export interface Attributed {
+interface Attributed {
   calls: [string, number, string][];
   json: [number, number, number];
 }

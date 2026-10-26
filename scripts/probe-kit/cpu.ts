@@ -72,7 +72,7 @@ const COMPOSITING = /Compositor$|^llvmpipe/u;
 const HZ = /^CONFIG_HZ=(\d+)$/mu;
 
 /** One recording, read. */
-export interface FrameCpu {
+interface FrameCpu {
   /**
    * CPU ms the main thread ran from `from` to `to` (the page's clock): never
    * less than it ran, to the page clock's millisecond, and never more than

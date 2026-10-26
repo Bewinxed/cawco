@@ -69,7 +69,7 @@ const layerOf = (fleet: CopyFleet, id: string): LayerRecord | undefined => {
  * layer.ts `clonePath` names, `~/.worktrees/<repo>-<id8>` in the fleet's
  * HOME, a folder of its own with no layer record.
  */
-export const isClone = (fleet: CopyFleet, ws: CopyRef): boolean =>
+const isClone = (fleet: CopyFleet, ws: CopyRef): boolean =>
   dirname(ws.path) === join(fleet.home, ".worktrees") &&
   basename(ws.path).endsWith(`-${ws.id.slice(0, 8)}`);
 

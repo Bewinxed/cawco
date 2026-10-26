@@ -287,7 +287,7 @@ export const serveTarget = async (options: {
 };
 
 /** What the program takes, as one JSON argument. */
-export interface TargetConfig {
+interface TargetConfig {
   authorized: string;
   home: string;
   host: string;

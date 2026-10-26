@@ -34,7 +34,7 @@ export const RCODESIGN_ARCHIVES: Record<
 };
 
 /** Where the release's own tools live on the release host, outside every checkout. */
-export const releaseToolsDir = (): string =>
+const releaseToolsDir = (): string =>
   join(homedir(), ".local", "share", "cawco-release", "tools");
 
 /** The pinned rcodesign, as setup installs it. */

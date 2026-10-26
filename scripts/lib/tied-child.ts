@@ -41,7 +41,7 @@ import {
 import { END_SIGNALS, type EndSignal, endsTheProcess } from "./stop-signals";
 
 /** The pid of the process that started this one as its tied child. */
-export const PARENT_ENV = "CAWCO_TIED_PARENT";
+const PARENT_ENV = "CAWCO_TIED_PARENT";
 const EVERY_MS = 1000;
 
 const parent = Number(process.env[PARENT_ENV]);

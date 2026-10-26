@@ -2,9 +2,7 @@
  * The usage benches' staged forecast as plain data, with no hub and no
  * Svelte: six accounts, five in Petralab (a group) and one in Omar Al Matar
  * (ungrouped); twenty adds Northwind's four (a group) and Acme's two
- * (ungrouped). The web benches stand it in for the hub's (`stage.ts`), and
- * the iOS usage probe's scratch hub serves it (scripts/stage-ios-usage.ts),
- * so both draw the same forecast.
+ * (ungrouped). The web benches stand it in for the hub's (`stage.ts`).
  */
 import type {
   Account,

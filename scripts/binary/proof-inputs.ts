@@ -8,7 +8,7 @@
  * last that did. No version string is in it: every proof build is named by
  * the proof itself.
  */
-export const PROOF_INPUTS = [
+const PROOF_INPUTS = [
   "packages",
   "apps/dashboard",
   "scripts/binary",

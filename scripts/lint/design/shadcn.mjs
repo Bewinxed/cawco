@@ -39,7 +39,7 @@ import {
 } from "./tailwind.mjs";
 
 /** Exact names or `*` patterns, matched against a class without its variants. */
-export function patterns(entries) {
+function patterns(entries) {
   const compiled = entries.map(
     (entry) =>
       new RegExp(
@@ -125,7 +125,7 @@ export function arbitraryValues(model, { allow = [] } = {}) {
  * dashboard's allow list named: margins, a flex or grid item's share and
  * place, position and inset, stacking, and width constraints.
  */
-export const PLACEMENT_PROPERTIES = new Set([
+const PLACEMENT_PROPERTIES = new Set([
   // m, mx, my, ms, me, mbs, mbe, mt, mr, mb, ml
   "margin",
   "margin-inline",
@@ -179,7 +179,7 @@ export const PLACEMENT_PROPERTIES = new Set([
 ]);
 
 /** Whether a class only places its element (what PLACEMENT allows). */
-export function placesOnly(token, allowedClass) {
+function placesOnly(token, allowedClass) {
   if (isMarkerClass(token) || allowedClass(token)) {
     return true;
   }
@@ -260,7 +260,7 @@ const NAMED_COLORS = new Set(
 const LEAVES = /[\s,()/]+/u;
 
 /** Whether a CSS value names a colour outright (not through a variable). */
-export function hasRawColor(value) {
+function hasRawColor(value) {
   const text = value
     .replace(/\/\*[\s\S]*?\*\//gu, " ")
     .replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/gu, " ")

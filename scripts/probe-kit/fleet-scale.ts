@@ -78,7 +78,7 @@ const wordsOf = (n: number, label: string): string[] =>
   Array.from({ length: n }, (_, i) => `${i === 0 ? `${label}: ` : ""}w${i} `);
 
 /** What the mock answers: a stream's call after call, a turn's one call then its end. */
-export const scaleRespond = (request: Seen): Reply => {
+const scaleRespond = (request: Seen): Reply => {
   if (!request.tools) {
     return { everyMs: 1, words: ["Scale"] };
   }

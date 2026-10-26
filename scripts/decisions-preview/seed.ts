@@ -20,14 +20,14 @@
 import { readWithin } from "../../packages/core/src/bounded";
 import type { Fleet } from "../scratch-fleet";
 
-export interface SeedOption {
+interface SeedOption {
   id: string;
   label: string;
   line: string;
   recommended?: boolean;
 }
 
-export interface SeedCard {
+interface SeedCard {
   /** The decisions it depends on: an id on its page, or `page#id`. */
   after?: string[];
   /** A Mermaid diagram shown between its why and its options. */
@@ -348,7 +348,7 @@ export const PRICING_PICKS: Record<
 };
 
 /** The tasks Make tasks files back onto the pricing cards. */
-export const PRICING_TASKS = [
+const PRICING_TASKS = [
   { card: "plan-shape", title: "Bill by machine joined" },
   { card: "trial-length", title: "Run the trial for a month" },
   { card: "spend-cap", title: "Cap spend on the project page" },

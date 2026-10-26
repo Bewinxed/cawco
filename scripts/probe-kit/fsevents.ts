@@ -69,7 +69,7 @@ export interface Stream {
 }
 
 /** Every stream in `log` as it stands now, in creation order; live ones are started and neither stopped nor invalidated. */
-export const streamsIn = async (log: string): Promise<Stream[]> => {
+const streamsIn = async (log: string): Promise<Stream[]> => {
   const text = await readFile(log, "utf8").catch(() => "");
   const all: Stream[] = [];
   const current = new Map<string, Stream>();

@@ -1,33 +1,21 @@
-/**
- * A session that asks the person for a Bash permission, as J1 and J2 use
- * it, on the scratch fleet's mock model:
- *
- *  - a message carrying `JOURNEY-ASK <token>` makes the model call Bash to
- *    write `journey-<token>.txt` in the session's folder: a write, so Claude
- *    Code asks for it in its default mode, and a file the machine holds only
- *    if the command really ran;
- *  - once the call's result is back, the model says what it does next, in
- *    words the page shows: carrying on after the command ran, or not
- *    running it after a denial.
- */
-import { join } from "node:path";
-import { MACHINE, type Reply, type Seen } from "../../scratch-fleet";
+
+import type { Reply, Seen } from "../../scratch-fleet";
 import type { KitFleet } from "../kit";
 import { eventually, waiting } from "./suite";
 
 const ASK = /JOURNEY-ASK (\S+)/u;
 const TOOL_RESULT = '"tool_result"';
 /** What the model says once the command has run. */
-export const RAN = "The command ran; carrying on with the release notes.";
+const RAN = "The command ran; carrying on with the release notes.";
 /** What the model says once the command was denied. */
-export const HELD_BACK = "Understood, I won't run it.";
+const HELD_BACK = "Understood, I won't run it.";
 /** The words a denial carries back to the model (client.svelte.ts `permissionAnswer`). */
 const DENIED = "User denied permission";
 
 const say = (words: string): Reply => ({ everyMs: 20, words: [words] });
 
 /** The command the model asks to run for `token`. */
-export const commandFor = (token: string) =>
+const commandFor = (token: string) =>
   `printf 'journey ${token}' > journey-${token}.txt`;
 
 /** The mock's answer for a session that asks. Anything else answers `otherwise`. */
@@ -64,12 +52,8 @@ export interface Parked {
 }
 
 /** Every ask the hub holds for the person: `/api/pending`'s asks, the artifact lane apart. */
-export const pendingAsks = async (fleet: KitFleet): Promise<Parked[]> =>
+const pendingAsks = async (fleet: KitFleet): Promise<Parked[]> =>
   (await waiting(fleet)).asks as Parked[];
-
-/** The file the command writes, in the session's folder. */
-export const markFile = (fleet: KitFleet, token: string) =>
-  join(fleet.workdir, `journey-${token}.txt`);
 
 /**
  * A Claude session in its default mode (it asks), with the message that
@@ -94,34 +78,3 @@ export async function sessionAsking(
   const parked = asks.find((one) => one.instanceId === id) as Parked;
   return { id, parked };
 }
-
-/** The session's turn went on after the answer: the model was asked again with the call's result. */
-export const resumed = (fleet: KitFleet, token: string) =>
-  fleet.seen.some(
-    (one) => one.afterTool && one.all.includes(`JOURNEY-ASK ${token}`)
-  );
-
-/** An answer through the hub's API, as another device sends it: the dashboard socket's `permission.answer` command. */
-export const answerThroughHub = (
-  fleet: KitFleet,
-  parked: Parked,
-  behavior: "allow" | "deny"
-) =>
-  fleet.post({
-    type: "command",
-    commandId: crypto.randomUUID(),
-    kind: "permission.answer",
-    machineId: MACHINE,
-    sessionId: parked.instanceId,
-    payload: {
-      instanceId: parked.instanceId,
-      requestId: parked.requestId,
-      method: "resolvePermission",
-      args: [
-        parked.requestId,
-        behavior === "allow"
-          ? { behavior: "allow", updatedInput: parked.input }
-          : { behavior: "deny", message: DENIED },
-      ],
-    },
-  });

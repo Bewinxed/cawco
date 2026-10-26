@@ -21,7 +21,7 @@
  */
 
 /** One element that scrolls sideways, and why. */
-export interface Sideways {
+interface Sideways {
   /** Its content's farthest end from its scroll origin, its end padding included. */
   boxEdge: number;
   /** `content`: a box drawn in it reaches past its end; `hitArea`: only a control's ::after does. */

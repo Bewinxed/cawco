@@ -1,2 +1,0 @@
-# Spec selectors the hooks do not cover (hooks-sweep.ts): spec:line  selector  why
-
