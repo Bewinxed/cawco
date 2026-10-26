@@ -28,24 +28,13 @@ export const shellWords = {
   fromShowDetails: "from Show details",
   /*
    * The connection band on a page built for an older wire than the hub's,
-   * which reads nothing more until it reloads (reload.svelte.ts): the lead,
-   * then what the reload waits on, then the band's Reload.
+   * which reads nothing more until the update toast's reload: the lead, then
+   * how it catches up.
    */
   /** The lead: the page stopped reading the hub. */
   staleLead: "CawCo updated — this page has stopped updating.",
-  /** A field has the keyboard and was typed in within `seconds`. */
-  staleTyping: (seconds: number) =>
-    `It reloads ${seconds} seconds after you stop typing.`,
-  /** Pointer or key input within `seconds`, no field typed in. */
-  staleRecent: (seconds: number) =>
-    `It reloads once the page has been still for ${seconds} seconds.`,
-  /** Words in a field nothing keeps across a reload: the focused one, or one in an open dialog. */
-  staleUnsaved: "It reloads once you save or close what you're editing.",
+  /** The update toast offers the new build: its Update now catches the page up. */
+  staleOffered: "Update now to catch up.",
   /** The dashboard's server doesn't run the new build yet: a reload would load this one. */
-  staleBuild: "It reloads when the dashboard serves the new build.",
-  /** The browser keeps no session storage, so the page never reloads itself. */
-  staleUnkept: "Reload it to catch up.",
-  /** The band's button, and its words while the drafts are written down first. */
-  reload: "Reload",
-  reloading: "Reloading…",
+  staleBuild: "It can update once the dashboard serves the new build.",
 };

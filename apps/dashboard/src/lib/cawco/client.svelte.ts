@@ -196,9 +196,8 @@ import { presenceClientId } from "./presence";
 import { send as askHub, json } from "./project-tasks";
 import { placedOn } from "./projects";
 import { type Refusal, refusals } from "./refusals.svelte";
-import { type ReloadHold, reloadWhenIdle } from "./reload.svelte";
 import { forgetSend, keepSend, keptSends, refuseSend } from "./send-store";
-import { checkServedBuild } from "./served-build.svelte";
+import { checkServedBuild, newerBuild } from "./served-build.svelte";
 import type {
   CommandRecord,
   SettleStage,
@@ -1167,10 +1166,10 @@ const state = $state({
   restart: null as { until: number; version: string | null } | null,
   /**
    * This page was built for an older wire than the hub's, so it reads nothing
-   * more off the socket ({@link olderThanHub}): `reloading` while its reload
-   * is on the way, or what that reload is waiting on. Null on the hub's wire.
+   * more off the socket ({@link olderThanHub}) until the update toast's
+   * reload takes it to the hub's build.
    */
-  older: null as "reloading" | ReloadHold | null,
+  older: false,
   /** When the next reconnect attempt fires, so the banner can count it down. */
   retryAt: null as number | null,
   /** The board's snapshot and the first read of the projects after it are in. */
@@ -5686,7 +5685,11 @@ function hubReached(): void {
  * `protocol` are the two fields of it no wire version moves (`WIRE_PROTOCOL`).
  *
  * An older page reads nothing more off the socket, the snapshot included,
- * and reloads. The check used to sit at the end of the board handler, after
+ * and takes the new build as any page does: through the update toast
+ * (updates/update-toast.svelte.ts), Update now or the idle reload once the
+ * person has seen it, never under them. It asks again which build the
+ * dashboard runs on each snapshot until it serves another, as the hub may
+ * restart into the new wire before the dashboard serves its build. The check used to sit at the end of the board handler, after
  * the frame was applied: the first change-only delta left `state.machines`
  * undefined, and every later board frame threw on it before the check ran,
  * so those tabs never reloaded.
@@ -5694,20 +5697,13 @@ function hubReached(): void {
 function olderThanHub(message: unknown): boolean {
   const { payload } = message as { payload?: FramePayload };
   if (payload?.kind !== "instances") {
-    return state.older !== null;
+    return state.older;
   }
-  if (payload.protocol <= WIRE_PROTOCOL) {
-    state.older = null;
-    return false;
+  state.older = payload.protocol > WIRE_PROTOCOL;
+  if (state.older && newerBuild() === null) {
+    detach(checkServedBuild(), "checkServedBuild");
   }
-  state.older ??= "reloading";
-  detach(
-    reloadWhenIdle((hold) => {
-      state.older = hold;
-    }),
-    "reloadWhenIdle"
-  );
-  return true;
+  return state.older;
 }
 
 /**
@@ -9455,17 +9451,9 @@ export const cawco = {
   get retryAt() {
     return state.retryAt;
   },
-  /**
-   * What holds the reload of a page built for an older wire than the hub's;
-   * null on the hub's wire and while the reload is on its way. Such a page
-   * has stopped reading the hub, so the connection band says so.
-   */
-  get reloadHold(): ReloadHold | null {
-    return state.older === "reloading" ? null : state.older;
-  },
-  /** This page was built for an older wire than the hub's: its reload is forced (reload.svelte.ts `reloadWhenIdle`), and the update toast stands aside. */
+  /** This page was built for an older wire than the hub's and has stopped reading it: the connection band says so, and the update toast takes it to the new build. */
   get olderWire(): boolean {
-    return state.older !== null;
+    return state.older;
   },
   /** What a session has been handed and not yet answered; `null` for most. */
   handoffFor: (instanceId: string): { from: string; at: number } | null =>

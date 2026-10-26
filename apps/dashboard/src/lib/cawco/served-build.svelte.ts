@@ -17,9 +17,10 @@
  * own server (serve.js), so a dashboard restart always drops it and the
  * reconnect is the moment to ask.
  *
- * A build that also raises the wire (`WIRE_PROTOCOL`) reloads the same way
- * (reload.svelte.ts): a tab built for the older wire misreads the hub, so
- * it also stops reading it while it waits.
+ * A build that also raises the wire (`WIRE_PROTOCOL`) is offered the same
+ * way: a tab built for the older wire misreads the hub, so it stops reading
+ * it while the toast stands, and asks on each snapshot until the dashboard
+ * serves the new build (client.svelte.ts `olderThanHub`).
  */
 import { version } from "$app/env";
 
@@ -39,9 +40,18 @@ export async function runningBuild(): Promise<string | null> {
   return ((await response.json()) as { version: string }).version;
 }
 
-export async function checkServedBuild(): Promise<void> {
-  const running = await runningBuild();
-  if (running !== null && running !== version) {
-    newer = running;
-  }
+/** The ask on its way: a page on an older wire asks on every snapshot, and one ask at a time is enough. */
+let asking: Promise<void> | null = null;
+
+export function checkServedBuild(): Promise<void> {
+  asking ??= runningBuild()
+    .then((running) => {
+      if (running !== null && running !== version) {
+        newer = running;
+      }
+    })
+    .finally(() => {
+      asking = null;
+    });
+  return asking;
 }

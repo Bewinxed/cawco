@@ -1,6 +1,4 @@
 <script lang="ts" module>
-  import type { ReloadHold } from "./reload.svelte";
-
   /**
    * What the band says, one state at a time: the only place the dashboard
    * speaks of its hub connection (JOURNEY.md: "a fleet error sits in the
@@ -13,14 +11,15 @@
    * - `refused`: this page has never reached the hub; its address shows.
    * - `back`: the hub answered again after the band showed, for --dur-hold.
    * - `older`: the page is on an older wire than the hub's, and reads
-   *   nothing more until it reloads (reload.svelte): what the reload waits
-   *   on, and Reload to go now.
+   *   nothing more until the update toast's reload: `offered` while the
+   *   toast offers the new build (its Update now catches the page up), else
+   *   the dashboard does not serve that build yet.
    */
   type BandState =
     | { kind: "updating"; until: number; version: string | null }
     | { kind: "lost" | "refused" | "retrying" }
     | { kind: "back"; updated: string | null | undefined }
-    | { kind: "older"; hold: ReloadHold };
+    | { kind: "older"; offered: boolean };
 </script>
 
 <script lang="ts">
@@ -58,7 +57,6 @@
    * had the hub, once the grace has run out.
    */
   import { connectionWords } from "@cawco/core";
-  import { detach } from "@cawco/core/detach";
   import { shellWords } from "@cawco/core/words/shell";
   import { onMount, untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -68,7 +66,8 @@
   import { cawco, hubSocketUrl, reconnectNow } from "./client.svelte";
   import { dur } from "./motion/curves.svelte";
   import { morph } from "./motion/morph.svelte";
-  import { IDLE_MS, reloadNow } from "./reload.svelte";
+  import { reloadedFor } from "./reload.svelte";
+  import { newerBuild } from "./served-build.svelte";
 
   /** Whether this tab has ever had the hub: a drop retries, a first miss is a wrong address. */
   let everConnected = $state(false);
@@ -142,8 +141,12 @@
     if (!browser) {
       return null;
     }
-    if (cawco.reloadHold) {
-      return { kind: "older", hold: cawco.reloadHold };
+    if (cawco.olderWire) {
+      const build = newerBuild();
+      return {
+        kind: "older",
+        offered: build !== null && !reloadedFor(build),
+      };
     }
     const { restart } = cawco;
     if (restart) {
@@ -230,13 +233,7 @@
             );
       case "older":
         return `${shellWords.staleLead} ${
-          {
-            typing: shellWords.staleTyping(IDLE_MS / 1000),
-            recent: shellWords.staleRecent(IDLE_MS / 1000),
-            unsaved: shellWords.staleUnsaved,
-            unkept: shellWords.staleUnkept,
-            build: shellWords.staleBuild,
-          }[shown.hold]
+          shown.offered ? shellWords.staleOffered : shellWords.staleBuild
         }`;
       case undefined:
         break;
@@ -272,19 +269,6 @@
       shown?.kind === "retrying" ||
       shown?.kind === "refused"
   );
-
-  /**
-   * A stale page's Reload, at once: shown whenever a reload would load the
-   * new build, so only not while the dashboard still serves this one.
-   */
-  const reloadable = $derived(
-    shown?.kind === "older" && shown.hold !== "build"
-  );
-  let reloadPressed = $state(false);
-  function reload() {
-    reloadPressed = true;
-    detach(reloadNow(), "reloadNow");
-  }
 </script>
 
 <!-- Its slot is a row of the page's column under the bar, a fold (design.css
@@ -364,18 +348,6 @@
             onclick={reconnectNow}
             pending={cawco.status === "connecting"}
             pendingLabel="Reconnecting…"
-            size="sm"
-            variant="outline"
-          />
-        {:else if reloadable}
-          <!-- Pending in place while the drafts are written down, then the
-               page goes (reload.svelte `reloadNow`). -->
-          <Button
-            icon={IconRefresh}
-            label={shellWords.reload}
-            onclick={reload}
-            pending={reloadPressed}
-            pendingLabel={shellWords.reloading}
             size="sm"
             variant="outline"
           />

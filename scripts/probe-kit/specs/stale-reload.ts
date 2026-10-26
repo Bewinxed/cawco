@@ -1,35 +1,38 @@
 /**
- * After an update an open page never sits stale (owner, nightly 5408: the
+ * After an update raises the wire, an open page never sits stale without
+ * saying so, and never reloads under the person (owner, nightly 5408: the
  * band "CawCo updated — this page has stopped updating. It reloads once
  * you're not using it." stood for hours while the transcript he read stopped
- * updating). A reload at any moment is safe, because what a person has in
- * progress comes back after it, so the page reloads at the first moment it
- * interrupts no keystroke or press, and the band's Reload goes at once
- * (reload.svelte.ts `busy`, `reloadNow`; HubBand).
+ * updating; tsk-66: a page that reloaded by itself took the update toast
+ * with it). The page stops reading the hub, the band says so and points to
+ * the update toast, and the toast takes it to the new build: Update now, or
+ * the idle reload once the person has seen it (client.svelte.ts
+ * `olderThanHub`, updates/update-toast.svelte.ts, HubBand). A reload at any
+ * moment is safe, because what a person has in progress comes back after it.
  *
  * On a scratch fleet, the update is simulated in the page's own network: its
  * hub socket's board snapshot says a wire one newer than the page's
- * (`protocol`, client.svelte.ts `olderThanHub`), and the dashboard's server
- * names another build as the one it runs (`/_app/running-version.json`,
- * served-build.svelte.ts), both from the moment the probe flips them, until
- * the page's next navigation. The socket is closed on the flip, so the page
- * reconnects and reads the newer snapshot, as it does when the hub restarts
- * into the update.
+ * (`protocol`), and the dashboard's server names another build as the one it
+ * runs (`/_app/running-version.json`, served-build.svelte.ts), both from the
+ * moment the probe flips them, until the page's next navigation. The socket
+ * is closed on the flip, so the page reconnects and reads the newer
+ * snapshot, as it does when the hub restarts into the update.
  *
  * Each leg on Chromium at the desk, WebKit at the desk and WebKit on a phone
  * (Playwright's WebKit build, not the owner's iPhone Safari):
  *
- * a. With a composer draft and the preview panel open, and nothing pressed
- *    or typed for {@link IDLE_MS}, the page reloads within a few seconds of
- *    the change, and comes back with the draft's words and the panel open.
- * b. While typing (a key every 3 s), it holds and the band says it waits on
- *    typing; it reloads within {@link IDLE_MS} (plus a look) after the last
- *    key, the draft with every key.
- * c. The band's Reload reloads at once and the draft comes back.
+ * a. With a composer draft and the preview panel open, and no input since,
+ *    the update lands: nothing reloads, the band says the page stopped
+ *    updating and to Update now, and the toast stands.
+ * b. A key, then the tab to the background: the idle reload goes, and the
+ *    page comes back with the draft's words and the panel open.
+ * c. While typing, the toast's Update now reloads at once and the draft
+ *    comes back.
  */
 
 import type { Page, WebSocketRoute } from "playwright-core";
 import { shellWords } from "../../../packages/core/src/words/shell";
+import { updatesWords } from "../../../packages/core/src/words/updates";
 import { until } from "../../scratch-fleet";
 import {
   COMPOSER,
@@ -42,16 +45,17 @@ import {
   type View,
 } from "../kit";
 
-/** reload.svelte.ts `IDLE_MS`: the input the reload waits out. */
-const IDLE_MS = 30_000;
-/** What a reload takes beyond the hold: a reconnect's first delay, one look (`POLL_MS`), the draft's write. */
+/** What a reload takes: a reconnect's first delay, the draft's write, the load's start. */
 const SLACK_MS = 5000;
+/** How long a page is watched for a reload that must not come. */
+const QUIET_MS = 8000;
+const TOAST = '[data-sonner-toast]:not([data-removed="true"])';
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 const BAND = "[data-hub-band-said]";
 /**
- * The build each landing names, one of its own each time: the page reloads
- * once per change (reload.svelte.ts `RELOADED_FOR`), and this probe's reload
- * hands back the build it had, where a real one loads the next.
+ * The build each landing names, one of its own each time: the page is
+ * offered each change once (reload.svelte.ts `RELOADED_FOR`), and this
+ * probe's reload hands back the build it had, where a real one loads the next.
  */
 const nextBuild = (landing: number) => `probe-next-${landing}`;
 
@@ -162,6 +166,20 @@ const reloaded = async (
   return at;
 };
 
+/** The tab going to the background, as a switch to another tab does it. */
+const toBackground = (page: Page) =>
+  page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => "hidden",
+    });
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      get: () => true,
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+
 /** The composer of the session's pane, the keyboard in it, holding `words` typed. */
 const typeDraft = async (page: Page, words: string) => {
   const field = page.locator(COMPOSER).first();
@@ -194,7 +212,7 @@ const leg = async (
   const update = await updateIn(page);
   await open(page, `${base}/session/${session}`, COMPOSER);
 
-  // a. A draft, the panel, then nothing for IDLE_MS; the update lands.
+  // a. A draft, the panel, then no input; the update lands.
   const draftA = `Kept across the reload ${index}`;
   await typeDraft(page, draftA);
   await fleet.api(`/api/instances/${session}/artifacts`, {
@@ -210,25 +228,42 @@ const leg = async (
     (heading) => heading === "Kept",
     30_000
   ).catch(() => null);
-  await page.waitForTimeout(IDLE_MS + 1000);
   const before = update.loads.length;
-  const landedA = await land(update);
-  const atA = await reloaded(page, update, before, IDLE_MS);
-  const backA = {
-    afterMs: atA === null ? null : atA - landedA,
+  await land(update);
+  await page.waitForTimeout(QUIET_MS);
+  const standing = {
+    loads: update.loads.length - before,
+    band: await bandSays(page),
+    toasts: await page.locator(TOAST).count(),
+  };
+  check(
+    "a: with no input since the update, nothing reloads, the band says the page stopped updating and to Update now, and the toast stands",
+    standing.loads === 0 &&
+      standing.band === `${shellWords.staleLead} ${shellWords.staleOffered}` &&
+      standing.toasts === 1,
+    JSON.stringify(standing)
+  );
+
+  // b. A key, then the background: the idle reload.
+  await page.keyboard.press("Shift");
+  const hidden = Date.now();
+  await toBackground(page);
+  const atB = await reloaded(page, update, before, SLACK_MS * 2);
+  const backB = {
+    afterMs: atB === null ? null : atB - hidden,
     draft: await composerText(page),
     panes: await page.locator(PANE).count(),
     heading: await panelHeading(page),
   };
   check(
-    `a: an idle page with a draft and the panel open reloads within ${SLACK_MS / 1000} s of the update`,
-    backA.afterMs !== null && backA.afterMs < SLACK_MS,
-    JSON.stringify(backA)
+    `b: after a key, the tab to the background reloads it within ${SLACK_MS / 1000} s`,
+    backB.afterMs !== null && backB.afterMs < SLACK_MS,
+    JSON.stringify(backB)
   );
   check(
-    "a: it comes back with the draft's words and the panel open",
-    backA.draft === draftA && backA.panes === 1 && backA.heading === "Kept",
-    JSON.stringify(backA)
+    "b: it comes back with the draft's words and the panel open",
+    backB.draft === draftA && backB.panes === 1 && backB.heading === "Kept",
+    JSON.stringify(backB)
   );
 
   // The composer is reached under the phone's sheet once it is closed.
@@ -243,60 +278,13 @@ const leg = async (
     await settle(page);
   }
 
-  // b. Typing holds it; the last key starts IDLE_MS.
-  await typeDraft(page, " b");
-  const loadsB = update.loads.length;
-  await land(update);
-  let lastKey = Date.now();
-  const heldWhile: string[] = [];
-  for (let key = 0; key < 4; key += 1) {
-    await page.waitForTimeout(3000);
-    await page.keyboard.type(String(key));
-    lastKey = Date.now();
-    heldWhile.push(await bandSays(page));
-  }
-  const typingWords = `${shellWords.staleLead} ${shellWords.staleTyping(IDLE_MS / 1000)}`;
-  check(
-    "b: while typing it holds, and the band says it waits on typing",
-    update.loads.length === loadsB &&
-      heldWhile.slice(1).every((said) => said === typingWords),
-    JSON.stringify({ loads: update.loads.length - loadsB, heldWhile })
-  );
-  const atB = await reloaded(page, update, loadsB, IDLE_MS + 2 * SLACK_MS);
-  const afterKey = atB === null ? null : atB - lastKey;
-  const draftB = `${draftA} b0123`;
-  const textB = await composerText(page);
-  check(
-    `b: it reloads within ${IDLE_MS / 1000} s (and a look) of the last key, not before`,
-    afterKey !== null &&
-      afterKey >= IDLE_MS - 1500 &&
-      afterKey < IDLE_MS + SLACK_MS,
-    JSON.stringify({ afterKey })
-  );
-  check(
-    "b: the draft comes back with every key",
-    textB === draftB,
-    JSON.stringify({ textB, draftB })
-  );
-
-  if (view === "phone" && (await page.locator(PANE).count()) > 0) {
-    await page.locator(`${PANE} [data-slot="close"]`).first().click();
-    await until(
-      "the sheet gone",
-      () => page.locator(PANE).count(),
-      (count) => count === 0,
-      10_000
-    ).catch(() => null);
-    await settle(page);
-  }
-
-  // c. The band's Reload, pressed while typing holds the reload.
+  // c. The toast's Update now, pressed while typing.
   await typeDraft(page, " c");
   const loadsC = update.loads.length;
   await land(update);
   const button = page
-    .locator('[data-slot="hub-band"]')
-    .getByRole("button", { name: shellWords.reload });
+    .locator(TOAST)
+    .getByRole("button", { name: updatesWords.updateNow });
   const shown = await button
     .waitFor({ state: "visible", timeout: SLACK_MS * 2 })
     .then(() => true)
@@ -308,13 +296,13 @@ const leg = async (
   const atC = await reloaded(page, update, loadsC, SLACK_MS);
   const textC = await composerText(page);
   check(
-    "c: the band's Reload reloads at once",
+    "c: the toast's Update now reloads at once",
     shown && atC !== null && atC - pressed < 3000,
     JSON.stringify({ shown, afterMs: atC === null ? null : atC - pressed })
   );
   check(
     "c: the draft comes back after it",
-    textC === `${draftB} c`,
+    textC === `${draftA} c`,
     JSON.stringify({ textC })
   );
   await page.close();

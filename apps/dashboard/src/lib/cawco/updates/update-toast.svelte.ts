@@ -33,11 +33,11 @@
  * moment the toast went up, and he came back to no toast (tsk-66, nightly
  * 5953 → 5958).
  *
- * A page whose wire is older than the hub's reloads by itself regardless
- * (client.svelte.ts `olderThanHub`, the connection band says it), so the
- * toast stands aside for it. A page reloaded once for this build that came
- * back on its own build is not offered it again ({@link reloadedFor}): the
- * reload would only load this build again.
+ * A page whose wire is older than the hub's is offered it the same way: it
+ * has stopped reading the hub (client.svelte.ts `olderThanHub`), and the
+ * connection band says so over it. A page reloaded once for this build that
+ * came back on its own build is not offered it again ({@link reloadedFor}):
+ * the reload would only load this build again.
  */
 
 import { detach } from "@cawco/core/detach";
@@ -45,7 +45,6 @@ import { AWAY_AFTER_DEFAULT_MS } from "@cawco/core/notifications";
 import { updatesWords } from "@cawco/core/words/updates";
 import { untrack } from "svelte";
 import { createSubscriber } from "svelte/reactivity";
-import { cawco } from "../client.svelte";
 import { person } from "../person.svelte";
 import {
   leaveForBuild,
@@ -138,9 +137,7 @@ export function watchUpdateToast(): void {
   /** The build the page is offered, or null. */
   const due = $derived.by(() => {
     const build = newerBuild();
-    return build === null || cawco.olderWire || reloadedFor(build)
-      ? null
-      : build;
+    return build === null || reloadedFor(build) ? null : build;
   });
 
   $effect(() => {

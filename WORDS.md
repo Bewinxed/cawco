@@ -261,11 +261,10 @@ Adopted verbatim from the doctrine (Yifrah 2017) and the Phase-7 plan constraint
   once it answers, **"CawCo updated to 1.4.2."** The app's status line says the same: both read core
   `words/connection.ts`
 - A page on an older wire than the hub's (connection band): **"CawCo updated — this page has stopped
-  updating. It reloads 30 seconds after you stop typing. Reload."** The second sentence names what the
-  reload waits on, determinate: "once the page has been still for 30 seconds", "once you save or
-  close what you're editing", "when the dashboard serves the new build" (no Reload: it would load
-  this build again), "Reload it to catch up" (a browser that keeps no session storage). Never an
-  open-ended "once you're not using it". Core `words/shell.ts`
+  updating. Update now to catch up."** The second sentence names how it catches up: the update
+  toast's Update now, or "It can update once the dashboard serves the new build." while no toast
+  can offer it yet. The band has no button of its own: the toast's acts are the one way. Core
+  `words/shell.ts`
 - A new build served to an open page (the update toast): **"A new build of CawCo is ready. This
   page updates by itself once it's in the background or you've been away for 5 min." → [Update
   when idle] [Update now]** (the minutes are the person's away clock; the line names exactly when

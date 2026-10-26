@@ -1,32 +1,23 @@
 /**
- * How a tab leaves for the build the dashboard's server runs, and the one
- * reload that goes by itself whatever the person chose.
+ * How a tab leaves for the build the dashboard's server runs.
  *
  * Every reload for a new build ends in {@link leaveForBuild}: the composers'
  * words written down, the change marked as reloaded for, then the page goes.
  * It acknowledges nothing: the landing's notes stand in Caw's panel on the
- * reloaded page until its ✕ (updates/update-notice.svelte.ts). Its callers:
- *
- * - the update toast (updates/update-toast.svelte.ts): Update now, or the
- *   person away or the tab hidden;
- * - the forced reload of a tab built for an older wire than the hub's
- *   (`WIRE_PROTOCOL`, client.svelte.ts `olderThanHub`): it misreads what the
- *   hub sends and reads nothing more until it reloads, so it goes by itself
- *   ({@link reloadWhenIdle}) at the first moment it interrupts no keystroke
- *   or press ({@link busy}), and the connection band's Reload goes sooner
- *   ({@link reloadNow}). A tab held for hours after nightly 5408, when a
- *   focused field alone held it (a composer keeps the keyboard after an
- *   Enter sends), and so did the side pane's artifact cards, a listbox,
- *   taken for an open picker.
+ * reloaded page until its ✕ (updates/update-notice.svelte.ts). Its one
+ * caller is the update toast (updates/update-toast.svelte.ts): Update now,
+ * or the idle reload once the person has seen the toast. A page built for
+ * an older wire than the hub's (`WIRE_PROTOCOL`, client.svelte.ts
+ * `olderThanHub`) goes the same way: it reads nothing more off the socket
+ * while the toast stands, and the connection band says so. It used to reload
+ * by itself 30 s after the last key, under whoever was reading it, and the
+ * toast it stood aside for never reached him (tsk-66).
  *
  * A reload at any moment is safe, since everything a person has in progress
- * comes back after it ({@link busy}). It only goes once the dashboard's
- * server runs a build other than this tab's (`runningBuild`), or the reload
- * would load this one again.
+ * comes back after it, save words no draft keeps ({@link unsavedWords}).
  */
 import { version } from "$app/env";
 import { leaveThePage } from "./leaving";
-import { runningBuild } from "./served-build.svelte";
 import { store, stored } from "./storage";
 
 /** Writes each composer's unsent words down; each resolves once they are stored. */
@@ -42,11 +33,6 @@ export function keepsDrafts(flush: () => Promise<void>): () => void {
     flushes.delete(flush);
   };
 }
-
-/** How long the tab goes without pointer or key input, typing included, before it is idle. */
-export const IDLE_MS = 30_000;
-/** How often a waiting reload looks again. */
-const POLL_MS = 1000;
 
 const TEXT_INPUTS = new Set([
   "email",
@@ -76,7 +62,6 @@ const textOf = (field: Field): string =>
 
 /** Each field typed in, with what it held when it was first focused. */
 const started = new Map<Field, string>();
-let lastInput = 0;
 
 /**
  * The person's last input in this tab, a preview frame's included, epoch
@@ -118,7 +103,6 @@ const moved = (event: Event): boolean =>
  */
 export function watchInput(target: Window): void {
   const touched = (event: Event) => {
-    lastInput = performance.now();
     if (!(event.isTrusted && moved(event))) {
       return;
     }
@@ -150,7 +134,6 @@ export function watchInput(target: Window): void {
 }
 
 if (typeof window !== "undefined") {
-  lastInput = performance.now();
   watchInput(window);
 }
 
@@ -218,61 +201,6 @@ export function unsavedWords(): boolean {
 }
 
 /**
- * Why the tab holds its reload, or null when nothing does. Everything else a
- * person has in progress comes back after a reload: every composer's and
- * comment's draft (`keepsDrafts`), the session and tab (the address), the
- * open preview and its place (the hub's snapshot, PreviewPane `keptAt`); a
- * menu or popover open with nothing typed in it is only closed.
- *
- * - `typing`: in view, a field has the keyboard and the last input is under
- *   {@link IDLE_MS} old;
- * - `unsaved`: words a reload would lose ({@link unsavedWords});
- * - `recent`: in view, the last pointer or key input is under {@link IDLE_MS} old.
- */
-type Busy = "typing" | "unsaved" | "recent";
-
-function busy(): Busy | null {
-  const recent =
-    document.visibilityState === "visible" &&
-    performance.now() - lastInput < IDLE_MS;
-  if (recent && typed(focused())) {
-    return "typing";
-  }
-  if (unsavedWords()) {
-    return "unsaved";
-  }
-  return recent ? "recent" : null;
-}
-
-/**
- * What a due reload is waiting on: the dashboard does not serve another
- * build yet, or the operator is using the tab ({@link Busy}); or it never
- * goes by itself, since the browser keeps no session storage for its
- * once-per-change guard ({@link RELOADED_FOR}), and the reader reloads.
- */
-export type ReloadHold = "build" | Busy | "unkept";
-
-/** Everyone told what holds the reload: the connection band (client.svelte.ts). */
-const listeners = new Set<(hold: ReloadHold) => void>();
-let reloading = false;
-
-/** The build the forced reload loads, once {@link reloadWhenIdle} has found one. */
-let due: string | null = null;
-/** A reload for a new build is on its way: the waiting one stands down. */
-let leaving = false;
-
-const nextLook = () =>
-  new Promise<void>((resolve) => {
-    const done = () => {
-      clearTimeout(timer);
-      document.removeEventListener("visibilitychange", done);
-      resolve();
-    };
-    const timer = setTimeout(done, POLL_MS);
-    document.addEventListener("visibilitychange", done);
-  });
-
-/**
  * The version change this tab last reloaded for (`<this build>→<served
  * build>`), kept in the tab's session storage so it outlives the reload. A
  * tab that comes back still on this build, with the server still naming that
@@ -281,7 +209,7 @@ const nextLook = () =>
  * version check another server answered), and reloading again would only
  * loop. One reload per actual version change. Where the browser keeps no
  * session storage the mark does not read back, and the tab never reloads
- * itself: the reader is told to.
+ * itself: the toast's Update now still goes.
  */
 const RELOADED_FOR = "cawco:reloaded-for";
 
@@ -303,74 +231,11 @@ export async function leaveForBuild(
   running: string,
   chosen: boolean
 ): Promise<boolean> {
-  leaving = true;
   await Promise.allSettled([...flushes].map((flush) => flush()));
   store("session", RELOADED_FOR, changeTo(running));
   if (!(chosen || reloadedFor(running))) {
-    leaving = false;
     return false;
   }
   leaveThePage(() => location.reload());
   return true;
-}
-
-/**
- * The forced reload of a tab built for an older wire than the hub's (its
- * only caller, client.svelte.ts `olderThanHub`): it goes once the dashboard
- * runs another build and the operator isn't using it, once per version
- * change ({@link RELOADED_FOR}), whatever the update toast was told. Called
- * again on every socket open and every snapshot, so a dashboard that did not
- * serve the other build yet is asked again; one reload is ever on its way.
- */
-export async function reloadWhenIdle(
-  held?: (hold: ReloadHold) => void
-): Promise<void> {
-  if (held) {
-    listeners.add(held);
-  }
-  if (reloading) {
-    return;
-  }
-  const running = await runningBuild();
-  if (running === null || running === version || reloadedFor(running)) {
-    for (const listener of listeners) {
-      listener("build");
-    }
-    return;
-  }
-  if (reloading) {
-    return;
-  }
-  reloading = true;
-  due = running;
-  for (let hold = busy(); hold !== null && !leaving; hold = busy()) {
-    for (const listener of listeners) {
-      listener(hold);
-    }
-    await nextLook();
-  }
-  if (leaving) {
-    return;
-  }
-  if (!(await leaveForBuild(running, false))) {
-    for (const listener of listeners) {
-      listener("unkept");
-    }
-  }
-}
-
-/**
- * The person's Reload (the connection band's): the forced reload that is
- * due, at once, whatever holds it ({@link leaveForBuild}). With none due
- * (the dashboard does not serve the other build yet) the drafts are still
- * written down before the page goes.
- */
-export async function reloadNow(): Promise<void> {
-  if (due) {
-    await leaveForBuild(due, true);
-    return;
-  }
-  leaving = true;
-  await Promise.allSettled([...flushes].map((flush) => flush()));
-  leaveThePage(() => location.reload());
 }
