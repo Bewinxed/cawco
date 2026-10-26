@@ -939,7 +939,6 @@ export class FleetMcp {
     let unanswered = 0;
     let last = "";
     for (const wait of [...REFRESH_RETRIES_MS, null]) {
-      // biome-ignore lint/performance/noAwaitInLoops: one token request at a time, each after the last's wait
       const tried = await this.#try(row, client, spent);
       if ("kept" in tried) {
         return tried.kept;

@@ -778,7 +778,6 @@ export function journey(steps: Step[]): string {
       const start = performance.now();
       let moved = 0;
       if (step.px) {
-        // biome-ignore lint/performance/noAwaitInLoops: one step after another, as a hand moves
         ({ moved } = await pf.wheel(step.px, step.everyMs ?? 100, step.ms));
       } else {
         await new Promise((resolve) => setTimeout(resolve, step.ms));

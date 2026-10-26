@@ -3,7 +3,6 @@
  * the dev server serves them as one pre-bundled module (vite.config.ts
  * `optimizeDeps.include`), where each was a module of its own.
  */
-// biome-ignore lint/performance/noBarrelFile: central icon barrel — every consumer imports icons from this index
 export * from "@cawco/icons";
 // Not Solar's: glyphs drawn to its grid where the set ships the glyph only in
 // a container (Info, Plug, Not yet's dotted ring, the double tick, the fork

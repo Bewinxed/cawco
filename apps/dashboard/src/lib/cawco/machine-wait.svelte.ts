@@ -80,7 +80,6 @@ export class MachineWait {
     });
     for (;;) {
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: one ask, again only once its machine is back
         const answer = await ask();
         if (!ended) {
           this.#clear(key);

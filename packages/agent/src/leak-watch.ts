@@ -706,7 +706,6 @@ export const watchLeaks = (options: LeakOptions): void => {
     };
     const now: string[] = [];
     for (const child of children) {
-      // biome-ignore lint/performance/noAwaitInLoops: one child at a time, each read against the same table
       const work = await lookAtChild(child, table, watching, limit, options);
       if (work) {
         now.push(work);

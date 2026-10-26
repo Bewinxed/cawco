@@ -92,7 +92,6 @@ export async function eventually<T>(
   let error: unknown;
   for (;;) {
     try {
-      // biome-ignore lint/performance/noAwaitInLoops: each look follows the last state
       last = await read();
       error = undefined;
       if (accept(last)) {
@@ -242,7 +241,6 @@ async function furnish(fleet: KitFleet, data: Data): Promise<void> {
   const long = stretch(data);
   for (const [at, name] of PROJECT_NAMES.entries()) {
     const dir = join(fleet.sandbox, `${data}-project-${at}`);
-    // biome-ignore lint/performance/noAwaitInLoops: one project at a time, as a person makes them
     await mkdir(dir, { recursive: true });
     await Bun.$`git init -q -b main ${dir}`.quiet();
     await fleet.api("/api/projects", {
@@ -324,7 +322,6 @@ async function restore(
     since
   );
   for (const { id } of started) {
-    // biome-ignore lint/performance/noAwaitInLoops: one stop at a time, as the dashboard sends them
     await fleet.stopSession(id);
   }
   await eventually(
@@ -405,12 +402,10 @@ export function journeySpec(journey: Journey, narrow: Narrow): Spec {
       await bootFleet(fleet, journey.hubMachine);
       const base = await fleet.dashboard();
       for (const data of DATA) {
-        // biome-ignore lint/performance/noAwaitInLoops: one data set after the other, on one fleet
         await furnish(fleet, data);
         const seeded = journey.seed ? await journey.seed(fleet, data) : null;
         for (const engine of narrow.engines) {
           for (const size of narrow.sizes) {
-            // biome-ignore lint/performance/noAwaitInLoops: one leg at a time, on one fleet
             await runLeg(kit, journey, {
               base,
               data,

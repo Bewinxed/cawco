@@ -51,7 +51,6 @@
   import { growTo } from "#lib/cawco/motion/hang.js";
   import { land } from "#lib/cawco/motion/share.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import type { FoldMeasure } from "#lib/components/ui/fluid-tabs/fold-memory.js";
   import {
@@ -63,7 +62,6 @@
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { hangLayer } from "#lib/components/ui/hang-card/hang-layer.js";
   import { HangCard } from "#lib/components/ui/hang-card/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import {
     IconAddLine,

@@ -71,7 +71,6 @@ const searchOps = (
     const moved = new Map<string, number>();
     for (const dbPath of opencodeDatabases()) {
       const key = `${WATERMARK}${dbPath}`;
-      // biome-ignore lint/performance/noAwaitInLoops: one database at a time, each a rowid range at a time
       const read = await readOpenCodeDocs(dbPath, {
         since: watermarks.get(key) ?? 0,
       });

@@ -1805,7 +1805,6 @@ async function pageDrawn(
 ): Promise<string | null> {
   const until = performance.now() + THUMB_WAIT_MS;
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: one picture at a time, each after the page's last change
     const png = await cropPicture(
       { x: scrollX, y: scrollY, w: innerWidth, h: innerHeight },
       heard,
@@ -2623,7 +2622,6 @@ async function markPictures(): Promise<MarkPicture[]> {
   ].slice(0, COMMENT_LIMITS.pictures);
   const pictures: MarkPicture[] = [];
   for (const { id, png } of marks) {
-    // biome-ignore lint/performance/noAwaitInLoops: each was started when its mark was made
     const drawn = await png;
     if (drawn) {
       pictures.push({ mark: id, png: drawn });

@@ -287,7 +287,6 @@ export async function loadTokenSystem(
       );
     }
     modifiersBegan ||= item.type === "modifier";
-    // biome-ignore lint/performance/noAwaitInLoops: the order is the meaning
     await (item.type === "set"
       ? loader.set(item.body, where)
       : loader.modifier(item.name, item.body, where));
@@ -376,7 +375,6 @@ class Loader {
   async modifier(name: string, body: Json, where: string): Promise<void> {
     const conditions = conditionsOf(body);
     for (const [context, list] of contextsOf(body, where)) {
-      // biome-ignore lint/performance/noAwaitInLoops: contexts merge in order
       const sources = await this.sources(list, `${where} ${context}`);
       if (context === body.default) {
         this.take(sources, this.base, this.baseOwners);
@@ -415,7 +413,6 @@ class Loader {
     }
     const out: Source[] = [];
     for (const entry of list) {
-      // biome-ignore lint/performance/noAwaitInLoops: sources merge in order
       out.push(...(await this.source(entry, where)));
     }
     return out;

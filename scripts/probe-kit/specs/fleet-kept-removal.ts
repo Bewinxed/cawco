@@ -75,7 +75,6 @@ const plant = async (dirs: readonly string[]): Promise<string[]> => {
   for (const dir of dirs) {
     for (const folder of READ_ONLY) {
       const at = join(dir, folder);
-      // biome-ignore lint/performance/noAwaitInLoops: a few folders, each made before its mode is taken
       await mkdir(at, { recursive: true });
       await writeFile(join(at, "probe.txt"), "kept\n");
       await chmod(at, 0o555);

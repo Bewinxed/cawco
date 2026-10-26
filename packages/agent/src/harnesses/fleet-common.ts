@@ -101,7 +101,6 @@ export const syncSkillFiles = async (
   const held = await heldSkills(dir, Object.keys(sidecar), desired);
   const managed = await skillRecords(dir, sidecar, held, desired);
   for (const skill of desired) {
-    // biome-ignore lint/performance/noAwaitInLoops: each skill is compared before it is written or claimed.
     if (await holdsFleetCopy(join(dir, skill.name), skill, held[skill.name])) {
       written[skill.name] = skill.hash;
       report[skill.name] = { state: "applied" };
@@ -177,7 +176,6 @@ export const syncSkillFiles = async (
       continue;
     }
     try {
-      // biome-ignore lint/performance/noAwaitInLoops: record each removal before advancing to the next managed skill.
       await removeTree(join(dir, name));
       report[name] = { state: "removed" };
     } catch (error) {

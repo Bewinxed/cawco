@@ -101,7 +101,6 @@ async function measure(engine, v) {
   const pages = {};
   const runs = {};
   for (const [build, base] of Object.entries(bases)) {
-    // biome-ignore lint/performance/noAwaitInLoops: one page at a time keeps the timings honest
     browsers[build] = await ENGINES[engine].launch();
     pages[build] = await load(browsers[build], v, base);
     runs[build] = {
@@ -115,7 +114,6 @@ async function measure(engine, v) {
     for (const build of Object.keys(bases)) {
       // A round the engine hangs on (no frame for 15s) or a page it brings
       // down is counted, and the build gets a fresh browser.
-      // biome-ignore lint/performance/noAwaitInLoops: the builds take their rounds in turn
       const done = await readWithin(15_000, () =>
         round(pages[build]).catch((error) => {
           throw new Gone(`the ${build} page went down: ${error}`);
@@ -139,7 +137,6 @@ async function measure(engine, v) {
   }
   const out = { rounds: ROUNDS };
   for (const build of Object.keys(bases)) {
-    // biome-ignore lint/performance/noAwaitInLoops: each browser in turn
     await browsers[build].close().catch(() => undefined);
     out[build] = {
       idle: runs[build].idle,
@@ -160,7 +157,6 @@ for (const engine of Object.keys(ENGINES)) {
     }
     console.error(`measuring ${key}`);
     // A page the engine hangs on is reported as hung after ten minutes.
-    // biome-ignore lint/performance/noAwaitInLoops: one browser at a time keeps the timings honest
     const measured = await readWithin(600_000, () => measure(engine, v));
     switch (measured.kind) {
       case "answered":

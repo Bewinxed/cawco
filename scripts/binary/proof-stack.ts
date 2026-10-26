@@ -1,11 +1,10 @@
 /** Live integration exercise run by the compiled proof binary, never a release. */
-// biome-ignore-all lint/performance/noAwaitInLoops: readiness and restart-phase polls observe successive real states.
-// biome-ignore-all lint/complexity/noVoid: log writers consume live process pipes concurrently; awaiting them before process exit would deadlock.
 import { dlopen, FFIType, ptr } from "bun:ffi";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { keepJoinedHub } from "../../packages/cli/src/joined-hub";
 import { readWithin } from "../../packages/core/src/bounded";
+import { detach } from "../../packages/core/src/detach";
 import {
   accountClaudeJson,
   accountConfigDir,
@@ -43,8 +42,14 @@ function spawn(
     stdin: "ignore",
   });
   children.push(child);
-  void Bun.write(join(home, `${verb}-${child.pid}.out.log`), child.stdout);
-  void Bun.write(join(home, `${verb}-${child.pid}.err.log`), child.stderr);
+  detach(
+    Bun.write(join(home, `${verb}-${child.pid}.out.log`), child.stdout),
+    "write"
+  );
+  detach(
+    Bun.write(join(home, `${verb}-${child.pid}.err.log`), child.stderr),
+    "write"
+  );
   return child;
 }
 async function exec(verb: string) {
@@ -245,8 +250,14 @@ function dashboard() {
     stdio: ["ignore", "pipe", "pipe", listener],
   });
   children.push(child);
-  void Bun.write(join(home, `dashboard-${child.pid}.out.log`), child.stdout);
-  void Bun.write(join(home, `dashboard-${child.pid}.err.log`), child.stderr);
+  detach(
+    Bun.write(join(home, `dashboard-${child.pid}.out.log`), child.stdout),
+    "write"
+  );
+  detach(
+    Bun.write(join(home, `dashboard-${child.pid}.err.log`), child.stderr),
+    "write"
+  );
   return child;
 }
 async function openDashboard() {

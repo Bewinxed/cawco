@@ -49,7 +49,6 @@ export const dashboardErrorsRoutes = () =>
           const decoder = new TextDecoder();
           try {
             for (;;) {
-              // biome-ignore lint/performance/noAwaitInLoops: read sequentially so the size cap stops ingestion before buffering the rest.
               const { done, value } = await reader.read();
               if (done) {
                 break;

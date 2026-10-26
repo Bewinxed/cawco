@@ -88,7 +88,6 @@ try {
       if (!shoots(file)) {
         continue;
       }
-      // biome-ignore lint/performance/noAwaitInLoops: one frame captured at a time
       const page = await browser.newPage({
         viewport: { width: Number(width), height: HEIGHT[width] ?? 900 },
         deviceScaleFactor: 1,
@@ -111,7 +110,6 @@ try {
       continue;
     }
     // The live captures are 2×: shown at the page's own size, the screen alone at DPR 1.
-    // biome-ignore lint/performance/noAwaitInLoops: a few pictures in turn
     const page = await browser.newPage({
       viewport: { width: Number(width), height: HEIGHT[width] ?? 900 },
       deviceScaleFactor: 1,
@@ -127,7 +125,6 @@ try {
     const sum =
       one.frame ??
       createHash("md5")
-        // biome-ignore lint/performance/noAwaitInLoops: each picture read in turn
         .update(await readFile(join(OUT, one.file)))
         .digest("hex");
     const twin = seen.get(sum);

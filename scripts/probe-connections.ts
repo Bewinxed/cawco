@@ -516,7 +516,6 @@ const readProc = (pid: number, what: string) =>
 const processOf = async (instanceId: string): Promise<number> => {
   const roots = await fleet.heldProcs();
   for (const root of roots) {
-    // biome-ignore lint/performance/noAwaitInLoops: one held process's tree at a time
     const pids = await tree(root.pid);
     const cmdlines = await Promise.all(
       pids.map((pid) => readProc(pid, "cmdline"))
@@ -631,7 +630,6 @@ const holding = async (dir: string, needles: string[]): Promise<string[]> => {
     for (const entry of entries) {
       const path = join(at, entry.name);
       if (entry.isDirectory()) {
-        // biome-ignore lint/performance/noAwaitInLoops: one folder at a time
         await walk(path);
       } else if (entry.isFile()) {
         const bytes = await readFile(path).catch(() => undefined);
@@ -674,7 +672,6 @@ const startedOf = async (
     if (Date.now() > deadline) {
       throw new Error(`the ${type} delegate: not within 300s, and no answer`);
     }
-    // biome-ignore lint/performance/noAwaitInLoops: each look follows the fleet's last state
     await Bun.sleep(500);
   }
 };
@@ -701,7 +698,6 @@ const tree = async (pid: number): Promise<number[]> => {
     if (!Number.isInteger(id)) {
       continue;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: one /proc entry at a time
     const stat = await readFile(`/proc/${id}/stat`, "utf8").catch(() => "");
     const parent = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1]);
     children.set(parent, [...(children.get(parent) ?? []), id]);
@@ -733,7 +729,6 @@ try {
       ["echo-alpha", "alpha"],
       ["echo-beta", "beta"],
     ]) {
-      // biome-ignore lint/performance/noAwaitInLoops: one row at a time
       await send("POST", "/api/connections", {
         name,
         service: "echo",
@@ -805,7 +800,6 @@ try {
     ["conn-user", ["echo-alpha", "echo-beta", "echo-oauth"]],
     ["conn-none", []],
   ] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one type at a time
     await send("PUT", `/api/delegate-types/${name}`, {
       description: `Probe type ${name}.`,
       harness: "claude",
@@ -1069,7 +1063,6 @@ try {
       ["USER", user],
       ["NONE", none],
     ] as const) {
-      // biome-ignore lint/performance/noAwaitInLoops: one session's file at a time
       const dumped = await readFile(
         join(session.cwd, envFile(tag)),
         "utf8"
@@ -1103,7 +1096,6 @@ try {
       .filter((name) => name.endsWith(".log") || name.endsWith(".err"))
       .sort();
     for (const name of logs) {
-      // biome-ignore lint/performance/noAwaitInLoops: one log at a time, in order
       const lines = (await Bun.file(join(fleet.sandbox, name)).text())
         .split("\n")
         .filter((line) => LOGGED.test(line))

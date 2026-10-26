@@ -5,7 +5,6 @@
    * drawn in the ledger's markup. A row opens its task.
    */
   import { createTable, tableFeatures } from "@tanstack/svelte-table";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Table from "#lib/components/ui/table/index.js";
   import { fieldText, rowsOf, type ViewTaskRow, viewContext } from "./context";
   import type { OpenUIRenderProps } from "./OpenUiRenderer.svelte";

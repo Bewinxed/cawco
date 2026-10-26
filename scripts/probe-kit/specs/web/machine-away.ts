@@ -164,7 +164,6 @@ const pressable = async (page: Page, name: string) => {
   await button.waitFor({ state: "visible", timeout: 60_000 });
   const deadline = Date.now() + 60_000;
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: a poll until its machine is online
     if (await button.isEnabled()) {
       break;
     }
@@ -180,7 +179,6 @@ const pressable = async (page: Page, name: string) => {
 async function machineFile(path: string, holding: string): Promise<string> {
   const deadline = Date.now() + 60_000;
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: a poll until the fleet has written it
     const text = await readFile(path, "utf8").catch(() => "");
     if (text.includes(holding)) {
       return path;
@@ -442,14 +440,12 @@ const spec: Spec = {
         )
         .some((one) => one.state === "read")
     ) {
-      // biome-ignore lint/performance/noAwaitInLoops: one look a beat until the turn is read
       await new Promise((done) => setTimeout(done, 250));
     }
     await fixtures(fleet);
     for (const engine of ENGINES) {
       for (const view of VIEWS) {
         const tag = `${engine} ${view}`;
-        // biome-ignore lint/performance/noAwaitInLoops: one browser at a time, its legs dropping the one agent in turn
         const page = await kit.page(view, { theme: "light", engine });
         await continueSizing(kit, fleet, page, tag, base, source);
         await inventory(kit, fleet, page, tag, base);

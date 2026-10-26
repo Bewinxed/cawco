@@ -25,7 +25,6 @@
  *
  *   bun scripts/probe-kit/run.ts preview-own-origin
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one engine's legs after the other, on one fleet
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";

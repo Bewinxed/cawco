@@ -375,7 +375,6 @@ const run = async (kit: Kit) => {
       { engine: "firefox", view: "desk" },
     ] satisfies Where[]) {
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: one browser after another, each through the one proxy
         await droppedBeforeSync(at, proxy, where);
         await downForGood(at, proxy, where);
       } catch (error) {

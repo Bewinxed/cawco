@@ -102,7 +102,6 @@ const legs = async (
       for (const frame of page.frames()) {
         let cards = 0;
         try {
-          // biome-ignore lint/performance/noAwaitInLoops: the first frame holding the card
           cards = await frame.locator("#decision-reach").count();
         } catch {
           // A frame gone mid-read holds no card.
@@ -205,7 +204,6 @@ const spec: Spec = {
     );
     const base = await fleet.dashboard();
     for (const engine of ["chromium", "webkit"] as const) {
-      // biome-ignore lint/performance/noAwaitInLoops: one engine's page at a time
       await legs(kit, base, { artifact, decision, session }, engine);
     }
   },

@@ -10,6 +10,7 @@
     EFFORT_NONE,
     isEffortLevel,
   } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import { onDestroy, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
@@ -274,8 +275,9 @@
     // `editable` re-derives on every change to the running list, so only a
     // new session (or the card closing) ends the wait, never a re-run.
     stopWaiting();
-    // biome-ignore lint/complexity/noVoid: fire-and-forget — the reading lands in the session's state and the popover follows it
-    stopWaiting = untrack(() => whenOpen(() => void refreshContext(id, mid)));
+    stopWaiting = untrack(() =>
+      whenOpen(() => detach(refreshContext(id, mid), "refreshContext"))
+    );
   });
   onDestroy(() => stopWaiting());
   // The card draws this session's reading while it is mounted: its turns'

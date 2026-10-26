@@ -636,7 +636,6 @@ async function dashboardIcons(
     proxied = await chain(port, tls);
     const opens: Open[] = [];
     for (let open = 0; open < APP_OPENS; open += 1) {
-      // biome-ignore lint/performance/noAwaitInLoops: each open cold and alone
       opens.push(await openCold(kit, proxied.canvas(APP_STORIES)));
     }
     const said = opens
@@ -735,7 +734,6 @@ async function relayCost(
           seen.add(child);
         }
       }
-      // biome-ignore lint/performance/noAwaitInLoops: samples until the GETs are done
       await Bun.sleep(5);
     }
   })();
@@ -744,7 +742,6 @@ async function relayCost(
   const cpu = process.cpuUsage();
   const started = performance.now();
   for (let sent = 0; sent < COST_GETS; sent += COST_AT_ONCE) {
-    // biome-ignore lint/performance/noAwaitInLoops: a batch at a time
     const batch = await Promise.all(
       Array.from({ length: COST_AT_ONCE }, async () => {
         const answer = await fetch(url, {
@@ -847,7 +844,6 @@ const relayOf = async (instanceId: string): Promise<number | null> => {
     .map((row) => row.pid)
     .sort((a, b) => a - b);
   for (const pid of pids) {
-    // biome-ignore lint/performance/noAwaitInLoops: lowest pid first, stopping at the first match
     const args = await processArgs(pid);
     if (args?.argv.some((one) => one.endsWith(ending))) {
       return pid;
@@ -942,13 +938,11 @@ async function realJoin(kit: Kit): Promise<void> {
       for (const child of relay ? childrenOf(relay) : []) {
         seen.add(child);
       }
-      // biome-ignore lint/performance/noAwaitInLoops: samples until the GETs are done
       await Bun.sleep(5);
     }
   })();
   const statuses = new Map<number, number>();
   for (let sent = 0; target && sent < COST_GETS; sent += COST_AT_ONCE) {
-    // biome-ignore lint/performance/noAwaitInLoops: a batch at a time
     await Promise.all(
       Array.from({ length: COST_AT_ONCE }, async () => {
         const status = await fetch(`${origin}${target}`)
@@ -990,7 +984,6 @@ const run = async (kit: Kit) => {
     let peak = 0;
     for (let open = 0; open < OPENS; open += 1) {
       edge.reset();
-      // biome-ignore lint/performance/noAwaitInLoops: each open cold and alone, as the owner's are
       opens.push(await openCold(kit, url));
       peak = Math.max(peak, edge.peak());
     }

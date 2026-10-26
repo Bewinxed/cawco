@@ -391,7 +391,6 @@ const discover = async (container: string, depth = 1): Promise<string[]> => {
       continue;
     }
     const dir = join(container, entry.name);
-    // biome-ignore lint/performance/noAwaitInLoops: each entry may recurse into `discover` to accumulate its own subtree before the next entry is checked; the entries are directories on local disk, not a rate concern.
     if (await Bun.file(join(dir, "SKILL.md")).exists()) {
       found.push(dir);
     } else if (depth < MAX_DEPTH) {
@@ -411,7 +410,6 @@ const skillDirs = async (root: string): Promise<string[]> => {
     return [root];
   }
   for (const container of CONTAINERS) {
-    // biome-ignore lint/performance/noAwaitInLoops: containers are tried in the documented priority order and the loop stops at the first that holds a skill; a later container is only checked once an earlier one came up empty.
     const found = await discover(join(root, container));
     if (found.length > 0) {
       return found.sort();
@@ -521,7 +519,6 @@ const walk = async (dir: string, prefix = ""): Promise<Found[]> => {
       continue;
     }
 
-    // biome-ignore lint/performance/noAwaitInLoops: each entry may recurse via `walk` to read its own subtree before the next entry is stat'd; entries are local-disk directory contents, not a rate concern.
     const stats = await lstat(path);
     if (stats.isSymbolicLink()) {
       continue;

@@ -236,7 +236,6 @@ const transcripts = async (dir: string): Promise<string[]> => {
     )) {
       const path = join(at, entry.name);
       if (entry.isDirectory()) {
-        // biome-ignore lint/performance/noAwaitInLoops: a small tree, walked once on failure
         await walk(path);
       } else if (entry.name.endsWith(".jsonl")) {
         found.push({ path, at: (await stat(path)).mtimeMs });
@@ -264,7 +263,6 @@ const diagnose = async (why: string): Promise<void> => {
     .filter((name) => name.endsWith(".log") || name.endsWith(".err"))
     .sort();
   for (const name of logs) {
-    // biome-ignore lint/performance/noAwaitInLoops: printed in order
     console.log(`── ${name}\n${await tail(join(fleet.sandbox, name), 40)}`);
   }
   const runtime = fleet.env.XDG_RUNTIME_DIR as string;

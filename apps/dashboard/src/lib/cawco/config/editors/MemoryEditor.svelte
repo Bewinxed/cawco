@@ -8,6 +8,7 @@
     scopeKey,
     memoryWords as words,
   } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import { untrack } from "svelte";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import MachineAway from "#lib/cawco/MachineAway.svelte";
@@ -215,8 +216,7 @@
   /** Cancel leaves the edits behind: the draft is dropped, not kept. */
   function cancel() {
     kept.drop();
-    // biome-ignore lint/complexity/noVoid: navigation reports nothing to wait for
-    void goto("/config/memory");
+    detach(goto("/config/memory"), "goto");
   }
 
   /** Delete: at once, with Undo in the toast (deletes.ts). */
@@ -237,8 +237,7 @@
   function keydown(event: KeyboardEvent) {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
       event.preventDefault();
-      // biome-ignore lint/complexity/noVoid: save owns its errors
-      void save();
+      detach(save(), "save");
     }
   }
 
@@ -305,8 +304,7 @@
     }
   }
   $effect(() => {
-    // biome-ignore lint/complexity/noVoid: the list fills in when it lands
-    void untrack(loadHistory);
+    detach(untrack(loadHistory), "untrack");
   });
 
   function sourceLabel(source: string): string {

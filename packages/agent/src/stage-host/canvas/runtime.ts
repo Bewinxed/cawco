@@ -1835,7 +1835,6 @@ export function boot(options: BootOptions): void {
           }
           break;
         }
-        // biome-ignore lint/performance/noAwaitInLoops: each section laid out before the next is judged
         await loadSection(section);
         // An embed draws every section, judging no view, and says its shape only once all have drawn (`sayShape`), so until then its frame is 0px tall and gets no rendering steps: it waits on no frame.
         if (!embed) {
@@ -2002,7 +2001,6 @@ export function boot(options: BootOptions): void {
         if (now.length === 0) {
           continue;
         }
-        // biome-ignore lint/performance/noAwaitInLoops: one read a task, the page's frames between
         await probeInteraction(now, interaction);
       }
     } finally {
@@ -2201,7 +2199,6 @@ export function boot(options: BootOptions): void {
         performance.now() < end &&
         [...seen].some((one) => one.playState === "running")
       ) {
-        // biome-ignore lint/performance/noAwaitInLoops: waiting on the engine's clock
         await frameTick();
       }
     } catch (error) {
@@ -2240,7 +2237,6 @@ export function boot(options: BootOptions): void {
     if (asked.length > 0) {
       await apart(async () => {
         for (const { to } of asked) {
-          // biome-ignore lint/performance/noAwaitInLoops: one move in the rig at a time
           await playOne(to);
         }
       });

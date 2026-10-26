@@ -74,7 +74,6 @@ async function heardIn(frame: Frame) {
       return null;
     }
     try {
-      // biome-ignore lint/performance/noAwaitInLoops: one ask at a time until the frame answers
       return await frame.evaluate(() => ({
         reduce: matchMedia("(prefers-reduced-motion: reduce)").matches,
         noPreference: matchMedia("(prefers-reduced-motion: no-preference)")

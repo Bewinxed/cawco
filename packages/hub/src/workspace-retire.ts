@@ -59,7 +59,6 @@ export const createWorkspaceRetire = (deps: WorkspaceRetireDeps) => {
   const sweepOnce = async (): Promise<RetireSweep> => {
     const done: RetireSweep = { failed: [], held: [], kept: [], retired: [] };
     for (const machineId of deps.online()) {
-      // biome-ignore lint/performance/noAwaitInLoops: one machine at a time, each one workspace at a time
       const settled = await deps.workItems.settleOn(machineId);
       for (const { workspace, outcome } of settled) {
         switch (outcome.kind) {

@@ -18,7 +18,6 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: the kit's compound menu, as every menu of the app imports it
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { IconChevronDown, IconLayers } from "#lib/icons.js";
   import type { SendExtras } from "../client.svelte";

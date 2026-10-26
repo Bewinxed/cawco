@@ -17,6 +17,7 @@
   import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import { pageSource } from "#lib/cawco/preview/page-source.js";
   import { enterPreviews, turnedAwayWords } from "#lib/cawco/preview/pass.js";
+  import { track } from "#lib/cawco/track.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
@@ -99,10 +100,8 @@
   // and again after a Retry or a switch of the preview mode.
   $effect(() => {
     const project = projectId;
-    // biome-ignore lint/complexity/noVoid: read so a Retry runs the effect again
-    void tries;
-    // biome-ignore lint/complexity/noVoid: read so a mode switch runs the effect again
-    void modeMoves;
+    track(tries);
+    track(modeMoves);
     const wanted = untrack(() => place);
     let live = true;
     problem = null;

@@ -335,7 +335,6 @@ const tree = async (root: number): Promise<number[]> => {
   while (queue.length > 0) {
     const pid = queue.shift() as number;
     found.push(pid);
-    // biome-ignore lint/performance/noAwaitInLoops: a breadth-first walk of /proc
     const tasks = await readdir(`/proc/${pid}/task`).catch(
       () => [] as string[]
     );
@@ -415,7 +414,6 @@ const serving = async (
   while (Date.now() < deadline) {
     try {
       // The session's preview, on its own origin (hub server.ts `frameAddress`).
-      // biome-ignore lint/performance/noAwaitInLoops: polls until it answers or the bound passes
       const listed = await fetch(
         `${fleet.base}/api/instances/${instanceId}/artifacts`
       );

@@ -365,7 +365,6 @@ export const resolveMarketplacePlugins = async (
           continue;
         }
         try {
-          // biome-ignore lint/performance/noAwaitInLoops: plugins of one marketplace are fetched one at a time to stay a good citizen of the source (github/CDN) and to keep each plugin's error attributable to its own name.
           const dir = await pluginRoot(entry, root, work);
           const { files, hash, bytes } = await readTree(dir);
           const version = pluginVersion(files, entry.version);

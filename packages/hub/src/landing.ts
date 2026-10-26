@@ -387,7 +387,6 @@ async function landOn<F>(
     if (deps.stopped?.()) {
       return { kind: "stopped" };
     }
-    // biome-ignore lint/performance/noAwaitInLoops: an item that stepped out of its turn gates again before it queues again
     const gated = await onBase(base, deps, false);
     if (gated.kind === "moved") {
       moved += 1;

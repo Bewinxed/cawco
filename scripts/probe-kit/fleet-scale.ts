@@ -25,7 +25,6 @@
  * `up` answers the dashboard's address once all of it runs; `stop` ends the
  * turns it sends.
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: the fleet's steps happen one after another
 import { Database } from "bun:sqlite";
 import { readdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";

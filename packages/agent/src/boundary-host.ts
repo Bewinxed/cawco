@@ -919,7 +919,6 @@ for (;;) {
   // sandbox stopped for that never starts in its path again.
   const gone = goneReason();
   if (gone) {
-    // biome-ignore lint/performance/noAwaitInLoops: the boundary's last step
     await finish({ gone });
   }
   const sandbox = await startSandbox();

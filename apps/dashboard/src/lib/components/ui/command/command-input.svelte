@@ -1,6 +1,5 @@
 <script lang="ts">
   import { Command as CommandPrimitive } from "bits-ui";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
   import { IconSearch } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";

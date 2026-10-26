@@ -6,7 +6,6 @@
    * fade; the scroller pads into an equal negative margin, so every
    * segment's touch area stays whole (DESIGN.md, The 44 Touch Rule).
    */
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
 
   let {

@@ -71,7 +71,6 @@ if (!chromiumEnded) {
 await mkdir(profile, { recursive: true });
 // What a running Chromium does to its profile, many times a second.
 for (let write = 0; write < 20; write += 1) {
-  // biome-ignore lint/performance/noAwaitInLoops: one write after another, as Chromium's journal goes
   await writeFile(join(profile, "Cookies-journal"), String(write));
 }
 say({

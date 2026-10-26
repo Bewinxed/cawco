@@ -1616,7 +1616,6 @@ const headChecks = async ({
   }
   for (const view of ["desk", "phone"] as const) {
     for (const theme of ["light", "dark"] as const) {
-      // biome-ignore lint/performance/noAwaitInLoops: one page at a time, as a person opens them
       const shown = await kit.page(view, { theme });
       await open(
         shown,

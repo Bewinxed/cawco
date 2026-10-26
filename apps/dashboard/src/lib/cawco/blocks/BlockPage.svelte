@@ -55,12 +55,12 @@
     type ShownBlockPage,
     blocksWords as words,
   } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { frameObserver, frameSize } from "#lib/cawco/frame-observer.js";
   import { dur } from "#lib/cawco/motion/curves.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { IconChevronDown, IconEye, IconLayers } from "#lib/icons.js";
   import type { ProjectBlocks } from "./arrangement.svelte";
@@ -216,8 +216,7 @@
     const at = shown.indexOf(place);
     const neighbour = shown[at + step];
     if (neighbour) {
-      // biome-ignore lint/complexity/noVoid: the page shows what the hub answers
-      void blocks.move(page, place.block, places.indexOf(neighbour));
+      detach(blocks.move(page, place.block, places.indexOf(neighbour)), "move");
     }
   }
 
@@ -259,8 +258,7 @@
     onmove={(step) => move(place, step)}
     ontab={() => {
       if (item.view) {
-        // biome-ignore lint/complexity/noVoid: the page shows what the hub answers
-        void blocks.unplace(item.view);
+        detach(blocks.unplace(item.view), "unplace");
       }
     }}
     onwidth={(width) => setWidth(place, width)}

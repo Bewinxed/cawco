@@ -89,7 +89,6 @@ export async function until<T>(
   const end = Date.now() + ms;
   let value = await read();
   while (!done(value) && Date.now() < end) {
-    // biome-ignore lint/performance/noAwaitInLoops: a poll, one look at a time
     await Bun.sleep(250);
     value = await read();
   }
@@ -159,7 +158,6 @@ export async function installedOn(
   const root = join(dataHome, "cawco", "binary");
   for (const version of ["0.0.0-dev", n.manifest.version]) {
     const dir = join(root, "versions", version);
-    // biome-ignore lint/performance/noAwaitInLoops: two folders, written in order
     await mkdir(dir, { recursive: true });
     await writeFile(
       join(dir, "release.json"),

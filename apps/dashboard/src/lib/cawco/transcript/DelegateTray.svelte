@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
   /**
    * The delegate tray: one compact chip per child this session has working
    * (its delegates, and the sessions it started with `start_session`,
@@ -38,7 +39,6 @@
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
@@ -374,8 +374,10 @@
     chip.style.visibility = "hidden";
     target.style.opacity = "0";
     left.add(item.id);
-    // biome-ignore lint/complexity/noVoid: the flight runs on its own; nothing waits on it.
-    void flight(copy, from, target.getBoundingClientRect(), target);
+    detach(
+      flight(copy, from, target.getBoundingClientRect(), target),
+      "flight"
+    );
   }
   async function flight(
     copy: HTMLElement,
@@ -997,8 +999,10 @@
   function dismiss(item: TrayChild): void {
     const reason = (reasons.get(item.id) ?? "").trim();
     if (reason) {
-      // biome-ignore lint/complexity/noVoid: the row says how it went.
-      void act(item, "dismiss", () => dismissWorkItem(item.id, { reason }));
+      detach(
+        act(item, "dismiss", () => dismissWorkItem(item.id, { reason })),
+        "act"
+      );
     }
   }
   async function startReason(id: string): Promise<void> {
@@ -1052,8 +1056,7 @@
     );
     const id = field?.dataset.shelfRow;
     if (id && reasons.has(id) && event.target instanceof HTMLInputElement) {
-      // biome-ignore lint/complexity/noVoid: focus lands after the field goes.
-      void cancelReason(id);
+      detach(cancelReason(id), "cancelReason");
       return;
     }
     if (allReason !== null && event.target === allField) {
@@ -1764,8 +1767,7 @@
                   class="flex flex-nowrap items-center gap-space-2 m-0 p-0"
                   onsubmit={(event) => {
                     event.preventDefault();
-                    // biome-ignore lint/complexity/noVoid: each row says how it went.
-                    void dismissAll();
+                    detach(dismissAll(), "dismissAll");
                   }}
                   style:--hit-gap-x="var(--space-2)"
                 >

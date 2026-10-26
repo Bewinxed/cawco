@@ -213,7 +213,6 @@ const askFromLan = async (
   const deadline = Date.now() + ASK_MS;
   while (heard.size === 0 && Date.now() < deadline) {
     mdns.query(question, { port: 5353, address: "224.0.0.251" });
-    // biome-ignore lint/performance/noAwaitInLoops: one question a second until the hub has probed its name
     await Bun.sleep(1000);
   }
   await Bun.sleep(LISTEN_MS);
@@ -640,7 +639,6 @@ const nameChecks = async (
   );
   for (const { name, base } of hubs) {
     const port = Number(new URL(base).port);
-    // biome-ignore lint/performance/noAwaitInLoops: one mDNS question at a time
     const answered = await asker.ask<string>({ name, type: "A" }, "A");
     const listed = (
       (await fetch(`${base}/api/join`).then((r) => r.json())) as {
@@ -767,7 +765,6 @@ const macLegs = async (
     await nameChecks(kit, asker, [first, next]);
     // 6. Each hub's name with the dashboard's port, and no command.
     for (const hub of [first, next]) {
-      // biome-ignore lint/performance/noAwaitInLoops: one hub at a time
       await localNameRead(
         kit,
         hub.base,

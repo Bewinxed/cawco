@@ -76,7 +76,6 @@
  * silent session's blank state and no skeleton; and wherever the loops off
  * screen are read, none costing a frame (`hiddenLoopsOf` `costly`).
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one return at a time, as a person makes them
 
 import { readFileSync } from "node:fs";
 import { cp, mkdir, writeFile } from "node:fs/promises";

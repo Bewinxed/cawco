@@ -21,7 +21,6 @@
    * row for it (`fleet_memory_history`, read through the Configure editor's
    * own routes), found by the call's time.
    */
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconChevronRight } from "#lib/icons.js";

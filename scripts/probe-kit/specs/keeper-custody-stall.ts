@@ -249,7 +249,6 @@ const twoFollowers = async (
   // as every reader on it does.
   const reads: string[] = [];
   for (const from of [0, 1]) {
-    // biome-ignore lint/performance/noAwaitInLoops: one listener per id on a connection
     const read = await readWithin(5000, () =>
       readRing(other, shared, from, head, () => undefined)
     );

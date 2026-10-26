@@ -340,7 +340,6 @@ const notCheckedOut = async (
       if (entry === ".git") {
         continue;
       }
-      // biome-ignore lint/performance/noAwaitInLoops: one entry at a time, each read whole
       const kind = await entryKind(path, source, git, tree, entry);
       if (kind === "dir") {
         await walk(entry);

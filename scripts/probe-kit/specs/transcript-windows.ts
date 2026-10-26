@@ -100,7 +100,6 @@ const SIZES = [24, WINDOW];
 const windowsOf = async (reader: Reader, limit: number) => {
   const windows = [await reader.window({ end: "newest", limit })];
   for (let older = windows[0]?.older ?? null; older !== null;) {
-    // biome-ignore lint/performance/noAwaitInLoops: each window names the one before it
     const window = await reader.window({ before: older, limit });
     windows.push(window);
     ({ older } = window);
@@ -292,7 +291,6 @@ const claudeParity = async (
 ): Promise<void> => {
   for (const path of paths) {
     for (const limit of SIZES) {
-      // biome-ignore lint/performance/noAwaitInLoops: one transcript at a time
       const before = await stampOf(path);
       const found = await parity(claudeReader(path), limit);
       const after = await stampOf(path);
@@ -408,7 +406,6 @@ export default {
       const real = named ? await transcriptsUnder(named) : [];
       await claudeParity(kit, dir, [...written, ...real]);
       for (const path of written) {
-        // biome-ignore lint/performance/noAwaitInLoops: one transcript at a time
         await reachesFirstPrompt(kit, dir, path);
       }
       await deletedReadsAsNone(kit, dir, written[1] as string);
@@ -431,7 +428,6 @@ export default {
           window: (ask) => piHarness.readTranscriptWindow(key, cwd, ask),
         };
         for (const limit of SIZES) {
-          // biome-ignore lint/performance/noAwaitInLoops: one session at a time
           const found = await parity(reader, limit);
           check(
             `d: a pi session of ${turns} turns (${found.entries} entries, ${found.blocks} blocks) read in ${found.windows} window(s) of ${limit} builds the rows, branches and pages a whole read builds`,

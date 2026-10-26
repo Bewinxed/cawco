@@ -284,7 +284,6 @@ export class KeeperPool {
       if (client.epoch === current.epoch) {
         continue;
       }
-      // biome-ignore lint/performance/noAwaitInLoops: keepers are few
       const held = (await client.list()).procs.some(
         (proc) => proc.procId === procId && proc.alive
       );

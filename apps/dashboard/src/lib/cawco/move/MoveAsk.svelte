@@ -7,7 +7,6 @@
    */
   import type { MoveAsk } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import { IconChevronRight } from "#lib/icons.js";
 

@@ -191,7 +191,6 @@ export const devServerOn3000 = async (
         port: 3000,
         fetch: () => new Response("dev server"),
       });
-      // biome-ignore lint/performance/noAwaitInLoops: one dev server at a time on 3000, each stopped before the next binds
       const answer = await fetch(
         `http://${hostname.includes(":") ? `[${hostname}]` : hostname}:3000/`
       ).then((one) => one.text());
@@ -284,7 +283,6 @@ async function nothingOnTheHubsComputer(
     ["[::1]", `ws://[::1]:${port}/ws`],
     ["localhost", `ws://localhost:${port}/ws`],
   ] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one machine at a time, each said in its order
     const machine = await fleet.launchMachine(
       `elsewhere-${name.replace(NOT_WORD, "")}`,
       { CAWCO_HUB_URL: url }

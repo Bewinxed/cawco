@@ -25,6 +25,7 @@
     previewMode,
     type ThreadEntry,
   } from "@cawco/core/comments";
+  import { detach } from "@cawco/core/detach";
   import { pinName } from "@cawco/core/pin-name";
   import {
     askHubReach,
@@ -42,11 +43,11 @@
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { failureClause, failureWords } from "#lib/cawco/hub-read.js";
+  import { track } from "#lib/cawco/track.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
     whileIdle,
   } from "#lib/components/ui/button/pending-content.svelte";
-  // biome-ignore lint/performance/noNamespaceImport: the kit's compound menu (DropdownMenu.Root, .Item, …), as every menu of the app imports it
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import {
@@ -495,8 +496,7 @@
   }
   $effect(() => {
     const origin = paneOrigin;
-    // biome-ignore lint/complexity/noVoid: read-only dependency — each bump probes again
-    void probe;
+    track(probe);
     if (!origin || untrack(() => reached?.origin === origin && reached.ok)) {
       return;
     }
@@ -757,8 +757,7 @@
     const hop = down;
     const origin = paneOrigin;
     const seen = inView && onScreen;
-    // biome-ignore lint/complexity/noVoid: read-only dependency — each bump probes again
-    void downProbe;
+    track(downProbe);
     if (!(hop && hop !== "closed" && origin && seen)) {
       return;
     }
@@ -1339,16 +1338,18 @@
     if (!shown) {
       return;
     }
-    // biome-ignore lint/complexity/noVoid: the question answers itself; a Cancel changes nothing
-    void removeAsks.ask({
-      at: "never-drawn-remove",
-      title: sheetWords.removeTitle(shown.name),
-      body: sheetWords.removeBody,
-      confirmLabel: sheetWords.removeConfirm,
-      pendingLabel: sheetWords.removing,
-      destructive: true,
-      run: () => removeArtifact(instanceId, shown.id),
-    });
+    detach(
+      removeAsks.ask({
+        at: "never-drawn-remove",
+        title: sheetWords.removeTitle(shown.name),
+        body: sheetWords.removeBody,
+        confirmLabel: sheetWords.removeConfirm,
+        pendingLabel: sheetWords.removing,
+        destructive: true,
+        run: () => removeArtifact(instanceId, shown.id),
+      }),
+      "ask"
+    );
   }
   /*
    * A sheet's inspector (live components spec §5): the chosen story's props

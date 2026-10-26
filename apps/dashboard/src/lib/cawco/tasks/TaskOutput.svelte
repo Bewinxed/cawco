@@ -20,6 +20,7 @@
     parsePost,
   } from "@cawco/core";
   import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
+  import { track } from "#lib/cawco/track.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconArrowUpRight, IconDocument } from "#lib/icons.js";
   import { failureWords } from "../hub-read";
@@ -71,8 +72,7 @@
       return;
     }
     // Read again whenever the task is written again.
-    // biome-ignore lint/complexity/noVoid: a read-only dependency
-    void version;
+    track(version);
     let gone = false;
     problem = null;
     readOutputText(projectId, taskId, path)

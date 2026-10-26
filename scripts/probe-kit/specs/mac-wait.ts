@@ -185,7 +185,6 @@ const run = async (kit: Kit) => {
   // 3
   for (let turn = 1; turn <= TURNS; turn += 1) {
     const words = `${WHILE_WAITING} ${turn}`;
-    // biome-ignore lint/performance/noAwaitInLoops: each turn follows the one before it ended
     await fleet.send(instanceId, words);
     await until(
       `turn ${turn} read`,

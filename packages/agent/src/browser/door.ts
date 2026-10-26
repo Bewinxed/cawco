@@ -193,7 +193,6 @@ const sweepDoors = async (
     if (kept.has(id)) {
       continue;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: one folder at a time, each judged by its own files.
     const marks = await Promise.all([
       statOf(gateTokenFile(id)),
       statOf(join(workspaceStateDir(id), GATE_CONFIG_NAME)),

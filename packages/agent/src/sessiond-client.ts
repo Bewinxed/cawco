@@ -34,6 +34,7 @@ import { fileURLToPath } from "node:url";
 // for `node:os`, and the core barrel is imported by the browser bundle.
 import type { SessionLimits } from "@cawco/core";
 import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
+import { detach } from "@cawco/core/detach";
 import { LineSplitter } from "@cawco/core/lines";
 import { PacedWriter } from "@cawco/core/paced-write";
 import { standalone } from "@cawco/core/runtime";
@@ -338,7 +339,6 @@ export const ensureSessiond = async (
 
   const deadline = Date.now() + ADHOC_START_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    // biome-ignore lint/performance/noAwaitInLoops: polls the freshly spawned daemon at a fixed interval until it binds or the deadline passes
     const bound = await probeEndpoint(endpoint, 250);
     switch (bound.kind) {
       case "answered":
@@ -1485,21 +1485,23 @@ export const sessiondBridge = (
 
   const kill = (sig: NodeJS.Signals): boolean => {
     killed = true;
-    // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — kill() itself is synchronous, and the SDK does not await the signal reaching the child
-    void started.then(async () => {
-      if (spent(sig)) {
-        return;
-      }
-      try {
-        await client.signal(procId, sig);
-      } catch (error) {
-        // A child that already died is no refusal (`signal`), and its exit
-        // event is the truth of it; any other refusal is said.
-        console.warn(
-          `[sessiond] ${procId}: ${sig} refused: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
-    });
+    detach(
+      started.then(async () => {
+        if (spent(sig)) {
+          return;
+        }
+        try {
+          await client.signal(procId, sig);
+        } catch (error) {
+          // A child that already died is no refusal (`signal`), and its exit
+          // event is the truth of it; any other refusal is said.
+          console.warn(
+            `[sessiond] ${procId}: ${sig} refused: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      }),
+      "then"
+    );
     return true;
   };
   options.signal?.addEventListener("abort", () => kill("SIGTERM"), {

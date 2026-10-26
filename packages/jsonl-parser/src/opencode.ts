@@ -153,7 +153,6 @@ export async function scanRanges<R>(
           each(row);
         }
       });
-      // biome-ignore lint/performance/noAwaitInLoops: the await is the turn between ranges
       await new Promise((resolve) => setImmediate(resolve));
     }
   } finally {

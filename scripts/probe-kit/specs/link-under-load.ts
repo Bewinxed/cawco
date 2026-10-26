@@ -186,7 +186,6 @@ const writeInputs = async (dir: string): Promise<string[][]> => {
     const paths: string[] = [];
     for (let input = 0; input < INPUTS; input += 1) {
       const path = join(dir, `lane-${lane}-input-${input}.txt`);
-      // biome-ignore lint/performance/noAwaitInLoops: one file at a time, each a few MiB
       await writeFile(path, randomBytes(INPUT_BYTES).toString("base64"));
       paths.push(path);
     }

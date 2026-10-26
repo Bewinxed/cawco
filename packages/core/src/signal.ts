@@ -8,7 +8,6 @@
 import { markerIsLive, processGroup, processStart } from "./process-identity";
 import { type Delivery, type Pid, signalOwnGroup, wall } from "./signal-wall";
 
-// biome-ignore lint/performance/noBarrelFile: the wall's own makers and senders, as every caller has always imported them from here; the sending half stays importable alone for the srt host (signal-wall.ts)
 export {
   type Delivery,
   isAlive,

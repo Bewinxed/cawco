@@ -317,7 +317,6 @@ try {
     "probe-url": urlSource,
   };
   for (const [name, source] of Object.entries(sources)) {
-    // biome-ignore lint/performance/noAwaitInLoops: one Browse at a time, as the dashboard does
     listings[name] = (await browse(source)).map((one) => one.name);
     check(
       `Browse lists ${name}'s plugins`,
@@ -335,7 +334,6 @@ try {
     "show-me@skills",
   ];
   for (const id of [...wanted, "relative-one@probe-url"]) {
-    // biome-ignore lint/performance/noAwaitInLoops: installs one at a time, as an operator clicks them
     await install(id);
   }
   // Carried before the machine's first sync, as a deployed hub's rows are.

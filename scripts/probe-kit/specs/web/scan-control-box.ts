@@ -79,7 +79,6 @@ const spec: Spec = {
   run: async (kit) => {
     const page = await kit.page("phone");
     for (const [label, { html, want }] of Object.entries(PAGES)) {
-      // biome-ignore lint/performance/noAwaitInLoops: one page at a time
       await page.setContent(html);
       const found = await page.evaluate(scan);
       const named = found.filter((line) => line.includes("“Approve”"));

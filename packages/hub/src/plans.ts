@@ -521,7 +521,6 @@ export const createPlans = (deps: PlansDeps) => {
     }
     const settled = new Set<string>();
     for (const handle of waits) {
-      // biome-ignore lint/performance/noAwaitInLoops: a plan's few waits, each read in turn
       if ((await deps.tasks.waitState(row.projectId ?? null, handle)).settled) {
         settled.add(handle);
       }

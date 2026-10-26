@@ -68,7 +68,6 @@ const run = async (kit: Kit) => {
   let inner = 0;
   const deadline = Date.now() + 3000;
   while (!inner && Date.now() < deadline && sandbox.exitCode === null) {
-    // biome-ignore lint/performance/noAwaitInLoops: waits for bwrap's child to exist
     await Bun.sleep(20);
     inner = Number(
       (await readFile(children, "utf8").catch(() => "")).trim().split(" ")[0]
@@ -131,7 +130,6 @@ const run = async (kit: Kit) => {
         () => "opened",
         (error: Error) => error.message
       );
-      // biome-ignore lint/performance/noAwaitInLoops: one race at a time, each at its own delay
       await Bun.sleep(delay);
       await closeBridge(instanceId);
       const opened = await reaching;

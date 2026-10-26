@@ -332,7 +332,6 @@ const delegate = async (
   const paths = new Map<string, string>();
   for (const leg of among) {
     legs.set(leg.key, leg);
-    // biome-ignore lint/performance/noAwaitInLoops: one delegate at a time, each its own workspace
     const started = await fleet.api<{ workspaceId: string }>(
       "/api/work-items",
       {

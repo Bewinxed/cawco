@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
   import type { HarnessKind, PermissionMode } from "@cawco/core/harness";
   import { spawnWords } from "@cawco/core/words/spawn";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
@@ -51,22 +52,24 @@
     if (!copy) {
       return;
     }
-    // biome-ignore lint/complexity/noVoid: the question answers itself; a Cancel changes nothing
-    void asks.ask({
-      at: "fullSend",
-      title: spawnWords.switchToFullSendTitle,
-      body: restarts ? [...copy.confirm, copy.restarts] : copy.confirm,
-      confirmLabel: spawnWords.switchToFullSend,
-      pendingLabel: spawnWords.switching,
-      grant: true,
-      // The yes is what this asks for: the change then says how it goes
-      // where every pick's does (a running session's feedback line under
-      // its chips), and the picker closes on it.
-      run: () => {
-        onchange("fullSend");
-        return Promise.resolve();
-      },
-    });
+    detach(
+      asks.ask({
+        at: "fullSend",
+        title: spawnWords.switchToFullSendTitle,
+        body: restarts ? [...copy.confirm, copy.restarts] : copy.confirm,
+        confirmLabel: spawnWords.switchToFullSend,
+        pendingLabel: spawnWords.switching,
+        grant: true,
+        // The yes is what this asks for: the change then says how it goes
+        // where every pick's does (a running session's feedback line under
+        // its chips), and the picker closes on it.
+        run: () => {
+          onchange("fullSend");
+          return Promise.resolve();
+        },
+      }),
+      "ask"
+    );
   }
   const index = $derived(
     Math.max(

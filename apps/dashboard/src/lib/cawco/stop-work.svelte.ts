@@ -17,6 +17,7 @@
  * one still listed is still stopping, and the end runs once none is left.
  */
 import type { CawRunning, CawView, ProjectStopFrame } from "@cawco/core";
+import { detach } from "@cawco/core/detach";
 import { untrack } from "svelte";
 import { SvelteSet } from "svelte/reactivity";
 import { goto } from "$app/navigation";
@@ -251,8 +252,7 @@ class StopWork {
     }
     this.jobs = kept;
     for (const key of Object.keys(kept)) {
-      // biome-ignore lint/complexity/noVoid: the job says its own outcome
-      void this.resume(key);
+      detach(this.resume(key), "resume");
     }
   }
 
@@ -368,11 +368,9 @@ class StopWork {
         job.rows.map((row) => row.s.id)
       );
     } else if (job.phase === "fail") {
-      // biome-ignore lint/complexity/noVoid: the job says its own outcome
-      void this.retry(job);
+      detach(this.retry(job), "retry");
     } else if (job.phase === "none") {
-      // biome-ignore lint/complexity/noVoid: the job says its own outcome
-      void this.finish(job);
+      detach(this.finish(job), "finish");
     }
   }
 
@@ -637,8 +635,7 @@ class StopWork {
     }
     if (job.rows.every((each) => each.arrived)) {
       this.after(job, dur("--dur-control"), () => {
-        // biome-ignore lint/complexity/noVoid: the job says its own outcome
-        void this.finish(job);
+        detach(this.finish(job), "finish");
       });
     }
     this.keep();

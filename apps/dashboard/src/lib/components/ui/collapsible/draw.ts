@@ -35,8 +35,8 @@ function run(start: number): void {
       more = stepped.step();
     });
     current = null;
-    // biome-ignore lint/complexity/noVoid: a layout read, made for its side effect of laying the step out now
-    void document.documentElement.offsetHeight;
+    // A layout read, made for its side effect: the step is laid out now.
+    document.documentElement.getBoundingClientRect();
     // A step can end its own drawer: the flush it ran may have taken down
     // what registered it.
     const index = drawers.indexOf(stepped);

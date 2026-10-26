@@ -45,6 +45,7 @@
   import { onMount, tick, untrack } from "svelte";
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { track } from "#lib/cawco/track.js";
   import { IconSearch } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import { felt } from "../feel.svelte";
@@ -786,8 +787,7 @@
   // Rows that come or go (a search, an older page, the roll crossing into
   // rows not mounted yet) are placed in the frame they are drawn.
   $effect(() => {
-    // biome-ignore lint/complexity/noVoid: read-only dependency — the rows mounted are drawn where the roll stands
-    void mounted;
+    track(mounted);
     if (row > 0) {
       untrack(draw);
     }

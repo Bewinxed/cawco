@@ -102,7 +102,6 @@ export async function leftBehind(tags: readonly string[]): Promise<string[]> {
   const wanted = new Set(tags);
   const until = performance.now() + GRACE_MS;
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: each read after the last, until none is left or the grace is spent
     const left = await carrying(wanted);
     if (left.length === 0 || performance.now() > until) {
       return left;

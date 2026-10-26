@@ -102,7 +102,6 @@
  *
  *   bun scripts/probe-kit/run.ts upstream-guard
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one hand, one step at a time.
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: the scenario runs in order, one choice after the last.
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";

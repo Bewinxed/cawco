@@ -39,7 +39,6 @@
  *
  *   bun scripts/probe-kit/run.ts hub-restart-holds
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one leg, and one step of it, at a time
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { WebsocketProvider } from "y-websocket";

@@ -210,7 +210,6 @@ const spec: Spec = {
     await page.evaluate(furnish, [CALLS, REFERENCE_ROWS] as const);
     const references = async (from: number, to: number) => {
       for (let i = from; i < to; i += 1) {
-        // biome-ignore lint/performance/noAwaitInLoops: each reference is a task of its own
         await page.evaluate(
           (mark) =>
             (
@@ -228,7 +227,6 @@ const spec: Spec = {
     const main = await traceMain(page, async () => {
       await references(0, REFERENCES / 2);
       for (let landing = 0; landing < LANDINGS; landing += 1) {
-        // biome-ignore lint/performance/noAwaitInLoops: one landing at a time, each on a transcript held afresh
         await page.evaluate(
           (mark) => performance.mark(mark),
           `probe-kit:hold:${landing}`

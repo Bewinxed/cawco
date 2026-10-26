@@ -122,7 +122,6 @@ const consequence = (
 export const damagedRecords = async (): Promise<DamagedRecordReport[]> => {
   const reports: DamagedRecordReport[] = [];
   for (const [file, entry] of known) {
-    // biome-ignore lint/performance/noAwaitInLoops: a stat per damaged file, of which there are none or a few
     if ((await writtenAt(file)) !== entry.writtenAt) {
       known.delete(file);
       continue;

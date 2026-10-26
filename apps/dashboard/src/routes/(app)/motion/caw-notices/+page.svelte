@@ -29,9 +29,7 @@
   } from "#lib/cawco/updates/model.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { HangCard } from "#lib/components/ui/hang-card/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import { page } from "$app/state";
 

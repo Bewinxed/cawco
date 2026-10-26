@@ -79,7 +79,6 @@ export async function awaitJoined(hubUrl: string): Promise<void> {
   let waiting = false;
   let keyNotTaken = false;
   while (waiting || Date.now() < deadline) {
-    // biome-ignore lint/performance/noAwaitInLoops: a poll; each read must see the hub after the previous one
     const answer = await readOwnRow(hubUrl, id).catch(() => undefined);
     // Neither an unanswered read nor a refused one ends the wait: the poll asks again.
     switch (answer?.kind) {

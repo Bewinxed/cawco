@@ -470,7 +470,6 @@ const run = async (kit: Kit) => {
   // A, on OpenCode and pi: each delegate's own install, in its own clone.
   for (const tag of ["O", "P"] as const) {
     const harness = HARNESS_OF[tag];
-    // biome-ignore lint/performance/noAwaitInLoops: one delegate at a time, each install told apart by the clones before it
     const clonesBefore = new Set((await calls()).map((one) => one.pwd));
     await delegate(tag, harness);
     const result = await until(

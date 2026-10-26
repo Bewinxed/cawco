@@ -199,7 +199,6 @@ export const assertPluginLoaded = async (
     async (within) => {
       for (;;) {
         within.throwIfAborted();
-        // biome-ignore lint/performance/noAwaitInLoops: each read decides whether the next is needed
         const listed = await client.plugin.list(at(directory), {
           signal: within,
         });
@@ -347,7 +346,6 @@ export const waitForMcp = async (
     async (within) => {
       for (;;) {
         within.throwIfAborted();
-        // biome-ignore lint/performance/noAwaitInLoops: each read decides whether the next is needed
         const response = await client.mcp.list(at(directory), {
           signal: within,
         });

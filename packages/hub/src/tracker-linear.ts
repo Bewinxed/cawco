@@ -360,7 +360,6 @@ export const linearAdapter = (
     let newest = cursor.since;
     let after: string | null = null;
     for (let page = 0; page < MAX_PAGES; page += 1) {
-      // biome-ignore lint/performance/noAwaitInLoops: each page names the next
       const data: Record<string, Page<Raw>> = await ask(what, query, {
         team: teamId,
         since,

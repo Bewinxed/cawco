@@ -20,6 +20,8 @@
 
 import type { ContinuationJob } from "@cawco/core";
 import { commonWords, spawnWords } from "@cawco/core";
+import { detach } from "@cawco/core/detach";
+import { track } from "#lib/cawco/track.js";
 import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
 import { cawco, followContinuations, sendFirstPrompt } from "../client.svelte";
 import {
@@ -156,8 +158,10 @@ export function beginStart(options: {
     dropStart(replacing);
   }
   running.add(id);
-  // biome-ignore lint/complexity/noVoid: fire-and-forget — the prompt is kept in the draft store for a reload; refused, it is simply not kept
-  void saveDraft(parkKey(id), content).catch(() => undefined);
+  detach(
+    saveDraft(parkKey(id), content).catch(() => undefined),
+    "saveDraft"
+  );
   parked.list.push({
     id,
     ...(continueFrom ? { continueFrom } : {}),
@@ -258,14 +262,16 @@ export function dropStart(id: string): void {
   if (at !== -1) {
     parked.list.splice(at, 1);
   }
-  // biome-ignore lint/complexity/noVoid: fire-and-forget — an empty draft deletes its record
-  void saveDraft(parkKey(id), {
-    text: "",
-    images: [],
-    texts: [],
-    files: [],
-    canvas: null,
-  }).catch(() => undefined);
+  detach(
+    saveDraft(parkKey(id), {
+      text: "",
+      images: [],
+      texts: [],
+      files: [],
+      canvas: null,
+    }).catch(() => undefined),
+    "saveDraft"
+  );
 }
 
 /** The picks and prompt the reader left the form on, on a failed start: kept for its Reopen. */
@@ -384,8 +390,7 @@ function recover(start: ParkedStart): void {
   for (const ask of listed) {
     if (!ask.sent) {
       ask.sent = true;
-      // biome-ignore lint/complexity/noVoid: fire-and-forget — the send says itself in the new session's transcript
-      void sendKept(start, ask);
+      detach(sendKept(start, ask), "sendKept");
     }
   }
   if (listed.length === asked.length) {
@@ -416,8 +421,7 @@ function recover(start: ParkedStart): void {
 
 $effect.root(() => {
   $effect(() => {
-    // biome-ignore lint/complexity/noVoid: read-only dependency — a deadline passing reads the board again
-    void tick;
+    track(tick);
     for (const start of parked.list) {
       if (start.state === "running" && !running.has(start.id)) {
         recover(start);

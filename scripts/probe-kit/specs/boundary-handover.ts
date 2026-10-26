@@ -797,7 +797,6 @@ const deletedStops = async (
   );
   const sleeping: (string | undefined)[] = [];
   for (const session of [h.instanceId, ...h.others]) {
-    // biome-ignore lint/performance/noAwaitInLoops: each session is asked to sleep in turn, as the dashboard would
     sleeping.push(await asleep(fleet, session));
   }
   // The loop runs on through the sessions' sleep: what the delete's stop

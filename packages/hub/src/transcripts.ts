@@ -551,7 +551,6 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
   ): Promise<HistoryFault | undefined> => {
     while (!entry.builder.holds(span, before) && entry.older !== null) {
       const cursor = entry.older;
-      // biome-ignore lint/performance/noAwaitInLoops: each window names the one before it
       const read = await readOlder(instanceId, entry, cursor);
       if ("fault" in read) {
         return read;
@@ -662,7 +661,6 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
           console.error(`[hub] transcript read on ${machineId} failed:`, error)
         );
       for (const [instanceId, entry] of [...entries]) {
-        // biome-ignore lint/performance/noAwaitInLoops: one machine read at a time, on purpose
         await settled(entry.loading);
         const stale =
           entries.get(instanceId) === entry &&
@@ -674,7 +672,6 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
       }
       for (const instanceId of instanceIds) {
         if (!entries.has(instanceId)) {
-          // biome-ignore lint/performance/noAwaitInLoops: one machine read at a time, on purpose — a register names every session it runs
           await settled(entryFor(instanceId).loading);
         }
       }

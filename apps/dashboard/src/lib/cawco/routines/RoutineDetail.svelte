@@ -23,7 +23,6 @@
   import { threadHref } from "#lib/cawco/thread-tabs.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Markdown } from "#lib/components/ui/markdown/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Table from "#lib/components/ui/table/index.js";
   import ActionsTable from "./ActionsTable.svelte";
   import RunStatus, { type Status } from "./RunStatus.svelte";

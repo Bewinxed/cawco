@@ -16,6 +16,7 @@
  * reached it is `unreachable`, and leaves activity unknown.
  */
 import { readWithin } from "@cawco/core/bounded";
+import { detach } from "@cawco/core/detach";
 import {
   errorText,
   notAnswered,
@@ -263,7 +264,6 @@ export class OpencodeActivity {
     const entry = this.#session(sessionId);
     for (;;) {
       const { sequence } = entry;
-      // biome-ignore lint/performance/noAwaitInLoops: a read older than this session's last observation is followed by a newer one
       const read = await this.#waveRead(client, entry.afterRead, wave);
       if (sequence !== entry.sequence || read.read <= entry.afterRead) {
         continue;
@@ -332,8 +332,7 @@ export class OpencodeActivity {
       }, ACTIVE_INTERVAL_MS);
       this.#timer.unref();
     }
-    // biome-ignore lint/complexity/noVoid: busy controls read the shared model without waiting for network requests
-    void this.sample(client);
+    detach(this.sample(client), "sample");
     return this.snapshot();
   }
 

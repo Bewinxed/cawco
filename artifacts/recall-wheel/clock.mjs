@@ -99,7 +99,6 @@ export const CLOCK = () => {
             nudge(run, d);
           }
         }
-        // biome-ignore lint/performance/noAwaitInLoops: one frame a step
         await frame();
       }
       await frame();

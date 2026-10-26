@@ -432,7 +432,6 @@ async function enable(
     return;
   }
   for (const group of [children.top, children.group, children.workspaces]) {
-    // biome-ignore lint/performance/noAwaitInLoops: each level's controller needs the one above it on first
     await writeFile(join(group, "cgroup.subtree_control"), `+${controller}`);
   }
   children.enabled.add(controller);

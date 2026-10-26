@@ -14,6 +14,8 @@
  * cost the frame that cue landed in (the wheel's open handler, 4ms with the
  * graph warm, took 76ms cold).
  */
+
+import { detach } from "@cawco/core/detach";
 import { MediaQuery } from "svelte/reactivity";
 import { readJson, writeJson } from "./storage";
 
@@ -115,9 +117,8 @@ export function felt(
       emphasis: "subtle",
       ...(toward ? { direction: toward === "older" ? "forward" : "back" } : {}),
     });
-    if (tap && touch.current) {
-      // biome-ignore lint/complexity/noVoid: a tap is fire-and-forget; its promise only says the pattern ended
-      void haptics?.trigger(tap);
+    if (tap && touch.current && haptics) {
+      detach(haptics.trigger(tap), "trigger");
     }
   } catch {
     // A cue that cannot play is silence, never a broken gesture.

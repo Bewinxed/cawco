@@ -31,7 +31,6 @@
  * digits, centred in the tabular advance; Caw's face the leftmost column of
  * his still's canvas with any alpha, in css px).
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time
 import type { Page } from "playwright-core";
 import type { Reply, Seen } from "../../scratch-fleet";
 import { at, capture, colours, off, type Raster, type Rgb } from "../ink";

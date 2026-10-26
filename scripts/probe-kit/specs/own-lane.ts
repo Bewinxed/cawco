@@ -63,7 +63,6 @@ const placeLeg = async (kit: Kit, root: string): Promise<void> => {
     "icons/key-bold-duotone.svg",
   ];
   for (const path of own) {
-    // biome-ignore lint/performance/noAwaitInLoops: a handful of files
     await write(join(place, path), `// ${path}\n`);
   }
   await write(join(place, ".env"), `OPENAI_API_KEY=${FAKE_KEY}\n`);
@@ -172,7 +171,6 @@ const nodeLeg = async (kit: Kit, root: string): Promise<void> => {
   for (const tool of ["tar", "xz", "ln"]) {
     const at = Bun.which(tool);
     if (at) {
-      // biome-ignore lint/performance/noAwaitInLoops: three links
       await symlink(at, join(bin, tool));
     }
   }

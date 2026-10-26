@@ -34,7 +34,6 @@
  * Each case on a page of its own: its motion happened (read from the DOM),
  * and the page answered a script within {@link ANSWERS_MS} the whole way.
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one case, one step at a time, as a hand makes them
 import type { Page } from "playwright-core";
 import { readWithin } from "../../../../packages/core/src/bounded";
 import { machineWords } from "../../../../packages/core/src/words/machine";

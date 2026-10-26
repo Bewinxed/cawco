@@ -922,7 +922,6 @@ export async function discoverAgents(
   for (const dir of entries.filter((entry) => entry.kind === "dir")) {
     let nested: Bounded<FsEntry[]>;
     try {
-      // biome-ignore lint/performance/noAwaitInLoops: one control call in flight per machine socket at a time
       nested = await userLayerFs<FsEntry[]>(
         machineId,
         "list",

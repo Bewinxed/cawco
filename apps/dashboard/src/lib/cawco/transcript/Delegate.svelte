@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { DelegateAskStatus } from "@cawco/core";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
+  import { detach } from "@cawco/core/detach";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   /**
    * A fleet delegate — a session this one spawned with `delegate` or
@@ -411,8 +411,7 @@
     }
     if (next) {
       watchDelegate(id);
-      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — onToggle is a sync callback, nothing here awaits the backfill.
-      void readTranscript(id);
+      detach(readTranscript(id), "readTranscript");
     } else {
       unwatchDelegate(id);
     }

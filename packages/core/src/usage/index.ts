@@ -6,7 +6,6 @@
  * Import it from the node-only subpath `@cawco/core/usage/opencode-go`.
  */
 
-// biome-ignore lint/performance/noBarrelFile: the deliberate browser-safe re-export surface described above — @cawco/core/usage is the public entry point.
 export * from "./pricing";
 export * from "./tokens";
 export * from "./types";

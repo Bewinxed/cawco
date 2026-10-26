@@ -52,6 +52,7 @@
 </script>
 
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
   import type { AvailableCommand } from "@cawco/core/fleet";
   import { questionsOf } from "@cawco/core/question";
   import { commonWords } from "@cawco/core/words/common";
@@ -95,10 +96,10 @@
   import { handOver, reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { departBox } from "#lib/cawco/motion/share.svelte.js";
   import { msOf } from "#lib/cawco/motion/time.js";
+  import { track } from "#lib/cawco/track.js";
   import { Button, sendVariants } from "#lib/components/ui/button/index.js";
   import { whileIdle } from "#lib/components/ui/button/pending-content.svelte";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Command from "#lib/components/ui/command/index.js";
   import { dockShellVariants } from "#lib/components/ui/dock-shell/index.js";
   import { Kbd } from "#lib/components/ui/kbd/index.js";
@@ -642,8 +643,7 @@
    * its menu closed: the caret this one last noted was in the other text.
    */
   $effect.pre(() => {
-    // biome-ignore lint/complexity/noVoid: read-only dependency — re-runs when the composer is pointed at another conversation's draft
-    void draft;
+    track(draft);
     untrack(() => {
       dismissed = true;
       caret = draft.text.length;
@@ -859,8 +859,7 @@
     };
     let frame = 0;
     $effect(() => {
-      // biome-ignore lint/complexity/noVoid: read-only dependency — a new draft or text re-reads the scroll
-      void draft.text;
+      track(draft.text);
       frame = requestAnimationFrame(cue);
     });
     // A resize in the next frame (frameObserver): the cues are the field's
@@ -2066,8 +2065,7 @@
   // A composer handed another conversation's draft puts the last one's
   // wheel away at once: what it rolled was that conversation's.
   $effect.pre(() => {
-    // biome-ignore lint/complexity/noVoid: read-only dependency — re-runs when the composer is pointed at another conversation's draft
-    void draft;
+    track(draft);
     untrack(() => {
       deckOut(0);
       recall = null;
@@ -3498,8 +3496,7 @@
           more={!!recalled?.cursor}
           older={() => {
             if (recallOf) {
-              // biome-ignore lint/complexity/noVoid: the page lands in the session, which the wheel reads
-              void fleet?.readOlderPage(recallOf);
+              detach(fleet?.readOlderPage(recallOf), "readOlderPage");
             }
           }}
           onback={recallBack}

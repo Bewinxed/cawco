@@ -186,7 +186,6 @@ const drag = async (
   });
   for (let step = 1; step <= steps; step += 1) {
     const t = step / steps;
-    // biome-ignore lint/performance/noAwaitInLoops: a drag's points, in order
     await cdp.send("Input.dispatchTouchEvent", {
       type: "touchMove",
       touchPoints: [
@@ -545,7 +544,6 @@ const layoutBySize = async (
   ];
   let phoneComposer = 0;
   for (const leg of legs) {
-    // biome-ignore lint/performance/noAwaitInLoops: one screen at a time
     const page = await kit.page(leg.view);
     if (leg.size) {
       await page.setViewportSize(leg.size);

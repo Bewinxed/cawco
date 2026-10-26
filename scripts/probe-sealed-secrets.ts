@@ -578,7 +578,6 @@ try {
     ["probe-piped", "piped"],
     ["probe-typed", "typed"],
   ] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one connection at a time
     await json("POST", "/api/connections", {
       name,
       service: "probe",

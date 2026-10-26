@@ -1436,7 +1436,6 @@ export const createConnections = (deps: ConnectionsDeps) => {
     const tools: Tool[] = [];
     let cursor: string | undefined;
     do {
-      // biome-ignore lint/performance/noAwaitInLoops: each page names the next
       const page = await client.listTools(cursor ? { cursor } : {}, {
         signal,
         timeout: SDK_CLOCK_OFF,

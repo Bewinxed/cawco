@@ -117,7 +117,6 @@ const sleepPids = async (): Promise<Pid[]> => {
     if (!PID.test(pid)) {
       continue;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: one scan of /proc
     const argv = await readFile(`/proc/${pid}/cmdline`, "utf8").catch(() => "");
     if (argv === wanted) {
       found.push(listedPid(Number(pid)));

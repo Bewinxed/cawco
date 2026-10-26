@@ -241,7 +241,6 @@ async function referenceImages(
   let total = 0;
   for (const reference of references) {
     const referencePath = resolve(cwd, reference);
-    // biome-ignore lint/performance/noAwaitInLoops: check each file before allocating its image buffer.
     const info = await stat(referencePath);
     total += info.size;
     if (

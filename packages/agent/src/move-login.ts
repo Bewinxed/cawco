@@ -280,7 +280,6 @@ const homeCredential = async (): Promise<{ secret: string; store: Store }> => {
   const stores =
     platform() === "darwin" ? [keychain, credentialsFile] : [credentialsFile];
   for (const store of stores) {
-    // biome-ignore lint/performance/noAwaitInLoops: Claude Code's own order: the Keychain first, the file as its fallback
     const secret = await store.readHome();
     if (secret) {
       return { secret, store };
@@ -441,7 +440,6 @@ const alreadyMoved = async (
   const stores =
     platform() === "darwin" ? [keychain, credentialsFile] : [credentialsFile];
   for (const store of stores) {
-    // biome-ignore lint/performance/noAwaitInLoops: Claude Code's own order: the Keychain first, the file as its fallback
     if (await store.heldBy(account)) {
       log(`already moved: ${account}'s dir answers as ${answered.email}`);
       return { store: store.name };
@@ -543,7 +541,6 @@ const takeLogin = async (account: string): Promise<Taken> => {
   const stores =
     platform() === "darwin" ? [keychain, credentialsFile] : [credentialsFile];
   for (const store of stores) {
-    // biome-ignore lint/performance/noAwaitInLoops: Claude Code's own order: the Keychain first, the file as its fallback
     const secret = await store.read(account);
     if (secret) {
       const oauthAccount = (await readJson(accountClaudeJson(account)))

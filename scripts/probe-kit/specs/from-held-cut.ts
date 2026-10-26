@@ -339,7 +339,6 @@ const cutPhase = async (
   // Two beats: the law is checked on each, after the quiet sweep.
   const watchedUntil = Date.now() + 2 * BEAT_MS + 15_000;
   while (Date.now() < watchedUntil && agent.exitCode === null) {
-    // biome-ignore lint/performance/noAwaitInLoops: watches the agent through its beats
     await Bun.sleep(1000);
   }
   const laws = (await watched.since())
@@ -396,7 +395,6 @@ const repairPhase = async (
   const repaired = `[workspace] ${source.id}: law live-workspace-judge-answers was broken`;
   const watchedUntil = Date.now() + 2 * BEAT_MS + 15_000;
   while (Date.now() < watchedUntil && agent.exitCode === null) {
-    // biome-ignore lint/performance/noAwaitInLoops: watches the agent through its beats
     await Bun.sleep(1000);
   }
   const log = await watched.since();

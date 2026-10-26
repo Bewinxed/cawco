@@ -75,7 +75,6 @@
  *     segment goes to the view switch and then the first card, never to
  *     the segment's panel (it holds the cards, so it takes no Tab stop).
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time, in order
 import type { Page } from "playwright-core";
 import { commonWords } from "../../../../packages/core/src/words/common";
 import { filesWords } from "../../../../packages/core/src/words/files";

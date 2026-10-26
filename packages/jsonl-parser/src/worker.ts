@@ -100,7 +100,6 @@ if (!isMainThread && typeof self !== "undefined" && self !== null) {
       const items = result.docs ?? result.records ?? [];
       for (let at = 0; at < items.length; at += PART_ITEMS) {
         const part = items.slice(at, at + PART_ITEMS);
-        // biome-ignore lint/performance/noAwaitInLoops: each part waits for the reader to take the last in
         await send(
           result.docs
             ? { kind: "part", path: result.path, docs: part as TranscriptDoc[] }

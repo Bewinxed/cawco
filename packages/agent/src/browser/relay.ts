@@ -265,7 +265,6 @@ const processesOf = async (
     pids.map(async (pid) => {
       const fds = await readdir(join("/proc", pid, "fd")).catch(() => []);
       for (const fd of fds) {
-        // biome-ignore lint/performance/noAwaitInLoops: one process's fds, read in turn.
         const target = await readlink(join("/proc", pid, "fd", fd)).catch(
           () => ""
         );
@@ -631,7 +630,6 @@ const waitLive = async (
   const until = Date.now() + LIVE_MS;
   let ports = NO_PORTS;
   while (Date.now() < until) {
-    // biome-ignore lint/performance/noAwaitInLoops: polling a server that is starting.
     const inspected = await relayContainer(docker);
     if (!inspected?.State.Running) {
       const said = await logsOf(docker.getContainer(RELAY_CONTAINER)).catch(

@@ -16,7 +16,6 @@
   import { Drawer as Vaul } from "vaul-svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { holdStyle } from "#lib/components/ui/drawer/hold-style.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import { cawco } from "../client.svelte";
   import { lightbox } from "../lightbox/lightbox-state.svelte";

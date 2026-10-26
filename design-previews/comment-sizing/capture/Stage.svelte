@@ -12,7 +12,6 @@
   import PinMark from "../../../apps/dashboard/src/lib/cawco/preview/PinMark.svelte";
   import { ComposerDraft } from "../../../apps/dashboard/src/lib/cawco/transcript/composer-draft.svelte";
   import { Button } from "../../../apps/dashboard/src/lib/components/ui/button/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Resizable from "../../../apps/dashboard/src/lib/components/ui/resizable/index.js";
   import { IconComment } from "../../../apps/dashboard/src/lib/icons.js";
   import { pinSaid } from "../../../packages/core/src/comments.ts";

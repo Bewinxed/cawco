@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { FleetWatchSettings } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import { onMount } from "svelte";
   import { blur } from "svelte/transition";
   import Field from "#lib/cawco/config/Field.svelte";
@@ -295,16 +296,12 @@
   onMount(() => {
     const code = page.url.searchParams.get("code");
     if (code) {
-      // biome-ignore lint/complexity/noVoid: the exchange reports its own outcome in page state
-      void finishConnect(code);
-      // biome-ignore lint/complexity/noVoid: the read reports its own outcome in page state
-      void readJev();
+      detach(finishConnect(code), "finishConnect");
+      detach(readJev(), "readJev");
     } else {
-      // biome-ignore lint/complexity/noVoid: the read reports its own outcome in page state
-      void readOpenRouter();
+      detach(readOpenRouter(), "readOpenRouter");
     }
-    // biome-ignore lint/complexity/noVoid: the read reports its own outcome in page state
-    void readWatch();
+    detach(readWatch(), "readWatch");
   });
 </script>
 

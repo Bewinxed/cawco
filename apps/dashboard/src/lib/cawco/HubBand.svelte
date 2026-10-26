@@ -57,6 +57,7 @@
    * had the hub, once the grace has run out.
    */
   import { connectionWords } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import { shellWords } from "@cawco/core/words/shell";
   import { onMount, untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -281,8 +282,7 @@
   let reloadPressed = $state(false);
   function reload() {
     reloadPressed = true;
-    // biome-ignore lint/complexity/noVoid: the page goes once the drafts are written down
-    void reloadNow();
+    detach(reloadNow(), "reloadNow");
   }
 </script>
 

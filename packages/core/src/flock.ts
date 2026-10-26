@@ -89,7 +89,6 @@ export const lockBy = async (
     if (Date.now() >= deadline) {
       return false;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: polling a lock another process holds.
     await Bun.sleep(LOCK_POLL_MS);
   }
   return true;

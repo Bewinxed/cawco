@@ -791,7 +791,6 @@ export const awaitFirstMachineReady = async (
   note("waiting for hub, sessiond, this machine's agent and dashboard…");
   const deadline = Date.now() + READY_TIMEOUT_MS;
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: a fresh snapshot of all four services on each readiness poll
     const standing = await Promise.all(checks.map(([, check]) => check()));
     const index = standing.findIndex((said) => said !== undefined);
     if (index === -1) {
@@ -1533,7 +1532,6 @@ const loadLaunchAgent = async (
   // and bootstrapping it then fails with "5: Input/output error" and leaves it
   // stopped. So the label is waited out first.
   const deadline = Date.now() + BOOTOUT_WAIT_MS;
-  // biome-ignore lint/performance/noAwaitInLoops: a poll — each check must see launchd after the previous wait
   while ((await run(["launchctl", "print", target])).exitCode === 0) {
     if (Date.now() > deadline) {
       throw new ServiceError(
@@ -1576,7 +1574,6 @@ export const installLaunchAgents = async (
     // `kickstart -k`, which keeps the socket.
     if (
       spec.sockets &&
-      // biome-ignore lint/performance/noAwaitInLoops: services install one at a time so each one's notes print in its own order and a failure is attributable to the service that caused it.
       (await Bun.file(path)
         .text()
         .catch(() => "")) === text &&
@@ -1607,7 +1604,6 @@ const uninstallLaunchAgents = async (
 ): Promise<void> => {
   for (const spec of specs) {
     const path = launchAgentPath(spec.name);
-    // biome-ignore lint/performance/noAwaitInLoops: services uninstall one at a time so each one's notes print in its own order and a failure is attributable to the service that caused it.
     await run(["launchctl", "bootout", `${guiDomain()}/${label(spec.name)}`]);
     await forgetLaunchdStart(label(spec.name));
     await Bun.file(path)
@@ -1713,7 +1709,6 @@ const writeSocketUnits = async (
   const sockets = spec.sockets ?? [];
   const moving: SocketSpec[] = [];
   for (const socket of sockets) {
-    // biome-ignore lint/performance/noAwaitInLoops: a service's sockets write one at a time, each note in its order
     if (await writeSocketUnit(spec, socket, note)) {
       moving.push(socket);
     }
@@ -1758,7 +1753,6 @@ const bindSockets = async (
   }
   for (const socket of sockets) {
     const name = socketName(socket.unit);
-    // biome-ignore lint/performance/noAwaitInLoops: a service's sockets bind one at a time, each note in its order
     const bound = await run(["systemctl", "--user", "restart", name]);
     const enabled = await run(["systemctl", "--user", "enable", name]);
     if (socket.required && bound.exitCode !== 0) {
@@ -1781,7 +1775,6 @@ const installSystemdUnits = async (
 ): Promise<void> => {
   const rebind = new Map<ServiceId, SocketSpec[]>();
   for (const spec of specs) {
-    // biome-ignore lint/performance/noAwaitInLoops: units write one at a time so each one's note prints in its own order and a failure is attributable to the unit that caused it.
     const moving = await writeSocketUnits(spec, note);
     if (moving.length > 0) {
       rebind.set(spec.id, moving);
@@ -1800,7 +1793,6 @@ const installSystemdUnits = async (
   for (const spec of specs) {
     const moving = rebind.get(spec.id);
     if (moving) {
-      // biome-ignore lint/performance/noAwaitInLoops: units enable one at a time, each socket listening before its service starts, so each one's notes print in its own order and a failure is attributable to the unit that caused it.
       await bindSockets(spec, moving, note);
     }
     const enabled = await run([
@@ -1885,7 +1877,6 @@ const uninstallSystemdUnits = async (
   note: (line: string) => void
 ): Promise<void> => {
   for (const spec of specs) {
-    // biome-ignore lint/performance/noAwaitInLoops: units uninstall one at a time so each one's notes print in its own order and a failure is attributable to the unit that caused it.
     await mayStopKeeper(spec, force);
     await run(["systemctl", "--user", "disable", "--now", unitName(spec.name)]);
     await Bun.file(systemdPath(spec.name))
@@ -1895,7 +1886,6 @@ const uninstallSystemdUnits = async (
       });
     note(`removed ${systemdPath(spec.name)}`);
     for (const socket of spec.sockets ?? []) {
-      // biome-ignore lint/performance/noAwaitInLoops: a service's sockets go one at a time, each note in its order
       await run([
         "systemctl",
         "--user",
@@ -2150,7 +2140,6 @@ const clearToRestart = async (
   try {
     for (;;) {
       const decision = restartDecision({
-        // biome-ignore lint/performance/noAwaitInLoops: a retry poll — each look must see the effect of the previous one before deciding whether to keep polling.
         cut: await read(),
         whenIdle,
         force,
@@ -2319,7 +2308,6 @@ const systemdStatus = async (
     `state    ${active.stdout.toString().trim() || "unknown"} (${enabled.stdout.toString().trim() || "not installed"})`
   );
   for (const socket of spec.sockets ?? []) {
-    // biome-ignore lint/performance/noAwaitInLoops: a service's sockets, each said in its order
     const listening = await run([
       "systemctl",
       "--user",
@@ -2473,7 +2461,6 @@ export const refreshUnits = async (
     const [path, text] = mac
       ? [launchAgentPath(spec.name), plist(spec)]
       : [systemdPath(spec.name), unit(spec)];
-    // biome-ignore lint/performance/noAwaitInLoops: one unit at a time, each note in its order
     const before = await Bun.file(path)
       .text()
       .catch(() => "");
@@ -2638,7 +2625,6 @@ export const refreshServices = async (
   const installed = new Map<ServiceId, string>();
   const rendered: ServiceSpec[] = [];
   for (const id of ids) {
-    // biome-ignore lint/performance/noAwaitInLoops: a handful of files, read in order
     const text = await Bun.file(fileOf(id))
       .text()
       .catch(() => undefined);
@@ -2663,7 +2649,6 @@ export const refreshServices = async (
     rendered.push(spec);
     const path = fileOf(id);
     if (text !== before) {
-      // biome-ignore lint/performance/noAwaitInLoops: units rewrite one at a time, each note in its order
       await writeUnit(path, text);
       rewrote.push(path);
       note(`rewrote ${path}`);
@@ -2737,7 +2722,6 @@ export const service = async (
         }
         // Asked per service and not up front, so the services asked nothing
         // are already back up by the time the daemon's question is answered.
-        // biome-ignore lint/performance/noAwaitInLoops: services restart one at a time so each one's notes print in its own order and a failure is attributable to the service that caused it.
         const fenced = await clearToRestart(spec, { whenIdle, force }, note);
         try {
           await (mac
@@ -2757,7 +2741,6 @@ export const service = async (
         if (index > 0) {
           note("");
         }
-        // biome-ignore lint/performance/noAwaitInLoops: services are checked one at a time so each one's status prints in its own order.
         await (mac ? launchAgentStatus(spec, note) : systemdStatus(spec, note));
       }
       return;

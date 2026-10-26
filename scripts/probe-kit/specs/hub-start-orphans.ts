@@ -129,7 +129,6 @@ const run = async (kit: Kit) => {
     [writer, kept.id],
     [other, orphan.id],
   ] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one panel at a time, as the person opens them
     await (
       await fetch(`${fleet.base}${at(session)}/${id}/show`, { method: "POST" })
     ).text();

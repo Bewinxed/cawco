@@ -84,7 +84,6 @@ const spec: Spec = {
     const path = `/session/${pane}`;
     const base = await fleet.dashboard();
     for (const theme of ["light", "dark"] as const) {
-      // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each its own report
       await runLeg(kit, base, {
         name: `desk ${theme}, beside its thread`,
         view: "desk",

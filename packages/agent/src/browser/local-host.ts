@@ -287,7 +287,6 @@ export class LocalHost implements BrowserHost {
       local: { pid, procStart, ...(boot ? { bootId: boot } : {}) },
     };
     const until = Date.now() + LIVE_MS;
-    // biome-ignore lint/performance/noAwaitInLoops: polling a browser that is starting.
     while (!(await answers(devtools))) {
       if (!isAlive(pid)) {
         throw new Error(
@@ -313,7 +312,6 @@ export class LocalHost implements BrowserHost {
     signalGroup(pid, "SIGTERM");
     const until = Date.now() + STOP_MS;
     while (isAlive(pid) && Date.now() < until) {
-      // biome-ignore lint/performance/noAwaitInLoops: waiting for the browser to end.
       await Bun.sleep(POLL_MS);
     }
     if (isAlive(pid)) {
@@ -352,7 +350,6 @@ export class LocalHost implements BrowserHost {
       if (moving.length === 0) {
         continue;
       }
-      // biome-ignore lint/performance/noAwaitInLoops: one browser at a time, each under its own lock.
       await withBrowser(key, async () => {
         const record = await readBrowser(key);
         if (record) {
@@ -360,7 +357,6 @@ export class LocalHost implements BrowserHost {
         }
         await mkdir(to, { recursive: true, mode: 0o700 });
         for (const file of moving) {
-          // biome-ignore lint/performance/noAwaitInLoops: two renames, in order.
           await rename(join(from, file), join(to, file));
         }
       });

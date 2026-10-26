@@ -1,4 +1,5 @@
 import { configureWords, type Deleted } from "@cawco/core";
+import { detach } from "@cawco/core/detach";
 import { toast } from "../toasts";
 import { restore } from "./unrestored.svelte";
 
@@ -33,8 +34,7 @@ export function offerUndo<T>(
       label: configureWords.undo,
       onClick: () => {
         settled();
-        // biome-ignore lint/complexity/noVoid: restore says its own refusal on the section
-        void restore(id, deleted, where, land);
+        detach(restore(id, deleted, where, land), "restore");
       },
     },
     onDismiss: settled,

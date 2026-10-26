@@ -1291,7 +1291,6 @@ export const createMoves = (deps: MovesDeps) => {
         return;
       }
       const stage = row.stage as MoveStep;
-      // biome-ignore lint/performance/noAwaitInLoops: a job's steps run one after another
       const learned = await runStep(row);
       if (db.moveRow(id)?.stage !== stage) {
         // A Cancel landed while the step ran; it stands.

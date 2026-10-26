@@ -1321,7 +1321,6 @@ const fitChecks = async (on: OnCanvas) => {
     ["phone", { width: 390, height: 844 }],
     ["desk", { width: 1280, height: 800 }],
   ] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one viewport at a time, each its own page
     const page = await on.kit.page(view);
     await page.setViewportSize(size);
     await open(
@@ -1441,7 +1440,6 @@ const themeChecks = async (on: OnCanvas, id: string) => {
     ["light", "dark"],
     ["dark", "light"],
   ] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one theme at a time, each its own page
     const page = await on.kit.page("desk", { theme: dashboard });
     await page.emulateMedia({ colorScheme: system });
     await open(
@@ -1668,7 +1666,6 @@ const penOn = async (on: OnCanvas): Promise<Pen> => {
       const last = placed.at(-1) as Pt;
       await send("mousePressed", placed[0], pointer);
       for (const point of placed.slice(1)) {
-        // biome-ignore lint/performance/noAwaitInLoops: a stroke's points, one after another
         await send("mouseMoved", point, pointer);
       }
       if (hold) {
@@ -1679,7 +1676,6 @@ const penOn = async (on: OnCanvas): Promise<Pen> => {
           [-1, 0],
           [0, 0],
         ]) {
-          // biome-ignore lint/performance/noAwaitInLoops: a hold, moment by moment
           await Bun.sleep(100);
           await send("mouseMoved", [last[0] + dx, last[1] + dy], pointer);
         }
@@ -1939,7 +1935,6 @@ const shapeTypeCheck = async (
   const got: string[] = [];
   const read: Record<string, Drawn> = {};
   for (const kind of ["ellipse", "triangle", "line", "arrow"] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one stroke at a time
     const drawn = await drawnBy(on, frame, pen, strokes[kind], at, {
       hold: true,
     });
@@ -2349,7 +2344,6 @@ const swapUnder = async (
   const samples: Awaited<ReturnType<typeof opacities>>[] = [];
   if (run) {
     for (const fraction of [0, 0.5, 1]) {
-      // biome-ignore lint/performance/noAwaitInLoops: one moment of the clock at a time
       await seekTo(frame, cdp, run, fraction * (run.source?.duration ?? 0));
       samples.push(await opacities(frame, known));
     }
@@ -2465,7 +2459,6 @@ const arrivalCheck = async (
   const samples: string[][] = [];
   for (const fraction of [0, 0.5, 1]) {
     for (const run of runs) {
-      // biome-ignore lint/performance/noAwaitInLoops: each run held at its own moment
       await seekTo(
         frame,
         cdp,
@@ -2683,7 +2676,6 @@ const penChecks = async (
     await pen("mousePressed", from[0], from[1]);
     for (let step = 1; step <= 24; step += 1) {
       const t = step / 24;
-      // biome-ignore lint/performance/noAwaitInLoops: a stroke's points, one after another
       await pen(
         "mouseMoved",
         from[0] + (to[0] - from[0]) * t,

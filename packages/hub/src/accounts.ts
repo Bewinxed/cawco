@@ -297,7 +297,6 @@ export const reconcileAccounts = async (
         store.putSignin({ accountId: account.id, machineId, state }) || changed;
     }
     if (state === "signed-in" && scope === "claude") {
-      // biome-ignore lint/performance/noAwaitInLoops: one dir's Claude Code at a time on the machine
       const read = await catalogFor(db, machineId, account, probe);
       failed = failed || !read;
     }

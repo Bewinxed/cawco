@@ -12,11 +12,11 @@
    * skeleton rows.
    */
   import { configureWords } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import { type Snippet, untrack } from "svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { reveal } from "#lib/cawco/motion/curves.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Alert from "#lib/components/ui/alert/index.js";
   import { IconWarningTriangle } from "#lib/icons.js";
   import { page } from "$app/state";
@@ -97,8 +97,7 @@
    */
   const refusedUndos = $derived(
     unrestoredOn(sectionOf(page.url.pathname), () => {
-      // biome-ignore lint/complexity/noVoid: the lists say what they read
-      void store.loadAll();
+      detach(store.loadAll(), "loadAll");
       window.dispatchEvent(new CustomEvent("cawco:config-restored"));
     })
   );

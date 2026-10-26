@@ -9,7 +9,6 @@
  * socket forwarded to the stage. The specs that read a decision page's
  * embeds (decision-embed) stand on this.
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one embed at a time, as the person scrolls to each
 import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

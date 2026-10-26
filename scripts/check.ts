@@ -370,7 +370,6 @@ const keyOf = async (paths: string[], ...more: string[]): Promise<string> => {
     hash.update(path).update("\0");
     const file = Bun.file(join(ROOT, path));
     hash.update(
-      // biome-ignore lint/performance/noAwaitInLoops: one hash, fed in order
       (await file.exists()) ? new Uint8Array(await file.arrayBuffer()) : "gone"
     );
     hash.update("\0");
@@ -640,7 +639,6 @@ for (const check of gated) {
   const inputs = check.inputs.includes("./")
     ? files
     : under(...check.inputs.filter(Boolean));
-  // biome-ignore lint/performance/noAwaitInLoops: each key is cheap, and the checks are listed in order
   const key = check.key ? await check.key() : await keyOf(inputs);
   if (await passed(check.name, key)) {
     skipped.push(check.name);

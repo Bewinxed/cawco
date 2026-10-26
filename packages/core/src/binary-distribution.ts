@@ -140,7 +140,6 @@ async function newestNightly(): Promise<GithubRelease | undefined> {
     })
     .sort((a, b) => b.count - a.count);
   for (const { tag } of tags) {
-    // biome-ignore lint/performance/noAwaitInLoops: highest count first; the first published pre-release ends the search
     const release: GithubRelease | undefined = await github(
       `the release ${tag}`,
       (octokit, request) =>

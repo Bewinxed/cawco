@@ -54,6 +54,7 @@ import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type { ListedBrowser } from "@cawco/core/browser";
 import { GATED_PAGE_MARK, GATED_PAGE_PARAM } from "@cawco/core/browser-gate";
 import type { ConnectionView } from "@cawco/core/connections";
+import { detach } from "@cawco/core/detach";
 import type { AvailableCommand } from "@cawco/core/fleet";
 import { classifyCommand } from "@cawco/core/fleet";
 import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
@@ -1922,8 +1923,10 @@ function applyFacts(
     target.machineId &&
     contextShown.has(target.instanceId)
   ) {
-    // biome-ignore lint/complexity/noVoid: fire-and-forget — the change is already on screen, this refreshes the reading
-    void refreshContext(target.instanceId, target.machineId);
+    detach(
+      refreshContext(target.instanceId, target.machineId),
+      "refreshContext"
+    );
   }
 }
 
@@ -2470,10 +2473,8 @@ async function persistSettings(
 /** Opens a session's view state — the route's half of arriving at `/session/[id]`. */
 export function openSession(instanceId: string): void {
   hydrate(session(instanceId));
-  // biome-ignore lint/complexity/noVoid: fire-and-forget — the view is already hydrated, delegate events fill in when they land
-  void loadDelegateEvents(instanceId);
-  // biome-ignore lint/complexity/noVoid: fire-and-forget — the tray fills in when the read lands
-  void loadWorkItems(instanceId);
+  detach(loadDelegateEvents(instanceId), "loadDelegateEvents");
+  detach(loadWorkItems(instanceId), "loadWorkItems");
   // Opening a view is the moment its frames become this browser's to render.
   // (The subscription effect in the route layout already names its tab; this makes
   // the direct route the only trigger the store needs to know about.)
@@ -2492,8 +2493,7 @@ function rereadDelegateEvents(): void {
   const read = [...delegatesRead];
   delegatesRead.clear();
   for (const instanceId of read) {
-    // biome-ignore lint/complexity/noVoid: fire-and-forget — the cards fill in when the read lands
-    void loadDelegateEvents(instanceId);
+    detach(loadDelegateEvents(instanceId), "loadDelegateEvents");
   }
 }
 
@@ -2532,8 +2532,7 @@ function rereadTrays(): void {
   const read = [...trayRead];
   trayRead.clear();
   for (const instanceId of read) {
-    // biome-ignore lint/complexity/noVoid: fire-and-forget — the tray fills in when the read lands
-    void loadWorkItems(instanceId);
+    detach(loadWorkItems(instanceId), "loadWorkItems");
   }
 }
 
@@ -3183,31 +3182,32 @@ function cancelFleetRead(): void {
 function readFleet(delay = 1000): void {
   cancelFleetRead();
   const chain = fleetChain;
-  // biome-ignore lint/complexity/noVoid: fire-and-forget — the socket is already marked connected, the fleet state fills in when it lands
-  void refresh().then((read) => {
-    if (chain !== fleetChain) {
-      return;
-    }
-    if (read) {
-      refreshCatalogs();
-      return;
-    }
-    if (globalThis.__cawcoSocket?.readyState !== WebSocket.OPEN) {
-      return;
-    }
-    fleetRetry = setTimeout(
-      () => readFleet(Math.min(delay * 2, 10_000)),
-      delay
-    );
-  });
+  detach(
+    refresh().then((read) => {
+      if (chain !== fleetChain) {
+        return;
+      }
+      if (read) {
+        refreshCatalogs();
+        return;
+      }
+      if (globalThis.__cawcoSocket?.readyState !== WebSocket.OPEN) {
+        return;
+      }
+      fleetRetry = setTimeout(
+        () => readFleet(Math.min(delay * 2, 10_000)),
+        delay
+      );
+    }),
+    "refresh"
+  );
 }
 
 /** Every online machine's stored sessions — the sidebar's contents on arrival. */
 function refreshCatalogs(): void {
   for (const machine of state.machines) {
     if (machine.status === "online") {
-      // biome-ignore lint/complexity/noVoid: fire-and-forget — every machine's catalog loads independently, none block the others
-      void loadCatalog(machine.machineId);
+      detach(loadCatalog(machine.machineId), "loadCatalog");
     }
   }
 }
@@ -3246,8 +3246,7 @@ function adoptMachines(incoming: Machine[]): void {
   }
   for (const machine of next) {
     if (machine.status === "online" && !wasOnline.has(machine.machineId)) {
-      // biome-ignore lint/complexity/noVoid: fire-and-forget — the catalog lands in the store the board reads
-      void loadCatalog(machine.machineId);
+      detach(loadCatalog(machine.machineId), "loadCatalog");
     }
   }
 }
@@ -3268,8 +3267,7 @@ function readBehind(machineId: string): void {
       fault?.reason === "offline" &&
       fault.machineId === machineId
     ) {
-      // biome-ignore lint/complexity/noVoid: fire-and-forget — the read adopts the page and resumes the stream when it lands
-      void readTranscript(id, "machineOnline");
+      detach(readTranscript(id, "machineOnline"), "readTranscript");
     }
   }
 }
@@ -3920,8 +3918,7 @@ const streamHost: StreamHost = {
   follows: (sessionId) => watchedIds().includes(sessionId),
   // The newest page again, which resumes the stream from the `seq` it carries.
   rereadHistory: (sessionId, cause) => {
-    // biome-ignore lint/complexity/noVoid: fire-and-forget — the read adopts the page and resumes the stream when it lands
-    void readTranscript(sessionId, cause);
+    detach(readTranscript(sessionId, cause), "readTranscript");
   },
   sendToHub: (message) => {
     const socket = globalThis.__cawcoSocket;
@@ -5275,8 +5272,7 @@ function streamEffectsFor<K extends CommandKind>(
           if (stage === "failed") {
             target.model = previous;
           } else {
-            // biome-ignore lint/complexity/noVoid: fire-and-forget — the local state already switched, this just persists it
-            void persistSettings(instanceId, { model });
+            detach(persistSettings(instanceId, { model }), "persistSettings");
           }
         },
       };
@@ -5292,8 +5288,10 @@ function streamEffectsFor<K extends CommandKind>(
           if (stage === "failed") {
             target.permissionMode = previous;
           } else {
-            // biome-ignore lint/complexity/noVoid: fire-and-forget — the local state already switched, this just persists it
-            void persistSettings(instanceId, { permissionMode: mode });
+            detach(
+              persistSettings(instanceId, { permissionMode: mode }),
+              "persistSettings"
+            );
           }
         },
       };
@@ -5449,8 +5447,7 @@ function followHeld(ids: string[], cause: "follow" | "reconnect"): void {
       held?.behind
     );
     if (holds && (cause === "reconnect" || !following(streamState, id))) {
-      // biome-ignore lint/complexity/noVoid: fire-and-forget — the read adopts the page and subscribes the stream when it lands
-      void readTranscript(id, cause, fresh);
+      detach(readTranscript(id, cause, fresh), "readTranscript");
     }
   }
 }
@@ -5675,8 +5672,7 @@ function hubReached(): void {
   state.restart = null;
   globalThis.__cawcoReconnectAttempts = 0;
   readFleet();
-  // biome-ignore lint/complexity/noVoid: fire-and-forget — the band and Add machine's window draw what lands
-  void readInstalls();
+  detach(readInstalls(), "readInstalls");
   rereadFollowed();
   if (connections > 1) {
     rereadTrays();
@@ -5685,10 +5681,8 @@ function hubReached(): void {
   lastPlanFollowKey = "";
   syncPlanFollows();
   resumePendingSends(streamState, streamHost);
-  // biome-ignore lint/complexity/noVoid: fire-and-forget — the update notice says it when the served build is newer
-  void checkServedBuild();
-  // biome-ignore lint/complexity/noVoid: fire-and-forget — the settings page and the notice read the policy once it lands
-  void updates.loadPolicy();
+  detach(checkServedBuild(), "checkServedBuild");
+  detach(updates.loadPolicy(), "loadPolicy");
 }
 
 /**
@@ -5714,10 +5708,12 @@ function olderThanHub(message: unknown): boolean {
     return false;
   }
   state.older ??= "reloading";
-  // biome-ignore lint/complexity/noVoid: fire-and-forget — a reload ends this page, and one that is held says what holds it
-  void reloadWhenIdle((hold) => {
-    state.older = hold;
-  });
+  detach(
+    reloadWhenIdle((hold) => {
+      state.older = hold;
+    }),
+    "reloadWhenIdle"
+  );
   return true;
 }
 
@@ -6308,8 +6304,7 @@ export async function spawnSession({
     }
   }
   sendFirstPrompt(started.value.instanceId, machineId, prompt, extras);
-  // biome-ignore lint/complexity/noVoid: fire-and-forget — the session already started locally, this just resyncs the fleet list
-  void refresh();
+  detach(refresh(), "refresh");
   return { kind: "answered", value: started.value.instanceId };
 }
 
@@ -6413,8 +6408,7 @@ export async function forkSession({
       return started;
     case "answered":
       sendFirstPrompt(started.value.instanceId, machineId, prompt, extras);
-      // biome-ignore lint/complexity/noVoid: fire-and-forget — the session already started locally, this just resyncs the fleet list
-      void refresh();
+      detach(refresh(), "refresh");
       return { kind: "answered", value: started.value.instanceId };
     default: {
       const unhandled: never = started;
@@ -6540,8 +6534,7 @@ export async function stopSession(
       }
     }
   } finally {
-    // biome-ignore lint/complexity/noVoid: fire-and-forget — the fleet list re-reads on its own
-    void refresh();
+    detach(refresh(), "refresh");
   }
 }
 
@@ -8253,7 +8246,6 @@ async function readBackToMeet(
     cursor !== null &&
     !read.some((block) => heldIds.has(block.id))
   ) {
-    // biome-ignore lint/performance/noAwaitInLoops: each page starts where the last one ended
     const previous = await olderPage(target.instanceId, cursor, cancel);
     if (!("blocks" in previous)) {
       return { blocks: read, branches, cursor, older: previous };
@@ -8339,8 +8331,7 @@ function readAtDeadline(viewId: string, deadline: number): void {
           fault.reconnectingUntil === deadline &&
           subscriptionIds().includes(viewId)
         ) {
-          // biome-ignore lint/complexity/noVoid: fire-and-forget — the read adopts the page, or the machine is still away
-          void readTranscript(viewId, "deadline");
+          detach(readTranscript(viewId, "deadline"), "readTranscript");
         }
       },
       Math.max(0, deadline - Date.now())
@@ -8369,8 +8360,7 @@ function readAgainLater(viewId: string): void {
       (held.behind ?? held.readFault) &&
       subscriptionIds().includes(viewId)
     ) {
-      // biome-ignore lint/complexity/noVoid: fire-and-forget — the read adopts the page and resumes the stream when it lands
-      void readTranscript(viewId, "backoff");
+      detach(readTranscript(viewId, "backoff"), "readTranscript");
     }
   }, wait);
   failedReads.set(viewId, failed);
@@ -8954,8 +8944,7 @@ export async function relaunchSession(
     throw error;
   } finally {
     target.relaunching = false;
-    // biome-ignore lint/complexity/noVoid: fire-and-forget — the relaunch already landed, this just resyncs the fleet list
-    void refresh();
+    detach(refresh(), "refresh");
   }
 }
 
@@ -8998,7 +8987,6 @@ async function rewindPointBehind(
   let point = rewindPoint(target, id);
   while (!point && target.cursor && !target.loading) {
     const { cursor } = target;
-    // biome-ignore lint/performance/noAwaitInLoops: each page starts where the last one ended
     await readOlderPage(target.instanceId);
     point = rewindPoint(target, id);
     // The cursor did not move: the page failed, or its answer was dropped.
@@ -9177,8 +9165,7 @@ export async function editAndResend(
     }
   } finally {
     target.relaunching = false;
-    // biome-ignore lint/complexity/noVoid: fire-and-forget — the relaunch already landed, this just resyncs the fleet list
-    void refresh();
+    detach(refresh(), "refresh");
   }
 }
 

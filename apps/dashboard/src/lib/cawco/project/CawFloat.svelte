@@ -27,7 +27,6 @@
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import { appearOnMount } from "../motion/curves.svelte";
   import { stopWork } from "../stop-work.svelte";

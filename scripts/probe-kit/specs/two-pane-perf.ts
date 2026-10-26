@@ -58,7 +58,6 @@
  * The weighting is the host's systemd's, run from its own shell; a
  * workspace's commands cannot reach it.
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one phase, one tab, one key at a time, as a person makes them
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Locator, Page } from "playwright-core";

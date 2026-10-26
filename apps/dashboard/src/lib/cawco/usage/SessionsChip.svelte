@@ -28,7 +28,6 @@
    * goes to the first session and the house ring shows.
    */
   import { MediaQuery } from "svelte/reactivity";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { cawco, type InstanceRow } from "../client.svelte";
   import { instanceTitle, projectOfRow } from "../home/home-state.svelte";

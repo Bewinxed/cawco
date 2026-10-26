@@ -75,7 +75,6 @@ const spec: Spec = {
       const damaged: string[] = [];
       for (let run = 0; run < RUNS; run += 1) {
         const dir = join(root, `atomic-${run}`);
-        // biome-ignore lint/performance/noAwaitInLoops: one killed writer at a time
         const left = await killedOnce(dir, "atomic");
         if (left) {
           damaged.push(`run ${run}: ${left}`);
@@ -94,7 +93,6 @@ const spec: Spec = {
       );
       const control: string[] = [];
       for (let run = 0; run < RUNS; run += 1) {
-        // biome-ignore lint/performance/noAwaitInLoops: one killed writer at a time
         const left = await killedOnce(join(root, `plain-${run}`), "plain");
         if (left) {
           control.push(left);

@@ -39,7 +39,6 @@ export async function runJourneys(rest: string[]): Promise<number> {
   const run = new Run();
   try {
     for (const name of chosen) {
-      // biome-ignore lint/performance/noAwaitInLoops: one journey at a time, each with the machine to itself
       const journey = (await import(join(import.meta.dir, `${name}.ts`)))
         .default as Journey;
       console.log(`… ${journey.name}: ${journey.flow}`);

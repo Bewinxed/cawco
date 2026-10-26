@@ -727,7 +727,6 @@ const probe = async (kit: Kit) => {
     ["chromium", "narrowDesk"],
     ["webkit", "narrowDesk"],
   ] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one engine and screen at a time
     await leg(
       kit,
       url,
@@ -737,7 +736,6 @@ const probe = async (kit: Kit) => {
     );
   }
   for (const engine of ["chromium", "webkit"] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one engine at a time
     await coldLoad(kit, url, engine);
   }
 };

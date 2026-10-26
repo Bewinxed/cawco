@@ -17,6 +17,7 @@
     findSecretWords,
     type OwnerDevice,
   } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import { onMount } from "svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SwitchField from "#lib/cawco/config/SwitchField.svelte";
@@ -158,10 +159,8 @@
   };
 
   onMount(() => {
-    // biome-ignore lint/complexity/noVoid: the read reports its own outcome in page state
-    void read();
-    // biome-ignore lint/complexity/noVoid: the read reports its own outcome in page state
-    void readFind();
+    detach(read(), "read");
+    detach(readFind(), "readFind");
   });
 </script>
 

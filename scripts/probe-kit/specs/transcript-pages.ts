@@ -77,7 +77,6 @@ const pidsOf = async (fleet: KitFleet, entry: string): Promise<number[]> => {
       continue;
     }
     try {
-      // biome-ignore lint/performance/noAwaitInLoops: one process at a time
       const command = await readFile(`/proc/${name}/cmdline`, "utf8");
       const environ = await readFile(`/proc/${name}/environ`, "utf8");
       if (
@@ -114,7 +113,6 @@ const watched = async <T>(
   const sampling = (async () => {
     while (!sampler.signal.aborted) {
       const asked = performance.now();
-      // biome-ignore lint/performance/noAwaitInLoops: one look at a time
       await fetch(`${fleet.base}/health`).catch(() => undefined);
       health = Math.max(health, performance.now() - asked);
       agentPeak = Math.max(agentPeak, await rssOf(agent));
@@ -170,7 +168,6 @@ const openCodeWindows = async (kit: Kit, fleet: KitFleet): Promise<void> => {
       : [];
   };
   for (let turn = 1; turn <= OC_TURNS; turn += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: one turn after another
     await fleet.send(instanceId, `Paged turn ${turn}`);
     await until(
       `OpenCode turn ${turn} stored`,
@@ -192,7 +189,6 @@ const openCodeWindows = async (kit: Kit, fleet: KitFleet): Promise<void> => {
   const key = keyOf() as string;
   let all = await whole();
   for (let settled = 0; settled < 10; settled += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: each read is compared with the one before it
     const again = await delay(500).then(whole);
     if (JSON.stringify(again) === JSON.stringify(all)) {
       break;
@@ -208,7 +204,6 @@ const openCodeWindows = async (kit: Kit, fleet: KitFleet): Promise<void> => {
     await window({ end: "newest", limit: OC_WINDOW }),
   ];
   for (let older = back[0]?.older ?? null; older !== null;) {
-    // biome-ignore lint/performance/noAwaitInLoops: each window names the one before it
     const one = await window({ before: older, limit: OC_WINDOW });
     back.push(one);
     ({ older } = one);
@@ -217,7 +212,6 @@ const openCodeWindows = async (kit: Kit, fleet: KitFleet): Promise<void> => {
     await window({ start: null, limit: OC_WINDOW }),
   ];
   for (let newer = on[0]?.newer ?? null; newer !== null;) {
-    // biome-ignore lint/performance/noAwaitInLoops: each window names the next
     const one = await window({ start: newer, limit: OC_WINDOW });
     on.push(one);
     ({ newer } = one);
@@ -356,7 +350,6 @@ export default {
     );
     for (let at = 0; at < PAGES && before !== null; at += 1) {
       const cursor: string = before;
-      // biome-ignore lint/performance/noAwaitInLoops: each page names the next
       const older = await watched(fleet, agent, hub, () => pageOf(cursor));
       note(`b: page ${at + 2}: ${said(older)}`);
       times.push(older.ms);

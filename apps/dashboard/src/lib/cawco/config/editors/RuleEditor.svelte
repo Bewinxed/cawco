@@ -14,6 +14,7 @@
     ruleSentence,
     rulesWords,
   } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import { onMount, untrack } from "svelte";
   import {
     appear,
@@ -234,8 +235,7 @@
   /** Cancel leaves the edits behind: the draft is dropped, not kept. */
   function cancel() {
     kept.drop();
-    // biome-ignore lint/complexity/noVoid: navigation reports nothing to wait for
-    void goto("/config/rules");
+    detach(goto("/config/rules"), "goto");
   }
 
   /**

@@ -30,7 +30,6 @@
  *
  *   bun scripts/probe-kit/run.ts upstream-any-host
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one step at a time.
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { UPSTREAM_POST_TOOL } from "../../../packages/core/src/upstream-post";

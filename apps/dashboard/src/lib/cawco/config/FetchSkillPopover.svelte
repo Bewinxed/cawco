@@ -58,6 +58,7 @@
     userLayerLabel,
     skillsWords as words,
   } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import { onMount } from "svelte";
   import Coded from "#lib/cawco/Coded.svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
@@ -66,7 +67,6 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { IconPlus } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
@@ -225,8 +225,7 @@
 
   function choose(choice: string) {
     held.typed = pickSkill(source, choice);
-    // biome-ignore lint/complexity/noVoid: fetchIt tracks its own state
-    void fetchIt(held.typed);
+    detach(fetchIt(held.typed), "fetchIt");
   }
 
   /**
@@ -266,8 +265,7 @@
       onsubmit={(event) => {
         event.preventDefault();
         if (ready && !busy) {
-          // biome-ignore lint/complexity/noVoid: fetchIt tracks its own state
-          void fetchIt(source);
+          detach(fetchIt(source), "fetchIt");
         }
       }}
     >

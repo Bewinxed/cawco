@@ -29,7 +29,6 @@
  *     `PAGE_SHAPE_PATH`): the page served again carries it in its media,
  *     at the frames' own height, so the next Preview's skeleton stands at it.
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one step at a time, as a person takes them
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Frame, Page } from "playwright-core";

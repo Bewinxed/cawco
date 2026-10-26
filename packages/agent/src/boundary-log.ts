@@ -77,7 +77,6 @@ for await (const chunk of response.body) {
     if (kind === LOG_FRAME.exit) {
       process.exit(Number.parseInt(decoder.decode(data), 10));
     }
-    // biome-ignore lint/performance/noAwaitInLoops: output keeps its order, and a slow reader slows the log
     await write(
       kind === LOG_FRAME.stderr ? process.stderr : process.stdout,
       data

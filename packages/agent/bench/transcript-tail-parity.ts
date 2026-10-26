@@ -38,7 +38,6 @@ const failures: string[] = [];
 
 for (const f of files) {
   let t0 = performance.now();
-  // biome-ignore lint/performance/noAwaitInLoops: sequential on purpose — per-file timing would be meaningless with concurrent reads
   const full = await readSessionChain(f);
   fullMsTotal += performance.now() - t0;
   if (full.length === 0) {
@@ -96,7 +95,6 @@ try {
   statSync(divergent);
   const full = await readSessionChain(divergent);
   for (const count of [100, 160, 229, 230, 250, 400]) {
-    // biome-ignore lint/performance/noAwaitInLoops: adversarial counts probed one at a time, in order
     const tail = (await readSessionEnd(divergent, count)).messages;
     const exact =
       full.slice(-tail.length).map(key).join() === tail.map(key).join();

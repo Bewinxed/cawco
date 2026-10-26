@@ -366,7 +366,6 @@ export function safariBridge(
             `no page's agent asked within ${ms}ms (heard: ${[...agents.values()].map((a) => a.href).join(", ") || "none"})`
           );
         }
-        // biome-ignore lint/performance/noAwaitInLoops: one look after the last
         await Bun.sleep(200);
       }
     },
@@ -395,7 +394,6 @@ export async function answering<T>(
   const watch = (async () => {
     while (going) {
       const started = performance.now();
-      // biome-ignore lint/performance/noAwaitInLoops: one question at a time, timed
       const ok = await page
         .run(() => 1, [], ms)
         .then(

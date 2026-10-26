@@ -18,6 +18,7 @@
   import { browserWords, commonWords, shellWords } from "@cawco/core";
   import type { ListedBrowser } from "@cawco/core/browser";
   import { untrack } from "svelte";
+  import { track } from "#lib/cawco/track.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -101,8 +102,7 @@
   // The stream, while the browser is live: neko's on the container host,
   // the local browser's frames on the local host.
   $effect(() => {
-    // biome-ignore lint/complexity/noVoid: read-only dependency — each press opens it again
-    void again;
+    track(again);
     const kind = host;
     const media = kind === "container" ? video : canvas;
     if (!(live && kind && media)) {

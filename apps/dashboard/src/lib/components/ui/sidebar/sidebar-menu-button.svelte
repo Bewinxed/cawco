@@ -47,7 +47,6 @@
   import { mergeProps } from "bits-ui";
   import type { ComponentProps, Snippet } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import {
     cn,

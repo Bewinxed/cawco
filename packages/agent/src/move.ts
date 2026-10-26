@@ -1493,7 +1493,6 @@ const checkOut = async (
         `refs/heads/${snapshot.sourceBranch}`,
       ],
     ]) {
-      // biome-ignore lint/performance/noAwaitInLoops: two config keys
       await must(
         run,
         clone,
@@ -1796,7 +1795,6 @@ const lfsStep = (request: MoveLfsRequest): Promise<MoveLfsResult> =>
         { ...plainEnv(), GIT_LFS_SKIP_SMUDGE: "1" }
       );
       for (const object of snapshot.hubLfs ?? []) {
-        // biome-ignore lint/performance/noAwaitInLoops: one download after another, each resumable on its own
         await fromHubLfs(
           run,
           path,

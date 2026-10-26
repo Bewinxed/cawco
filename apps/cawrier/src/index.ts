@@ -29,7 +29,6 @@ import {
   verifyPurchase,
 } from "./storekit";
 
-// biome-ignore lint/performance/noBarrelFile: Workers find a Durable Object class among the entry module's exports.
 export { Pairing } from "./pairing";
 export { Seats } from "./seats";
 

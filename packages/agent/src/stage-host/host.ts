@@ -587,7 +587,6 @@ async function drawnFrom(abs: string, text: string): Promise<string[]> {
     for (const one of fresh) {
       files.add(one);
     }
-    // biome-ignore lint/performance/noAwaitInLoops: one level of imports at a time, each level's files read at once
     level = (await Promise.all(fresh.map(sourceImports))).flat();
   }
   return [...files].sort();
@@ -1057,7 +1056,6 @@ async function reportOf(files: string[]): Promise<RenderReport> {
         .filter((one) => !one.label)
         .map((one) => `${file}:${one.name}`)
     );
-    // biome-ignore lint/performance/noAwaitInLoops: each states file hashed in turn, a canvas's few
     const hash = await contentHash(file);
     const kept = reports.get(file);
     if (kept && (!newest || kept.at > newest.at)) {
@@ -1635,7 +1633,6 @@ async function closureOf(
     }
     // One level of imports at a time, each level's modules at once.
     const next = Promise.all(fresh.map((url) => staticImportsOf(dev, url)));
-    // biome-ignore lint/performance/noAwaitInLoops: the next level is known only once this one is read
     level = (await next).flat();
   }
   // A section's module is a dynamic import of an address the runtime builds, which Vite asks for with `?import` first.
@@ -1666,7 +1663,6 @@ async function settledClosureOf(
   let urls: string[] = [];
   for (let round = 0; round < DEPENDENCY_ROUNDS; round += 1) {
     const build = optimizer()?.metadata.browserHash;
-    // biome-ignore lint/performance/noAwaitInLoops: each walk reads the build the one before it waited on
     urls = await closureOf(dev, files, embed);
     const building = Object.values(optimizer()?.metadata.discovered ?? {})
       .map((one) => one.processing)

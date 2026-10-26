@@ -884,7 +884,6 @@ export const createTrackers = (deps: TrackersDeps) => {
     );
     for (const comment of due) {
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: comments go in the order they were written
         const posted = await sync.adapter.comment(
           { key: link.issueKey, ref: link.ref },
           comment.author.name,
@@ -1037,7 +1036,6 @@ export const createTrackers = (deps: TrackersDeps) => {
     for (const comment of listed.items) {
       const link = db.trackers.linkByIssue(sync.projectId, comment.issueKey);
       if (link) {
-        // biome-ignore lint/performance/noAwaitInLoops: comments land in the order they were written
         await carryInOne(sync, comment, link);
       }
     }
@@ -1432,7 +1430,6 @@ export const createTrackers = (deps: TrackersDeps) => {
           statusMoved ||
           task.updatedAt > (link.syncedAt?.getTime() ?? 0) - CLOCK_MARGIN_MS);
       if (task && !link.issueKey.startsWith(PENDING) && (issue || touched)) {
-        // biome-ignore lint/performance/noAwaitInLoops: one task's sync at a time, inside one rate limit
         await reconcile(sync, link, issue);
       }
     }
@@ -1449,7 +1446,6 @@ export const createTrackers = (deps: TrackersDeps) => {
         issue.createdAt >= bound &&
         !db.trackers.linkByIssue(sync.projectId, issue.key)
       ) {
-        // biome-ignore lint/performance/noAwaitInLoops: tasks are numbered in the order their issues came
         await fileTask(sync, issue);
       }
     }
@@ -1467,7 +1463,6 @@ export const createTrackers = (deps: TrackersDeps) => {
         task.createdAt >= bound &&
         (!link || link.issueKey.startsWith(PENDING))
       ) {
-        // biome-ignore lint/performance/noAwaitInLoops: issues are made in the order their tasks came
         await fileOrRelink(sync, task.id);
       }
     }

@@ -302,7 +302,6 @@ const withSources = async (
       continue;
     }
     try {
-      // biome-ignore lint/performance/noAwaitInLoops: one file after another, each a read on its machine
       const bytes = await store.source(file.from ?? "");
       out.push({
         path: file.path,
@@ -669,7 +668,6 @@ const writeTemporary = async (
     const chunk = text.slice(part * CHUNK, (part + 1) * CHUNK);
     const head =
       part === 0 ? `mkdir -p ${quote(posix.dirname(target))} && ` : "";
-    // biome-ignore lint/performance/noAwaitInLoops: one chunk after another, in order
     const result = await sh(
       `${head}printf %s '${chunk}' | base64 -d ${part === 0 ? ">" : ">>"} ${quote(`${target}.cawco-${index}`)}`
     );
@@ -766,7 +764,6 @@ const repositoryStore = (
       // 8 MiB (hub-command.ts), and a system's assets together pass it.
       const found = new Map<string, Uint8Array | null>();
       for (const path of paths) {
-        // biome-ignore lint/performance/noAwaitInLoops: one file after another
         const result = await sh(
           `p=${quote(`${DESIGN_DIR}/${path}`)}; if [ -f "$p" ]; then echo F; base64 < "$p" | tr -d '\\n'; fi`
         );
@@ -801,7 +798,6 @@ const repositoryStore = (
     write: async (files) => {
       // Each file to a temporary name first, then all moved into place.
       for (const [index, file] of files.entries()) {
-        // biome-ignore lint/performance/noAwaitInLoops: one file after another
         await writeTemporary(sh, file, index);
       }
       const moved = await sh(

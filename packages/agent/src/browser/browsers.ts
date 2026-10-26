@@ -618,7 +618,6 @@ const reserved = async (key: BrowserKey): Promise<BrowserRecord> => {
   const until = Date.now() + RESERVE_MS;
   try {
     while (!tryLock(fd)) {
-      // biome-ignore lint/performance/noAwaitInLoops: waiting for the holder to write the record.
       await Bun.sleep(RESERVE_POLL_MS);
       const made = await readBrowser(key);
       if (made) {
@@ -725,7 +724,6 @@ const readBack = async (): Promise<void> => {
     if (starting.has(record.key)) {
       continue;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: one record at a time, each under its own lock.
     await withBrowser(record.key, async () => {
       const now = await readBrowser(record.key);
       if (
@@ -772,7 +770,6 @@ const idleDown = async (): Promise<void> => {
       console.info(
         `[browser] ${record.key} ${idle ? "idle for 30 minutes" : "relay credential near its end"}: stopping`
       );
-      // biome-ignore lint/performance/noAwaitInLoops: one browser at a time.
       await stopBrowser(record.key).catch((error: unknown) =>
         console.warn(`[browser] ${record.key} did not stop: ${why(error)}`)
       );
@@ -792,7 +789,6 @@ const backFromAway = async (records: BrowserRecord[]): Promise<void> => {
     console.info(
       `[browser] ${record.key}: its container runtime answers again; starting it`
     );
-    // biome-ignore lint/performance/noAwaitInLoops: one browser at a time, each under its own lock.
     await wakeBrowser(record.key).catch((error: unknown) =>
       console.warn(`[browser] ${record.key} did not start again: ${why(error)}`)
     );
@@ -981,7 +977,6 @@ const moveLocals = async (
     ) {
       continue;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: one browser at a time, each under its own lock.
     await moveIntoContainer(record.key, answering);
   }
 };

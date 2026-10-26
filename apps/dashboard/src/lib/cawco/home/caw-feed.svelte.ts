@@ -8,6 +8,7 @@ import type {
   DamagedHubRecord,
   RebalanceNotice,
 } from "@cawco/core";
+import { detach } from "@cawco/core/detach";
 import type { MovedLogin } from "../accounts/model.svelte";
 import { notices } from "../notices.svelte";
 import type { Notice } from "../updates/model";
@@ -63,8 +64,7 @@ export const liveFeed: CawFeed = {
   },
   resetNotices: () => notices.reset(),
   acknowledge(ids) {
-    // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
-    void notices.acknowledge(ids);
+    detach(notices.acknowledge(ids), "acknowledge");
   },
   dismissUpdate,
   actOnUpdate,

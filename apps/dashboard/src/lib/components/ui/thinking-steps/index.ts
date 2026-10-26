@@ -1,4 +1,3 @@
-// biome-ignore-all lint/performance/noBarrelFile: public entry point follows the UI component convention.
 export type { StepInk, StepStatus } from "./thinking-step.svelte";
 export { default as ThinkingStep } from "./thinking-step.svelte";
 export { default as ThinkingStepDetails } from "./thinking-step-details.svelte";

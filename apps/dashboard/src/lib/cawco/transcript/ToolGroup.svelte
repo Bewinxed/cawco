@@ -45,7 +45,6 @@
     whileIdle,
   } from "#lib/components/ui/button/pending-content.svelte";
   import CollapsibleLazy from "#lib/components/ui/collapsible/collapsible-lazy.svelte";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import {
     IconAgent,

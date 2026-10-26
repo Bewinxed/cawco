@@ -232,7 +232,6 @@ export async function backfillUsage(db: DbShape): Promise<void> {
     (path) => existsSync(path) && statSync(path).mtimeMs >= since
   );
   for (const path of recent) {
-    // biome-ignore lint/performance/noAwaitInLoops: one file at a time keeps memory flat on a month of transcripts
     await scanTranscript(path, since, found);
   }
   for (const command of found.commands) {

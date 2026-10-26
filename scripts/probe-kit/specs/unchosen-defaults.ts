@@ -848,7 +848,6 @@ const run = async (kit: Kit) => {
   await fromProject(kit, fleet, base);
   await tabs(kit, fleet, base);
   for (const role of ["agent", "hub", "sessiond"] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: the fleet stops in order, its agent first
     await fleet.stop(role);
   }
   await claudeModels(kit);

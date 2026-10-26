@@ -9,6 +9,7 @@
 </script>
 
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
   import type { HarnessKind, PermissionMode } from "@cawco/core/harness";
   import { commonWords } from "@cawco/core/words/common";
   import { transcriptWords } from "@cawco/core/words/transcript";
@@ -309,8 +310,7 @@
       cancelEditing();
     } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
-      // biome-ignore lint/complexity/noVoid: the row owns pending and failure state
-      void submitEdit();
+      detach(submitEdit(), "submitEdit");
     }
   }
   const hidden = $derived(
@@ -513,16 +513,18 @@
     const held = plain.parentElement;
     const pressed = event.type === "click";
     stripBuilt = true;
-    // biome-ignore lint/complexity/noVoid: fire-and-forget: the strip is built in the flush this awaits
-    void tick().then(() => {
-      const real = held?.querySelector<HTMLElement>(
-        `[aria-label="${CSS.escape(label)}"]`
-      );
-      real?.focus();
-      if (pressed) {
-        real?.click();
-      }
-    });
+    detach(
+      tick().then(() => {
+        const real = held?.querySelector<HTMLElement>(
+          `[aria-label="${CSS.escape(label)}"]`
+        );
+        real?.focus();
+        if (pressed) {
+          real?.click();
+        }
+      }),
+      "tick"
+    );
   }
   function stripFocus(event: FocusEvent): void {
     stripFocused =
@@ -564,13 +566,15 @@
       // The send again is a new row, drawn once the hub takes it, as this
       // one folds away: these words fly into it, under the id it goes out
       // under, known once it has gone.
-      // biome-ignore lint/complexity/noVoid: fire-and-forget — the retry's own record and this row's leaving are the outcome
-      void retryFailed(message).then(() => {
-        const out = retryOf(id)?.commandId;
-        if (out && words) {
-          departBox(`sent:${out}`, words, false);
-        }
-      });
+      detach(
+        retryFailed(message).then(() => {
+          const out = retryOf(id)?.commandId;
+          if (out && words) {
+            departBox(`sent:${out}`, words, false);
+          }
+        }),
+        "retryFailed"
+      );
     }
   }
   /**
@@ -586,8 +590,7 @@
       return;
     }
     sendAfterMove = accountId;
-    // biome-ignore lint/complexity/noVoid: the move's own state (movingTo) and its toast are the outcome
-    void moveTo(target, accountId);
+    detach(moveTo(target, accountId), "moveTo");
   }
   $effect(() => {
     const asked = sendAfterMove;

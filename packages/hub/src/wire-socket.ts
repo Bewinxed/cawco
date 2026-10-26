@@ -124,7 +124,6 @@ export const caughtUp = async (socketId: string): Promise<void> => {
     if (seen === undefined) {
       return;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: one quiet turn after another, until the socket hands over nothing more
     await Bun.sleep(QUIET_MS);
     if (lines.get(socketId)?.received === seen || Date.now() >= until) {
       break;

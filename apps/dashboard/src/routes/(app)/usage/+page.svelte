@@ -26,9 +26,7 @@
     Tabs,
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Select from "#lib/components/ui/select/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import { IconDownload, IconRefresh } from "#lib/icons.js";
   import { goto } from "$app/navigation";

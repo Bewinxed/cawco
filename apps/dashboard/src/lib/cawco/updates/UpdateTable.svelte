@@ -6,7 +6,6 @@
    */
   import { machineLabel } from "@cawco/core";
   import type { BinaryUpdatePolicy } from "@cawco/core/binary-updates";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Table from "#lib/components/ui/table/index.js";
   import { IconCheck } from "#lib/icons.js";
   import NoMachines from "../config/NoMachines.svelte";

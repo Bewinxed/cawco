@@ -1326,7 +1326,6 @@ async function endGroup(group: Proc | undefined): Promise<void> {
   await signalGroupOf(group, "SIGTERM");
   const deadline = performance.now() + STOP_GRACE_MS;
   while (performance.now() < deadline) {
-    // biome-ignore lint/performance/noAwaitInLoops: one look at the group per 250 ms until it ends or its grace does
     if (await groupEnded(group)) {
       return;
     }
@@ -1692,7 +1691,6 @@ const keepEvidence = async (
  */
 const acquire = async (): Promise<boolean> => {
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: each claim reads the line again after a lost race
     const seen = await generations();
     const top = seen.at(-1) ?? 0;
     const holder = top ? await readHolder(join(locks, String(top))) : undefined;
@@ -1926,7 +1924,6 @@ const build = async (current: Request): Promise<void> => {
 // before it succeeded or failed. Each is finished once, either way.
 try {
   let failure: unknown;
-  // biome-ignore lint/performance/noAwaitInLoops: one release run builds the queue's requests in turn; the lock is what keeps two runs from building at once
   for (let current = await pending(); current; current = await pending()) {
     if (current.id !== request.id) {
       console.log(`Building queued ${current.commit}`);

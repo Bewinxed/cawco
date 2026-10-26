@@ -45,7 +45,6 @@
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   import Skeleton from "#lib/components/ui/skeleton/skeleton.svelte";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Tabs from "#lib/components/ui/tabs/index.js";
   import {
     IconChevronDown,

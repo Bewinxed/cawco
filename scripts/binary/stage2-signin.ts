@@ -62,7 +62,6 @@ while (!existsSync(stop)) {
   if (next < Date.now()) {
     next = Date.now() + EVERY_MS;
   }
-  // biome-ignore lint/performance/noAwaitInLoops: the clock between asks, not the asks
   await Bun.sleep(next - Date.now());
 }
 await Promise.all(pending);

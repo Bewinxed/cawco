@@ -8,7 +8,6 @@
    */
   import { buttonVariants } from "#lib/components/ui/button/index.js";
   import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { cn } from "#lib/utils.js";
 

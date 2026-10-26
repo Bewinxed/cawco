@@ -681,7 +681,6 @@ try {
       "Office: the room.\n\n- KNOWLEDGE-UNRELATED: the plants are watered on Mondays. (since 2026-10-01, from n-20261001-090000-bbbbbb)\n",
     ],
   ]) {
-    // biome-ignore lint/performance/noAwaitInLoops: two files, in order
     const put = await http("PUT", `/api/projects/${projectId}/folder/file`, {
       path,
       content,

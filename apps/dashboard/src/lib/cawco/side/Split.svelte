@@ -24,7 +24,6 @@
   import type { Snippet } from "svelte";
   import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Resizable from "#lib/components/ui/resizable/index.js";
   import { frameSize } from "../frame-observer";
   import { dur, easeOut, motionOk } from "../motion/curves.svelte";

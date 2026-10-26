@@ -39,6 +39,7 @@
     viewOfBlock,
     viewsWords,
   } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
@@ -125,6 +126,7 @@
     pickTask,
     selection,
   } from "#lib/cawco/tasks/task-select.svelte.js";
+  import { track } from "#lib/cawco/track.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
@@ -149,10 +151,8 @@
     AlertDescription,
   } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
@@ -545,8 +545,7 @@
    * panel reopened over the page stays.
    */
   $effect(() => {
-    // biome-ignore lint/complexity/noVoid: read so each page opened runs the effect
-    void openPage;
+    track(openPage);
     untrack(() => {
       if (lead.open && sheetCovers()) {
         lead.open = false;
@@ -763,13 +762,10 @@
     } else {
       stagesProblem = message(readStagesNow.reason);
     }
-    // biome-ignore lint/complexity/noVoid: the re-read sets its own state
-    void readDated();
-    // biome-ignore lint/complexity/noVoid: the re-read sets its own state
-    void readArchived();
+    detach(readDated(), "readDated");
+    detach(readArchived(), "readArchived");
     // What the words find moves with the tasks (a description changed).
-    // biome-ignore lint/complexity/noVoid: the re-read sets its own state
-    void find.again();
+    detach(find.again(), "again");
   }
 
   /** A task the hub just wrote, put into the list until the list is read again. */
@@ -831,8 +827,7 @@
 
   function changed(task: TaskView) {
     patch(task);
-    // biome-ignore lint/complexity/noVoid: the re-read sets its own state
-    void refresh();
+    detach(refresh(), "refresh");
   }
 
   /** The card for `id` takes off from where it is drawn, to land in its new column. */
@@ -869,8 +864,7 @@
     } finally {
       const { [id]: _, ...rest } = moving;
       moving = rest;
-      // biome-ignore lint/complexity/noVoid: the re-read sets its own state
-      void refresh();
+      detach(refresh(), "refresh");
     }
   }
 
@@ -906,8 +900,7 @@
    */
   function applied(next: StagesView) {
     stages = next;
-    // biome-ignore lint/complexity/noVoid: the re-read sets its own state
-    void refresh();
+    detach(refresh(), "refresh");
   }
 
   async function create(title: string, stage: string) {
@@ -957,7 +950,6 @@
     bulkRun = { verb, done: before, total, failed: null };
     for (const [at, id] of ids.entries()) {
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: one task at a time, so a refusal stops the rest
         await act(id);
       } catch (error) {
         bulkRun = {
@@ -967,8 +959,7 @@
           failed: { id, text: message(error) },
         };
         bulkAgain = () => bulk(verb, ids.slice(at), act, total, before + at);
-        // biome-ignore lint/complexity/noVoid: the re-read sets its own state
-        void refresh();
+        detach(refresh(), "refresh");
         return;
       }
       selection.ids = selection.ids.filter((each) => each !== id);
@@ -977,8 +968,7 @@
     bulkRun = null;
     bulkAgain = null;
     clearPicks();
-    // biome-ignore lint/complexity/noVoid: the re-read sets its own state
-    void refresh();
+    detach(refresh(), "refresh");
   }
   const pickedIds = () => picked.map((task) => task.id);
   const bulkMove = (stage: string) =>
@@ -1351,12 +1341,9 @@
   $effect(() => {
     const back = () => {
       if (document.visibilityState === "visible") {
-        // biome-ignore lint/complexity/noVoid: the re-read sets its own state
-        void refresh();
-        // biome-ignore lint/complexity/noVoid: the re-read sets its own state
-        void decisions.read();
-        // biome-ignore lint/complexity/noVoid: the re-read sets its own state
-        void blocks.read();
+        detach(refresh(), "refresh");
+        detach(decisions.read(), "read");
+        detach(blocks.read(), "read");
       }
     };
     document.addEventListener("visibilitychange", back);
@@ -2369,8 +2356,7 @@
           }}
           onstop={() => undefined}
           onsubmit={(text) => {
-            // biome-ignore lint/complexity/noVoid: the ask's own state is the composer's sending and its refusal
-            void askView(text);
+            detach(askView(text), "askView");
           }}
           placeholder={viewsWords.placeholder}
           sendAgain={viewAgain}

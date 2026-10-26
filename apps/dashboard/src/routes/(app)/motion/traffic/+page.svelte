@@ -244,7 +244,6 @@
     for (let i = 0; i < count; i += 1) {
       const [name, arg] = TOOLS[i % TOOLS.length];
       tool(name, `${arg}#${n}`);
-      // biome-ignore lint/performance/noAwaitInLoops: the spacing IS the scenario.
       await new Promise((r) => setTimeout(r, gapMs));
     }
   }

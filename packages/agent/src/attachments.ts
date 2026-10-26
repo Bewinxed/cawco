@@ -104,7 +104,6 @@ export async function withFiles(
   }
   const lines: string[] = [];
   for (const file of files) {
-    // biome-ignore lint/performance/noAwaitInLoops: one file at a time, in the order they were attached; a 100 MB file at once is enough
     lines.push(await deliverFile(sessionId, file));
   }
   const added = lines.join("\n");

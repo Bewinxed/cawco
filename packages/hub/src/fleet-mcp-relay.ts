@@ -431,7 +431,6 @@ export class FleetMcpRelay {
       const wait = state.until - Date.now();
       if (wait > 0) {
         // Pacing, not a read: the gate's own wait, then the asker is looked at again.
-        // biome-ignore lint/performance/noAwaitInLoops: the gate holds each request until the upstream's own wait has passed
         await Bun.sleep(wait);
         exchange.signal?.throwIfAborted();
       }
@@ -593,7 +592,6 @@ export class FleetMcpRelay {
     };
     try {
       for (;;) {
-        // biome-ignore lint/performance/noAwaitInLoops: an event stream is read in order until the answer arrives
         const next = await reader.read();
         if (next.done) {
           return;
@@ -826,7 +824,6 @@ export class FleetMcpRelay {
     const items: unknown[] = [];
     let cursor: unknown;
     do {
-      // biome-ignore lint/performance/noAwaitInLoops: each page names the next
       const { response, reply } = await this.#rpc(
         name,
         state,

@@ -5,7 +5,6 @@
    * segment (thumb.ts), so the thumb's and the segments' corners are read
    * against the groove's (DESIGN.md, Segmented; The Concentric Rule).
    */
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Tabs from "#lib/components/ui/tabs/index.js";
 
   let {

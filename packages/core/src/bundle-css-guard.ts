@@ -49,7 +49,6 @@ export async function refuseSchemeLowering(
     if (!output.path.endsWith(".css")) {
       continue;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: a bundle has one or two stylesheets
     for (const rule of loweredRules(await output.text())) {
       found.push(`${output.path}: ${rule}`);
     }

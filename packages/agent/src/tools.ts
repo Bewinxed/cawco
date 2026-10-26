@@ -221,7 +221,6 @@ const npmGlobalBin = async (bin: string): Promise<string | undefined> => {
       ? [join(root, `${bin}.cmd`), join(root, `${bin}.exe`)]
       : [join(root, "bin", bin)];
   for (const candidate of candidates) {
-    // biome-ignore lint/performance/noAwaitInLoops: candidates are tried in priority order and the loop returns on the first that exists
     if (await Bun.file(candidate).exists()) {
       return candidate;
     }
@@ -382,7 +381,6 @@ const findCopy = async (spec: ToolSpec): Promise<Found | undefined> => {
     file: await realpath(path).catch(() => path),
   };
   for (const method of spec.install) {
-    // biome-ignore lint/performance/noAwaitInLoops: methods are tried in catalog order and the loop returns on the first whose footprint matches
     if (method.footprint && (await bears(method.footprint, at))) {
       return { ...at, method };
     }
@@ -849,7 +847,6 @@ export const putOnPins = async (
     if (!spec) {
       throw new Error(`${build} pins ${id}, which is not in its tool catalog`);
     }
-    // biome-ignore lint/performance/noAwaitInLoops: one install at a time, and the first that fails ends it
     const before = await probeTool(spec, version);
     if (before.state === "missing" || before.state === "installed") {
       continue;

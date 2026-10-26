@@ -20,6 +20,8 @@
  * draft until the hub has kept it, so nothing typed is lost to a save in
  * flight, an answer that arrives late, or a reload.
  */
+
+import { detach } from "@cawco/core/detach";
 import {
   currentStep,
   type DraftStamp,
@@ -231,8 +233,7 @@ class Connect {
         return;
       }
       this.#readRetry = setTimeout(() => {
-        // biome-ignore lint/complexity/noVoid: fire-and-forget; each read schedules its own next try
-        void this.load(Math.min(delay * 2, 10_000));
+        detach(this.load(Math.min(delay * 2, 10_000)), "load");
       }, delay);
     }
   }

@@ -196,7 +196,6 @@ const frameRead = (page) =>
 async function stepRead(page, ms, reads) {
   const step = 1000 / 60;
   for (let done = 0; done < ms - 0.01; done += step) {
-    // biome-ignore lint/performance/noAwaitInLoops: one frame a step
     await advance(page, Math.min(step, ms - done));
     reads.push(await frameRead(page));
   }
@@ -415,7 +414,6 @@ async function throughDeck(page) {
   const a = await shoot(page);
   const found = [];
   for (const card of cards.slice(1)) {
-    // biome-ignore lint/performance/noAwaitInLoops: one card at a time
     await page.evaluate((k) => {
       for (const [i, e] of [
         ...document.querySelector(".cin .ctrls").children,
@@ -657,7 +655,6 @@ async function run(engine, v) {
   const frames = [await shoot(page)];
   const step = 1000 / 60;
   for (let at = 0; at < fold + 200; at += step) {
-    // biome-ignore lint/performance/noAwaitInLoops: one frame a step
     await stepRead(page, step, closing);
     if (Math.abs(at + step - fold / 2) < step / 2) {
       await shoot(page, join(dir, "mid-close.png"));
@@ -747,7 +744,6 @@ for (const engine of Object.keys(ENGINES)) {
     }
     console.error(`measuring ${key}`);
     try {
-      // biome-ignore lint/performance/noAwaitInLoops: one browser at a time
       report[key] = await run(engine, v);
     } catch (error) {
       report[key] = { error: String(error).slice(0, 300) };

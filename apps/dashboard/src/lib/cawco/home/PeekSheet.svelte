@@ -7,7 +7,6 @@
    * from, the page giving it that room (`peekBeside`). Open in the pane
    * dives.
    */
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import { afterNavigate } from "$app/navigation";
   import PeekPane from "../PeekPane.svelte";

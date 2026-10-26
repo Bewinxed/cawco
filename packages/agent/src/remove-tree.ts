@@ -41,7 +41,6 @@ const ownerMayRemove = async (dir: string): Promise<void> => {
   }
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     if (entry.isDirectory()) {
-      // biome-ignore lint/performance/noAwaitInLoops: one folder at a time, each opened before the ones inside it
       await ownerMayRemove(join(dir, entry.name));
     }
   }

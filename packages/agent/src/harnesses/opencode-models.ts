@@ -198,7 +198,6 @@ class OpencodeModels {
       let last: unknown;
       for (const delay of ATTEMPT_DELAYS_MS) {
         if (delay) {
-          // biome-ignore lint/performance/noAwaitInLoops: each read waits out the one before it
           await Bun.sleep(delay);
         }
         try {

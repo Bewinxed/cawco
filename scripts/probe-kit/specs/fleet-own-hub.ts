@@ -43,7 +43,6 @@ const ephemeral = async () => {
 const take = async (pool: PortPool, count: number) => {
   const ports: number[] = [];
   for (let n = 0; n < count; n += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: one port after another, as a fleet takes them
     ports.push(await pool.next());
   }
   return ports;

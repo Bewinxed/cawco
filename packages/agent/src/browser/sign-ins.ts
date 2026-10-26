@@ -165,7 +165,6 @@ const blankPage = async (
       await link.call("Page.navigate", { url: `${origin}/` }, session);
       const until = Date.now() + OPEN_MS;
       while (
-        // biome-ignore lint/performance/noAwaitInLoops: polling the page's own origin.
         (await evaluate(link, session, "location.origin", CALL_SHORT_MS)) !==
         origin
       ) {
@@ -255,7 +254,6 @@ export const readSignIns = async (devtools: string): Promise<SignIns> => {
     const databases: SignIns["databases"] = [];
     try {
       for (const origin of originsOf(cookies)) {
-        // biome-ignore lint/performance/noAwaitInLoops: one origin at a time on the one page.
         await page.open(origin);
         // An origin the page did not land on (Chromium upgraded its http
         // to https) has no frame holding its storage key: said, and passed.
@@ -316,15 +314,12 @@ export const writeSignIns = async (
     const page = await blankPage(link);
     try {
       for (const { origin, snapshot } of signIns.databases) {
-        // biome-ignore lint/performance/noAwaitInLoops: one origin at a time on the one page.
         await page.open(origin);
         await evaluate(link, page.session, idbWrite(snapshot), IDB_MS);
       }
       for (const { origin, items } of signIns.storage) {
-        // biome-ignore lint/performance/noAwaitInLoops: one origin at a time on the one page.
         await page.open(origin);
         for (const [key, value] of items) {
-          // biome-ignore lint/performance/noAwaitInLoops: each item on the origin the page holds, in order.
           await link.call(
             "DOMStorage.setDOMStorageItem",
             { storageId: storageId(origin), key, value },

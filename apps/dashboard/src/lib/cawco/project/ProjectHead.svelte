@@ -78,11 +78,8 @@
   import { newSession, spawning } from "#lib/cawco/spawn/new-session.svelte.js";
   import { cawOffAt, stopWork } from "#lib/cawco/stop-work.svelte.js";
   import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Drawer from "#lib/components/ui/drawer/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {

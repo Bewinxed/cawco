@@ -137,7 +137,6 @@ export const createLeftRunning = () => {
       if (row.pid !== pid && !held.tree.has(row.pid)) {
         held.tree.set(row.pid, {
           started: row.started,
-          // biome-ignore lint/performance/noAwaitInLoops: one read per process first seen, so the log can name it once it is gone
           command: (await commandLine(row.pid)) ?? "?",
         });
       }

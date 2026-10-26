@@ -128,7 +128,6 @@ const message = (error: unknown): string =>
 async function takeLock(version: string): Promise<boolean> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      // biome-ignore lint/performance/noAwaitInLoops: at most one retry, after clearing a stale lock
       const identity = await ownIdentity();
       await writeStateFile(
         lockPath(),
@@ -331,7 +330,6 @@ async function awaitWelcome(endpoint: string, job: KeeperJob): Promise<void> {
   let last = "it never answered";
   while (Date.now() < end) {
     try {
-      // biome-ignore lint/performance/noAwaitInLoops: a poll
       const read = await SessiondClient.connect(endpoint);
       switch (read.kind) {
         case "answered":
@@ -518,7 +516,6 @@ async function handOverKeeper(to: string): Promise<KeeperMove> {
     if (other.endpoint === endpoint) {
       continue;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: keepers are few, each said in its order
     await keeperJob(other.keeper)
       ?.retire()
       .catch((error: unknown) =>
@@ -793,7 +790,6 @@ async function verify(
     `verify ${start.version}: probing ${installation.hubUrl} every 1s; ${holdMs ? `healthy for ${holdMs / 1000}s confirms` : "waiting for it to answer"}, not healthy at ${new Date((start.decideBy ?? 0) * 1000).toISOString()} rolls back`
   );
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: a poll; each read must see the services after the previous one
     const stuck = await watch.followMigration();
     if (stuck) {
       return stuck;
@@ -1068,7 +1064,6 @@ async function stopHub(version: string): Promise<void> {
 async function holdDatabase(db: string, version: string): Promise<void> {
   const end = Date.now() + SERVICE_TIMEOUT_MS;
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: each stop follows the lock the last one left held
     await stopHub(version);
     try {
       await lockDatabase(db);
@@ -1144,13 +1139,11 @@ export async function putBackup(
     // A helper before this one moved it aside already: what is at `db` now is
     // no copy of ours, and goes.
     for (const suffix of [...SIDECARS, ""]) {
-      // biome-ignore lint/performance/noAwaitInLoops: four files, in order
       await rm(`${db}${suffix}`, { force: true });
     }
   } else {
     for (const suffix of [...SIDECARS, ""]) {
       if (existsSync(`${db}${suffix}`)) {
-        // biome-ignore lint/performance/noAwaitInLoops: the sidecars first, then the file they belong to
         await rename(`${db}${suffix}`, `${aside}${suffix}`);
       }
     }

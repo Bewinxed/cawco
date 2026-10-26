@@ -87,10 +87,8 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as NativeSelect from "#lib/components/ui/native-select/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import { IconChevronDown, IconPlus } from "#lib/icons.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";

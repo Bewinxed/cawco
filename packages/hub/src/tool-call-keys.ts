@@ -87,7 +87,6 @@ const follow = async (running: Running): Promise<Response> => {
     new ReadableStream<Uint8Array>({
       async pull(controller) {
         while (next >= running.chunks.length && !running.ended) {
-          // biome-ignore lint/performance/noAwaitInLoops: waits for the call's next chunk.
           await running.moved.promise;
         }
         const chunk = running.chunks[next];

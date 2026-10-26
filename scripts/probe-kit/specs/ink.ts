@@ -157,7 +157,6 @@ export const mouseLoop = async (frame: Frame, box: Rect, ms = 2000) => {
   }
   await pressAt(frame, first, { how: "down" });
   for (const p of points.slice(1)) {
-    // biome-ignore lint/performance/noAwaitInLoops: a stroke's moves, one a frame
     await desk.mouse.move(p.x, p.y);
     await desk.waitForTimeout(FRAME_MS);
   }
@@ -344,7 +343,6 @@ export const penStroke = async (
   await at("mousePressed", from, p0);
   for (let step = 1; step <= steps; step += 1) {
     const t = step / steps;
-    // biome-ignore lint/performance/noAwaitInLoops: a stroke's points, one after another
     await at(
       "mouseMoved",
       { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t },

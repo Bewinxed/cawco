@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
   /**
    * The house hover panel: the delegate tray's chip panel, and the rail's
    * session card. One surface for whichever thing the pointer rests on; when
@@ -138,8 +139,7 @@
       }
       watchDelegate(id);
       if (!cawco.session(id)?.messages.length) {
-        // biome-ignore lint/complexity/noVoid: fire-and-forget; the tail draws whatever has arrived.
-        void readTranscript(id);
+        detach(readTranscript(id), "readTranscript");
       }
     });
     return () => {

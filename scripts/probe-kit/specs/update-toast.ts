@@ -685,7 +685,6 @@ const leg = async (
     ["d: after Update when idle", true],
     ["e: with no choice", false],
   ] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each timed on its own
     const { page, update, loaded, keyAt: lastInput } = await fresh();
     await announce(update);
     await toastUp(page);
@@ -745,7 +744,6 @@ const run = async (kit: Kit) => {
     ["webkit", "phone"],
   ];
   for (const [engine, view] of legs) {
-    // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each timed on its own
     await leg(kit, fleet, base, engine, view);
   }
 };

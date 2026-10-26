@@ -281,7 +281,6 @@ const killGroup = async (
   await proc.exited;
   const deadline = Date.now() + BRIDGE_STOP_MS;
   while (inGroup(proc.pid).length > 0 && Date.now() < deadline) {
-    // biome-ignore lint/performance/noAwaitInLoops: polls until the group's last connection is gone, or the deadline passes
     await Bun.sleep(10);
   }
   const left = inGroup(proc.pid);
@@ -392,7 +391,6 @@ const open = async (instanceId: string, reach: Reach): Promise<string> => {
   const deadline = Date.now() + BRIDGE_START_MS;
   const exited = () => proc.exitCode !== null || proc.signalCode !== null;
   while (!(existsSync(socket) || exited() || Date.now() > deadline)) {
-    // biome-ignore lint/performance/noAwaitInLoops: polls for the socket until the relay binds it, exits, or the deadline passes
     await Bun.sleep(10);
   }
   if (exited()) {
@@ -459,7 +457,6 @@ export const reachWorkspace = async (
     if (sameReach(pending, reach)) {
       return pending.socket;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: waits out each open for another reach in turn, until none is under way
     await pending.socket.catch(() => {
       // Its own request was told why; this one opens its own below.
     });

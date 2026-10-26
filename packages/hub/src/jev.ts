@@ -114,7 +114,6 @@ export function askJev<
   });
   return readWithin(options.timeoutMs, async (deadline) => {
     for (let wait = BACKOFF_MS; ; wait *= 2) {
-      // biome-ignore lint/performance/noAwaitInLoops: a throttled request is asked again only after the previous one answered
       const response = await fetch(ENDPOINT[access.route], {
         method: "POST",
         headers: {

@@ -16,6 +16,7 @@
     artifactWords,
     noticePartWords,
   } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import type { Component } from "svelte";
   import {
     IconArtifactCanvas,
@@ -60,8 +61,10 @@
   function opened(): void {
     onchoose();
     if (notice.instanceId) {
-      // biome-ignore lint/complexity/noVoid: a refusal is kept where its row says it (artifactOpenKey)
-      void openArtifactIn(notice.instanceId, notice.artifactId, notice.stop);
+      detach(
+        openArtifactIn(notice.instanceId, notice.artifactId, notice.stop),
+        "openArtifactIn"
+      );
     }
   }
   const row = $derived(

@@ -1313,7 +1313,6 @@ export class CanvasRoom {
     }
     await stage.picture();
     for (;;) {
-      // biome-ignore lint/performance/noAwaitInLoops: the hub's export read again until it counts what the page does
       const read = await exportCanvasWithin(
         canvas.id,
         Math.max(EXPORT_AT_LEAST_MS, deadline - performance.now())

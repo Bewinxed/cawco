@@ -1,5 +1,4 @@
 /** Real relay transport probe: peer integrity, keep-alive, half-close and backpressure. */
-// biome-ignore-all lint/performance/noAwaitInLoops: successive requests must reuse the same channel to prove peer binding survives keep-alive.
 import { dlopen, FFIType, ptr } from "bun:ffi";
 import http from "node:http";
 import net from "node:net";

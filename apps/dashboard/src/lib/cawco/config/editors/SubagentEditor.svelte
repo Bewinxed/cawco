@@ -6,6 +6,7 @@
     parseAgentFrontMatter,
     userLayerLabel,
   } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import { untrack } from "svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
@@ -109,8 +110,7 @@ You are a <role>, working in one repository at a time.
   /** Cancel leaves the edits behind: the draft is dropped, not kept. */
   function cancel() {
     kept.drop();
-    // biome-ignore lint/complexity/noVoid: navigation reports nothing to wait for
-    void goto("/config/subagents");
+    detach(goto("/config/subagents"), "goto");
   }
 
   /** Remove: at once, with Undo in the toast (deletes.ts). */

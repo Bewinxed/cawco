@@ -796,7 +796,6 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       if (lasts(source, Date.now())) {
         break;
       }
-      // biome-ignore lint/performance/noAwaitInLoops: one move at a time, each between its session's turns, the next one's target forecast taking it in
       const done = await step(source, row, share, added);
       if (done === "stop") {
         break;
@@ -999,7 +998,6 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       const added: Added = new Map();
       for (const [accountId, rows] of runningOn(machineId, signed)) {
         const from = db.accounts.get(accountId);
-        // biome-ignore lint/performance/noAwaitInLoops: one account at a time, each target's forecast taking the moves before it in
         const moved = from ? await moveOff(forecast, from, rows, added) : null;
         if (moved) {
           running.push(moved);
@@ -1048,7 +1046,6 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     let next: RebalanceCause | null | undefined = cause;
     try {
       while (next !== undefined) {
-        // biome-ignore lint/performance/noAwaitInLoops: passes on one pair run one after another
         await pass(provider, machineId, next, looks || next !== null);
         const self = passes.get(key);
         next = self?.again;
@@ -1092,7 +1089,6 @@ export const createRebalancer = (deps: RebalancerDeps) => {
   /** Every pair rebalanced, one after another: a look's part, after its own look at the holds. */
   const everyPair = async (): Promise<void> => {
     for (const { provider, machineId } of pairs()) {
-      // biome-ignore lint/performance/noAwaitInLoops: one pair at a time, each move between its session's turns
       await rebalance(provider, machineId, null, false);
     }
   };

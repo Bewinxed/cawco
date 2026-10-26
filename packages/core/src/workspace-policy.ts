@@ -535,7 +535,6 @@ const alternatesOf = async (clone: string): Promise<string[]> => {
   const found: string[] = [];
   const pending = [join(clone, ".git", "objects")];
   for (let objects = pending.shift(); objects; objects = pending.shift()) {
-    // biome-ignore lint/performance/noAwaitInLoops: a chain of one or two borrowed dirs, each named by the one before
     const listed = await readFile(
       join(objects, "info", "alternates"),
       "utf8"

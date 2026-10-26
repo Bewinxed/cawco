@@ -81,7 +81,6 @@ const goneWithin = async (
     if (!pids.some(runs)) {
       return Math.round(performance.now() - from);
     }
-    // biome-ignore lint/performance/noAwaitInLoops: polls the process table until the listener is gone
     await Bun.sleep(10);
   }
 };
@@ -98,7 +97,6 @@ const saysWithin = async (
   const deadline = Bun.sleep(ms).then(() => false);
   const heard = (async () => {
     for (;;) {
-      // biome-ignore lint/performance/noAwaitInLoops: one chunk at a time until the word
       const { value, done } = await reader.read();
       if (done) {
         return false;

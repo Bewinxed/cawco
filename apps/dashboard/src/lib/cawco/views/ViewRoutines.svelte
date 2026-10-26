@@ -4,6 +4,7 @@
     connectWords,
     routinesWords as words,
   } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import { DAY_MS } from "@cawco/core/time";
   import { untrack } from "svelte";
   import type { ProjectBlocks } from "#lib/cawco/blocks/arrangement.svelte.js";
@@ -96,11 +97,9 @@
     chipsVariants,
     chipVariants,
   } from "#lib/components/ui/chip/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Table from "#lib/components/ui/table/index.js";
   import {
     IconClock,
@@ -211,8 +210,7 @@
   $effect(() => {
     const back = () => {
       if (document.visibilityState === "visible") {
-        // biome-ignore lint/complexity/noVoid: the re-read sets its own state
-        void read();
+        detach(read(), "read");
       }
     };
     document.addEventListener("visibilitychange", back);
@@ -235,8 +233,7 @@
       return;
     }
     const tick = setInterval(() => {
-      // biome-ignore lint/complexity/noVoid: the re-read sets its own state
-      void read();
+      detach(read(), "read");
     }, RUN_READ_MS);
     return () => clearInterval(tick);
   });
@@ -798,8 +795,7 @@
       }}
       onstop={() => undefined}
       onsubmit={(text, _extras, id) => {
-        // biome-ignore lint/complexity/noVoid: the ask's own state is the composer's sending and its refusal
-        void ask(text, id);
+        detach(ask(text, id), "ask");
       }}
       placeholder={words.placeholder}
     />

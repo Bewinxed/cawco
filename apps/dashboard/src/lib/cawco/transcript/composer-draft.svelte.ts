@@ -10,6 +10,7 @@
  * across a reload through `draft-store.ts`.
  */
 import type { StarterPlace } from "@cawco/core";
+import { detach } from "@cawco/core/detach";
 import { SvelteSet } from "svelte/reactivity";
 import { failureWords } from "#lib/cawco/hub-read.js";
 import type { SendExtras } from "../client.svelte";
@@ -356,7 +357,6 @@ export class ComposerDraft {
   async add(files: Iterable<File>): Promise<void> {
     if (this.byReference) {
       for (const file of files) {
-        // biome-ignore lint/performance/noAwaitInLoops: sequential by intent — each attachment must append in the order it was picked.
         await this.attach(
           file,
           file.type.startsWith("image/") ? "image" : undefined
@@ -366,7 +366,6 @@ export class ComposerDraft {
     }
     for (const file of files) {
       if (file.type.startsWith("image/")) {
-        // biome-ignore lint/performance/noAwaitInLoops: sequential by intent — each attachment must append in the order it was picked, not the order its read happens to settle.
         this.images = [...this.images, await readImage(file)];
         continue;
       }
@@ -467,17 +466,18 @@ export class ComposerDraft {
       .map((item) => item.getAsFile())
       .filter((file): file is File => !!file);
     if (files.length) {
-      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — a paste handler returns synchronously, independent of the read.
-      void this.add(files);
+      detach(this.add(files), "add");
       return true;
     }
     const text = data.getData("text/plain");
     if (text.length > LARGE_PASTE && this.byReference) {
-      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — a paste handler returns synchronously.
-      void this.attach(
-        new Blob([text], { type: "text/plain" }),
-        "text",
-        `Pasted text · ${text.length.toLocaleString()} chars`
+      detach(
+        this.attach(
+          new Blob([text], { type: "text/plain" }),
+          "text",
+          `Pasted text · ${text.length.toLocaleString()} chars`
+        ),
+        "attach"
       );
       return true;
     }

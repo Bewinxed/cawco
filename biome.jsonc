@@ -177,7 +177,13 @@
       // biomejs.dev/linter/rules/use-dom-node-text-content). Off, so no fix
       // pass rewrites them.
       "complexity": { "useMathMinMax": "off" },
-      "performance": { "useDomNodeTextContent": "off" },
+      "performance": {
+        "useDomNodeTextContent": "off",
+        // CawCo's loops are sequential on purpose (ordered effects, one git
+        // or process at a time); a parallel loop is written with Promise.all
+        // where it is meant.
+        "noAwaitInLoops": "off",
+      },
       // A label wrapping a kit control wraps its input: each of these renders
       // one (ui/input, ui/textarea, ui/checkbox, ui/switch's button,
       // ui/native-select). The rule
@@ -200,6 +206,32 @@
     },
   },
   "overrides": [
+    {
+      // Modules whose job is to be an import surface: the shadcn-svelte kit's
+      // component groups, imported as a namespace (`* as DropdownMenu`, read
+      // as `DropdownMenu.Root`, `.Item`) through each group's index; the
+      // dashboard's one icon module (DESIGN.md, The Solar Duotone Rule); and
+      // each module a package's manifest names as an entry (`exports`,
+      // Workers' `main`, where a Durable Object class is found among the
+      // entry's exports). A namespace import of anything but a kit group is
+      // refused by scripts/lint/kit-namespace-only.grit.
+      "includes": [
+        "apps/dashboard/src/**/*.svelte",
+        "apps/dashboard/src/lib/components/ui/**",
+        "apps/dashboard/src/lib/icons.ts",
+        "apps/cawrier/src/index.ts",
+        "packages/*/src/index.ts",
+        "packages/core/src/usage/index.ts",
+        "packages/core/src/signal.ts",
+        "packages/icons/src/marks.ts",
+      ],
+      "plugins": ["./scripts/lint/kit-namespace-only.grit"],
+      "linter": {
+        "rules": {
+          "performance": { "noNamespaceImport": "off", "noBarrelFile": "off" },
+        },
+      },
+    },
     {
       // Ultracite's Svelte preset turns noInlineStyles back on for Svelte
       // and app.html; the house rule (shadcn.mjs no-inline-styles) holds.

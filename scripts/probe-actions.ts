@@ -647,7 +647,6 @@ try {
     const viaLead = (text: string) =>
       ok("POST", `/api/projects/${projectId}/threads`, { body: text });
     for (const written of ["posted", "draft"]) {
-      // biome-ignore lint/performance/noAwaitInLoops: one edit, then its restore, then the next
       const content = (await fileOf()).replace(STAGE_LINE, `stage: ${written}`);
       const said = await toolCall(
         "mcp__cawco__folder_write",
@@ -800,7 +799,6 @@ try {
       .filter((name) => name.endsWith(".log") || name.endsWith(".err"))
       .sort();
     for (const name of logs) {
-      // biome-ignore lint/performance/noAwaitInLoops: one log at a time, in order
       const lines = (await Bun.file(join(fleet.sandbox, name)).text())
         .split("\n")
         .filter((line) => LOGGED.test(line))

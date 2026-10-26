@@ -72,7 +72,6 @@ const searchProcesses = async (home: string): Promise<number[]> => {
     if (!PID.test(entry)) {
       continue;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: one process's files at a time
     const read = await Promise.all([
       readFile(`/proc/${entry}/cmdline`, "utf8"),
       readFile(`/proc/${entry}/environ`, "utf8"),
@@ -115,7 +114,6 @@ const probing = (fleet: KitFleet) => {
   const ask = async (kind: "busy" | "listing") => {
     while (on) {
       const at = performance.now();
-      // biome-ignore lint/performance/noAwaitInLoops: one probe at a time, each timed
       const answer = await fleet
         .controlAnswer(
           kind === "busy" ? "agentBusy" : "listSessions",

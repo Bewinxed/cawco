@@ -95,6 +95,7 @@
     type Deleted,
     connectionsWords as words,
   } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import { onMount } from "svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import Choice from "#lib/cawco/config/Choice.svelte";
@@ -114,13 +115,10 @@
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
   import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { UseClipboard } from "#lib/hooks/use-clipboard.svelte.js";
   import {
@@ -172,17 +170,14 @@
 
   onMount(() => {
     callbackUrl = `${window.location.origin}/api/connections/oauth/callback`;
-    // biome-ignore lint/complexity/noVoid: the read reports its own outcome in page state
-    void read();
+    detach(read(), "read");
     // A GitHub sign-in kept through a reload asks the machines again.
     if (typed.service === "github") {
-      // biome-ignore lint/complexity/noVoid: the read reports its own outcome in page state
-      void readGh();
+      detach(readGh(), "readGh");
     }
     // A refused Undo tried again after a reload (SectionFrame) put one back.
     const reread = () => {
-      // biome-ignore lint/complexity/noVoid: the read reports its own outcome in page state
-      void read();
+      detach(read(), "read");
     };
     window.addEventListener("cawco:config-restored", reread);
     return () => window.removeEventListener("cawco:config-restored", reread);
@@ -365,8 +360,7 @@
     const open = row.signIn;
     if (row.auth === "device" && !open) {
       // A new code: shown on the row, its page opened from there.
-      // biome-ignore lint/complexity/noVoid: the sign-in reports its own outcome on its row
-      void startSignIn(row.name, null);
+      detach(startSignIn(row.name, null), "startSignIn");
       return;
     }
     const tab = window.open(open ? open.url : "", "_blank");
@@ -379,8 +373,7 @@
       tabs[row.name] = tab;
       return;
     }
-    // biome-ignore lint/complexity/noVoid: the sign-in reports its own outcome on its row
-    void startSignIn(row.name, tab);
+    detach(startSignIn(row.name, tab), "startSignIn");
   }
 
   // --- Set key: a field under the row, emptied once the hub holds it ---
@@ -414,8 +407,7 @@
       return;
     }
     copiedFrom = row.name;
-    // biome-ignore lint/complexity/noVoid: the copy says how it went on its button
-    void clipboard.copy(row.device.userCode);
+    detach(clipboard.copy(row.device.userCode), "copy");
   }
 
   // --- Set app: a Linear app's client, under the row -----------------------
@@ -509,8 +501,7 @@
     addKey = "";
     addApp = emptyApp();
     if (service.service === "github") {
-      // biome-ignore lint/complexity/noVoid: the read reports its own outcome in page state
-      void readGh();
+      detach(readGh(), "readGh");
     }
   }
 

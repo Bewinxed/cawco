@@ -61,7 +61,6 @@
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { HangCard } from "#lib/components/ui/hang-card/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { DRAWER_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { page } from "$app/state";

@@ -354,7 +354,6 @@ const makeStandIns = async (layer: Layer): Promise<void> => {
     const mount = [...mounts]
       .reverse()
       .find((each) => within(deny.path, each.at));
-    // biome-ignore lint/performance/noAwaitInLoops: one path at a time, its folders made before it
     if (!(mount && (await absentUnderFolders(mount.at, deny.path)))) {
       continue;
     }
@@ -383,7 +382,6 @@ const absentUnderFolders = async (
     return false;
   }
   for (let dir = dirname(path); within(dir, root); dir = dirname(dir)) {
-    // biome-ignore lint/performance/noAwaitInLoops: a few folders, nearest first
     const info = await lstat(dir).catch(() => undefined);
     if (info && !info.isDirectory()) {
       return false;
@@ -567,7 +565,6 @@ const startView = async (id: string, layer: Layer): Promise<number> => {
   const perl = systemProgram("perl");
   systemProgram("nsenter");
   for (const mount of layer.mounts ?? []) {
-    // biome-ignore lint/performance/noAwaitInLoops: a few layers, each two dirs
     await mkdir(mount.upper, { recursive: true, mode: 0o700 });
     await mkdir(mount.work, { recursive: true, mode: 0o700 });
   }
@@ -602,7 +599,6 @@ const startView = async (id: string, layer: Layer): Promise<number> => {
   while (Date.now() < deadline) {
     const record = readViewRecord(id);
     if (record && nsOf(record.pid, "mnt") === record.mnt) {
-      // biome-ignore lint/performance/noAwaitInLoops: once, as the holder names its namespaces
       const said = await mountView(record, viewPlan(id, layer), env, perl);
       if (said !== undefined) {
         return await refuse(`was not mounted: ${said}`);
@@ -881,7 +877,6 @@ export const endView = async (
   // namespace's number may be another's within the same round.
   let left = viewMembers(id, record);
   while (left.length > 0 && Date.now() < deadline) {
-    // biome-ignore lint/performance/noAwaitInLoops: each round names what it kills, then reads the namespace again
     const named = await Promise.all(
       left
         .filter((pid) => !ended.has(pid))
@@ -1254,7 +1249,6 @@ const upperChanges = async (
       if (skip(rel)) {
         continue;
       }
-      // biome-ignore lint/performance/noAwaitInLoops: one entry at a time, down the upper's tree
       const info = await lstat(join(upper, inner));
       if (info.isDirectory()) {
         await down(inner);
@@ -1321,7 +1315,6 @@ const copyChanges = async (
     }
     for (const name of mine) {
       const rel = join(dir, name);
-      // biome-ignore lint/performance/noAwaitInLoops: one entry at a time, down both trees
       if (!skip(rel) && (await one(rel))) {
         await down(rel);
       }
@@ -1507,7 +1500,6 @@ const noteSeen = async (
   if (layer.form === "overlay") {
     const seen = { ...layer.seen };
     for (const each of conflicts) {
-      // biome-ignore lint/performance/noAwaitInLoops: a few conflicting paths
       const info = await lstat(join(layer.folder, each.path)).catch(
         () => undefined
       );
@@ -1522,7 +1514,6 @@ const noteSeen = async (
   }
   for (const each of conflicts) {
     const into = join(base, each.path);
-    // biome-ignore lint/performance/noAwaitInLoops: one path at a time, each replaced whole
     await removeTree(into);
     if (await lstat(join(layer.folder, each.path)).catch(() => undefined)) {
       await mkdir(dirname(into), { recursive: true });
@@ -1612,11 +1603,9 @@ export const applyChanges = async (
     .filter((each) => each.change === "delete")
     .sort((a, b) => b.path.split("/").length - a.path.split("/").length);
   for (const each of writes) {
-    // biome-ignore lint/performance/noAwaitInLoops: one path at a time, so a failure names the one it stopped at
     await putOne(layer, each.path);
   }
   for (const each of deletes) {
-    // biome-ignore lint/performance/noAwaitInLoops: deepest first, so a folder's entries go before it
     await removeTree(join(layer.folder, each.path));
   }
   await landedInBase(layer, changed);
@@ -1641,7 +1630,6 @@ const landedInBase = async (
   }
   for (const each of changed) {
     const into = join(base, each.path);
-    // biome-ignore lint/performance/noAwaitInLoops: one path at a time, each replaced whole
     await removeTree(into);
     if (each.change === "write") {
       await mkdir(dirname(into), { recursive: true });

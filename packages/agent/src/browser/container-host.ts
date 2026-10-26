@@ -295,7 +295,6 @@ const keptAsAsked = (
 const answers = async (url: string, what: string): Promise<void> => {
   const until = Date.now() + LIVE_MS;
   while (Date.now() < until) {
-    // biome-ignore lint/performance/noAwaitInLoops: polling a server that is starting.
     if (await httpAnswers(url, 2000)) {
       return;
     }
@@ -450,7 +449,6 @@ export class ContainerHost implements BrowserHost {
     // again for it. Each round publishes less, so this ends.
     for (;;) {
       if (!container) {
-        // biome-ignore lint/performance/noAwaitInLoops: each round waits on the container it made.
         await removeContainers(this.#docker, owner, record.key, [kept?.id]);
         container = await this.#create(record, {
           image,

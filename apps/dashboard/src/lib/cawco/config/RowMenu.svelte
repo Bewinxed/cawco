@@ -13,7 +13,6 @@
 <script lang="ts">
   /** A row's ⋯ menu: every action a row has beyond opening it and its switch. */
   import { commonWords } from "@cawco/core";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { IconMore } from "#lib/icons.js";
 

@@ -124,7 +124,6 @@ const run = async (kit: Kit) => {
 
     for (const engine of ["chromium", "webkit"] as Engine[]) {
       const tab = `probe-aged-out-${engine}`;
-      // biome-ignore lint/performance/noAwaitInLoops: one engine at a time, each leg reading serve.js's log from where the last left it
       const from = await logLengths(logs);
       const page = await kit.page("desk", { engine, ignoreHTTPSErrors: true });
       const titles: string[] = [];
@@ -162,7 +161,6 @@ const run = async (kit: Kit) => {
         ),
     });
     for (const engine of ["chromium", "webkit"] as Engine[]) {
-      // biome-ignore lint/performance/noAwaitInLoops: one engine at a time, each leg reading serve.js's log from where the last left it
       const from = await logLengths(logs);
       const page = await kit.page("desk", { engine, ignoreHTTPSErrors: true });
       const other = `http://localhost:${foreign.port}`;

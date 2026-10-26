@@ -110,7 +110,6 @@ async function offerTools(ask: boolean): Promise<boolean> {
       )) {
         continue;
       }
-      // biome-ignore lint/performance/noAwaitInLoops: one prompt at a time, each reading its own line
       if (!(await runAllowed(item.id))) {
         continue;
       }

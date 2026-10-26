@@ -57,7 +57,6 @@
    */
   import { since } from "#lib/cawco/rules.js";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Table from "#lib/components/ui/table/index.js";
   import RunStatus from "./RunStatus.svelte";
   import { exactOf } from "./schedule";

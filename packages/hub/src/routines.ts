@@ -930,7 +930,6 @@ export const createRoutines = ({
   ): Promise<{ cwd: string; machineId: string } | string> => {
     const deadline = Date.now() + PLACE_WAIT_MS;
     for (;;) {
-      // biome-ignore lint/performance/noAwaitInLoops: each look follows the machines as they come back
       const place = await placeOf(routine);
       if (
         typeof place !== "string" ||
@@ -1059,7 +1058,6 @@ export const createRoutines = ({
     // run does, a run just after a hub start waits for one to be back.
     const deadline = Date.now() + PLACE_WAIT_MS;
     while (!anyOnline() && Date.now() < deadline && !lifetime.closed()) {
-      // biome-ignore lint/performance/noAwaitInLoops: each look follows the machines as they come back
       await lifetime.sleep(PLACE_POLL_MS);
     }
     const label = slotLabel(run.slot, routine.timeZone);

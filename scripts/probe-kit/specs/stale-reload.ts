@@ -250,7 +250,6 @@ const leg = async (
   let lastKey = Date.now();
   const heldWhile: string[] = [];
   for (let key = 0; key < 4; key += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: a key every 3 s, as a person types
     await page.waitForTimeout(3000);
     await page.keyboard.type(String(key));
     lastKey = Date.now();
@@ -338,7 +337,6 @@ const run = async (kit: Kit) => {
     ["webkit", "phone"],
   ];
   for (const [index, [engine, view]] of legs.entries()) {
-    // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each timed on its own
     await leg(kit, fleet, base, engine, view, index + 1);
   }
 };

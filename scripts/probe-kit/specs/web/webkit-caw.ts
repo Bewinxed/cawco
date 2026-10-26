@@ -262,14 +262,12 @@ const spec: Spec = {
     /** The opens taken again, each take's heaviest interval. */
     const retaken: string[] = [];
     for (let n = 0; n < RUNS; n += 1) {
-      // biome-ignore lint/performance/noAwaitInLoops: one open at a time, each from rest
       const takes: Take[] = [await openOnce()];
       for (
         let last = takes[0] as Take;
         last.worst > DROPPED_MS && takes.length < TAKES;
         last = takes.at(-1) as Take
       ) {
-        // biome-ignore lint/performance/noAwaitInLoops: each take from rest, after the one before
         takes.push(await openOnce());
       }
       beside.push(...takes.map((one) => one.beside));

@@ -13,7 +13,6 @@
  * and only what draws a mark loads it. The decision host, which bundles the
  * barrel's icons with Solar alone (core decision-host.ts), never meets it.
  */
-// biome-ignore lint/performance/noBarrelFile: the brand marks' one module, every consumer imports a mark from here
 export { default as SvgCerebras } from "~icons/logos/cerebras-icon?raw";
 export { default as LogoClaude } from "~icons/logos/claude-icon";
 export { default as SvgClaude } from "~icons/logos/claude-icon?raw";

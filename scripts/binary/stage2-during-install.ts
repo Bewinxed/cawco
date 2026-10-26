@@ -137,7 +137,6 @@ let left = 0;
 let firstSeen = 0;
 let lastSeen = 0;
 while (Date.now() < DEADLINE) {
-  // biome-ignore lint/performance/noAwaitInLoops: a poll; each read must follow the previous answer
   const before = await phase();
   let gone = false;
   switch (before.kind) {

@@ -127,7 +127,6 @@ export const streamsOnce = async (
 ): Promise<string[][]> => {
   const until = Date.now() + ms;
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: polling the child's log
     const live = await liveStreams(log, pid);
     if (settled(live) || Date.now() > until) {
       return live;

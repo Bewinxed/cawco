@@ -15,6 +15,7 @@
    * to, focus goes to where the install is parked (`parkedAt`).
    */
   import { causeLine, connectWords, type Install } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconClose } from "#lib/icons.js";
   import AskHere from "../AskHere.svelte";
@@ -55,8 +56,7 @@
   }
 
   $effect(() => {
-    // biome-ignore lint/complexity/noVoid: fire-and-forget; the sheet draws the lines when they land
-    void read();
+    detach(read(), "read");
     requestAnimationFrame(() => {
       open = true;
     });

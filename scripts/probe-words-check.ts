@@ -90,7 +90,6 @@ function collect(value: unknown, path: string): void {
 }
 
 for (const file of readdirSync(WORDS).filter((name) => name.endsWith(".ts"))) {
-  // biome-ignore lint/performance/noAwaitInLoops: each module once, in order
   const module = (await import(join(WORDS, file))) as Record<string, unknown>;
   for (const [name, value] of Object.entries(module)) {
     collect(value, `${name} (core words/${file})`);

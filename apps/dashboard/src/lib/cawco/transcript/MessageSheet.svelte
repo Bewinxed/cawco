@@ -11,7 +11,6 @@
    */
   import { transcriptWords } from "@cawco/core/words/transcript";
   import { Button } from "#lib/components/ui/button/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: the kit's compound sheet, as every sheet of the app imports it
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   import { IconCopy, IconFork, IconMore, IconPenLine } from "#lib/icons.js";

@@ -32,6 +32,7 @@
 
 <script lang="ts">
   import { commonWords, transcriptWords } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   /**
    * The scrolling transcript: the folded rows, virtualized. The live tail rides
    * as rows of its own (see `buildRowsFrom`), so streaming text, an open reasoning
@@ -42,6 +43,7 @@
   import { flushSync, onDestroy, setContext, tick, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { Virtualizer, type VirtualizerHandle } from "virtua/svelte";
+  import { track } from "#lib/cawco/track.js";
   import { describeTool } from "#lib/components/features/tool-cards/descriptors.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -503,10 +505,8 @@
     w.__transcriptBuilds[key] = (w.__transcriptBuilds[key] ?? 0) + 1;
   };
   const built = $derived.by<Built>(() => {
-    // biome-ignore lint/complexity/noVoid: the bump that hands over a two-step change's second step.
-    void secondStep;
-    // biome-ignore lint/complexity/noVoid: the bump that hands over a page folded in front (`foldInFront`).
-    void fronted;
+    track(secondStep);
+    track(fronted);
     // The switch flush paints what is already there; the catch-up comes
     // after the paint, through the hold letting go.
     if (risen !== builtRises) {
@@ -515,8 +515,7 @@
         hold();
       }
     }
-    // biome-ignore lint/complexity/noVoid: the release is what re-runs a held build.
-    void released;
+    track(released);
     if (held) {
       return STILL_BUILD();
     }
@@ -526,8 +525,7 @@
       // Read, not used: this is `built`'s reactive dependency on the unfocused
       // tier's own clock — its change is what re-runs this branch to re-check
       // the print, in place of the tracked reads `untrack` below hides.
-      // biome-ignore lint/complexity/noVoid: see comment above — a bare reference would look unused and get "cleaned up".
-      void rebuildTick;
+      track(rebuildTick);
       return untrack(rebuild);
     }
     // The print is the whole of what a focused build depends on: the live
@@ -1383,8 +1381,7 @@
   // indexes had not moved), so the turn's rows stood over one another until
   // a reload (the owner's "good morning", nightly 0.1.12-nightly.5855).
   const presentation = $derived.by(() => {
-    // biome-ignore lint/complexity/noVoid: a row finishing its fold re-draws the list without it.
-    void leftTick;
+    track(leftTick);
     const from = built;
     const shifted = from.shifted && from !== drawnFrom;
     drawnFrom = from;
@@ -1861,8 +1858,7 @@
   let buffer = $state(0);
   $effect(() => {
     const full = viewHeight * BUFFER_SCREENS;
-    // biome-ignore lint/complexity/noVoid: a page handed over in front steps the buffer up from nothing (`foldInFront`)
-    void fronted;
+    track(fronted);
     if (narrow || unseen) {
       buffer = 0;
       return;
@@ -2978,8 +2974,7 @@
     if (!(docId && shown && visible)) {
       return;
     }
-    // biome-ignore lint/complexity/noVoid: a page landing changes the rows the record is looked for in
-    void rowCount;
+    track(rowCount);
     const own = paged();
     if (session.loading || own?.loading) {
       return;
@@ -2987,8 +2982,10 @@
     if (untrack(anchorIndex) < 0) {
       if (own?.cursor && !own.olderFault) {
         if (!own.hydrating && untrack(printOf) === builtPrint) {
-          // biome-ignore lint/complexity/noVoid: fire-and-forget; the page landing re-runs this seek
-          void untrack(() => readOlderPage(own.instanceId));
+          detach(
+            untrack(() => readOlderPage(own.instanceId)),
+            "untrack"
+          );
         }
         return;
       }
@@ -3104,8 +3101,7 @@
     // A front shift virtua is holding until a touch scroll comes to rest is
     // not in the scroll offset yet: it stands in the first row's own offset.
     if (above - list.getItemOffset(0) < list.getViewportSize()) {
-      // biome-ignore lint/complexity/noVoid: fire-and-forget; the page lands in the store the rows are built from
-      void readOlderPage(store.instanceId);
+      detach(readOlderPage(store.instanceId), "readOlderPage");
     }
   }
 
@@ -3168,8 +3164,7 @@
     ) {
       return;
     }
-    // biome-ignore lint/complexity/noVoid: a page landing changes the rows without moving the cursor's truthiness
-    void rowCount;
+    track(rowCount);
     return askOlderInFrame();
   });
 
@@ -3854,8 +3849,7 @@
 
     const reading =
       session.loading || (store !== null && store !== session && store.loading);
-    // biome-ignore lint/complexity/noVoid: a record asked for before the list is drawn is read back to (`seek`).
-    void asked;
+    track(asked);
 
     if (shown || reading || !(landed && node && container)) {
       return;
@@ -3887,8 +3881,10 @@
       }
       if (own?.cursor && !own.olderFault) {
         if (!own.hydrating) {
-          // biome-ignore lint/complexity/noVoid: fire-and-forget; the page landing re-runs this reveal
-          void untrack(() => readOlderPage(own.instanceId));
+          detach(
+            untrack(() => readOlderPage(own.instanceId)),
+            "untrack"
+          );
         }
         return;
       }
@@ -4096,22 +4092,26 @@
   $effect(() => {
     if (landed) {
       if (active && untrack(() => atBottom)) {
-        // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — this effect does not await the land, it only arms it.
-        void tick().then(() => {
-          if (active && atBottom) {
-            land();
-          }
-        });
+        detach(
+          tick().then(() => {
+            if (active && atBottom) {
+              land();
+            }
+          }),
+          "tick"
+        );
       }
       return;
     }
     if (rows.length > 0) {
-      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — this effect does not await the land, it only arms it.
-      void tick().then(() => {
-        if (!landed) {
-          land();
-        }
-      });
+      detach(
+        tick().then(() => {
+          if (!landed) {
+            land();
+          }
+        }),
+        "tick"
+      );
     }
   });
 

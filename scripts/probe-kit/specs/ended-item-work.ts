@@ -276,7 +276,6 @@ const serving = async (
   while (Date.now() < deadline) {
     try {
       // The session's preview, on its own origin (hub server.ts `frameAddress`).
-      // biome-ignore lint/performance/noAwaitInLoops: polls until it answers or the bound passes
       const listed = await fetch(
         `${fleet.base}/api/instances/${instanceId}/artifacts`
       );

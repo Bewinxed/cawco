@@ -13,7 +13,6 @@
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
   import { IconEye, IconEyeClosed, IconWarningTriangle } from "#lib/icons.js";
   import Check from "./Check.svelte";

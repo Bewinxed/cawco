@@ -74,7 +74,6 @@ const approve = async (origin: string, command: string): Promise<string> => {
   let interval = pairing.interval * 1000;
   const deadline = Date.now() + pairing.expiresIn * 1000;
   while (Date.now() < deadline) {
-    // biome-ignore lint/performance/noAwaitInLoops: RFC 8628 §3.5: each poll waits its interval after the one before
     await Bun.sleep(interval);
     const polled = await readWithin(PAIR_ANSWER_MS, async (signal) => {
       const response = await fetch(`${origin}/api/pair/poll`, {

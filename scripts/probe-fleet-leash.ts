@@ -113,7 +113,6 @@ const leftOf = async (
     .map(Number)
     .filter((pid) => pid !== process.pid);
   for (const pid of new Set([...tree, ...inGroups, ...byPath])) {
-    // biome-ignore lint/performance/noAwaitInLoops: a few dozen pids, read once each
     if (await runs(pid)) {
       left.set(pid, (await commandLine(pid)) ?? "?");
     }
@@ -188,7 +187,6 @@ const main = async () => {
   console.log(`… the starter (pid ${child.pid}) killed with SIGKILL`);
   let left = await leftOf(tree, root);
   while (left.size > 0 && Date.now() - killedAt < WITHIN_MS) {
-    // biome-ignore lint/performance/noAwaitInLoops: one look every quarter second until the deadline
     await Bun.sleep(250);
     left = await leftOf(tree, root);
   }

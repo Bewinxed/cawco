@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
   /**
    * Attach: a press opens the system's picker (files, and on a phone its
    * photos and camera), and what is picked joins the draft
@@ -16,7 +17,6 @@
    * 44px under a finger (commenting build note 1).
    */
   import { Button } from "#lib/components/ui/button/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { IconArtifactCanvas, IconPaperclip, IconPlus } from "#lib/icons.js";
   import type { ComposerDraft } from "./composer-draft.svelte";
@@ -44,8 +44,7 @@
       // Copied first: `picker.files` is live, and clearing the input below
       // empties it while the reads are still walking it — a pick of several
       // files kept only the first.
-      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — the file input clears synchronously below, independent of the read.
-      void draft.add([...picker.files]);
+      detach(draft.add([...picker.files]), "add");
     }
     picker.value = "";
   }

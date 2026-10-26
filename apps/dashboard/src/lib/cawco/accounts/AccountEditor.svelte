@@ -8,6 +8,7 @@
    * it, a machine away) is the hub's sentence.
    */
   import { type Account, accountsWords as words } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import { untrack } from "svelte";
   import {
     cawco,
@@ -101,8 +102,7 @@
 
   function cancel() {
     kept.drop();
-    // biome-ignore lint/complexity/noVoid: navigation reports nothing to wait for
-    void goto("/config/accounts");
+    detach(goto("/config/accounts"), "goto");
   }
 
   async function askRemove() {

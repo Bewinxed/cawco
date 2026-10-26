@@ -678,7 +678,6 @@ export const ownConfigChanges = async (
     if (!MOVE_TARGET.test(rev)) {
       throw new Error(`"${rev}" is no commit name`);
     }
-    // biome-ignore lint/performance/noAwaitInLoops: a move names one or two commits
     const listed = await insideRead(
       workspace,
       `git rev-list --boundary ${rev} --not --remotes=origin`
@@ -696,7 +695,6 @@ export const ownConfigChanges = async (
     const against = bases.length > 0 ? bases : [EMPTY_TREE];
     let differs: Set<string> | undefined;
     for (const base of against) {
-      // biome-ignore lint/performance/noAwaitInLoops: a branch's own commits begin at one commit of origin's, a merge's at a few
       const read = await insideRead(
         workspace,
         `git diff --name-only -z ${base} ${rev} -- ${paths}`
@@ -866,7 +864,6 @@ const onHost = async (
   let told = false;
   try {
     for (;;) {
-      // biome-ignore lint/performance/noAwaitInLoops: one look at the boundary at a time, until it is idle
       const down = await whileSandboxDown(workspace, async () => {
         const now = await hostGitRefusal(workspace);
         if (now) {

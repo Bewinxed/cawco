@@ -156,7 +156,6 @@ export const createThreadRepair = ({
     for (const send of missed) {
       let entries = read.get(send.instanceId);
       if (!entries) {
-        // biome-ignore lint/performance/noAwaitInLoops: one session's transcript, read once
         const stored = await history(send.instanceId);
         if ("fault" in stored) {
           console.warn(

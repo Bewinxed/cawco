@@ -49,7 +49,6 @@ export const throughHubAway = async (
   for (;;) {
     let away: string;
     try {
-      // biome-ignore lint/performance/noAwaitInLoops: one try at a time, the next only once this one found the hub away
       const answer = await tryOnce();
       if (!isHubAway(answer.status)) {
         return answer;

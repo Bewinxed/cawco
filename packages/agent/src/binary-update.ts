@@ -1047,7 +1047,6 @@ export class BinaryUpdater {
         continue;
       }
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: one keeper at a time, each removal said in its order
         await keeperJob(keeper.keeper)?.remove({ children: keeper.children });
         await rm(keeper.endpoint, { force: true });
         this.#emptySince.delete(keeper.endpoint);
@@ -1127,7 +1126,6 @@ export class BinaryUpdater {
     );
     let removed = false;
     for (const job of await keeperJobsHere()) {
-      // biome-ignore lint/performance/noAwaitInLoops: keeper jobs are few, each removal said in its order
       if (kept.has(job.service) || (await job.pid()) !== undefined) {
         this.#idleJobSince.delete(job.service);
         continue;
@@ -1875,7 +1873,6 @@ export class BinaryUpdater {
       let reading = await readReadiness(hub);
       const deadline = Date.now() + DRAIN_MS;
       while (!reading.ready && Date.now() < deadline) {
-        // biome-ignore lint/performance/noAwaitInLoops: a poll; each look must see the work the previous one saw end
         await Bun.sleep(DRAIN_POLL_MS);
         reading = await readReadiness(hub);
       }

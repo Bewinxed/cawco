@@ -335,7 +335,6 @@ const run = async (kit: Kit): Promise<void> => {
   const newest = `/api/instances/${busy}/transcript`;
   for (let at = 1; at <= RELOADS; at += 1) {
     const streaming = fleet.instance(busy)?.status === "running";
-    // biome-ignore lint/performance/noAwaitInLoops: each reload follows the last
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.waitForSelector(COMPOSER, { timeout: 60_000 });
     await page.waitForTimeout(SETTLE_MS);

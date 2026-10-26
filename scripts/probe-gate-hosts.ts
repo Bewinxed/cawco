@@ -1116,7 +1116,6 @@ try {
     let quietSince = Date.now();
     const deadline = Date.now() + 30_000;
     while (Date.now() - quietSince < 3000 && Date.now() < deadline) {
-      // biome-ignore lint/performance/noAwaitInLoops: polling the file until it stops changing
       const read = await Bun.file(recordFile).text();
       if (read !== last) {
         last = read;
@@ -1189,7 +1188,6 @@ try {
   let oldGone = false;
   const deadline = Date.now() + 90_000;
   while (!oldGone && Date.now() < deadline) {
-    // biome-ignore lint/performance/noAwaitInLoops: the keeper is watched until the old server is retired
     oldGone = !(await keeper.list()).procs.some(
       (proc) => proc.procId === oldServer.procId && proc.alive
     );
@@ -1463,7 +1461,6 @@ try {
     },
   ];
   for (const one of written) {
-    // biome-ignore lint/performance/noAwaitInLoops: each exclude line is appended to its clone's file in turn
     await Bun.write(one.file, one.text);
     await excludeFromCheckout(one.file);
   }
@@ -1521,7 +1518,6 @@ try {
   // are removed, as the agent ends them with a gate's last session.
   mcpHost.stopAll();
   for (const row of await browsers.browserRows()) {
-    // biome-ignore lint/performance/noAwaitInLoops: one browser at a time, each under its own lock.
     await browsers.removeBrowser(row.key);
   }
   await sessiond.drain(5000);

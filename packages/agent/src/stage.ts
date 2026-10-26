@@ -948,7 +948,6 @@ const commandOf = (stage: Stage): [string, Record<string, string>] =>
 const letGo = async (stage: Stage, waitMs: number): Promise<boolean> => {
   const deadline = Date.now() + waitMs;
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: one ask at a time until the port is free or the wait ends
     const look = await healthy(stage, SERVE_ASK_MS);
     switch (look.kind) {
       case "answered":
@@ -1010,7 +1009,6 @@ const servesBy = async (
   waiting: () => boolean
 ): Promise<boolean> => {
   while (waiting() && stage.child === child) {
-    // biome-ignore lint/performance/noAwaitInLoops: one ask at a time until the port answers or the start ends
     const look = await healthy(stage, SERVE_ASK_MS);
     if (look.kind === "answered" && look.value) {
       return true;

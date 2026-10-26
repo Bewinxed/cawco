@@ -1,0 +1,10 @@
+language js
+
+// A namespace import names a component group of the shadcn-svelte kit
+// (`* as DropdownMenu`, read as `DropdownMenu.Root`, `.Item`), the one place
+// biome.jsonc turns noNamespaceImport off. Any other module is imported by
+// name.
+`import * as $name from $source` where {
+  $source <: not r"[\"'](?:#lib/components/ui/[a-z-]+/index\.js|\./index\.js)[\"']",
+  register_diagnostic(span=$source, message="Only a kit component group (#lib/components/ui/<group>/index.js) is imported as a namespace; import this module's exports by name.")
+}

@@ -192,8 +192,7 @@ const admitFolder = async (
     for (const entry of entries) {
       const path = rel ? `${rel}/${entry.name}` : entry.name;
       const why = entry.isDirectory()
-        ? // biome-ignore lint/performance/noAwaitInLoops: depth first in name order, the first refusal the answer
-          await walk(path)
+        ? await walk(path)
         : await inFolder(join(named, path), `${basename(named)}/${path}`);
       if (why) {
         return why;
@@ -296,7 +295,6 @@ const admitAll = async (
   const reach = { opened, roots };
   const tally: Tally = { admitted: [], named: new Map(), bytes: 0 };
   for (const path of paths as string[]) {
-    // biome-ignore lint/performance/noAwaitInLoops: one input at a time, the first refusal is the answer
     const files = await admit(path, reach);
     const why = typeof files === "string" ? files : await counted(tally, files);
     if (why) {
@@ -331,7 +329,6 @@ const counted = async (
     if (tally.named.size > INPUTS_COUNT_LIMIT) {
       return `the inputs come to more than ${INPUTS_COUNT_LIMIT} files together, the most one delegation carries; name fewer files or a narrower folder`;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: the running total refuses at the first file past it
     tally.bytes += (await stat(one.real)).size;
     if (tally.bytes > INPUTS_LIMIT_BYTES) {
       return `the inputs come to more than ${INPUTS_LIMIT_BYTES / MIB} MiB together, the most one delegation carries; hand larger data on through git or a check with machine`;
@@ -437,7 +434,6 @@ const ownFolder = async (own: string, rel: string): Promise<string> => {
   let at = own;
   for (const component of rel === "." ? [] : rel.split("/")) {
     at = join(at, component);
-    // biome-ignore lint/performance/noAwaitInLoops: each folder stands inside the one before it
     const found = await lstat(at).catch(() => undefined);
     if (found?.isDirectory()) {
       continue;
@@ -478,7 +474,6 @@ const writeInto = async (
     if (nameProblem(file.name)) {
       throw new Error(`"${file.name}" is not a file name`);
     }
-    // biome-ignore lint/performance/noAwaitInLoops: one file at a time, each into the folder checked just before it
     if ((await realpath(dir)) !== own) {
       throw new Error(
         `${dir} is no longer workspace ${ref.id}'s own inputs folder, so nothing more was written there`

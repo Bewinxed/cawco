@@ -73,7 +73,6 @@ const endAll = async (): Promise<void> => {
   ending = true;
   const frozen = new Set<number>();
   for (let reading = 0; reading <= MAX_READINGS; reading += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: each reading follows the last freeze
     const found = [...(await treeOf(process.pid))].filter(
       (pid) => !frozen.has(pid)
     );

@@ -269,7 +269,6 @@ async function fitBar(root, c) {
       }
     }
     view(root, c.view);
-    // biome-ignore lint/performance/noAwaitInLoops: each fold is measured once its pictures stand
     await pictures(slot);
     const fits = [...slot.querySelectorAll('[data-group="lead"], [data-group="trail"]')].every((group) =>
       reachesIn(group, gap)

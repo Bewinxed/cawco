@@ -283,7 +283,6 @@ export const createProjectSettings = ({
     }
     const out: ProjectSettingChange[] = [];
     for (const one of asked) {
-      // biome-ignore lint/performance/noAwaitInLoops: at most three changes, a publish's read on its machine among them
       out.push(await checked(project, one));
     }
     return out;
@@ -337,7 +336,6 @@ export const createProjectSettings = ({
   ): Promise<string[]> => {
     const said: string[] = [];
     for (const change of changes) {
-      // biome-ignore lint/performance/noAwaitInLoops: at most three changes, each applied before the next
       said.push(...(await applyOne(project, change)));
     }
     console.log(`[project-settings] ${project.name}: ${said.join("; ")}`);

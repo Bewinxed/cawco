@@ -19,6 +19,7 @@
     planWords,
     questionsOf,
   } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import { humanize, mcpParts } from "@cawco/core/tool-presentation";
   /**
    * The middle step of the board's loop: glance at the fleet, peek at one
@@ -33,7 +34,6 @@
    */
   import { untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { followTail } from "#lib/hooks/follow-tail.js";
@@ -119,8 +119,7 @@
       openSession(id);
       const held = cawco.session(id);
       if (!(held?.initialized && held.messages.length > 0)) {
-        // biome-ignore lint/complexity/noVoid: fire-and-forget inside untrack — the read publishes into the store the tail below reads
-        void readTranscript(id);
+        detach(readTranscript(id), "readTranscript");
       }
     });
   });
@@ -238,8 +237,7 @@
     if (!(machineId && running)) {
       return;
     }
-    // biome-ignore lint/complexity/noVoid: fire-and-forget inside untrack — the store the effect reads is what this call updates
-    untrack(() => void refreshContext(id, machineId));
+    untrack(() => detach(refreshContext(id, machineId), "refreshContext"));
   });
   // The meter draws the peeked session's reading while it runs: its turns'
   // ends read it again only while one does (client.svelte.ts `showContext`).
@@ -439,8 +437,10 @@
           compaction={session?.lastCompaction ?? null}
           onrefresh={() => {
             if (session) {
-              // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — the meter re-renders off the store this call updates
-              void refreshContext(session.instanceId, session.machineId);
+              detach(
+                refreshContext(session.instanceId, session.machineId),
+                "refreshContext"
+              );
             }
           }}
           status={session?.sdkStatus ?? null}

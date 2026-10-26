@@ -16,7 +16,6 @@
  * place, transform and opacity read there go to `letters.json`, to compare
  * with another tree's morph.
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one step at a time, on one clock
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { bundled } from "../../../packages/core/src/bundled";

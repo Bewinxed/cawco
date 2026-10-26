@@ -7,7 +7,6 @@
    * it on the clipboard exactly as it came.
    */
   import { Button } from "#lib/components/ui/button/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import { IconAlert, IconCheck, IconCopy } from "#lib/icons.js";
   import { copyRefused, copyToClipboard } from "./copy";

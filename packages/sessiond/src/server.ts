@@ -467,7 +467,6 @@ export class SessiondServer {
       }
       if (
         !(watch.proc.alive || reading.populated) &&
-        // biome-ignore lint/performance/noAwaitInLoops: one removal at a time, each after its own last reading
         (await removeGroup(path))
       ) {
         this.#groups.delete(path);
@@ -1376,7 +1375,6 @@ export class SessiondServer {
     }
     const deadline = Date.now() + graceMs;
     while (Date.now() < deadline && alive.some((proc) => proc.alive)) {
-      // biome-ignore lint/performance/noAwaitInLoops: polls until every child exits or the grace window closes; each check depends on the previous sleep
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
     // The grace is spent: the sweeps still waiting on theirs end here too.

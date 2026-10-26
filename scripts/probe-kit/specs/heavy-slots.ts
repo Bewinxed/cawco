@@ -161,7 +161,6 @@ async function until(look: () => boolean, ms = 20_000): Promise<boolean> {
     if (look()) {
       return true;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: polling a condition
     await Bun.sleep(50);
   }
   return look();
@@ -214,7 +213,6 @@ async function inLine(kit: Kit, place: SlotPlace): Promise<void> {
   const runs: Promise<CommandResult>[] = [];
   for (let k = 0; k < total; k += 1) {
     runs.push(mergeCheck(`a-${k}`, WORK, `merge check ${k + 1}`));
-    // biome-ignore lint/performance/noAwaitInLoops: each run comes 30 ms after the last
     await Bun.sleep(30);
   }
   const results = await Promise.all(runs);

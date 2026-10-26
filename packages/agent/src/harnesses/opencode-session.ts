@@ -76,6 +76,7 @@ import {
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { detach } from "@cawco/core/detach";
 import { readRecordSync, writeStateFileSync } from "@cawco/core/state-file";
 import type {
   FormInfo,
@@ -1094,7 +1095,6 @@ export class OpencodeSession implements HarnessSession {
       const placed = this.#placedEntries;
       for (const key of [...placed]) {
         if (!(key in entries)) {
-          // biome-ignore lint/performance/noAwaitInLoops: a few entries, taken off in turn
           await this.#client.session.instructions.entry.remove(
             { sessionID, key },
             options
@@ -1114,7 +1114,6 @@ export class OpencodeSession implements HarnessSession {
             `${key} is ${bytes} bytes as an OpenCode instruction entry; OpenCode takes at most ${INSTRUCTION_ENTRY_MAX}.`
           );
         }
-        // biome-ignore lint/performance/noAwaitInLoops: a few entries, put in turn
         await this.#client.session.instructions.entry.put(
           { sessionID, key, value },
           options
@@ -1630,7 +1629,6 @@ export class OpencodeSession implements HarnessSession {
     let cursor: string | undefined;
     while (this.#background.size > 0) {
       const page = cursor;
-      // biome-ignore lint/performance/noAwaitInLoops: each page's cursor comes from the one before it
       const read = await askOpencode(
         (options) =>
           this.#client.message.list(
@@ -2049,7 +2047,6 @@ export class OpencodeSession implements HarnessSession {
     };
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: bounded retry of this endpoint, independently of the other
         const read = await askOpencode(async (options): Promise<void> => {
           if (kind === "permission") {
             for (const ask of await this.#client.permission.list(
@@ -2105,8 +2102,7 @@ export class OpencodeSession implements HarnessSession {
       this.#resolvedGates.add(requestId);
       this.#questions.delete(requestId);
       this.#ctx.permissionResolved?.(requestId);
-      // biome-ignore lint/complexity/noVoid: fire-and-forget: resolvePermission itself is not awaited by its callers
-      void this.#replyForm(requestId, asked, result);
+      detach(this.#replyForm(requestId, asked, result), "replyForm");
       return;
     }
     let decision: "once" | "always" | "reject";
@@ -2131,32 +2127,36 @@ export class OpencodeSession implements HarnessSession {
     this.#resolvedGates.add(requestId);
     this.#ctx.permissionResolved?.(requestId);
     const sessionID = this.#opencodeSessionId();
-    // biome-ignore lint/complexity/noVoid: fire-and-forget: #replyPermission itself is not awaited by its callers
-    void withRestartHold("write", `permission:${requestId}`, () =>
-      askOpencode((options) =>
-        this.#client.permission.reply(
-          { sessionID, requestID: requestId, decision },
-          options
+    detach(
+      withRestartHold("write", `permission:${requestId}`, () =>
+        askOpencode((options) =>
+          this.#client.permission.reply(
+            { sessionID, requestID: requestId, decision },
+            options
+          )
         )
-      )
-    ).then(
-      (replied) => {
-        switch (replied.kind) {
-          case "answered":
-            return;
-          case "unanswered":
-            console.warn(
-              `[opencode] permission reply failed: ${notAnswered(`the reply to ${requestId}`, replied)}`
-            );
-            return;
-          default: {
-            const unhandled: never = replied;
-            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      ).then(
+        (replied) => {
+          switch (replied.kind) {
+            case "answered":
+              return;
+            case "unanswered":
+              console.warn(
+                `[opencode] permission reply failed: ${notAnswered(`the reply to ${requestId}`, replied)}`
+              );
+              return;
+            default: {
+              const unhandled: never = replied;
+              throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+            }
           }
-        }
-      },
-      (error: unknown) =>
-        console.warn(`[opencode] permission reply failed: ${errorText(error)}`)
+        },
+        (error: unknown) =>
+          console.warn(
+            `[opencode] permission reply failed: ${errorText(error)}`
+          )
+      ),
+      "withRestartHold"
     );
   }
 
@@ -2829,8 +2829,10 @@ export class OpencodeSession implements HarnessSession {
     this.#ctx.busy(true);
     const command = parseCommand(text);
     if (command) {
-      // biome-ignore lint/complexity/noVoid: fire-and-forget: send() itself is not awaited by its callers
-      void this.#commandOrPrompt(command, text, files, messageID, uuid);
+      detach(
+        this.#commandOrPrompt(command, text, files, messageID, uuid),
+        "commandOrPrompt"
+      );
     } else {
       this.#prompt(text, files, messageID, uuid);
     }
@@ -2843,8 +2845,10 @@ export class OpencodeSession implements HarnessSession {
     messageID: string,
     uuid: string
   ): void {
-    // biome-ignore lint/complexity/noVoid: send() remains synchronous while dispatch custody is prepared
-    void this.#dispatchPrompt(text, files, messageID, uuid);
+    detach(
+      this.#dispatchPrompt(text, files, messageID, uuid),
+      "dispatchPrompt"
+    );
   }
 
   async #dispatchPrompt(
@@ -3120,7 +3124,6 @@ export class OpencodeSession implements HarnessSession {
           `OpenCode has no skill “${name}” at ${this.#directory}.`
         );
       }
-      // biome-ignore lint/performance/noAwaitInLoops: skills load in order, before the first prompt
       const loaded = await askOpencode((options) =>
         this.#client.session.skill({ sessionID, id, resume: false }, options)
       );
@@ -3404,7 +3407,6 @@ export class OpencodeSession implements HarnessSession {
       }
       const id = messageId();
       const line = mcpNotConnectedLine(server.name, server.why);
-      // biome-ignore lint/performance/noAwaitInLoops: one note per server, in the order the server listed them
       const written = await askOpencode((options) =>
         this.#client.session.synthetic(
           {

@@ -14,9 +14,7 @@
   } from "@pierre/diffs";
   import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
   import { CopyButton } from "#lib/components/ui/copy-button/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Dialog from "#lib/components/ui/dialog/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import { IconAlignLeft, IconColumns } from "#lib/icons.js";
   import { fileName, languageOf } from "./diff-language";

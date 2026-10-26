@@ -8,7 +8,6 @@
    * kept by the hub, gone with a reload, which its placeholder then says.
    */
   import { connectWords } from "@cawco/core";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
   import { IconEye, IconEyeClosed } from "#lib/icons.js";
   import { connect } from "./installs.svelte";

@@ -43,7 +43,6 @@ async function* framesOf(
       .then((result) => ({ kind, result }));
   const reads = new Map([...readers.keys()].map((kind) => [kind, next(kind)]));
   while (reads.size > 0) {
-    // biome-ignore lint/performance/noAwaitInLoops: one frame at a time, in the order the pipes give them
     const { kind, result } = await Promise.race(reads.values());
     if (result.done) {
       reads.delete(kind);

@@ -949,7 +949,6 @@ export function createDelegationMcp(options: {
     }
     const result = await entry.call(input);
     for (const envelope of emitted) {
-      // biome-ignore lint/performance/noAwaitInLoops: spawn must finish before its first send is relayed
       await options.forward(envelope, actor);
     }
     return result;

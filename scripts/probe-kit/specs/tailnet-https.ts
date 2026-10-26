@@ -39,7 +39,6 @@
  *
  *   bun scripts/probe-kit/run.ts tailnet-https
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: each state is set, then waited on, before the next
 
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { userInfo } from "node:os";

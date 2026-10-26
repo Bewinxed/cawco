@@ -249,7 +249,6 @@ async function still(page) {
   let was = await read();
   let same = 0;
   for (let i = 0; i < 40 && same < 2; i += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: each read waits on the last
     await page.waitForTimeout(200);
     const now = await read();
     same = now === was ? same + 1 : 0;
@@ -337,7 +336,6 @@ async function typeThree(page) {
 /** ↑ until the wheel is up (the caret climbs the draft's lines first). */
 async function upIntoWheel(page) {
   for (let i = 0; i < 6; i += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: each press reads whether the wheel came up
     await page.keyboard.press("ArrowUp");
     await page.waitForTimeout(30);
     if (await page.$(".ghosts")) {
@@ -370,7 +368,6 @@ async function draftRoundTrip(page, keys) {
   await still(page);
   await mark(page, "close");
   for (const key of keys) {
-    // biome-ignore lint/performance/noAwaitInLoops: the keys go in order
     await page.keyboard.press(key);
     await still(page);
   }
@@ -399,7 +396,6 @@ async function takeRun(page, lines, ups) {
   await upIntoWheel(page);
   await still(page);
   for (let i = 0; i < ups; i += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: one row a press
     await page.keyboard.press("ArrowUp");
     await page.waitForTimeout(250);
   }
@@ -457,7 +453,6 @@ function swipe(page, rise, drag) {
       for (let i = 0; i < up / 6; i += 1) {
         y -= 6;
         fire("pointermove", field);
-        // biome-ignore lint/performance/noAwaitInLoops: a frame a move, as a finger
         await frame();
       }
       const opened = !!document.querySelector(".ghosts");
@@ -466,7 +461,6 @@ function swipe(page, rise, drag) {
       for (let i = 0; i < down / 6; i += 1) {
         y += 6;
         fire("pointermove", document.body);
-        // biome-ignore lint/performance/noAwaitInLoops: a frame a move, as a finger
         await frame();
       }
       const onDrag = active();
@@ -498,7 +492,6 @@ async function cdpSwipe(page) {
     });
   await touch("touchStart", b.y);
   for (let d = 6; d <= 60; d += 6) {
-    // biome-ignore lint/performance/noAwaitInLoops: a move at a time, as a finger
     await touch("touchMove", b.y - d);
     await page.waitForTimeout(16);
   }
@@ -512,7 +505,6 @@ async function cdpSwipe(page) {
     );
   const onOpen = await active();
   for (let d = 54; d >= -40; d -= 6) {
-    // biome-ignore lint/performance/noAwaitInLoops: a move at a time, as a finger
     await touch("touchMove", b.y - d);
     await page.waitForTimeout(16);
   }
@@ -676,7 +668,6 @@ async function reducedDeck(engine) {
 for (const engine of Object.keys(ENGINES)) {
   report[engine] = {};
   for (const v of VIEWPORTS) {
-    // biome-ignore lint/performance/noAwaitInLoops: one browser at a time keeps the frame timings honest
     report[engine][v.name] = await (v.touch ? phone : desktop)(engine, v);
   }
   report[engine].reducedMotionDeck = await reducedDeck(engine);

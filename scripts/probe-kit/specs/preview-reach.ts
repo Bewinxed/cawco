@@ -427,7 +427,6 @@ const paneCause = async (legs: Legs, cause: Cause) => {
         const times: number[] = [];
         for (let i = 0; i < 20; i += 1) {
           const started = performance.now();
-          // biome-ignore lint/performance/noAwaitInLoops: one ping at a time, each timed alone
           await fetch(url, { mode: "cors", cache: "no-store" }).catch(
             () => undefined
           );
@@ -772,7 +771,6 @@ const run = async (kit: Kit) => {
     }
   );
   for (const engine of GONE_ENGINES) {
-    // biome-ignore lint/performance/noAwaitInLoops: one engine at a time, the agent stopped and back for each
     await serverGone({ artifact: away.id, base, engine, fleet, kit, ported });
   }
 
@@ -831,7 +829,6 @@ const run = async (kit: Kit) => {
   );
   const legs: Legs = { base, decided, embedPort, kit, paged, panePort, ports };
   for (const cause of CAUSES) {
-    // biome-ignore lint/performance/noAwaitInLoops: one cause at a time, each in a browser of its own
     await paneCause(legs, cause);
     await previewCause(legs, cause);
   }

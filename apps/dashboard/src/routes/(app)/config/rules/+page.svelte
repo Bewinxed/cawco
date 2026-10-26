@@ -1,5 +1,10 @@
 <script lang="ts">
-  import { type RuleRow, ruleSentence, rulesWords } from "@cawco/core";
+  import {
+    RULE_TEMPLATES,
+    type RuleRow,
+    ruleSentence,
+    rulesWords,
+  } from "@cawco/core";
   import { deleteRule, notDeleted } from "#lib/cawco/config/deletes.js";
   import RowList from "#lib/cawco/config/RowList.svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
@@ -21,7 +26,6 @@
   import {
     createRule,
     draftOf,
-    RULE_TEMPLATES,
     saveRule,
     since,
     times,

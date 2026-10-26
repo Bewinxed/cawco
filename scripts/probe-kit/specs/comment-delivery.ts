@@ -554,7 +554,6 @@ const writePins = async (on: On, frame: Frame): Promise<number[]> => {
     const number = i + 1;
     if (i > 0) {
       // 2 s from the last pin's words to this pin.
-      // biome-ignore lint/performance/noAwaitInLoops: the pins are written one after another, as a person does
       await Bun.sleep(Math.max(0, keptAt[i - 1] + 2000 - Date.now()));
     }
     const b = await screenBox(on, frame, `#${PARAS[i].id}`);
@@ -775,7 +774,6 @@ const wholePageChecks = async (on: On, frame: Frame) => {
   );
   // The page's words change, twice, as a mockup's do from state to state.
   for (const words of ["Showing state two", "Showing state three"]) {
-    // biome-ignore lint/performance/noAwaitInLoops: one state after the other, each drawn
     await frame.evaluate((said) => {
       const main = document.querySelector("main");
       const line =
@@ -840,7 +838,6 @@ const linkDownChecks = async (on: On, frame: Frame) => {
   );
   pageLink.down = true;
   for (const ws of pageLink.open) {
-    // biome-ignore lint/performance/noAwaitInLoops: each socket the page holds, closed
     await ws.close({
       code: 1011,
       reason: "The probe dropped the page's link.",

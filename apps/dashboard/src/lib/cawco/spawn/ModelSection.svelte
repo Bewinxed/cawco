@@ -26,7 +26,7 @@
     IconSearch as Search,
   } from "#lib/icons.js";
   import HarnessLogo from "../HarnessLogo.svelte";
-  import { models, providerOf, rememberModel } from "../models.svelte";
+  import { models, rememberModel } from "../models.svelte";
   import {
     crossIn,
     crossOut,
@@ -39,6 +39,7 @@
   import { unfold } from "../motion/fold.svelte";
   import { ListSwap } from "../motion/list-swap.svelte";
   import Rail from "../motion/Rail.svelte";
+  import { providerOf } from "../provider";
   import AccountChip, { type AccountTool } from "./AccountChip.svelte";
   import {
     deriveModelEntries,

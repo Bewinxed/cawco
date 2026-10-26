@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
   import { untrack } from "svelte";
   import { flip } from "svelte/animate";
   import { fade } from "svelte/transition";
@@ -148,8 +149,7 @@
       return;
     }
     quiet = setTimeout(() => {
-      // biome-ignore lint/complexity/noVoid: the ask reports its own outcome in component state
-      void ask(draft);
+      detach(ask(draft), "ask");
     }, SUGGEST_PAUSE_MS);
   });
 

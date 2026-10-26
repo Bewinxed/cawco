@@ -153,7 +153,6 @@
       let stillFailing = 0;
       for (const fault of group.faults) {
         if (fault.scope === "skills") {
-          // biome-ignore lint/performance/noAwaitInLoops: rows are re-resolved one at a time, in order, so the final count is right
           if ((await waits.run("act", () => refreshSkill(fault.key))).error) {
             stillFailing += 1;
           }

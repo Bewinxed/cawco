@@ -22,7 +22,6 @@
  *
  *   bun scripts/probe-kit/run.ts web phone-bar
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one engine and one width at a time, each on its own page
 import type { Page } from "playwright-core";
 import { HouseRules } from "../../house-rules";
 import { scan } from "../../journeys/scan";

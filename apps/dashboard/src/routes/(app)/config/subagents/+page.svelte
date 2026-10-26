@@ -4,6 +4,7 @@
     machineLabel,
     parseAgentFrontMatter,
   } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import { cawco, didntAnswer } from "#lib/cawco/client.svelte.js";
   import { deleteAgent, notDeleted } from "#lib/cawco/config/deletes.js";
   import RowList from "#lib/cawco/config/RowList.svelte";
@@ -69,26 +70,28 @@
         continue;
       }
       reading[machine.machineId] = true;
-      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — the effect re-runs per machine, not per promise
-      void discoverAgents(machine.machineId)
-        .then((read) => {
-          switch (read.kind) {
-            case "answered":
-              found[machine.machineId] = read.value;
-              break;
-            case "unanswered":
-              // Not known yet: the machine is asked again when this effect next runs.
-              console.warn(
-                `[cawco] subagents on ${machine.machineId}: ${didntAnswer(machine.machineId, read, { missed: "its list of subagents didn't come back", again: "It's asked again when this page next reads its machines." })}`
-              );
-              break;
-            default: {
-              const unhandled: never = read;
-              throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+      detach(
+        discoverAgents(machine.machineId)
+          .then((read) => {
+            switch (read.kind) {
+              case "answered":
+                found[machine.machineId] = read.value;
+                break;
+              case "unanswered":
+                // Not known yet: the machine is asked again when this effect next runs.
+                console.warn(
+                  `[cawco] subagents on ${machine.machineId}: ${didntAnswer(machine.machineId, read, { missed: "its list of subagents didn't come back", again: "It's asked again when this page next reads its machines." })}`
+                );
+                break;
+              default: {
+                const unhandled: never = read;
+                throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+              }
             }
-          }
-        })
-        .finally(() => delete reading[machine.machineId]);
+          })
+          .finally(() => delete reading[machine.machineId]),
+        "discoverAgents"
+      );
     }
   });
 

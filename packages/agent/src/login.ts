@@ -9,6 +9,7 @@ import {
   sameIdentity,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { detach } from "@cawco/core/detach";
 import { accountConfigDir, accountIds, accountsRoot } from "@cawco/core/paths";
 import { bootId, processStart } from "@cawco/core/process-identity";
 import {
@@ -187,7 +188,6 @@ export const endOrphanedSignIns = async (): Promise<void> => {
     if (!marker) {
       continue;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: one marker per account, each read and ended before the next
     const live = await identifiedPid(marker).catch((error: unknown) => {
       if (!isSignalRefused(error)) {
         throw error;
@@ -302,8 +302,10 @@ const until = (
             settle(true);
           }
         };
-        // biome-ignore lint/complexity/noVoid: the exit only settles the wait; its value is read from the process
-        void signIn.child.exited.then(() => settle(done()));
+        detach(
+          signIn.child.exited.then(() => settle(done())),
+          "then"
+        );
         signIn.heard();
       })
   );
@@ -357,8 +359,10 @@ const beginSignIn = async (
   const current = signIn;
   const { pid } = current.child;
   await markLogin(account, pid);
-  // biome-ignore lint/complexity/noVoid: the marker goes however the login ends; nothing waits on it
-  void current.child.exited.then(() => unmarkLogin(account, pid));
+  detach(
+    current.child.exited.then(() => unmarkLogin(account, pid)),
+    "then"
+  );
 
   // Ready once its authorize link is on the screen, whatever its prompt says.
   const shown = await until(

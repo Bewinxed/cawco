@@ -35,7 +35,6 @@
     TabsList,
   } from "../../../apps/dashboard/src/lib/components/ui/fluid-tabs/index.js";
   import { HangCard } from "../../../apps/dashboard/src/lib/components/ui/hang-card/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "../../../apps/dashboard/src/lib/components/ui/popover/index.js";
   import {
     IconChat,

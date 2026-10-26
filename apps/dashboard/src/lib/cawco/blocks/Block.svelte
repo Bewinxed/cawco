@@ -27,7 +27,6 @@
   } from "@cawco/core";
   import type { Component, Snippet } from "svelte";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import {
     IconArrowDown,

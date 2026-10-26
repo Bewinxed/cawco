@@ -42,14 +42,12 @@
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent from "#lib/components/ui/button/pending-content.svelte";
-  // biome-ignore lint/performance/noNamespaceImport: the kit's compound menu, as every menu of the app imports it
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import {
     TabItem,
     Tabs,
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import {

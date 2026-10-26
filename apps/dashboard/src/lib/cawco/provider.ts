@@ -4,8 +4,7 @@
  * after the last `/` is what matches. Prefix-first and case-insensitive: a
  * single token decides a whole family, and anything else is not our call.
  *
- * `models.svelte.ts` re-exports it, so callers keep importing
- * it from the same place as `modelLabel`.
+ * Pure string work, so it lives in a plain module.
  */
 const PROVIDER_PREFIXES: ReadonlyArray<
   readonly [prefix: string, provider: string]

@@ -19,7 +19,6 @@
  * Add, bare (the owner, 10-24: "u need to draw similar style icons that are
  * without their containers"): Solar's add in its bold-duotone cut.
  */
-// biome-ignore lint/performance/noBarrelFile: the dashboard's icon barrel (lib/icons.ts) re-exports it, every consumer imports from there
 export { default as IconAdd } from "~icons/solar/add-bold-duotone";
 /*
  * The session strip's "+", beside the tabs' close X: Solar's bare add in its

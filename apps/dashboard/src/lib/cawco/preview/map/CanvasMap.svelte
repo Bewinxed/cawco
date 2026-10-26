@@ -28,6 +28,7 @@
   import { fetchCanvasMap } from "#lib/cawco/artifact-api.js";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
+  import { track } from "#lib/cawco/track.js";
   import FlowAutoFit from "#lib/components/features/flow/FlowAutoFit.svelte";
   import FlowCanvasTools from "#lib/components/features/flow/FlowCanvasTools.svelte";
   import FlowZoomTracker from "#lib/components/features/flow/FlowZoomTracker.svelte";
@@ -94,8 +95,7 @@
   let chosen = $state<string | null>(null);
   $effect(() => {
     const ids = { instanceId, artifactId };
-    // biome-ignore lint/complexity/noVoid: read-only dependencies — a new show or Try again reads the map again
-    void [revision, asked];
+    track(revision, asked);
     let live = true;
     failure = null;
     fetchCanvasMap(ids.instanceId, ids.artifactId).then(

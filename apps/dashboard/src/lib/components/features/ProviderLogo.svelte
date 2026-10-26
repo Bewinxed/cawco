@@ -63,7 +63,7 @@
    * the caller keeps whatever it had been showing instead.
    */
   import type { Component } from "svelte";
-  import { providerOf } from "#lib/cawco/models.svelte.js";
+  import { providerOf } from "#lib/cawco/provider.js";
   import { cn } from "#lib/utils.js";
 
   /* `nemotron` is the only id that resolves to this lab (see `provider.ts`), so

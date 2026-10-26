@@ -256,7 +256,6 @@ export const findRuntime = async (): Promise<Runtime | { missing: string }> => {
       continue;
     }
     tried.add(socket);
-    // biome-ignore lint/performance/noAwaitInLoops: the first that answers, in order.
     const answer = await probeEndpoint(socket);
     if ("runtime" in answer) {
       return answer.runtime;

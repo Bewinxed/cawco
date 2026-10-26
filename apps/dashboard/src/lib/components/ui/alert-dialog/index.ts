@@ -1,4 +1,3 @@
-// biome-ignore lint/performance/noBarrelFile: public entry point for the alert-dialog component group, consumed as a unit under the shadcn-svelte convention
 export {
   default as Root,
   //

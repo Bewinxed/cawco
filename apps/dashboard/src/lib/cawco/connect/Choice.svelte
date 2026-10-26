@@ -6,7 +6,6 @@
    * where it has one, the consequence in meta under them. The chip's words
    * morph as the choice changes (The Steady Swap Rule).
    */
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { IconChevronDown } from "#lib/icons.js";

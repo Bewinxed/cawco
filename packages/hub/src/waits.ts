@@ -137,7 +137,6 @@ export const createWaits = ({ lifetime, projectIds, tasks }: WaitsDeps) => {
     for (const task of rows) {
       const stage = holding.get(task.stage);
       if (stage) {
-        // biome-ignore lint/performance/noAwaitInLoops: one task's move at a time, in the project's turn
         await wake(projectId, view, task, stage, now);
       }
     }

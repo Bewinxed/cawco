@@ -675,7 +675,6 @@ const refuses = async (
   ];
   for (const [what, entry, words] of cases) {
     const before = workspaceCount(fleet);
-    // biome-ignore lint/performance/noAwaitInLoops: one refusal after another, each counted against the workspaces before it
     const refused = await delegate([entry]).then(
       () => "started",
       (error: unknown) => String(error)
@@ -1284,7 +1283,6 @@ const continuedAs = async (
     ["its old id", old],
     ["its new id", now],
   ] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one handoff after the other, each read before the next
     const { answer, reached } = await handedTo(fleet, session, target, tag);
     check(
       `10: handoff to a continued leaf by ${by} reaches the continuation`,
@@ -1323,7 +1321,6 @@ const ambiguousPrefix = async (
       `${prefix}${tail}-0000-4000-8000-${crypto.randomUUID().slice(-12)}`
   );
   for (const id of ids) {
-    // biome-ignore lint/performance/noAwaitInLoops: one spawn after the other, each running before the next
     await fleet.post({
       verb: "spawn",
       machineId: MACHINE,
@@ -1578,7 +1575,6 @@ const spec: Spec = {
 
     // 7. OpenCode and pi: each parent's own delegate call carries a text input.
     for (const harness of OTHERS) {
-      // biome-ignore lint/performance/noAwaitInLoops: one harness's parent after the other, so the mock answers one leg at a time
       await otherHarness(kit, fleet, harness, repo, project.id);
     }
 
@@ -1600,13 +1596,11 @@ const spec: Spec = {
       credential: await credentialOf(fleet, parent),
     };
     for (const [form, written] of Object.entries(FORMS)) {
-      // biome-ignore lint/performance/noAwaitInLoops: one leaf after another, each named one way
       await reachedAs(kit, fleet, session, form, written, (tag) =>
         delegate(tag, [])
       );
     }
     for (const stopBy of ["its old id", "its new id"] as const) {
-      // biome-ignore lint/performance/noAwaitInLoops: one continuation after the other
       await continuedAs(kit, fleet, session, stopBy, (tag) =>
         delegate(tag, [])
       );

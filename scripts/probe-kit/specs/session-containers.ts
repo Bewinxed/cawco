@@ -355,12 +355,10 @@ const podsOf = (of: string): Promise<ListedPod[]> =>
 const removeMarked = async (mark: string): Promise<string> => {
   const pods = await podsWith([mark]);
   for (const pod of pods) {
-    // biome-ignore lint/performance/noAwaitInLoops: one pod at a time, each with what it holds
     await api("DELETE", `/v4.0.0/libpod/pods/${pod.Id}?force=true`);
   }
   const containers = await containersWith([mark]);
   for (const one of containers) {
-    // biome-ignore lint/performance/noAwaitInLoops: one container at a time
     await api("DELETE", `/containers/${one.Id}?force=true`);
   }
   return `${pods.length} pod(s) and ${containers.length} container(s)`;
@@ -733,7 +731,6 @@ const provenOn = async (kit: Kit): Promise<void> => {
 
     // ── (c1)–(c3) the session's containers and pods, and one outside ────
     for (const [at, [name]] of commands().entries()) {
-      // biome-ignore lint/performance/noAwaitInLoops: one command at a time, each read back before the next
       await fleet.send(session, `${name}: start it.`);
       await until(
         `the ${name} command's end`,

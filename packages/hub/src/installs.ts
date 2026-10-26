@@ -790,7 +790,6 @@ export const createInstalls = (deps: InstallsDeps) => {
     if (entry.exitCode === 0 && install.machineId) {
       const deadline = Date.now() + INSTALL_GRACE_MS;
       while (!machineOf(install.machineId)?.online && Date.now() < deadline) {
-        // biome-ignore lint/performance/noAwaitInLoops: a poll; each look must see the fleet after the last wait
         await Bun.sleep(500);
       }
       if (machineOf(install.machineId)?.online) {

@@ -93,7 +93,6 @@ const until = async (ok: () => boolean, ms: number): Promise<boolean> => {
     if (Date.now() > deadline) {
       return false;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: a poll for one process to change
     await Bun.sleep(20);
   }
   return true;
@@ -151,7 +150,6 @@ const VALUES = [-1, 0, 1, -(group ?? own), Number.NaN, 2.5];
 const attempts: Attempt[] = [];
 for (const value of VALUES) {
   attempts.push(
-    // biome-ignore lint/performance/noAwaitInLoops: one attempt at a time, each read for what it sent
     await attempt("signal", value, () => signal(forged(value), "SIGKILL")),
     await attempt("signal SIGTERM", value, () =>
       signal(forged(value), "SIGTERM")

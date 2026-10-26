@@ -151,7 +151,6 @@ for (const name of await list(worktrees)) {
   }
   // A folder there whose id8 the hub never cut is someone's own worktree.
   if (byId8.has(id8)) {
-    // biome-ignore lint/performance/noAwaitInLoops: one folder at a time, du is the bulk
     await note(orphans, "clone", path, `workspace ${id8} is archived`);
   }
 }
@@ -159,7 +158,6 @@ for (const name of await list(worktrees)) {
 for (const id of await list(workspacesDir())) {
   const row = byId.get(id);
   if (!live(row)) {
-    // biome-ignore lint/performance/noAwaitInLoops: one folder at a time
     await note(
       orphans,
       "state",
@@ -172,7 +170,6 @@ for (const id of await list(workspacesDir())) {
 for (const id8 of await list(workspaceScratchRoot())) {
   const why = ID8.test(id8) ? id8Why(id8) : "named by no workspace id";
   if (why) {
-    // biome-ignore lint/performance/noAwaitInLoops: one folder at a time
     await note(orphans, "scratch", join(workspaceScratchRoot(), id8), why);
   }
 }
@@ -183,7 +180,6 @@ if (runtime) {
   for (const id8 of await list(doors)) {
     const why = ID8.test(id8) ? id8Why(id8) : "named by no workspace id";
     if (why) {
-      // biome-ignore lint/performance/noAwaitInLoops: one folder at a time
       await note(orphans, "door", join(doors, id8), why);
     }
   }
@@ -197,7 +193,6 @@ for (const name of await list(apple)) {
   }
   const why = id8Why(id8);
   if (why) {
-    // biome-ignore lint/performance/noAwaitInLoops: one folder at a time
     await note(orphans, "apple-build", join(apple, name), why);
   }
 }
@@ -233,7 +228,6 @@ const cloneSize = async (path: string) => {
   let own = 0;
   let shared = 0;
   for (let at = 0; at < files.length; at += LSTAT_BATCH) {
-    // biome-ignore lint/performance/noAwaitInLoops: a batch at a time, so a large node_modules holds no more than a batch of reads open
     const infos = await Promise.all(
       files
         .slice(at, at + LSTAT_BATCH)
@@ -279,7 +273,6 @@ const itemWords = (clone: Clone): string => {
 
 const clones: Clone[] = [];
 for (const row of liveRows) {
-  // biome-ignore lint/performance/noAwaitInLoops: one clone at a time, find and du are the bulk
   const there = await stat(row.path).catch(() => undefined);
   const of = items.get(row.id);
   clones.push({

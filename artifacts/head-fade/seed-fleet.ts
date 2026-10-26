@@ -54,7 +54,6 @@ try {
   await fleet.accountSignedIn();
   const id = await fleet.spawn("claude", "Head fade captures");
   for (let n = 1; n <= SENDS; n += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: each send waits for the turn before it to end
     await fleet.send(id, `Run step ${n} and report.`);
     await until(
       `step ${n}'s reply in the transcript`,

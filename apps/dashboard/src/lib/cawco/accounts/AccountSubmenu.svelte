@@ -9,7 +9,6 @@
    * chosen reads "Moving to {name}…". Nothing at all when there is no other
    * account to move to.
    */
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import { IconAccounts } from "#lib/icons.js";
   import type { InstanceRow } from "../client.svelte";

@@ -89,7 +89,6 @@ export const screenJoined = async (
 ): Promise<boolean> => {
   const until = Date.now() + ms;
   while (docs.screens(artifactId) === 0 && Date.now() < until) {
-    // biome-ignore lint/performance/noAwaitInLoops: a bounded poll for a page to connect
     await Bun.sleep(100);
   }
   return docs.screens(artifactId) > 0;

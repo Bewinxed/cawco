@@ -129,7 +129,6 @@ export const readV1Activity = async (
         }
         const running: string[] = [];
         for (const directory of directories) {
-          // biome-ignore lint/performance/noAwaitInLoops: one directory at a time; each read boots its instance on the server
           const status = await get(
             `/session/status?directory=${encodeURIComponent(directory)}`
           );
@@ -183,7 +182,6 @@ const v1Directories = async (
   let cursor: string | null = null;
   do {
     const query: string = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
-    // biome-ignore lint/performance/noAwaitInLoops: each page names the next
     const page: Response = await get(
       `/experimental/session?limit=200&start=${born}${query}`
     );
@@ -356,7 +354,6 @@ const recordedServers = async (): Promise<Set<string>> => {
   );
   const named = new Set<string>();
   for (const file of files) {
-    // biome-ignore lint/performance/noAwaitInLoops: a handful of small files, each one must be read
     const record = await readJson<ServerRecord>(join(dir, file));
     if (!record) {
       throw new Error(
@@ -1035,7 +1032,6 @@ export class OpencodeServerOwner {
         );
       this.#retiring.set(identity.procId, ending);
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: one end at a time; each reads the keeper
         await ending;
       } catch (error) {
         left.push(`${identity.procId}/${identity.pid}: ${String(error)}`);
@@ -1082,7 +1078,6 @@ export class OpencodeServerOwner {
       ) {
         continue;
       }
-      // biome-ignore lint/performance/noAwaitInLoops: only the few serve lines are read whole
       const stray = await strayServer(pid, cawcoMcp);
       if (stray) {
         found.push(stray);
@@ -1223,7 +1218,6 @@ export class OpencodeServerOwner {
     );
     await send("SIGTERM");
     const deadline = Date.now() + 15_000;
-    // biome-ignore lint/performance/noAwaitInLoops: observe this exact retired identity during its grace period
     while (Date.now() < deadline && (await present())) {
       await Bun.sleep(200);
     }
@@ -1235,7 +1229,6 @@ export class OpencodeServerOwner {
         `[opencode] retire ${identity.procId}/${identity.pid}${whose}: retired-only SIGKILL after grace`
       );
       const killDeadline = Date.now() + 5000;
-      // biome-ignore lint/performance/noAwaitInLoops: verify exit of only the retired identity
       while (Date.now() < killDeadline && (await present())) {
         await Bun.sleep(100);
       }

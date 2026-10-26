@@ -48,7 +48,6 @@
  * host's as much as the page's. Every number is written to `numbers.json`
  * in the spec's out folder.
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time
 import { writeFile } from "node:fs/promises";
 import { loadavg } from "node:os";
 import { join } from "node:path";

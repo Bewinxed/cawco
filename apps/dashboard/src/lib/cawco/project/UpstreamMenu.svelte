@@ -13,7 +13,6 @@
     type UpstreamPosts,
     upstreamPostsWords,
   } from "@cawco/core/upstream-guard";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { IconShield } from "#lib/icons.js";
 

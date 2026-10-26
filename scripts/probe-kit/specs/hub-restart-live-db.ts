@@ -362,7 +362,6 @@ setInterval(() => {
   const driven = driveReads(fleet.base, lead?.id, until);
   while (Date.now() < until) {
     const at = Date.now() - from;
-    // biome-ignore lint/performance/noAwaitInLoops: the trial probes once a second, one probe after another
     reads.push({ at, health: await probe(`${fleet.base}/health`) });
     await Bun.sleep(Math.max(0, PROBE_EVERY_MS - (Date.now() - from - at)));
   }
@@ -610,7 +609,6 @@ const lateAnswerHolds = async (
     !(late && Date.now() - late.at > LATE_SETTLE_MS)
   ) {
     const at = Date.now();
-    // biome-ignore lint/performance/noAwaitInLoops: once a second, as the trial probes
     probes.push(await probe(`${fleet.base}/health`));
     const line = lateLine(await fleet.logs("hub"));
     if (!late && line && line !== already) {
@@ -684,7 +682,6 @@ const sendPlaces = async (
   const uuid = await fleet.send(woken, "Carry on.", HUB_MACHINE);
   const started = await readWithin(WAKE_MS, async () => {
     for (;;) {
-      // biome-ignore lint/performance/noAwaitInLoops: polled until its wake is placed and started
       const said = await fleet.logs("hub");
       const status = fleet.instance(woken)?.status;
       const [line] = placedLines(woken, said);
@@ -748,7 +745,6 @@ const driveReads = async (
     while (Date.now() < until) {
       const at = Date.now();
       const socket = new WebSocket(socketUrl);
-      // biome-ignore lint/performance/noAwaitInLoops: one socket at a time per dashboard, as a tab holds one
       const first = await readWithin(
         READ_BOUND_MS,
         () =>
@@ -785,7 +781,6 @@ const driveReads = async (
         `/api/instances/${id}/artifacts`,
         `/api/instances/${id}/transcript`,
       ]) {
-        // biome-ignore lint/performance/noAwaitInLoops: one read after another, as one session's tools make them
         await read(path);
       }
       await Bun.sleep(

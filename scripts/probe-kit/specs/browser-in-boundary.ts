@@ -20,7 +20,6 @@
  *
  *   bun scripts/probe-kit/run.ts browser-in-boundary
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: polls one page until its title is in
 import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";

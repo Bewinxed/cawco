@@ -145,7 +145,6 @@ const until = async (
 ): Promise<boolean> => {
   const end = Date.now() + ms;
   while (Date.now() < end) {
-    // biome-ignore lint/performance/noAwaitInLoops: a poll; each look must follow the one before
     if (await ok()) {
       return true;
     }

@@ -129,7 +129,6 @@ await new Promise((r) => {
 // Poll for transcript to appear (backfill can take several seconds)
 let transcriptCheck;
 for (let attempt = 0; attempt < 15; attempt += 1) {
-  // biome-ignore lint/performance/noAwaitInLoops: polls until the transcript backfills; each attempt must wait for the previous sleep+check
   await sleep(2000);
   transcriptCheck = await evaluate(`(() => {
     const transcript = document.querySelector('[data-transcript-content]');
@@ -185,7 +184,6 @@ const pushResults = [];
 
 for (let i = 0; i < 10; i += 1) {
   // Take a snapshot before
-  // biome-ignore lint/performance/noAwaitInLoops: each iteration traces and measures one message push before moving to the next
   const before = await getMetrics();
 
   // Start tracing

@@ -1,5 +1,4 @@
 <script lang="ts">
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import {
     IconAsk,

@@ -41,6 +41,7 @@ import {
   tailnetWords,
   topsIn,
 } from "@cawco/core";
+import { detach } from "@cawco/core/detach";
 import { UPSTREAM_WORDS } from "@cawco/core/upstream-guard";
 import { untrack } from "svelte";
 import {
@@ -280,21 +281,23 @@ export function archive(ids: string[]): void {
   for (const id of ids) {
     const row = cawco.instanceIndex.byId.get(id);
     const through = (row && endedAt(row)) ?? 0;
-    // biome-ignore lint/complexity/noVoid: the row is the report; nothing awaits it
-    void onRow(
-      id,
-      "Archiving…",
-      async () => {
-        const at = await postSeen([id], "archive");
-        seenMarks += 1;
-        const mark = seenMarks;
-        moveMarks((seen, cleared) => {
-          seen.set(id, { mark, through, at: at ?? undefined });
-          cleared.delete(id);
-        });
-        settleSeen();
-      },
-      () => archive([id])
+    detach(
+      onRow(
+        id,
+        "Archiving…",
+        async () => {
+          const at = await postSeen([id], "archive");
+          seenMarks += 1;
+          const mark = seenMarks;
+          moveMarks((seen, cleared) => {
+            seen.set(id, { mark, through, at: at ?? undefined });
+            cleared.delete(id);
+          });
+          settleSeen();
+        },
+        () => archive([id])
+      ),
+      "onRow"
     );
   }
 }
@@ -306,19 +309,21 @@ export function archive(ids: string[]): void {
  */
 export function unarchive(rows: BoardRow[]): void {
   for (const row of rows) {
-    // biome-ignore lint/complexity/noVoid: the row is the report; nothing awaits it
-    void onRow(
-      row.id,
-      "Unarchiving…",
-      async () => {
-        const was = epochOf(row, "seenAt");
-        await postSeen([row.id], "unarchive");
-        moveMarks((seen, cleared) => {
-          cleared.set(row.id, was);
-          seen.delete(row.id);
-        });
-      },
-      () => unarchive([row])
+    detach(
+      onRow(
+        row.id,
+        "Unarchiving…",
+        async () => {
+          const was = epochOf(row, "seenAt");
+          await postSeen([row.id], "unarchive");
+          moveMarks((seen, cleared) => {
+            cleared.set(row.id, was);
+            seen.delete(row.id);
+          });
+        },
+        () => unarchive([row])
+      ),
+      "onRow"
     );
   }
 }

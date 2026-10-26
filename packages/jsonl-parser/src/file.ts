@@ -108,7 +108,6 @@ export async function scanFile<T>(path: string, options: ScanFileOptions<T>): Pr
       const want = Math.min(CHUNK_BYTES, size - readTo);
       const buf = new Uint8Array(carry.length + want);
       buf.set(carry, 0);
-      // biome-ignore lint/performance/noAwaitInLoops: one chunk at a time is the point
       const { bytesRead } = await handle.read(buf, carry.length, want, readTo);
       if (bytesRead === 0) {
         break;
@@ -202,7 +201,6 @@ export async function readSpans(
     const breathe = slicer();
     for (const { start, end, members } of reads) {
       const buf = new Uint8Array(end - start);
-      // biome-ignore lint/performance/noAwaitInLoops: one range at a time keeps the read's memory one range
       const { bytesRead } = await handle.read(buf, 0, buf.length, start);
       for (const { span, at } of members) {
         const local = span.offset - start;
@@ -284,7 +282,6 @@ export class ReverseReader {
       }
       let added = 0;
       while (added < records && !this.spent) {
-        // biome-ignore lint/performance/noAwaitInLoops: each step reads the chunk before the last
         added += await this.#step(handle);
         await turn();
       }
@@ -300,7 +297,6 @@ export class ReverseReader {
     while (hi > 0) {
       const lo = Math.max(0, hi - CHUNK_BYTES);
       const buf = new Uint8Array(hi - lo);
-      // biome-ignore lint/performance/noAwaitInLoops: back a chunk at a time until a newline
       await handle.read(buf, 0, buf.length, lo);
       this.#read += buf.length;
       const last = buf.lastIndexOf(NEWLINE);
@@ -318,7 +314,6 @@ export class ReverseReader {
     for (;;) {
       const lo = Math.max(0, this.#from - span);
       const buf = new Uint8Array(this.#from - lo);
-      // biome-ignore lint/performance/noAwaitInLoops: a line longer than the chunk widens this step
       await handle.read(buf, 0, buf.length, lo);
       this.#read += buf.length;
       // The chunk's front is the end of a line begun before it, unless it is

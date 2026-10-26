@@ -72,6 +72,7 @@ import { createHash } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Socket, SocketHandler } from "bun";
+import { detach } from "../packages/core/src/detach";
 import { processStart } from "../packages/core/src/process-identity";
 import { signal } from "../packages/core/src/signal";
 import { startedPath } from "../packages/core/src/workspace-needs";
@@ -1306,8 +1307,7 @@ const hubProxy = (listenPort: number, hubPort: number) => {
         held.add(sock);
         return;
       }
-      // biome-ignore lint/complexity/noVoid: the connection goes through when its upstream opens
-      void through(sock);
+      detach(through(sock), "through");
     },
     drain: flush,
     close: (sock) => {
@@ -1338,8 +1338,7 @@ const hubProxy = (listenPort: number, hubPort: number) => {
       holding = on;
       if (!on) {
         for (const sock of [...held]) {
-          // biome-ignore lint/complexity/noVoid: each held connection goes through on its own
-          void through(sock);
+          detach(through(sock), "through");
         }
       }
     },
@@ -1377,7 +1376,6 @@ const mcpLateCase = async (label: string) => {
     const ids: string[] = [];
     const tools = new Map<string, string>();
     for (const n of [1, 2, 3]) {
-      // biome-ignore lint/performance/noAwaitInLoops: one session at a time, each with its first turn answered
       const id = await fleet.spawn("claude", `Custody claude mcp-late ${n}`);
       const first = mark("claude", "mcp-late", `first${n}`);
       await fleet.send(id, `${first}: say ok.`);
@@ -1403,7 +1401,6 @@ const mcpLateCase = async (label: string) => {
     let outages = 0;
     while (taken.length === 0 && outages < 3) {
       outages += 1;
-      // biome-ignore lint/performance/noAwaitInLoops: each outage follows the one before it
       const before = await eachSaid(ids, ATTACHED_CONNECTING);
       // The hub, and the address the slots dial, go down; it comes back
       // on a port of its own, behind the proxy on the one they dial.
@@ -1614,7 +1611,6 @@ try {
       (one) => casesWanted.size === 0 || casesWanted.has(one)
     )) {
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: one case at a time, each on its own session
         await runCase(harness, name);
       } catch (error) {
         report(

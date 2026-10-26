@@ -609,7 +609,6 @@ const protocolFeed = (
       if (line.startsWith("push ")) {
         batch.push(line);
       } else if (line === "" && batch.length > 0) {
-        // biome-ignore lint/performance/noAwaitInLoops: a batch is answered before the next command is read
         await endBatch();
       } else {
         if (DRY_RUN_OPTION.test(line)) {

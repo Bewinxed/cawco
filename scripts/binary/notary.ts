@@ -170,7 +170,6 @@ export async function notarize(options: {
   const deadline = performance.now() + options.waitS * 1000;
   let status = "In Progress";
   while (status === "In Progress" && performance.now() < deadline) {
-    // biome-ignore lint/performance/noAwaitInLoops: a poll; each look follows the answer before it
     await Bun.sleep(POLL_MS);
     ({ status } = json<{ data: Submission }>(
       await ask(`notary status ${id}`, `${SUBMISSIONS}/${id}`, {

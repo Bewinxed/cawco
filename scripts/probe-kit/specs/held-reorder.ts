@@ -48,7 +48,6 @@
  * time is noted, not asserted: past its style it is the page's rendering of
  * any change in the rail. Every number is written to `numbers.json`.
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one turn and one reorder at a time, as a person sees them
 import { readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";

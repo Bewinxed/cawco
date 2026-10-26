@@ -31,7 +31,6 @@
  *
  *   bun scripts/probe-kit/run.ts canvas-parallel
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one page at a time, each in a fresh context, so their timings are their own
 import type { Page } from "playwright-core";
 import { scratchCertificate } from "../cloudflare-front";
 import {

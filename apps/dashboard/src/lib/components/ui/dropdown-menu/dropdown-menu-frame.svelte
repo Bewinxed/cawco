@@ -7,7 +7,6 @@
    * the menu item recipe (DESIGN.md, Popover, dropdown; Menu item).
    */
   import { buttonVariants } from "#lib/components/ui/button/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
 
   let {

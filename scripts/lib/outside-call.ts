@@ -79,7 +79,6 @@ export async function persist<T>(
   const started = performance.now();
   for (let n = 1; ; n += 1) {
     try {
-      // biome-ignore lint/performance/noAwaitInLoops: each attempt follows the one before it got no answer
       return await attempt(n);
     } catch (error) {
       if (!(error instanceof NoAnswer)) {

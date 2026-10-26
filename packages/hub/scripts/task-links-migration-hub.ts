@@ -48,12 +48,10 @@ const migrated = (folder: string): boolean =>
     .includes("links:");
 const deadline = Date.now() + 120_000;
 while (Date.now() < deadline && !folders.every(migrated)) {
-  // biome-ignore lint/performance/noAwaitInLoops: a poll, once a second until the commits land
   await Bun.sleep(1000);
 }
 // Each project's board read once more: its index caught up with its files.
 for (const id of readdirSync(projects)) {
-  // biome-ignore lint/performance/noAwaitInLoops: one project's folder at a time, as the hub catches them up
   await app.handle(new Request(`http://127.0.0.1/api/projects/${id}/tasks`));
 }
 process.exit(0);

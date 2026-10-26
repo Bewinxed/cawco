@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
   /**
    * Which model answers — for a session that is running, and for one that is
    * still a form. Lists retain the harness that reported them; custom ids go
@@ -12,9 +13,7 @@
     type ButtonProps,
     type ButtonSize,
   } from "#lib/components/ui/button/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Command from "#lib/components/ui/command/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { IconUnfold } from "#lib/icons.js";
   import {
@@ -89,8 +88,10 @@
   function closeAndFocusTrigger() {
     open = false;
     typed = "";
-    // biome-ignore lint/complexity/noVoid: focusing the trigger after close is fire-and-forget — nothing awaits it and there is nothing to report if it fails
-    void tick().then(() => triggerRef?.focus());
+    detach(
+      tick().then(() => triggerRef?.focus()),
+      "tick"
+    );
   }
 
   /** Already running it — an init names the wire id, its row is keyed by the alias. */
@@ -108,14 +109,10 @@
     }
   }
 
-  // biome-ignore lint/complexity/noVoid: onSelect handlers are sync — the pick is fire-and-forget, and choose()'s own callers already own its rejection
-  const selectCustom = () => void choose(trimmed, true);
-  // biome-ignore lint/complexity/noVoid: onSelect handlers are sync — the pick is fire-and-forget, and choose()'s own callers already own its rejection
-  const selectRecent = (id: string) => void choose(id);
-  // biome-ignore lint/complexity/noVoid: onSelect handlers are sync — the pick is fire-and-forget, and choose()'s own callers already own its rejection
-  const selectDefault = () => void choose(MODEL_DEFAULT);
-  // biome-ignore lint/complexity/noVoid: onSelect handlers are sync — the pick is fire-and-forget, and choose()'s own callers already own its rejection
-  const selectModel = (model: string) => void choose(model);
+  const selectCustom = () => detach(choose(trimmed, true), "choose");
+  const selectRecent = (id: string) => detach(choose(id), "choose");
+  const selectDefault = () => detach(choose(MODEL_DEFAULT), "choose");
+  const selectModel = (model: string) => detach(choose(model), "choose");
 </script>
 
 <Popover.Root onOpenChange={opened} bind:open>

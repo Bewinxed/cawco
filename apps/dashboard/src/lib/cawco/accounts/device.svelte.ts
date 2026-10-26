@@ -16,6 +16,7 @@ import {
   type PendingAccountSignin,
   type ProviderSigninChallenge,
 } from "@cawco/core";
+import { detach } from "@cawco/core/detach";
 import { failureWords } from "#lib/cawco/hub-read.js";
 import { awaitDeviceSignin, beginDeviceSignin } from "../client.svelte";
 
@@ -80,17 +81,19 @@ export class DeviceFlow {
     this.phase = "waiting";
     this.problem = null;
     this.#clock(true);
-    // biome-ignore lint/complexity/noVoid: the wait reports through the flow's own state
-    void this.#account()
-      .then((id) => this.#wait(id, round))
-      .catch((error: unknown) => {
-        if (round === this.#round) {
-          this.#clock(false);
-          this.code = null;
-          this.phase = "idle";
-          this.problem = failureWords(error);
-        }
-      });
+    detach(
+      this.#account()
+        .then((id) => this.#wait(id, round))
+        .catch((error: unknown) => {
+          if (round === this.#round) {
+            this.#clock(false);
+            this.code = null;
+            this.phase = "idle";
+            this.problem = failureWords(error);
+          }
+        }),
+      "account"
+    );
   }
 
   /** Mints a code on the machine and waits for it to be entered. */
@@ -131,7 +134,6 @@ export class DeviceFlow {
 
   async #wait(id: string, round: number): Promise<void> {
     while (round === this.#round) {
-      // biome-ignore lint/performance/noAwaitInLoops: one wait at a time, each a minute long on the hub
       const result = await awaitDeviceSignin(id, this.#machineId);
       if (round !== this.#round) {
         return;

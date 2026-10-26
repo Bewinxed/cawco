@@ -713,7 +713,6 @@ const builtOutput = async (): Promise<number> => {
     const key = await treeKey();
     let waiting = false;
     for (;;) {
-      // biome-ignore lint/performance/noAwaitInLoops: each look follows the last
       if (tryShare(fd) && (await stampSays(key))) {
         return fd;
       }
@@ -1295,7 +1294,6 @@ export class Run {
           await watchContext(context);
         }
         for (const script of options.init ?? []) {
-          // biome-ignore lint/performance/noAwaitInLoops: each script before the next, in order
           await context.addInitScript(script);
         }
         const page = await context.newPage();
@@ -1363,11 +1361,9 @@ export class Run {
       );
     } finally {
       for (const context of contexts) {
-        // biome-ignore lint/performance/noAwaitInLoops: one context at a time
         await context.close().catch(() => undefined);
       }
       for (const end of ends.reverse()) {
-        // biome-ignore lint/performance/noAwaitInLoops: fleets stop one at a time, by PID
         await end().catch((error) => console.log(`  cleanup: ${error}`));
       }
       // The browsers the spec launched itself (launchEnv) are closed by now.
@@ -1387,7 +1383,6 @@ export class Run {
       this.failed.push(said.slice(0, 600));
     });
     for (const browser of this.browsers.values()) {
-      // biome-ignore lint/performance/noAwaitInLoops: one browser at a time
       await (await browser).close().catch(() => undefined);
     }
     // Each closed browser says the most its processes held (browser-cap.ts).
@@ -1436,7 +1431,6 @@ async function fleetEvidence(fleet: Fleet, dir: string): Promise<void> {
   await mkdir(join(dir, "logs"), { recursive: true });
   for (const name of await readdir(fleet.sandbox)) {
     if (LOG_FILE.test(name)) {
-      // biome-ignore lint/performance/noAwaitInLoops: a few files, one at a time
       await cp(join(fleet.sandbox, name), join(dir, "logs", name));
     }
   }
@@ -1447,7 +1441,6 @@ async function fleetEvidence(fleet: Fleet, dir: string): Promise<void> {
   for (const { id, title } of instances) {
     const name = `${(title ?? "untitled").replace(/[^\w-]+/gu, "-").slice(0, 60)}-${id.slice(0, 8)}.json`;
     try {
-      // biome-ignore lint/performance/noAwaitInLoops: one session at a time, off a hub that is closing next
       const response = await fetch(
         `${fleet.base}/api/instances/${id}/transcript`
       );
@@ -1457,7 +1450,6 @@ async function fleetEvidence(fleet: Fleet, dir: string): Promise<void> {
     }
   }
   for (const table of ["work_items", "artifacts"]) {
-    // biome-ignore lint/performance/noAwaitInLoops: two tables, one at a time
     await writeFile(
       join(dir, `${table}.json`),
       JSON.stringify(fleet.query(`SELECT * FROM ${table}`), null, 2)
@@ -1475,7 +1467,6 @@ async function fleetEvidence(fleet: Fleet, dir: string): Promise<void> {
     }
     for (const file of sessionLogs.scanSync({ cwd: root, dot: true })) {
       const to = join(dir, "claude", under, file);
-      // biome-ignore lint/performance/noAwaitInLoops: one log at a time
       await mkdir(join(to, ".."), { recursive: true });
       await cp(join(root, file), to);
     }
@@ -1567,7 +1558,6 @@ export async function pageReady(page: Page): Promise<void> {
   let last = "";
   let held = 0;
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: each read is a frame after the last
     const now = await page.evaluate(readiness);
     if (now.step === null) {
       held = now.boxes === last ? held + 1 : 0;
@@ -1808,7 +1798,6 @@ async function coverOver(
     parent;
     child = parent, parent = parent.parentFrame()
   ) {
-    // biome-ignore lint/performance/noAwaitInLoops: each level maps the point the level inside it gave
     const element = await child.frameElement();
     const seen = await element.evaluate(
       (el: Element, { p, layer }) => {
@@ -1914,7 +1903,6 @@ export async function pressIn(
     "owner" in frame ? frame.owner() : await frame.frameElement()
   ) as Pick<Locator, "evaluate">;
   for (let press = 1; press <= PRESSES; press += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: each press waits on the one before it
     await element.evaluate((el: Element) => {
       const kept = el as unknown as { __kitTook: boolean };
       kept.__kitTook = false;
@@ -2024,7 +2012,6 @@ async function pointIn(
   }
   let point = at;
   for (const child of chain) {
-    // biome-ignore lint/performance/noAwaitInLoops: each level maps the point the level around it gave
     const element = await child.frameElement();
     point = await element.evaluate((el: Element, p) => {
       const box = el.getBoundingClientRect();
@@ -2055,7 +2042,6 @@ async function uncovered(
   const deadline = performance.now() + UNCOVER_MS;
   let cover: string | null = null;
   do {
-    // biome-ignore lint/performance/noAwaitInLoops: each read waits on the page the one before it saw
     const { inner, point } = await read();
     cover = await coverOver(inner, point, through);
     if (!cover) {
@@ -2267,7 +2253,6 @@ async function stillInside({
         return `${run.constructor.name} ${named.transitionProperty ?? named.animationName ?? run.id} at ${Math.round(Number(run.currentTime ?? 0))}ms`;
       });
     }
-    // biome-ignore lint/performance/noAwaitInLoops: one frame at a time until two pass still
     await new Promise((done) => requestAnimationFrame(done));
     quiet = moving().length === 0 ? quiet + 1 : 0;
   }
@@ -2355,7 +2340,6 @@ async function clockRead<T>(
     await page.evaluate(keepCaught, within);
     if (read) {
       for (const fraction of options.fractions ?? []) {
-        // biome-ignore lint/performance/noAwaitInLoops: one fraction of the clock at a time
         await clock.seek(fraction, options.of);
         at.push({ fraction, value: await read() });
       }
@@ -2425,7 +2409,6 @@ async function heldRead<T>(
     const { read } = options;
     if (read && caught.length > 0) {
       for (const fraction of options.fractions ?? []) {
-        // biome-ignore lint/performance/noAwaitInLoops: one fraction of the clock at a time
         await page.evaluate(
           ({ share, named }) => window.kitHeld?.seek(share, named),
           { share: fraction, named: options.of }
@@ -2790,7 +2773,6 @@ function holdMotion({ own, within }: { own: boolean; within: string }): void {
           going.length > 0 && going.every((run) => run.startTime !== null);
         quiet = ready && going.length === seen ? quiet + 1 : 0;
         seen = ready ? going.length : -1;
-        // biome-ignore lint/performance/noAwaitInLoops: one frame at a time until every run has started, each held at 0 meanwhile
         await new Promise((done) => requestAnimationFrame(done));
       }
       caught = [...held].filter(

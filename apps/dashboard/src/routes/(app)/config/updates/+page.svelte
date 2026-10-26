@@ -1,5 +1,6 @@
 <script lang="ts">
   import { commonWords } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import { onMount } from "svelte";
   import { blur } from "svelte/transition";
   import { cawco } from "#lib/cawco/client.svelte.js";
@@ -140,8 +141,7 @@
   }
 
   onMount(() => {
-    // biome-ignore lint/complexity/noVoid: the read reports its own outcome in page state
-    void updates.loadChannels();
+    detach(updates.loadChannels(), "loadChannels");
   });
 
   /** Reset of a damaged policy record: pending until the hub answers, failed with its words. */

@@ -28,9 +28,7 @@
   } from "@cawco/core";
   import { mergeProps } from "bits-ui";
   import cawcoIcon from "#lib/assets/brand/cawco-icon.png";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Sidebar from "#lib/components/ui/sidebar/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { cawco } from "./client.svelte";

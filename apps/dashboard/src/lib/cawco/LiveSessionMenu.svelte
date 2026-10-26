@@ -23,7 +23,6 @@
     type SpinOffHeld,
   } from "@cawco/core";
   import type { Snippet } from "svelte";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import {
     IconArchive,

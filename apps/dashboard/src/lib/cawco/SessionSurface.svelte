@@ -405,7 +405,6 @@
       const [id] = historyQueue;
       historyQueue.shift();
       if (id !== workspace.activeSessionId && workspace.openIds.includes(id)) {
-        // biome-ignore lint/performance/noAwaitInLoops: background reads deliberately run one at a time
         await readTranscript(id);
       }
       await new Promise<void>((resolve) => {

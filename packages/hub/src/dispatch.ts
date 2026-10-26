@@ -1441,7 +1441,6 @@ export const createDispatcher = ({
         break;
       }
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: one start at a time keeps the cap exact and the folder's commits in order
         const started = await startAttempt(
           projectId,
           id,
@@ -1524,7 +1523,6 @@ export const createDispatcher = ({
       }
       db.dropQueuedTaskStart(projectId, queued.taskId);
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: one start at a time keeps the cap exact
         await runQueued(project, queued);
       } catch (error) {
         console.warn(
@@ -1590,7 +1588,6 @@ export const createDispatcher = ({
       do {
         again.delete(projectId);
         try {
-          // biome-ignore lint/performance/noAwaitInLoops: a look that was asked for during the last one runs after it
           await drainQueued(projectId);
           await dispatchOnce(projectId);
         } catch (error) {

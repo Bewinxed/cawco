@@ -209,7 +209,6 @@ console.log(`| ${head.map(() => "---").join(" | ")} |`);
 const digests = [];
 for (const name of files) {
   const bytes = readFileSync(join(dir, `${name}.riv`));
-  // biome-ignore lint/performance/noAwaitInLoops: one file at a time on one page
   const rows = await page.evaluate(
     ([b64, job]) => window.measure(b64, job),
     [

@@ -204,7 +204,6 @@ export default {
       const watchLost = async (ms: number) => {
         const from = Date.now();
         while (Date.now() - from < ms) {
-          // biome-ignore lint/performance/noAwaitInLoops: a look every 2.5 s
           lostReads.push((await row())?.lostAt ?? null);
           await delay(2500);
         }

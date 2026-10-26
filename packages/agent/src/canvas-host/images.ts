@@ -145,7 +145,6 @@ export const guardImages = (
     let below: { x: number; bottom: number } | null = null;
     for (const next of files) {
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: each image stands under the one before
         const file = await next;
         const why = refusalOf(file);
         if (why) {

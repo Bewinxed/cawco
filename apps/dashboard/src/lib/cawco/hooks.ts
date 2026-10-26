@@ -20,9 +20,6 @@ import type { Machine } from "./client.svelte";
  */
 
 export type { FleetHook, HookDraft } from "@cawco/core";
-// biome-ignore lint/performance/noBarrelFile: consumers import the templates from this file's public surface, not straight off @cawco/core
-export { HOOK_TEMPLATES } from "@cawco/core";
-
 /** What `GET /api/fleet/hooks` answers with. */
 export interface HooksPayload {
   hooks: FleetHook[];

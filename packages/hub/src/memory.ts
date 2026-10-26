@@ -2168,7 +2168,6 @@ export const createMemory = ({
     const today = dayOf(new Date());
     for (const [path, edit] of edits) {
       const at = new Date();
-      // biome-ignore lint/performance/noAwaitInLoops: one commit per proposal, each on the folder as the last left it
       const archiveNow = await fileOr(project.id, archivePath(path));
       await keep(
         {
@@ -2228,7 +2227,6 @@ export const createMemory = ({
     for (const file of files.filter(
       (each) => isProse(each) && !touched.has(each.path) && !declined(each)
     )) {
-      // biome-ignore lint/performance/noAwaitInLoops: one proposal per file, each on the folder as the last left it
       const written = await folderBlame(project.id, file.path);
       const content = factsFromProse(file.path, file.content, (line) =>
         dayOf(written.lines.get(line) ?? written.mtime)
@@ -2285,7 +2283,6 @@ export const createMemory = ({
       if (retired.length === 0) {
         continue;
       }
-      // biome-ignore lint/performance/noAwaitInLoops: one proposal per file, each on the folder as the last left it
       const [head] = (await folderHistory(project.id, "", 1)).commits;
       const at = new Date();
       await keep(
@@ -2338,7 +2335,6 @@ export const createMemory = ({
         continue;
       }
       const into = archivePath(file.path);
-      // biome-ignore lint/performance/noAwaitInLoops: one proposal per file, each reading its own archive
       const now = await fileOr(project.id, into);
       const [head] = (await folderHistory(project.id, "", 1)).commits;
       const at = new Date();
@@ -3220,7 +3216,6 @@ export const createMemory = ({
     const done: string[] = [];
     for (const each of notes) {
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: one withdrawal at a time, each on the folder as the last left it
         await withdraw(projectId, each.id);
         done.push(each.id);
       } catch (error) {

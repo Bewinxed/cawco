@@ -158,7 +158,6 @@ const toolCalls = async (procId: string, text: string): Promise<string[]> => {
   const said: string[] = [];
   for (const [, name, json] of calls) {
     // tool answer: words (what the session's model would read, put in its turn)
-    // biome-ignore lint/performance/noAwaitInLoops: a session's tool calls run in the order its message names them
     const run = await Bun.$`${process.execPath} tool ${name} ${json ?? "{}"}`
       .env(env)
       .nothrow()

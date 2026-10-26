@@ -19,6 +19,7 @@
  */
 import type { TabNamed } from "@cawco/core";
 import { artifactStopOf } from "@cawco/core/artifact-needs";
+import { detach } from "@cawco/core/detach";
 import { type HarnessKind, harnessNamed } from "@cawco/core/harness";
 import { SvelteSet } from "svelte/reactivity";
 import { browser } from "$app/env";
@@ -805,11 +806,13 @@ export const workspace = {
           )?.leadInstanceId
         : urlId;
     if (browser && holder && artifact) {
-      // biome-ignore lint/complexity/noVoid: a refusal is kept where its row says it (artifactOpenKey)
-      void openArtifactIn(
-        holder,
-        artifact,
-        artifactStopOf(url.searchParams.get("stop"))
+      detach(
+        openArtifactIn(
+          holder,
+          artifact,
+          artifactStopOf(url.searchParams.get("stop"))
+        ),
+        "openArtifactIn"
       );
     }
     if (urlId === this.activeSessionId) {

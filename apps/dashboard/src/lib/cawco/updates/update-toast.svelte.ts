@@ -31,6 +31,8 @@
  * back on its own build is not offered it again ({@link reloadedFor}): the
  * reload would only load this build again.
  */
+
+import { detach } from "@cawco/core/detach";
 import { AWAY_AFTER_DEFAULT_MS } from "@cawco/core/notifications";
 import { updatesWords } from "@cawco/core/words/updates";
 import { untrack } from "svelte";
@@ -99,8 +101,7 @@ function offer(minutes: number): void {
         event.preventDefault();
         const build = newerBuild();
         if (build !== null) {
-          // biome-ignore lint/complexity/noVoid: the page goes once the drafts are written down
-          void go(build, true);
+          detach(go(build, true), "go");
         }
       },
     },
@@ -142,8 +143,7 @@ export function watchUpdateToast(): void {
     }
     untrack(() => {
       if (!unsavedWords()) {
-        // biome-ignore lint/complexity/noVoid: a reload ends this page
-        void go(build, false);
+        detach(go(build, false), "go");
       }
     });
   });

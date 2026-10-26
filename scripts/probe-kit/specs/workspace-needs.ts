@@ -57,8 +57,12 @@ const standIns = async (dir: string, commands: string[]): Promise<string> => {
   await mkdir(dir, { recursive: true });
   for (const command of commands) {
     const path = join(dir, command);
-    // biome-ignore lint/performance/noAwaitInLoops: a handful of files, in order
-    await writeFile(path, `#!${systemProgram("sh")}\nexit 0\n`);
+    await writeFile(
+      path,
+      `#!${systemProgram("sh")}
+exit 0
+`
+    );
     await chmod(path, 0o755);
   }
   return dir;
@@ -78,7 +82,6 @@ const legA = async ({ check }: Kit, scratch: string): Promise<void> => {
     ["apk", "sudo apk add"],
   ] as const;
   for (const [manager, line] of managers) {
-    // biome-ignore lint/performance/noAwaitInLoops: one stand-in folder each, in order
     const path = await standIns(join(scratch, manager), [manager]);
     const needs = workspaceNeeds(linux(path));
     const commands = (needs.missing ?? []).map((tool) => tool.command);
@@ -166,7 +169,6 @@ const withoutGit = async (path: string, under: string): Promise<string> => {
       continue;
     }
     const farm = join(under, `bin-${index}`);
-    // biome-ignore lint/performance/noAwaitInLoops: one dir at a time, in PATH order
     const [names] = await Promise.all([
       readdir(dir),
       mkdir(farm, { recursive: true }),

@@ -2975,7 +2975,6 @@ export const createTasks = (store: TaskStore) => {
     const renames = new Map<string, string>();
     const numbers: number[] = [];
     for (const { was } of numbered) {
-      // biome-ignore lint/performance/noAwaitInLoops: numbers are handed out in the files' own order
       const number = await nextNumber(projectId);
       renames.set(taskId(was), taskId(number));
       numbers.push(number);
@@ -3065,7 +3064,6 @@ export const createTasks = (store: TaskStore) => {
     for (let tries = 1; ; tries += 1) {
       const { path, content, message } = make(number);
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: each try waits on the one before it
         return await save(
           projectId,
           path,
@@ -3269,7 +3267,6 @@ export const createTasks = (store: TaskStore) => {
       .filter((row) => row.waitsOn.includes(from) && row.id !== from);
     const moved: string[] = [];
     for (const waiter of waiters) {
-      // biome-ignore lint/performance/noAwaitInLoops: each waiter is its own commit, in turn
       await amend(projectId, waiter.id, hubActor(why), (doc, id) => {
         const kept = doc.read().fields.waitsOn;
         doc.setField("waits_on", [
@@ -4073,7 +4070,6 @@ export const createTasks = (store: TaskStore) => {
         // whole merge is numbered afresh and written again.
         for (let tries = 1; ; tries += 1) {
           try {
-            // biome-ignore lint/performance/noAwaitInLoops: each try waits on the one before it
             return await adoptOnce(projectId, numbered, actor, from);
           } catch (error) {
             if (!(error instanceof FolderTaken) || tries >= CLAIM_TRIES) {
@@ -4341,7 +4337,6 @@ export const createTasks = (store: TaskStore) => {
       }
       const artifacts = written.artifacts ?? [];
       for (const artifact of artifacts) {
-        // biome-ignore lint/performance/noAwaitInLoops: a handful of artifacts, each checked in turn
         await artifactProblem(projectId, outputs, artifact);
       }
       if (artifacts.filter((artifact) => artifact.primary).length > 1) {
@@ -4655,7 +4650,6 @@ export const createTasks = (store: TaskStore) => {
      */
     async syncAll(): Promise<void> {
       for (const projectId of store.projectIds()) {
-        // biome-ignore lint/performance/noAwaitInLoops: one project at a time keeps a start from reading every folder at once
         if (await hasProjectFolder(projectId)) {
           try {
             await inTurn(projectId, async () => {

@@ -262,17 +262,6 @@ export function modelLabel(model: string, harness?: string): string {
 }
 
 /**
- * Which lab makes a model, for the logo in a picker row or a delegate's header.
- * An id may carry a route prefix (`opencode-go/deepseek-v4-pro`), so the part
- * after the last `/` is what matches. Prefix-first and case-insensitive: a
- * single token decides a whole family, and anything else is not our call.
- *
- * Pure string work, so it lives in a plain module.
- */
-// biome-ignore lint/performance/noBarrelFile: re-exports the one pure helper so callers import it beside modelLabel, not a module-graph barrel
-export { providerOf } from "./provider";
-
-/**
  * Remembers an id the user typed for `harness`, so its next session can pick
  * it off a list. A typed id is, by definition, one the catalog does not offer
  * — that is the whole reason it was typed — so nothing here checks it against

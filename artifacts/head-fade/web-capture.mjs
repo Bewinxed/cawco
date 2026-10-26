@@ -81,7 +81,6 @@ function region(page) {
 /** Scrolls the transcript to `y` until it stays there. */
 async function scrollTo(page, y) {
   for (let tries = 0; tries < 10; tries += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: each try reads where the last one rested
     await page.evaluate((to) => {
       document.querySelector(".tr").scrollTop = to;
     }, y);
@@ -171,7 +170,6 @@ const report = { stills: [], sharpness: {}, frames: {}, videos: [] };
 // ── Stills and sharpness ────────────────────────────────────────────────
 for (const v of FRAMES_ONLY ? [] : VIEWPORTS) {
   for (const [label, base] of Object.entries(BUILDS)) {
-    // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each width in turn
     const page = await newPage(v);
     await open(page, base);
     const clip = await region(page);
@@ -184,7 +182,6 @@ for (const v of FRAMES_ONLY ? [] : VIEWPORTS) {
           ]
         : [["scrolled", edgeAt[v.name]]];
     for (const [state, y] of states) {
-      // biome-ignore lint/performance/noAwaitInLoops: each frame scrolls the one page
       const seen = await scrollTo(page, y);
       const file = join(out, `${label}-${v.name}-${state}.png`);
       await page.screenshot({ path: file, clip });
@@ -240,7 +237,6 @@ async function wheelScroll(page, px) {
   const steps = Math.round(px / 6);
   for (const dir of [1, -1]) {
     for (let i = 0; i < steps; i += 1) {
-      // biome-ignore lint/performance/noAwaitInLoops: one wheel step a frame apart
       await page.mouse.wheel(0, dir * 6);
       await page.waitForTimeout(12);
     }
@@ -402,7 +398,6 @@ async function screencast(page, run, name, clip, viewportWidth) {
 for (const v of VIEWPORTS) {
   for (const [label, base] of Object.entries(BUILDS)) {
     // The trace on a page of its own: a screencast adds work to every frame.
-    // biome-ignore lint/performance/noAwaitInLoops: one page at a time, so the trace measures one scroll
     const page = await newPage(v);
     await open(page, base);
     // One scroll first, not measured: a fresh page's first scroll misses

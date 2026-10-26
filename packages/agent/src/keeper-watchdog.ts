@@ -453,7 +453,6 @@ export class KeeperWatchdog {
     // init, each in its own process group, where nobody can reach them.
     const gone = Date.now() + KEEPER_GONE_MS;
     while (isAlive(streak.pid) && Date.now() < gone) {
-      // biome-ignore lint/performance/noAwaitInLoops: waits for this one process to be gone
       await Bun.sleep(250);
     }
     const now = await processTable();
@@ -473,7 +472,6 @@ export class KeeperWatchdog {
     const back = Date.now() + KEEPER_BACK_MS;
     let answered = false;
     while (!answered && Date.now() < back) {
-      // biome-ignore lint/performance/noAwaitInLoops: polls the restarted keeper until it answers or the budget ends
       const { dial } = await dialKeeper(machineEndpoint(), 2000);
       switch (dial.kind) {
         case "answered":

@@ -24,7 +24,6 @@ const bundles = {
 const failed: string[] = [];
 for (const [name, build] of Object.entries(bundles)) {
   try {
-    // biome-ignore lint/performance/noAwaitInLoops: one bundle at a time keeps the gate's memory flat
     await build();
   } catch (error) {
     failed.push(

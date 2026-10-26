@@ -623,7 +623,6 @@ class Hosted {
     for (const method of methods) {
       const { items, capability } = LIST_METHODS[method] ?? {};
       if (items && capability && capabilities[capability]) {
-        // biome-ignore lint/performance/noAwaitInLoops: one list at a time, on the one process
         kept.lists[method] = await this.#pages(child, method, items);
       }
     }
@@ -640,7 +639,6 @@ class Hosted {
     const all: unknown[] = [];
     let cursor: unknown;
     for (let page = 0; page < MOST_PAGES; page += 1) {
-      // biome-ignore lint/performance/noAwaitInLoops: a cursor names the next page only once this one is read
       const listed = await within(this.name, method, (abort) =>
         child.request(method, cursor ? { cursor } : {}, abort)
       );
@@ -897,7 +895,6 @@ export class McpHost {
       return;
     }
     for (const { pid, start } of left) {
-      // biome-ignore lint/performance/noAwaitInLoops: a few pids, each read once
       const still = await identifiedPid({ pid, procStart: start }).catch(
         () => undefined
       );

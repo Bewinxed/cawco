@@ -636,7 +636,6 @@ export const claudeInstalls = async (used?: string): Promise<CliInstall[]> => {
   const seen = new Set<string>();
   const found: string[] = [];
   for (const path of candidates) {
-    // biome-ignore lint/performance/noAwaitInLoops: candidates are in PATH order; found must keep that order so the first real install on PATH is reported first
     if (!(await Bun.file(path).exists())) {
       continue;
     }
@@ -950,7 +949,6 @@ const syncPlugins = async (
   );
 
   for (const { name, source } of linkable) {
-    // biome-ignore lint/performance/noAwaitInLoops: each `claude plugin marketplace add` mutates the CLI's shared known_marketplaces.json; concurrent runs would race
     if (await isLinked(name)) {
       marketplaces.push(name);
       report.marketplaces[name] = { state: "applied" };
@@ -987,7 +985,6 @@ const syncPlugins = async (
     { marketplaces: linkable },
     registered
   )) {
-    // biome-ignore lint/performance/noAwaitInLoops: `claude plugin marketplace remove` mutates the CLI's shared known_marketplaces.json; concurrent runs would race
     const ran = await runClaude(bin, ["plugin", "marketplace", "remove", name]);
     report.marketplaces[name] = (await isLinked(name))
       ? ranFailed(ran)
@@ -1031,7 +1028,6 @@ const syncPlugins = async (
       };
       continue;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: `claude plugin install` mutates the CLI's shared installed_plugins.json; concurrent runs would race
     if (await isInstalled(id)) {
       report.plugins[id] = { state: "applied" };
       continue;
@@ -1056,7 +1052,6 @@ const syncPlugins = async (
     // A vendored plugin is uninstalled under the name it was installed with;
     // `syncVendoredPlugins` has already done that one.
     if (!carried.has(id)) {
-      // biome-ignore lint/performance/noAwaitInLoops: `claude plugin uninstall` mutates the CLI's shared installed_plugins.json; concurrent runs would race
       await runClaude(bin, [
         "plugin",
         "uninstall",
@@ -1171,7 +1166,6 @@ const writeVendoredMarketplace = async (
     if (unsafe) {
       throw new Error(`unsafe path ${unsafe.path}`);
     }
-    // biome-ignore lint/performance/noAwaitInLoops: one plugin's tree at a time keeps the disk writes bounded
     await placeTree(join(into, "plugins", plugin.name), plugin.files);
     console.log(
       `[fleet] ${plugin.name}@${marketplace} written (${plugin.files.length} files, ${plugin.hash.slice(0, 7)})`
@@ -1183,12 +1177,12 @@ const writeVendoredMarketplace = async (
   const present = await readdir(join(into, "plugins")).catch(
     () => [] as string[]
   );
-  for (const name of present) {
-    if (!wanted.has(name)) {
-      // biome-ignore lint/performance/noAwaitInLoops: removals are independent, but this pass mirrors the write loop above rather than adding a second concurrency strategy for the same directory
-      await removeTree(join(into, "plugins", name));
-    }
-  }
+  // Each removal is its own folder: all at once.
+  await Promise.all(
+    present
+      .filter((name) => !wanted.has(name))
+      .map((name) => removeTree(join(into, "plugins", name)))
+  );
 
   await writeStateFile(
     join(into, ".claude-plugin", "marketplace.json"),
@@ -1220,17 +1214,15 @@ const writeVendoredMarketplaces = async (
     if (!isSafeSegment(marketplace)) {
       throw new Error(`unsafe marketplace name ${marketplace}`);
     }
-    // biome-ignore lint/performance/noAwaitInLoops: one marketplace's folder at a time, like its plugins'
     await writeVendoredMarketplace(marketplace, group, vendorDir(marketplace));
   }
-  for (const present of await readdir(VENDOR_ROOT).catch(
-    () => [] as string[]
-  )) {
-    if (!groups.has(present)) {
-      // biome-ignore lint/performance/noAwaitInLoops: removals are independent and few
-      await rm(vendorDir(present), { recursive: true, force: true });
-    }
-  }
+  // Each removal is its own folder: all at once.
+  const present = await readdir(VENDOR_ROOT).catch(() => [] as string[]);
+  await Promise.all(
+    present
+      .filter((name) => !groups.has(name))
+      .map((name) => rm(vendorDir(name), { recursive: true, force: true }))
+  );
 };
 
 /** The paths of the files the fleet carries for a skill now, when this sync has them. */
@@ -1258,7 +1250,6 @@ const treeFiles = async (dir: string): Promise<SkillFile[]> => {
     const file = join(dir, path);
     files.push({
       path,
-      // biome-ignore lint/performance/noAwaitInLoops: one file read at a time keeps the disk reads bounded
       contentBase64: Buffer.from(await Bun.file(file).bytes()).toString(
         "base64"
       ),
@@ -1307,7 +1298,6 @@ export const skillRecords = async (
     if (disk === undefined || !recorded || disk === recorded) {
       continue;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: one skill directory read at a time keeps the disk reads bounded
     if (hashFilesWithoutMode(await treeFiles(join(dir, name))) === recorded) {
       records[name] = disk;
       continue;
@@ -1336,7 +1326,6 @@ export const heldSkills = async (
   const held: Record<string, string> = {};
   for (const name of names) {
     const skill = known.get(name);
-    // biome-ignore lint/performance/noAwaitInLoops: one skill directory read at a time keeps the disk reads bounded
     const hash = await heldHash(
       join(dir, name),
       skill ? carriedPaths(skill) : undefined
@@ -1388,7 +1377,6 @@ const readVendoredPlugins = async (): Promise<Record<string, string>> => {
   )) {
     const root = join(vendorDir(marketplace), "plugins");
     for (const name of await readdir(root).catch(() => [] as string[])) {
-      // biome-ignore lint/performance/noAwaitInLoops: one plugin directory read at a time keeps the disk reads bounded
       const hash = await heldHash(join(root, name));
       if (hash) {
         held[`${name}@${marketplace}`] = hash;
@@ -1469,7 +1457,6 @@ const syncVendoredPlugins = async (
   // (https://code.claude.com/docs/en/plugin-marketplaces).
   for (const marketplace of groups.keys()) {
     const name = vendorName(marketplace);
-    // biome-ignore lint/performance/noAwaitInLoops: `claude plugin marketplace add` mutates the CLI's shared known_marketplaces.json; concurrent runs would race
     if ((await linkedEntry(name))?.installLocation !== vendorDir(marketplace)) {
       await runClaude(bin, [
         "plugin",
@@ -1500,7 +1487,6 @@ const syncVendoredPlugins = async (
     }
 
     const already =
-      // biome-ignore lint/performance/noAwaitInLoops: the install this loop runs mutates the CLI's shared installed_plugins.json; concurrent plugins would race
       managed[id] === plugin.hash && (await isInstalled(vendoredId));
     const ran = already
       ? undefined
@@ -1544,7 +1530,6 @@ const syncVendoredPlugins = async (
     if (byId.has(id)) {
       continue;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: `claude plugin uninstall` mutates the CLI's shared installed_plugins.json; concurrent runs would race
     await runClaude(bin, [
       "plugin",
       "uninstall",
@@ -1557,7 +1542,6 @@ const syncVendoredPlugins = async (
   // A vendored marketplace the fleet carries nothing from any more: its
   // plugins are uninstalled above and its folder is gone, so its link goes.
   for (const marketplace of gone) {
-    // biome-ignore lint/performance/noAwaitInLoops: `claude plugin marketplace remove` mutates the CLI's shared known_marketplaces.json; concurrent runs would race
     if (await linkedEntry(vendorName(marketplace))) {
       await runClaude(bin, [
         "plugin",
@@ -1589,7 +1573,6 @@ const syncSkillFiles = async (
   const managed = await skillRecords(SKILLS_DIR, sidecar, held, desired);
   for (const skill of desired) {
     if (
-      // biome-ignore lint/performance/noAwaitInLoops: each skill is compared before it is written or claimed.
       await holdsFleetCopy(
         join(SKILLS_DIR, skill.name),
         skill,
@@ -1677,7 +1660,6 @@ const syncSkillFiles = async (
       continue;
     }
     try {
-      // biome-ignore lint/performance/noAwaitInLoops: record each removal before advancing to the next managed skill.
       await removeTree(join(SKILLS_DIR, name));
       report[name] = { state: "removed" };
     } catch (error) {
@@ -1809,7 +1791,6 @@ const syncPlacedSkills = async (
   const placed: Sidecar["placedSkills"] = {};
   for (const skill of desired.filter((each) => each.cwd && each.placeId)) {
     const key = placedKey(skill);
-    // biome-ignore lint/performance/noAwaitInLoops: one skill directory written at a time keeps the disk writes bounded
     const hash = await placeSkill(skill, managed[key]?.hash, report);
     if (hash !== undefined) {
       placed[key] = { cwd: skill.cwd as string, name: skill.name, hash };
@@ -1828,7 +1809,6 @@ const syncPlacedSkills = async (
     if (placedDirs.has(dir)) {
       continue;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: one removal at a time, each recorded before the next
     const disk = await heldHash(dir);
     if (disk !== undefined && record.hash && disk !== record.hash) {
       report[key] = { state: "removed", detail: "kept: edited in the folder" };
@@ -1864,7 +1844,6 @@ export const placedAsMade = async (cwd: string): Promise<string[]> => {
   const { placedSkills, placedMemory } = await readSidecar();
   const made: string[] = [];
   for (const record of Object.values(placedSkills)) {
-    // biome-ignore lint/performance/noAwaitInLoops: one record at a time, a folder holds a few
     if (!record.hash || (await real(record.cwd)) !== folder) {
       continue;
     }
@@ -1877,7 +1856,6 @@ export const placedAsMade = async (cwd: string): Promise<string[]> => {
     }
   }
   for (const record of Object.values(placedMemory)) {
-    // biome-ignore lint/performance/noAwaitInLoops: one record at a time, a folder holds a few
     if ((await real(record.cwd)) !== folder) {
       continue;
     }
@@ -2072,7 +2050,6 @@ const pruneEmptyDirs = async (): Promise<void> => {
   for (const relative of [...dirs].sort(
     (a, b) => b.split("/").length - a.split("/").length
   )) {
-    // biome-ignore lint/performance/noAwaitInLoops: deepest-first order matters — a parent must not be tried until its children are gone
     // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — a directory that still holds something of the user's, or is already gone, is left alone
     await rmdir(join(MEMORIES_DIR, relative)).catch(() => {});
   }
@@ -2162,7 +2139,6 @@ const syncMemoryDocs = async (
     const doc = wanted.get(path);
     if (!doc) {
       if (plan === "remove") {
-        // biome-ignore lint/performance/noAwaitInLoops: `removed` gates a single pruneEmptyDirs() after the loop; concurrent removes would still need that to run after every one lands, which sequential awaiting already guarantees
         await rm(join(MEMORIES_DIR, path), { force: true });
         report[path] = { state: "removed" };
         removed = true;
@@ -2227,7 +2203,6 @@ const pruneEmptyPlaced = async (cwd: string, path: string): Promise<void> => {
     dir !== root && dirname(dir) !== dir;
     dir = dirname(dir)
   ) {
-    // biome-ignore lint/performance/noAwaitInLoops: deepest first, a parent only once its child is gone
     // biome-ignore lint/suspicious/noEmptyBlockStatements: a folder still holding something stays
     await rmdir(dir).catch(() => {});
   }
@@ -2322,7 +2297,6 @@ const syncPlacedMemory = async (
   const placed: Sidecar["placedMemory"] = {};
   for (const doc of desired.filter((each) => each.cwd && each.placeId)) {
     const key = placedKey({ name: doc.path, placeId: doc.placeId });
-    // biome-ignore lint/performance/noAwaitInLoops: one file written at a time, each recorded before the next
     const hash = await placeMemoryDoc(doc, managed[key]?.hash, report);
     if (hash !== undefined) {
       placed[key] = { cwd: doc.cwd as string, name: doc.path, hash };
@@ -2341,7 +2315,6 @@ const syncPlacedMemory = async (
     if (placedFiles.has(file)) {
       continue;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: one removal at a time, each recorded before the next
     const disk = await fileHashAt(file);
     if (disk !== null && disk !== record.hash) {
       report[key] = { state: "removed", detail: "kept: edited in the folder" };
@@ -2522,7 +2495,6 @@ const dropCheckoutHooks = async (
     }
   }
   for (const [file, records] of byFile) {
-    // biome-ignore lint/performance/noAwaitInLoops: each file is a read-modify-write of its own, one at a time
     const stored = await readJson<Record<string, unknown>>(file);
     if (!stored) {
       continue;
@@ -2662,7 +2634,6 @@ const settleHooks = async (
     // never equals a hash of the file alone; drift is read off the script's
     // own bytes, the same thing {@link fleetStatus} hashes on disk.
     const scriptHash = hashText(hook.script);
-    // biome-ignore lint/performance/noAwaitInLoops: the write two branches below depends on this hook's own drift check; scripts are written one hook at a time
     const onDisk = await fileHashAt(path);
     // A script that is gone was edited by nobody: it is written again, as
     // the hooks dir is made again (a hand edit is drift, kept as it is).
@@ -2925,20 +2896,19 @@ const syncHooks = async (
   const scripts = new Set(
     Object.values(written).flatMap((one) => (one.script ? [one.script] : []))
   );
+  const gone: string[] = [];
   for (const [id, record] of Object.entries(managed)) {
     const script = scriptPathOf(record);
-    if (stillHere.has(id) || written[id]) {
-      if (script && !scripts.has(script)) {
-        // biome-ignore lint/performance/noAwaitInLoops: removals are independent, but this mirrors the sequential style of the rest of this sync rather than fanning out filesystem writes
-        await rm(script, { force: true });
-      }
-      continue;
+    const kept = stillHere.has(id) || Boolean(written[id]);
+    if (script && !(kept && scripts.has(script))) {
+      gone.push(script);
     }
-    if (script) {
-      await rm(script, { force: true });
+    if (!kept) {
+      report[id] = { state: "removed" };
     }
-    report[id] = { state: "removed" };
   }
+  // Each script is its own file: all removed at once.
+  await Promise.all(gone.map((script) => rm(script, { force: true })));
 
   return { records: written, set };
 };
@@ -3005,7 +2975,6 @@ export const placeFolder = (
     const placedSkills: Sidecar["placedSkills"] = {};
     for (const skill of copies.skills) {
       const key = placedKey(skill);
-      // biome-ignore lint/performance/noAwaitInLoops: one skill directory written at a time keeps the disk writes bounded
       const hash = await placeSkill(
         skill,
         managed.placedSkills[key]?.hash,
@@ -3018,7 +2987,6 @@ export const placeFolder = (
     const placedMemory: Sidecar["placedMemory"] = {};
     for (const doc of copies.memory) {
       const key = placedKey({ name: doc.path, placeId: doc.placeId });
-      // biome-ignore lint/performance/noAwaitInLoops: one file written at a time, each recorded before the next
       const hash = await placeMemoryDoc(
         doc,
         managed.placedMemory[key]?.hash,
@@ -3212,6 +3180,61 @@ export const syncFleetConfig = (
 ): Promise<FleetSyncReport> => inFleetQueue(() => converge(config));
 
 /**
+ * One fleet hook as a status reads it: its script where cawco wrote one,
+ * then its registration where sessions take it.
+ */
+const hookState = async (
+  id: string,
+  record: ManagedHook,
+  harnessSet: () => Promise<FleetHarnessSet>,
+  settings: () => Promise<Record<string, unknown> | undefined>
+): Promise<FleetItemState> => {
+  const scriptPath = scriptPathOf(record);
+  if (scriptPath?.startsWith(HOOKS_DIR)) {
+    const scriptFile = Bun.file(scriptPath);
+    if (!(await scriptFile.exists())) {
+      return { state: "failed", cause: "absent", detail: "not on disk" };
+    }
+    const script = await scriptFile.text();
+    const parseError = await scriptParseError(script);
+    if (parseError) {
+      return { state: "failed", cause: "unknown", detail: parseError };
+    }
+    if (hashText(script) !== record.hash) {
+      return { state: "failed", cause: "drifted", detail: DRIFTED };
+    }
+  }
+  // The last question for every hook: whether the entry cawco registered
+  // is still where sessions take it — a project's copy in the harness set,
+  // the fleet's own in the user settings. A script that was refused
+  // registration is kept on disk, so a matching file is not enough.
+  const applied: FleetItemState = record.note
+    ? { state: "applied", detail: record.note }
+    : { state: "applied" };
+  if (record.placed) {
+    const one = (await harnessSet()).placedHooks[id];
+    return one && identityOf(one.handler) === record.command
+      ? applied
+      : {
+          state: "failed",
+          cause: "absent",
+          detail: `not in ${fleetHarnessSetFile()}`,
+        };
+  }
+  const stored = await settings();
+  const entries =
+    (stored?.hooks as Record<string, HookMatcher[]> | undefined)?.[
+      record.event
+    ] ?? [];
+  const present = entries.some((entry) =>
+    (entry.hooks ?? []).some((one) => entryKey(one) === record.command)
+  );
+  return present
+    ? applied
+    : { state: "failed", cause: "absent", detail: `not in ${SETTINGS_PATH}` };
+};
+
+/**
  * What the machine has of what cawco last put on it, without changing any of
  * it. The sidecar is the question — a server or a plugin nobody here manages is
  * not this report's business.
@@ -3240,7 +3263,6 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     report.mcp[key] = { state: "applied" };
   }
   for (const name of managed.marketplaces) {
-    // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
     report.marketplaces[name] = (await isLinked(name))
       ? { state: "applied" }
       : {
@@ -3254,7 +3276,6 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     // marketplace, under that copy's name, and the upstream id is uninstalled.
     const installedAs =
       managed.vendoredPlugins?.[id] === undefined ? id : vendoredIdOf(id);
-    // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
     report.plugins[id] = (await isInstalled(installedAs))
       ? { state: "applied" }
       : {
@@ -3286,25 +3307,38 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
       skills[name] = { state: "applied" };
     }
   }
-  for (const [key, record] of Object.entries(managed.placedSkills)) {
-    const dir = join(placedSkillsDir(record.cwd), record.name);
-    // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
-    const disk = await heldHash(dir);
-    if (disk === undefined) {
-      skills[key] = {
-        state: "failed",
-        cause: "absent",
-        detail: `${dir} is not on disk`,
-      };
-    } else if (disk === record.hash) {
-      skills[key] = { state: "applied" };
-    } else {
-      skills[key] = {
-        state: "failed",
-        cause: "drifted",
-        detail: `${dir}: ${DRIFTED}`,
-      };
-    }
+  // Each record is read on its own, all at once; the results land in the
+  // records' order.
+  const placedSkills = await Promise.all(
+    Object.entries(managed.placedSkills).map(
+      async ([key, record]): Promise<[string, FleetItemState]> => {
+        const dir = join(placedSkillsDir(record.cwd), record.name);
+        const disk = await heldHash(dir);
+        if (disk === undefined) {
+          return [
+            key,
+            {
+              state: "failed",
+              cause: "absent",
+              detail: `${dir} is not on disk`,
+            },
+          ];
+        }
+        return [
+          key,
+          disk === record.hash
+            ? { state: "applied" }
+            : {
+                state: "failed",
+                cause: "drifted",
+                detail: `${dir}: ${DRIFTED}`,
+              },
+        ];
+      }
+    )
+  );
+  for (const [key, state] of placedSkills) {
+    skills[key] = state;
   }
   if (managed.memory !== undefined) {
     const fileHash = await memoryFileHash();
@@ -3313,22 +3347,33 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
         ? { state: "applied" }
         : absentOrDrifted(fileHash, "not on disk");
   }
-  for (const [path, hash] of Object.entries(managed.memoryDocs)) {
-    // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
-    const fileHash = await fileHashAt(join(MEMORIES_DIR, path));
-    memoryDocs[path] =
-      fileHash === hash
-        ? { state: "applied" }
-        : absentOrDrifted(fileHash, "not on disk");
-  }
-  for (const [key, record] of Object.entries(managed.placedMemory)) {
-    const file = join(placedMemoryDir(record.cwd), record.name);
-    // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
-    const fileHash = await fileHashAt(file);
-    memoryDocs[key] =
-      fileHash === record.hash
-        ? { state: "applied" }
-        : absentOrDrifted(fileHash, `${file} is not on disk`);
+  const docStates = await Promise.all([
+    ...Object.entries(managed.memoryDocs).map(
+      async ([path, hash]): Promise<[string, FleetItemState]> => {
+        const fileHash = await fileHashAt(join(MEMORIES_DIR, path));
+        return [
+          path,
+          fileHash === hash
+            ? { state: "applied" }
+            : absentOrDrifted(fileHash, "not on disk"),
+        ];
+      }
+    ),
+    ...Object.entries(managed.placedMemory).map(
+      async ([key, record]): Promise<[string, FleetItemState]> => {
+        const file = join(placedMemoryDir(record.cwd), record.name);
+        const fileHash = await fileHashAt(file);
+        return [
+          key,
+          fileHash === record.hash
+            ? { state: "applied" }
+            : absentOrDrifted(fileHash, `${file} is not on disk`),
+        ];
+      }
+    ),
+  ]);
+  for (const [key, state] of docStates) {
+    memoryDocs[key] = state;
   }
   // The fleet's settings, plugins and extensions: each row the last sync
   // made ready, which sessions load, applied while its file is on disk; each
@@ -3349,56 +3394,20 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     readSet ??= readFleetHarnessSet();
     return readSet;
   };
-  for (const [id, record] of Object.entries(managed.hooks)) {
-    const scriptPath = scriptPathOf(record);
-    if (scriptPath?.startsWith(HOOKS_DIR)) {
-      const scriptFile = Bun.file(scriptPath);
-      // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
-      if (!(await scriptFile.exists())) {
-        hooks[id] = { state: "failed", cause: "absent", detail: "not on disk" };
-        continue;
-      }
-      const script = await scriptFile.text();
-      const parseError = await scriptParseError(script);
-      if (parseError) {
-        hooks[id] = { state: "failed", cause: "unknown", detail: parseError };
-        continue;
-      }
-      if (hashText(script) !== record.hash) {
-        hooks[id] = { state: "failed", cause: "drifted", detail: DRIFTED };
-        continue;
-      }
-    }
-    // The last question for every hook: whether the entry cawco registered
-    // is still where sessions take it — a project's copy in the harness set,
-    // the fleet's own in the user settings. A script that was refused
-    // registration is kept on disk, so a matching file is not enough.
-    const applied: FleetItemState = record.note
-      ? { state: "applied", detail: record.note }
-      : { state: "applied" };
-    if (record.placed) {
-      const one = (await harnessSet()).placedHooks[id];
-      hooks[id] =
-        one && identityOf(one.handler) === record.command
-          ? applied
-          : {
-              state: "failed",
-              cause: "absent",
-              detail: `not in ${fleetHarnessSetFile()}`,
-            };
-      continue;
-    }
-    const stored = await readJson<Record<string, unknown>>(SETTINGS_PATH);
-    const entries =
-      (stored?.hooks as Record<string, HookMatcher[]> | undefined)?.[
-        record.event
-      ] ?? [];
-    const present = entries.some((entry) =>
-      (entry.hooks ?? []).some((one) => entryKey(one) === record.command)
-    );
-    hooks[id] = present
-      ? applied
-      : { state: "failed", cause: "absent", detail: `not in ${SETTINGS_PATH}` };
+  // Read once, at the first fleet hook that asks.
+  let readSettings: Promise<Record<string, unknown> | undefined> | undefined;
+  const settings = (): Promise<Record<string, unknown> | undefined> => {
+    readSettings ??= readJson<Record<string, unknown>>(SETTINGS_PATH);
+    return readSettings;
+  };
+  const hookStates = await Promise.all(
+    Object.entries(managed.hooks).map(
+      async ([id, record]) =>
+        [id, await hookState(id, record, harnessSet, settings)] as const
+    )
+  );
+  for (const [id, state] of hookStates) {
+    hooks[id] = state;
   }
   // Claimed here too, and for the reason `have` above is: a status overwrites
   // the stored report, so a status that left the toolchain out would retract
@@ -3418,14 +3427,13 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
  */
 export const readMemoryFile = async (): Promise<MachineMemorySet | null> => {
   const file = Bun.file(MEMORY_PATH);
-  const docs: MachineMemoryDoc[] = [];
-  // Each document is an independent read, but the reads are few and this is
-  // a plain discovery call, not a hot path worth a concurrency strategy.
-  for (const path of await memoryDocPaths()) {
-    // biome-ignore lint/performance/noAwaitInLoops: independent reads, kept sequential for a call this infrequent
-    const content = await Bun.file(join(MEMORIES_DIR, path)).text();
-    docs.push({ path, content, hash: hashText(content) });
-  }
+  // Each document is read on its own, all at once, kept in the listing's order.
+  const docs: MachineMemoryDoc[] = await Promise.all(
+    (await memoryDocPaths()).map(async (path) => {
+      const content = await Bun.file(join(MEMORIES_DIR, path)).text();
+      return { path, content, hash: hashText(content) };
+    })
+  );
   // A machine with documents but no main file still has a set worth adopting,
   // and an empty main file is what the fleet's own row would have been anyway.
   if (!(await file.exists())) {
@@ -3579,7 +3587,6 @@ export async function skillsIn(
     }
     const path = join(root, entry.name);
     const file = Bun.file(join(path, "SKILL.md"));
-    // biome-ignore lint/performance/noAwaitInLoops: `found` is built in directory-listing order, which the dashboard's skill list preserves
     if (await file.exists()) {
       const description = skillDescription(await file.text());
       found.push({
@@ -3654,18 +3661,20 @@ export const inspectConfig = async (
 
   const memoryHash = await memoryFileHash();
   const memoryFile = Bun.file(MEMORY_PATH);
-  const docs: NonNullable<ConfigInspection["memory"]>["docs"] = [];
-  for (const path of await memoryDocPaths()) {
-    const doc = Bun.file(join(MEMORIES_DIR, path));
-    // biome-ignore lint/performance/noAwaitInLoops: independent reads, kept sequential for a call this infrequent
-    const hash = hashText(await doc.text());
-    docs.push({
-      path,
-      hash,
-      bytes: doc.size,
-      managed: managed.memoryDocs[path] === hash,
-    });
-  }
+  // Each document is read on its own, all at once, kept in the listing's order.
+  const docs: NonNullable<ConfigInspection["memory"]>["docs"] =
+    await Promise.all(
+      (await memoryDocPaths()).map(async (path) => {
+        const doc = Bun.file(join(MEMORIES_DIR, path));
+        const hash = hashText(await doc.text());
+        return {
+          path,
+          hash,
+          bytes: doc.size,
+          managed: managed.memoryDocs[path] === hash,
+        };
+      })
+    );
 
   return {
     ...(cwd ? { cwd } : {}),
@@ -3701,7 +3710,6 @@ const filesUnder = async (root: string, prefix = ""): Promise<string[]> => {
   for (const entry of entries) {
     const relative = `${prefix}${entry.name}`;
     if (entry.isDirectory()) {
-      // biome-ignore lint/performance/noAwaitInLoops: `paths` is built in directory-listing order, which readSkillFiles relies on for a stable file order
       paths.push(...(await filesUnder(join(root, entry.name), `${relative}/`)));
     } else if (entry.isFile()) {
       paths.push(relative);
@@ -3734,7 +3742,6 @@ export const readSkillFiles = async (
   );
   for (const path of paths) {
     const content = new Uint8Array(
-      // biome-ignore lint/performance/noAwaitInLoops: files are read one at a time in directory-listing order, so the result's order is stable and a huge skill never holds every file's read in flight at once
       await Bun.file(join(skill.path, path)).arrayBuffer()
     );
     files.push({

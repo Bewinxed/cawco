@@ -1486,7 +1486,6 @@ const awaitNewKey = async (): Promise<boolean> => {
     return false;
   }
   while (readMachineKey() === refused.key) {
-    // biome-ignore lint/performance/noAwaitInLoops: a poll; each read must see the key file after the previous wait
     await Bun.sleep(NEW_KEY_POLL_MS);
   }
   refusedWith = undefined;
@@ -2078,53 +2077,55 @@ const attach = (
           });
         }
       };
-      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — reannounce doesn't await its own sends
-      void (async () => {
-        reportedProviderAccounts = providerAccountReports();
-        reportedHomeStores = (await homeStoresStamp()) ?? reportedHomeStores;
-        beat({
-          ...(latestBinaryUpdate()
-            ? { binaryUpdate: latestBinaryUpdate() }
-            : {}),
-          providerAccounts: reportedProviderAccounts,
-          ...(reportedHomeStores ? { homeStores: reportedHomeStores } : {}),
-        });
-        await Promise.all([
-          ...harnesses().map(async (adapter) => {
-            const report = await readHarness(adapter);
-            if (report) {
-              keepReport(report);
-              beat({ harnesses: [report] });
-            }
-          }),
-          (async () => {
-            const machineCapabilities = await readPart(
-              "the machine's capabilities",
-              probeCapabilities
-            );
-            if (machineCapabilities) {
-              beat({ machineCapabilities });
-            }
-          })(),
-          (async () => {
-            const tools = await readPart("tools", probeTools);
-            if (tools) {
-              beat({ tools });
-            }
-          })(),
-          (async () => {
-            const providers = await machineProviders();
-            if (providers) {
-              beat({ providers });
-            }
-          })(),
-        ]);
-        // Every part answered or ran out: the cadence below reads again what is missing.
-        announced = true;
-      })().catch((error: unknown) =>
-        console.warn(
-          `[agent] the machine's report could not be sent: ${errorWords(error)}`
-        )
+      detach(
+        (async () => {
+          reportedProviderAccounts = providerAccountReports();
+          reportedHomeStores = (await homeStoresStamp()) ?? reportedHomeStores;
+          beat({
+            ...(latestBinaryUpdate()
+              ? { binaryUpdate: latestBinaryUpdate() }
+              : {}),
+            providerAccounts: reportedProviderAccounts,
+            ...(reportedHomeStores ? { homeStores: reportedHomeStores } : {}),
+          });
+          await Promise.all([
+            ...harnesses().map(async (adapter) => {
+              const report = await readHarness(adapter);
+              if (report) {
+                keepReport(report);
+                beat({ harnesses: [report] });
+              }
+            }),
+            (async () => {
+              const machineCapabilities = await readPart(
+                "the machine's capabilities",
+                probeCapabilities
+              );
+              if (machineCapabilities) {
+                beat({ machineCapabilities });
+              }
+            })(),
+            (async () => {
+              const tools = await readPart("tools", probeTools);
+              if (tools) {
+                beat({ tools });
+              }
+            })(),
+            (async () => {
+              const providers = await machineProviders();
+              if (providers) {
+                beat({ providers });
+              }
+            })(),
+          ]);
+          // Every part answered or ran out: the cadence below reads again what is missing.
+          announced = true;
+        })().catch((error: unknown) =>
+          console.warn(
+            `[agent] the machine's report could not be sent: ${errorWords(error)}`
+          )
+        ),
+        "work"
       );
     };
     // An account signed in, keyed, moved in or forgotten here: the hub hears
@@ -2745,8 +2746,10 @@ const attach = (
             )
           );
         }
-        // biome-ignore lint/complexity/noVoid: the harnesses' reconnects are theirs; registration never waits on them
-        void reconnectAfterHubRestart(url, ackPayload);
+        detach(
+          reconnectAfterHubRestart(url, ackPayload),
+          "reconnectAfterHubRestart"
+        );
       };
 
       /** Every unit settled: the machine's custody, read fresh, is complete. */
@@ -2777,36 +2780,39 @@ const attach = (
       // One unit per harness whose children sessiond keeps, each read from
       // the keepers there now; no control reply waits for the transaction. A
       // harness that keeps none has no keeper to ask, and its rows start.
-      // biome-ignore lint/complexity/noVoid: each unit settles its own sessions as its keepers answer
-      void Promise.all(
-        SESSION_PROC_KINDS.flatMap((kind) => {
-          const mine = spawns.filter(
-            (envelope) => envelope.payload.harness === kind
-          );
-          if (mine.length === 0) {
-            return [];
-          }
-          return [
-            (async () => ({
-              unit: kind,
-              keepers: (await supervisor.custodyReader(kind)?.keepers()) ?? [],
-              rows: mine.map((envelope) => ({
-                id: (envelope.payload as SpawnPayload).instanceId,
-                fresh: !(envelope.payload as SpawnPayload).reattachOnly,
-              })),
-            }))(),
-          ];
-        })
-      )
-        .then((begun) =>
-          custodyStep({
-            kind: "custody-begin",
-            epoch,
-            units: begun,
-            now: Date.now(),
+      detach(
+        Promise.all(
+          SESSION_PROC_KINDS.flatMap((kind) => {
+            const mine = spawns.filter(
+              (envelope) => envelope.payload.harness === kind
+            );
+            if (mine.length === 0) {
+              return [];
+            }
+            return [
+              (async () => ({
+                unit: kind,
+                keepers:
+                  (await supervisor.custodyReader(kind)?.keepers()) ?? [],
+                rows: mine.map((envelope) => ({
+                  id: (envelope.payload as SpawnPayload).instanceId,
+                  fresh: !(envelope.payload as SpawnPayload).reattachOnly,
+                })),
+              }))(),
+            ];
           })
         )
-        .catch((problem: unknown) => supervisor.failCustody(epoch, problem));
+          .then((begun) =>
+            custodyStep({
+              kind: "custody-begin",
+              epoch,
+              units: begun,
+              now: Date.now(),
+            })
+          )
+          .catch((problem: unknown) => supervisor.failCustody(epoch, problem)),
+        "all"
+      );
     };
 
     /**
@@ -4110,8 +4116,10 @@ export const runDaemon = (rediscover = false): void => {
     // `EventEmitter` directly reaches the generic signature `process.off`
     // itself no longer offers.
     (process as NodeJS.EventEmitter).off(signal, drain);
-    // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — the signal handler doesn't await its own exit
-    void Effect.runPromise(Fiber.interrupt(daemon)).then(() => process.exit(0));
+    detach(
+      Effect.runPromise(Fiber.interrupt(daemon)).then(() => process.exit(0)),
+      "runPromise"
+    );
   };
   process.on("SIGINT", drain).on("SIGTERM", drain);
   // However the daemon ends, a `claude auth login` it holds ends with it.

@@ -3648,7 +3648,6 @@ export const createWorkItems = ({
       do {
         drainAgain = false;
         for (const queued of db.queuedWorkItems()) {
-          // biome-ignore lint/performance/noAwaitInLoops: one start at a time, so each sees the files the last one took
           await startQueued(queued);
         }
       } while (drainAgain);
@@ -7472,7 +7471,6 @@ export const createWorkItems = ({
         let ran: Ran | undefined;
         while (!ran) {
           const machineId = machineFor(step);
-          // biome-ignore lint/performance/noAwaitInLoops: steps run in order, each once its machine runs work
           await unpaused(machineId);
           started = Date.now();
           // A step that ends while waiting (killed, past the most a wait may
@@ -8329,7 +8327,6 @@ export const createWorkItems = ({
       if (one.link) {
         continue;
       }
-      // biome-ignore lint/performance/noAwaitInLoops: one file at a time keeps each read under the command's output cap
       const read = await runIn(workspace, item)(
         `base64 < "$TMPDIR/${OUTPUTS_DIR}/"${quote(one.path)}`,
         GIT_TIMEOUT_MS
@@ -8368,7 +8365,6 @@ export const createWorkItems = ({
     }
     const files: { path: string; content: Uint8Array }[] = [];
     for (const path of listed.stdout.split("\n").filter(Boolean)) {
-      // biome-ignore lint/performance/noAwaitInLoops: one file at a time keeps each read under the command's output cap
       const read = await runIn(workspace, item)(
         `base64 < ${quote(path)}`,
         GIT_TIMEOUT_MS
@@ -8396,7 +8392,6 @@ export const createWorkItems = ({
     const folder = outputsFolder(item);
     const files: { path: string; content: Uint8Array }[] = [];
     for (const output of item.outputs ?? []) {
-      // biome-ignore lint/performance/noAwaitInLoops: one output at a time keeps each read under the command's output cap
       files.push(...(await outputFiles(workspace, item, output, folder)));
     }
     files.push(...(await scratchOutputFiles(workspace, item, folder)));
@@ -8474,7 +8469,6 @@ export const createWorkItems = ({
       if (!COMMIT_ID.test(from.commit)) {
         return;
       }
-      // biome-ignore lint/performance/noAwaitInLoops: one link of the chain at a time, each read in the clone that landed it
       const cherry = await runIn(workspace, item)(
         `git cherry ${target} ${from.commit}`,
         GIT_TIMEOUT_MS
@@ -8726,7 +8720,6 @@ export const createWorkItems = ({
   ): Promise<Map<string, TargetMap> | GateRefusal> => {
     const maps = new Map<string, TargetMap>();
     for (const path of new Set(steps.flatMap((step) => step.targetMap ?? []))) {
-      // biome-ignore lint/performance/noAwaitInLoops: one map per gate, and a gate names one
       const map = await targetMapOf(workspace, item, path, touched);
       if ("refusal" in map) {
         return map;
@@ -10107,7 +10100,6 @@ export const createWorkItems = ({
         if (workspaceTurns.has(workspace.id)) {
           continue;
         }
-        // biome-ignore lint/performance/noAwaitInLoops: one workspace at a time, so a sweep never loads a machine with many archives at once
         done.push({ workspace, outcome: await settleNow(workspace.id) });
       }
       return done;

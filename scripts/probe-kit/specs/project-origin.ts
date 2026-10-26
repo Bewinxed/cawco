@@ -51,7 +51,6 @@
  * front of the host-mode port) and the tailnet route (the hub's HTTPS twins
  * on its tailnet name).
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one step at a time, as a person takes them
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: the legs are read in order, one after another.
 import type { Frame, Page } from "playwright-core";
 import { PREVIEW_PASS_COOKIE } from "../../../packages/core/src/frames";

@@ -464,7 +464,6 @@ export async function leasePortRange(count: number): Promise<PortLease> {
       free = false;
     } finally {
       for (const probe of opened) {
-        // biome-ignore lint/performance/noAwaitInLoops: each probe closes before the next block is tried
         await probe.stop(true);
       }
     }
@@ -543,7 +542,6 @@ export async function until<T>(
   for (;;) {
     // A read that throws, synchronously (a database the hub has not made yet: SQLITE_CANTOPEN)
     // or by rejecting, is no reading yet: `.then(read)` makes both a rejection.
-    // biome-ignore lint/performance/noAwaitInLoops: each look follows the scratch services' last state
     const value = await Promise.resolve()
       .then(read)
       .catch(() => undefined);
@@ -1123,7 +1121,6 @@ async function removeFleetBrowsers(dir: string): Promise<void> {
   const { LocalHost } =
     await import("../packages/agent/src/browser/local-host");
   for (const record of records) {
-    // biome-ignore lint/performance/noAwaitInLoops: one browser at a time
     const gone = await new LocalHost().stop(record).then(
       () => "its local Chromium stopped",
       (error: unknown) =>
@@ -1186,12 +1183,7 @@ async function endCarriers(dirs: readonly string[]): Promise<string[]> {
     signalPid(listedPid(pid), "SIGTERM");
   }
   const graceEnds = performance.now() + CARRIER_GRACE_MS;
-  for (
-    let left = found;
-    left.length > 0;
-    // biome-ignore lint/performance/noAwaitInLoops: each read after the last, until none is left or the grace is spent
-    left = await carriers()
-  ) {
+  for (let left = found; left.length > 0; left = await carriers()) {
     if (performance.now() > graceEnds) {
       for (const { pid } of left) {
         signalPid(listedPid(pid), "SIGKILL");
@@ -1265,7 +1257,6 @@ class FleetDirs {
   async short(root: string): Promise<string> {
     for (const name of shuffledHex()) {
       const dir = join(root, name);
-      // biome-ignore lint/performance/noAwaitInLoops: a name is tried only when the last one was taken
       const made = await mkdir(dir, { mode: 0o700 }).then(
         () => true,
         (error: NodeJS.ErrnoException) => {
@@ -1293,7 +1284,6 @@ class FleetDirs {
   /** Every browser this fleet's agents recorded, removed while their records stand ({@link removeFleetBrowsers}). */
   async removeBrowsers(): Promise<void> {
     for (const dir of this.dirs) {
-      // biome-ignore lint/performance/noAwaitInLoops: one folder's browsers at a time
       await removeFleetBrowsers(dir).catch((error: unknown) =>
         console.log(`… browsers under ${dir} not removed: ${String(error)}`)
       );
@@ -1314,7 +1304,6 @@ class FleetDirs {
   async remove(): Promise<void> {
     LIVE.delete(this);
     for (const stop of this.#stops.splice(0)) {
-      // biome-ignore lint/performance/noAwaitInLoops: one at a time, in order
       await Promise.resolve()
         .then(stop)
         .catch(() => undefined);
@@ -1322,7 +1311,6 @@ class FleetDirs {
     await this.endCarriers();
     await this.removeBrowsers();
     for (const dir of this.dirs.splice(0)) {
-      // biome-ignore lint/performance/noAwaitInLoops: a handful of dirs
       await removeTree(dir);
       // A service HOME's short name in the socket root goes with it (macOS).
       forgetSessiondLink(dir);
@@ -1392,7 +1380,6 @@ async function removeKept(scratch: string, name?: string): Promise<string[]> {
       continue;
     }
     const sandbox = join(scratch, entry);
-    // biome-ignore lint/performance/noAwaitInLoops: one kept sandbox at a time
     const said = await readFile(join(sandbox, KEPT_FILE), "utf8").catch(
       () => null
     );
@@ -1401,7 +1388,6 @@ async function removeKept(scratch: string, name?: string): Promise<string[]> {
     }
     const { dirs } = JSON.parse(said) as { dirs: string[] };
     for (const dir of [...dirs.filter((one) => one !== sandbox), sandbox]) {
-      // biome-ignore lint/performance/noAwaitInLoops: the sandbox, which says the others, goes last
       await removeTree(dir);
       forgetSessiondLink(dir);
     }
@@ -1476,7 +1462,6 @@ async function heldByLive(dir: string): Promise<boolean> {
       continue;
     }
     const at = `/proc/${entry}`;
-    // biome-ignore lint/performance/noAwaitInLoops: one process at a time
     const cwd = await readlink(`${at}/cwd`).catch(() => "");
     if (under(cwd)) {
       return true;
@@ -1572,11 +1557,9 @@ export async function sweepDeadFleets(): Promise<string[]> {
     ...fleetDirs,
   ]);
   for (const root of roots) {
-    // biome-ignore lint/performance/noAwaitInLoops: one root at a time
     const entries = await readdir(root).catch(() => [] as string[]);
     for (const entry of entries) {
       const dir = join(root, entry);
-      // biome-ignore lint/performance/noAwaitInLoops: one folder at a time, each read against every process
       if (await sweepDeadFleet(dir)) {
         removed.push(dir);
       }
@@ -2352,7 +2335,6 @@ async function standUp(
       if (!Number.isInteger(id)) {
         continue;
       }
-      // biome-ignore lint/performance/noAwaitInLoops: one /proc entry at a time
       const stat = await Bun.file(`/proc/${id}/stat`)
         .text()
         .catch(() => "");
@@ -3216,7 +3198,6 @@ async function standUp(
         continue;
       }
       const pid = pidOf(child);
-      // biome-ignore lint/performance/noAwaitInLoops: one machine's process at a time, as `stop` does
       await killTree(pid, "SIGCONT");
       await killTree(pid, "SIGTERM");
       if (!(await exited(child, 10_000))) {

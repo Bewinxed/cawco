@@ -647,7 +647,6 @@ async function walkChainYielding(
     if (step.done) {
       return step.value;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: the turn between two steps is the point
     await loopTurn();
   }
 }
@@ -1480,7 +1479,6 @@ async function newestWindow(
   });
   let target = limit * 2;
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: each read decides whether the next, wider one is needed
     await reader.more(target - reader.records.length);
     const raw = reader.records.map(nodeOf);
     if (raw.some(isCompactBoundary)) {
@@ -1612,7 +1610,6 @@ async function sessionEnd(
   const reader = new ReverseReader(path, { prefilter: CHAIN_TYPES });
   let target = count;
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: each read decides whether the next, wider one is needed
     await reader.more(target - reader.records.length);
     const raw = reader.records.map(nodeOf);
     const nodes = walkChainWindowed(raw, !reader.complete);
@@ -1638,7 +1635,6 @@ export async function readSessionContext(path: string) {
   let count = 8;
   let previous = -1;
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: widen the tail only when the preceding read found no usage.
     const { messages, complete } = await readSessionEnd(path, count);
     for (const entry of messages.reverse()) {
       if (entry.type !== "assistant" || entry.error || entry.compactSummary) {

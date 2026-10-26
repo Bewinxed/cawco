@@ -36,7 +36,6 @@
  *
  *   bun scripts/probe-kit/run.ts preview-lock
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one connection after another, each its own
 import {
   type PreviewTicket,
   previewEnterUrl,

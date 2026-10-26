@@ -590,7 +590,6 @@ export async function takeSlot(
       const inLine =
         ahead.length > 0 ? `; ${ahead.length} run(s) ahead in line` : "";
       tell(key, `${held.length} of ${place.count} held by ${holders}${inLine}`);
-      // biome-ignore lint/performance/noAwaitInLoops: a waiting run looks again once a poll
       await pause(pollMs, signal);
     }
   } finally {

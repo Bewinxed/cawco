@@ -40,7 +40,6 @@ export const forgetUnknownAccounts = async (ids: string[]): Promise<void> => {
   for (const id of ids.filter((one) => ours.has(one))) {
     try {
       if (existsSync(accountConfigDir(id))) {
-        // biome-ignore lint/performance/noAwaitInLoops: one store at a time, each signed out by its own harness
         await changingSignins(forgetAccount(id));
       }
       if (existsSync(accountCredentialPath(id))) {

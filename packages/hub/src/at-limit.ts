@@ -1778,7 +1778,6 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         continue;
       }
       const last = at === targets.length - 1;
-      // biome-ignore lint/performance/noAwaitInLoops: the next target is tried only when this one's own part failed
       const failed = await moveTo(row, current, target, weighed, {
         input,
         decision,
@@ -2195,7 +2194,6 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     const now = Date.now();
     landing.clear();
     for (const held of admissionOrder(db.atLimit.holds())) {
-      // biome-ignore lint/performance/noAwaitInLoops: each held session needs its own idle receipt before it is sent on, and the next decision reads this one's charge
       await lookAt(held, now);
     }
   };

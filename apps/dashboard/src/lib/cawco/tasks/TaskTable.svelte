@@ -31,7 +31,6 @@
   import TaskRing from "#lib/cawco/TaskRing.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Table from "#lib/components/ui/table/index.js";
   import { IconChevronDown, IconChevronUp, IconNeedsYou } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";

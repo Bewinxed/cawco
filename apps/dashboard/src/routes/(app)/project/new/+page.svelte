@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
   /**
    * New project (design §5, PRD §5.6): Caw at 80px asks "What are we working
    * on?"; the session Composer, four starter chips that put their words in
@@ -209,8 +210,7 @@
         }}
         onstop={() => undefined}
         onsubmit={(text, _extras, id) => {
-          // biome-ignore lint/complexity/noVoid: the start's own state is the composer's sending and its refusal
-          void start(text, id);
+          detach(start(text, id), "start");
         }}
         placeholder="A repo, a launch, a brand…"
         sendAgain={again}

@@ -31,7 +31,6 @@
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import TaskRing from "#lib/cawco/TaskRing.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";

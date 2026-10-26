@@ -18,6 +18,7 @@
 </script>
 
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
   import {
     dur,
     easeDrawer,
@@ -26,7 +27,6 @@
     revealOut,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   /** Walks a machine's filesystem over the `fs` verb so a cwd can be picked, not typed. */
@@ -161,8 +161,7 @@
       return;
     }
     open = true;
-    // biome-ignore lint/complexity/noVoid: fire-and-forget — the panel opens immediately, the listing fills in when it arrives
-    void go(seed(), 0);
+    detach(go(seed(), 0), "go");
   }
 
   function use() {

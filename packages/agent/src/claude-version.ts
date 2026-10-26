@@ -2,6 +2,7 @@ import { readFile, realpath, stat } from "node:fs/promises";
 import { CLAUDE_VERSION_FLOOR, olderThan } from "@cawco/core";
 import { writeJsonAtomic } from "@cawco/core/binary-installation";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { detach } from "@cawco/core/detach";
 import { claudeVersionPath } from "@cawco/core/paths";
 import { hostEnvironment } from "@cawco/core/session-env";
 import type { Subprocess } from "bun";
@@ -100,29 +101,34 @@ const readVersion = (path: string, binary: string): VersionRead => {
     version = Promise.resolve(undefined);
   }
   const reading: VersionRead = { binary, version, child };
-  // biome-ignore lint/complexity/noVoid: the change is said and kept when the read lands; callers take the version itself
-  void version.then(async (answered) => {
-    if (!answered) {
-      // Not kept, so the next call asks again.
-      if (read === reading) {
-        read = undefined;
+  detach(
+    version.then(async (answered) => {
+      if (!answered) {
+        // Not kept, so the next call asks again.
+        if (read === reading) {
+          read = undefined;
+        }
+        return;
       }
-      return;
-    }
-    if (known && answered !== known) {
-      console.info(
-        `[claude] this machine's Claude Code changed from ${known} to ${answered}: each Claude session on another version goes to sleep once it is at rest, and wakes on ${answered}`
-      );
-    }
-    known = answered;
-    try {
-      await writeJsonAtomic(claudeVersionPath(), { binary, version: answered });
-    } catch (error) {
-      console.warn(
-        `[claude] Claude Code ${answered} was not kept in ${claudeVersionPath()}, so the next agent reads it again: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-  });
+      if (known && answered !== known) {
+        console.info(
+          `[claude] this machine's Claude Code changed from ${known} to ${answered}: each Claude session on another version goes to sleep once it is at rest, and wakes on ${answered}`
+        );
+      }
+      known = answered;
+      try {
+        await writeJsonAtomic(claudeVersionPath(), {
+          binary,
+          version: answered,
+        });
+      } catch (error) {
+        console.warn(
+          `[claude] Claude Code ${answered} was not kept in ${claudeVersionPath()}, so the next agent reads it again: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }),
+    "then"
+  );
   return reading;
 };
 

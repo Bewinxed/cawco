@@ -11,6 +11,8 @@
  *
  * Call while a component initialises: the keeping lives as long as it does.
  */
+
+import { detach } from "@cawco/core/detach";
 import { untrack } from "svelte";
 import { type DraftContent, loadDraft, saveDraft } from "../draft-store";
 import { keepsDrafts } from "../reload.svelte";
@@ -48,20 +50,22 @@ export function keepDraft(
     }
     let live = true;
     untrack(() => {
-      // biome-ignore lint/complexity/noVoid: fire-and-forget — the read lands in the draft, and a refused read leaves the draft unstored rather than overwritten
-      void loadDraft(id).then(
-        (stored) => {
-          if (!live) {
-            return;
+      detach(
+        loadDraft(id).then(
+          (stored) => {
+            if (!live) {
+              return;
+            }
+            if (stored && !draft.hasContent) {
+              draft.fill(stored);
+            }
+            kept = id;
+          },
+          () => {
+            // No database: drafts do not start, so nothing is ever written.
           }
-          if (stored && !draft.hasContent) {
-            draft.fill(stored);
-          }
-          kept = id;
-        },
-        () => {
-          // No database: drafts do not start, so nothing is ever written.
-        }
+        ),
+        "loadDraft"
       );
     });
     return () => {
@@ -71,8 +75,7 @@ export function keepDraft(
       // change that ended it, so a draft emptied in the same breath would
       // be written back whole (`discard` is how a surface lets one go).
       if (kept === id) {
-        // biome-ignore lint/complexity/noVoid: fire-and-forget — the write lands on its own
-        void write();
+        detach(write(), "write");
         kept = null;
       }
     };
@@ -103,14 +106,16 @@ export function keepDraft(
       timer = undefined;
       unwritten = null;
       if (kept) {
-        // biome-ignore lint/complexity/noVoid: fire-and-forget — an empty draft deletes its record
-        void saveDraft(kept, {
-          text: "",
-          images: [],
-          texts: [],
-          files: [],
-          canvas: null,
-        });
+        detach(
+          saveDraft(kept, {
+            text: "",
+            images: [],
+            texts: [],
+            files: [],
+            canvas: null,
+          }),
+          "saveDraft"
+        );
       }
     },
   };

@@ -443,7 +443,6 @@ async function walk(
   for (const entry of entries) {
     const full = join(root, entry.name);
     if (entry.isDirectory()) {
-      // biome-ignore lint/performance/noAwaitInLoops: recursive walk; siblings push into the same shared `out` array in a stable, reproducible order
       await walk(full, project ?? entry.name, out);
     } else if (entry.name.endsWith(".jsonl")) {
       out.push({ path: full, project: project ?? "unknown" });
@@ -455,7 +454,6 @@ async function walk(
 export const listClaudeFiles = async (): Promise<ClaudeFile[]> => {
   const files: ClaudeFile[] = [];
   for (const dir of claudeConfigDirs()) {
-    // biome-ignore lint/performance/noAwaitInLoops: each config dir walks into the same shared `files` array in a stable, reproducible order
     await walk(join(dir, "projects"), null, files);
   }
   return files;

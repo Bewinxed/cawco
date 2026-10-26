@@ -191,7 +191,6 @@ export const readMcpRuntime = async (
       connectMs + VERDICT_MARGIN_MS,
       async (signal) => {
         while (!signal.aborted) {
-          // biome-ignore lint/performance/noAwaitInLoops: wait on the same connection attempt until its status settles; no reconnect or retry is issued
           await delay(250);
           const read = await handle.mcpServerStatus();
           statuses = read;

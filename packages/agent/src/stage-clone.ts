@@ -245,7 +245,6 @@ const foldersOwn = async (clone: string, path: string): Promise<boolean> => {
   let at = clone;
   for (const part of parts) {
     at = join(at, part);
-    // biome-ignore lint/performance/noAwaitInLoops: each folder is looked at before the one inside it
     const found = await lstat(at).catch(() => undefined);
     if (!found) {
       await mkdir(at);
@@ -399,7 +398,6 @@ const mirror = async (
   );
   const changed: string[] = [];
   for (const path of named) {
-    // biome-ignore lint/performance/noAwaitInLoops: one path at a time, each folder made before what goes in it
     if (await mirrorOne(kept.repo, boundary.path, path, seen)) {
       changed.push(path);
     }
@@ -474,7 +472,6 @@ const installOf = async (
   from: string
 ): Promise<Install> => {
   for (let dir = from; ; dir = dirname(dir)) {
-    // biome-ignore lint/performance/noAwaitInLoops: the nearest folder that names its manager, one folder at a time
     const field = await packageManagerIn(dir);
     if (field) {
       const [name = "", version = ""] = field.split("@");
@@ -539,7 +536,6 @@ const frozenInstall = (install: Install): string => {
 const inputsOf = async (dir: string, command: string): Promise<string> => {
   const hash = createHash("sha256").update(command);
   for (const name of ["package.json", ...LOCKFILES]) {
-    // biome-ignore lint/performance/noAwaitInLoops: a handful of small files, hashed in order
     const bytes = await readFile(join(dir, name)).catch(() => undefined);
     hash.update(`\0${name}\0`);
     if (bytes) {
@@ -610,7 +606,6 @@ const step = async (boundary: WorkspaceRef, kept: Kept): Promise<string[]> => {
   if (manifests) {
     for (const key of Object.keys(now.installed ?? {})) {
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: one install at a time in one boundary
         now = await installAt(boundary, now, join(boundary.path, key));
       } catch (error) {
         console.warn(

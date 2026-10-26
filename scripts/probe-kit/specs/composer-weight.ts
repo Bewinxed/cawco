@@ -317,7 +317,6 @@ const run = async (kit: Kit) => {
     const eachPart = async (page: Page) => {
       const counts: string[] = [];
       for (const part of CHAT_PARTS) {
-        // biome-ignore lint/performance/noAwaitInLoops: in turn, so each part's count is its own
         const fetched = await page.evaluate(async (url) => {
           const before = performance.getEntriesByType("resource").length;
           await import(/* @vite-ignore */ url);

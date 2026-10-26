@@ -256,7 +256,6 @@ export default {
 
       const evictions = (async () => {
         while (evicting) {
-          // biome-ignore lint/performance/noAwaitInLoops: one eviction at a time, on its own clock
           await evict([db, `${db}-wal`]);
           await Bun.sleep(EVICT_MS);
         }

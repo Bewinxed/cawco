@@ -49,7 +49,6 @@
  * weblogs.asp.net/owscott/introducing-testing-domain-localtest-me): the hub
  * is asked for them here as DNS answers them, so it runs where none does.
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one request at a time, each read off the wire before the next
 import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";

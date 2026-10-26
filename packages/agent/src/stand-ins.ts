@@ -131,7 +131,6 @@ export const rewriteLeftFiles = async (ref: WorkspaceRef): Promise<boolean> => {
       continue;
     }
     if (empty.kind === "file") {
-      // biome-ignore lint/performance/noAwaitInLoops: a few files, each written in turn
       await chmod(path, 0o644);
       // In place, never renamed over: this inode is the mount point a
       // sandbox left, and a rename would put another file where it is.
@@ -196,7 +195,6 @@ export const listStandIns = async (
     const ours = found
       ? listed.has(name) ||
         leftMountPoint(found) ||
-        // biome-ignore lint/performance/noAwaitInLoops: one path at a time
         (await asMade({ ...one, found }))
       : willStandIn;
     if (ours) {
@@ -265,7 +263,6 @@ export const straysAmong = async (
   const { folder, strayOf } = await strayReader(path, placed);
   const strays: string[] = [];
   for (const entry of entries) {
-    // biome-ignore lint/performance/noAwaitInLoops: one entry at a time, a husk holds a handful
     strays.push(...(await strayOf(join(folder, entry))));
   }
   return strays;
@@ -298,7 +295,6 @@ const strayReader = async (path: string, placed: readonly string[]) => {
   const walk = async (dir: string): Promise<string[]> => {
     const strays: string[] = [];
     for (const name of await readdir(dir)) {
-      // biome-ignore lint/performance/noAwaitInLoops: one entry at a time, a husk holds a handful
       strays.push(...(await strayOf(join(dir, name))));
     }
     return strays;
@@ -329,7 +325,6 @@ export const removeStandIns = async (ref: WorkspaceRef): Promise<void> => {
   for (const one of await presentIn(ref.path)) {
     const goes =
       !mountedAnywhere(one.path) &&
-      // biome-ignore lint/performance/noAwaitInLoops: one path at a time
       (leftMountPoint(one.found) || (await asMade(one)));
     if (goes) {
       await (one.found.isDirectory() ? rmdir(one.path) : rm(one.path));

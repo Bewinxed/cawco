@@ -1636,15 +1636,17 @@ export class SessionSupervisor {
         }
       });
     this.#queues.set(key, queue);
-    // biome-ignore lint/complexity/noVoid: fire-and-forget cleanup; dispatch() itself is synchronous and does not wait on the queue draining
-    void queue.then(() => {
-      if (imageRequest) {
-        this.#imageRequests.delete(imageRequest);
-      }
-      if (this.#queues.get(key) === queue) {
-        this.#queues.delete(key);
-      }
-    });
+    detach(
+      queue.then(() => {
+        if (imageRequest) {
+          this.#imageRequests.delete(imageRequest);
+        }
+        if (this.#queues.get(key) === queue) {
+          this.#queues.delete(key);
+        }
+      }),
+      "then"
+    );
     return queue;
   }
 
@@ -2168,7 +2170,6 @@ export class SessionSupervisor {
         if (wait.signal.aborted) {
           return { stopped: String((wait.signal.reason as Error).message) };
         }
-        // biome-ignore lint/performance/noAwaitInLoops: one look at the turn every beat, until it has ended
         await Bun.sleep(TURN_END_LOOK_MS);
       }
       if (wait.signal.aborted) {
@@ -2297,12 +2298,14 @@ export class SessionSupervisor {
         )
       );
     this.#queues.set(instanceId, queue);
-    // biome-ignore lint/complexity/noVoid: fire-and-forget cleanup, as in dispatch
-    void queue.then(() => {
-      if (this.#queues.get(instanceId) === queue) {
-        this.#queues.delete(instanceId);
-      }
-    });
+    detach(
+      queue.then(() => {
+        if (this.#queues.get(instanceId) === queue) {
+          this.#queues.delete(instanceId);
+        }
+      }),
+      "then"
+    );
   }
 
   /**
@@ -2329,7 +2332,6 @@ export class SessionSupervisor {
       if (!session) {
         continue;
       }
-      // biome-ignore lint/performance/noAwaitInLoops: one session at a time; only opencode's read is awaited, and it was taken above
       const awake = await this.#awake(instanceId, session, serverBusy, true);
       if (awake) {
         restless[instanceId] = awake.why;
@@ -2470,7 +2472,6 @@ export class SessionSupervisor {
     const go: CarrySessionRequest[] = [];
     const ended = new Map<string, MoveEnded>();
     for (const request of requests) {
-      // biome-ignore lint/performance/noAwaitInLoops: one session at a time, each checked before its process is touched
       const left = await this.#carryReady(request, held, ended);
       if (left) {
         outcomes[request.instanceId] = left;
@@ -2664,7 +2665,6 @@ export class SessionSupervisor {
       (await this.#adapter("opencode").busyInstances?.()) ?? [];
     const now = Date.now();
     for (const [instanceId, session] of carried) {
-      // biome-ignore lint/performance/noAwaitInLoops: one session at a time; each read is the machine's version, read once per binary
       const outdated = await session.outdated?.();
       if (outdated) {
         this.#retire(instanceId, session, outdated);
@@ -2688,12 +2688,14 @@ export class SessionSupervisor {
           warn(`putting ${instanceId} to sleep failed: ${error}`)
         );
       this.#queues.set(instanceId, queue);
-      // biome-ignore lint/complexity/noVoid: fire-and-forget cleanup, as in dispatch
-      void queue.then(() => {
-        if (this.#queues.get(instanceId) === queue) {
-          this.#queues.delete(instanceId);
-        }
-      });
+      detach(
+        queue.then(() => {
+          if (this.#queues.get(instanceId) === queue) {
+            this.#queues.delete(instanceId);
+          }
+        }),
+        "then"
+      );
     }
   }
 
@@ -2951,7 +2953,6 @@ export class SessionSupervisor {
     });
     try {
       while (!room.ok) {
-        // biome-ignore lint/performance/noAwaitInLoops: one reading per tick until the room is back
         await new Promise<void>((resolve, reject) => {
           const timer = setTimeout(resolve, ROOM_POLL_MS);
           stop.signal.addEventListener(
@@ -3476,8 +3477,10 @@ export class SessionSupervisor {
       }
       session.attached?.();
       if (payload.reattachOnly) {
-        // biome-ignore lint/complexity/noVoid: the catalog read dates a rest already under way; nothing waits on it
-        void this.#dateActivity(instanceId, adapter, session, workdir);
+        detach(
+          this.#dateActivity(instanceId, adapter, session, workdir),
+          "dateActivity"
+        );
       } else {
         this.#activeAt.set(instanceId, Date.now());
       }
@@ -4126,12 +4129,14 @@ export class SessionSupervisor {
         }
       });
     this.#queues.set(instanceId, job);
-    // biome-ignore lint/complexity/noVoid: the queue's own cleanup, as dispatch's
-    void job.then(() => {
-      if (this.#queues.get(instanceId) === job) {
-        this.#queues.delete(instanceId);
-      }
-    });
+    detach(
+      job.then(() => {
+        if (this.#queues.get(instanceId) === job) {
+          this.#queues.delete(instanceId);
+        }
+      }),
+      "then"
+    );
   }
 
   /** {@link #holdChild}'s attach, run from the session's queue. */
@@ -4318,8 +4323,10 @@ export class SessionSupervisor {
     holder.session = session;
     // Attached: the live child is this session's process from here, running.
     this.#sessions.set(spec.instanceId, session);
-    // biome-ignore lint/complexity/noVoid: the catalog read dates a rest already under way; nothing waits on it
-    void this.#dateActivity(spec.instanceId, claude, session, spec.cwd);
+    detach(
+      this.#dateActivity(spec.instanceId, claude, session, spec.cwd),
+      "dateActivity"
+    );
     session.attached?.();
     if (this.#busy.has(spec.instanceId)) {
       this.#emitPulse(spec.instanceId, true);
@@ -4468,13 +4475,15 @@ export class SessionSupervisor {
     }
     const { sessionId, dir } = spinOff;
     spinOff.tagged = true;
-    // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — #tagQuest itself is synchronous and does not wait on the tag landing
-    void adapter
-      .tagSession(sessionId, CAWCO_SCRATCH_TAG, dir)
-      .catch((error: unknown) => {
-        spinOff.tagged = false;
-        warn(`could not tag spin-off ${sessionId}: ${error}`);
-      });
+    detach(
+      adapter
+        .tagSession(sessionId, CAWCO_SCRATCH_TAG, dir)
+        .catch((error: unknown) => {
+          spinOff.tagged = false;
+          warn(`could not tag spin-off ${sessionId}: ${error}`);
+        }),
+      "adapter"
+    );
   }
 
   /** A session whose tag someone has just set by hand is no longer ours to set. */
@@ -5222,7 +5231,6 @@ export class SessionSupervisor {
           const deadline = Date.now() + 10_000;
           let alive = true;
           while (alive && Date.now() < deadline) {
-            // biome-ignore lint/performance/noAwaitInLoops: confirmation follows sessiond's existing graceful stop and five-second kill grace
             const after = await client.list();
             alive = after.procs.some(
               (proc) => proc.pid === child.pid && proc.alive
@@ -5300,12 +5308,14 @@ export class SessionSupervisor {
           () => this.#endWork(instanceId, "finished", undefined, workspace)
         );
         this.#queues.set(instanceId, run);
-        // biome-ignore lint/complexity/noVoid: fire-and-forget cleanup, as dispatch's own lanes do
-        void run.then(() => {
-          if (this.#queues.get(instanceId) === run) {
-            this.#queues.delete(instanceId);
-          }
-        });
+        detach(
+          run.then(() => {
+            if (this.#queues.get(instanceId) === run) {
+              this.#queues.delete(instanceId);
+            }
+          }),
+          "then"
+        );
         return run;
       })
     ).then(() => undefined);
@@ -5917,7 +5927,6 @@ export class SessionSupervisor {
           continue;
         }
         try {
-          // biome-ignore lint/performance/noAwaitInLoops: one session's heal at a time, through the proxy's rate
           await session.control(CONTROL_MCP_FLEET_HEAL, []);
         } catch (error) {
           warn(`fleet MCP heal of ${instanceId} failed: ${errorText(error)}`);
@@ -6045,7 +6054,6 @@ export class SessionSupervisor {
         continue;
       }
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: one harness's files at a time, as a converge writes them
         const said = await adapter.placeFleet(
           cwd,
           adapter.capabilities.mcpStatus ? Object.values(launched) : rows
@@ -6715,7 +6723,6 @@ export class SessionSupervisor {
         continue;
       }
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: one harness's disk read at a time keeps the reads bounded
         const held = await adapter.fleetHoldings();
         if (held.skills) {
           skillClaims.push(held.skills);
@@ -6930,7 +6937,6 @@ export class SessionSupervisor {
       }
       for (const adapter of harnesses()) {
         if (adapter.machine) {
-          // biome-ignore lint/performance/noAwaitInLoops: harnesses are tried in order and the loop returns on the first that claims the control
           const answer = await adapter.machine(method, args);
           if (answer !== undefined) {
             return answer;

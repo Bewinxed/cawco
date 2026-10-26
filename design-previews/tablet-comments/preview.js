@@ -767,13 +767,11 @@ function build() {
         );
     const still = async () => {
       while (!doc.documentElement.dataset.ready) {
-        // biome-ignore lint/performance/noAwaitInLoops: waits on the page, a frame at a time
         await frameOf();
       }
       let quiet = 0;
       while (quiet < 2) {
         const runs = ending();
-        // biome-ignore lint/performance/noAwaitInLoops: each run's end, then a frame
         await Promise.all(runs.map((run) => run.finished.catch(() => undefined)));
         await frameOf();
         quiet = runs.length === 0 ? quiet + 1 : 0;

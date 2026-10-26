@@ -595,7 +595,6 @@ const sshJoin = async (kit: Kit, scratch: string): Promise<void> => {
   const hostKey = join(dir, "host_key");
   const otherKey = join(dir, "other_key");
   for (const key of [hostKey, otherKey]) {
-    // biome-ignore lint/performance/noAwaitInLoops: two keys, made one at a time
     await shell(
       dir,
       process.env as Record<string, string>,
@@ -823,7 +822,6 @@ const penalties = async (
     };
     const kinds: string[] = [];
     for (let attempt = 0; attempt < 10; attempt += 1) {
-      // biome-ignore lint/performance/noAwaitInLoops: retried one after another, as a person retries
       const install = await add();
       kinds.push(install?.problem?.kind ?? "none");
     }

@@ -231,7 +231,6 @@ export const mergeSameRemote = async (
   for (const [keep, ...dups] of duplicates(deps.db.listProjects(), remote)) {
     for (const dup of dups) {
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: one fold at a time, each its own commits
         changed = (await fold(deps, keep as ProjectRow, dup)) || changed;
       } catch (error) {
         log(

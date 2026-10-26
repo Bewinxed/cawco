@@ -327,7 +327,6 @@ const spec: Spec = {
       const sampling = new AbortController();
       const sampler = (async () => {
         while (!sampling.signal.aborted) {
-          // biome-ignore lint/performance/noAwaitInLoops: a sampler, one look at a time
           const state = await machineState().catch(() => undefined);
           if (state) {
             samples.push(state);

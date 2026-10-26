@@ -542,7 +542,6 @@ const sayLogs = async (
   instanceId: string
 ): Promise<void> => {
   for (const role of ["hub", "agent"] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: two logs
     const lines = (await fleet.logs(role))
       .split("\n")
       .filter((line) => line.includes(instanceId))
@@ -754,7 +753,6 @@ const watchRelease = async (
         why: `every send holding ${mark} left pending before a release was seen: ${rows.map((row) => row.state).join(", ")}`,
       };
     }
-    // biome-ignore lint/performance/noAwaitInLoops: polls the records until the release shows
     await Bun.sleep(RELEASE_POLL_MS);
   }
   return { kind: "missed", why: `no release within ${ms} ms` };
@@ -1154,12 +1152,10 @@ const OPENCODE_EMPTY = '{"$schema":"https://opencode.ai/config.json"}\n';
 /** What an earlier build left at a deleted clone's path (cockpit-95d26a37 on obelisk). */
 const makeHusk = async (path: string): Promise<void> => {
   for (const dir of [".git/hooks", ".git/modules", ".vscode", ".opencode"]) {
-    // biome-ignore lint/performance/noAwaitInLoops: a few dirs
     await mkdir(join(path, dir), { recursive: true });
   }
   await chmod(join(path, ".opencode"), 0o555);
   for (const name of [".bashrc", ".bash_profile", ".ripgreprc"]) {
-    // biome-ignore lint/performance/noAwaitInLoops: a few files
     await writeFile(join(path, name), "", { mode: 0o644 });
   }
   await writeFile(join(path, "opencode.json"), OPENCODE_EMPTY);
@@ -1191,7 +1187,6 @@ const huskPhase = async (kit: Kit, scene: Scene): Promise<void> => {
       "(f) and (g) run where a workspace's copy is a folder of its own (macOS): on Linux each path is the person's folder seen through the workspace's view, with no clone to delete or husk to leave"
     );
     for (const preview of previews) {
-      // biome-ignore lint/performance/noAwaitInLoops: three artifacts
       await scene.closePreview(preview);
     }
     return;
@@ -1217,7 +1212,6 @@ const huskPhase = async (kit: Kit, scene: Scene): Promise<void> => {
     three.filter((workspace) => existsSync(workspace.path)).map(({ id }) => id);
 
   for (const workspace of three) {
-    // biome-ignore lint/performance/noAwaitInLoops: three clones, each under its running sandbox
     await rm(workspace.path, { recursive: true, force: true });
   }
   // Each host watches its clone and its `.git` (boundary-host.ts
@@ -1259,7 +1253,6 @@ const huskPhase = async (kit: Kit, scene: Scene): Promise<void> => {
   await writeFile(join(ws.path, "notes.txt"), "a user's own\n");
   const statuses: number[] = [];
   for (const preview of previews) {
-    // biome-ignore lint/performance/noAwaitInLoops: three artifacts
     statuses.push(await scene.closePreview(preview));
   }
   const [h, g, s] = [

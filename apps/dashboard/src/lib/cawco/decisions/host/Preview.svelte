@@ -68,6 +68,7 @@
     type FrameObserver,
     frameObserver,
   } from "#lib/cawco/frame-observer.js";
+  import { track } from "#lib/cawco/track.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconRefresh } from "#lib/icons.js";
@@ -449,8 +450,7 @@
   });
   $effect(() => {
     const embed = held?.embed;
-    // biome-ignore lint/complexity/noVoid: read-only dependency — each Try again asks again
-    void attempt;
+    track(attempt);
     ready = null;
     rest = null;
     drawn = false;
@@ -482,7 +482,6 @@
     const reached = async () => {
       const deadline = Date.now() + START_MS;
       for (;;) {
-        // biome-ignore lint/performance/noAwaitInLoops: one ask a second until the origin serves, never several at once
         const why = await probePreview(at.origin, hubReach);
         if (
           gone ||

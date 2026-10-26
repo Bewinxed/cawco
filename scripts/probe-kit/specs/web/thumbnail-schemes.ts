@@ -42,7 +42,6 @@
  *    its picture is the app drawn, never its bare white ground (the
  *    overlay draws again once the page changes, picture.ts `flat`).
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time, in order
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Frame, Page } from "playwright-core";

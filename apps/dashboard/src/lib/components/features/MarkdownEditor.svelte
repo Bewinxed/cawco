@@ -17,6 +17,7 @@
   // a palette, and the palette this app already has is app.css's `crepe-host`
   // rules, anchored under `data-slot="crepe-host"`, so none is imported.
   import "#lib/vendor-css/crepe.css";
+  import { detach } from "@cawco/core/detach";
   import { onMount } from "svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
@@ -93,8 +94,7 @@
   };
 
   onMount(() => {
-    // biome-ignore lint/complexity/noVoid: load owns its failure, which it shows
-    void load();
+    detach(load(), "load");
     return () => {
       dropped = true;
       editor?.destroy();

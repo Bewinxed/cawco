@@ -75,7 +75,6 @@ async function untilQuiet(waitMs: number): Promise<string> {
   const first = machineQuiet();
   let reading = first;
   while (!isQuiet(reading) && Date.now() - began < waitMs) {
-    // biome-ignore lint/performance/noAwaitInLoops: one reading per poll until the machine is quiet
     await Bun.sleep(POLL_MS);
     reading = machineQuiet();
   }
@@ -96,7 +95,6 @@ export async function quietLeg(
   const tries = options.tries ?? LEG_TRIES;
   let said = "";
   for (let attempt = 1; attempt <= tries; attempt += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: a leg's tries run one after another
     const waited = await untilQuiet(options.waitMs ?? WAIT_MS);
     const readings: MachinePressure[] = [machineQuiet()];
     const loadAt = oneMinuteLoad();

@@ -175,7 +175,6 @@ const cgiHead = async (
   let head: Uint8Array = new Uint8Array(0);
   let end = { at: -1, length: 0 };
   while (end.at < 0) {
-    // biome-ignore lint/performance/noAwaitInLoops: the header block arrives in order, chunk by chunk
     const { value, done } = await reader.read();
     if (done) {
       return undefined;

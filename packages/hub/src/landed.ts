@@ -124,7 +124,6 @@ export const projectDesign = async (
   let repo: Landed | undefined;
   let unknown = false;
   for (const place of checkouts) {
-    // biome-ignore lint/performance/noAwaitInLoops: stops at the first checkout that has one
     const read = await landedAt(deps, place, commits);
     repo ??= read;
     if (read?.design) {

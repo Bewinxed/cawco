@@ -84,7 +84,6 @@ const once = async (): Promise<string> => {
 while (!existsSync(stop) && Date.now() < DEADLINE) {
   const started = Date.now();
   counts.calls += 1;
-  // biome-ignore lint/performance/noAwaitInLoops: one call a second, in order, as a session makes them
   console.log(`${started} ${await once()}`);
   await Bun.sleep(Math.max(0, started + EVERY_MS - Date.now()));
 }

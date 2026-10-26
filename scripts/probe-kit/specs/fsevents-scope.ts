@@ -101,7 +101,6 @@ const words = (stream: ReadableStream<Uint8Array>) => {
           continue;
         }
       }
-      // biome-ignore lint/performance/noAwaitInLoops: the child's next chunk
       const chunk = await next();
       if (chunk === undefined) {
         throw new Error("the child ended before it said its word");
@@ -117,7 +116,6 @@ const until = async (
   ...phases: string[]
 ): Promise<Record<string, unknown>> => {
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: the child's next word
     const word = await next();
     if (phases.includes(String(word.phase))) {
       return word;
@@ -239,7 +237,6 @@ const opencodeLeg = async (kit: Kit, dylib: string, root: string) => {
     let url: string | undefined;
     let password: string | undefined;
     while (!(url && password)) {
-      // biome-ignore lint/performance/noAwaitInLoops: the server's next words
       const chunk = await next();
       if (chunk === undefined) {
         throw new Error(`opencode serve ended: ${said}`);
@@ -359,7 +356,6 @@ const daemonLeg = async (kit: Kit, dylib: string, root: string) => {
     );
     // A pi session going on, as pi writes it.
     for (let turn = 0; turn < 10; turn += 1) {
-      // biome-ignore lint/performance/noAwaitInLoops: one write after another
       await writeFile(join(pi, "sessions", "s.jsonl"), `${turn}\n`, {
         flag: "a",
       });

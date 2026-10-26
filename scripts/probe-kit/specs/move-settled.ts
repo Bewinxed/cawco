@@ -95,7 +95,6 @@ const run = async (kit: Kit) => {
 
   for (const round of Array.from({ length: ROUNDS }, (_, index) => index + 1)) {
     const folder = join(fleet.sandbox, `plain-${round}`);
-    // biome-ignore lint/performance/noAwaitInLoops: one round at a time, each its own race with nothing else running
     await plainFolder(folder, `Plain ${round}`);
     const project = await fleet.api<{ id: string }>("/api/projects", {
       name: `Settled ${round}`,

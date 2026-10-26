@@ -275,7 +275,6 @@ export const freshen = async (
 /** Keeps every OAuth credential on the machine fresh; a failure is said and tried again next time. */
 export const freshenAll = async (): Promise<void> => {
   for (const account of credentialAccountIds()) {
-    // biome-ignore lint/performance/noAwaitInLoops: one refresh at a time keeps the providers' token endpoints calm
     await freshen(account, true).catch((error: unknown) =>
       console.warn(
         `[accounts] ${account}: refresh failed: ${error instanceof Error ? error.message : String(error)}`

@@ -1216,7 +1216,6 @@ export async function listeningPorts(pid: number): Promise<number[]> {
   );
   const ports = new Set<number>();
   for (const table of ["tcp", "tcp6"]) {
-    // biome-ignore lint/performance/noAwaitInLoops: two small tables, read in turn
     const text = await readFile(`/proc/${pid}/net/${table}`, "utf8").catch(
       () => ""
     );

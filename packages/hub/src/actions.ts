@@ -753,7 +753,6 @@ export const createActions = ({
     for (const row of rows.filter((one) => one.taskId !== null)) {
       const key = `${row.projectId}/${row.taskId}`;
       if (!titles.has(key)) {
-        // biome-ignore lint/performance/noAwaitInLoops: a handful of reads, each once
         const task = await tasks
           .get(row.projectId, row.taskId ?? "")
           .catch(() => undefined);

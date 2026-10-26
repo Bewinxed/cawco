@@ -161,7 +161,6 @@ export function drawMissingPages(
     let kept = false;
     for (const artifact of missing) {
       tried.add(artifact.id);
-      // biome-ignore lint/performance/noAwaitInLoops: one unseen page at a time, never a pile of frames
       kept = (await drawPage(instanceId, artifact)) || kept;
     }
     running.delete(instanceId);

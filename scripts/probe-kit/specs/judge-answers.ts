@@ -169,7 +169,6 @@ const leg = async (
   const stalls: string[] = [];
   let slowest = 0;
   for (let n = 0; n < CALLS; n += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: one call after another, as a turn makes them
     const { ran, stalls: read } = await call(n);
     slowest = Math.max(slowest, ran.ms);
     if (!ok(ran)) {

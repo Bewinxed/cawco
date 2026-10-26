@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { NeutralStatus } from "@cawco/core";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
   import {
     IconSparkles as IconCompact,

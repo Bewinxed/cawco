@@ -9,7 +9,6 @@ import type { LastErrorKind } from "./relaunch";
 import type { ToolStatus } from "./tools";
 
 // Accounts: several sign-ins per provider, and which one a session runs on.
-// biome-ignore lint/performance/noBarrelFile: this is the package's public API surface — packages/core's consumers (hub, cli, dashboard) import from "@cawco/core" as one module, not per-file.
 export * from "./accounts";
 // Connections: outside services the hub signs in to and calls for sessions.
 export * from "./actions";

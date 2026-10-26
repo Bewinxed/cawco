@@ -37,7 +37,6 @@ export const placedMemoryIn = async (
 ): Promise<{ path: string; file: string; content: string }[]> => {
   for (let dir = cwd; ; dir = dirname(dir)) {
     const root = placedMemoryDir(dir);
-    // biome-ignore lint/performance/noAwaitInLoops: one folder up at a time, stopping at the first that holds any
     const paths = await markdownUnder(root);
     if (paths.length > 0) {
       return await Promise.all(

@@ -394,7 +394,6 @@ const readAccount = async (
 export const accountReports = async (): Promise<AccountsRead> => {
   probeStarted();
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: each read waits out the changes begun before it
     await Promise.allSettled([...signinChanges]);
     const seen = signinChanged;
     const read = await Promise.all(accountIds().map(readAccount));
@@ -711,7 +710,6 @@ export const linkUserLayer = async (account: string): Promise<void> => {
     }),
   ]);
   for (const slug of await memorySlugs(dir)) {
-    // biome-ignore lint/performance/noAwaitInLoops: one project at a time, each a handful of syscalls
     await linkProjectMemory(dir, slug);
   }
 };
@@ -844,7 +842,6 @@ const shareDirNow = async (
     for (const name of await readdir(path)) {
       const from = join(path, name);
       const into = join(target, name);
-      // biome-ignore lint/performance/noAwaitInLoops: each entry moved whole before the dir it leaves is removed
       if (!(await lstat(into).catch(() => undefined))) {
         await rename(from, into);
       } else if (await sameFile(from, into)) {

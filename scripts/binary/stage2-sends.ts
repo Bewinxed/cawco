@@ -104,7 +104,6 @@ const message = async (token: string): Promise<string> => {
   let tries = 0;
   for (;;) {
     tries += 1;
-    // biome-ignore lint/performance/noAwaitInLoops: each try follows the last one's answer
     const outcome = await sendOnce(commandId, token);
     if (outcome.kind === "accepted") {
       return `accepted ${tries}`;
@@ -124,7 +123,6 @@ while (!existsSync(stop)) {
   const started = Date.now();
   n += 1;
   const token = `${prefix}-${n}`;
-  // biome-ignore lint/performance/noAwaitInLoops: one message at a time, in order, as a person types them
   console.log(`${started} ${token} ${await message(token)}`);
   await Bun.sleep(Math.max(0, started + EVERY_MS - Date.now()));
 }

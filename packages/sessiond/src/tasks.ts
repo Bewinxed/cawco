@@ -81,7 +81,6 @@ async function userTasks(uid: number): Promise<number> {
   const pids = (await readdir("/proc")).filter((name) => NUMERIC.test(name));
   let total = 0;
   for (let at = 0; at < pids.length; at += READ_BATCH) {
-    // biome-ignore lint/performance/noAwaitInLoops: batches of reads, so a busy machine does not open a file per process at once
     const statuses = await Promise.all(
       pids
         .slice(at, at + READ_BATCH)
@@ -107,7 +106,6 @@ async function cgroupRoom(): Promise<Headroom | undefined> {
   let tightest: Headroom | undefined;
   let dir = join(CGROUP_ROOT, own.slice(3));
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: one level of the hierarchy at a time, up to the root
     const [max, current] = await Promise.all([
       readFile(join(dir, "pids.max"), "utf8").catch(() => ""),
       readFile(join(dir, "pids.current"), "utf8").catch(() => ""),

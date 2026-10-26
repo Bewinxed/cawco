@@ -27,7 +27,6 @@
   } from "#lib/cawco/motion/curves.svelte.js";
   import { land } from "#lib/cawco/motion/share.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { IconMore, IconTrash } from "#lib/icons.js";
   import { page } from "$app/state";

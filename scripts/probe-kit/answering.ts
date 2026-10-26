@@ -23,7 +23,6 @@ export async function answering<T>(
   const watch = (async () => {
     while (going) {
       const started = performance.now();
-      // biome-ignore lint/performance/noAwaitInLoops: one question at a time, timed
       const asked = await readWithin(ANSWER_MS, () =>
         page
           .evaluate(() => 1)

@@ -385,7 +385,6 @@ const readerLeg = async (
   );
   const reader = { base: fleet.base, id: started.instanceId, credential };
   for (const one of handed) {
-    // biome-ignore lint/performance/noAwaitInLoops: one read at a time, as a delegate makes them
     const read = await toolWords(reader, "folder_read", { path: one.path });
     check(
       `a delegate's folder_read ${one.path} returns what ${one.by} wrote, its workspace gone`,

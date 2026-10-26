@@ -789,7 +789,6 @@ const spec: Spec = {
       );
       const posted: { status: number; text: string }[] = [];
       for (const form of ["#via-dashboard", "#via-hub"]) {
-        // biome-ignore lint/performance/noAwaitInLoops: one navigation at a time
         await paired.goto(site, { waitUntil: "domcontentloaded" });
         const [answered] = await Promise.all([
           paired.waitForResponse((response) =>

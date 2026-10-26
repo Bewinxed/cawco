@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
   /**
    * What a browser the hub does not know sees, in place of the app, while
    * the hub requires paired devices (hub-auth.svelte.ts). In the shape of
@@ -27,8 +28,7 @@
 
   onMount(() => {
     if (hubAuth.pairing.kind === "idle" && !resumePairing()) {
-      // biome-ignore lint/complexity/noVoid: the pairing reports its own outcome in its stage
-      void startPairing();
+      detach(startPairing(), "startPairing");
     }
   });
 

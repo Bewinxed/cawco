@@ -245,7 +245,6 @@ export class Clock {
     try {
       await action();
       for (let after = 0; after < 2 && Date.now() < deadline;) {
-        // biome-ignore lint/performance/noAwaitInLoops: one frame at a time, until the runs are in
         await frames(this.page);
         const fresh = this.started.slice(read);
         read += fresh.length;
@@ -253,7 +252,6 @@ export class Clock {
           const run = runOf(one);
           // A run of no length (a 0ms transition) is over as it starts: the
           // page drops it at once, and it never stands on the clock.
-          // biome-ignore lint/performance/noAwaitInLoops: each run is placed in turn
           const place = await this.held.get(one.id);
           if (place?.inside && run.end > 0 && !(this.noLoops && run.loop)) {
             keep(kept, transitions, one, run);
@@ -370,7 +368,6 @@ export class Clock {
     } catch {
       const missing: Run[] = [];
       for (const run of runs) {
-        // biome-ignore lint/performance/noAwaitInLoops: one run at a time, to learn which the protocol lost
         await this.cdp
           .send("Animation.seekAnimations", {
             animations: [run.id],
@@ -401,7 +398,6 @@ export class Clock {
     }
     const drop = new Set<Run>();
     for (const [node, runs] of byNode) {
-      // biome-ignore lint/performance/noAwaitInLoops: one node at a time
       const held = await this.heldOn(node);
       if (held === null) {
         for (const run of runs) {
@@ -542,7 +538,6 @@ export class Clock {
       byTime.set(t, [...(byTime.get(t) ?? []), run.id]);
     }
     for (const [currentTime, animations] of byTime) {
-      // biome-ignore lint/performance/noAwaitInLoops: one time at a time
       await this.cdp.send("Animation.seekAnimations", {
         animations,
         currentTime,
@@ -595,7 +590,6 @@ export class Clock {
   async playOn(runs: readonly Run[]): Promise<void> {
     for (const run of runs) {
       this.held.delete(run.id);
-      // biome-ignore lint/performance/noAwaitInLoops: one run at a time
       await this.cdp
         .send("Animation.setPaused", { animations: [run.id], paused: false })
         .catch(() => undefined);
@@ -611,7 +605,6 @@ export class Clock {
     this.held.clear();
     for (const id of ids) {
       // A run the page has since replaced or cancelled has nothing to play out.
-      // biome-ignore lint/performance/noAwaitInLoops: one run at a time
       await this.cdp
         .send("Animation.setPaused", { animations: [id], paused: false })
         .catch(() => undefined);

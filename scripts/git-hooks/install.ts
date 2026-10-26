@@ -34,7 +34,6 @@ if (where.exitCode === 0) {
     await mkdir(dir, { recursive: true });
     for (const hook of HOOKS) {
       const target = join(dir, hook);
-      // biome-ignore lint/performance/noAwaitInLoops: one small file at a time
       await copyFile(join(import.meta.dir, hook), target);
       await chmod(target, 0o755);
     }

@@ -305,7 +305,6 @@ const resumeSessions = async (
       join(dir, `${sessionKey}.jsonl`),
       sessionFile(entries, fleet.repo, sessionKey)
     );
-    // biome-ignore lint/performance/noAwaitInLoops: one start at a time, as the machine's room allows
     const id = await fleet.spawn(
       "claude",
       `restart load ${machineId} ${index} (${entries})`,
@@ -343,13 +342,11 @@ async function run(kit: Kit): Promise<void> {
   const others = Object.keys(SHAPE).filter((id) => id !== MACHINE);
   const homes: Record<string, string> = { [MACHINE]: fleet.home };
   for (const machineId of others) {
-    // biome-ignore lint/performance/noAwaitInLoops: one machine joins at a time
     const machine = await fleet.launchMachine(machineId);
     homes[machineId] = machine.home;
   }
   const ids: string[] = [];
   for (const [machineId, counts] of Object.entries(SHAPE)) {
-    // biome-ignore lint/performance/noAwaitInLoops: one machine's starts at a time
     const started = await resumeSessions(
       fleet,
       machineId,
@@ -364,7 +361,6 @@ async function run(kit: Kit): Promise<void> {
   );
   // A turn each, so the tables a turn writes hold rows to copy.
   for (const id of ids) {
-    // biome-ignore lint/performance/noAwaitInLoops: one send after another
     await fleet.send(id, "One more step.");
   }
   await Bun.sleep(15_000);
@@ -417,7 +413,6 @@ async function run(kit: Kit): Promise<void> {
     (profile ? PROFILE_MS - 2 * PROBE_TIMEOUT_MS : WATCH_MS)
   ) {
     const at = Date.now() - from;
-    // biome-ignore lint/performance/noAwaitInLoops: the trial probes once a second, one probe after another
     const [h, r] = await Promise.all([probe(health), probe(row)]);
     reads.push({ at, health: h, row: r });
     const spent = Date.now() - from - at;

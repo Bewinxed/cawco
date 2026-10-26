@@ -35,10 +35,8 @@
     NativeSelect,
     NativeSelectOption,
   } from "#lib/components/ui/native-select/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Table from "#lib/components/ui/table/index.js";
   import { formatAgeShort } from "#lib/utils/time.js";
 

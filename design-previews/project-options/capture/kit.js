@@ -4,7 +4,6 @@
  * icons, its OS mark, TaskRing and Markdown, imported where they live, so a
  * capture is their markup on the dashboard's stylesheet.
  */
-// biome-ignore lint/performance/noBarrelFile: the capture stage's one door into the dashboard's parts
 export { default as OsMark } from "../../../apps/dashboard/src/lib/cawco/OsMark.svelte";
 export { default as Suggestions } from "../../../apps/dashboard/src/lib/cawco/suggestions/Suggestions.svelte";
 export { default as TaskRing } from "../../../apps/dashboard/src/lib/cawco/TaskRing.svelte";

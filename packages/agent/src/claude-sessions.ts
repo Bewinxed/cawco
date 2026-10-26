@@ -124,7 +124,6 @@ const indexConfigDir = async (configDir: string): Promise<SessionIndex> => {
   const index: SessionIndex = new Map();
   for (const entry of SESSION_ENTRIES) {
     if (entry.kind === "project") {
-      // biome-ignore lint/performance/noAwaitInLoops: each root is read in order into the shared index
       await indexProjects(configDir, index);
       continue;
     }
@@ -170,7 +169,6 @@ const moveEntry = async (from: string, to: string): Promise<void> => {
   const here = await lstat(from);
   if (here.isDirectory() && there.isDirectory()) {
     for (const child of await readdir(from)) {
-      // biome-ignore lint/performance/noAwaitInLoops: a merge moves one child at a time into the folder it shares
       await moveEntry(join(from, child), join(to, child));
     }
     await rmdir(from);
@@ -240,7 +238,6 @@ const carryOne = async (
   entries: readonly string[]
 ): Promise<void> => {
   for (const entry of entries) {
-    // biome-ignore lint/performance/noAwaitInLoops: one entry at a time, each whole before the next
     await moveEntry(join(from, entry), join(into, entry));
   }
   console.info(
@@ -317,7 +314,6 @@ const carryNow = async (
         if (!entries?.length) {
           continue;
         }
-        // biome-ignore lint/performance/noAwaitInLoops: one session at a time, its data whole in one dir before the next is touched
         await carryOne(dir, into, request.sessionId, entries);
         index.delete(request.sessionId);
         carried.entries += entries.length;
@@ -350,7 +346,6 @@ export const retireConfigDir = async (
   }
   const index = await indexConfigDir(from);
   for (const [sessionId, entries] of index) {
-    // biome-ignore lint/performance/noAwaitInLoops: one session at a time, each whole before the next
     await carryOne(from, target, sessionId, entries);
   }
   return index.size;
@@ -379,7 +374,6 @@ export const transcriptIn = async (
       continue;
     }
     const candidate = join(projects, project.name, name);
-    // biome-ignore lint/performance/noAwaitInLoops: the first project folder that has it wins
     if (await lstat(candidate).catch(() => undefined)) {
       return candidate;
     }

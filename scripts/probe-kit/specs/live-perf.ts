@@ -100,7 +100,6 @@
  *
  *   bun scripts/probe-kit/run.ts live-perf --fleet
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one session, one tab, one press at a time, as a person makes them
 import { readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";

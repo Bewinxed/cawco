@@ -287,7 +287,6 @@ const writesByFile = async (
 ): Promise<Map<string, number>> => {
   const bytes = new Map<string, number>();
   for (const name of await readdir(dir)) {
-    // biome-ignore lint/performance/noAwaitInLoops: one thread's log at a time
     const text = await Bun.file(join(dir, name)).text();
     for (const line of text.split("\n")) {
       const call = WRITE_CALL.exec(line);
@@ -326,7 +325,6 @@ const writeHistory = async (projects: string): Promise<number> => {
   let seededBytes = 0;
   for (let i = 0; i < SEED_FILES; i += 1) {
     const dir = join(projects, projectOf(i));
-    // biome-ignore lint/performance/noAwaitInLoops: one transcript written at a time
     await mkdir(dir, { recursive: true });
     const one = session(1000 + i, projectOf(i), SEED_BASE + i * HOUR_MS);
     const steps = 50 + Math.floor(rng(5000 + i)() * 200);
@@ -362,7 +360,6 @@ if (corpus) {
     for (let s = 0; s < liveSteps; s += 1) {
       text += writer.session.next();
     }
-    // biome-ignore lint/performance/noAwaitInLoops: one transcript written at a time
     await writeFile(writer.file, text);
   }
   console.log(`… corpus written to ${corpus}`);
@@ -488,7 +485,6 @@ try {
     for (let s = 0; s < liveSteps; s += 1) {
       const text = writer.session.next();
       appended.bytes += text.length;
-      // biome-ignore lint/performance/noAwaitInLoops: a session writes its steps in order
       await appendFile(writer.file, text);
       const due = start + (s + 1) * STEP_MS - performance.now();
       if (due > 0) {
@@ -507,7 +503,6 @@ try {
     writing = false;
   });
   while (writing) {
-    // biome-ignore lint/performance/noAwaitInLoops: one sample per interval
     await Promise.race([delay(SAMPLE_MS), done]);
     const now = await ioOf(agent.pid);
     const seconds = (performance.now() - t0) / 1000;

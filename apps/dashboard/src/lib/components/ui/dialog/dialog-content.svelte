@@ -93,7 +93,6 @@
   import { IconClose } from "#lib/icons.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
   import DialogPortal from "./dialog-portal.svelte";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
   import * as Dialog from "./index.js";
 
   let {

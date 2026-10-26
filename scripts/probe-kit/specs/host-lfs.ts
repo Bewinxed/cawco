@@ -178,7 +178,6 @@ const lfsRepo = async (
   );
   await writeFile(join(dir, "big.bin"), bytes);
   for (const [name, text] of Object.entries(extra)) {
-    // biome-ignore lint/performance/noAwaitInLoops: a file or two, each written before the commit
     await writeFile(join(dir, name), text);
   }
   git(dir, "add", ".");

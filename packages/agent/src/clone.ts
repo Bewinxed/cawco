@@ -66,7 +66,6 @@ export const prepareClone = async (
       "refs/heads"
     );
     for (const ref of copied.split("\n").filter(Boolean)) {
-      // biome-ignore lint/performance/noAwaitInLoops: a fresh clone holds a handful of refs, deleted one git call at a time
       await run(dir, "update-ref", "-d", ref);
     }
     await run(dir, "remote", "set-url", "origin", remote);

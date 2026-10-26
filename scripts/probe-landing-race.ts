@@ -197,7 +197,6 @@ const moveAsked = async (
   for (const want of wants) {
     moved.add(want);
     const run = want.slice("probe-want-".length);
-    // biome-ignore lint/performance/noAwaitInLoops: one push at a time, in the order asked
     await sh(
       fleet.sandbox,
       `[ -d other ] || git clone -q ${bare} other; cd other && git pull -q --ff-only origin main && git commit -q --allow-empty -m "Someone else's push ${run}" && git push -q origin HEAD:main`

@@ -157,7 +157,6 @@ const run = async (kit: Kit): Promise<void> => {
     JSON.stringify(step)
   );
   for (const each of COMMITS) {
-    // biome-ignore lint/performance/noAwaitInLoops: one git read per commit, printed in order
     await judge(kit, step, map, each);
   }
 };

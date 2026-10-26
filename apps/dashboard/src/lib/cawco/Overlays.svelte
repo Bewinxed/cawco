@@ -6,7 +6,6 @@
    * thumbnail opens into (a transcript's picture, a pin's picture).
    */
   import type { Snippet } from "svelte";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import Lightbox from "./lightbox/Lightbox.svelte";
 

@@ -143,7 +143,6 @@ export default {
       crypto.randomUUID()
     );
     for (const id of ids) {
-      // biome-ignore lint/performance/noAwaitInLoops: one file at a time, so the probe's own memory stays one transcript's
       await writeFile(
         join(project, `${id}.jsonl`),
         transcript(id, cwd, ids.indexOf(id) < LONG ? LONG_MB : TRANSCRIPT_MB)
@@ -171,7 +170,6 @@ const comingUp = async (kit: Kit, fleet: KitFleet, ids: string[]) => {
   const began = Date.now();
   let caughtUp = false;
   while (!caughtUp && Date.now() - began < INDEX_MS) {
-    // biome-ignore lint/performance/noAwaitInLoops: one look at a time, until the index says it has taken everything in
     await delay(INDEX_LOOK_MS);
     const asked = await search(LONG_WORD);
     caughtUp =
@@ -243,7 +241,6 @@ const reattaches = async (kit: Kit, fleet: KitFleet) => {
   // (c) Coming up owing OpenCode reattaches.
   const opencode: string[] = [];
   for (let at = 0; at < REATTACHES; at += STARTS_AT_ONCE) {
-    // biome-ignore lint/performance/noAwaitInLoops: a few starts at a time, as a busy machine takes them
     const started = await Promise.all(
       Array.from(
         { length: Math.min(STARTS_AT_ONCE, REATTACHES - at) },
@@ -277,7 +274,6 @@ const reattaches = async (kit: Kit, fleet: KitFleet) => {
     opencode.map((id) => fleet.instance(id)?.status ?? "gone");
   let settled = false;
   while (!settled && Date.now() - back < REATTACH_MS) {
-    // biome-ignore lint/performance/noAwaitInLoops: one look at a time, until every session is back
     await delay(INDEX_LOOK_MS);
     settled = statuses().every((status) => BACK.has(status));
   }

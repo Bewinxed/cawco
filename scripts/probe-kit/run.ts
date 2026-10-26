@@ -124,7 +124,6 @@ if (unknown.length > 0) {
 // is a helper, not one to run.
 const specs = new Map<string, Spec>();
 for (const name of chosen) {
-  // biome-ignore lint/performance/noAwaitInLoops: each module read once, in the order named
   const spec = (await import(pathOf(name) as string)).default as
     Spec | undefined;
   if (spec === undefined) {
@@ -185,7 +184,6 @@ try {
   for (const name of chosen) {
     const spec = specs.get(name) as Spec;
     if (spec.ownHome && !process.env[OWN_HOME_ENV]) {
-      // biome-ignore lint/performance/noAwaitInLoops: specs run one at a time, in the order named
       const code = await runOwnHome(spec);
       if (code === 3) {
         // Its own run said where it runs.

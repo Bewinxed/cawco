@@ -13,7 +13,6 @@
  *   bun scripts/house-faces.ts          write it
  *   bun scripts/house-faces.ts --check  fail when it is stale
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one face at a time, each held to its own file
 import { readFileSync, writeFileSync } from "node:fs";
 import { create, type Font } from "fontkit";
 import subsetFont from "subset-font";

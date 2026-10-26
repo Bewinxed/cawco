@@ -30,6 +30,7 @@
    */
   import { commonWords, TRACKER_NAMES } from "@cawco/core";
   import { DECIDED_FIELD, decidedOf } from "@cawco/core/decisions";
+  import { detach } from "@cawco/core/detach";
   import { type Snippet, untrack } from "svelte";
   import { readDecision } from "#lib/cawco/decisions/decisions-api.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
@@ -44,7 +45,6 @@
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Select from "#lib/components/ui/select/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import {
@@ -215,8 +215,7 @@
     stageProblem = null;
     edgeProblem = null;
     titleProblem = null;
-    // biome-ignore lint/complexity/noVoid: fire-and-forget — the read sets its own state
-    void read(id);
+    detach(read(id), "read");
   });
   // The hub says this task changed, or the project's tasks naming none (its
   // folder written by hand): the file is read again. Its times are whole
@@ -227,8 +226,7 @@
     const id = taskId;
     const changes = cawco.taskChangedOf(projectId, id);
     if (heard.id === id && heard.changes !== changes) {
-      // biome-ignore lint/complexity/noVoid: the read sets its own state
-      untrack(() => void read(id));
+      untrack(() => detach(read(id), "read"));
     }
     heard = { id, changes };
   });
@@ -245,8 +243,7 @@
         (stage !== undefined && stage !== shown.stage) ||
         resultStamp(summary) !== resultStamp(shown))
     ) {
-      // biome-ignore lint/complexity/noVoid: the read sets its own state
-      void read(shown.id);
+      detach(read(shown.id), "read");
     }
   });
 
@@ -261,8 +258,7 @@
     readProblem = null;
     taskReads += 1;
     const ticket = taskReads;
-    // biome-ignore lint/complexity/noVoid: the history reads beside the task and sets its own state
-    void readActivity(id);
+    detach(readActivity(id), "readActivity");
     try {
       const fresh = await readTask(projectId, id);
       if (taskId === id && ticket === taskReads) {
@@ -297,8 +293,7 @@
     taskReads += 1;
     task = next;
     onchanged(next);
-    // biome-ignore lint/complexity/noVoid: the history reads again and sets its own state
-    void readActivity(next.id);
+    detach(readActivity(next.id), "readActivity");
   }
 
   async function saveTitle() {
@@ -328,8 +323,7 @@
     if (moved.id === taskId) {
       taskReads += 1;
       task = moved;
-      // biome-ignore lint/complexity/noVoid: the move is a commit in its history
-      void readActivity(moved.id);
+      detach(readActivity(moved.id), "readActivity");
     }
     return moved;
   }

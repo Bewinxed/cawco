@@ -56,7 +56,6 @@ const endsWithin = async (
   const reader = body.getReader();
   let read = 0;
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: a stream's chunks come one after another
     const { done, value } = await reader.read();
     if (done) {
       return true;

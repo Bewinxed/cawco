@@ -210,7 +210,6 @@ async function boxes(kit: Kit, base: string): Promise<void> {
   const url = `${base}/motion/pin-working`;
   for (const theme of THEMES) {
     for (const { view, width } of VIEWS_READ) {
-      // biome-ignore lint/performance/noAwaitInLoops: one viewport at a time
       const page = await kit.page(view, { theme });
       await open(page, url, DOT);
       // The card's entrance (the kit's pop, --dur-pop) has landed.
@@ -283,7 +282,6 @@ async function boxes(kit: Kit, base: string): Promise<void> {
 async function breath(kit: Kit, base: string): Promise<void> {
   const url = `${base}/motion/pin-working`;
   for (const theme of THEMES) {
-    // biome-ignore lint/performance/noAwaitInLoops: one scheme at a time
     const page = await kit.page("desk", { theme });
     const engine = page.context().browser()?.browserType().name() ?? "";
     await open(page, url, DOT);
@@ -516,14 +514,12 @@ const monotonic = (reads: Morph[], growing: boolean) =>
 async function morph(kit: Kit, base: string): Promise<void> {
   const url = `${base}/motion/pin-working`;
   for (const engine of ["chromium", "webkit"] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one engine at a time
     const page = await kit.page("desk", { engine });
     await open(page, `${url}?at=foot`, CARD);
     await bench(page, url, "hide");
     await page.locator(CARD).waitFor({ state: "detached" });
     const tag = `1440 (${engine})`;
     for (const way of ["opens", "closes"] as const) {
-      // biome-ignore lint/performance/noAwaitInLoops: the open, then the close
       const motion = await readMotion(
         page,
         () => bench(page, url, way === "opens" ? "show" : "hide"),
@@ -683,7 +679,6 @@ function followed(
 async function scrollFollow(kit: Kit, base: string): Promise<void> {
   const url = `${base}/motion/pin-working`;
   for (const engine of ["chromium", "webkit"] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one engine at a time
     const page = await kit.page("desk", { engine });
     await open(page, `${url}?at=scroll`, CARD);
     await page.waitForTimeout(400);
@@ -699,10 +694,8 @@ async function scrollFollow(kit: Kit, base: string): Promise<void> {
     for (const how of ["wheel", "code"] as const) {
       const recording = page.evaluate(recordScroll, 1600);
       if (how === "wheel" && pageBox) {
-        // biome-ignore lint/performance/noAwaitInLoops: the wheel, then a scroll from code, each read on its own
         await page.mouse.move(pageBox.x + pageBox.width - 40, pageBox.y + 200);
         for (const dy of [120, 120, 120, 120, -120, -120, 200, 200]) {
-          // biome-ignore lint/performance/noAwaitInLoops: one wheel step a frame or so apart, as a hand gives them
           await page.mouse.wheel(0, dy);
           await page.waitForTimeout(60);
         }
@@ -715,7 +708,6 @@ async function scrollFollow(kit: Kit, base: string): Promise<void> {
             if (scroller) {
               scroller.scrollTop = top;
             }
-            // biome-ignore lint/performance/noAwaitInLoops: one scroll a frame, in order
             await new Promise((done) => requestAnimationFrame(done));
             await new Promise((done) => setTimeout(done, 40));
           }

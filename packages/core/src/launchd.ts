@@ -68,7 +68,6 @@ export async function capLaunchdLogs(
       continue;
     }
     const path = join(dir, name);
-    // biome-ignore lint/performance/noAwaitInLoops: a handful of files, each copied before it is cut
     const size = await stat(path).then(
       (found) => (found.isFile() ? found.size : 0),
       unlessMissing(0)

@@ -987,7 +987,6 @@ export class TranscriptIndex {
     try {
       for (const write of writes) {
         for (let at = 0; at < write.docs.length; at += INSERT_CHUNK) {
-          // biome-ignore lint/performance/noAwaitInLoops: the await is the yield; the chunks are written one at a time on purpose.
           await insert(write.docs.slice(at, at + INSERT_CHUNK));
         }
         putCheckpoint.run(
@@ -998,7 +997,6 @@ export class TranscriptIndex {
         );
       }
       for (let at = 0; at < docs.length; at += INSERT_CHUNK) {
-        // biome-ignore lint/performance/noAwaitInLoops: the await is the yield, as above.
         await insert(docs.slice(at, at + INSERT_CHUNK));
       }
       for (const [key, value] of changed) {
@@ -1026,7 +1024,6 @@ export class TranscriptIndex {
     const changes = this.db.query("SELECT total_changes() AS n");
     const merge = this.db.query("INSERT INTO docs_fts(docs_fts, rank) VALUES ('merge', ?)");
     for (;;) {
-      // biome-ignore lint/performance/noAwaitInLoops: the await is the turn between steps
       await new Promise((resolve) => setImmediate(resolve));
       const before = (changes.get() as { n: number }).n;
       section("search index: merge step", () => merge.run(MERGE_PAGES));
@@ -1113,7 +1110,6 @@ export class TranscriptIndex {
     for (const { path, checkpoint } of tailFiles) {
       let write: FileWrite;
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: one tail read at a time; they are small
         const tail = await scanFile(path, {
           from: checkpoint,
           prefilter,
@@ -1137,7 +1133,6 @@ export class TranscriptIndex {
     // The new files: parallel full parse in workers, a batch at a time, each
     // batch gathered before the next is parsed (FULL_PARSE_BATCH_BYTES).
     for (const batch of byteBatches(fullFiles, FULL_PARSE_BATCH_BYTES)) {
-      // biome-ignore lint/performance/noAwaitInLoops: one batch's docs in memory at a time is the point
       const parsed = await parseMany(batch, {
         mode: "docs",
         types: [...DOC_TYPES],

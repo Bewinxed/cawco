@@ -291,13 +291,11 @@ const relayedLegs = async (
 
   const sessions: string[] = [];
   for (let at = 0; at < SESSIONS; at += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: one session's start at a time, as a person makes them
     sessions.push(await fleet.spawn("claude", `Silence ${at + 1}`));
   }
   // A first turn each, so each names its conversation: a session with none
   // has no transcript to read.
   for (const id of sessions) {
-    // biome-ignore lint/performance/noAwaitInLoops: one turn at a time
     const first = await fleet.send(id, "Hello.");
     await until(
       "its first turn read and its conversation named",
@@ -325,14 +323,12 @@ const relayedLegs = async (
   const watchLost = async (ms: number) => {
     const from = Date.now();
     while (Date.now() - from < ms) {
-      // biome-ignore lint/performance/noAwaitInLoops: a look every 2.5 s
       lostSeen.push(await lostAt());
       await delay(2500);
     }
   };
   fleet.freeze("agent", true);
   for (const id of sessions) {
-    // biome-ignore lint/performance/noAwaitInLoops: one send at a time
     await fleet.send(id, "Are you there?");
   }
   await watchLost(FROZEN_MS);

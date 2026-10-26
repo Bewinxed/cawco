@@ -1,4 +1,3 @@
-// biome-ignore lint/performance/noBarrelFile: shadcn-svelte component barrel — every consumer imports the group from this index
 export { useSidebar } from "./context.svelte.js";
 export {
   default as Content,

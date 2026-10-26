@@ -585,7 +585,6 @@ export async function seedDecisions(
   });
   const writers: Record<string, string> = {};
   for (const page of [LANDING, PRICING, ONBOARDING]) {
-    // biome-ignore lint/performance/noAwaitInLoops: one session at a time keeps the scratch machine small
     writers[page.name] = await fleet.spawn("claude", page.writer, project.cwd, {
       projectId,
     });
@@ -620,7 +619,6 @@ export async function seedDecisions(
   const done = stages.stages.find((stage) => stage.kind === "done")?.name;
   const tasks: Record<string, string> = {};
   for (const [index, task] of PRICING_TASKS.entries()) {
-    // biome-ignore lint/performance/noAwaitInLoops: each task is a commit in the project's folder, in order
     const filed = await hub<{ id: string }>(
       fleet,
       "POST",

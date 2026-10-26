@@ -1890,7 +1890,6 @@ export async function houseRules(
 
   // 7: a declared fade that draws, read in the pixels with and without it.
   for (const edge of read.edges) {
-    // biome-ignore lint/performance/noAwaitInLoops: one band drawn at a time, each lifting a style the next must not see
     const said = await fadeDraws(page, edge);
     if (said?.unread) {
       unread.push(said.unread);

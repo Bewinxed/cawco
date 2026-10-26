@@ -49,7 +49,6 @@
  *
  *   bun scripts/probe-kit/run.ts artifact-browse
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one CDP step at a time, in order
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";

@@ -1037,7 +1037,6 @@ try {
       .filter((name) => name.endsWith(".log") || name.endsWith(".err"))
       .sort();
     for (const name of logs) {
-      // biome-ignore lint/performance/noAwaitInLoops: one log at a time, in order
       const lines = (await Bun.file(join(fleet.sandbox, name)).text())
         .split("\n")
         .filter((line) => LOGGED.test(line))

@@ -591,7 +591,6 @@ const watchOnce = async (): Promise<void> => {
   }
   const now = Date.now();
   for (const [key, take] of held) {
-    // biome-ignore lint/performance/noAwaitInLoops: one browser at a time.
     const record = await readBrowser(key);
     // The browser stopped (Stop, its machine, its container), and the
     // registry cleared its take-over: answered as a hand-back with no page.
@@ -650,7 +649,6 @@ const tellHub = (
 export const restoreShields = async (): Promise<void> => {
   const keys: BrowserKey[] = [];
   for (const record of await allBrowsers()) {
-    // biome-ignore lint/performance/noAwaitInLoops: one browser's dir at a time.
     const kept = await keptOf(record.key);
     if (!record.takeover) {
       if (kept) {

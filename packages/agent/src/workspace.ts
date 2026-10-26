@@ -574,7 +574,6 @@ const sweepUnfinished = async (): Promise<void> => {
   const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
   for (const id of ids) {
     try {
-      // biome-ignore lint/performance/noAwaitInLoops: one workspace at a time, each its own folder
       const layer = await readLayer(id).catch(() => undefined);
       if (layer && !layer.made) {
         await archiveWorkspace({
@@ -662,7 +661,6 @@ const sweepUnmarked = async (): Promise<void> => {
     await unfinishedCleared;
     const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
     for (const id of ids) {
-      // biome-ignore lint/performance/noAwaitInLoops: one workspace at a time, each its own folder to read and clear
       await clearUnmarked(id);
     }
   } catch (error) {
@@ -1326,7 +1324,6 @@ export const copyOwnSecrets = async (
   for (const file of files) {
     const from = join(repoRoot, file);
     const to = join(path, file);
-    // biome-ignore lint/performance/noAwaitInLoops: a repository keeps a handful of these
     const info = await stat(from).catch(() => undefined);
     if (!info?.isFile()) {
       continue;
@@ -2220,7 +2217,6 @@ export const workspaceOutputs = async (
     for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
       const inner = rel ? join(rel, entry.name) : entry.name;
       if (entry.isDirectory()) {
-        // biome-ignore lint/performance/noAwaitInLoops: one folder at a time, down the tree
         await down(inner);
       } else if (entry.isFile()) {
         const handle = await open(
@@ -2378,7 +2374,6 @@ const endLeftInside = async (workspace: WorkspaceRef): Promise<void> => {
     );
   const killed = new Map<number, string>();
   for (let pass = 0; pass < LEFT_INSIDE_PASSES; pass += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: each round reads the process table the round before left
     const fresh = (await read()).filter(
       (one) => !(one.owner || killed.has(one.pid))
     );

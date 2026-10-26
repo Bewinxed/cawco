@@ -6,6 +6,7 @@
     workspaceNeedsReason,
     workspaceNeedsWords,
   } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import { Button } from "#lib/components/ui/button/index.js";
   /**
    * The machines as a list: every install under way or waiting on the
@@ -140,8 +141,7 @@
   ]);
   $effect(() => {
     if (!(updates.policy || updates.problem)) {
-      // biome-ignore lint/complexity/noVoid: fire-and-forget — the rows read the policy when it lands
-      void updates.loadPolicy();
+      detach(updates.loadPolicy(), "loadPolicy");
     }
   });
   function updateOf(machine: Machine) {

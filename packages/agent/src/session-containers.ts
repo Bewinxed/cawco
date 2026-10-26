@@ -768,7 +768,6 @@ export const openContainerDoors = (
     const servers: Server[] = [];
     const upstreams = new Map<string, string>();
     for (const kind of KINDS) {
-      // biome-ignore lint/performance/noAwaitInLoops: two runtimes, each read in turn
       const upstream = await upstreamOf(kind, true);
       if (!upstream) {
         continue;
@@ -1085,7 +1084,6 @@ const endResources = async (
   const pods = only && new Set(only.pods);
   const containers = only && new Set(only.containers);
   for (const socketPath of await runtimeSockets()) {
-    // biome-ignore lint/performance/noAwaitInLoops: one runtime at a time, its pods together and then its containers
     const podsHere = (await madeBy(socketPath, instanceId)).pods.filter(
       (pod) => !pods || pods.has(pod.Id)
     );
@@ -1139,7 +1137,6 @@ export const beginEnding = async (instanceId: string): Promise<void> => {
   const record: EndingRecord = { containers: [], pods: [] };
   const sockets = await runtimeSockets();
   for (const socketPath of sockets) {
-    // biome-ignore lint/performance/noAwaitInLoops: one runtime at a time
     const { pods, containers } = await madeBy(socketPath, instanceId);
     record.pods.push(...pods.map((pod) => pod.Id));
     record.containers.push(...containers.map((container) => container.Id));
@@ -1202,7 +1199,6 @@ export const sessionsOwedEnding = async (
   const had = new Set(instances);
   const gone = new Set<string>();
   for (const socketPath of await runtimeSockets()) {
-    // biome-ignore lint/performance/noAwaitInLoops: one runtime at a time
     const [pods, containers] = await Promise.all([
       podsWith(socketPath, labels),
       containersWith(socketPath, labels),

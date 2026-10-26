@@ -272,7 +272,6 @@ try {
   await put(OAUTH, { type: "http", url: `${standInBase}/oauth/mcp` });
   await put(SLOW, { type: "http", url: `${standInBase}/slow/mcp` });
   for (const name of [OAUTH, SLOW]) {
-    // biome-ignore lint/performance/noAwaitInLoops: each server's report in turn
     const row = await until(
       `the agent's report of ${name}`,
       () => reported(name),

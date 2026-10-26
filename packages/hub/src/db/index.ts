@@ -4551,7 +4551,6 @@ const make = async (path: string): Promise<DbShape> => {
     }
     const later = async () => {
       for (const chunk of chunks) {
-        // biome-ignore lint/performance/noAwaitInLoops: one chunk a turn, so the hub answers between them
         await new Promise<void>((resolve) => setImmediate(resolve));
         try {
           // The transcript's mtime includes maintenance; it is not real

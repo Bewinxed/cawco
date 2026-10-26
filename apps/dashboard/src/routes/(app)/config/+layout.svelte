@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
   /**
    * Configure: every fleet-wide setting behind one rail. The rail and the
    * section share one store, read once when the area opens, so the counts
@@ -18,7 +19,6 @@
   } from "#lib/cawco/config/store.svelte.js";
   import { pageIn, pageOut } from "#lib/cawco/motion/route.svelte.js";
   import { store as storeLocally } from "#lib/cawco/storage.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import { page } from "$app/state";
 
@@ -32,8 +32,7 @@
     }
   });
   onMount(() => {
-    // biome-ignore lint/complexity/noVoid: each slot reports its own outcome
-    void store.loadAll();
+    detach(store.loadAll(), "loadAll");
     // A skill or plugin fetch runs at the hub after its request answered;
     // its frames keep the rows, and the rail's counts, as the hub has them.
     return onFleetFetch({
@@ -51,8 +50,7 @@
   $effect(() => {
     if (cawco.status === "connected" && dropped) {
       dropped = false;
-      // biome-ignore lint/complexity/noVoid: the slot reports its own outcome
-      void store.fleet.load();
+      detach(store.fleet.load(), "load");
     }
   });
 

@@ -81,7 +81,6 @@ class GitFailed extends Error {
 const gitAbove = async (root: string): Promise<string | undefined> => {
   const device = (await stat(root)).dev;
   for (let at = root; ; at = dirname(at)) {
-    // biome-ignore lint/performance/noAwaitInLoops: nearest first, and each step depends on the last
     if ((await stat(at).catch(() => undefined))?.dev !== device) {
       return;
     }
@@ -278,7 +277,6 @@ const credentialInFile = async (path: string): Promise<string | undefined> => {
     const scan = new CredentialScan();
     const buffer = new Uint8Array(SCAN_READ);
     for (;;) {
-      // biome-ignore lint/performance/noAwaitInLoops: one read at a time is the point: a file is never held whole
       const { bytesRead } = await file.read(buffer, 0, SCAN_READ, null);
       if (bytesRead === 0 || scan.done) {
         return scan.found;
@@ -337,7 +335,6 @@ const credentialHits = async (
 ): Promise<PlaceLeftOut[]> => {
   const hits: PlaceLeftOut[] = [];
   for (const path of paths) {
-    // biome-ignore lint/performance/noAwaitInLoops: one file read at a time
     const found = await credentialInFile(join(root, path));
     if (found) {
       hits.push({ path, why: `its text holds what reads as ${found}` });
@@ -367,7 +364,6 @@ const judge = async (
       continue;
     }
     const full = join(root, path);
-    // biome-ignore lint/performance/noAwaitInLoops: one file read at a time
     const info = await lstat(full).catch(() => undefined);
     if (info?.isSymbolicLink()) {
       sizes.set(path, 0);
@@ -1033,7 +1029,6 @@ export const placeLfs = async (
   }
   let bytes = 0;
   for (const file of files) {
-    // biome-ignore lint/performance/noAwaitInLoops: a handful of large files, each read once
     const info = await lstat(join(root, file)).catch(() => undefined);
     if (!(info?.isFile() && under(resolve(root, file), root))) {
       throw new Error(

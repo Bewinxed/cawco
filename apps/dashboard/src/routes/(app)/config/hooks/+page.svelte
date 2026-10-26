@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { hookSentence } from "@cawco/core";
+  import { HOOK_TEMPLATES, hookSentence } from "@cawco/core";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { deleteHook, notDeleted } from "#lib/cawco/config/deletes.js";
   import RolloutChip from "#lib/cawco/config/RolloutChip.svelte";
@@ -18,12 +18,7 @@
     NO_SESSION_CAN_START,
     sessionCanStart,
   } from "#lib/cawco/empty-asks.js";
-  import {
-    draftOf,
-    type FleetHook,
-    HOOK_TEMPLATES,
-    saveHook,
-  } from "#lib/cawco/hooks.js";
+  import { draftOf, type FleetHook, saveHook } from "#lib/cawco/hooks.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { newId } from "#lib/cawco/id.js";
   import RowFault from "#lib/cawco/RowFault.svelte";

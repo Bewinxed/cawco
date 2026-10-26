@@ -137,7 +137,6 @@ const spec: Spec = {
       ["(b)", "session"],
       ["(c)", "server"],
     ] as const) {
-      // biome-ignore lint/performance/noAwaitInLoops: one child at a time, each its own line
       const said = await childReads(fleet.sessiondSocket, inherit);
       const read = ANSWER.exec(said)?.[2];
       check(

@@ -200,7 +200,6 @@ async function settled(
   let held = 0;
   const deadline = Date.now() + 30_000;
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: each read is a frame after the last
     const now = await read(page);
     const key = now ? `${now.step}:${now.height}` : "";
     if (now && now.step === step && (!has || now.text.includes(has))) {
@@ -266,7 +265,6 @@ const setDraft = (
 
 /** Every install the hub keeps goes, running ones stopped first. */
 async function clearInstalls(fleet: KitFleet): Promise<void> {
-  // biome-ignore lint/performance/noAwaitInLoops: one install after another, each stopped before it goes
   for (const one of (await installs(fleet)).installs) {
     if (one.state === "running") {
       await fetch(`${fleet.base}/api/installs/${one.id}/stop`, {
@@ -496,7 +494,6 @@ async function run(kit: Kit): Promise<void> {
     const ladders: Record<string, Ladder> = {};
     for (const view of ["desk", "phone"] as const) {
       for (const theme of ["light", "dark"] as Theme[]) {
-        // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each walk on the hub the last one left
         ladders[`${view}-${theme}`] = await walk(kit, fleet, dashboard, {
           view,
           theme,
@@ -1152,7 +1149,6 @@ async function walk(
   const first = await boxes();
   const ticks: string[][] = [];
   for (let tick = 0; tick < 3; tick += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: one tick after another
     await page.waitForTimeout(1100);
     ticks.push(await boxes());
   }
@@ -1510,7 +1506,6 @@ async function walk(
   let parked = true;
   for (const how of ["×", "Esc"] as const) {
     if (how === "×") {
-      // biome-ignore lint/performance/noAwaitInLoops: one way of closing after another, each on the window the last reopened
       await page.locator(CLOSE).click();
     } else {
       await page.focus(CLOSE);
@@ -2050,7 +2045,6 @@ async function keyboardUp(
   const said: string[] = [];
   let fits = true;
   for (const [name, set, has] of variants) {
-    // biome-ignore lint/performance/noAwaitInLoops: one variant at a time
     await set();
     await openWindow(page, dashboard, "new");
     const at = await settled(page, "reach", has);
@@ -2124,7 +2118,6 @@ async function webkitFocus(
     "#connect-port",
     "#connect-password",
   ]) {
-    // biome-ignore lint/performance/noAwaitInLoops: one field at a time
     if (field === "#connect-port" && !(await page.locator(field).count())) {
       await page.locator(`${WINDOW} button[data-slot=port]`).click();
     }
@@ -2177,7 +2170,6 @@ async function entryTabs(
 ): Promise<void> {
   await clearInstalls(fleet);
   for (const view of ["desk", "phone"] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one page at a time
     const page = await kit.page(view, { theme: "light" });
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
@@ -2190,7 +2182,6 @@ async function entryTabs(
     let right = true;
     for (const where of ["home", "list"] as const) {
       for (const way of [connectWords.byCommand, connectWords.overSsh]) {
-        // biome-ignore lint/performance/noAwaitInLoops: one entry point after another, on one page
         await open(page, `${dashboard}/`, "body");
         if (where === "home") {
           await page
@@ -2279,7 +2270,6 @@ async function chipAdds(
     (["desk", "phone"] as const).map((view) => ({ engine, view }))
   );
   for (const { engine, view } of legs) {
-    // biome-ignore lint/performance/noAwaitInLoops: one page at a time
     const page = await kit.page(view, { engine, theme: "light" });
     await open(
       page,
@@ -2422,7 +2412,6 @@ async function tabsFit(
     );
   for (const engine of ["chromium", "webkit"] as const) {
     for (const view of ["phone", "narrowDesk", "desk"] as const) {
-      // biome-ignore lint/performance/noAwaitInLoops: one page at a time
       const page = await kit.page(view, { engine, theme: "dark" });
       await page.route(isJoinRead, async (route) => {
         const response = await route.fetch();
@@ -2456,7 +2445,6 @@ async function tabsFit(
         [connectWords.overSsh, connectWords.reachItAt],
         [connectWords.byCommand, connectWords.reachesHubAt],
       ] as const) {
-        // biome-ignore lint/performance/noAwaitInLoops: one tab after the other, each measured where it stands
         if ((await chosenTab(page)) !== tab) {
           await pickTab(page, tab);
         }

@@ -40,6 +40,7 @@
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { depart, land } from "#lib/cawco/motion/share.svelte.js";
   import StarterCards from "#lib/cawco/project/StarterCards.svelte";
+  import { track } from "#lib/cawco/track.js";
   import {
     Alert,
     AlertAction,
@@ -207,8 +208,7 @@
     if (!(visible && thread)) {
       return;
     }
-    // biome-ignore lint/complexity/noVoid: read-only dependency: each new message is looked at again
-    void thread.lastAt;
+    track(thread.lastAt);
     untrack(() => markOpened(viewId));
   });
 
@@ -353,8 +353,7 @@
     }
     // Read again when a new reply may name new tasks, and when the
     // project's tasks change (a card's stage moves under it).
-    // biome-ignore lint/complexity/noVoid: read-only dependencies
-    void [blocks.length, cawco.tasksChangedOf(projectId)];
+    track(blocks.length, cawco.tasksChangedOf(projectId));
     untrack(() => {
       readTasks().catch(() => undefined);
     });

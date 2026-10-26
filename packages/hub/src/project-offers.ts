@@ -196,7 +196,6 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
         continue;
       }
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: task numbers are handed out in plan order
         const task = await deps.tasks.create(
           projectId,
           { title, labels: [PROPOSED_LABEL] },
@@ -253,7 +252,6 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
       .liveMainlineFolders()
       .filter((other) => other.id !== row.id);
     for (const other of others) {
-      // biome-ignore lint/performance/noAwaitInLoops: one git read per folder, cached; stops at the first match
       if ((await remoteOf(other.machineId, other.cwd)) === remote) {
         const where =
           other.machineId === row.machineId

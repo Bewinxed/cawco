@@ -758,7 +758,6 @@ const removeTranscript = async (
     )) {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) {
-        // biome-ignore lint/performance/noAwaitInLoops: a walk, one folder at a time
         await walk(path);
       } else if (entry.name === `${conversation}.jsonl`) {
         await rm(path);
@@ -1435,7 +1434,6 @@ const onlyOpenAsks = async (at: At, session: string) => {
     JSON.stringify({ plain: filed(plain), tried: filed(tried) })
   );
   for (const engine of ["chromium", "webkit"] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one engine at a time
     const page = await kit.page("desk", { engine });
     await open(page, `${base}/session`, "[data-needs-caw]");
     await cawPanel(page);
@@ -1558,7 +1556,6 @@ const mediaAndGone = async (at: At, session: string) => {
     JSON.stringify({ pageLine, listed, page, flat, raised })
   );
   for (const engine of ["chromium", "webkit"] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one engine at a time
     const view = await kit.page("desk", { engine });
     await open(view, `${base}/session`, "[data-needs-caw]");
     await cawPanel(view);
@@ -1852,7 +1849,6 @@ const reconnectStartsNothing = async (
   ];
   const pages: Page[] = [];
   for (const pane of panes) {
-    // biome-ignore lint/performance/noAwaitInLoops: one pane at a time
     const page = await kit.page("desk");
     await open(page, `${base}/session/${pane.session}`, FRAME);
     pages.push(page);
@@ -2298,7 +2294,6 @@ const run = async (kit: Kit) => {
   const judge = await notOpened(at, judging);
   // One item, at every width and in both engines.
   for (const leg of ROW_LEGS) {
-    // biome-ignore lint/performance/noAwaitInLoops: one page at a time
     await rowBoxes(at, leg.engine, leg.view, "with one item");
   }
   await picks(at, picking);
@@ -2312,7 +2307,6 @@ const run = async (kit: Kit) => {
   const ending = await fleet.spawn("claude", "Ending", fleet.repo);
   await ended(at, ending);
   for (const harness of HARNESSES) {
-    // biome-ignore lint/performance/noAwaitInLoops: one harness at a time, each push out before the next
     await onHarness(at, harness, phone);
   }
   await filesDot(at, parking, presence);
@@ -2329,7 +2323,6 @@ const run = async (kit: Kit) => {
     "Pick the plan's sheet heights",
     "Pick the tray's icons",
   ].entries()) {
-    // biome-ignore lint/performance/noAwaitInLoops: one create at a time
     const id = await create(fleet, many, {
       kind: "page",
       does: n === 1 ? "judge" : "pick",
@@ -2349,7 +2342,6 @@ const run = async (kit: Kit) => {
   }
   await countAndArcs(at);
   for (const leg of ROW_LEGS) {
-    // biome-ignore lint/performance/noAwaitInLoops: one page at a time
     await rowBoxes(
       at,
       leg.engine,

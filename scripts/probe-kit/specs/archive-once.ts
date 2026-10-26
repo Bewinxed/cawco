@@ -89,7 +89,6 @@ async function run(kit: Kit): Promise<void> {
       // The hub answers at once: 503 while it fetches, as a machine hears it.
       let response = await fetch(url);
       while (response.status === 503) {
-        // biome-ignore lint/performance/noAwaitInLoops: one ask at a time, as a machine asks
         await response.arrayBuffer();
         await delay(1000);
         response = await fetch(url);

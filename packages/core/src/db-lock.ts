@@ -79,7 +79,6 @@ export const lockDatabase = async (path: string): Promise<void> => {
   try {
     for (let tries = 0; tries < TRIES; tries += 1) {
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: each try follows from what the last found
         await link(written, lock);
         return;
       } catch (error) {

@@ -716,7 +716,6 @@ for (const status of FILES) {
     ? JSON.parse(readFileSync(here(`../clips/${enter}/timing.json`), "utf8"))
         .frames
     : 0;
-  // biome-ignore lint/performance/noAwaitInLoops: one file at a time, so no run's load timing shares the CPU with another
   const now = await run(bytes, loops, enterFrames);
   const again = await run(bytes, loops, enterFrames);
   totals.files += 1;

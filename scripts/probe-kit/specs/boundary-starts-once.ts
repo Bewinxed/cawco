@@ -251,7 +251,6 @@ const run = async (kit: Kit) => {
     projectId: project.id,
   });
   for (const harness of HARNESSES) {
-    // biome-ignore lint/performance/noAwaitInLoops: one delegate at a time, each its own workspace
     await oneHarness(kit, fleet, home, parent, src, harness);
   }
 };

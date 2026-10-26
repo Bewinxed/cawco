@@ -390,7 +390,6 @@ const fetchIcon = async (host: string): Promise<Bounded<Icon | undefined>> => {
       continue;
     }
     tried.add(candidate.href);
-    // biome-ignore lint/performance/noAwaitInLoops: the first icon that answers is the one
     const iconRead = await fetchCapped(candidate, ICON_CAP, "image/*");
     switch (iconRead.kind) {
       case "answered": {

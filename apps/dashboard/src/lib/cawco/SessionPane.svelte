@@ -5,6 +5,7 @@
     type HarnessKind,
     type PermissionResult,
   } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   /**
    * One conversation, whole: the identity header, the transcript (Chat) or its
    * graph (Flow), and the floating composer, grown into any parked permission
@@ -26,6 +27,7 @@
     crossOutWith,
     reveal,
   } from "#lib/cawco/motion/curves.svelte.js";
+  import { track } from "#lib/cawco/track.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { IconAlert, IconChat, IconLaptop } from "#lib/icons.js";
@@ -227,8 +229,7 @@
       besideStages = null;
       return;
     }
-    // biome-ignore lint/complexity/noVoid: read-only dependency
-    void cawco.tasksChangedOf(projectId);
+    track(cawco.tasksChangedOf(projectId));
     untrack(() => {
       readBeside(projectId).catch(() => undefined);
     });
@@ -379,8 +380,7 @@
     const hint =
       browsing && harness ? { machineId: browsing, cwd, harness } : null;
     const running = isLive;
-    // biome-ignore lint/complexity/noVoid: read-only dependency — Retry bumps `attempt` purely to re-run this effect
-    void attempt;
+    track(attempt);
     // A session its project is still moving for has nothing to read yet;
     // this runs again the moment the move starts it. An ask standing alone
     // has no transcript at all.
@@ -395,10 +395,8 @@
     // Tracking the connection and the live session's machineId (neither
     // written by the read below) re-runs this the moment it becomes
     // answerable, so the transcript reads back instead of staying empty.
-    // biome-ignore lint/complexity/noVoid: read-only dependency — re-runs this effect once the hub or the session's machineId become known, per the comment above
-    void cawco.status;
-    // biome-ignore lint/complexity/noVoid: read-only dependency — re-runs this effect once the hub or the session's machineId become known, per the comment above
-    void cawco.session(id)?.machineId;
+    track(cawco.status);
+    track(cawco.session(id)?.machineId);
     untrack(() => {
       // What the last read said stands while this pass reads again: a
       // reconnect re-reads behind a "no session" or an offline card, and
@@ -469,8 +467,7 @@
     untrack(() => {
       const cause = nextCause;
       nextCause = "open";
-      // biome-ignore lint/complexity/noVoid: fire-and-forget inside untrack — readHistory reports its outcome through the store fields this effect reads
-      void readHistory(id, cause);
+      detach(readHistory(id, cause), "readHistory");
     });
   });
 
@@ -503,8 +500,7 @@
       seenBefore = true;
       if (leftUnread) {
         leftUnread = false;
-        // biome-ignore lint/complexity/noVoid: fire-and-forget inside untrack — readHistory reports its outcome through the store fields the pane reads
-        void readHistory(viewId, "open", true);
+        detach(readHistory(viewId, "open", true), "readHistory");
       }
     });
   });
@@ -825,10 +821,8 @@
     const id = viewId;
     const mid = machineId;
     untrack(() => {
-      // biome-ignore lint/complexity/noVoid: fire-and-forget inside untrack — each loader tracks its own pending guard
-      void loadMcpServers(id, mid);
-      // biome-ignore lint/complexity/noVoid: fire-and-forget inside untrack — each loader tracks its own pending guard
-      void refreshCommands(id, mid);
+      detach(loadMcpServers(id, mid), "loadMcpServers");
+      detach(refreshCommands(id, mid), "refreshCommands");
     });
   });
 
@@ -1067,8 +1061,7 @@
   /** The `/` menu opened: ask the session again what it offers. */
   function refreshMenu(): void {
     if (machineId) {
-      // biome-ignore lint/complexity/noVoid: fire-and-forget command menu refresh
-      void refreshCommands(viewId, machineId);
+      detach(refreshCommands(viewId, machineId), "refreshCommands");
     }
   }
 

@@ -747,7 +747,6 @@ export const createIngress = ({
   ): Promise<void> => {
     let moved = false;
     for (const [url, target] of waitsDue(projectId)) {
-      // biome-ignore lint/performance/noAwaitInLoops: a project's few waits, one request at a time against its rate limit
       const read = await readGitHubWait(octokit, target).catch(() => undefined);
       const wait = waits.get(url);
       if (

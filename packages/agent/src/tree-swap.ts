@@ -84,7 +84,6 @@ const entriesUnder = async (root: string, prefix = ""): Promise<string[]> => {
   for (const entry of entries) {
     const path = `${prefix}${entry.name}`;
     if (entry.isDirectory()) {
-      // biome-ignore lint/performance/noAwaitInLoops: one directory at a time keeps the reads bounded
       paths.push(...(await entriesUnder(join(root, entry.name), `${path}/`)));
     } else if (entry.isFile() || entry.isSymbolicLink()) {
       paths.push(path);
@@ -117,7 +116,6 @@ export const heldHash = async (
   for (const each of list) {
     const file = join(path, each);
     const found = isInside(each) ? stat(file) : Promise.reject();
-    // biome-ignore lint/performance/noAwaitInLoops: one file read at a time keeps the disk reads bounded
     const stats = await found.catch(() => undefined);
     files.push(
       stats?.isFile()
@@ -226,7 +224,6 @@ export const placeTree = async (
   ]);
   try {
     for (const file of files) {
-      // biome-ignore lint/performance/noAwaitInLoops: one file at a time keeps a large plugin's writes bounded
       await writeTreeFile(tree, file);
       await newerThan(join(tree, file.path), join(path, file.path));
     }
@@ -249,7 +246,6 @@ export const placeTree = async (
           .some((_, at, parts) => fleet.has(parts.slice(0, at + 1).join("/")));
       for (const each of await entriesUnder(path)) {
         if (each !== CARRIED && !under(each) && !folders.has(each)) {
-          // biome-ignore lint/performance/noAwaitInLoops: one file at a time keeps the copies bounded
           await carryOver(join(path, each), join(tree, each));
         }
       }
@@ -319,7 +315,6 @@ export const carriedBytecode = async (
   }
   const made: string[] = [];
   for (const [cache, sources] of stems) {
-    // biome-ignore lint/performance/noAwaitInLoops: one cache folder at a time, a tree holds a few
     const entries = await readdir(join(tree, cache), {
       withFileTypes: true,
     }).catch(() => []);

@@ -137,7 +137,6 @@ const spec: Spec = {
       let previous: string | undefined;
       for (const version of BUILDS) {
         // Staged as the agent stages it, its archive fetched through the hub.
-        // biome-ignore lint/performance/noAwaitInLoops: installs go on one after another
         await mkdir(versionDirectory(version), { recursive: true });
         await Bun.write(
           join(releases, version, "cawco-linux-x64.tar.gz"),
@@ -211,7 +210,6 @@ const spec: Spec = {
       // Every entry of the cache goes, each taken for a release, as a
       // hand-run prune took them; then the hub starts again.
       for (const name of await readdir(releases)) {
-        // biome-ignore lint/performance/noAwaitInLoops: one entry after another, as the loop it reproduces
         await rm(join(releases, name), { recursive: true, force: true });
       }
       const again = startHub(dbPath);

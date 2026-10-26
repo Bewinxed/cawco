@@ -714,7 +714,6 @@ export const runLeg = async (kit: Kit, base: string, leg: Leg) => {
   const postedAt: Step[] = [];
   for (const step of leg.steps) {
     const before = said.posts.length;
-    // biome-ignore lint/performance/noAwaitInLoops: one size, laid out and delivered, before the next
     await page.setViewportSize(step);
     await frames(page);
     if (await moreStands(page)) {
@@ -1402,7 +1401,6 @@ export const runNarrow = async (
   // sheet standing on it rises with it.
   await page.locator('[data-slot="composer-field"]').first().click();
   for (const line of ["The chips wrap", "at 320", "and the gap", "doubles."]) {
-    // biome-ignore lint/performance/noAwaitInLoops: one line, then its break, in order
     await page.keyboard.type(line);
     await page.keyboard.press("Shift+Enter");
   }
@@ -1619,7 +1617,6 @@ const run = async (kit: Kit) => {
   const still = stillOnly();
   if (still) {
     for (const engine of ["chromium", "webkit"] as const) {
-      // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each its own report
       await runStill(kit, base, fleet, session, { engine, ...still });
     }
     return;
@@ -1627,21 +1624,17 @@ const run = async (kit: Kit) => {
   const repeat = phoneSheetRuns();
   if (repeat > 0) {
     for (let at = 0; at < repeat; at += 1) {
-      // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each its own report
       await runPhoneSheet(kit, base, { session, view: "phone" });
     }
     for (const engine of ["webkit", "chromium"] as const) {
-      // biome-ignore lint/performance/noAwaitInLoops: one session and page at a time
       await runPhoneSheetLeaves(kit, base, fleet, engine);
     }
     return;
   }
   for (const view of ["phone", "phoneWide"] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each its own report
     await runPhoneSheet(kit, base, { session, view });
   }
   for (const engine of ["webkit", "chromium"] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one session and page at a time
     await runPhoneSheetLeaves(kit, base, fleet, engine);
   }
   for (const theme of ["light", "dark"] as const) {
@@ -1686,7 +1679,6 @@ const run = async (kit: Kit) => {
       },
     ];
     for (const leg of legs) {
-      // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each its own report
       await runLeg(kit, base, leg);
     }
     await runNarrow(kit, base, {
@@ -1698,7 +1690,6 @@ const run = async (kit: Kit) => {
   }
   for (const width of FILES_WIDTHS) {
     for (const panel of ["open", "shut"] as const) {
-      // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each its own report
       await runFiles(kit, base, {
         artifact: id,
         name: `Files at desk ${width}, the session's panel ${panel}`,
@@ -1724,11 +1715,9 @@ const run = async (kit: Kit) => {
     },
   ];
   for (const one of pages) {
-    // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each its own report
     await runPageSweep(kit, base, one);
   }
   for (const engine of ["chromium", "webkit"] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each its own report
     await runStill(kit, base, fleet, session, { engine });
   }
 };
@@ -1765,7 +1754,6 @@ export const runPageSweep = async (
   const postedAt: string[] = [];
   for (const step of PAGE_SWEEP) {
     const before = said.posts.length;
-    // biome-ignore lint/performance/noAwaitInLoops: one size, laid out and delivered, before the next
     await page.setViewportSize(step);
     await frames(page);
     if (said.posts.length > before) {

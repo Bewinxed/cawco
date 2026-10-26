@@ -254,7 +254,6 @@ const run = async (kit: Kit) => {
   ];
   let gone = "";
   for (const [way, name, written] of ways) {
-    // biome-ignore lint/performance/noAwaitInLoops: one artifact made and deleted at a time, the list read around each
     const id = await make(name);
     gone = written(id, name);
     const before = await listed();
@@ -274,7 +273,6 @@ const run = async (kit: Kit) => {
     ["naming nothing the session has", "0badc0de"],
     ["of one already removed, by its name", gone],
   ] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one miss at a time, the list read around each
     const before = await listed();
     const missed = await agent(DELETE, { id: asked });
     const after = await listed();

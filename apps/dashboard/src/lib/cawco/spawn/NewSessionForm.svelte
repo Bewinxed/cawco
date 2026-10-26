@@ -21,8 +21,10 @@
     TARGET_HEADROOM_TOKENS,
   } from "@cawco/core";
   import type { Bounded } from "@cawco/core/bounded";
+  import { detach } from "@cawco/core/detach";
   import { tick, untrack } from "svelte";
   import { awayOf, failureWords, hubRefusal } from "#lib/cawco/hub-read.js";
+  import { track } from "#lib/cawco/track.js";
   import {
     Alert,
     AlertDescription,
@@ -736,8 +738,7 @@
     }
   });
   $effect(() => {
-    // biome-ignore lint/complexity/noVoid: read-only dependency — a new machine or project starts the destination over
-    void moveTo;
+    track(moveTo);
     untrack(() => {
       moveAt = undefined;
       moveEditing = false;
@@ -1183,8 +1184,7 @@
     lastMachine = kept.machineIds[0] ?? "";
   }
   $effect(() => {
-    // biome-ignore lint/complexity/noVoid: read-only dependency — each opening (a row reopening its start) reads the form again
-    void spawning.opening;
+    track(spawning.opening);
     if (!open) {
       return;
     }
@@ -1471,8 +1471,7 @@
     submission += 1;
     if (pressedFor !== null && !busy) {
       pressedFor = null;
-      // biome-ignore lint/complexity/noVoid: the start parks itself as it begins, and says how it ends on its row
-      void start(true);
+      detach(start(true), "start");
     }
     pressedFor = null;
     const left = spawning.shown;
@@ -1908,7 +1907,6 @@
       let first = "";
       for (const [at, target] of draft.machineIds.entries()) {
         stageStart(id, CHECKING);
-        // biome-ignore lint/performance/noAwaitInLoops: each machine is verified, then spawned, in order — one failure must stop the batch before the next spawn.
         const refused = await verifyBeforeSpawn(target, draft.baseCwd);
         if (refused) {
           failStart(id, refused);
@@ -2099,8 +2097,7 @@
     }
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
       event.preventDefault();
-      // biome-ignore lint/complexity/noVoid: the start says how it ends on its row and in the form
-      void start();
+      detach(start(), "start");
     }
   }
   function bodyScroll() {

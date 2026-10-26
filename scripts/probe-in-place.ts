@@ -100,7 +100,6 @@ async function until<T>(
 ): Promise<T> {
   const deadline = Date.now() + ms;
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: each bounded look follows the stack's previous state
     const value = await read();
     if (accept(value)) {
       return value;
@@ -351,7 +350,6 @@ if (role === "sessiond") {
       timestamp: new Date(at(minutes + plus)).toISOString(),
     });
     const opening = openings.get(id);
-    // biome-ignore lint/performance/noAwaitInLoops: six small files, one after another
     await writeFile(
       join(scratch, `${key}.jsonl`),
       [
@@ -656,7 +654,6 @@ if (role === "sessiond") {
     })
       .then(async (response) => {
         const reader = response.body?.getReader();
-        // biome-ignore lint/performance/noAwaitInLoops: one read after another, until the hub or the process ends the stream
         while (reader && !(await reader.read()).done) {
           // held open until the process ends
         }
@@ -1255,7 +1252,6 @@ if (role === "sessiond") {
     await running(id);
     for (const n of [1, 2, 3, 4, 5, 6, 7, 8]) {
       personSays(id, `Turn ${n}: a long enough piece of work to summarise.`);
-      // biome-ignore lint/performance/noAwaitInLoops: each turn after the last
       await until(
         `${short(id)} turn ${n}`,
         eventLog,
@@ -1321,7 +1317,6 @@ if (role === "sessiond") {
     };
     // Each account's Claude dir, as its sign-in makes it on a machine.
     for (const account of [a, b]) {
-      // biome-ignore lint/performance/noAwaitInLoops: two dirs
       await mkdir(join(dir, "home", ".cawco", "accounts", account, "claude"), {
         recursive: true,
       });
@@ -1627,7 +1622,6 @@ if (role === "sessiond") {
     await delay(1000);
     await writeFile(join(dir, `unread-${q}`), "holds what it is sent");
     for (const n of [1, 2]) {
-      // biome-ignore lint/performance/noAwaitInLoops: one hand-off after the other
       await tool(parent, "handoff", {
         target: q,
         message: `Queued hand-off ${n} while it asks.`,
@@ -1708,7 +1702,6 @@ if (role === "sessiond") {
     await running(pChild);
     await running(oChild);
     for (const id of [p, o, r2]) {
-      // biome-ignore lint/performance/noAwaitInLoops: three marker files
       await writeFile(join(dir, `background-${id}`), "a monitor");
     }
     const sessionsOf = async () =>
@@ -1911,7 +1904,6 @@ if (role === "sessiond") {
     spawn(g2, b, parent);
     spawn(g3, b);
     for (const id of [g1, g2, g3]) {
-      // biome-ignore lint/performance/noAwaitInLoops: three starts
       await running(id);
     }
     const stopAsked = crypto.randomUUID();
@@ -1939,7 +1931,6 @@ if (role === "sessiond") {
       [g2, `Stopped by ${titled(parent)}`],
       [g3, "Ended from outside CawCo (SIGTERM)"],
     ] as const) {
-      // biome-ignore lint/performance/noAwaitInLoops: one session at a time
       const lines3 = await until(
         `${short(id)}'s end said as "${want}"`,
         () => endedLine(id),
@@ -2122,7 +2113,6 @@ if (role === "sessiond") {
     dashboard?.close();
     for (const child of [...children.values()].reverse()) {
       child.kill("SIGTERM");
-      // biome-ignore lint/performance/noAwaitInLoops: one at a time, by recorded pid
       await Promise.race([child.exited, delay(5000)]);
       if (child.exitCode === null) {
         child.kill("SIGKILL");

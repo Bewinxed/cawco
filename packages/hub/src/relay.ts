@@ -303,7 +303,6 @@ const readCapped = async (
   const chunks: Uint8Array[] = [];
   let size = 0;
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: a stream is read chunk after chunk, and the cap is checked on each
     const { done, value } = await reader.read();
     if (done) {
       return Buffer.concat(chunks);
@@ -811,7 +810,6 @@ export const createRelay = ({
           } as const)
         : await tailscale().apply(bound);
     for (const row of active) {
-      // biome-ignore lint/performance/noAwaitInLoops: one relay at a time, each maybe one GitHub call
       keep(row.id, await settle(row, state, registerNow));
     }
   };
@@ -1035,7 +1033,6 @@ export const createRelay = ({
       if (store.get(id)?.testedAt) {
         return true;
       }
-      // biome-ignore lint/performance/noAwaitInLoops: waiting on the ping, a quarter second at a time
       await Bun.sleep(250);
     }
     return Boolean(store.get(id)?.testedAt);

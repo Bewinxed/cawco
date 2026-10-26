@@ -9,7 +9,6 @@
    * goes to the session.
    */
   import { previewWords } from "@cawco/core";
-  // biome-ignore lint/performance/noNamespaceImport: the kit's compound menu (DropdownMenu.Root, .Item, …), as every menu of the app imports it
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { IconLayers } from "#lib/icons.js";
   import {

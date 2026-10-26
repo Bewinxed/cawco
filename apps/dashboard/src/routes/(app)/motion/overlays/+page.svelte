@@ -14,7 +14,6 @@
    * draws one (`layout="ledger" stickyBand`, its band's heads sticky at
    * `z-2`), so what opens there stands over a sticky band (layer-stack).
    */
-  // biome-ignore-all lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
   /**
    * Add machine: a modal, the kit's dialog (DESIGN.md, Dialog, sheet and
    * drawer), from the machine's details to its outcome (The Work Outlives
@@ -21,7 +22,6 @@
    *   inside it.
    */
   import { tick, untrack } from "svelte";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { page } from "$app/state";
@@ -148,8 +148,7 @@
     }
     if (step === "reach" && !joinRead) {
       joinRead = true;
-      // biome-ignore lint/complexity/noVoid: fire-and-forget; Reach draws the addresses and key when they land
-      void connect.loadJoin();
+      detach(connect.loadJoin(), "loadJoin");
     }
   });
 
@@ -303,8 +302,7 @@
   $effect(() => {
     const node = surface;
     if (node) {
-      // biome-ignore lint/complexity/noVoid: its flight plays on its own clock
-      void arrive(node);
+      detach(arrive(node), "arrive");
     }
   });
 </script>

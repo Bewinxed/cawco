@@ -16,7 +16,6 @@
  * With `--at`, this file and hub-in-process.ts run inside a worktree of that
  * commit, against its hub; the seed below must fit that commit's Db.
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one seeded row after another keeps the database's order as a real hub's.
 import { Database } from "bun:sqlite";
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

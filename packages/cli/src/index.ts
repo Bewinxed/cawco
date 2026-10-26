@@ -1,4 +1,3 @@
-// biome-ignore lint/performance/noBarrelFile: this is the package's public entrypoint; consumers import "@cawco/cli" and expect one surface
 export {
   type CliConfig,
   CONFIG_PATH,

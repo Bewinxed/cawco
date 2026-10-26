@@ -167,7 +167,6 @@ const penOf = (cdp: CDPSession) => {
     await at("mousePressed", from[0], from[1]);
     for (let step = 1; step <= steps; step += 1) {
       const t = step / steps;
-      // biome-ignore lint/performance/noAwaitInLoops: a stroke's points, one after another
       await at(
         "mouseMoved",
         from[0] + (to[0] - from[0]) * t,
@@ -694,7 +693,6 @@ const swapCheck = async (on: On, clock: Clock) => {
   // is no person's, and can leave the button's key block holding no glyph
   // that a later press brings back.
   for (const motion of ["reduce", "no-preference"] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one press at a time, each read once it has played out
     await emulateMotion(page, motion);
     await until(
       "the button back on Send",
@@ -782,7 +780,6 @@ const swapCheck = async (on: On, clock: Clock) => {
     const of = kept.find((run) => run.name.includes("icon-swap"))?.name;
     const looks: Awaited<ReturnType<typeof swapNow>>[] = [];
     for (const fraction of [0, 0.5, 1]) {
-      // biome-ignore lint/performance/noAwaitInLoops: one fraction at a time, each read where it lands
       await clock.seek(fraction, of);
       // The carriers the clock moved: a later swap's held runs stand at 0.
       looks.push(
@@ -1107,7 +1104,6 @@ const touchCheck = async (on: On) => {
     });
   await touch("touchStart", y);
   for (let step = 1; step <= 6; step += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: a swipe's points, in order
     await touch("touchMove", y - step * 10);
   }
   await touch("touchEnd", y - 60);
@@ -2124,7 +2120,6 @@ const pasteOrderCheck = async (on: On) => {
       );
     const landed = async (count: number) => {
       for (let i = 0; i < 50 && images().length < count; i += 1) {
-        // biome-ignore lint/performance/noAwaitInLoops: read until the image lands
         await new Promise((done) => setTimeout(done, 100));
       }
     };
@@ -2285,7 +2280,6 @@ const dockCheck = async (on: On, clock: Clock) => {
   // The flight scrubbed through its own length, held: where the iframe is drawn at each fraction.
   const scrub: { at: number; box: Box | null }[] = [];
   for (const at of [0, 0.25, 0.5, 0.75, 1]) {
-    // biome-ignore lint/performance/noAwaitInLoops: one fraction at a time, each read where it lands
     await page.evaluate((f) => {
       for (const run of window.kitRuns()) {
         if (run.id === "canvas-flight") {

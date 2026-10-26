@@ -1,5 +1,6 @@
 <script lang="ts">
   import { commonWords } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   /**
    * A session's transcript drawn inside another view, in a recessed well of
    * its own: what a delegate's card opens onto in its parent's chat. The rows come from the store
@@ -81,8 +82,7 @@
       branch &&
       !(branch.loading || branch.hydrating || branch.olderFault)
     ) {
-      // biome-ignore lint/complexity/noVoid: fire-and-forget; the page lands in the store the rows below read
-      void readOlderPage(id);
+      detach(readOlderPage(id), "readOlderPage");
     }
   });
   /** What stopped the well's rows arriving: the newest page's read, or an older one's. */

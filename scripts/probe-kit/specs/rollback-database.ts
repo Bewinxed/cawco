@@ -96,7 +96,6 @@ await Bun.sleep(60000);`,
   const reader = child.stdout.getReader();
   let said = "";
   while (!said.includes("ready")) {
-    // biome-ignore lint/performance/noAwaitInLoops: a stream read, chunk by chunk
     const { done, value } = await reader.read();
     if (done) {
       break;

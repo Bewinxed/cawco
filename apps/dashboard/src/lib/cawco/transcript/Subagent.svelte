@@ -1,6 +1,5 @@
 <script lang="ts">
   import CollapsibleLazy from "#lib/components/ui/collapsible/collapsible-lazy.svelte";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { IconChevronRight } from "#lib/icons.js";

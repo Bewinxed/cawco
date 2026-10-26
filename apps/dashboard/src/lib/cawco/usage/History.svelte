@@ -7,6 +7,7 @@
    * a month. Table swaps both charts for their figures.
    */
   import type { UsageSummary } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import { HOUR_MS } from "@cawco/core/time";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
@@ -15,7 +16,6 @@
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import { IconRefresh } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
@@ -114,8 +114,7 @@
   }
 
   $effect(() => {
-    // biome-ignore lint/complexity/noVoid: fire-and-forget — read() reads the range before it awaits, so the effect reruns on it
-    void read();
+    detach(read(), "read");
   });
 
   async function retry(): Promise<void> {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
   /**
    * The one code surface the console opens into — a tool result's output and a
    * markdown fence share it, on the house code theme (code-theme.ts): a
@@ -40,12 +41,14 @@
       return;
     }
     let live = true;
-    // biome-ignore lint/complexity/noVoid: fire-and-forget — the `live` flag guards against a stale result after the effect re-runs
-    void tokenize(text, lang).then((result) => {
-      if (live) {
-        painted = result;
-      }
-    });
+    detach(
+      tokenize(text, lang).then((result) => {
+        if (live) {
+          painted = result;
+        }
+      }),
+      "tokenize"
+    );
     return () => {
       live = false;
     };

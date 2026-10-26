@@ -247,7 +247,6 @@ const sayLogs = async (
   instanceId: string
 ): Promise<void> => {
   for (const role of ["hub", "agent"] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: two logs
     const lines = (await fleet.logs(role))
       .split("\n")
       .filter((line) => line.includes(instanceId))

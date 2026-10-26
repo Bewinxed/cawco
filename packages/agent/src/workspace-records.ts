@@ -51,7 +51,6 @@ const pathOf = async (
   let damage: DamagedRecord | undefined;
   for (const name of ["create.json", "boundary.json", "place.json"]) {
     try {
-      // biome-ignore lint/performance/noAwaitInLoops: the first of the records that names the clone
       const record = await readRecord<{ path?: unknown }>(
         join(workspacesDir(), id, name)
       );
@@ -182,7 +181,6 @@ const holding = async (
     return held;
   }
   for (const { id, damage } of unread) {
-    // biome-ignore lint/performance/noAwaitInLoops: none or a few damaged workspaces
     if (await insideCloneOf(at, id)) {
       throw damage;
     }

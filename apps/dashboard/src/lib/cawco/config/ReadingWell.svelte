@@ -6,7 +6,6 @@
    * the code face by Coded, never shown as raw backticks.
    */
   import Coded from "#lib/cawco/Coded.svelte";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Alert from "#lib/components/ui/alert/index.js";
 
   let { text }: { text: string } = $props();

@@ -6,7 +6,6 @@ import {
   IconServerSquare as Server,
 } from "#lib/icons.js";
 
-// biome-ignore lint/performance/noBarrelFile: public entry point for the machine row, consumed under the shadcn-svelte convention
 export { default as MachineRow } from "./machine-row.svelte";
 
 /** The tile glyph for a machine, read off the OS string its daemon reports. */

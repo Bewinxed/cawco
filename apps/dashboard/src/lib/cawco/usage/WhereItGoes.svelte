@@ -21,6 +21,7 @@
    * (motion/relay-boxes) so an old row never overflows into the group below.
    */
   import type { UsageSummary, UsageSummaryRow } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import { flushSync } from "svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -30,7 +31,6 @@
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import { IconRefresh } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
@@ -138,8 +138,7 @@
   }
 
   $effect(() => {
-    // biome-ignore lint/complexity/noVoid: fire-and-forget — read() reads the switches before it awaits, so the effect reruns on them, and it owns its own state
-    void read();
+    detach(read(), "read");
   });
 
   async function retry(): Promise<void> {

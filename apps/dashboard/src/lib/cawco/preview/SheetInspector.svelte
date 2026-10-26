@@ -29,6 +29,7 @@
    * page's foot on a phone.
    */
   import { artifactWords as words } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import type { PropMeta } from "@cawco/core/stage";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
@@ -129,20 +130,22 @@
     if (!name) {
       return;
     }
-    // biome-ignore lint/complexity/noVoid: the question answers itself; a Cancel changes nothing
-    void asks.ask({
-      at: "remove-story",
-      title: words.removeTitle(name),
-      body: words.removeBody(fileName),
-      confirmLabel: words.removeConfirm,
-      pendingLabel: words.removing,
-      destructive: true,
-      run: async () => {
-        if (!(await inspector.op({ remove: name }))) {
-          throw new Error(inspector.problem ?? words.storyNotRemoved(name));
-        }
-      },
-    });
+    detach(
+      asks.ask({
+        at: "remove-story",
+        title: words.removeTitle(name),
+        body: words.removeBody(fileName),
+        confirmLabel: words.removeConfirm,
+        pendingLabel: words.removing,
+        destructive: true,
+        run: async () => {
+          if (!(await inspector.op({ remove: name }))) {
+            throw new Error(inspector.problem ?? words.storyNotRemoved(name));
+          }
+        },
+      }),
+      "ask"
+    );
   }
   const up = $derived(inspector.moveBy(-1));
   const down = $derived(inspector.moveBy(1));

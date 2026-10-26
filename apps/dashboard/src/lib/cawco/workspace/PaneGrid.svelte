@@ -15,7 +15,6 @@
    * would keep sizes under a key of its own that survives a tree mutation
    * which reshapes the group, and then apply the old numbers to new children.
    */
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Resizable from "#lib/components/ui/resizable/index.js";
   import { IsCoarsePointer } from "#lib/hooks/is-mobile.svelte.js";
   import { gridView } from "./grid-view.svelte";

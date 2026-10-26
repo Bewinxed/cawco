@@ -232,7 +232,6 @@ export const readyHarnessRows = async (
       continue;
     }
     try {
-      // biome-ignore lint/performance/noAwaitInLoops: one row at a time: an install is npm's whole machine, and two of one package would race over its dir
       const ready = await readyRow(row, kept);
       if ("failed" in ready) {
         report[key] = failed(ready.failed);

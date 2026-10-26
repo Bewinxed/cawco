@@ -355,7 +355,6 @@ export const slotted = async (
           continue;
         }
         const ports = Object.values(browserPorts(slot));
-        // biome-ignore lint/performance/noAwaitInLoops: the first free slot, in order.
         const free = await Promise.all(ports.map(portFree));
         if (free.every(Boolean)) {
           const placed = { ...record, slot };

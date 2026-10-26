@@ -19,7 +19,6 @@ const writeInPlace = async (path: string, text: string): Promise<void> => {
   try {
     const bytes = Buffer.from(text);
     for (let at = 0; at < bytes.length; at += PIECE) {
-      // biome-ignore lint/performance/noAwaitInLoops: the pieces in order, as a stream writes them
       await handle.write(bytes, at, Math.min(PIECE, bytes.length - at));
     }
   } finally {
@@ -36,7 +35,6 @@ await mkdir(dirname(file), { recursive: true });
 const write = how === "atomic" ? writeStateFile : writeInPlace;
 for (let round = 0; round < 1000; round += 1) {
   const body = String.fromCharCode(97 + (round % 26)).repeat(Number(bytes));
-  // biome-ignore lint/performance/noAwaitInLoops: one record over the last, as a keeper of state writes it
   await write(file, JSON.stringify({ round, body }));
   if (round === 0) {
     console.log("under way");

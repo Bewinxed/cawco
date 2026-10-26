@@ -112,7 +112,6 @@ async function said(child: Child, text: string, ms = 20_000): Promise<boolean> {
     if (at(child, text) !== null) {
       return true;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: polling a child's output
     await Bun.sleep(50);
   }
   return false;
@@ -152,7 +151,6 @@ async function inLine(kit: Kit, root: string): Promise<void> {
   const runs: Child[] = [];
   for (const name of ["first", "second", "third", "fourth"]) {
     runs.push(start(dir, 2, name, 2500));
-    // biome-ignore lint/performance/noAwaitInLoops: each run comes 300 ms after the last
     await Bun.sleep(300);
   }
   const codes = await Promise.all(runs.map((run) => run.ended));

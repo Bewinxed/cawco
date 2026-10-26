@@ -502,7 +502,6 @@ async function slimPseudoRules(
   const slimmed: (string | null)[] = [];
   for (const [, selectors, body] of text.matchAll(PSEUDO_RULE)) {
     slimmed.push(slimRule(svg, selectors, body, defaults));
-    // biome-ignore lint/performance/noAwaitInLoops: a slice of the page's thread at a time
     await breathe();
   }
   let next = 0;
@@ -753,7 +752,6 @@ async function facesOf(
           data = dataUrlOf(at);
           faces.data.set(at, data);
         }
-        // biome-ignore lint/performance/noAwaitInLoops: a face's few files, each fetched once a picture
         const read = await data;
         if (!read) {
           failed(
@@ -808,7 +806,6 @@ async function styleCopy(
     if ("web" in fonts) {
       dropWebFamilies(copied[i], fonts.web);
     }
-    // biome-ignore lint/performance/noAwaitInLoops: a slice of the page's thread at a time
     await breathe();
   }
 }
@@ -1196,7 +1193,6 @@ export async function cropPicture(
       context.width = step.box.w;
       context.height = step.box.h;
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: one part at a time, in paint order, on one context
         context.node = await partRoot(step.el, step.box, copying);
         const part = await domToCanvas(context);
         ctx.drawImage(part, step.box.x, step.box.y, step.box.w, step.box.h);

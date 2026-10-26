@@ -1,5 +1,6 @@
 <script lang="ts">
   import { shellWords, sidebarWords } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import {
     type ShellShortcut,
     shellShortcutOf,
@@ -30,7 +31,6 @@
   import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
   import { provideHangLayer } from "#lib/components/ui/hang-card/hang-layer.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Sheet from "#lib/components/ui/sheet/index.js";
   import { setSidebar } from "#lib/components/ui/sidebar/context.svelte.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
@@ -393,8 +393,7 @@
       // The dialog has the focus by now: a navigation hands it to <body>
       // unless told to leave it alone (SvelteKit 3's `reset: false`, which
       // leaves the scroll where it is too).
-      // biome-ignore lint/complexity/noVoid: the dialog is already open; the URL cleanup is a courtesy
-      void goto(url, { replace: true, reset: false });
+      detach(goto(url, { replace: true, reset: false }), "goto");
     });
   });
   /**

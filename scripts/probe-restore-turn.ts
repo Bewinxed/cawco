@@ -101,7 +101,6 @@ try {
   const sessions = new Map<Harness, string>();
   for (const harness of wanted) {
     try {
-      // biome-ignore lint/performance/noAwaitInLoops: one session up at a time
       const id = await fleet.spawn(harness, `Restore probe ${harness}`);
       sessions.set(harness, id);
       await fleet.send(id, `SLOW-PROBE ${harness}: count slowly.`);
@@ -134,7 +133,6 @@ try {
   await fleet.agentUp();
   for (const [harness, id] of sessions) {
     try {
-      // biome-ignore lint/performance/noAwaitInLoops: each harness's hand-back is waited for in turn
       await until(
         `${harness} handed back its turn`,
         () => handBacksSeen(harness),
@@ -222,7 +220,6 @@ async function phaseC(): Promise<void> {
     workspaceId: string;
   }[] = [];
   for (const name of ["item-wake", "item-gone", "item-open"]) {
-    // biome-ignore lint/performance/noAwaitInLoops: one delegate at a time
     const started = await fleet.api<{
       workItemId: string;
       instanceId: string;

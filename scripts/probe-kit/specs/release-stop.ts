@@ -112,7 +112,6 @@ const until = async (
 ): Promise<boolean> => {
   const deadline = performance.now() + within;
   while (performance.now() < deadline) {
-    // biome-ignore lint/performance/noAwaitInLoops: one look per 100 ms until the point is reached
     if (await ready()) {
       return true;
     }
@@ -538,7 +537,6 @@ const spec: Spec = {
       ]);
       await run(["git", "-C", origin, "update-ref", "refs/heads/main", sha]);
       for (const leg of LEGS) {
-        // biome-ignore lint/performance/noAwaitInLoops: one release at a time, as the lock would have it anyway
         await runLeg(checked, scratch, origin, sha, leg);
       }
     } finally {

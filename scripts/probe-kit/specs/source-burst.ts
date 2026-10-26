@@ -375,7 +375,6 @@ const opencodeAnswer = async (at: Legs): Promise<void> => {
   const outcomes: string[] = [];
   for (const lane of lanes) {
     const place = join(at.src, `opencode-${lane}`);
-    // biome-ignore lint/performance/noAwaitInLoops: one fresh location at a time, each its own race
     await mkdir(place, { recursive: true });
     // Its start and its first message back to back, as the hub starts Caw
     // with the message that woke him: the message goes right behind the
@@ -452,7 +451,6 @@ const cawcoConnectedAt = async (home: string): Promise<Map<string, number>> => {
   ).catch(() => [] as string[]);
   const connected = new Map<string, number>();
   for (const file of files) {
-    // biome-ignore lint/performance/noAwaitInLoops: a few log files, read in turn
     const log = await Bun.file(join(dir, file)).text();
     for (const line of log.split("\n")) {
       const found = CAWCO_CONNECTED.exec(line);

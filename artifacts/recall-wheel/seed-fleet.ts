@@ -56,7 +56,6 @@ try {
   await fleet.accountSignedIn();
   const id = await fleet.spawn("claude", "Recall wheel checks");
   for (let n = 1; n <= SENDS; n += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: each send waits for the turn before it to end
     await fleet.send(id, send(n));
     await until(
       `step ${n}'s reply in the transcript`,

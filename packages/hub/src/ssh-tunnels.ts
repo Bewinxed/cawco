@@ -459,7 +459,6 @@ const masterReady = async (
   const deadline = Date.now() + MASTER_READY_MS;
   while (child.exitCode === null && Date.now() < deadline) {
     if (existsSync(path)) {
-      // biome-ignore lint/performance/noAwaitInLoops: a poll; each check must see the master after the previous wait
       const checked = await control([
         "ssh",
         "-S",
@@ -592,7 +591,6 @@ const endStale = async (
   );
   const deadline = Date.now() + STALE_GONE_MS;
   while (Date.now() < deadline) {
-    // biome-ignore lint/performance/noAwaitInLoops: a poll; each read must see the machine after the previous wait
     const read = await onMachine(path, target, listenersOn(port));
     if (read?.code === 0 && !read.out) {
       return null;

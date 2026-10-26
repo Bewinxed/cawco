@@ -663,7 +663,6 @@ export class UsageScanner {
       for (const rec of records.slice(at, at + INGEST_PART)) {
         this.#ingest(rec);
       }
-      // biome-ignore lint/performance/noAwaitInLoops: the await is the loop's turn between parts
       await new Promise((resolve) => setImmediate(resolve));
     }
     this.#putFile.run(path, info.mtimeMs, info.size, next);
@@ -679,7 +678,6 @@ export class UsageScanner {
     for (const dbPath of opencodeDatabases()) {
       const key = `opencode_max_time_updated:${dbPath}`;
       const since = fresh ? 0 : (this.#meta(key) ?? 0);
-      // biome-ignore lint/performance/noAwaitInLoops: one database at a time, each a rowid range at a time
       const latest = await scanOpencode(dbPath, since, (rec) =>
         this.#ingest(rec)
       );
@@ -705,7 +703,6 @@ export class UsageScanner {
     for (const file of await listClaudeFiles()) {
       let info: { mtimeMs: number; size: number };
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: each file folds into the shared dedup set and buckets in sequence
         info = await stat(file.path);
       } catch {
         continue;
@@ -732,7 +729,6 @@ export class UsageScanner {
     for (const file of await listClaudeFiles()) {
       let info: { mtimeMs: number; size: number };
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: each file folds into the shared dedup set and buckets in sequence
         info = await stat(file.path);
       } catch {
         continue;

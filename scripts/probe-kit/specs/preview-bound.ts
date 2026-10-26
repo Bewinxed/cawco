@@ -95,7 +95,6 @@
  *
  * Every reading is written to `numbers.json` in the spec's out folder.
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time, as a person opens them
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: one scenario, read in order, one check after another.
 import { existsSync } from "node:fs";
 import { appendFile, cp, readdir, writeFile } from "node:fs/promises";

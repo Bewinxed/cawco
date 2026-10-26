@@ -281,7 +281,6 @@ export async function downloadResumably(
   let fruitless = 0;
   let attempts = 0;
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: one attempt at a time, each from where the last stopped
     let from = await partialSize(download.partial);
     if (from > download.size) {
       await rm(download.partial, { force: true });

@@ -621,7 +621,6 @@ const spec: Spec = {
       ["h6", "opencode"],
       ["h7", "pi"],
     ] as const) {
-      // biome-ignore lint/performance/noAwaitInLoops: one harness at a time, each read against the host as it stands then
       const before = (await hostReading()).listen;
       const read = await probe(fleet, parent, harness, TAGS[harness], {
         host: true,

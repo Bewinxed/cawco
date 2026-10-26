@@ -131,7 +131,6 @@ async function proxied(page: Page): Promise<Socket> {
 async function until(ok: () => boolean | Promise<boolean>, ms: number) {
   const end = Date.now() + ms;
   while (Date.now() < end) {
-    // biome-ignore lint/performance/noAwaitInLoops: polled one read at a time
     if (await ok()) {
       return true;
     }
@@ -1272,7 +1271,6 @@ async function runLeg(
   let calm = true;
   const seen: string[] = [];
   while (Date.now() < announced + within - 700) {
-    // biome-ignore lint/performance/noAwaitInLoops: one read every half second, in order
     const now = await bandNow(page);
     const away = await awaySayers(page);
     if (
@@ -1840,7 +1838,6 @@ const spec: Spec = {
     await neverConnected(kit, base);
     for (const view of ["phone", "narrowDesk", "desk"] as const) {
       for (const theme of ["light", "dark"] as const) {
-        // biome-ignore lint/performance/noAwaitInLoops: one leg at a time, each its own page
         await runLeg(
           kit,
           { base, hub: fleet.base, project: probe.id },
@@ -1859,12 +1856,10 @@ const spec: Spec = {
     await fleet.accountSignedIn();
     const session = await fleet.spawn("claude", "Band");
     for (const turn of ["one", "two", "three", "four", "five", "six"]) {
-      // biome-ignore lint/performance/noAwaitInLoops: one turn after another
       await fleet.send(session, `band turn ${turn}`);
       await Bun.sleep(1500);
     }
     for (const view of ["phone", "desk"] as const) {
-      // biome-ignore lint/performance/noAwaitInLoops: one leg at a time
       await conversationLeg(kit, base, session, view);
     }
     kit.check(

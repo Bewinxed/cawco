@@ -4802,9 +4802,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const at: StageAt = { workspace: sheet.workspace };
       const deadline = Date.now() + PANEL_DRAW_MS;
       for (;;) {
-        const { report } =
-          // biome-ignore lint/performance/noAwaitInLoops: the panel redraws as Vite's HMR lands; one read at a time until it has
-          (await deps.stage(at, sheet.files[0] as string, sheet.files)).opened;
+        const { report } = (
+          await deps.stage(at, sheet.files[0] as string, sheet.files)
+        ).opened;
         if (!unseen(report, name)) {
           frames = renderSaid(report).frames.filter(
             (one) => one.story === name
@@ -4843,7 +4843,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     let { report } = opened;
     const deadline = Date.now() + PANEL_DRAW_MS;
     while (shownNow && unseen(report, story) && Date.now() < deadline) {
-      // biome-ignore lint/performance/noAwaitInLoops: the panel's page posts its report as it draws; one read at a time until it has
       await Bun.sleep(PANEL_DRAW_POLL_MS);
       ({ report } = (await deps.stage(at, files[0] as string, files)).opened);
     }

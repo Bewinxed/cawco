@@ -6,7 +6,6 @@
    * only somewhere work happens, and there is nothing to pin or to forget.
    */
   import type { Snippet } from "svelte";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import {

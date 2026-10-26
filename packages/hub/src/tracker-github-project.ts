@@ -339,7 +339,6 @@ export const githubProjectStatus = (
       let head: Omit<ProjectRead, "complete" | "items"> | null = null;
       let complete = false;
       for (let page = 1; page <= MAX_PAGES; page += 1) {
-        // biome-ignore lint/performance/noAwaitInLoops: each page follows the one before it
         const data: ItemsAnswer = await ask<ItemsAnswer>(
           octokit,
           "read the Status of its items",

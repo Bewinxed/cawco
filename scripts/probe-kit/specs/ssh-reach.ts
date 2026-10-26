@@ -1030,7 +1030,6 @@ async function refusalEnds(
   const seenRows: string[] = [];
   const until10 = Date.now() + REFUSED_QUIET_MS;
   while (Date.now() < until10) {
-    // biome-ignore lint/performance/noAwaitInLoops: a watch; each read must see the hub after the previous wait
     const rows = await waiting();
     if (rows.some((row) => row.machineId === BOX)) {
       seenRows.push(JSON.stringify(rows));

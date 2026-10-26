@@ -6354,7 +6354,6 @@ export const createServer = (
     const windows: SessionMessage[][] = [];
     let ask: WindowAsk = { end: "newest", limit: STORED_TAIL };
     for (;;) {
-      // biome-ignore lint/performance/noAwaitInLoops: each window names the one before it
       const answer = await readAgent(
         row.machineId,
         CONTROL_READ_TRANSCRIPT_WINDOW,
@@ -8599,7 +8598,6 @@ export const createServer = (
         failures.push(lenderAway(move.accountId, lender));
         continue;
       }
-      // biome-ignore lint/performance/noAwaitInLoops: one lender at a time; the first that lends is the one used
       const lent = await callAgent(
         lender,
         CONTROL_LEND_ACCOUNT,
@@ -10958,7 +10956,6 @@ export const createServer = (
         .machineLinesOf(instanceId)
         .some((line) => line.kind === "room" && line.at >= sentAt)
     ) {
-      // biome-ignore lint/performance/noAwaitInLoops: one wait at a time, on the same answer
       reply = await awaitReply(
         machineId,
         requestId,
@@ -11397,7 +11394,6 @@ export const createServer = (
   const readLaunchDirs = async (machineId: string): Promise<void> => {
     const rows = db.unreadLaunchDirs(machineId);
     for (let at = 0; at < rows.length; at += 8) {
-      // biome-ignore lint/performance/noAwaitInLoops: bounded batches keep the machine's other control requests serviceable.
       await Promise.all(
         rows.slice(at, at + 8).map(async (row) => {
           const answer = await readAgent(
@@ -11478,7 +11474,6 @@ export const createServer = (
     const silent: string[] = [];
     const later: string[] = [];
     for (const machineId of machineIds) {
-      // biome-ignore lint/performance/noAwaitInLoops: one machine at a time, each told and answered before the next
       const answer = await forgetOn(account, machineId);
       switch (answer.kind) {
         case "unanswered":
@@ -11794,7 +11789,6 @@ export const createServer = (
         throw unreachable(read);
     }
     for (const found of read.value.result as HomeCredential[]) {
-      // biome-ignore lint/performance/noAwaitInLoops: one move at a time per machine, as each may wait on its sessions
       const started = await startMove(machineId, found.store, found);
       if ("error" in started) {
         console.log(`[hub] ${started.error}`);
@@ -11954,7 +11948,6 @@ export const createServer = (
       .filter(
         (one) => one.accountId === account.id && one.machineId !== machineId
       )) {
-      // biome-ignore lint/performance/noAwaitInLoops: one machine at a time; an offline one forgets its empty store when it next connects (`unknownAccountsOf`)
       await forgetOn(account, signin.machineId, existing.id);
     }
     db.accounts.remove(account.id, "joined");
@@ -13471,7 +13464,6 @@ export const createServer = (
       // Read before the withdrawal, which clears what the record held.
       const images = picturesOf(row.owed ?? row.envelope);
       const attachments = attachmentsOf(row.owed ?? row.envelope);
-      // biome-ignore lint/performance/noAwaitInLoops: each withdrawal is the harness's atomic answer, taken one at a time so what each carried is folded in order
       const outcome = await withdrawPending(row, instance.machineId).catch(
         (error: unknown) => {
           console.warn(
@@ -15163,7 +15155,6 @@ export const createServer = (
       // One machine, every adapter at once: the asks are independent reads and
       // the machine answers them concurrently, so the wait is the slowest one
       // rather than their sum.
-      // biome-ignore lint/performance/noAwaitInLoops: machines are asked one at a time and the loop returns on the first hit — a session found on the second machine must not race an ask still in flight to the first.
       const answers = await Promise.all(
         kinds.map(async (harness) => {
           const answer = await readAgent(
@@ -17481,7 +17472,6 @@ export const createServer = (
         );
         return true;
       }
-      // biome-ignore lint/performance/noAwaitInLoops: one look a beat until the work in flight ends
       const now = await workInFlightOf(sourceId);
       const [source] = db.getInstancesByIds([sourceId]);
       if (!now && (!source || (await sessionIdle(source)))) {
@@ -17885,7 +17875,6 @@ export const createServer = (
       if (!registry.agent(row.prepared.source.machineId)) {
         throw awayError(row.prepared.source.machineId);
       }
-      // biome-ignore lint/performance/noAwaitInLoops: one look a beat until the filing send is read
       await lifetime.sleep(IDLE_LOOK_MS);
     }
   };
@@ -17931,7 +17920,6 @@ export const createServer = (
       if (cancelledContinuation(job.id)) {
         throw new Error(CONTINUATION_CANCELLED);
       }
-      // biome-ignore lint/performance/noAwaitInLoops: one idle receipt a beat until the session is between turns
       if (await sessionIdle(row)) {
         return row;
       }
@@ -18352,7 +18340,6 @@ export const createServer = (
   ): Promise<ContinuationRow | undefined> => {
     let row = db.continuationRow(id);
     while (row && !SETTLED.has(row.stage)) {
-      // biome-ignore lint/performance/noAwaitInLoops: waits for this job's next settle, then reads its record again
       await new Promise<void>((wake) => {
         const waiters = continuationWaiters.get(id) ?? new Set();
         waiters.add(wake);
@@ -20149,7 +20136,6 @@ export const createServer = (
     const runs: string[] = [];
     const failed: string[] = [];
     for (const harness of HARNESS_KINDS) {
-      // biome-ignore lint/performance/noAwaitInLoops: one install at a time on a machine, each told before the next
       const brought = await readyHarness(machineId, harness, tools, say);
       if ("runs" in brought) {
         runs.push(brought.runs);
@@ -20676,7 +20662,6 @@ export const createServer = (
     }
 
     for (const file of files) {
-      // biome-ignore lint/performance/noAwaitInLoops: each write is a control round-trip to the same machine over one socket; concurrent writes would race the daemon's own file handling.
       const answer = await callFs(machineId, agent, {
         op: "write",
         root: "claude-home",
@@ -20759,7 +20744,6 @@ export const createServer = (
         }
         continue;
       }
-      // biome-ignore lint/performance/noAwaitInLoops: one marketplace's plugins are resolved at a time, keeping each marketplace's fetch and its writes to `db.putPluginPayload` grouped together.
       const resolved = await resolveMarketplacePlugins(
         marketplace,
         source,
@@ -21155,7 +21139,6 @@ export const createServer = (
       if (lifetime.closed()) {
         return;
       }
-      // biome-ignore lint/performance/noAwaitInLoops: one source fetched at a time, as a refresh does it
       await fetchSkill(stored.name, stored.source);
     }
   };
@@ -21171,7 +21154,6 @@ export const createServer = (
   const nameMarketplacesByManifest = async (): Promise<void> => {
     let moved = false;
     for (const { name, source } of db.fleetConfig().marketplaces) {
-      // biome-ignore lint/performance/noAwaitInLoops: one marketplace fetched at a time, as a resolve does it
       const read = await readMarketplaceSource(source);
       if (lifetime.closed()) {
         return;
@@ -21265,7 +21247,6 @@ export const createServer = (
   /** {@link checkSources}' skills: one source at a time. */
   const checkSkillSources = async (): Promise<void> => {
     for (const row of db.listSkills()) {
-      // biome-ignore lint/performance/noAwaitInLoops: one row a turn, so the hub answers between them
       await sourceTurn();
       if (lifetime.closed()) {
         return;
@@ -21337,7 +21318,6 @@ export const createServer = (
     found: ResolvedPlugin[]
   ): Promise<void> => {
     for (const plugin of found) {
-      // biome-ignore lint/performance/noAwaitInLoops: one row a turn, so the hub answers between them
       await sourceTurn();
       if (lifetime.closed()) {
         return;
@@ -21354,7 +21334,6 @@ export const createServer = (
   /** {@link checkSources}' plugins: one marketplace, every plugin of it, at a time. */
   const checkPluginSources = async (): Promise<void> => {
     for (const [marketplace, ids] of pluginsByMarketplace()) {
-      // biome-ignore lint/performance/noAwaitInLoops: one row a turn, so the hub answers between them
       await sourceTurn();
       if (lifetime.closed()) {
         return;
@@ -23059,7 +23038,6 @@ export const createServer = (
     const windows: SessionMessage[][] = [newest.entries];
     let { records } = newest;
     for (let cursor = newest.older; cursor !== null;) {
-      // biome-ignore lint/performance/noAwaitInLoops: each window names the one before it
       const older = await readOlder(instanceId, cursor);
       if ("fault" in older) {
         return older;
@@ -23445,7 +23423,6 @@ export const createServer = (
       if (paused) {
         throw new WouldWait(paused);
       }
-      // biome-ignore lint/performance/noAwaitInLoops: a run cancelled by a pause runs again once it is over
       await pauseOver(machineId, how.onWait, how.stop);
       throwIfStopped(how, cmd);
       const result = await runOnce(
@@ -24445,7 +24422,6 @@ export const createServer = (
       if (project.template) {
         continue;
       }
-      // biome-ignore lint/performance/noAwaitInLoops: one project's folder at a time, once per boot
       const view = await tasks.stages(project.id).catch(() => undefined);
       if (!(view?.source === "file" && view.problems.length === 0)) {
         continue;
@@ -26162,7 +26138,6 @@ export const createServer = (
     const pages: TranscriptPage[] = [];
     let before: string | undefined;
     for (;;) {
-      // biome-ignore lint/performance/noAwaitInLoops: each page names the cursor of the next
       const page = await transcripts.page(id, ATTACHMENT_PAGE_LIMIT, before);
       if ("gone" in page || "fault" in page) {
         return page;
@@ -27386,7 +27361,6 @@ export const createServer = (
       ) {
         return false;
       }
-      // biome-ignore lint/performance/noAwaitInLoops: one look a second until it is up
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
   };
@@ -27424,7 +27398,6 @@ export const createServer = (
             taskId: task.taskId,
             type: task.type,
             description: task.description,
-            // biome-ignore lint/performance/noAwaitInLoops: one read at a time on the session's own process
             ...(up && now ? await cutTaskOutput(now, task.taskId) : {}),
           });
         }
@@ -30572,7 +30545,6 @@ export const createServer = (
               // the next render asks again.
               let first: string | undefined;
               for (let start: string | null = null; ;) {
-                // biome-ignore lint/performance/noAwaitInLoops: each window names the next
                 const window = await storedWindow(
                   { machineId, sessionKey, cwd: cwd ?? "", harness },
                   { start, limit: TITLE_WINDOW }
@@ -32709,7 +32681,6 @@ export const createServer = (
             if (hook.script === undefined) {
               continue;
             }
-            // biome-ignore lint/performance/noAwaitInLoops: each hook's script is read and kept before the one push below; a push is one click on one machine, rarely more than a hook or two
             const read = await readMachineHookScript(
               body.machineId,
               hook.id,
@@ -34718,7 +34689,6 @@ export const createServer = (
                 restore(ws, orphan.row, heldRows.has(orphan.row.id));
                 restoreBatch += 1;
                 if (restoreBatch % 8 === 0) {
-                  // biome-ignore lint/performance/noAwaitInLoops: bounded restore batches keep unrelated control requests serviceable.
                   await new Promise<void>((resolve) => setImmediate(resolve));
                 }
               }
@@ -34763,7 +34733,6 @@ export const createServer = (
                     );
                     restoreBatch += 1;
                     if (restoreBatch % 8 === 0) {
-                      // biome-ignore lint/performance/noAwaitInLoops: history inspection must not monopolize the hub event loop.
                       await new Promise<void>((resolve) =>
                         setImmediate(resolve)
                       );

@@ -60,7 +60,6 @@
  *
  *   bun scripts/probe-kit/run.ts canvas-cost [--legs trace,page,shared,frame,raf,decision,memory] [--engines chromium,webkit] [--embeds 33] [--idle 240] [--story <file>#<story>] [--scroll 1200] [--rounds 6] [--memory-runs uninspected,collected,collected-control] [--memory-page decision]
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one frame at a time, as the page gives them turns
 import { type ChildProcess, spawn } from "node:child_process";
 import {
   cpSync,

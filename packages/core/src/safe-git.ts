@@ -166,7 +166,6 @@ export const repositoryConfigProblem = async (
     return `${join(gitDir, "commondir")} names another git directory, whose config CawCo does not read, so it does not run git there`;
   }
   for (const file of ownConfigs(gitDir)) {
-    // biome-ignore lint/performance/noAwaitInLoops: two small files, the second only where it exists
     if (!(await Bun.file(file).exists())) {
       continue;
     }

@@ -43,6 +43,7 @@
     skillsHere,
     skillWords,
   } from "#lib/cawco/skill-chips.js";
+  import { track } from "#lib/cawco/track.js";
   import OutputBlock from "#lib/components/features/tool-cards/OutputBlock.svelte";
   import { PROSE } from "#lib/prose.js";
   import { cn } from "#lib/utils.js";
@@ -312,8 +313,7 @@
   // fade already running when it settles plays on: its spans are the same
   // elements.
   $effect(() => {
-    // biome-ignore lint/complexity/noVoid: a new chunk is what re-runs this.
-    void drawn;
+    track(drawn);
     const root = host;
     if (!(root && tokens)) {
       return;

@@ -57,7 +57,6 @@ interface Problem {
 const scriptFiles = async (patterns: string[]): Promise<string[]> => {
   const found: string[] = [];
   for (const pattern of patterns) {
-    // biome-ignore lint/performance/noAwaitInLoops: a few globs, each walked once
     for await (const path of new Glob(pattern).scan({ cwd: ROOT })) {
       if (!path.includes("node_modules/")) {
         found.push(path);
@@ -186,11 +185,9 @@ for (const path of code) {
   if (path === "scripts/tool-answer-check.ts") {
     continue;
   }
-  // biome-ignore lint/performance/noAwaitInLoops: one file at a time, read once
   problems.push(...codeChecks(path, await Bun.file(`${ROOT}${path}`).text()));
 }
 for (const path of shell) {
-  // biome-ignore lint/performance/noAwaitInLoops: one file at a time, read once
   problems.push(...shellChecks(path, await Bun.file(`${ROOT}${path}`).text()));
 }
 if (problems.length > 0) {

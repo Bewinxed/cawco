@@ -24,6 +24,7 @@
   import type { Attachment } from "svelte/attachments";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { dur, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { track } from "#lib/cawco/track.js";
   import MessageBody from "../MessageBody.svelte";
   import { useVoice } from "../turn/voice";
   import Who from "../turn/Who.svelte";
@@ -142,8 +143,7 @@
 
   $effect.pre(() => {
     const next = row;
-    // biome-ignore lint/complexity/noVoid: a change that waited for the row's first frame goes on.
-    void laidOut;
+    track(laidOut);
     untrack(() => {
       const current = faces.at(-1) as Face;
       const phase = phaseOf(next);

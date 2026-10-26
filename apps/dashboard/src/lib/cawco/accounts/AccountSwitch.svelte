@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
   import {
     type ChipSize,
     chipVariants,
@@ -60,8 +61,7 @@
 
   function pick(id: string) {
     open = false;
-    // biome-ignore lint/complexity/noVoid: fire-and-forget — the session's rows say the move and name the new account when it lands; a refusal stays on them (moveTo)
-    void moveTo(instance, id);
+    detach(moveTo(instance, id), "moveTo");
   }
 </script>
 

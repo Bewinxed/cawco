@@ -8,6 +8,7 @@
 </script>
 
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
   /**
    * The last six things a delegate did, one line each, read off its own live
    * transcript: the tray panel's answer to "what is it doing right now?".
@@ -315,8 +316,7 @@
       return;
     }
     playing = true;
-    // biome-ignore lint/complexity/noVoid: the queue plays on its own; nothing waits on it.
-    void lift(dur("--dur-morph"));
+    detach(lift(dur("--dur-morph")), "lift");
   }
 
   /** One row into the bottom slot, then the next one queued, if any. */

@@ -550,7 +550,6 @@ const stageCloneIn = async (
   const dir = join(home, ".cawco", "workspaces");
   const repo = await realpath(checkout);
   for (const id of await readdir(dir).catch(() => [] as string[])) {
-    // biome-ignore lint/performance/noAwaitInLoops: a handful of records, read until the one cut from the checkout
     const kept = await Bun.file(join(dir, id, "stage-clone.json"))
       .json()
       .catch(() => undefined);
@@ -589,7 +588,6 @@ const stageHostIn = async (
     if (!command.includes(HOST_FILE)) {
       continue;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: one process at a time, until the host
     const args = await processArgs(pid);
     const argv = args?.argv ?? [];
     if (
@@ -1111,7 +1109,6 @@ async function panelLegs(
 
   // 18 and 21 at 390, light and dark: the mode as one button, More before Close holding the rest.
   for (const theme of ["light", "dark"] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one phone page at a time
     const phone = await panelPage(kit, base, session, "phone", theme);
     await drawn(phone);
     const narrow = await headOf(phone);
@@ -1192,7 +1189,6 @@ async function centredLegs(
   session: string
 ): Promise<void> {
   for (const view of ["desk", "phone"] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one page at a time
     const page = await panelPage(kit, base, session, view, "light");
     await drawn(page);
     const frame = await (
@@ -1205,7 +1201,6 @@ async function centredLegs(
           let width = 0;
           while (width !== innerWidth) {
             width = innerWidth;
-            // biome-ignore lint/performance/noAwaitInLoops: one width after the last, until it holds
             await new Promise((done) => setTimeout(done, 300));
           }
           await Promise.all(world.getAnimations().map((one) => one.finished));

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
   /**
    * The rail's session card: resting the pointer on a session row (Working,
    * Finished, a project's sessions) opens the delegate tray's panel
@@ -51,8 +52,7 @@
       return;
     }
     if (!cawco.session(id)?.messages.length) {
-      // biome-ignore lint/complexity/noVoid: fire-and-forget; the card draws whatever has arrived.
-      void readTranscript(id);
+      detach(readTranscript(id), "readTranscript");
     }
   }
 

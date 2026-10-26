@@ -71,7 +71,6 @@ const foreignProcess = async (): Promise<number | undefined> => {
     if (!PID.test(name) || Number(name) <= 1) {
       continue;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: one scan, stopped at the first other user's process
     const owner = await stat(`/proc/${name}`).catch(() => undefined);
     if (owner && owner.uid !== me) {
       return Number(name);

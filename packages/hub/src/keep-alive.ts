@@ -210,7 +210,6 @@ export const tickKeepAlive = async (
     }
     // A process reading can await a machine. Re-read the stored schedule after
     // it answers: a real send, toggle or result may have moved it meanwhile.
-    // biome-ignore lint/performance/noAwaitInLoops: each due session needs its own fresh idle receipt before its send
     if (!(await ports.idle(row))) {
       continue;
     }

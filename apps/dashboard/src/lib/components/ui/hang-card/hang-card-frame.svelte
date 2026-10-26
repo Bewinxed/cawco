@@ -8,7 +8,6 @@
    * 1440, the phone's at 390, its trailing side square on the screen's edge.
    */
   import { glassPlacement } from "#lib/cawco/bar-glass.svelte.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
   import BarGlassFrame from "../bar-glass/bar-glass-frame.svelte";
   import HangCard from "./hang-card.svelte";

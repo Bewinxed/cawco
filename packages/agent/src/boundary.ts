@@ -1203,7 +1203,6 @@ const recordHostRestarts = async (
       continue;
     }
     known.add(one.at);
-    // biome-ignore lint/performance/noAwaitInLoops: each restart recorded in its order
     await recordDecision(id, {
       ...decided(held),
       decision: "host-restarted",
@@ -1291,7 +1290,6 @@ export const settleGonePlaces = async (): Promise<void> => {
       await readdir(workspacesDir()).catch(() => [] as string[])
     ).filter(isPlace);
     for (const id of ids) {
-      // biome-ignore lint/performance/noAwaitInLoops: one small record read per place, each settled on its own
       const held = await readHeld(id).catch(() => undefined);
       if (held) {
         await settleGonePlace({ id, path: held.path });
@@ -2040,7 +2038,6 @@ export const hookArmed = async (id: string): Promise<void> => {
     if (phase.kind !== "listing") {
       break;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: waits for the start-up reading to move, then reads it again
     await readingMoved.promise;
   }
   armStep({ kind: "arm-need", id });
@@ -2075,7 +2072,6 @@ export const rearmHooks = async (): Promise<void> => {
   const started = Date.now();
   armStep({ kind: "arm-start" });
   while (armState.arming.kind !== "listed") {
-    // biome-ignore lint/performance/noAwaitInLoops: waits for the first whole reading, however many it takes
     await readingMoved.promise;
   }
   // Read once, as listed: a session launched meanwhile arms its workspace
@@ -2126,7 +2122,6 @@ const readWorkspaces = async (): Promise<{
   const refs = new Map<string, WorkspaceRef>();
   for (const id of ids) {
     if (live.some((proc) => isBoundaryOf(proc.procId, id))) {
-      // biome-ignore lint/performance/noAwaitInLoops: one small record read per workspace
       const held = await readHeld(id).catch(() => undefined);
       if (held) {
         // Its folder watched whether or not it is armed now: a folder
@@ -2474,7 +2469,6 @@ const SPILL_KEEP = ".cawco-keep";
 const keepSpill = async (dir: string): Promise<void> => {
   const keep = join(dir, SPILL_KEEP);
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: the folder is made again only when the sweep took it
     await mkdir(dir, { recursive: true, mode: 0o700 });
     const kept = await symlink("/dev/null", keep).then(
       () => true,
@@ -4281,7 +4275,6 @@ const killReading = async (
 ): Promise<number[]> => {
   const killed = new Set<number>();
   for (let pass = 0; pass < KILL_PASSES; pass += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: each round reads the process table the round before left
     const fresh = (await read()).filter((pid) => !killed.has(pid));
     if (fresh.length === 0) {
       break;
@@ -4551,7 +4544,6 @@ export const workspacesWithCommands = async (): Promise<string[]> => {
         ...(await readRetiring(id)),
       ].flatMap((held) => (held ? [held.gen] : []));
       for (const gen of generations) {
-        // biome-ignore lint/performance/noAwaitInLoops: a workspace's generations are one or two, and the first with a command settles it
         const marks = await readdir(commandsOf(id, gen)).catch(
           () => [] as string[]
         );
@@ -4620,7 +4612,6 @@ const COMMAND_DRAIN_LOOK_MS = 100;
 const commandsEnded = async (id: string, gen: string): Promise<number[]> => {
   const deadline = Date.now() + COMMAND_DRAIN_MS;
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: reads again until the commands past the gate end, or the wait is given up
     const seen = await snapshot();
     const past = await commandsIn(seen, id, gen);
     const ours = executors(
@@ -5116,7 +5107,6 @@ const endWorkspaceWork = async (
   const ended = new Set<number>();
   const left = new Set<number>();
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: one round per set of the agent's commands it waits out
     const round = await endWork(
       async () => (await workspaceWork(instanceId, workspace)).now
     );
@@ -5131,7 +5121,6 @@ const endWorkspaceWork = async (
       return { ended: [...ended], left: [...left] };
     }
     while (agents.some((pid) => agentExecutors.get(workspace)?.has(pid))) {
-      // biome-ignore lint/performance/noAwaitInLoops: waits for the agent's commands running then to end
       await Bun.sleep(AGENT_LOOK_MS);
     }
   }
@@ -5194,7 +5183,6 @@ const endWork = async (
   let ending = first;
   const graceEnds = Date.now() + WORK_GRACE_MS;
   while (ending.length > 0 && Date.now() < graceEnds) {
-    // biome-ignore lint/performance/noAwaitInLoops: polls the process table until the session's work has ended or its grace is spent
     await Bun.sleep(50);
     ending = await stillRunning(ending);
   }
@@ -5205,7 +5193,6 @@ const endWork = async (
   let left = last;
   const killEnds = Date.now() + KILL_WAIT_MS;
   while (left.length > 0 && Date.now() < killEnds) {
-    // biome-ignore lint/performance/noAwaitInLoops: polls the process table until the kill has landed or its wait is spent
     await Bun.sleep(50);
     left = await stillRunning(left);
   }
@@ -5485,7 +5472,6 @@ const narrowedGenerations = async (
   );
   const older: { boundary: Retiring; why: readonly string[] }[] = [];
   for (const boundary of await readRetiring(ref.id)) {
-    // biome-ignore lint/performance/noAwaitInLoops: one small record read per older generation
     const granted = await grantedPolicy(ref.id, boundary.gen);
     const why = narrowedBy(compareGrant(granted, now));
     if (why.length > 0) {
@@ -5560,7 +5546,6 @@ const replaceNarrowed = async (
     ];
     const stopped: WorkProcess[] = [];
     for (const boundary of stopping) {
-      // biome-ignore lint/performance/noAwaitInLoops: one boundary at a time, each gone before the next
       stopped.push(...(await workIn(ref.id, boundary)));
       const place = await readPlace(ref.id, boundary.gen);
       await stopBoundary(ref.id, boundary);
@@ -5695,7 +5680,6 @@ const recheckNow = async (
     if (starting.has(id) || closing.has(id)) {
       continue;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: one workspace at a time, as each start is
     const held = await readHeld(id).catch(() => undefined);
     if (!held) {
       continue;
@@ -5749,7 +5733,6 @@ const inUseNow = async (): Promise<string[]> => {
   let seen: Seen[] | undefined;
   const used: string[] = [];
   for (const id of ids) {
-    // biome-ignore lint/performance/noAwaitInLoops: one small record read per running boundary
     const held = await readHeld(id).catch(() => undefined);
     if (!held) {
       continue;
@@ -5786,7 +5769,6 @@ export const rearmMoved = async (why: string): Promise<void> => {
     if (stale.has(id)) {
       continue;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: one small record read and one form per boundary in use
     const held = await readHeld(id).catch(() => undefined);
     if (!held?.parts) {
       continue;
@@ -5922,7 +5904,6 @@ const closeIdle = async (seen: Seen[], id: string): Promise<boolean> => {
   const now = process.platform === "linux" ? await sandboxes(id) : [];
   let left = false;
   for (const old of await readRetiring(id)) {
-    // biome-ignore lint/performance/noAwaitInLoops: one older boundary at a time
     const alive = Boolean(await running(id, old));
     let closed = alive
       ? "has nothing left running in it and is closed"
@@ -6029,7 +6010,6 @@ const sandboxesGone = async (inners: readonly number[]): Promise<boolean> => {
     if (Date.now() >= deadline) {
       return false;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: polls until the sandboxes are gone, or the deadline passes
     await Bun.sleep(20);
   }
 };
@@ -6058,7 +6038,6 @@ const restartStubbed = async (): Promise<void> => {
   for (const entry of [...stubbed.values()]) {
     const { ref } = entry;
     try {
-      // biome-ignore lint/performance/noAwaitInLoops: one workspace at a time
       const held = await readHeld(ref.id);
       // On every keeper: the current one, and a retiring one still running one.
       const alive = (await keepers.held())
@@ -6166,7 +6145,6 @@ const handOverStale = async (): Promise<void> => {
       continue;
     }
     try {
-      // biome-ignore lint/performance/noAwaitInLoops: one boundary handed over at a time
       const held = await readHeld(ref.id);
       if (!(held && (await running(ref.id, held)))) {
         forgetStale(ref.id);
@@ -6216,7 +6194,6 @@ const closeRetiring = async (): Promise<void> => {
       continue;
     }
     try {
-      // biome-ignore lint/performance/noAwaitInLoops: one workspace's older boundaries at a time
       if (!(await closeIdle(seen, id))) {
         forgetRetiring(id);
       }
@@ -6318,7 +6295,6 @@ const sayWhyLeft = async (ids: readonly string[]): Promise<void> => {
   const seen = await snapshot();
   for (const id of ids) {
     for (const old of await readRetiring(id)) {
-      // biome-ignore lint/performance/noAwaitInLoops: one older boundary at a time, as the look reads them
       const [commands, work] = await Promise.all([
         commandsIn(seen, id, old.gen),
         workProcesses(seen, id, old),
@@ -6413,7 +6389,6 @@ export const leaveRetiringKeepers = async (): Promise<void> => {
     if (starting.has(id) || closing.has(id)) {
       continue;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: one small read per workspace, only while a keeper retires
     const held = await readHeld(id).catch(() => undefined);
     if (!held) {
       continue;
@@ -6726,7 +6701,6 @@ const closeNow = async (id: string, why: string): Promise<void> => {
     forgetStubbed(id);
     const boundaries = [held, ...(await readRetiring(id))];
     for (const boundary of boundaries) {
-      // biome-ignore lint/performance/noAwaitInLoops: one boundary at a time, as an archive closes them
       await stopBoundary(id, boundary);
       await cleanGeneration(id, boundary);
       await rm(retiringFileOf(id, boundary), { force: true });
@@ -6781,7 +6755,6 @@ const sweepQuiet = async (): Promise<void> => {
   }
   const now = Date.now();
   for (const id of ids) {
-    // biome-ignore lint/performance/noAwaitInLoops: one small record read per workspace whose boundary runs
     const held = await readHeld(id).catch(() => undefined);
     if (!held || liveWhy(id, held.path, facts)) {
       liveAt.set(id, now);
@@ -6991,11 +6964,7 @@ const repairJudge = async (
     if (stuck) {
       await stuck.client.signal(procId, "SIGKILL");
       const deadline = Date.now() + STOP_TIMEOUT_MS;
-      while (
-        // biome-ignore lint/performance/noAwaitInLoops: polls one judge until its keeper says it is gone, or the deadline passes
-        (await holding(procId)) &&
-        Date.now() < deadline
-      ) {
+      while ((await holding(procId)) && Date.now() < deadline) {
         await Bun.sleep(20);
       }
     }
@@ -7671,7 +7640,6 @@ const ownInScratch = async (id: string, path: string): Promise<boolean> => {
   let at = scratchOf(id);
   for (const part of relative(at, path).split("/")) {
     at = join(at, part);
-    // biome-ignore lint/performance/noAwaitInLoops: each entry is looked at before the one inside it
     const found = await lstat(at).catch(() => undefined);
     if (!found) {
       return true;
@@ -7954,7 +7922,6 @@ export const ownInodes = async (path: string): Promise<number> => {
     .filter(({ inode }) => !cached.has(inode))
     .map(({ file }) => file);
   for (let at = 0; at < files.length; at += OWN_INODE_BATCH) {
-    // biome-ignore lint/performance/noAwaitInLoops: a bounded batch of copies at a time
     await Promise.all(
       files.slice(at, at + OWN_INODE_BATCH).map(async (file) => {
         const copy = `${file}.cawco-own-inode`;
@@ -8093,7 +8060,6 @@ export const workspaceNetworks = async (
   const held = await readHeld(id).catch(() => undefined);
   const boundaries = [...(held ? [held] : []), ...(await readRetiring(id))];
   for (const boundary of boundaries) {
-    // biome-ignore lint/performance/noAwaitInLoops: one boundary at a time, current first; the first that runs answers
     if (await running(id, boundary)) {
       return ["host"];
     }
@@ -8122,7 +8088,6 @@ const endMembers = async (
 const goneWithin = async (procId: string, ms: number): Promise<boolean> => {
   const deadline = Date.now() + ms;
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: polls one process until it is gone, or the deadline passes
     if (!(await holding(procId))) {
       return true;
     }
@@ -8285,7 +8250,6 @@ const launch = async (
   await keepSpills(ref.id);
   const plan = await planOf(ref, gen);
   for (const [path, content, mode] of plan.files) {
-    // biome-ignore lint/performance/noAwaitInLoops: a few small files
     await writeWhole(path, content, mode ?? 0o644);
   }
   const fifo = fifoOf(ref.id, gen);
@@ -8526,7 +8490,6 @@ const endUsers = async (
   }
   const deadline = Date.now() + STOP_TIMEOUT_MS;
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: polls until the keepers and the process table say they are gone, or the deadline passes
     const left = await users();
     if (left.words.length === 0 || Date.now() >= deadline) {
       return { ended: found.words, left: left.words };
@@ -8550,7 +8513,6 @@ const stopNow = async (ref: WorkspaceRef): Promise<number[]> => {
   const boundaries = [...(held ? [held] : []), ...(await readRetiring(ref.id))];
   const inners: number[] = [];
   for (const boundary of boundaries) {
-    // biome-ignore lint/performance/noAwaitInLoops: one boundary at a time
     const place = await readPlace(ref.id, boundary.gen);
     if (place) {
       inners.push(place.inner);

@@ -702,7 +702,6 @@ const walk = async (
       entries.push({ path, kind: "folder" });
       if (
         recursive &&
-        // biome-ignore lint/performance/noAwaitInLoops: depth first in name order is what makes the cap the first paths
         !(await walk(join(dir, child.name), path, recursive, entries))
       ) {
         return false;
@@ -1145,7 +1144,6 @@ const putBackAll = async (
 ): Promise<void> => {
   for (const [abs, previous] of before) {
     if (previous) {
-      // biome-ignore lint/performance/noAwaitInLoops: putting files back, one at a time
       await placeWhole(root, abs, previous).catch(noop);
     } else {
       await unlink(abs).catch(noop);
@@ -1234,18 +1232,15 @@ export const changeFolderFiles = async (
     const { exclusive } = options;
     try {
       for (const { rel, bytes } of writes) {
-        // biome-ignore lint/performance/noAwaitInLoops: one file at a time, each checked before it is written
         await putFile(root, rel, bytes, before, exclusive);
       }
       for (const rel of deletes) {
-        // biome-ignore lint/performance/noAwaitInLoops: one file at a time, each checked before it goes
         await removeFile(root, rel, before);
       }
       if (exclusive) {
         // A claim that landed on an earlier file while a later one went in.
         for (const { rel } of writes) {
           const abs = join(root, rel);
-          // biome-ignore lint/performance/noAwaitInLoops: one folder read per file, in order
           await claimed(abs, rel, exclusive, basename(abs));
         }
       }
@@ -1257,7 +1252,6 @@ export const changeFolderFiles = async (
         options.author ?? YOU
       );
       for (const rel of deletes) {
-        // biome-ignore lint/performance/noAwaitInLoops: each emptied folder, up to the root
         await pruneEmpty(root, dirname(join(root, rel)));
       }
       return { ...done, paths: rels };

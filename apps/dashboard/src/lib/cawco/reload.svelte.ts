@@ -347,7 +347,6 @@ export async function reloadWhenIdle(
     for (const listener of listeners) {
       listener(hold);
     }
-    // biome-ignore lint/performance/noAwaitInLoops: one look at a time until the tab is idle
     await nextLook();
   }
   if (leaving) {

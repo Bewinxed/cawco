@@ -92,7 +92,6 @@ let reads = 0;
 let unanswered = 0;
 const until = Date.now() + ms;
 while (Date.now() < until) {
-  // biome-ignore lint/performance/noAwaitInLoops: one round at a time, as each tick reads
   const round = await Promise.all([
     accounts.homeStoresStamp(),
     accounts.opencodeOwnChanges(),

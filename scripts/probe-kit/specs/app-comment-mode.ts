@@ -532,7 +532,6 @@ const run = async (kit: Kit) => {
   const base = await fleet.dashboard();
   const at: At = { base, fleet, id, kit, session };
   for (const engine of ["chromium", "webkit"] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one engine after another, on the one artifact
     const preview = await dashboardLeg(at, engine);
     kit.note(`${engine}: the preview's address ${preview}`);
     await appLeg(at, engine, preview);

@@ -544,7 +544,6 @@ export const createBrowsers = (deps: BrowsersDeps) => {
         }
         try {
           if (row.takeover) {
-            // biome-ignore lint/performance/noAwaitInLoops: one machine at a time, each answered before the next.
             await browsers.handback(key, row.machineId);
           }
           await browsers.remove(key, row.machineId);

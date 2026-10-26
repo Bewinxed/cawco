@@ -878,7 +878,6 @@ export const pollRepo = async (input: {
       if (taken.past || read === MAX_PAGES) {
         break;
       }
-      // biome-ignore lint/performance/noAwaitInLoops: each page names the next, so pages are read in turn
       const got = await pageOf(next, path);
       if (got.kind === "unanswered") {
         return got;
@@ -907,7 +906,6 @@ export const pollRepo = async (input: {
     let newest = edge;
     let after: string | null = null;
     for (let read = 1; read <= MAX_PAGES; read += 1) {
-      // biome-ignore lint/performance/noAwaitInLoops: each page names the next, so pages are read in turn
       const asked = await readWithin(REQUEST_MS, async (signal) => {
         try {
           return (await octokit.graphql(DISCUSSIONS_QUERY, {
@@ -1001,7 +999,6 @@ export const pollRepo = async (input: {
 
   for (const resource of GITHUB_RESOURCES) {
     try {
-      // biome-ignore lint/performance/noAwaitInLoops: one resource at a time, inside one rate limit
       const polled = await pollResource(resource);
       switch (polled.kind) {
         case "answered":

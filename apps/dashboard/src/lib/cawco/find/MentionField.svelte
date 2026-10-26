@@ -39,6 +39,7 @@
    */
   import { type Component, mount, unmount, untrack } from "svelte";
   import type { ClassValue, HTMLAttributes } from "svelte/elements";
+  import { track } from "#lib/cawco/track.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { IconPause as Idle, IconServerAlt as Machine } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
@@ -342,8 +343,7 @@
   // The session's skills arrive after its draft (its / menu is asked for
   // once it opens): a skill already in the draft becomes its chip then.
   $effect(() => {
-    // biome-ignore lint/complexity/noVoid: a new list of skills is what re-runs this.
-    void skills;
+    track(skills);
     untrack(() => {
       if (editor && written && namesSkill("end")) {
         redraw();

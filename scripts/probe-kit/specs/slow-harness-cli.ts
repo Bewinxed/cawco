@@ -99,7 +99,6 @@ const poll = async <T>(
 ): Promise<T | undefined> => {
   const end = Date.now() + ms;
   while (Date.now() < end) {
-    // biome-ignore lint/performance/noAwaitInLoops: each look follows the fleet's last state
     const value = await Promise.resolve()
       .then(read)
       .catch(() => undefined);

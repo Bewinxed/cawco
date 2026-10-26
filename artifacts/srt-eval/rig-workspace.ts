@@ -81,7 +81,6 @@ const heldRules = async (): Promise<UpstreamRules> => {
     if (!rule) {
       continue;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: one small record per workspace
     const project = await readRecord<unknown>(workspaceProjectFile(id)).catch(
       () => undefined
     );

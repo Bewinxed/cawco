@@ -524,7 +524,6 @@ export const createDecisions = (deps: DecisionsDeps) => {
     }
     for (const name of await deps.folderNames(projectId, "decisions")) {
       if (NAME.test(name) && !byName.has(name)) {
-        // biome-ignore lint/performance/noAwaitInLoops: a project holds a handful of pages; read one at a time
         const kept = await keptIn(deps.folderText, projectId, name);
         if (kept !== undefined) {
           byName.set(name, null);
@@ -733,7 +732,6 @@ export const createDecisions = (deps: DecisionsDeps) => {
       if (!NAME.test(name)) {
         continue;
       }
-      // biome-ignore lint/performance/noAwaitInLoops: a project holds a handful of pages; read one at a time
       const record = await readRecord(projectId, name);
       if (!record) {
         continue;
@@ -774,7 +772,6 @@ export const createDecisions = (deps: DecisionsDeps) => {
       const read: { cards: DecisionCard[]; facts: DecisionPageRead }[] = [];
       for (const { name, artifact } of names) {
         try {
-          // biome-ignore lint/performance/noAwaitInLoops: one page's files at a time keeps the folder's reads small
           const one = await readOne(projectId, name, artifact, tasks);
           if (decisionPage(one.read, one.page)) {
             read.push({ facts: one.read, cards: one.page.cards });
@@ -829,7 +826,6 @@ export const createDecisions = (deps: DecisionsDeps) => {
         if (artifact && writerOf(artifact)?.instanceId !== instanceId) {
           continue;
         }
-        // biome-ignore lint/performance/noAwaitInLoops: one page's files at a time keeps the folder's reads small
         const { read, page } = await readOne(projectId, name, artifact, tasks);
         if (
           read.writer?.instanceId === instanceId &&
@@ -1007,7 +1003,6 @@ export const createDecisions = (deps: DecisionsDeps) => {
       ];
       for (const each of await pageNames(projectId)) {
         if (each.name !== name) {
-          // biome-ignore lint/performance/noAwaitInLoops: one page's files at a time keeps the folder's reads small
           const page = await pageOf(projectId, each.name);
           pages.push({ name: each.name, cards: page.cards });
         }

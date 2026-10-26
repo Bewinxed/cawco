@@ -19,9 +19,6 @@ import { hubFailure } from "#lib/cawco/hub-read.js";
  */
 
 export type { Rule, RuleDraft, RuleRow } from "@cawco/core";
-// biome-ignore lint/performance/noBarrelFile: re-exports the shared rule types/constant that this dashboard module and the hub engine must agree on, not a module-graph barrel
-export { RULE_TEMPLATES } from "@cawco/core";
-
 /** What `GET /api/rules` answers with. */
 export interface RulesPayload {
   rules: RuleRow[];

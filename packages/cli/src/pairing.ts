@@ -82,7 +82,6 @@ const askHub = async (path: string, pid: number | undefined) => {
   const end = Date.now() + ANSWER_WITHIN_MS;
   try {
     for (;;) {
-      // biome-ignore lint/performance/noAwaitInLoops: each look follows the last
       const said = await readFile(answer, "utf8").catch(() => undefined);
       if (said !== undefined) {
         await rm(answer, { force: true });
@@ -118,7 +117,6 @@ export const pairingOff = async (): Promise<number> => {
   }
   for (;;) {
     try {
-      // biome-ignore lint/performance/noAwaitInLoops: a hub that ended while asked is held off before the write
       await lockDatabase(path);
     } catch (error) {
       if (!(error instanceof DatabaseHeld)) {

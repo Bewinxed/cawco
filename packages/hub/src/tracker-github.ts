@@ -386,7 +386,6 @@ export const githubAdapter = (
     const raws = [...first.raws] as Raw[];
     let last = first.raws.length;
     for (let page = 2; last === PER_PAGE && page <= MAX_PAGES; page += 1) {
-      // biome-ignore lint/performance/noAwaitInLoops: each page follows the one before it
       const next = await readPage(what, route, since, page, null);
       const more = next.kind === "page" ? next.raws : [];
       raws.push(...(more as Raw[]));
@@ -561,7 +560,6 @@ export const githubTargets = async (
     last === PER_PAGE && number <= TARGET_PAGES;
     number += 1
   ) {
-    // biome-ignore lint/performance/noAwaitInLoops: each page follows the one before it
     const batch = await page(number);
     repos.push(...batch);
     last = batch.length;

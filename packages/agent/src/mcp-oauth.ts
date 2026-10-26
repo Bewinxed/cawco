@@ -71,7 +71,6 @@ function throughDrops(
       for (;;) {
         let next: Awaited<ReturnType<typeof reader.read>>;
         try {
-          // biome-ignore lint/performance/noAwaitInLoops: one read at a time, past the bytes already passed on.
           next = await reader.read();
         } catch (error) {
           if (stopped.aborted) {

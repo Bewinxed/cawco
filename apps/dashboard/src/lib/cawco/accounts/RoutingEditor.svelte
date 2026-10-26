@@ -94,7 +94,6 @@
       for (const [at, id] of order.entries()) {
         const account = accounts.find((one) => one.id === id);
         if (account && account.order !== at) {
-          // biome-ignore lint/performance/noAwaitInLoops: one PATCH per account, in order, so a refusal stops the rest
           await patchAccount(id, { order: at });
         }
       }

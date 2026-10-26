@@ -20,6 +20,7 @@
  * paint.
  */
 
+import { detach } from "@cawco/core/detach";
 import { loadDraft, saveDraft } from "../draft-store";
 import { keepsDrafts } from "../reload.svelte";
 import { ComposerDraft } from "../transcript/composer-draft.svelte";
@@ -102,21 +103,22 @@ export function commentDrafts(artifact: () => string | null | undefined) {
       }
       drafts.get(slot)?.settle();
       unwritten.delete(slot);
-      // biome-ignore lint/complexity/noVoid: fire-and-forget — an empty draft deletes its record
-      void saveDraft(storeKey(slot), {
-        text: "",
-        images: [],
-        texts: [],
-        files: [],
-        canvas: null,
-      });
+      detach(
+        saveDraft(storeKey(slot), {
+          text: "",
+          images: [],
+          texts: [],
+          files: [],
+          canvas: null,
+        }),
+        "saveDraft"
+      );
     },
     /** The pane goes: what waits is written, and the keeping ends. */
     release: () => {
       window.removeEventListener("pagehide", write);
       unkeep();
-      // biome-ignore lint/complexity/noVoid: fire-and-forget — what waits lands on its own
-      void write();
+      detach(write(), "write");
     },
   };
 }

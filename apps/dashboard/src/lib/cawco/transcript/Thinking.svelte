@@ -7,6 +7,7 @@
     lifting,
     motionOk,
   } from "#lib/cawco/motion/curves.svelte.js";
+  import { track } from "#lib/cawco/track.js";
   import { ThinkingIndicator } from "#lib/components/ui/thinking-indicator/index.js";
   import {
     ThinkingStep,
@@ -111,13 +112,11 @@
   let cell = $state<HTMLElement>();
   let cellWas = 0;
   $effect.pre(() => {
-    // biome-ignore lint/complexity/noVoid: the swap this reads the old width for
-    void liveLabel;
+    track(liveLabel);
     cellWas = untrack(() => cell?.getBoundingClientRect().width ?? 0);
   });
   $effect(() => {
-    // biome-ignore lint/complexity/noVoid: the swap this tweens the width of
-    void liveLabel;
+    track(liveLabel);
     untrack(() => {
       if (!(cell && cellWas && motionOk.current)) {
         return;

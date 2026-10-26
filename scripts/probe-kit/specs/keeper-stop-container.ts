@@ -387,7 +387,6 @@ const spec: Spec = {
       return;
     }
     for (const leg of LEGS) {
-      // biome-ignore lint/performance/noAwaitInLoops: one keeper at a time, each leg its own unit and container
       await runLeg(kit, leg);
     }
   },

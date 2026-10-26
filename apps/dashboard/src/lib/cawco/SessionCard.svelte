@@ -1,4 +1,5 @@
 <script lang="ts" module>
+  import { detach } from "@cawco/core/detach";
   import { cawco, readTranscript } from "./client.svelte";
   import { threadIdOf, threadTabId } from "./thread-tabs";
 
@@ -13,8 +14,10 @@
   export function readThreadCard(threadId: string): void {
     const viewId = threadTabId(threadId);
     if (cawco.threadOf(viewId) && !cawco.session(viewId)?.initialized) {
-      // biome-ignore lint/complexity/noVoid: fire-and-forget; the card draws whatever has arrived.
-      void readTranscript(viewId).catch(() => undefined);
+      detach(
+        readTranscript(viewId).catch(() => undefined),
+        "readTranscript"
+      );
     }
   }
 </script>

@@ -567,7 +567,6 @@ const reach = async (
   }
   let failed = "ENOTFOUND";
   for (const address of addresses) {
-    // biome-ignore lint/performance/noAwaitInLoops: one address after another, as ssh tries them
     const heard = await knock(address, port);
     if (heard.kind === "greeted") {
       return;
@@ -634,7 +633,6 @@ const SCAN_TYPES: [string, string][] = [
 const knownKeys = async (to: SshDestination): Promise<Set<string> | null> => {
   const known = new Set<string>();
   for (const file of to.knownHosts) {
-    // biome-ignore lint/performance/noAwaitInLoops: a few files, each a short local read
     const said = await output(["ssh-keygen", "-F", to.keyName, "-f", file]);
     const keys = said === undefined ? new Set<string>() : knownKeysOf(said);
     if (keys === null) {

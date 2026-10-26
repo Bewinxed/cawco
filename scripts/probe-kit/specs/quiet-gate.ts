@@ -93,7 +93,6 @@ const run = async (kit: Kit): Promise<void> => {
   }
   const settled = Date.now();
   while (machineQuiet().cpu >= QUIET_LIMIT && Date.now() - settled < 180_000) {
-    // biome-ignore lint/performance/noAwaitInLoops: one reading every 5 s until the machine settles
     await Bun.sleep(5000);
   }
   const after = await gate("after the spinners", idleLeg);

@@ -324,7 +324,6 @@ const legChecks = async (kit: Kit, fleet: Fleet, leg: Leg) => {
       .focus()
       .catch(() => undefined);
     for (const step of ["j", "k", "j", "k"]) {
-      // biome-ignore lint/performance/noAwaitInLoops: one key, then the next, each read
       await screen.keyboard.press(step);
       await settle(screen, 200);
       walked.push((await railNow(screen)).focused);
@@ -337,7 +336,6 @@ const legChecks = async (kit: Kit, fleet: Fleet, leg: Leg) => {
       JSON.stringify({ walked, shown })
     );
     for (const n of [...shown]) {
-      // biome-ignore lint/performance/noAwaitInLoops: one comment resolved at a time
       await toggleResolve(screen, n, touch);
     }
     const emptied = await until(
@@ -383,7 +381,6 @@ const legChecks = async (kit: Kit, fleet: Fleet, leg: Leg) => {
 const run = async (kit: Kit) => {
   const fleet = await setUp(kit);
   for (const leg of LEGS) {
-    // biome-ignore lint/performance/noAwaitInLoops: one leg, then the next, on the one fleet
     await legChecks(kit, fleet, leg);
   }
 };

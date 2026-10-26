@@ -418,7 +418,6 @@ const run = async (kit: Kit) => {
   const at = { base, fleet, id, kit, session };
   const hub = await pinned(at);
   for (const leg of LEGS) {
-    // biome-ignore lint/performance/noAwaitInLoops: one leg after the other
     await counts(at, leg, hub);
     await heldBack(at, leg);
     await refused(at, leg);
@@ -435,7 +434,6 @@ const run = async (kit: Kit) => {
   );
   await nothing({ ...at, id: none.id });
   for (const engine of ["chromium", "webkit"] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each its own report
     await fronted(at, engine);
   }
   await rejoined(at);

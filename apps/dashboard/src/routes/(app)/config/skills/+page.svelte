@@ -10,6 +10,7 @@
     machineLabel,
     skillsWords as words,
   } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import {
     deleteMarketplace,
@@ -113,8 +114,7 @@
   const installed = (id: string): boolean =>
     plugins.some((row) => row.id === id);
   const resolved = () => {
-    // biome-ignore lint/complexity/noVoid: the slot reports its own outcome
-    void store.fleet.load();
+    detach(store.fleet.load(), "load");
   };
 
   /** A row's version (else its short hash) and size, for its meta line. */
@@ -343,8 +343,7 @@
       for (const fault of hubBroken) {
         const next =
           fault.scope === "skills"
-            ? // biome-ignore lint/performance/noAwaitInLoops: one at a time, so the count is right
-              await waits.run("all", () => refreshSkill(fault.key))
+            ? await waits.run("all", () => refreshSkill(fault.key))
             : await refreshPlugin(fault.key);
         if (next.error) {
           still += 1;
@@ -394,8 +393,7 @@
       return;
     }
     historyOf = row.name;
-    // biome-ignore lint/complexity/noVoid: the list reports its own failure in place
-    void loadVersions(row.name);
+    detach(loadVersions(row.name), "loadVersions");
   }
 
   async function restoreSkill(name: string, version: ListedVersion) {

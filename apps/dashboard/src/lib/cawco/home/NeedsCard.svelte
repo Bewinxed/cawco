@@ -77,6 +77,7 @@
     type TailnetHttpsTodo,
     tailnetWords,
   } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import {
     UPSTREAM_POSTS,
     UPSTREAM_WORDS,
@@ -434,8 +435,10 @@
   function chosen(): void {
     onchoose();
     if (item.kind === "artifact") {
-      // biome-ignore lint/complexity/noVoid: a refusal is kept where its row says it (artifactOpenKey)
-      void openArtifactIn(item.instanceId, item.artifactId, item.stop);
+      detach(
+        openArtifactIn(item.instanceId, item.artifactId, item.stop),
+        "openArtifactIn"
+      );
     }
   }
 

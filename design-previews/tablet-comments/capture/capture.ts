@@ -98,7 +98,6 @@ const browser = await chromium.launch({
 try {
   const deadline = Date.now() + 90_000;
   while (
-    // biome-ignore lint/performance/noAwaitInLoops: polls the dev server until it answers
     !(await fetch(`${base}/@vite/client`)
       .then((r) => r.ok)
       .catch(() => false))
@@ -306,7 +305,6 @@ try {
   for (const url of read.fonts) {
     const absolute = new URL(url, base).href;
     const name = new URL(absolute).pathname.split("/").at(-1) ?? "face.woff2";
-    // biome-ignore lint/performance/noAwaitInLoops: a face or two, each written as it comes
     const response = await fetch(absolute);
     if (!response.ok) {
       throw new Error(`${absolute}: ${response.status}`);
@@ -334,7 +332,6 @@ try {
     "house.css",
     "fonts",
   ]) {
-    // biome-ignore lint/performance/noAwaitInLoops: a few files, copied in order
     await cp(join(SOURCE, file), join(OUT, "page", file), { recursive: true });
   }
   await writeFile(

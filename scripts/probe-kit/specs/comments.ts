@@ -987,7 +987,6 @@ const runOn = async (kit: Kit, on: On) => {
     // Last: it loads the desk again, which gives the split its kept width.
     () => keyOpenChecks(on),
   ]) {
-    // biome-ignore lint/performance/noAwaitInLoops: the checks run in order, one after another
     await shutList(on);
     await checks();
   }
@@ -1355,7 +1354,6 @@ const inkCommentChecks = async (on: On, frame: Frame) => {
     ["j", "#second"],
     ["k", "#para"],
   ] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one key at a time, each read where it lands
     await on.page.keyboard.press(key);
     await settle(on.page, 700);
     const current = await on.page
@@ -2910,7 +2908,6 @@ const embedChecks = async (on: On) => {
     const STEPS = 14;
     for (let i = 0; i <= STEPS; i += 1) {
       const t = i / STEPS;
-      // biome-ignore lint/performance/noAwaitInLoops: one pointer step at a time, the target read after each
       await on.page.mouse.move(
         start.x + (end.x - start.x) * t,
         start.y + (end.y - start.y) * t
@@ -3172,7 +3169,6 @@ const scaledFrameChecks = async (on: On) => {
       ["Desk half", 0.5],
       ["Desk whole", 1],
     ] as const) {
-      // biome-ignore lint/performance/noAwaitInLoops: one desk hovered after the other
       const shown = await transcriptIn(title);
       if (!shown) {
         on.kit.check(`h: ${title}'s transcript has a box`, false, "none");
@@ -4007,7 +4003,6 @@ const roomChecks = async (on: On) => {
   }
   const replies = 20;
   for (let n = 1; n <= replies; n += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: the replies land in order, each a thread entry
     await on.fleet.api(
       `/api/instances/${on.session}/artifacts/comments/${pin.id}/reply`,
       {
@@ -4543,7 +4538,6 @@ const sizingChecks = async (on: On) => {
   for (const engine of ["chromium", "webkit"] as const) {
     for (const want of SIZING_VIEWS) {
       const tag = `sizing (${engine}, ${want.name})`;
-      // biome-ignore lint/performance/noAwaitInLoops: one window after another
       const screen = await on.kit.page(want.view, { engine });
       if (want.width !== VIEWS[want.view].width) {
         await screen.setViewportSize({ width: want.width, height: 1080 });
@@ -4847,7 +4841,6 @@ const switchChecks = async (
   for (const engine of ["chromium", "webkit"] as const) {
     for (const view of ["desk", "phone"] as const) {
       const tag = `switch (${engine}, ${view})`;
-      // biome-ignore lint/performance/noAwaitInLoops: one window after another
       const screen = await on.kit.page(view, { engine });
       try {
         await open(screen, `${origin}/artifact/${made.id}`, PANE);
@@ -4990,7 +4983,6 @@ const edgeChecks = async (on: On) => {
     .click();
   await pageInComment(frame, true);
   for (const corner of CORNERS) {
-    // biome-ignore lint/performance/noAwaitInLoops: one comment after another
     await frame.evaluate(
       (sel) =>
         document.querySelector(sel)?.scrollIntoView({ block: "nearest" }),
@@ -5016,7 +5008,6 @@ const edgeChecks = async (on: On) => {
   const { origin } = new URL(on.page.url());
   for (const engine of ["chromium", "webkit"] as const) {
     for (const view of ["phone", "narrowDesk", "desk"] as const) {
-      // biome-ignore lint/performance/noAwaitInLoops: one window after another
       const screen = await on.kit.page(view, { engine });
       try {
         await edgesOn(on, screen, `${origin}/artifact/${id}`, id, numbers, {
@@ -5049,7 +5040,6 @@ const edgesOn = async (
   await frame.waitForSelector("#br");
   await settle(screen, 600);
   for (const n of numbers) {
-    // biome-ignore lint/performance/noAwaitInLoops: one thread at a time
     const still = await openFromRow(screen, n);
     const card = screen.locator(`[data-slot="pin-card"][data-pin-card="${n}"]`);
     const read = await card
@@ -5069,7 +5059,6 @@ const edgesOn = async (
     let pill = await pillDrawn(frame, n);
     let stood = 0;
     for (let tries = 0; tries < 30 && stood < 3; tries += 1) {
-      // biome-ignore lint/performance/noAwaitInLoops: a read each tenth of a second until the pill stands clear
       await screen.waitForTimeout(100);
       const now = await pillDrawn(frame, n);
       const clear = !!(now && read && apart(now, read.rect));
@@ -5415,7 +5404,6 @@ const cornerChecks = async (on: On) => {
     .click();
   await pageInComment(frame, true);
   for (const selector of ["#field", "#pill", "#block"]) {
-    // biome-ignore lint/performance/noAwaitInLoops: one element hovered after the other
     const b = await screenBox(on, frame, selector);
     await on.page.mouse.move(b.x + b.w / 2, b.y + b.h / 2);
     await settle(on.page, 150);
@@ -6089,7 +6077,6 @@ const overlayThemeChecks = async (on: On, id: string) => {
     ["dark", "light"],
     ["light", "dark"],
   ] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one theme at a time, each its own page
     const desk = await on.kit.page("desk", { theme: dashboard });
     await desk.emulateMedia({ colorScheme: system });
     await open(desk, `${origin}/artifact/${id}`, FRAME);
@@ -8059,7 +8046,6 @@ const railScenes = async (on: On, artifactId: string) => {
     ["phone", "light"],
     ["phone", "dark"],
   ] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one device and theme after another
     const screen = await on.kit.page(view, { theme });
     await open(screen, `${origin}/artifact/${artifactId}`, PANE).catch(
       () => undefined
@@ -8368,7 +8354,6 @@ const srgbOf = (screen: Page, colors: string[]) =>
 const switchTheme = async (screen: Page, to: "dark" | "light") => {
   const label = to === "dark" ? shellWords.lightMode : shellWords.darkMode;
   for (let press = 0; press < 3; press += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: one press of the switch at a time
     const dark = await screen.evaluate(() =>
       document.documentElement.classList.contains("dark")
     );
@@ -8410,7 +8395,6 @@ const agentSays = async (on: On, words: string) => {
 /** The split at rest: a leg before may have left the panel expanded over the transcript, which is inert then; Esc gives it back. */
 const restSplit = async (on: On) => {
   for (let tries = 0; tries < 3; tries += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: one Esc, then a look, until the split rests
     if ((await on.page.locator("[data-split-expanded]").count()) === 0) {
       return;
     }
@@ -9006,7 +8990,6 @@ const barLook = async (
   scroll: "top" | "mid"
 ): Promise<BarLook> => {
   for (let tries = 0; ; tries += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: one try, then the next once the frame went away
     const frame = await frameHolding(on.page, id, `the changed page at ${at}`);
     if (!frame) {
       return { ...NO_LOOK, at, bar: "no frame" };
@@ -9093,11 +9076,9 @@ const changesBarSweep = async (on: On, id: string) => {
   const was = on.page.viewportSize();
   const looks: BarLook[] = [];
   for (const width of SWEEP_WIDTHS) {
-    // biome-ignore lint/performance/noAwaitInLoops: one width, then the next
     await on.page.setViewportSize({ width, height: 900 });
     await settle(on.page, 600);
     for (const scroll of ["top", "mid"] as const) {
-      // biome-ignore lint/performance/noAwaitInLoops: one scroll, then the next
       looks.push(await barLook(on, id, `${width} ${scroll}`, scroll));
     }
   }
@@ -9857,7 +9838,6 @@ const redrawChecks = async (on: On) => {
   const watched: { moved: boolean; on: boolean | null }[] = [];
   const until4 = Date.now() + 4000;
   while (Date.now() < until4) {
-    // biome-ignore lint/performance/noAwaitInLoops: one read every 150 ms, in order
     const pin = pinNumbered((await docOf(frame)).pins, 1);
     watched.push({
       moved: !!pin?.movedAt,
@@ -10041,7 +10021,6 @@ const liveWordsChecks = async (on: On) => {
   const watched: { moved: boolean; on: boolean | null; text: string }[] = [];
   const until4 = Date.now() + 4000;
   while (Date.now() < until4) {
-    // biome-ignore lint/performance/noAwaitInLoops: one read every 200 ms, in order
     const pin = pinNumbered((await docOf(frame)).pins, 1);
     watched.push({
       moved: !!pin?.movedAt,
@@ -10080,7 +10059,6 @@ const liveWordsChecks = async (on: On) => {
     await again.waitForSelector(LIVE_COUNT);
     const until3 = Date.now() + 3000;
     while (Date.now() < until3) {
-      // biome-ignore lint/performance/noAwaitInLoops: one read every 200 ms, in order
       const pin = pinNumbered((await docOf(again)).pins, 1);
       reloaded.push({
         moved: !!pin?.movedAt,
@@ -10196,7 +10174,6 @@ const pinSendChecks = async (on: On) => {
     ["#one", "This one goes on its own."],
     ["#two", "So does this one."],
   ] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one comment, then the next
     const b = await screenBox(on, frame, selector);
     await commentAt(on, frame, b.x + b.w * 0.3, b.y + b.h / 2, words);
   }
@@ -10847,7 +10824,6 @@ const deleteHeadChecks = async (on: On) => {
   await on.page.locator(`${PANE} button[aria-keyshortcuts='C']`).click();
   await pageInComment(frame, true);
   for (const selector of ["#one", "#two"]) {
-    // biome-ignore lint/performance/noAwaitInLoops: one comment, then the next
     const b = await screenBox(on, frame, selector);
     await commentAt(on, frame, b.x + b.w * 0.3, b.y + b.h / 2, "Delete me.");
   }
@@ -12089,7 +12065,6 @@ const footSettled = async (read: () => Promise<FootRead | null>) => {
   let last = await read();
   let same = 0;
   for (let looks = 0; looks < 40 && same < 3; looks += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: each look follows the last frame's scroll
     await Bun.sleep(120);
     const next = await read();
     same = JSON.stringify(next) === JSON.stringify(last) ? same + 1 : 0;
@@ -12161,7 +12136,6 @@ const footSheetChecks = async (on: On) => {
   for (const engine of ["chromium", "webkit"] as const) {
     const made: Partial<Record<FootKind, string>> = {};
     for (const kind of FOOT_KINDS) {
-      // biome-ignore lint/performance/noAwaitInLoops: one page after the other, each a call of the session's
       const said = await on.call(CREATE, {
         kind: "page",
         does: "judge",
@@ -12184,7 +12158,6 @@ const footSheetChecks = async (on: On) => {
     phone.on("pageerror", (error) => faults.push(error.message));
     try {
       for (const kind of FOOT_KINDS) {
-        // biome-ignore lint/performance/noAwaitInLoops: one page after the other on the one phone
         await footOn(on, phone, engine, origin, made[kind] ?? "", kind);
       }
     } finally {

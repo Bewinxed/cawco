@@ -50,7 +50,6 @@ for (const [width, scheme, tag] of [
   [declared ? 1440 : 1000, "light", "desk-light"],
   [360, "dark", "phone-dark"],
 ]) {
-  // biome-ignore lint/performance/noAwaitInLoops: one page at a time keeps the two renders apart and the browser small.
   const page = await browser.newPage({
     viewport: { width, height: 900 },
     colorScheme: scheme,

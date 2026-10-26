@@ -4,6 +4,7 @@
     type FleetMcpServer,
     mcpWords as words,
   } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import { untrack } from "svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import {
@@ -213,8 +214,7 @@
   /** Cancel leaves the edits behind: the draft is dropped, not kept. */
   function cancel() {
     kept.drop();
-    // biome-ignore lint/complexity/noVoid: navigation reports nothing to wait for
-    void goto("/config/mcp");
+    detach(goto("/config/mcp"), "goto");
   }
 
   /** Remove: at once, with Undo in the toast (deletes.ts). */

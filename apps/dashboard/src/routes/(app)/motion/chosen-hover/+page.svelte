@@ -31,7 +31,6 @@
   import MarkdownEditor from "#lib/components/features/MarkdownEditor.svelte";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Resizable from "#lib/components/ui/resizable/index.js";
   import { Toggle } from "#lib/components/ui/toggle/index.js";
   import { IconEye, IconLaptop, IconPen, IconServer } from "#lib/icons.js";

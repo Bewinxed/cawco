@@ -150,7 +150,6 @@ const quiet = async (): Promise<void> => {
   const most = performance.now() + QUIET_MOST_MS;
   while (performance.now() < most) {
     const posted = performance.now();
-    // biome-ignore lint/performance/noAwaitInLoops: one task at a time, each timed alone
     await nextTask();
     if (performance.now() - posted < INSTANT_REFUSAL_MS / 2) {
       return;

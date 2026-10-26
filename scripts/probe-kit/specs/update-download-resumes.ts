@@ -523,7 +523,6 @@ function sample(fleet: Fleet, into: BinaryUpdateState[]) {
   };
   const running = (async () => {
     while (sampling) {
-      // biome-ignore lint/performance/noAwaitInLoops: a sampler, one look at a time
       const state = await read();
       if (state) {
         into.push(state);

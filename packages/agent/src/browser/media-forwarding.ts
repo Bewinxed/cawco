@@ -514,7 +514,6 @@ export const measureMedia = async (
   }
   const until = Date.now() + MEASURE_MS;
   for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: polling a forwarder that is binding.
     const forwarded = await reader.read(port);
     if (!carriesLess(forwarded, published) || Date.now() > until) {
       return forwarded;

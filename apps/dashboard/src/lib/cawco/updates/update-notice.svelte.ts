@@ -11,6 +11,7 @@
  * landing: not a reload for the new build, not a page viewed.
  */
 import { machineLabel } from "@cawco/core";
+import { detach } from "@cawco/core/detach";
 import { cawco } from "../client.svelte";
 import { notices } from "../notices.svelte";
 import { newerBuild } from "../served-build.svelte";
@@ -53,8 +54,7 @@ export function dismissUpdate(notice: Notice): void {
     updates.forgetRefusal(notice.machineIds);
     return;
   }
-  // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
-  void notices.acknowledge(notice.acks);
+  detach(notices.acknowledge(notice.acks), "acknowledge");
   if (notice.kind === 3) {
     updates.forgetCommanded();
   }
@@ -67,8 +67,7 @@ export function actOnUpdate(
 ): void {
   const { policy } = updates;
   if (action === "install-all" && policy) {
-    // biome-ignore lint/complexity/noVoid: each machine reports its own outcome
-    void updates.installAll(cawco.machines, policy);
+    detach(updates.installAll(cawco.machines, policy), "installAll");
     return;
   }
   if (notice.kind === 9) {
@@ -76,8 +75,7 @@ export function actOnUpdate(
     for (const id of notice.machineIds) {
       const machine = cawco.machines.find((row) => row.machineId === id);
       if (machine) {
-        // biome-ignore lint/complexity/noVoid: the machine reports its own outcome
-        void updates.again(machine);
+        detach(updates.again(machine), "again");
       }
     }
     return;
@@ -86,10 +84,8 @@ export function actOnUpdate(
     (row) => row.machineId === notice.machineIds[0]
   );
   if (machine) {
-    // biome-ignore lint/complexity/noVoid: the machine reports its own outcome
-    void updates.installNow(machine);
-    // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
-    void notices.acknowledge(notice.acks);
+    detach(updates.installNow(machine), "installNow");
+    detach(notices.acknowledge(notice.acks), "acknowledge");
   }
 }
 
@@ -110,8 +106,7 @@ export function startUpdateWatch(): () => void {
       }
       const { acks } = notice;
       const timer = setTimeout(() => {
-        // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
-        void notices.acknowledge(acks);
+        detach(notices.acknowledge(acks), "acknowledge");
         updates.forgetCommanded();
       }, DONE_MS);
       return () => clearTimeout(timer);

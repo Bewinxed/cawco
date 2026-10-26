@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
   /**
    * A task's activity: what was said about it (its `## Comments`) and what
    * happened to it (its file's history, task-history.ts), in one stream,
@@ -21,7 +22,6 @@
     type TaskComment,
     type TaskHistoryEvent,
   } from "#lib/cawco/project-tasks.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
@@ -369,8 +369,7 @@
         }}
         onstop={() => undefined}
         onsubmit={(text) => {
-          // biome-ignore lint/complexity/noVoid: the comment's own state is the composer's sending and its refusal
-          void sendComment(text);
+          detach(sendComment(text), "sendComment");
         }}
         placeholder="Add a comment…"
         sendAgain={commentAgain}

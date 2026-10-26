@@ -161,7 +161,6 @@ export async function macSim(choice: SimChoice = {}): Promise<MacSim> {
   const decoder = new TextDecoder();
   let text = "";
   while (!text.includes("\n")) {
-    // biome-ignore lint/performance/noAwaitInLoops: one stream, read in order up to its first line
     const { value, done } = await reader.read();
     if (done) {
       break;

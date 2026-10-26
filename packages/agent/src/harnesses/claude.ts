@@ -119,6 +119,7 @@ import {
 } from "@cawco/core";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { detach } from "@cawco/core/detach";
 import {
   accountConfigDir,
   accountIds,
@@ -657,7 +658,6 @@ async function claudeSessionFile(
     for (const projectsDir of projects) {
       const candidate = join(projectsDir, slug, fileName);
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: the first config dir that has the file wins; a match short-circuits the search
         await access(candidate);
         return candidate;
       } catch {
@@ -668,7 +668,6 @@ async function claudeSessionFile(
   for (const projectsDir of projects) {
     let entries: Dirent[];
     try {
-      // biome-ignore lint/performance/noAwaitInLoops: the first config dir that has the file wins; a match short-circuits the search
       entries = await readdir(projectsDir, { withFileTypes: true });
     } catch {
       continue;
@@ -679,7 +678,6 @@ async function claudeSessionFile(
       }
       const candidate = join(projectsDir, entry.name, fileName);
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: the first project dir that has the file wins; a match short-circuits the search
         await access(candidate);
         return candidate;
       } catch {
@@ -790,7 +788,6 @@ const listingRead = async <T, R>(
     while (next < items.length) {
       const index = next;
       next += 1;
-      // biome-ignore lint/performance/noAwaitInLoops: the reader takes the next transcript only once this one is read; that is the bound
       results[index] = await read(items[index]);
     }
   };
@@ -1113,7 +1110,6 @@ const spooledOutput = async (
   const projects = await readdir(user).catch(() => [] as string[]);
   for (const project of projects) {
     const file = join(user, project, sessionId, "tasks", `${taskId}.output`);
-    // biome-ignore lint/performance/noAwaitInLoops: one project folder holds the session; the first found is it
     const said = await readFile(file, "utf8").catch(() => undefined);
     if (said !== undefined) {
       return said.length > CUT_OUTPUT_CHARS
@@ -2567,10 +2563,8 @@ class ClaudeSession implements HarnessSession {
     }
 
     this.#pump = this.#pumpMessages(ctx, handle, turn);
-    // biome-ignore lint/complexity/noVoid: the reading is said as a frame when it lands; nothing waits for it
-    void this.#readEffort();
-    // biome-ignore lint/complexity/noVoid: the reading is said as a frame when it lands; nothing waits for it
-    void this.#readAccount();
+    detach(this.#readEffort(), "readEffort");
+    detach(this.#readAccount(), "readAccount");
   }
 
   /**
@@ -2648,8 +2642,10 @@ class ClaudeSession implements HarnessSession {
   #readEffort(): Promise<void> {
     const reading = this.#readEffortNow();
     this.#effortReads.add(reading);
-    // biome-ignore lint/complexity/noVoid: the read says its own failure; this only lets go of it
-    void reading.finally(() => this.#effortReads.delete(reading));
+    detach(
+      reading.finally(() => this.#effortReads.delete(reading)),
+      "finally"
+    );
     return reading;
   }
 
@@ -2909,8 +2905,7 @@ class ClaudeSession implements HarnessSession {
           turn.end();
           ctx.busy(false);
           // Cheap, and what catches a `/effort` or `/model` run in the turn.
-          // biome-ignore lint/complexity/noVoid: the reading is said as a frame when it lands
-          void this.#readEffort();
+          detach(this.#readEffort(), "readEffort");
         }
         this.#stamp(message);
         ctx.frame(neutral);
@@ -3111,8 +3106,7 @@ class ClaudeSession implements HarnessSession {
     }
     this.#boundaryFailure = failure;
     console.warn(`[claude] ${this.instanceId}: ${failure}`);
-    // biome-ignore lint/complexity/noVoid: the turn's result frame carries the outcome
-    void this.interrupt();
+    detach(this.interrupt(), "interrupt");
   }
 
   /**
@@ -3173,14 +3167,16 @@ class ClaudeSession implements HarnessSession {
     console.warn(`[claude] ${this.instanceId}: ${refusal.message}`);
     this.#ctx.refused?.(refusal);
     const held = this.#sessiond;
-    // biome-ignore lint/complexity/noVoid: the refusal is said; stopping finishes on its own
-    void this.stop()
-      .then(() => (held ? endProc(held.client, held.procId) : undefined))
-      .catch((error: unknown) =>
-        console.warn(
-          `[claude] ${this.instanceId}: stopping after its refusal: ${String(error)}`
-        )
-      );
+    detach(
+      this.stop()
+        .then(() => (held ? endProc(held.client, held.procId) : undefined))
+        .catch((error: unknown) =>
+          console.warn(
+            `[claude] ${this.instanceId}: stopping after its refusal: ${String(error)}`
+          )
+        ),
+      "stop"
+    );
     return refusal;
   }
 
@@ -3215,11 +3211,13 @@ class ClaudeSession implements HarnessSession {
   boundedBy(hook: LaunchedHook): void {
     this.#boundaryHook = hook;
     if (!hook.events) {
-      // biome-ignore lint/complexity/noVoid: the watch reports through #watchBoundary
-      void this.#watchTranscript().catch((error: unknown) =>
-        console.warn(
-          `[claude] ${this.instanceId}: watching its transcript for boundary hook failures failed: ${String(error)}`
-        )
+      detach(
+        this.#watchTranscript().catch((error: unknown) =>
+          console.warn(
+            `[claude] ${this.instanceId}: watching its transcript for boundary hook failures failed: ${String(error)}`
+          )
+        ),
+        "watchTranscript"
       );
     }
   }
@@ -3752,7 +3750,6 @@ class ClaudeSession implements HarnessSession {
     }
     for (const name of plan.redial) {
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: one server's dial at a time, as the CLI takes them
         await this.#handle.reconnectMcpServer(name);
       } catch (error) {
         errors[name] = error instanceof Error ? error.message : String(error);
@@ -3892,7 +3889,6 @@ class ClaudeSession implements HarnessSession {
       ) {
         continue;
       }
-      // biome-ignore lint/performance/noAwaitInLoops: one reading per server, shared by every session asking within seconds
       const listed = await proxiedToolCount(name);
       if (!listed) {
         continue;
@@ -3985,7 +3981,6 @@ class ClaudeSession implements HarnessSession {
     this.#pump.then(ended, ended);
     for (let wait = 1000; !over; wait = Math.min(wait * 2, 30_000)) {
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: one reading of the slot at a time, each after the wait before it
         if ((await this.#dialOnce(credential)) === "done") {
           return;
         }
@@ -4102,7 +4097,6 @@ class ClaudeSession implements HarnessSession {
     const deadline = Date.now() + HUB_AWAY_BOUND_MS;
     let said = "connecting";
     for (;;) {
-      // biome-ignore lint/performance/noAwaitInLoops: only the cawco slot gates its credential ACK.
       const read = await this.#readCawcoSlot();
       if (read.slot === "connected") {
         if (said !== "connecting") {
@@ -4218,8 +4212,7 @@ class ClaudeSession implements HarnessSession {
       console.info(
         `[claude] ${this.instanceId}: attached while its CawCo MCP is ${cawco.status === "pending" ? "connecting" : "reconnecting"}; it is dialled until it connects`
       );
-      // biome-ignore lint/complexity/noVoid: the attach does not wait on the slot; the dial runs as long as the child does
-      void this.#dialCawco(credential);
+      detach(this.#dialCawco(credential), "dialCawco");
     } else if (cawco?.status === "needs-auth") {
       // The refusal stops it and says why; what asked hears it was refused.
       this.#credentialRefused();
@@ -4817,7 +4810,6 @@ export class ClaudeHarness implements Harness {
     for (let span = TURN_LOOK_LINES; ; span *= 4) {
       const from = Math.max(head - span, 0);
       const activity = new ChildActivity("claude");
-      // biome-ignore lint/performance/noAwaitInLoops: each look reaches further back only when the one before it found nothing about a turn
       const read = await readRing(
         client,
         procIdFor("claude", instanceId),
@@ -5061,7 +5053,6 @@ export class ClaudeHarness implements Harness {
     const files: { file: string; sessionId: string }[] = [];
     for (const configDir of configDirs) {
       const projects = join(configDir, "projects");
-      // biome-ignore lint/performance/noAwaitInLoops: a handful of config dirs, each listed into the shared `files`
       const projectDirs = slug ? [slug] : await subdirectories(projects);
       for (const project of projectDirs) {
         for (const name of await jsonlNames(join(projects, project))) {

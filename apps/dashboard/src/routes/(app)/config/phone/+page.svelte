@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
   import { onMount } from "svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SwitchField from "#lib/cawco/config/SwitchField.svelte";
@@ -122,8 +123,7 @@
     ({ ios: "iPhone", ipados: "iPad", macos: "Mac" })[platform] ?? platform;
 
   onMount(() => {
-    // biome-ignore lint/complexity/noVoid: the read reports its own outcome in page state
-    void read();
+    detach(read(), "read");
   });
 </script>
 

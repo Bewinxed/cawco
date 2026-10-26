@@ -184,7 +184,6 @@ async function narrow(page: Page, bounds: Offset): Promise<Offset> {
   let { low, high } = bounds;
   for (let n = 0; n < ROUND_TRIPS; n += 1) {
     const sent = now();
-    // biome-ignore lint/performance/noAwaitInLoops: each round trip on its own
     const there = await page.evaluate(() => performance.now());
     const back = now();
     low = Math.max(low, there - back);

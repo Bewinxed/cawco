@@ -65,6 +65,7 @@ import {
 } from "@cawco/core";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { detach } from "@cawco/core/detach";
 import { LONG_CALL_WALL_MS } from "@cawco/core/long-calls";
 import {
   credentialAccountIds,
@@ -1143,7 +1144,6 @@ const removeCawcoSessionConfigsIn = async (
   for (const line of lines.filter((one) => CAWCO_CONFIG_LINE.test(one))) {
     const inside = line.slice(1);
     const file = join(top, inside);
-    // biome-ignore lint/performance/noAwaitInLoops: one clone's few lines, each read and judged in turn
     const bytes = await readFile(file).catch(() => undefined);
     if (
       bytes &&
@@ -1181,7 +1181,6 @@ export const removeCawcoSessionConfigs = async (): Promise<void> => {
     );
     for (const ref of await workspaceRefs()) {
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: clones are judged one at a time, at start, off the hot path
         removed += await removeCawcoSessionConfigsIn(ref, fleet);
       } catch (error) {
         console.warn(
@@ -1355,7 +1354,6 @@ const allSessions = async (
   let cursor: string | undefined;
   do {
     const from = cursor;
-    // biome-ignore lint/performance/noAwaitInLoops: each page names the next
     const read = await askOpencode((options) =>
       client.session.list(
         {
@@ -1388,7 +1386,6 @@ const allMessages = async (
   let cursor: string | undefined;
   do {
     const from = cursor;
-    // biome-ignore lint/performance/noAwaitInLoops: each page names the next
     const read = await askOpencode((options) =>
       client.message.list(
         {
@@ -1460,7 +1457,6 @@ async function* messagesFrom(
   let next = cursor;
   for (;;) {
     const page = next ?? null;
-    // biome-ignore lint/performance/noAwaitInLoops: each page names the next
     const read = await messagePage(client, sessionID, order, next);
     for (const message of read.data) {
       yield { message, page };
@@ -1692,7 +1688,6 @@ const subagentEntries = async (
     if (!callID) {
       continue;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: children are appended in this order; parallel reads would reorder subagents
     const childMessages = await allMessages(client, child.id);
     const childEntries = syncSection("OpenCode transcript built", () =>
       toTranscript(child.id, childMessages)
@@ -2265,7 +2260,6 @@ export class OpencodeHarness implements Harness {
     const client = await this.#ensureAccount(account);
     const roots = await allSessions(client, {});
     for (const root of roots) {
-      // biome-ignore lint/performance/noAwaitInLoops: one move at a time; each exports, imports and removes in order
       await this.#setHome([root.id], account);
       await this.#bringHome(root.id, "");
     }
@@ -2506,9 +2500,11 @@ export class OpencodeHarness implements Harness {
       return;
     }
     this.#configWatchTimer = setInterval(() => {
-      // biome-ignore lint/complexity/noVoid: fire-and-forget tick; errors logged, not thrown
-      void this.#configTick().catch((error: unknown) =>
-        console.warn(`[opencode] convergence probe failed: ${error}`)
+      detach(
+        this.#configTick().catch((error: unknown) =>
+          console.warn(`[opencode] convergence probe failed: ${error}`)
+        ),
+        "configTick"
       );
     }, 2000);
   }
@@ -2649,8 +2645,7 @@ export class OpencodeHarness implements Harness {
       this.#pendingRecoveries.size > 0
     ) {
       this.#leftRevision = null;
-      // biome-ignore lint/complexity/noVoid: fire-and-forget; the attempt manages its own errors
-      void this.#attemptConfigApply();
+      detach(this.#attemptConfigApply(), "attemptConfigApply");
       return;
     }
     if (this.#leftRevision !== this.#desiredHash) {
@@ -2678,9 +2673,7 @@ export class OpencodeHarness implements Harness {
   async #leaveUnkept(): Promise<void> {
     for (const slot of this.#slots()) {
       if (!(
-        slot.client &&
-        // biome-ignore lint/performance/noAwaitInLoops: one slot at a time; each read asks the keepers
-        (await slot.owner.activeKeeperGone().catch(() => false))
+        slot.client && (await slot.owner.activeKeeperGone().catch(() => false))
       )) {
         continue;
       }
@@ -2772,7 +2765,6 @@ export class OpencodeHarness implements Harness {
       console.info(
         `[opencode] ${this.#slotName(slot)} server: no session on it for ${SERVER_IDLE_MS / 60_000} minutes`
       );
-      // biome-ignore lint/performance/noAwaitInLoops: one retirement at a time; each reads the keeper
       await slot.owner.retireActive();
     }
     await this.#dropGoneViews();
@@ -2910,7 +2902,6 @@ export class OpencodeHarness implements Harness {
         ) {
           continue;
         }
-        // biome-ignore lint/performance/noAwaitInLoops: one server is replaced at a time
         const { revision, launch } = await this.#slotRevision(slot);
         if (
           slot.starting ||
@@ -2969,13 +2960,14 @@ export class OpencodeHarness implements Harness {
       (identity) => {
         const client = this.#adopt(slot, identity);
         slot.applied = revision;
-        // biome-ignore lint/complexity/noVoid: publication does not wait for busy incumbent sessions to migrate
-        void this.#handoffIdle().catch(console.warn);
+        detach(this.#handoffIdle().catch(console.warn), "handoffIdle");
         // What it offers, as the catalog it started on says (#catalog): an
         // account's own server alone lists its catalog.
         if (account !== undefined && view === undefined) {
-          // biome-ignore lint/complexity/noVoid: the catalog read rides on the start; nothing waits on it
-          void this.#readAccountCatalogSoon(account, client);
+          detach(
+            this.#readAccountCatalogSoon(account, client),
+            "readAccountCatalogSoon"
+          );
         }
       }
     );
@@ -3563,8 +3555,7 @@ export class OpencodeHarness implements Harness {
           this.#appliedHash = targetHash;
           this.#appliedVersion = targetVersion;
           this.#configError = null;
-          // biome-ignore lint/complexity/noVoid: publication does not wait for busy incumbent sessions to migrate
-          void this.#handoffIdle().catch(console.warn);
+          detach(this.#handoffIdle().catch(console.warn), "handoffIdle");
           // Its catalog is the new config's.
           this.#readFactsSoon();
           // What was reported of the fleet's servers may have been read on
@@ -3906,7 +3897,6 @@ export class OpencodeHarness implements Harness {
     for (const credential of own) {
       const provider = credential.integrationID;
       const model = models.data.find((one) => one.providerID === provider);
-      // biome-ignore lint/performance/noAwaitInLoops: one credential at a time, each at most one request
       const verdict = await this.#signInCheck(credential, {
         refreshable: refreshable.has(
           `${provider}/${String(credential.value.methodID ?? "")}`
@@ -4120,7 +4110,6 @@ export class OpencodeHarness implements Harness {
         this.#straysSweptAt = Date.now();
       }
       for (;;) {
-        // biome-ignore lint/performance/noAwaitInLoops: the 1.x servers are read again until none is left
         const reads = await Promise.all(
           this.#slots().map((slot) => slot.owner.retireV1())
         );
@@ -4338,8 +4327,10 @@ export class OpencodeHarness implements Harness {
       console.info(
         `[opencode] account ${account}: its server is ${slot.owner.active?.procId}/${slot.owner.active?.pid}`
       );
-      // biome-ignore lint/complexity/noVoid: the catalog read rides on the start; nothing waits on it
-      void this.#readAccountCatalogSoon(account, client);
+      detach(
+        this.#readAccountCatalogSoon(account, client),
+        "readAccountCatalogSoon"
+      );
       return client;
     })()
       .catch((error: unknown) => {
@@ -4491,7 +4482,6 @@ export class OpencodeHarness implements Harness {
       );
       for (const credential of own) {
         if (!stored.has(credential.id)) {
-          // biome-ignore lint/performance/noAwaitInLoops: a few sign-ins, each its own request
           await client.credential.create(
             {
               id: credential.id,
@@ -4852,8 +4842,7 @@ export class OpencodeHarness implements Harness {
       const owner = new AbortController();
       this.#pumps.set(key, owner);
       this.#pumpReady.set(key, Promise.withResolvers<void>().promise);
-      // biome-ignore lint/complexity/noVoid: the pump owns reconnection; callers await only readiness
-      void this.#pump(identity, owner.signal).catch(console.warn);
+      detach(this.#pump(identity, owner.signal).catch(console.warn), "pump");
     }
     // biome-ignore lint/style/noNonNullAssertion: set above or by the pump before its first await
     return this.#pumpReady.get(key)!;
@@ -4987,8 +4976,10 @@ export class OpencodeHarness implements Harness {
       }
       const ready = Promise.withResolvers<void>();
       this.#pumpReady.set(key, ready.promise);
-      // biome-ignore lint/complexity/noVoid: a reconnect need not have a caller waiting for readiness
-      void ready.promise.catch(() => undefined);
+      detach(
+        ready.promise.catch(() => undefined),
+        "catch"
+      );
       // The feed is up when its first event comes, given RECOVERY_TIMEOUT_MS;
       // the signal the read hands it then only ever aborts on `stopped`.
       const connection = new AbortController();
@@ -4997,7 +4988,6 @@ export class OpencodeHarness implements Harness {
       try {
         const client = this.#clientForGeneration(identity);
         let feed: AsyncIterator<V2Event> | undefined;
-        // biome-ignore lint/performance/noAwaitInLoops: one connect per round; a dropped feed is subscribed again
         const first = await askOpencode(({ signal }) => {
           feed = client.event
             .subscribe({ signal: AbortSignal.any([signal, connection.signal]) })
@@ -5024,14 +5014,12 @@ export class OpencodeHarness implements Harness {
                     this.#sessionOwners.get(session.instanceId)?.procId ===
                     identity.procId
                   ) {
-                    // biome-ignore lint/complexity/noVoid: snapshots must not block consumption of live gate events
-                    void this.#reconcile(session);
+                    detach(this.#reconcile(session), "reconcile");
                   }
                 }
               }
               delay = 1000;
               this.#route(next.value, identity);
-              // biome-ignore lint/performance/noAwaitInLoops: a feed's events are routed in the order they come
               next = await (feed as AsyncIterator<V2Event>).next();
             }
             break;
@@ -5204,8 +5192,7 @@ export class OpencodeHarness implements Harness {
         this.#reconcileAgain.delete(session) &&
         this.#sessions.get(session.instanceId) === session
       ) {
-        // biome-ignore lint/complexity/noVoid: a reconnect during a snapshot needs a fresh snapshot after it
-        void this.#reconcile(session);
+        detach(this.#reconcile(session), "reconcile");
       }
     });
     this.#reconcileJobs.set(session, job);
@@ -5281,7 +5268,6 @@ export class OpencodeHarness implements Harness {
     const generations = await this.#completeGenerations();
     for (const identity of generations) {
       const client = this.#clientForGeneration(identity);
-      // biome-ignore lint/performance/noAwaitInLoops: each generation owns distinct runners
       if (sessionKey in (await active(client))) {
         // Interrupt only this session on its captured generation.
         answerOf(
@@ -5300,7 +5286,6 @@ export class OpencodeHarness implements Harness {
       }
       for (const [id, session] of this.#sessions) {
         if (id === instanceId && session.sessionId === sessionKey) {
-          // biome-ignore lint/performance/noAwaitInLoops: release each handle of exactly this conversation
           await session.dispose();
         }
       }
@@ -5520,7 +5505,6 @@ export class OpencodeHarness implements Harness {
       }
       const { round } = wave;
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: an unreachable server is tried again, within the budget
         return await this.#reattachOnce(spec, ctx, round);
       } catch (error) {
         if (
@@ -5579,7 +5563,6 @@ export class OpencodeHarness implements Harness {
   ): Promise<OpencodeSession | undefined> {
     // Wait out publication before resolving custody across generations.
     while (this.#applyGate) {
-      // biome-ignore lint/performance/noAwaitInLoops: each apply must finish before the next check
       await this.#applyGate.promise;
     }
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: custody check, inspection-only policy and cancellation belong to one recovery transaction
@@ -5849,7 +5832,6 @@ export class OpencodeHarness implements Harness {
         continue;
       }
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: one view at a time; each ends its servers first
         await slot.owner.endAll();
         await slot.owner.forget();
       } catch (error) {
@@ -5933,7 +5915,6 @@ export class OpencodeHarness implements Harness {
       ];
       for (const one of exported) {
         try {
-          // biome-ignore lint/performance/noAwaitInLoops: a parent is imported before its children
           await ask(`the import of ${one.info.id}`, (options) =>
             target.session.import(
               {
@@ -6261,35 +6242,38 @@ export class OpencodeHarness implements Harness {
         ...(spec.permissionMode ? { permissionMode: spec.permissionMode } : {}),
       });
       session.sayEffort();
-      // biome-ignore lint/complexity/noVoid: the command prefill must not block attachment
-      void session
-        .control(CONTROL_SUPPORTED_COMMANDS, [])
-        .then((answer) => {
-          const commands = answer as SlashCommand[];
-          if (commands.length) {
-            ctx.frame({
-              type: "system",
-              subtype: "commands_changed",
-              session_id: sessionId,
-              commands,
-            });
-          }
-        })
-        .catch((error: unknown) =>
-          console.warn(`[opencode] command list: ${String(error)}`)
-        );
+      detach(
+        session
+          .control(CONTROL_SUPPORTED_COMMANDS, [])
+          .then((answer) => {
+            const commands = answer as SlashCommand[];
+            if (commands.length) {
+              ctx.frame({
+                type: "system",
+                subtype: "commands_changed",
+                session_id: sessionId,
+                commands,
+              });
+            }
+          })
+          .catch((error: unknown) =>
+            console.warn(`[opencode] command list: ${String(error)}`)
+          ),
+        "session"
+      );
       // A resumed session may already be mid-turn on the server, or holding
       // an open permission or form; nothing else would ever tell this process
       // so. One snapshot per session, after its generation's subscription is
       // up: a subscription that comes up after this line reconciles every
       // session it holds, this one included, so only one already up does here.
-      // biome-ignore lint/complexity/noVoid: attached handles remain operable while the subscription starts
-      void this.#ensurePump(owner).catch((error: unknown) =>
-        console.warn(String(error))
+      detach(
+        this.#ensurePump(owner).catch((error: unknown) =>
+          console.warn(String(error))
+        ),
+        "ensurePump"
       );
       if (this.#pumpConnected.has(owner.procId)) {
-        // biome-ignore lint/complexity/noVoid: attached handles remain operable while reconciliation runs
-        void this.#reconcile(session);
+        detach(this.#reconcile(session), "reconcile");
       }
     };
     // Skills load natively, each as a message of its own, before the first prompt.
@@ -6721,7 +6705,6 @@ export class OpencodeHarness implements Harness {
           }
           const gate = this.#applyGate;
           if (gate) {
-            // biome-ignore lint/performance/noAwaitInLoops: an apply ends before the next look at its state
             await gate.promise;
           } else if (this.#configState === "applied") {
             return;
@@ -6770,7 +6753,6 @@ export class OpencodeHarness implements Harness {
       async (signal): Promise<Listed> => {
         for (;;) {
           signal.throwIfAborted();
-          // biome-ignore lint/performance/noAwaitInLoops: each read decides whether the next is needed
           const listed = await client.mcp.list({}, { signal });
           last = listed;
           const connecting = names.some((name) => {
@@ -7035,7 +7017,6 @@ export class OpencodeHarness implements Harness {
       return;
     }
     for (const { client, directory } of this.#livePlaces().values()) {
-      // biome-ignore lint/performance/noAwaitInLoops: one place at a time, so a pass is never a burst of server starts on a loaded machine
       await this.#startFailedAt(client, directory, names);
     }
   }
@@ -7065,7 +7046,6 @@ export class OpencodeHarness implements Harness {
     for (const { name, error } of failed) {
       // The call holds the client: leased, as e1ce75227 leased the sync's.
       this.#mutatingMcp += 1;
-      // biome-ignore lint/performance/noAwaitInLoops: one start at a time, so a pass is never a burst of server starts on a loaded machine
       const started = await readWithin(MCP_START_AGAIN_MS, (signal) =>
         client.mcp.connect({ server: name, ...where }, { signal })
       )

@@ -83,7 +83,6 @@ const plant = async (
   make: (file: string, dir: string, index: number) => Promise<unknown>
 ): Promise<void> => {
   for (const dir of Array.from({ length: DIRS }, (_, d) => `d${pad(d, 2)}`)) {
-    // biome-ignore lint/performance/noAwaitInLoops: one dir's hundred files at a time
     await mkdir(join(root, dir), { recursive: true }).then(() =>
       Promise.all(
         Array.from({ length: FILES }, (_, f) =>

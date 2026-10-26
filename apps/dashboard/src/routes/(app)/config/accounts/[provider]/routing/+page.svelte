@@ -5,6 +5,7 @@
    * the list.
    */
   import { accountsWords, hasRouting } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import { accountsOf, routingOf } from "#lib/cawco/accounts/model.svelte.js";
   import RoutingEditor from "#lib/cawco/accounts/RoutingEditor.svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
@@ -22,8 +23,7 @@
 
   $effect(() => {
     if (loaded && !routes) {
-      // biome-ignore lint/complexity/noVoid: navigation reports nothing to wait for
-      void goto("/config/accounts", { replaceState: true });
+      detach(goto("/config/accounts", { replaceState: true }), "goto");
     }
   });
 </script>

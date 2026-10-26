@@ -273,7 +273,6 @@ export async function cutHouseFaces(
         ...own,
         ...marks.filter((point) => allMarks || holds(range, point)),
       ];
-      // biome-ignore lint/performance/noAwaitInLoops: one piece at a time, for woff2-encoder's sake (below)
       const sfnt = await subsetFont(
         file,
         String.fromCodePoint(...points),

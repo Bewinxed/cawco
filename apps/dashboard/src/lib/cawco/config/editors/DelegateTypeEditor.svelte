@@ -1,8 +1,12 @@
 <script lang="ts">
-  import { EFFORT_LEVELS, delegateTypesWords as words } from "@cawco/core";
+  import {
+    delegateTypeProblem,
+    EFFORT_LEVELS,
+    delegateTypesWords as words,
+  } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import { untrack } from "svelte";
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Alert from "#lib/components/ui/alert/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
@@ -13,7 +17,6 @@
     blankDelegateType,
     DELEGATE_HARNESSES,
     type DelegateType,
-    delegateTypeProblem,
     saveDelegateType,
   } from "../../delegate-types";
   import { failureWords as message } from "../../hub-read";
@@ -149,8 +152,7 @@
   /** Cancel leaves the edits behind: the draft is dropped, not kept. */
   function cancel() {
     kept.drop();
-    // biome-ignore lint/complexity/noVoid: navigation reports nothing to wait for
-    void goto("/config/delegate-types");
+    detach(goto("/config/delegate-types"), "goto");
   }
 
   /** Delete: at once, with Undo in the toast (deletes.ts). */

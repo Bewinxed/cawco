@@ -23,7 +23,6 @@
  * and glide, the sheet's scrim exit) to `computed.json`, to compare with
  * the same run on a tree that still asks with `:has()`.
  */
-// biome-ignore-all lint/performance/noAwaitInLoops: one step at a time, as a person takes them
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";

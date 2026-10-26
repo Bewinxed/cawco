@@ -41,6 +41,7 @@
     type ProviderChoice,
     type StrategyChoice,
   } from "@cawco/core";
+  import { detach } from "@cawco/core/detach";
   import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
   import {
@@ -424,12 +425,14 @@
     }
     written = search;
     untrack(() => {
-      // biome-ignore lint/complexity/noVoid: a shallow replace of the address, nothing to wait on
-      void goto(`${page.url.pathname}${search}`, {
-        shallow: true,
-        replace: true,
-        state: page.state,
-      });
+      detach(
+        goto(`${page.url.pathname}${search}`, {
+          shallow: true,
+          replace: true,
+          state: page.state,
+        }),
+        "goto"
+      );
     });
   });
 
@@ -562,7 +565,6 @@
     for (const [place, id] of order.entries()) {
       const one = cawco.accounts?.accounts.find((a) => a.id === id);
       if (one && one.order !== place) {
-        // biome-ignore lint/performance/noAwaitInLoops: one PATCH per account, in order, so a refusal stops the rest
         await patchAccount(id, { order: place });
       }
     }

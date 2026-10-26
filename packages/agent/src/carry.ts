@@ -101,7 +101,6 @@ export const copyStrays = async (
       }
       await mkdir(target, { recursive: true, mode: 0o700 });
       for (const name of names) {
-        // biome-ignore lint/performance/noAwaitInLoops: a stray holds a handful of files
         await copy(join(entry, name));
       }
     } else if (found.isFile()) {
@@ -118,7 +117,6 @@ export const copyStrays = async (
   };
   await mkdir(folder, { mode: 0o700 });
   for (const entry of entries) {
-    // biome-ignore lint/performance/noAwaitInLoops: one entry at a time, a folder that is no clone holds a handful
     await copy(entry);
   }
   return left;
@@ -201,7 +199,6 @@ export const ownFilesOnly = async (dir: string): Promise<void> => {
   }
   for (const entry of await readdir(dir)) {
     const path = join(dir, entry);
-    // biome-ignore lint/performance/noAwaitInLoops: a carry holds a handful of files
     const one = await lstat(path);
     if (one.isDirectory()) {
       await ownFilesOnly(path);
