@@ -13,8 +13,10 @@
  *   dirs are the workspace's own, on disk under its state dir
  *   (`~/.cawco/workspaces/<id>/layer/mounts/<n>`), never a tmpfs. The
  *   overlay is mounted once per workspace, in a mount namespace of its own
- *   (the view), by bwrap's `--overlay-src`/`--overlay` (bwrap(1)): one
- *   holder process keeps it ({@link ensureView}), and every process of the
+ *   (the view): the distro's bwrap makes the view's namespaces and one
+ *   holder process keeps them ({@link ensureView}), CawCo's own
+ *   `view-mount` mounts the overlay there with mount(2) (view-mount.ts),
+ *   on any bubblewrap and on Linux 5.11 or later, and every process of the
  *   workspace (its sessions' harnesses, its boundary's srt host, the agent's
  *   own git there) enters that namespace by `nsenter` ({@link viewArgv}), so
  *   they all read and write through one mount: two overlay mounts sharing
@@ -77,11 +79,13 @@ import type {
 } from "@cawco/core";
 import { claudeHome, workspacesDir } from "@cawco/core/paths";
 import { commandLine } from "@cawco/core/process-identity";
+import { ownedCommand } from "@cawco/core/runtime";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { listedPid, signal as signalPid } from "@cawco/core/signal";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { cloneDenies } from "@cawco/core/workspace-policy";
 import { removeTree } from "./remove-tree";
+import type { ViewMount } from "./view-mount";
 import { SYSTEM_PATH } from "./workspace-needs";
 
 /**
@@ -315,42 +319,38 @@ const PASSTHROUGH = (): string[] => [
 ];
 
 /**
- * The bwrap words of workspace `id`'s view of `layer`: the host's whole
- * tree, then each of its overlays, then what under F is the host's again,
- * then its mark ({@link viewMarked}).
+ * The mounts of workspace `id`'s view of `layer`, in the order view-mount.ts
+ * makes them: each of its overlays, shallowest first, then what under F is
+ * the host's again, then its mark ({@link viewMarked}). Each later mount
+ * goes on top of the overlays it lies under.
  */
-const viewMounts = (id: string, layer: Layer): string[] => {
-  const mounts = layer.mounts ?? [];
+const viewPlan = (id: string, layer: Layer): ViewMount[] => {
   const { bound } = mountsUnder(layer.folder);
   const through = PASSTHROUGH().filter(
     (path) => within(path, layer.folder) && existsSync(path)
   );
   return [
-    "--dev-bind",
-    "/",
-    "/",
-    ...mounts.flatMap((mount) => [
-      "--overlay-src",
-      mount.at,
-      "--overlay",
-      mount.upper,
-      mount.work,
-      mount.at,
-    ]),
-    ...bound.flatMap((path) => ["--dev-bind", path, path]),
-    ...through.flatMap((path) => ["--bind", path, path]),
-    "--bind",
-    layerDir(id),
-    layerDir(id),
+    ...(layer.mounts ?? []).map((mount) => ({
+      overlay: mount.at,
+      upper: mount.upper,
+      work: mount.work,
+    })),
+    ...[...bound, ...through, layerDir(id)].map((path) => ({ bind: path })),
   ];
 };
 
+/** What the agent tells a view's holder once its view is mounted ({@link HOLDER}). */
+const VIEW_MOUNTED = "mounted";
+
 /**
  * The holder of a view: it writes its pid and its namespaces where the
- * agent reads them ({@link viewFile}), then waits. Every process of the view
- * may hold it as well: the view lives while any does.
+ * agent reads them ({@link viewFile}), then waits for the agent to say its
+ * view is mounted on its stdin, and holds it from then on. Without that word
+ * (the mount refused, the agent gone) it ends, and the namespaces with it.
+ * Every process of the view may hold it as well: the view lives while any
+ * does.
  */
-const HOLDER = `printf '%s %s %s\\n' "$$" "$(readlink /proc/self/ns/mnt)" "$(readlink /proc/self/ns/user)" > "$1.tmp" && mv -f "$1.tmp" "$1" && exec sleep 2147483647`;
+const HOLDER = `printf '%s %s %s\\n' "$$" "$(readlink /proc/self/ns/mnt)" "$(readlink /proc/self/ns/user)" > "$1.tmp" && mv -f "$1.tmp" "$1" && read -r said && [ "$said" = ${VIEW_MOUNTED} ] && exec sleep 2147483647 < /dev/null`;
 
 interface ViewRecord {
   mnt: string;
@@ -390,7 +390,7 @@ const membersOf = (mnt: string): number[] =>
  * Whether the mount namespace of `pids` (all in one) is workspace `id`'s
  * view, or one made from it (a sandbox its boundary starts there): its mark
  * is mounted there, the workspace's layer dir bound onto itself
- * ({@link viewMounts}), a mount point no other namespace has. A view's
+ * ({@link viewPlan}), a mount point no other namespace has. A view's
  * record names its namespace by inode number, which names it only while it
  * lives: the kernel frees the number with the namespace and hands it to a
  * later one (include/linux/proc_ns.h `proc_alloc_inum`, `proc_free_inum`).
@@ -466,8 +466,8 @@ const VIEW_START_MS = 10_000;
 
 /**
  * Workspace `id`'s view, running: a live member's pid. With none, the
- * holder starts it, detached from the agent; the overlay is mounted there
- * once, and only when no process holds an earlier mount of the same upper.
+ * holder starts it, detached from the agent, and view-mount.ts mounts it
+ * there once, only when no process holds an earlier mount of the same upper.
  */
 export const ensureView = (id: string, layer: Layer): Promise<number> => {
   const member = viewMember(id);
@@ -490,10 +490,13 @@ const startView = async (id: string, layer: Layer): Promise<number> => {
     await mkdir(mount.work, { recursive: true, mode: 0o700 });
   }
   await rm(viewFile(id), { force: true });
+  const env = { ...hostEnvironment(), PATH: SYSTEM_PATH };
   const holder = Bun.spawn(
     [
       systemTool("bwrap"),
-      ...viewMounts(id, layer),
+      "--dev-bind",
+      "/",
+      "/",
       "--",
       "/bin/sh",
       "-c",
@@ -501,35 +504,69 @@ const startView = async (id: string, layer: Layer): Promise<number> => {
       "cawco-view",
       viewFile(id),
     ],
-    {
-      env: { ...hostEnvironment(), PATH: SYSTEM_PATH },
-      stdin: "ignore",
-      stdout: "ignore",
-      stderr: "pipe",
-      detached: true,
-    }
+    { env, stdin: "pipe", stdout: "ignore", stderr: "pipe", detached: true }
   );
   holder.unref();
+  const refuse = async (why: string): Promise<never> => {
+    // The holder reads the end of its stdin and leaves; bwrap, if it never
+    // got as far, is killed.
+    await holder.stdin.end();
+    signalPid(listedPid(holder.pid), "SIGKILL");
+    await rm(viewFile(id), { force: true });
+    throw new Error(`workspace ${id}'s view of ${layer.folder} ${why}`);
+  };
   const deadline = Date.now() + VIEW_START_MS;
   while (Date.now() < deadline) {
     const record = readViewRecord(id);
     if (record && nsOf(record.pid, "mnt") === record.mnt) {
-      // biome-ignore lint/performance/noAwaitInLoops: once, as the view is up
+      // biome-ignore lint/performance/noAwaitInLoops: once, as the holder names its namespaces
+      const said = await mountView(record.pid, viewPlan(id, layer), env);
+      if (said !== undefined) {
+        return await refuse(`was not mounted: ${said}`);
+      }
+      holder.stdin.write(`${VIEW_MOUNTED}\n`);
+      await holder.stdin.end();
       await openWorkDirs(layer);
       return record.pid;
     }
     if (holder.exitCode !== null) {
       const said = (await new Response(holder.stderr).text()).trim();
-      throw new Error(
-        `workspace ${id}'s view of ${layer.folder} did not start: bwrap exited ${holder.exitCode}${said ? `: ${said}` : ""}`
+      return await refuse(
+        `did not start: bwrap exited ${holder.exitCode}${said ? `: ${said}` : ""}`
       );
     }
     await Bun.sleep(20);
   }
-  signalPid(listedPid(holder.pid), "SIGKILL");
-  throw new Error(
-    `workspace ${id}'s view of ${layer.folder} did not name its namespace within ${VIEW_START_MS / 1000} s`
+  return await refuse(
+    `did not name its namespace within ${VIEW_START_MS / 1000} s`
   );
+};
+
+/**
+ * `mounts` made in the view whose holder is `pid`, by CawCo's own
+ * `view-mount` entered into its namespaces ({@link viewArgv}); its
+ * refusal's words when it refused, none when all are made.
+ */
+const mountView = async (
+  pid: number,
+  mounts: readonly ViewMount[],
+  env: Record<string, string>
+): Promise<string | undefined> => {
+  const { command, args } = ownedCommand(
+    "view-mount",
+    join(import.meta.dir, "view-mount.ts")
+  );
+  const mounter = Bun.spawn(viewArgv(pid, "/", [command, ...args]), {
+    env,
+    stdin: new Blob([JSON.stringify(mounts)]),
+    stdout: "ignore",
+    stderr: "pipe",
+  });
+  const [code, said] = await Promise.all([
+    mounter.exited,
+    new Response(mounter.stderr).text(),
+  ]);
+  return code === 0 ? undefined : said.trim() || `view-mount exited ${code}`;
 };
 
 /**
@@ -773,37 +810,6 @@ export const ownModules = (id: string): Promise<void> => {
 
 // --------------------------------------------------------------- the making
 
-/** bubblewrap's `--overlay-src` and `--overlay`, which a Linux view is mounted by, came in bubblewrap 0.11.0. */
-const OVERLAY_BWRAP: readonly [number, number] = [0, 11];
-
-const BWRAP_VERSION = /bubblewrap (\d+)\.(\d+)/u;
-
-/**
- * Refuses a Linux view of `folder` where this machine's bubblewrap is older
- * than {@link OVERLAY_BWRAP}, in words that say so, before anything of the
- * layer is made: Ubuntu 24.04 ships 0.9.0, whose bwrap refused the view with
- * "Unknown option --overlay-src" (the release's stage-2 rig, 2026-10-26).
- * A git repository's workspace is a clone, which needs no overlay.
- */
-const refuseOldBwrap = (folder: string): void => {
-  const ran = Bun.spawnSync([systemTool("bwrap"), "--version"], {
-    env: { ...hostEnvironment(), PATH: SYSTEM_PATH },
-    stderr: "pipe",
-  });
-  const said = ran.stdout.toString().trim();
-  const found = BWRAP_VERSION.exec(said);
-  const [major, minor] = OVERLAY_BWRAP;
-  const old =
-    !found ||
-    Number(found[1]) < major ||
-    (Number(found[1]) === major && Number(found[2]) < minor);
-  if (old) {
-    throw new Error(
-      `${folder} is no git repository, so its workspace is a private view of it, which needs bubblewrap ${major}.${minor} or later; this machine has ${said || "a bubblewrap that does not say its version"}. Install a newer bubblewrap, or delegate in a git repository, whose workspace is a clone of its own.`
-    );
-  }
-};
-
 /**
  * Workspace `id`'s layer of `folder`, made: on Linux its view's dirs and
  * record, nothing copied, and its view mounted; on macOS the clone at
@@ -818,7 +824,6 @@ export const makeLayer = async (
   const kind: WorkspaceKind = "folder";
   const started = Date.now();
   if (process.platform === "linux") {
-    refuseOldBwrap(folder);
     const dir = layerDir(id);
     const mounts = [folder, ...mountsUnder(folder).layered].map((at, n) => ({
       at,

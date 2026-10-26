@@ -1,6 +1,6 @@
 /**
  * A workspace's private layer of any folder (agent layer.ts), on the
- * machine's own engine: the Linux view (bwrap's overlay, entered by
+ * machine's own engine: the Linux view (its overlay, entered by
  * nsenter) or the Mac's APFS clone, driven through layer.ts itself with no
  * hub. Every read is of the folder on the host and of what a process in
  * the copy sees.
@@ -274,7 +274,7 @@ const run = async (kit: Kit) => {
 export default {
   group: "Workspaces and what agents may touch",
   name: "layer-view",
-  host: "it mounts a Linux view (bwrap's overlay in a user namespace), which no workspace boundary allows inside it",
+  host: "it mounts a Linux view (an overlay in a user namespace), which no workspace boundary allows inside it",
   ownHome:
     "its layers' records and upper dirs are under ~/.cawco, which must be its own",
   run,

@@ -14,7 +14,8 @@
     "./pi-mcp-list": "./src/harnesses/pi-mcp-list.ts",
     "./pin-record": "./src/pin-record.ts",
     "./sessiond-client": "./src/sessiond-client.ts",
-    "./tools": "./src/tools.ts"
+    "./tools": "./src/tools.ts",
+    "./view-mount": "./src/view-mount.ts"
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
