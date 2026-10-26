@@ -2179,11 +2179,8 @@ const versionWords = (version: ChangeVersion): string => {
       return " a folder";
     case "gone":
       return " deleted";
-    default: {
-      // biome-ignore lint/plugin/no-hand-unhandled: a fallback, not a throw: a version it does not know is shown as it is rather than fail the read.
-      const unmatched: never = version;
-      return String(unmatched);
-    }
+    default:
+      return String(version);
   }
 };
 

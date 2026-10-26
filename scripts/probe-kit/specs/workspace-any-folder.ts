@@ -68,6 +68,7 @@ import {
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CAWCO_ENV } from "../../../packages/core/src/cawco-env";
+import { unhandled } from "../../../packages/core/src/unhandled";
 import { toolWords } from "../../lib/tool-call";
 import {
   MACHINE,
@@ -209,11 +210,8 @@ const commandOf = (tag: Tag): string => {
       return `cat ${at}/${OC_FILE} && echo "DONE-""F"`;
     case "P":
       return `cat ${at}/${PI_FILE} && echo "DONE-""P"`;
-    default: {
-      // biome-ignore lint/plugin/no-hand-unhandled: a fallback, not a throw: an unknown tag is its own command text.
-      const unmatched: never = tag;
-      return unmatched;
-    }
+    default:
+      return unhandled("tag", tag);
   }
 };
 

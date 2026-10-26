@@ -25,7 +25,6 @@ import {
   draggable,
   dropTargetForElements,
 } from "@atlaskit/pragmatic-drag-and-drop/adapter/element-adapter";
-// biome-ignore lint/style/noExportedImports: export-from here would make this a single-export barrel file, flagged by noBarrelFile instead
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/utils/combine";
 import type { Edge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/types";
 import { bareDrag, internalData } from "../internal-drag";

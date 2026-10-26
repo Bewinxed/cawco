@@ -4040,11 +4040,8 @@ function failureNotice(record: CommandRecord): string {
       return `The message was not taken back: ${why}. It stays queued.`;
     case "send":
       return `Your message was not sent: ${why}.`;
-    default: {
-      // biome-ignore lint/plugin/no-hand-unhandled: a fallback, not a throw: a refused command of a kind this build does not know still gets its line, not a throw.
-      const unmatched: never = record.kind;
-      return `That didn't go through: ${why}. (${String(unmatched)})`;
-    }
+    default:
+      return `That didn't go through: ${why}. (${String(record.kind)})`;
   }
 }
 

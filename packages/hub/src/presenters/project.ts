@@ -73,11 +73,8 @@ const messageLine = (message: ThreadLine, now: number): string => {
       return `- you, ${ago(message.at, now)}: ${quote(message.body, 1200)}${message.tasks?.length ? ` (tasks ${listed(message.tasks)})` : ""}${message.files?.length ? ` (files ${listed(message.files)})` : ""}`;
     case "event":
       return `- event, ${ago(message.at, now)}: ${message.noteTitle}${message.body ? `: ${quote(message.body, 600)}` : ""}`;
-    default: {
-      // biome-ignore lint/plugin/no-hand-unhandled: a fallback, not a throw: a presenter prints a message it does not know rather than fail the read.
-      const unmatched: never = message;
-      return String(unmatched);
-    }
+    default:
+      return String(message);
   }
 };
 

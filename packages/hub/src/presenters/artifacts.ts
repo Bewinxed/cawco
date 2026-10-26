@@ -174,11 +174,8 @@ const answerLine = (answer: DecisionAnswer, now: number): string => {
       return `- ${asked}: picked, then cleared ${ago(answer.at, now)}${earlier}; nothing picked now${note}`;
     case "gone":
       return `- ${asked}: picked ${listed(answer.options)} ${ago(answer.at, now)}, but the page no longer offers ${listed(answer.gone)}${earlier}${note}`;
-    default: {
-      // biome-ignore lint/plugin/no-hand-unhandled: a fallback, not a throw: a presenter prints an answer it does not know rather than fail the read.
-      const unmatched: never = answer;
-      return String(unmatched);
-    }
+    default:
+      return String(answer);
   }
 };
 
@@ -617,11 +614,8 @@ export const artifactUpdatedWords = (updated: Updated): Presented => {
       return componentChangedWords(updated.answer);
     case "page":
       return pageChangedWords(updated.answer);
-    default: {
-      // biome-ignore lint/plugin/no-hand-unhandled: a fallback, not a throw: a presenter prints an answer it does not know rather than fail the read.
-      const unmatched: never = updated;
-      return String(unmatched);
-    }
+    default:
+      return String(updated);
   }
 };
 
