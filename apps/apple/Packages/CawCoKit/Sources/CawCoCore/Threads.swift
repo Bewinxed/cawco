@@ -6,34 +6,46 @@ import OSLog
 
 // A project's threads with its Caw (hub caw.ts, the web's client.svelte.ts
 // "a project's Caw, its threads and views", thread-tabs.ts and
-// ThreadPane.svelte): read on connect, kept by `thread.upsert` and
-// `thread.message` frames, written to through the hub's thread routes only.
+// ThreadPane.svelte): their rows read on connect and kept by `thread.upsert`
+// frames. A thread is addressed as a session (`thread:<id>`): its transcript
+// is read and followed through `SessionsStore` and a send to it goes through
+// the one send path, as any session's (hub thread-transcript.ts).
 
 public typealias ThreadSummary = Components.Schemas.ThreadSummary
 /// A project's Caw as the hub answers it (`GET`/`PATCH /api/projects/:id/caw`); the mascot is `CawView`.
 public typealias CawLeadView = Components.Schemas.CawView
 
-/// How a thread is addressed as a session (thread-tabs.ts): `thread:<id>`,
-/// and a thread not started yet, whose first message makes it,
-/// `thread:new:<project id>`.
+/// How a thread is addressed as a session (thread-tabs.ts, core threads.ts
+/// `threadTarget`): `thread:<id>`, wherever a session is addressed by its
+/// id. A thread not started yet has its id already, minted as a send's is
+/// (`newTabId`): its first send carries its project, and the hub makes the
+/// thread under that id.
 public enum ThreadTabs {
     public static let prefix = "thread:"
-    static let newPrefix = "thread:new:"
 
     /// The session-shaped id a thread is listed, opened and linked by.
     public static func tabId(_ threadId: String) -> String { prefix + threadId }
-    /// The tab for a new thread in `projectId`, before its first message.
-    public static func newTabId(_ projectId: String) -> String { newPrefix + projectId }
-    /// The thread an id names; nil for anything else, a new thread's tab included.
+    /// A new thread of `projectId`'s: its id minted here, its project kept
+    /// for its first send (`mintedProject`).
+    @MainActor
+    public static func newTabId(_ projectId: String) -> String {
+        let id = tabId(UUID().uuidString.lowercased())
+        minted[id] = projectId
+        return id
+    }
+    /// The thread an id names; nil for anything else.
     public static func threadId(of id: String) -> String? {
-        id.hasPrefix(prefix) && !id.hasPrefix(newPrefix) ? String(id.dropFirst(prefix.count)) : nil
+        id.hasPrefix(prefix) ? String(id.dropFirst(prefix.count)) : nil
     }
-    /// The project a new thread's tab is for.
-    public static func newProject(of id: String) -> String? {
-        id.hasPrefix(newPrefix) ? String(id.dropFirst(newPrefix.count)) : nil
-    }
-    /// A thread's tab or a new thread's: the ids the thread screen draws.
+    /// The project of a thread this device minted and the hub has not made yet.
+    @MainActor
+    public static func mintedProject(of id: String) -> String? { minted[id] }
+    /// A thread's tab: the ids the thread screen draws.
     public static func isThread(_ id: String) -> Bool { id.hasPrefix(prefix) }
+    /// The threads this device minted, by tab id: their project.
+    @MainActor private static var minted: [String: String] = [:]
+    /// The `noteKind` of a thread's event: something that woke a project's Caw (core `CAW_EVENT_NOTE`).
+    public static let cawEvent = "caw.event"
 }
 
 /// An artifact in a tab of its own (routes/artifact/[id]): its tab's id is the
@@ -47,160 +59,32 @@ public enum ArtifactTabs {
     }
 }
 
-/// One message of a thread (core threads.ts `ThreadMessage`), read off the
-/// hub's JSON once: yours, Caw's, or an event that woke him.
-public struct ThreadNote: Sendable, Equatable {
-    public enum Author: Sendable, Equatable {
-        case you, caw, event
-    }
-
-    public let id: String
-    public let threadId: String
-    /// When it was added, ms epoch.
-    public let createdAt: Double
-    public let author: Author
-    public let body: String
-    /// An event's one line ("Routine · 3 new GitHub issues").
-    public let noteTitle: String?
-    /// The tasks Caw's reply is about (`tsk-12`), drawn as cards under it.
-    public let tasks: [String]
-    /// The project folder's files Caw's reply wrote, drawn as chips under it.
-    public let files: [String]
-    /// Your answer to his question: the question's JSON, and the answer's.
-    let question: Data?
-    let answer: Data?
-    /// A not-woken note's data: your words he has not read, and why.
-    public let notWoken: ThreadNotWoken?
-    /// Caw asking whether to build a design system: the project it is for
-    /// (its event, of kind `design-offer`).
-    public let designOffer: String?
-    /// What rode with your words, as a send's row carries it (`images`,
-    /// `attachments`): the JSON of each, drawn on your row.
-    let carried: Data?
-
-    init?(_ raw: [String: Any]) {
-        guard let id = raw["id"] as? String, let threadId = raw["threadId"] as? String else { return nil }
-        switch raw["author"] as? String {
-        case "you": author = .you
-        case "caw": author = .caw
-        case "event": author = .event
-        default: return nil
-        }
-        self.id = id
-        self.threadId = threadId
-        createdAt = (raw["createdAt"] as? NSNumber)?.doubleValue ?? 0
-        body = raw["body"] as? String ?? ""
-        noteTitle = raw["noteTitle"] as? String
-        tasks = raw["tasks"] as? [String] ?? []
-        files = raw["files"] as? [String] ?? []
-        question = (raw["question"] as? [String: Any]).flatMap { try? JSONSerialization.data(withJSONObject: $0) }
-        answer = (raw["answer"] as? [String: Any]).flatMap { try? JSONSerialization.data(withJSONObject: $0) }
-        notWoken = ((raw["event"] as? [String: Any])?["notWoken"] as? [String: Any]).flatMap(ThreadNotWoken.init)
-        let event = raw["event"] as? [String: Any]
-        designOffer = event?["kind"] as? String == "design-offer" ? event?["projectId"] as? String : nil
-        var carried: [String: Any] = [:]
-        if let images = raw["images"] as? [[String: Any]], !images.isEmpty { carried["images"] = images }
-        if let attachments = raw["attachments"] as? [[String: Any]], !attachments.isEmpty { carried["attachments"] = attachments }
-        self.carried = carried.isEmpty ? nil : try? JSONSerialization.data(withJSONObject: carried)
-    }
-
-    /// A generated message (a frame's, a read's) as one note.
-    static func read(_ message: some Encodable) -> ThreadNote? {
-        guard let data = try? Wire.encoder().encode(message),
-              let raw = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-        return ThreadNote(raw)
-    }
-
-    /// The block's ISO 8601 timestamp, its zone with it (`Z`): the transcript reads no time without one.
-    static func stamp(_ ms: Double) -> String {
-        Date(timeIntervalSince1970: ms / 1000).formatted(Date.ISO8601FormatStyle(includingFractionalSeconds: true))
-    }
-
-    /// The message as the transcript's block (ThreadPane.svelte `blockOf`):
-    /// your words your turn, Caw's his, an event a code line; your answer to
-    /// his question the call that asked it, answered, which the transcript
-    /// draws as the settled question card.
-    func block(in viewId: String) -> [String: Any] {
-        var raw: [String: Any] = ["id": id, "instanceId": viewId, "timestamp": Self.stamp(createdAt)]
-        switch author {
-        case .caw:
-            raw["type"] = "assistant"
-            raw["content"] = body
-        case .event:
-            raw["type"] = "ui.system_note"
-            raw["content"] = body
-            var metadata: [String: Any] = ["noteTitle": noteTitle ?? "", "noteKind": ThreadNote.cawEvent]
-            // What SystemLine draws under it: a design offer's Build and Not now (thread-blocks.ts `eventMetadata`).
-            if let designOffer { metadata["designOffer"] = ["projectId": designOffer] }
-            raw["metadata"] = metadata
-        case .you:
-            guard let question = question.flatMap({ try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }),
-                  let answer = answer.flatMap({ try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }) else {
-                raw["type"] = "user"
-                raw["content"] = body
-                // What rode with your words, as a send's row carries it (ThreadPane.svelte `blockOf`).
-                if let carried = carried.flatMap({ try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }) {
-                    raw["metadata"] = carried
-                }
-                return raw
-            }
-            let call = question["toolUseId"] as? String ?? id
-            let questions = question["questions"] ?? []
-            var result: [String: Any] = ["questions": questions]
-            if answer["outcome"] as? String == "answered" {
-                result["outcome"] = "answered"
-                result["answers"] = answer["answers"] ?? [:]
-                if let annotations = answer["annotations"] { result["annotations"] = annotations }
-            } else {
-                result["outcome"] = "dismissed"
-            }
-            raw["type"] = "tool.use"
-            raw["content"] = ""
-            raw["toolCallId"] = call
-            raw["metadata"] = [
-                "toolName": "AskUserQuestion", "toolId": call, "toolInput": ["questions": questions],
-                "toolStatus": "success", "toolUseResult": result,
-            ] as [String: Any]
-        }
-        return raw
-    }
-
-    /// The `noteKind` of a thread's event: something that woke a project's Caw (voice.ts `CAW_EVENT`).
-    public static let cawEvent = "caw.event"
-}
-
-/// Your words in a thread that did not wake Caw (core threads.ts
-/// `CawNotWoken`): the message he has not read, why, and the hub's sentence
-/// for it.
-public struct ThreadNotWoken: Sendable, Equatable {
-    public let message: String
-    /// `no-machine`, `capped`, `could-not-start`, `place`, `not-taken` or `failed`.
-    public let reason: String
-    public let words: String
-
-    init?(_ raw: [String: Any]) {
-        guard let message = raw["message"] as? String, let reason = raw["reason"] as? String,
-              let words = raw["words"] as? String else { return nil }
-        self.message = message
-        self.reason = reason
-        self.words = words
-    }
-}
-
-/// What a message carries under it, by its block's id (ThreadPane.svelte
-/// `setVoice`): a Caw reply's tasks and the files it wrote; a not-woken
-/// note's reason, and whether Try again stands under it.
+/// What one of Caw's replies carries under it, by its block's id
+/// (ThreadPane.svelte `setVoice`): the tasks it is about and the files it
+/// wrote, from the block's metadata.
 public struct ThreadExtras: Sendable, Equatable {
     public let tasks: [String]
     public let files: [String]
-    public let notWoken: ThreadNotWoken?
-    /// The note is the one Try again wakes Caw from (ThreadPane.svelte `retryable`).
-    public let wakeAgain: Bool
+
+    public init(tasks: [String], files: [String]) {
+        self.tasks = tasks
+        self.files = files
+    }
+
+    /// What each of a thread's replies carries, by block id, read off its transcript's blocks.
+    public static func of(_ blocks: [Components.Schemas.TranscriptBlock]) -> [String: ThreadExtras] {
+        var out: [String: ThreadExtras] = [:]
+        for block in blocks {
+            let tasks = block.metadata?.tasks ?? []
+            let files = block.metadata?.files ?? []
+            if !tasks.isEmpty || !files.isEmpty { out[block.id] = ThreadExtras(tasks: tasks, files: files) }
+        }
+        return out
+    }
 }
 
-/// Every project's threads with its Caw, and the messages of each thread
-/// this device has opened: the hub's word, read on connect and kept by its
-/// frames (client.svelte.ts `state.threads`, `state.threadMessages`).
+/// Every project's threads with its Caw: the hub's word, read on connect
+/// and kept by its frames (client.svelte.ts `state.threads`).
 @MainActor
 @Observable
 public final class ThreadsStore {
@@ -208,28 +92,10 @@ public final class ThreadsStore {
     public private(set) var byProject: [String: [ThreadSummary]] = [:]
     /// Each thread by its id.
     public private(set) var byId: [String: ThreadSummary] = [:]
-    /// The messages of each thread read here, oldest first; nil until read.
-    public private(set) var messages: [String: [ThreadNote]] = [:]
     /// The threads were read once on this connection.
     public private(set) var read = false
-    /// Each thread as the transcript's session (ThreadPane.svelte `session`).
-    @ObservationIgnored private var transcripts: [String: SessionTranscript] = [:]
-    /// His asks that ended with no answer from this device, by thread
-    /// (withdrawn before they were answered, or answered elsewhere): each
-    /// leaves its quiet line where it was asked (ThreadPane.svelte `withdrawn`).
-    private var askEnds: [String: [[String: Any]]] = [:]
     /// The fleet lists the threads as rows (thread-tabs.ts `threadRowOf`).
     @ObservationIgnored var onThreads: () -> Void = {}
-
-    /// The messages that reached a thread while a read of it was on its way,
-    /// and how many reads are: a read's answer may have been taken before
-    /// them, so it lands them after its own (client.svelte.ts
-    /// `heardWhileReading`). Held only while a read is in flight.
-    private struct Reading {
-        var heard: [ThreadNote] = []
-        var reads = 0
-    }
-    @ObservationIgnored private var heardWhileReading: [String: Reading] = [:]
 
     private unowned let hub: HubConnection
     private let log = Logger(subsystem: "dev.cawco.app", category: "Threads")
@@ -241,10 +107,6 @@ public final class ThreadsStore {
     func reset() {
         byProject = [:]
         byId = [:]
-        messages = [:]
-        askEnds = [:]
-        transcripts = [:]
-        retried = []
         read = false
         onThreads()
     }
@@ -264,15 +126,6 @@ public final class ThreadsStore {
         let list = (byProject[thread.projectId] ?? []).filter { $0.id != thread.id } + [thread]
         byProject[thread.projectId] = list.sorted { $0.lastAt != $1.lastAt ? $0.lastAt > $1.lastAt : $0.id > $1.id }
         onThreads()
-    }
-
-    /// A message added to a thread read here, or being read; one not read yet is read whole when it opens (`adoptThreadMessage`).
-    func adopt(_ note: ThreadNote) {
-        heardWhileReading[note.threadId]?.heard.append(note)
-        guard var list = messages[note.threadId], !list.contains(where: { $0.id == note.id }) else { return }
-        list.append(note)
-        messages[note.threadId] = list
-        draw(note.threadId, history: false)
     }
 
     /// Every project's threads (`GET /api/threads`): the whole truth on each connect.
@@ -297,37 +150,10 @@ public final class ThreadsStore {
         }
     }
 
-    /// Reads a thread whole; its frames keep it from then on (`readThread`).
-    /// A frame that lands while the read is on its way is newer than the
-    /// read's answer, so the thread is the read's messages and then each such
-    /// one the read does not have: the read never drops a message the frames
-    /// already brought.
-    public func read(projectId: String, threadId: String) async throws {
-        guard let client = hub.client else { throw TaskRefusal(message: "No hub is connected.") }
-        heardWhileReading[threadId, default: Reading()].reads += 1
-        defer {
-            heardWhileReading[threadId]?.reads -= 1
-            if heardWhileReading[threadId]?.reads == 0 { heardWhileReading[threadId] = nil }
-        }
-        let output = try await client.getApiProjectsByIdThreadsByThreadId(path: .init(id: projectId, threadId: threadId))
-        guard case let .ok(ok) = output else { throw await TaskRefusal.reading(output) }
-        let read = try ok.body.json
-        let notes = read.messages.compactMap(ThreadNote.read)
-        var ids = Set(notes.map(\.id))
-        let after = (heardWhileReading[threadId]?.heard ?? []).filter { ids.insert($0.id).inserted }
-        messages[threadId] = notes + after
-        adopt(read.thread)
-        draw(threadId, history: true)
-        #if DEBUG
-        // Its own prefix and a count, never the list: a thread's `probe thread <id> …` line is the pane's state.
-        log.notice("probe thread-read \(threadId, privacy: .public) \(read.messages.count, privacy: .public) messages, \((self.messages[threadId] ?? []).count, privacy: .public) held")
-        #endif
-    }
-
-    /// A thread send that got no answer, in the error formula: what, why,
-    /// what is kept, the way back (ThreadPane.svelte `THREAD_SEND_UNREACHED`).
-    /// It may have reached him: the same words go again under the id they
-    /// went as (ThreadViewController `unanswered`), the same message to the hub.
+    /// An ask of Caw's that got no answer (a view asked for), in the error
+    /// formula: what, why, what is kept, the way back (hub-read.ts
+    /// `THREAD_SEND_UNREACHED`). It may have reached him: the same words go
+    /// again under the id they went as, the same ask to the hub.
     public static let sendUnreached =
         "Your message may not have gone: the hub didn't answer. Your words are back in the field. Send again once the hub answers, and it goes once."
 
@@ -351,43 +177,16 @@ public final class ThreadsStore {
 
     private static let noHub = "No hub is connected."
 
-    /// Your words in a thread, or the first of a new one (`sayInThread`,
-    /// `startThread`): Caw is woken with them, and with what rides with them
-    /// (client.svelte.ts `carriedOf`: its pictures, its texts and the files
-    /// already on the hub). `id` is the message's, so its row lands the words
-    /// that flew under it. Answers the thread they went to.
+    /// A new thread of the project's, opened by your words: its id minted
+    /// here (`ThreadTabs.newTabId`) and your words its first send, through
+    /// the one send path as any session's (`SessionsStore.steer`), carrying
+    /// the project the hub makes it in. Answers the thread's tab id.
     @discardableResult
-    public func say(projectId: String, threadId: String?, body: String, id: String,
-                    images: [(mediaType: String, data: Data)] = [], texts: [(name: String, content: String)] = [],
-                    files: [SentFile] = []) async throws -> ThreadSummary {
-        guard let client = hub.client else { throw TaskRefusal(message: Self.noHub) }
-        let said: Components.Schemas.ThreadSaid
-        if let threadId {
-            typealias Said = Operations.PostApiProjectsByIdThreadsByThreadIdMessages.Input.Body.JsonPayload
-            let carried = images.map { Said.ImagesPayloadPayload(mediaType: $0.mediaType, data: $0.data.base64EncodedString()) }
-            let attached = texts.map { Said.AttachmentsPayloadPayload(value1: .init(kind: .text, name: $0.name, content: $0.content)) }
-                + files.map { Said.AttachmentsPayloadPayload(value2: .init(kind: .file, name: $0.name, mediaType: $0.mediaType, size: $0.size, ref: $0.ref)) }
-            let output = try await client.postApiProjectsByIdThreadsByThreadIdMessages(
-                path: .init(id: projectId, threadId: threadId),
-                body: .json(.init(body: body, id: id, images: carried.isEmpty ? nil : carried, attachments: attached.isEmpty ? nil : attached)))
-            guard case let .ok(ok) = output else { throw await TaskRefusal.reading(output) }
-            said = try ok.body.json
-        } else {
-            typealias Started = Operations.PostApiProjectsByIdThreads.Input.Body.JsonPayload
-            let carried = images.map { Started.ImagesPayloadPayload(mediaType: $0.mediaType, data: $0.data.base64EncodedString()) }
-            let attached = texts.map { Started.AttachmentsPayloadPayload(value1: .init(kind: .text, name: $0.name, content: $0.content)) }
-                + files.map { Started.AttachmentsPayloadPayload(value2: .init(kind: .file, name: $0.name, mediaType: $0.mediaType, size: $0.size, ref: $0.ref)) }
-            let output = try await client.postApiProjectsByIdThreads(
-                path: .init(id: projectId),
-                body: .json(.init(body: body, id: id, images: carried.isEmpty ? nil : carried, attachments: attached.isEmpty ? nil : attached)))
-            guard case let .ok(ok) = output else { throw await TaskRefusal.reading(output) }
-            said = try ok.body.json
-            if messages[said.thread.id] == nil { messages[said.thread.id] = [] }
-        }
-        if let note = ThreadNote.read(said.message) { adopt(note) }
-        adopt(said.thread)
-        log.notice("said in thread \(said.thread.id, privacy: .public) as message \(id, privacy: .public)")
-        return said.thread
+    public func start(projectId: String, text: String) -> String {
+        let viewId = ThreadTabs.newTabId(projectId)
+        _ = hub.sessions.steer(sessionId: viewId, machineId: "hub", text: text, projectId: projectId)
+        log.notice("started thread \(viewId, privacy: .public) in project \(projectId, privacy: .public)")
+        return viewId
     }
 
     /// Ask Caw for a view (client.svelte.ts `requestView`): your words go to
@@ -400,134 +199,9 @@ public final class ThreadsStore {
         let output = try await client.postApiProjectsByIdViewRequests(path: .init(id: projectId), body: .json(.init(text: text, id: id)))
         guard case let .ok(ok) = output else { throw await TaskRefusal.reading(output) }
         let said = try ok.body.json
-        if messages[said.thread.id] == nil { messages[said.thread.id] = [] }
-        if let note = ThreadNote.read(said.message) { adopt(note) }
         adopt(said.thread)
         log.notice("asked for a view in thread \(said.thread.id, privacy: .public) as message \(id, privacy: .public)")
         return said.thread
-    }
-
-    /// His ask in this thread ended with no answer from this device, withdrawn
-    /// or answered elsewhere (AskEnd): its quiet line, where it was asked.
-    func ended(_ ask: ParkedAsk, line: String) {
-        guard let threadId = ask.threadId else { return }
-        let note: [String: Any] = [
-            "id": "ended:\(ask.requestId)", "instanceId": ThreadTabs.tabId(threadId), "type": "ui.system_note",
-            "content": line, "timestamp": ThreadNote.stamp(Date.now.timeIntervalSince1970 * 1000),
-        ]
-        askEnds[threadId, default: []].append(note)
-        draw(threadId, history: false)
-    }
-
-    // MARK: The thread as a transcript
-
-    /// The thread as the transcript reads a session: its messages as
-    /// blocks, kept current as they change (ThreadPane.svelte `session`).
-    public func transcript(_ threadId: String) -> SessionTranscript {
-        if let held = transcripts[threadId] { return held }
-        let made = SessionTranscript(ThreadTabs.tabId(threadId))
-        made.loading = messages[threadId] == nil
-        transcripts[threadId] = made
-        draw(threadId, history: true)
-        return made
-    }
-
-    /// A thread not started yet (`thread:new:<project>`): nothing said, nothing to read.
-    public func blank(_ projectId: String) -> SessionTranscript {
-        let made = SessionTranscript(ThreadTabs.newTabId(projectId))
-        made.loading = false
-        return made
-    }
-
-    /// What Caw's replies and the not-woken notes carry under them, by block id.
-    public func extras(_ threadId: String) -> [String: ThreadExtras] {
-        let again = wakeAgainNote(threadId)
-        var out: [String: ThreadExtras] = [:]
-        for note in messages[threadId] ?? [] {
-            if note.author == .caw, !note.tasks.isEmpty || !note.files.isEmpty {
-                out[note.id] = ThreadExtras(tasks: note.tasks, files: note.files, notWoken: nil, wakeAgain: false)
-            } else if let woken = note.notWoken {
-                out[note.id] = ThreadExtras(tasks: [], files: [], notWoken: woken, wakeAgain: note.id == again)
-            }
-        }
-        return out
-    }
-
-    /// His words as he writes them, while his turn answers your words in this
-    /// thread (ThreadPane.svelte `liveWords`), as the thread's live tail: his
-    /// plain words in his session after the send `hearing` names, the one he
-    /// is writing last, as the hub posts them as his reply when the turn
-    /// ends; none once a reply of his stands after your newest words. The
-    /// thread screen watches his session while `hearing` names it.
-    public func hear(_ threadId: String) {
-        guard let transcript = transcripts[threadId] else { return }
-        let thread = byId[threadId]
-        let busy = thread?.status == .working
-        var words = ""
-        if let hearing = thread?.hearing, let lead = hub.sessions.transcripts[hearing.instanceId],
-           (messages[threadId] ?? []).last(where: { $0.author != .event })?.author == .you,
-           let at = lead.blocks.firstIndex(where: { $0.id == hearing.send }) {
-            var said = lead.blocks[(at + 1)...]
-                .filter { $0._type.value3 == .assistant && $0.parentToolUseId == nil }
-                .map(\.content)
-                .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            if let streaming = lead.tail?.streaming, !streaming.isEmpty { said.append(streaming) }
-            words = said.joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        guard transcript.tail?.streaming != words || transcript.tail?.busy != busy else { return }
-        let raw: [String: Any] = [
-            "busy": busy, "streaming": words, "streams": [String: Any](),
-            "thinkingClosing": false, "thinkingSince": NSNull(), "thinkingStream": "",
-        ]
-        transcript.tail = (try? JSONSerialization.data(withJSONObject: raw))
-            .flatMap { try? Wire.decoder().decode(Components.Schemas.TranscriptTail.self, from: $0) }
-    }
-
-    /// Not-woken notes Try again was pressed on and went: their wake is under way.
-    private var retried: Set<String> = []
-
-    /// The one not-woken note that offers Try again (ThreadPane.svelte
-    /// `retryable`): the newest, about your newest words, with no reply of
-    /// his after them, while no turn of his is on the thread.
-    private func wakeAgainNote(_ threadId: String) -> String? {
-        let notes = messages[threadId] ?? []
-        guard byId[threadId]?.status != .working,
-              let at = notes.lastIndex(where: { $0.author == .you && $0.answer == nil }) else { return nil }
-        let yours = notes[at]
-        let after = notes[(at + 1)...]
-        guard !after.contains(where: { $0.author == .caw }),
-              let note = after.last(where: { $0.notWoken?.message == yours.id }),
-              !retried.contains(note.id) else { return nil }
-        return note.id
-    }
-
-    /// Try again on a not-woken note (`wakeThread`): Caw woken with your
-    /// words he has not read; nothing of yours is added. The thread's frames
-    /// carry what comes of it.
-    public func wake(projectId: String, threadId: String, note: String) async throws {
-        guard let client = hub.client else { throw TaskRefusal(message: Self.noHub) }
-        let output = try await client.postApiProjectsByIdThreadsByThreadIdWake(path: .init(id: projectId, threadId: threadId))
-        guard case .ok = output else { throw await TaskRefusal.reading(output) }
-        retried.insert(note)
-        log.notice("woke Caw again in thread \(threadId, privacy: .public) from note \(note, privacy: .public)")
-    }
-
-    private func draw(_ threadId: String, history: Bool) {
-        guard let transcript = transcripts[threadId] else { return }
-        let viewId = ThreadTabs.tabId(threadId)
-        var raws = (messages[threadId] ?? []).map { $0.block(in: viewId) }
-        // An ended ask's line stands after what was said before it went.
-        for note in askEnds[threadId] ?? [] {
-            let at = raws.lastIndex { ($0["timestamp"] as? String ?? "") <= (note["timestamp"] as? String ?? "") }
-            raws.insert(note, at: (at ?? -1) + 1)
-        }
-        let decoder = Wire.decoder()
-        transcript.blocks = raws.compactMap { raw in
-            (try? JSONSerialization.data(withJSONObject: raw)).flatMap { try? decoder.decode(Components.Schemas.TranscriptBlock.self, from: $0) }
-        }
-        transcript.loading = messages[threadId] == nil
-        transcript.blockRevision += 1
-        if history { transcript.historyRevision += 1 }
     }
 
     // MARK: Caw

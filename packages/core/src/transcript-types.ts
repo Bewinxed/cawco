@@ -113,6 +113,8 @@ export interface BlockMetadata {
    */
   errorTitle?: string;
   exitCode?: number;
+  /** A Caw thread's reply: the project folder's files it says he wrote (`stages.md`), drawn as chips under it. */
+  files?: string[];
   handoffBrief?: string;
   handoffKind?: "handoff" | "start" | "delegate";
   /**
@@ -159,6 +161,11 @@ export interface BlockMetadata {
   /** Images returned by the tool, as the hub's media references. */
   resultImages?: Array<{ mediaType: string; src: string }>;
   resultSubtype?: string;
+  /**
+   * A Caw thread's notice that a session made a routine (ThreadEvent
+   * `routine-made`): the note draws Keep, Turn off and Open beside it.
+   */
+  routineMade?: { expiresAt: number | null; routineId: string };
   /** A `user.rule`'s rule name, read off its `[Rule: <name>]` marker line. */
   ruleName?: string;
   /** Why a send did not go: its record's reason. */
@@ -177,6 +184,8 @@ export interface BlockMetadata {
   subagentModel?: string;
   subagentType?: string;
   subtype?: string;
+  /** A Caw thread's reply: the tasks it is about (`tsk-12`), drawn as cards under it. */
+  tasks?: string[];
   thinking?: string;
   /**
    * How long the thinking block ran, measured by the hub's clock between the

@@ -250,11 +250,10 @@ export function unreachedAnswer(response: Response): boolean {
 }
 
 /**
- * A send to Caw that got no answer, in the error formula: what, why, what is
- * kept, the way back. Said over the composer of every place that writes to
- * him (a thread tab, his panel). It may have reached him: each of those
- * sends goes again under the id it went as (id.ts `idForWords`), which the
- * hub takes as the same message.
+ * An ask of Caw's that got no answer (a new project's prompt, a view
+ * asked for), in the error formula: what, why, what is kept, the way back.
+ * It may have reached him: each goes again under the id it went as (id.ts
+ * `idForWords`), which the hub takes as the same ask.
  */
 export const THREAD_SEND_UNREACHED =
   "Your message may not have gone: the hub didn't answer. Your words are back in the field. Send again once the hub answers, and it goes once.";

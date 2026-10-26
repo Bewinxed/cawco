@@ -97,12 +97,20 @@ import {
   presenceLogWords,
   questionsOf,
   type TurnWakes,
+  threadTarget,
+  threadTargetOf,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { firstLine } from "@cawco/core/tool-presentation";
 import { Elysia, t } from "elysia";
-import type { DbShape, PushDeviceRow, WorkItemRow } from "./db";
+import type {
+  DbShape,
+  PushDeviceRow,
+  ThreadMessageRow,
+  ThreadRow,
+  WorkItemRow,
+} from "./db";
 import { hidden } from "./hidden";
 import { boardTitle } from "./labels";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
@@ -182,6 +190,8 @@ const MAX_INLINE_OPTIONS = 3;
 const LOOK_GRACE_MS = 5000;
 /** A finished turn's visible body: the reply itself goes sealed. */
 const TURN_ENDED = "Finished its turn";
+/** Caw's reply in a thread, its visible body: the reply itself goes sealed. */
+const CAW_REPLIED = "Caw replied";
 /** A session's `send_to_user`'s visible body: the message itself goes sealed. */
 const SENT_YOU = "Sent you a message";
 /** A failed session's visible body: the reason goes sealed. */
@@ -860,6 +870,8 @@ export const createPush = ({
   const recent = new Map<string, number>();
   /** Sessions whose running turn the operator interrupted: its end pushes nothing. */
   const stopped = new Set<string>();
+  /** When each Caw thread was last looked at, by its view id (`thread:<id>`): a reply before then pushes nothing. */
+  const threadLooks = new Map<string, Date>();
   /** By pairing: the clear count the device was last handed the whole cleared set at. */
   const told = new Map<string, number>();
   /** By pairing: when its last background push went. */
@@ -1775,6 +1787,65 @@ export const createPush = ({
     /** The operator (or a session for them) interrupted the session: the turn it cuts pushes nothing. */
     interrupted(instanceId: string): void {
       stopped.add(instanceId);
+    },
+
+    /**
+     * The owner had these in front (`/api/seen` `look`): the Caw threads
+     * among them (`thread:<id>`) are looked at now, so a reply of his before
+     * this pushes nothing ({@link threadReply}).
+     */
+    looked(ids: readonly string[], at: Date): void {
+      for (const id of ids) {
+        if (threadTarget(id)) {
+          threadLooks.set(id, at);
+        }
+      }
+    },
+
+    /**
+     * Caw replied in a thread (caw.ts `said`): his turn's end is no push of
+     * its own ({@link turnEnded} leaves a lead out), his reply is. One
+     * collapse id per thread, so a newer reply replaces the older on the
+     * device; a tap opens the thread. It waits {@link LOOK_GRACE_MS} as a
+     * turn's push does, and nothing goes when the thread was looked at since.
+     */
+    threadReply(thread: ThreadRow, reply: ThreadMessageRow): void {
+      const viewId = threadTargetOf(thread.id);
+      const at = reply.createdAt;
+      const unseen = () =>
+        (threadLooks.get(viewId)?.getTime() ?? 0) < at.getTime();
+      lifetime.after(LOOK_GRACE_MS, () => {
+        if (!unseen()) {
+          return;
+        }
+        const project = projectName(thread.projectId);
+        arrive(
+          {
+            ask: false,
+            instanceId: viewId,
+            landedAt: at,
+            still: unseen,
+            notification: {
+              shown: alertOf("Caw", project, CAW_REPLIED),
+              sealed: alertOf(
+                thread.title,
+                project,
+                firstLine(reply.body) ?? CAW_REPLIED
+              ),
+              category: PUSH_CATEGORIES.turn,
+              collapseId: turnCollapseId(viewId),
+              threadId: thread.projectId,
+              data: {
+                kind: "turn",
+                instanceId: viewId,
+                machineId: "hub",
+                projectId: thread.projectId,
+              },
+            },
+          },
+          false
+        );
+      });
     },
 
     /**

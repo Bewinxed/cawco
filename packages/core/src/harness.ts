@@ -1140,11 +1140,18 @@ export interface SendRecord {
    * another's record ({@link SessionMessage.joined}) — that record's uuid.
    */
   harnessId?: string;
+  /**
+   * The session it went to. A send to a Caw thread ({@link threadId}) names
+   * the thread's view id (`thread:<id>`) until a lead session was handed it,
+   * and that lead's id from then on.
+   */
   instanceId: string;
   keepAlive?: true;
   mode: SendMode;
   /** No permission mode to wake its session on: the page asks for one, and it goes again ({@link ModeAsk}). */
   modeAsk?: ModeAsk;
+  /** ISO-8601: when its reader read it; absent until then. A thread's page places it here. */
+  readAt?: string;
   /** Why it failed, in the harness's words or the hub's. */
   reason?: string;
   /**
@@ -1157,6 +1164,8 @@ export interface SendRecord {
   /** The failed send this one was sent in place of. */
   replaces?: string;
   state: SendState;
+  /** The Caw thread it was written in (core threads.ts), when it was a thread's. */
+  threadId?: string;
   uuid: string;
 }
 

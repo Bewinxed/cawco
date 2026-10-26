@@ -1,7 +1,10 @@
 /**
  * A project's threads: your conversations with its Caw (Projects spec §5.6,
- * the hub's `caw.ts`). The shapes the routes answer, the `thread.upsert` and
- * `thread.message` frames carry, and the dashboard draws.
+ * the hub's `caw.ts`). A thread is a target a session reads, kept by the
+ * hub: it is addressed as `thread:<id>` wherever a session is addressed by
+ * its id (a send, a transcript page, a stream), and the hub serves it as a
+ * transcript (thread-transcript.ts). The shapes the routes answer, the
+ * `thread.upsert` frame carries, and the dashboard draws.
  */
 import type {
   HarnessKind,
@@ -77,14 +80,19 @@ export type CawInitiated = "finish" | "stop";
  */
 export type ThreadStatus = "working" | "needs-you" | "ready";
 
-/**
- * Caw's turn answering your words in a thread, before his reply lands: his
- * session, and the send his turn read your words as.
- */
-export interface ThreadHearing {
-  instanceId: string;
-  send: string;
-}
+/** How a thread is addressed wherever a session is addressed by its id: `thread:<id>`. */
+export const THREAD_TARGET = "thread:";
+
+/** The `noteKind` of a thread's event line: something that woke, or was noted for, a project's Caw. */
+export const CAW_EVENT_NOTE = "caw.event";
+
+/** The id a thread is addressed by: its view id. */
+export const threadTargetOf = (threadId: string): string =>
+  `${THREAD_TARGET}${threadId}`;
+
+/** The thread an address names, or undefined for a session's id. */
+export const threadTarget = (id: string): string | undefined =>
+  id.startsWith(THREAD_TARGET) ? id.slice(THREAD_TARGET.length) : undefined;
 
 /** A thread as the project's list and the `thread.upsert` frame carry it. */
 export interface ThreadSummary {
@@ -94,13 +102,6 @@ export interface ThreadSummary {
    * Absent while it is not archived; a new message in it brings it back.
    */
   archivedAt?: number;
-  /**
-   * While his turn has read your words here and not yet answered them: what
-   * he says in plain text after that send in his session is posted here as
-   * his reply when the turn ends, so the thread draws it as he writes it.
-   * Absent otherwise.
-   */
-  hearing?: ThreadHearing;
   id: string;
   /** When its newest message was added, ms epoch. */
   lastAt: number;
@@ -152,19 +153,15 @@ export interface ThreadImage {
 }
 
 /**
- * Yours: words you wrote, or your answer to the lead's question. An answer
- * carries `question` and `answer`, and `body` reads it in one line. Words
- * carry what rode with them as a send's do: `images`, and `attachments`
- * (pastes, and files by the hub's reference); Try again wakes Caw with all
- * of it.
+ * Your answer to the lead's question: the questions, and your choices or
+ * that you walked away; `body` reads it in one line. Your words themselves
+ * are sends (`SendRecord` with its `threadId`), never a thread message.
  */
 export interface YourThreadMessage extends ThreadMessageBase {
-  answer?: ThreadAnswer;
-  attachments?: import("./attachments").SendAttachment[];
+  answer: ThreadAnswer;
   author: "you";
   body: string;
-  images?: ThreadImage[];
-  question?: ThreadQuestion;
+  question: ThreadQuestion;
 }
 
 /**
@@ -248,16 +245,8 @@ export type ThreadEvent =
       /** The command or file of one of Caw's gated calls; absent for a wake. */
       command?: string;
       kind: "caw";
-      /** Your words that did not wake him: on every `not-woken` event, and only there. */
-      notWoken?: CawNotWoken;
       what:
-        | "not-woken"
-        | "could-not-start"
-        | "ran"
-        | "edited"
-        | "refused"
-        | "denied"
-        | "guard";
+        "could-not-start" | "ran" | "edited" | "refused" | "denied" | "guard";
     }
   | { kind: "view"; name: string }
   | { kind: "agents"; sha: string }
@@ -380,34 +369,6 @@ export interface LfsOfferState {
   rows: PlaceLfsRow[];
 }
 
-/**
- * Why your words did not wake Caw: `no-machine`, no machine is online for
- * him; `capped`, the project is past its spend cap; `could-not-start`, his
- * session could not be started; `place`, his place's boundary could not be
- * held on his machine; `not-taken`, his session did not take the message;
- * `failed`, anything else (its words say what).
- */
-export type CawNotWokenReason =
-  | "no-machine"
-  | "capped"
-  | "could-not-start"
-  | "place"
-  | "not-taken"
-  | "failed";
-
-/**
- * Your words in a thread that did not wake Caw (a `not-woken` event): why,
- * the hub's sentence for it, and your message he has not read, which Try
- * again (`POST /api/projects/:id/threads/:threadId/wake`) wakes him with.
- */
-export interface CawNotWoken {
-  /** Your message in the thread he has not read. */
-  message: string;
-  reason: CawNotWokenReason;
-  /** The cause, in the hub's words ("No machine is online, so Caw can't start."). */
-  words: string;
-}
-
 /** A note in a thread as its writers give it: one line, its fold, and what it is. */
 export interface ThreadNote {
   body?: string;
@@ -431,12 +392,6 @@ export interface EventThreadMessage extends ThreadMessageBase {
 
 export type ThreadMessage =
   YourThreadMessage | CawThreadMessage | EventThreadMessage;
-
-/** A thread and its messages, oldest first: `GET /api/projects/:id/threads/:threadId`. */
-export interface ThreadRead {
-  messages: ThreadMessage[];
-  thread: ThreadSummary;
-}
 
 /**
  * What reaching a project's spend cap does (Projects spec §5.3): `pause`
@@ -530,10 +485,4 @@ export interface ProjectSpend {
   todayStart: number;
   /** Every session of the project. */
   todayUsd: number;
-}
-
-/** Your message as the hub took it: the thread (new or moved) and the message. */
-export interface ThreadSaid {
-  message: ThreadMessage;
-  thread: ThreadSummary;
 }

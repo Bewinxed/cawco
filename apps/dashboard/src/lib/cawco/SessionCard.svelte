@@ -1,6 +1,6 @@
 <script lang="ts" module>
-  import { cawco, readThread } from "./client.svelte";
-  import { threadIdOf } from "./thread-tabs";
+  import { cawco, readTranscript } from "./client.svelte";
+  import { threadIdOf, threadTabId } from "./thread-tabs";
 
   /**
    * The session whose live tail a card draws: the session itself, and none
@@ -9,21 +9,17 @@
   export const tailOf = (id: string | null): string | null =>
     !id || threadIdOf(id) ? null : id;
 
-  /** A thread's card reads its messages, so it opens on its newest line. */
+  /** A thread's card reads its transcript, as a session's is read, so it opens on its newest line. */
   export function readThreadCard(threadId: string): void {
-    const thread = cawco.threadOf(`thread:${threadId}`);
-    if (!thread) {
-      return;
-    }
-    if (!cawco.threadMessagesOf(threadId)) {
+    const viewId = threadTabId(threadId);
+    if (cawco.threadOf(viewId) && !cawco.session(viewId)?.initialized) {
       // biome-ignore lint/complexity/noVoid: fire-and-forget; the card draws whatever has arrived.
-      void readThread(thread.projectId, threadId).catch(() => undefined);
+      void readTranscript(viewId).catch(() => undefined);
     }
   }
 </script>
 
 <script lang="ts">
-  import type { ThreadMessage } from "@cawco/core";
   import { commonWords } from "@cawco/core";
   /**
    * A session's card, as the house hover panel (HoverPanel) draws it: its
@@ -51,6 +47,7 @@
     type TailNote,
   } from "./transcript/DelegateTail.svelte";
   import { askDetailOf } from "./transcript/present";
+  import type { Message } from "./types";
 
   let { id, open }: { id: string; open?: string } = $props();
 
@@ -66,17 +63,24 @@
   };
 
   /** A thread's newest line, as the card's tail ends on it. */
-  const newestLine = (message: ThreadMessage | undefined): string | null => {
+  /** Who said a thread's row: you, Caw, or an event noted in it; null for a row that is no one's line. */
+  const SPEAKERS: Partial<Record<Message["type"], string>> = {
+    user: "You",
+    assistant: "Caw",
+    "ui.system_note": "Event",
+  };
+  const speakerOf = (message: Message): string | null =>
+    SPEAKERS[message.type] ?? null;
+  /** A thread's row as its card's one line: its words' first line, an event's title. */
+  const newestLine = (message: Message | undefined): string | null => {
     if (!message) {
       return null;
     }
-    const words = message.author === "event" ? message.noteTitle : message.body;
-    return words.trim().split("\n")[0] ?? null;
-  };
-  const SPEAKER: Record<ThreadMessage["author"], string> = {
-    caw: "Caw",
-    event: "Event",
-    you: "You",
+    const words =
+      message.type === "ui.system_note"
+        ? (message.metadata?.noteTitle ?? "")
+        : message.content;
+    return words.trim().split("\n")[0] || null;
   };
 
   type Tone = "live" | "needs" | "stopping" | "done" | "failed" | "idle";
@@ -206,12 +210,14 @@
   </div>
   {#if thread}
     <!-- A thread's card: its newest line. -->
-    {@const newest = cawco.threadMessagesOf(thread.id)?.at(-1)}
+    {@const newest = cawco
+      .session(threadTabId(thread.id))
+      ?.messages.findLast((message) => speakerOf(message) !== null)}
     {@const line = newestLine(newest)}
     {#if newest && line}
       <p class="flex min-w-0 gap-space-2 text-size-meta text-ink-strong">
         <span data-slot="who" class="flex-none font-medium"
-          >{SPEAKER[newest.author]}</span
+          >{speakerOf(newest)}</span
         >
         <span class="min-w-0 truncate">{line}</span>
       </p>

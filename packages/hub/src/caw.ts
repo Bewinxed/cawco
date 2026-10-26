@@ -36,12 +36,15 @@
  *   to take them and failed attempts to you (push.ts), and the dispatcher
  *   starts nothing on its own. A move of harness or model ends his session.
  * - **Threads**: conversations with Caw, kept here; Caw answers with
- *   `thread_reply`. A thread's status is derived, never stored: `working`
- *   while the lead is busy on a turn that thread woke, `needs-you` while a
- *   question the lead asked in it is parked, else `ready`. The lead's
- *   question is tagged with its thread (server.ts) and your answer lands in
- *   it. Every change reaches open dashboards as `thread.upsert` and
- *   `thread.message` frames.
+ *   `thread_reply`. A thread is a target his session reads: it is addressed
+ *   as `thread:<id>`, your words there are sends through the hub's one send
+ *   path ({@link Caw.sent}), each waking him under its own uuid, and the hub
+ *   serves the thread as a transcript (thread-transcript.ts). A thread's
+ *   status is derived, never stored: `working` while the lead is busy on a
+ *   turn that thread woke, `needs-you` while a question the lead asked in it
+ *   is parked, else `ready`. The lead's question is tagged with its thread
+ *   (server.ts) and your answer lands in it. Every change reaches open
+ *   dashboards as `thread.upsert` frames and on the thread's stream.
  * - **Views**: Caw drafts a view with `view_draft` (views.ts), an OpenUI
  *   Lang program written to the prompt generated from CawCo's library
  *   (openui.ts `VIEW_PROMPT`, which your ask for a view carries), reading the
@@ -62,7 +65,6 @@ import {
   CAW_DENIED_TOOLS,
   CAW_NO_MACHINE,
   type CawInitiated,
-  type CawNotWokenReason,
   type CawRunning,
   type CawView,
   type ConnectionView,
@@ -86,16 +88,12 @@ import {
   sessionLink,
   type ThreadAnswer,
   type ThreadEvent,
-  type ThreadHearing,
-  type ThreadMessage,
-  type ThreadMessageFrame,
   type ThreadNote,
-  type ThreadRead,
-  type ThreadSaid,
   type ThreadStatus,
   type ThreadSummary,
   type ThreadUpsertFrame,
   taskLink,
+  threadTargetOf,
   type UserAnswers,
   VIEW_TOOLS,
   type ViewAsked,
@@ -110,21 +108,25 @@ import type { Blocks } from "./blocks";
 import { topsAtCaw } from "./caw-own";
 import type {
   DbShape,
+  SentMessageRow,
   ThreadListRow,
   ThreadMessageRow,
   ThreadRow,
   WorkItemRow,
 } from "./db";
 import type { Origin, WorkOrigin } from "./db/schema";
+import { sendWords } from "./db/words";
 import { byHandle } from "./handles";
 import { inboxText } from "./ingress";
 import { sentence, tool } from "./mcp-tool";
-import { mediaBase64, storeImage } from "./media";
+import { mediaBase64 } from "./media";
 import { MAKE_A_NOTE, personsTier, ROUTINE_ORIGIN } from "./memory";
 import { VIEW_PROMPT } from "./openui";
 import {
   folderReadWords,
   folderWrittenWords,
+  type ThreadLine,
+  type ThreadLines,
   threadReadWords,
   threadRepliedWords,
   viewDraftedWords,
@@ -317,11 +319,10 @@ export interface CawEvent {
   /** The routine whose run this wake is (routines.ts): its turn is that run's, and a note in it is tainted (memory.ts). */
   routine?: string;
   /**
-   * The person's own send this wake carries ({@link Caw.personSent}): it
-   * goes under that send's uuid, so the row their screen drew is the wake's
-   * record.
+   * The person's own send this wake carries, by its uuid ({@link Caw.sent}):
+   * the wake goes under it, so the send's record is the wake's.
    */
-  send?: PersonSend;
+  send?: string;
   text: string;
   /** Its thread: the note goes there, and that thread is `working` while the turn it wakes runs. */
   threadId?: string;
@@ -343,36 +344,11 @@ interface Carry {
   uuid?: string;
 }
 
-/**
- * Your words' send to a thread (caw.ts `start`, `say`): the message's id
- * when its sender chose it, the send to Caw's session it came as, and what
- * rode with it.
- */
-interface YourSend {
-  carried?: Carried;
-  id?: string;
-  person?: PersonSend;
-}
-
-/** What rode with a thread message of yours, as the message keeps it. */
-type Kept = Partial<Pick<ThreadMessageRow, "images" | "attachments">>;
-
 /** What a wake's message carries, from its event. */
 const carryOf = (event: CawEvent): Carry => ({
-  ...(event.send ? { uuid: event.send.uuid } : {}),
+  ...(event.send ? { uuid: event.send } : {}),
   ...(event.carried ? { carried: event.carried } : {}),
 });
-
-/** A person's send to Caw's session, as its wake carries it on: its uuid. */
-interface PersonSend {
-  uuid: string;
-  /**
-   * Told the wake that carries the send once it is under way, with when it
-   * settles (sent, or noted in the thread as not woken): the send's own
-   * record is that wake's, so nothing records it before then.
-   */
-  waking: (settled: Promise<void>) => void;
-}
 
 /** A send's words: its text, or the text blocks of its content. */
 const wordsOf = (content: SendPayload["message"]["message"]["content"]) =>
@@ -381,43 +357,6 @@ const wordsOf = (content: SendPayload["message"]["message"]["content"]) =>
     : content
         .flatMap((block) => (block.type === "text" ? [block.text] : []))
         .join("\n");
-
-const messageOf = (row: ThreadMessageRow): ThreadMessage => {
-  const base = {
-    id: row.id,
-    threadId: row.threadId,
-    createdAt: row.createdAt.getTime(),
-  };
-  switch (row.author) {
-    case "event":
-      return {
-        ...base,
-        author: "event",
-        noteTitle: row.noteTitle ?? "",
-        event: row.event,
-        ...(row.body ? { body: row.body } : {}),
-      };
-    case "caw":
-      return {
-        ...base,
-        author: "caw",
-        body: row.body,
-        ...(row.tasks?.length ? { tasks: row.tasks } : {}),
-        ...(row.files?.length ? { files: row.files } : {}),
-      };
-    case "you":
-      break;
-  }
-  return {
-    ...base,
-    author: "you",
-    body: row.body,
-    ...(row.images?.length ? { images: row.images } : {}),
-    ...(row.attachments?.length ? { attachments: row.attachments } : {}),
-    ...(row.question ? { question: row.question } : {}),
-    ...(row.answer ? { answer: row.answer } : {}),
-  };
-};
 
 /** How long a thread's title runs: the first line of its first message, cut. */
 const TITLE_MAX = 60;
@@ -490,11 +429,34 @@ const eventRow = (note: ThreadNote) => ({
   event: note.event,
 });
 
-/** A thread message as a wake carries it: your words, or a note's title over its body. */
+/** A note as a wake carries it: its title over its body. */
 const openedOf = (line: ThreadMessageRow): string =>
-  line.author === "event"
-    ? [line.noteTitle, line.body].filter(Boolean).join("\n\n")
-    : line.body;
+  [line.noteTitle, line.body].filter(Boolean).join("\n\n");
+
+/**
+ * The pictures a send carried, back as a wake carries them: each one's
+ * bytes out of the media store (server.ts `envelopeOf` reads a pending send
+ * the same way). Undefined when one is no longer stored. Its pastes and
+ * files are in its words already, as its record keeps them.
+ */
+const picturesOf = (send: SentMessageRow): Carried | undefined => {
+  const content = send.body?.message.content;
+  const images: { mediaType: string; data: string }[] = [];
+  for (const block of typeof content === "string" ? [] : (content ?? [])) {
+    const { source } = block as {
+      source?: { type?: string; url?: string; media_type?: string };
+    };
+    if (block.type !== "image" || source?.type !== "url" || !source.url) {
+      continue;
+    }
+    const data = mediaBase64(source.url);
+    if (!(data && source.media_type)) {
+      return;
+    }
+    images.push({ mediaType: source.media_type, data });
+  }
+  return images.length > 0 ? { images } : {};
+};
 
 /** An attempt's end, in the word an event note reads. */
 const ENDED: Record<ItemEnd, string> = {
@@ -532,17 +494,30 @@ const errorWords = (error: unknown): string =>
 /** Why an event's wake goes no further while Caw is off. */
 const CAW_OFF = "Caw is off: only your own words wake him.";
 
-/** Why Caw's start failed: refused for want of a machine (`startLead`), else failed on its machine. */
-const startFailure = (error: unknown): CawNotWokenReason =>
-  error instanceof CawRefusal && error.status === 409
-    ? "no-machine"
-    : "could-not-start";
-
-/** The not-woken a thread message is, when it is one (`notWoken`, core threads.ts). */
-const notWokenOf = (row: ThreadMessageRow) =>
-  row.author === "event" && row.event?.kind === "caw"
-    ? row.event.notWoken
-    : undefined;
+/** A thread's own row as `thread_read` reads it: Caw's reply, a note, or your answer to his question. */
+const lineOf = (message: ThreadMessageRow): ThreadLine => {
+  const at = message.createdAt.getTime();
+  switch (message.author) {
+    case "caw":
+      return {
+        at,
+        author: "caw",
+        body: message.body,
+        ...(message.tasks?.length ? { tasks: message.tasks } : {}),
+        ...(message.files?.length ? { files: message.files } : {}),
+      };
+    case "event":
+      return {
+        at,
+        author: "event",
+        noteTitle: message.noteTitle ?? "",
+        ...(message.body ? { body: message.body } : {}),
+      };
+    case "you":
+      break;
+  }
+  return { at, author: "you", body: message.body, answer: true };
+};
 
 /** A refusal a route answers with its status. */
 export class CawRefusal extends Error {
@@ -595,19 +570,22 @@ export interface CawDeps {
     | "ingress"
     | "leadTurns"
     | "listProjects"
+    | "makeThread"
     | "newestConversation"
     | "project"
     | "projectAttempts"
     | "projectSpend"
     | "projectThreads"
     | "putLeadTurn"
+    | "sendRecord"
     | "setProjectCaw"
     | "setSetupThread"
     | "spendOnCap"
     | "thread"
     | "threadMessages"
-    | "threadMessage"
     | "threadOfTask"
+    | "threadSends"
+    | "touchThread"
     | "updateKeepAlive"
     | "updateWorkItem"
     | "workItem"
@@ -637,6 +615,8 @@ export interface CawDeps {
   ) => Promise<{ sha: string }>;
   /** Whether a machine is connected now; without one, whether any is. */
   readonly online: (machineId?: string) => boolean;
+  /** One of a thread's own rows added, onto its transcript (thread-transcript.ts `line`). */
+  readonly posted: (row: ThreadMessageRow) => void;
   /** Every dashboard and the app read the projects again: his switch, harness or model moved. */
   readonly projectsChanged: () => void;
   /**
@@ -655,9 +635,7 @@ export interface CawDeps {
    * turn an event started stopped as he was turned off (the ledger's
    * broadcast).
    */
-  readonly publish: (
-    frame: ThreadUpsertFrame | ThreadMessageFrame | ProjectStopFrame
-  ) => void;
+  readonly publish: (frame: ThreadUpsertFrame | ProjectStopFrame) => void;
   /**
    * Ensures a lead's place boundary on his machine again (server.ts
    * `ensureIdentityWorkspace`): the machine reads its policy anew and hands
@@ -667,8 +645,27 @@ export interface CawDeps {
   readonly refreshPlace: (lead: InstanceRow) => Promise<void>;
   /** The setup page's stream relay card, while it is to be asked (with the domain the person last reached CawCo through); null once the fleet has a relay or a journey, or the card was answered and not asked `again`. */
   readonly relayOffer: (again: boolean) => RelayOffer | null;
+  /** Caw replied in a thread: the person's phone hears it, unless they looked at the thread since (push.ts `threadReply`). */
+  readonly replied: (thread: ThreadRow, reply: ThreadMessageRow) => void;
   /** Delivers one message to a session through the hub's one send path: whether the hub took it (its record `pending`). */
   readonly send: (envelope: Envelope<SendPayload>) => boolean;
+  /**
+   * The records of the person's sends in a thread (server.ts): `record`
+   * keeps one as it was written, pending, or failed with `failed`, the
+   * hub's sentence; `fail` fails one still pending that no wake carried;
+   * `read` marks one read that needed no wake ("Make a note"); `claim`
+   * makes a send to Caw's own session the thread's, read at `at`.
+   */
+  readonly sends: {
+    claim: (uuid: string, threadId: string, at: Date) => void;
+    fail: (uuid: string, reason: string) => void;
+    read: (uuid: string) => void;
+    record: (
+      payload: SendPayload,
+      threadId: string,
+      failed?: string
+    ) => SentMessageRow;
+  };
   /** Starts a session in `mode` where its harness has modes, resolved once its machine says it is in place. */
   readonly spawn: (
     machineId: string,
@@ -684,6 +681,14 @@ export interface CawDeps {
     running: (projectId: string) => Omit<CawRunning, "kind" | "taskId">[];
     stop: (projectId: string, ids: string[]) => void;
   };
+  /**
+   * The live tail of a thread's transcript (thread-transcript.ts `tail`):
+   * busy while his turn is on it, and his words in it as he writes them.
+   */
+  readonly tail: (
+    threadId: string,
+    patch: { busy?: boolean; streaming?: string }
+  ) => void;
   /** A task as its project's files have it. */
   readonly task: (projectId: string, id: string) => Promise<TaskView>;
   /**
@@ -726,15 +731,19 @@ export const createCaw = ({
   inTurn,
   interrupt,
   leadHome,
+  posted,
   makeNote,
   online,
   projectsChanged,
   proposeType,
   publish,
   refreshPlace,
+  replied,
   send,
+  sends,
   spawn,
   stops,
+  tail,
   task,
   triage,
   turnEnded,
@@ -851,8 +860,8 @@ export const createCaw = ({
    * since. A turn that read your words and ends without answering them
    * leaves what it said after reading them in their thread, as his reply
    * ({@link answerUnreplied}): you read only the thread, so nothing he says
-   * to you stays in his session alone. Until it does, the thread names that
-   * send ({@link hearingOf}), so it draws his words as he writes them.
+   * to you stays in his session alone. Until it does, the thread's tail
+   * carries his words as he writes them ({@link spokeInto}).
    */
   const speech = new Map<
     string,
@@ -887,12 +896,18 @@ export const createCaw = ({
     speech.set(instanceId, now);
   };
 
-  /** The lead turn that has read your words in `threadId` and owes them its answer ({@link speech}). */
-  const hearingOf = (threadId: string): ThreadHearing | undefined => {
-    for (const [instanceId, turn] of speech) {
-      const heard = turn.heard.get(threadId);
-      if (heard && !turn.replied.has(threadId)) {
-        return { instanceId, send: heard.send };
+  /**
+   * What the lead's turn has said in plain text since it read your words in
+   * each thread it owes an answer, onto that thread's tail: the thread draws
+   * his words as he writes them, until his reply stands in their place.
+   */
+  const spokeInto = (instanceId: string): void => {
+    const turn = speech.get(instanceId);
+    for (const [threadId, { from }] of turn?.heard ?? []) {
+      if (!turn?.replied.has(threadId)) {
+        tail(threadId, {
+          streaming: turn?.words.slice(from).join("\n\n") ?? "",
+        });
       }
     }
   };
@@ -909,6 +924,7 @@ export const createCaw = ({
       return;
     }
     for (const [threadId, { from }] of turn.heard) {
+      tail(threadId, { streaming: "" });
       const body = turn.words.slice(from).join("\n\n").trim();
       if (!body || turn.replied.has(threadId) || !db.thread(threadId)) {
         continue;
@@ -945,42 +961,46 @@ export const createCaw = ({
     return "ready";
   };
 
-  const summaryOf = (thread: ThreadRow): ThreadSummary => {
-    const hearing = hearingOf(thread.id);
-    return {
-      ...(hearing ? { hearing } : {}),
-      id: thread.id,
-      projectId: thread.projectId,
-      title: thread.title,
-      lastAt: thread.updatedAt.getTime(),
-      setup: thread.setup,
-      status: statusOf(thread.id),
-      ...(thread.archivedAt ? { archivedAt: thread.archivedAt.getTime() } : {}),
-    };
-  };
+  const summaryOf = (thread: ThreadRow): ThreadSummary => ({
+    id: thread.id,
+    projectId: thread.projectId,
+    title: thread.title,
+    lastAt: thread.updatedAt.getTime(),
+    setup: thread.setup,
+    status: statusOf(thread.id),
+    ...(thread.archivedAt ? { archivedAt: thread.archivedAt.getTime() } : {}),
+  });
 
+  /**
+   * A thread's row, to every dashboard, and its transcript's tail busy
+   * while his turn is on it: the thread reads as a session at work.
+   */
   const upsert = (thread: ThreadRow | undefined): void => {
     if (thread) {
-      publish({ kind: "thread.upsert", thread: summaryOf(thread) });
+      const summary = summaryOf(thread);
+      publish({ kind: "thread.upsert", thread: summary });
+      tail(thread.id, { busy: summary.status === "working" });
     }
   };
 
   /**
-   * A message added to a thread, to every dashboard: the message, then the
-   * row it moved. `withRow: false` when a wake follows, which publishes the row
-   * once with the turn's status, so it never reads `ready` for a moment.
+   * A message added to a thread, onto its transcript, then the row it
+   * moved; a reply of Caw's reaches the person's phone. `withRow: false`
+   * when a wake follows, which publishes the row once with the turn's
+   * status, so it never reads `ready` for a moment.
    */
   const said = (
     thread: ThreadRow,
     added: ThreadMessageRow,
     withRow = true
-  ): ThreadSaid => {
-    const message = messageOf(added);
-    publish({ kind: "thread.message", threadId: thread.id, message });
+  ): void => {
+    posted(added);
     if (withRow) {
       upsert(thread);
     }
-    return { thread: summaryOf(thread), message };
+    if (added.author === "caw") {
+      replied(thread, added);
+    }
   };
 
   /**
@@ -1369,15 +1389,15 @@ export const createCaw = ({
   };
 
   /**
-   * What one wake came to: a model woken, or not and why (`why`, the reason
-   * a thread's not-woken note carries), with what was thrown when something
-   * refused it.
+   * What one wake came to: a model woken, or not and why (`why`, the hub's
+   * sentence a send it carried fails with), with what was thrown when
+   * something refused it.
    */
   type Woke =
     | { woke: true }
     | {
         thrown?: unknown;
-        why: { reason: CawNotWokenReason; words: string };
+        why: string;
         woke: false;
       };
 
@@ -1400,7 +1420,7 @@ export const createCaw = ({
       upsert(id ? db.thread(id) : undefined);
     if (event.by === "event" && !projectOf(projectId).caw) {
       settle(event.threadId);
-      return { woke: false, why: { reason: "failed", words: CAW_OFF } };
+      return { woke: false, why: CAW_OFF };
     }
     const threadId = event.note
       ? noteIn(projectId, event.threadId, event.note, false)
@@ -1413,7 +1433,7 @@ export const createCaw = ({
       settle(threadId);
       return {
         woke: false,
-        why: { reason: "capped", words: capped },
+        why: capped,
         ...(event.by === "you" ? { thrown: new CawRefusal(409, capped) } : {}),
       };
     }
@@ -1424,7 +1444,7 @@ export const createCaw = ({
     const text =
       inbox.length > 0 ? `${words}\n\n---\n\n${inboxText(inbox)}` : words;
     return deliver(projectId, event, threadId, text, inbox.length, (why) => {
-      db.ingress.releaseInbox(inbox.map((line) => line.id));
+      db.ingress.releaseInbox(inbox.map((each) => each.id));
       settle(threadId);
       return why;
     });
@@ -1444,14 +1464,10 @@ export const createCaw = ({
     inboxed: number,
     notOut: (why: Woke & { woke: false }) => Woke
   ): Promise<Woke> => {
-    const failed = (
-      reason: CawNotWokenReason,
-      words: string,
-      thrown?: unknown
-    ): Woke =>
+    const failed = (why: string, thrown?: unknown): Woke =>
       notOut({
         woke: false,
-        why: { reason, words },
+        why,
         ...(thrown === undefined ? {} : { thrown }),
       });
     const carry = carryOf(event);
@@ -1459,24 +1475,24 @@ export const createCaw = ({
     try {
       lead = await leadFor(projectId, text, event.by, event.routine, carry);
     } catch (error) {
-      return failed(startFailure(error), errorWords(error), error);
+      return failed(errorWords(error), error);
     }
     if (!lead) {
-      return failed("failed", CAW_OFF);
+      return failed(CAW_OFF);
     }
     try {
       // His place's boundary read again before he reads this: what became
       // only its owner's since it started is hidden from him too.
       await placeFresh(lead);
     } catch (error) {
-      return failed("place", errorWords(error), error);
+      return failed(errorWords(error), error);
     }
     const sent = lead.started
       ? lead.sent
       : message(lead.row, text, event.by, event.routine, carry);
     if (!sent) {
       // His session refused it: nothing woke him, and the thread is not his.
-      return failed("not-taken", "His session didn't take the message.");
+      return failed("His session didn't take the message.");
     }
     wakeSent(sent, sourceOf(event, inboxed));
     if (threadId) {
@@ -1527,54 +1543,35 @@ export const createCaw = ({
   };
 
   /**
-   * Your words wake Caw after the answer that keeps them: a thread's send is
-   * stored and answered at once, and the wake (his session started, moved
-   * or busy, his account at its limit) runs behind it. A wake that does not
-   * go out is noted in the thread as typed data (`notWoken`): why, the
-   * hub's sentence for it, and `unread`, your message he has not read, which
-   * Try again wakes him with ({@link api.wakeAgain}). `settled` is told once
-   * the wake has gone out or been noted.
+   * Your send in a thread wakes Caw behind the answer that keeps it: its
+   * record is kept pending and answered at once, and the wake (his session
+   * started, moved or busy, his account at its limit) runs behind it under
+   * the send's own uuid, so the record is the wake's. A wake that does not
+   * go out fails the record with the hub's sentence; its row's Try again
+   * sends it again (`replaces`).
    */
   const wakeForYou = (
     projectId: string,
     threadId: string,
-    unread: string,
-    event: CawEvent,
-    settled?: () => void
+    uuid: string,
+    event: CawEvent
   ): void => {
-    const notWoken = (reason: CawNotWokenReason, words: string) => {
+    const notWoken = (why: string) => {
       console.warn(
-        `[caw] ${projectId}: your words in thread ${threadId} did not wake Caw (${reason}): ${words}`
+        `[caw] ${projectId}: your words in thread ${threadId} did not wake Caw: ${why}`
       );
-      sayNestedBoundaryFix(words);
-      // A project deleted meanwhile has no thread to say it in.
-      if (!db.project(projectId)) {
-        return;
-      }
-      noteIn(projectId, threadId, {
-        title: "Caw · not woken",
-        event: {
-          kind: "caw",
-          what: "not-woken",
-          notWoken: { message: unread, reason, words },
-        },
-      });
+      sayNestedBoundaryFix(why);
+      sends.fail(uuid, why);
     };
-    const woken = wakeOnce(projectId, event)
-      .then(
-        (woke) => {
-          if (!woke.woke) {
-            notWoken(woke.why.reason, woke.why.words);
-          }
-        },
-        (error: unknown) => notWoken("failed", errorWords(error))
-      )
-      .finally(() => settled?.());
-    event.send?.waking(woken);
+    wakeOnce(projectId, { ...event, send: uuid }).then(
+      (woke) => {
+        if (!woke.woke) {
+          notWoken(woke.why);
+        }
+      },
+      (error: unknown) => notWoken(errorWords(error))
+    );
   };
-
-  /** Threads a Try again is waking Caw for now ({@link api.wakeAgain}): one at a time each. */
-  const wakingAgain = new Set<string>();
 
   /** Logs a wake that failed: an event is never lost silently. */
   const wakeQuietly = (projectId: string, event: CawEvent): void => {
@@ -2000,12 +1997,28 @@ export const createCaw = ({
     return db.projectThreads(projectId).map(summaryOf);
   };
 
-  /** A thread and its messages, oldest first. */
-  const read = (projectId: string, threadId: string): ThreadRead => {
+  /**
+   * A thread and what was said in it, oldest first, as `thread_read` reads
+   * it: the person's sends where you read them (one not read yet last),
+   * your replies, the notes and the person's answers to your questions.
+   */
+  const read = (projectId: string, threadId: string): ThreadLines => {
     const thread = threadIn(projectId, threadId);
+    const lines: ThreadLine[] = [
+      ...db.threadMessages(thread.id).map(lineOf),
+      ...db
+        .threadSends(thread.id)
+        .filter((one) => one.state === "read" || one.state === "pending")
+        .map((one): ThreadLine => ({
+          at: (one.readAt ?? one.acceptedAt).getTime(),
+          author: "you",
+          body: sendWords(one.body),
+          ...(one.state === "pending" ? { unread: true } : {}),
+        })),
+    ];
     return {
       thread: summaryOf(thread),
-      messages: db.threadMessages(thread.id).map(messageOf),
+      lines: lines.sort((a, b) => a.at - b.at),
     };
   };
 
@@ -2035,135 +2048,6 @@ export const createCaw = ({
     body: `Added to AGENTS.md as your commit ${sha.slice(0, 9)}.`,
     event: { kind: "agents", sha },
   });
-
-  /**
-   * Each person's send to Caw still being kept or woken for, by its uuid,
-   * until it settles ({@link Caw.personSent}): the same send again in that
-   * time (a device resending after its socket dropped) is answered by the
-   * first one's settling, never kept twice nor settled before its wake.
-   */
-  const personSends = new Map<string, Promise<unknown>>();
-
-  /** Each of your messages being kept now, by the id the dashboard chose ({@link once}). */
-  const saying = new Map<string, Promise<ThreadSaid>>();
-
-  /**
-   * Your message under the id the dashboard chose for it, kept once: the
-   * same message again (a device sending again after its request got no
-   * answer) is answered with the message the thread keeps, nothing added,
-   * nobody woken twice; while the first is still being kept ("Make a note"
-   * commits first), with that one's answer. An id kept in another thread
-   * than `threadId`, or another project, is refused.
-   */
-  const once = (
-    projectId: string,
-    threadId: string | undefined,
-    id: string | undefined,
-    make: () => Promise<ThreadSaid>
-  ): Promise<ThreadSaid> => {
-    if (!id) {
-      return make();
-    }
-    const first = saying.get(id);
-    if (first !== undefined) {
-      return first;
-    }
-    const kept = db.threadMessage(id);
-    if (kept) {
-      const thread = db.thread(kept.threadId);
-      if (
-        !thread ||
-        thread.projectId !== projectId ||
-        (threadId && thread.id !== threadId)
-      ) {
-        return refuse(409, "That message is already in another thread.");
-      }
-      return Promise.resolve({
-        thread: summaryOf(thread),
-        message: messageOf(kept),
-      });
-    }
-    const keeping = make();
-    saying.set(id, keeping);
-    const done = () => saying.delete(id);
-    keeping.then(done, done);
-    return keeping;
-  };
-
-  /** A setup's prompt id the dashboard chose is a new one: a second of it is refused. */
-  const unsaid = (id: string | undefined): void => {
-    if (id && db.threadMessage(id)) {
-      refuse(409, "That message is already in its thread.");
-    }
-  };
-
-  /**
-   * Starts a thread with your first message, to every dashboard; the wake
-   * that follows publishes its row. `id` is the message's, when the
-   * dashboard chose it (see `say`); `kept`, what rode with it, as
-   * {@link keepCarried} keeps it.
-   */
-  const open = (
-    projectId: string,
-    body: string,
-    id?: string,
-    kept: Kept = {}
-  ) => {
-    const made = db.createThread({
-      id: crypto.randomUUID(),
-      projectId,
-      title: titleFrom(body),
-      first: { author: "you", body, ...kept, ...(id ? { id } : {}) },
-    });
-    return { row: made.thread, said: said(made.thread, made.message, false) };
-  };
-
-  /**
-   * What rode with your words, as their thread message keeps it: each
-   * picture in the hub's media store (media.ts, where a send's pictures go)
-   * by its address, pastes and files as they came (a file is already the
-   * hub's reference). Refused for a picture of a type the store does not
-   * keep, before anything is kept.
-   */
-  const keepCarried = (carried: Carried | undefined): Kept => {
-    const images = (carried?.images ?? []).map(({ mediaType, data }) => ({
-      mediaType,
-      src:
-        storeImage(mediaType, data) ??
-        refuse(
-          400,
-          `A ${mediaType} picture can't be kept. Send it as PNG, JPEG, GIF or WebP.`
-        ),
-    }));
-    const attachments = carried?.attachments ?? [];
-    return {
-      ...(images.length ? { images } : {}),
-      ...(attachments.length ? { attachments } : {}),
-    };
-  };
-
-  /**
-   * What your message carried, back as a send carries it: each picture's
-   * bytes out of the media store (server.ts `envelopeOf` does the same for
-   * a pending send). Refused when one is no longer stored: what went with
-   * your words would not go with them again.
-   */
-  const carriedOf = (line: ThreadMessageRow): Carried => {
-    const images = (line.images ?? []).map(({ mediaType, src }) => ({
-      mediaType,
-      data:
-        mediaBase64(src) ??
-        refuse(
-          409,
-          "A picture your message carried is no longer kept on the hub, so it can't go to Caw again. Write to him again with it."
-        ),
-    }));
-    const attachments = line.attachments ?? [];
-    return {
-      ...(images.length ? { images } : {}),
-      ...(attachments.length ? { attachments } : {}),
-    };
-  };
 
   /**
    * Setup's steps for `project` in `threadId` as the fleet stands now
@@ -2206,59 +2090,81 @@ export const createCaw = ({
 
   /**
    * Wakes the project's Caw with its setup event: your words (your prompt,
-   * or the offer you accepted), so on or off. The Setup thread's first
-   * message goes with it as it reads, with what rode with your words, as a
-   * thread's wake carries them ({@link yourWords}). When Caw cannot start for a
-   * reason the thread already states (no machine online: the thread's
-   * composer says so), nothing is added; any other failure, the spend cap's
-   * included, is noted in it. `machineOnline` tries again.
+   * or the offer you accepted), so on or off. The Setup thread's first send
+   * (`first`, the prompt) goes with it as it reads, under its own uuid, with
+   * the pictures it carried. When Caw cannot start for want of a machine,
+   * the prompt waits, queued, and `machineOnline` tries again; any other
+   * failure, the spend cap's included, fails the prompt's record, or, with
+   * no prompt, is noted in the thread.
    */
   const wakeForSetup = (
     project: ReturnType<typeof projectOf>,
     threadId: string,
     from: "prompt" | "offer",
-    template: StagesTemplate | null
+    template: StagesTemplate | null,
+    first?: SentMessageRow
   ): void => {
-    const [first] = db.threadMessages(threadId);
-    let carried: Carried | undefined;
-    try {
-      carried = first?.author === "you" ? carriedOf(first) : undefined;
-    } catch (error) {
-      // A picture your words carried is no longer stored (a setup tried
-      // again long after): the thread says so, and nothing wakes him.
+    const pending = first?.state === "pending" ? first : undefined;
+    const carried = pending ? picturesOf(pending) : undefined;
+    const couldNot = (why: string): void => {
+      if (pending) {
+        sends.fail(pending.uuid, why);
+        return;
+      }
       noteIn(project.id, threadId, {
         title: "Caw · could not start",
-        body: error instanceof Error ? error.message : String(error),
+        body: why,
         event: { kind: "caw", what: "could-not-start" },
       });
+    };
+    if (pending && !carried) {
+      // A picture the prompt carried is no longer stored (a setup tried
+      // again long after): it can't go to him as it was written.
+      couldNot(
+        "A picture your message carried is no longer kept on the hub, so it can't go to Caw again. Write to him again with it."
+      );
       return;
     }
+    const opened = first
+      ? sendWords(first.body)
+      : (() => {
+          const [note] = db.threadMessages(threadId);
+          return note ? openedOf(note) : undefined;
+        })();
     wake(project.id, {
       by: "you",
       threadId,
       text: setupText(project, threadId, from, template, {
-        ...(first ? { opened: openedOf(first) } : {}),
+        ...(opened === undefined ? {} : { opened }),
       }),
-      ...(carried?.images || carried?.attachments ? { carried } : {}),
-    }).catch((error: unknown) => {
-      // No machine for him (the composer says so), or the project was
-      // deleted meanwhile: nothing to say.
-      if (!db.project(project.id)) {
-        return;
+      ...(pending ? { send: pending.uuid } : {}),
+      ...(carried?.images ? { carried } : {}),
+    }).then(
+      (woke) => {
+        if (
+          !woke &&
+          pending &&
+          db.sendRecord(pending.uuid)?.state === "pending"
+        ) {
+          couldNot(CAW_OFF);
+        }
+      },
+      (error: unknown) => {
+        // The project was deleted meanwhile: nothing to say.
+        if (!db.project(project.id)) {
+          return;
+        }
+        // No machine for him: the prompt waits for one, queued.
+        if (
+          error instanceof CawRefusal &&
+          error.status === 409 &&
+          !caps.quiets(project.id)
+        ) {
+          return;
+        }
+        couldNot(errorWords(error));
       }
-      if (
-        error instanceof CawRefusal &&
-        error.status === 409 &&
-        !caps.quiets(project.id)
-      ) {
-        return;
-      }
-      noteIn(project.id, threadId, {
-        title: "Caw · could not start",
-        body: error instanceof Error ? error.message : String(error),
-        event: { kind: "caw", what: "could-not-start" },
-      });
-    });
+    );
   };
 
   /** The project's stages.md as it stands; undefined while it has none. */
@@ -2320,6 +2226,86 @@ export const createCaw = ({
     ].find(
       (id): id is string => !!id && db.thread(id)?.projectId === projectId
     );
+  };
+
+  /**
+   * The thread a send is written in: the one its id names, else made now
+   * under that id in the send's project (the project's Setup thread when it
+   * has none). `first`: nothing was said in it before this send. Refused
+   * for a thread that is not there and no project to make it in.
+   */
+  const sentTo = (
+    threadId: string,
+    payload: SendPayload,
+    body: string
+  ): {
+    first: boolean;
+    project: ReturnType<typeof projectOf>;
+    setup: boolean;
+    thread: ThreadRow;
+  } => {
+    const had = db.thread(threadId);
+    const projectId =
+      had?.projectId ??
+      payload.projectId ??
+      refuse(404, "This thread is not on this hub any more.");
+    const project = projectOf(projectId);
+    if (had) {
+      return {
+        project,
+        thread: had,
+        setup: false,
+        first: !(
+          db.threadSends(threadId).length > 0 ||
+          db.threadMessages(threadId).some((one) => one.author !== "event")
+        ),
+      };
+    }
+    const setup = db.projectThreads(projectId).length === 0;
+    const thread = db.makeThread({
+      id: threadId,
+      projectId,
+      title: setup ? `Set up ${project.name}` : titleFrom(body),
+      setup,
+    });
+    return { project, thread, setup, first: true };
+  };
+
+  /**
+   * A new thread of the project's opened by your words: the thread, made
+   * under a new id, and your words its first send, kept pending for the
+   * wake that follows to carry under its uuid (`uuid`, when the device
+   * chose it).
+   */
+  const openWith = (
+    projectId: string,
+    body: string,
+    uuid: string = crypto.randomUUID(),
+    made: { setup?: boolean; title?: string } = {}
+  ): { send: SentMessageRow; thread: ThreadRow } => {
+    const thread = db.makeThread({
+      id: crypto.randomUUID(),
+      projectId,
+      title: made.title ?? titleFrom(body),
+      ...(made.setup ? { setup: true } : {}),
+    });
+    const opening = sends.record(
+      {
+        instanceId: threadTargetOf(thread.id),
+        message: {
+          type: "user",
+          uuid,
+          message: { role: "user", content: body },
+          parent_tool_use_id: null,
+          origin: { kind: "human" },
+        },
+      },
+      thread.id
+    );
+    return {
+      send: opening,
+      thread: db.touchThread(thread.id, opening.acceptedAt) ?? thread,
+    };
   };
 
   const api = {
@@ -2523,125 +2509,6 @@ export const createCaw = ({
     },
 
     /**
-     * Starts a thread with your first message, answered once it is kept, and
-     * wakes Caw with it behind that answer ({@link wakeForYou}); "Make a
-     * note: …" goes to AGENTS.md instead. A project's first thread is its
-     * Setup thread, Caw woken to set the project up ({@link wakeForSetup}).
-     * `sent`: the message's id, the send
-     * to his session it came as ({@link personSent}), and what rode with
-     * your words, which the message keeps ({@link keepCarried}) and the wake
-     * carries to him. The same `id` again is the same message ({@link once}).
-     */
-    async start(
-      projectId: string,
-      raw: string,
-      { id, person, carried }: YourSend = {}
-    ): Promise<ThreadSaid> {
-      return await once(projectId, undefined, id, async () => {
-        const body = bodyOf(raw);
-        if (MAKE_A_NOTE.test(body)) {
-          projectOf(projectId);
-          const sha = await noteInAgents(projectId, body);
-          const opened = open(projectId, body, id);
-          noteIn(projectId, opened.row.id, notedLine(sha));
-          return { ...opened.said, thread: summaryOf(opened.row) };
-        }
-        listening(projectId);
-        // A project's first words to him, where nothing opened its Setup
-        // thread (one made from a folder): they open it, and wake him to set
-        // the project up, as New project's prompt does (setup).
-        if (db.projectThreads(projectId).length === 0) {
-          const project = projectOf(projectId);
-          const made = db.createThread({
-            id: crypto.randomUUID(),
-            projectId,
-            title: `Set up ${project.name}`,
-            setup: true,
-            first: {
-              author: "you",
-              body,
-              ...keepCarried(carried),
-              ...(id ? { id } : {}),
-            },
-          });
-          const opened = said(made.thread, made.message, false);
-          wakeForSetup(project, made.thread.id, "prompt", project.template);
-          return { ...opened, thread: summaryOf(made.thread) };
-        }
-        const opened = open(projectId, body, id, keepCarried(carried));
-        wakeForYou(projectId, opened.row.id, opened.said.message.id, {
-          by: "you",
-          text: yourWords(opened.row, body, true),
-          threadId: opened.row.id,
-          ...(person ? { send: person } : {}),
-          ...(carried ? { carried } : {}),
-        });
-        return { ...opened.said, thread: summaryOf(opened.row) };
-      });
-    },
-
-    /**
-     * Adds your message to a thread, answered once it is kept, and wakes Caw
-     * with it behind that answer ({@link wakeForYou}): the answer never waits
-     * on his session, his account or his turn ("Make a note: …" goes to
-     * AGENTS.md instead, waking nobody). `id` is the
-     * message's when the dashboard chose it, as a session's composer does:
-     * the row your words fly into is then the one they went out as, however
-     * soon the hub's frame draws it, and the same `id` again is the same
-     * message ({@link once}). `person` and `carried` as for {@link start}.
-     */
-    async say(
-      projectId: string,
-      threadId: string,
-      raw: string,
-      { id, person, carried }: YourSend = {}
-    ): Promise<ThreadSaid> {
-      return await once(projectId, threadId, id, async () => {
-        const body = bodyOf(raw);
-        threadIn(projectId, threadId);
-        if (MAKE_A_NOTE.test(body)) {
-          const sha = await noteInAgents(projectId, body);
-          const added = db.addThreadMessage({
-            threadId,
-            author: "you",
-            body,
-            ...(id ? { id } : {}),
-          });
-          const out = said(added.thread, added.message, false);
-          noteIn(projectId, threadId, notedLine(sha));
-          return { ...out, thread: summaryOf(added.thread) };
-        }
-        listening(projectId);
-        const added = db.addThreadMessage({
-          threadId,
-          author: "you",
-          body,
-          ...keepCarried(carried),
-          ...(id ? { id } : {}),
-        });
-        const out = said(added.thread, added.message, false);
-        wakeForYou(projectId, threadId, added.message.id, {
-          by: "you",
-          text: yourWords(added.thread, body, false),
-          threadId,
-          ...(person ? { send: person } : {}),
-          ...(carried ? { carried } : {}),
-        });
-        return { ...out, thread: summaryOf(added.thread) };
-      });
-    },
-
-    /**
-     * Try again on a thread's not-woken note: Caw woken with your newest
-     * words in the thread, the message a wake failed to carry, as you wrote
-     * them, behind the answer ({@link wakeForYou}); nothing of yours is
-     * added. Refused while his turn is on the thread, when your newest words
-     * are not ones a wake failed to carry or he has answered them, and while
-     * he cannot read them (`listening`). A wake that fails again is noted
-     * again. What rode with your words (pictures, pastes, files) goes with
-     * them again, as the message kept it. Answers the thread.
-     */
-    /**
      * Archives one of the project's threads (`archived`), or brings it back:
      * the rails leave an archived thread and the sessions under it out, and
      * a new message in it brings it back. Every dashboard hears the thread
@@ -2661,109 +2528,93 @@ export const createCaw = ({
       return summaryOf(thread);
     },
 
-    wakeAgain(projectId: string, threadId: string): ThreadSummary {
-      const thread = threadIn(projectId, threadId);
-      if (wakingAgain.has(threadId) || statusOf(threadId) === "working") {
-        refuse(409, "Caw is already reading this thread.");
+    /**
+     * The person's send to a thread (server.ts `deliverSend`, its target
+     * `thread:<id>`): every word they write to Caw, from a thread's composer,
+     * his own session's, a push's Reply or a relay. Kept as a send's record
+     * under its uuid, with the thread's id, and answered at once; Caw is
+     * woken with it behind that answer, under the same uuid
+     * ({@link wakeForYou}), so the record is the wake's and moves as his
+     * harness reads it. A thread not made yet is made under its id in
+     * `payload.projectId`, the project's Setup thread when it has none.
+     * "Make a note: …" goes to AGENTS.md, waking nobody. A send Caw cannot
+     * read now (no machine for him, the spend cap) is kept failed with the
+     * hub's sentence; its row's Try again sends it again. The same uuid
+     * again is the same send: its record as it stands. Refused, before
+     * anything is kept, for a thread that is not there and no project to
+     * make it in, or a send with no words.
+     */
+    sent(threadId: string, payload: SendPayload): SentMessageRow {
+      const known = db.sendRecord(payload.message.uuid);
+      if (known) {
+        return known;
       }
-      const lines = db.threadMessages(threadId);
-      const at = lines.findLastIndex(
-        (line) => line.author === "you" && !line.answer
-      );
-      const yours = lines[at];
-      const after = lines.slice(at + 1);
-      if (!(
-        yours &&
-        after.some((line) => notWokenOf(line)?.message === yours.id) &&
-        !after.some((line) => line.author === "caw")
-      )) {
-        return refuse(
-          409,
-          "Caw has your newest message in this thread already. Write to him to wake him again."
+      const body = wordsOf(payload.message.message.content).trim();
+      if (!(body || payload.images?.length || payload.attachments?.length)) {
+        refuse(400, "A message needs words.");
+      }
+      const { project, thread, setup, first } = sentTo(threadId, payload, body);
+      const projectId = project.id;
+      const kept = (failed?: string): SentMessageRow => {
+        const record = sends.record(payload, threadId, failed);
+        upsert(db.touchThread(threadId, record.acceptedAt) ?? thread);
+        return record;
+      };
+      if (MAKE_A_NOTE.test(body)) {
+        const record = kept();
+        noteInAgents(projectId, body).then(
+          (sha) => {
+            sends.read(record.uuid);
+            noteIn(projectId, threadId, notedLine(sha));
+          },
+          (error: unknown) => sends.fail(record.uuid, errorWords(error))
         );
+        return record;
       }
-      const carried = carriedOf(yours);
-      listening(projectId);
-      wakingAgain.add(threadId);
-      wakeForYou(
-        projectId,
+      const refused = problemOf(project) ?? caps.quiets(projectId);
+      if (refused) {
+        return kept(refused);
+      }
+      const record = kept();
+      if (setup) {
+        // A project's first words to him, where nothing opened its Setup
+        // thread (one made from a folder): they open it, and wake him to
+        // set the project up, as New project's prompt does.
+        wakeForSetup(project, threadId, "prompt", project.template, record);
+        return record;
+      }
+      const carried: Carried = {
+        ...(payload.images?.length ? { images: payload.images } : {}),
+        ...(payload.attachments?.length
+          ? { attachments: payload.attachments }
+          : {}),
+      };
+      wakeForYou(projectId, threadId, record.uuid, {
+        by: "you",
+        text: yourWords(thread, body, first),
         threadId,
-        yours.id,
-        {
-          by: "you",
-          text: yourWords(
-            thread,
-            yours.body,
-            !lines.slice(0, at).some((line) => line.author !== "event")
-          ),
-          threadId,
-          carried,
-        },
-        () => wakingAgain.delete(threadId)
-      );
-      return summaryOf(thread);
+        ...(carried.images || carried.attachments ? { carried } : {}),
+      });
+      return record;
     },
 
     /**
-     * Your words sent straight to Caw's session (server.ts `deliverSend`):
-     * his session's composer in the app, a push's Reply, a relay.
-     * Everything you say to him is a thread's, so they go into the thread he
-     * is in ({@link threadOfLead}, a new one when the project has none) by
-     * the thread's own path, and wake him from there under the send's uuid:
-     * the row your screen drew of them is the wake's. Undefined when
-     * `payload` is not to a project's Caw; resolved at once when its words
-     * are in a thread already (the same send again).
+     * The thread your words sent straight to a project's Caw's own session
+     * belong to (server.ts `toCawThread`): the one he is in
+     * ({@link threadOfLead}), else a new one of the project's. Undefined
+     * when `instanceId` is not a project's Caw.
      */
-    personSent(payload: SendPayload): Promise<unknown> | undefined {
-      const project = leadOf(row(payload.instanceId));
+    leadThread(
+      instanceId: string
+    ): { projectId: string; threadId: string } | undefined {
+      const project = leadOf(row(instanceId));
       if (!project) {
         return;
       }
-      const sent = payload.message;
-      // The same send again: while the first is still kept or woken for, its
-      // settling answers this one too; a "Make a note" kept twice would be
-      // two commits, and one settled early would write the send's record
-      // before its wake, which then never goes (server.ts `toCawThread`).
-      const first = personSends.get(sent.uuid);
-      if (first !== undefined) {
-        return first;
-      }
-      if (db.threadMessage(sent.uuid)) {
-        return Promise.resolve();
-      }
-      let woken: Promise<void> | undefined;
-      const person: PersonSend = {
-        uuid: sent.uuid,
-        waking: (settled) => {
-          woken = settled;
-        },
+      return {
+        projectId: project.id,
+        threadId: threadOfLead(instanceId, project.id) ?? crypto.randomUUID(),
       };
-      const yours: YourSend = {
-        id: sent.uuid,
-        person,
-        carried: {
-          ...(payload.images?.length ? { images: payload.images } : {}),
-          ...(payload.attachments?.length
-            ? { attachments: payload.attachments }
-            : {}),
-        },
-      };
-      const words = wordsOf(sent.message.content);
-      const threadId = threadOfLead(payload.instanceId, project.id);
-      const kept = threadId
-        ? api.say(project.id, threadId, words, yours)
-        : api.start(project.id, words, yours);
-      // Answered once the wake carrying it has settled: that wake records the
-      // send under its uuid as it goes out, and answering before it (the
-      // thread's answer comes at once, the wake runs behind it) let the
-      // send's own record ({@link server.ts toCawThread}) be written first,
-      // which the wake then took for the same send again and never sent. A
-      // send taken with no wake ("Make a note") is answered once it is kept.
-      const settling = kept.then(() => woken);
-      personSends.set(sent.uuid, settling);
-      const done = () => personSends.delete(sent.uuid);
-      settling.then(done, done);
-      return settling;
     },
 
     /**
@@ -2806,7 +2657,11 @@ export const createCaw = ({
      * threads of yours it may leave unanswered ({@link answerUnreplied}).
      */
     spoke(instanceId: string, words: string): void {
-      speech.get(instanceId)?.words.push(words);
+      const turn = speech.get(instanceId);
+      if (turn) {
+        turn.words.push(words);
+        spokeInto(instanceId);
+      }
     },
 
     /**
@@ -2816,19 +2671,26 @@ export const createCaw = ({
      */
     restore(
       threadId: string,
-      lines: { at: Date; author: "you" | "caw"; body: string }[],
+      lines: (
+        | { at: Date; author: "you"; send: string }
+        | { at: Date; author: "caw"; body: string }
+      )[],
       note: ThreadNote
     ): void {
       const thread = db.thread(threadId);
       if (!thread) {
         return;
       }
-      for (const line of lines) {
+      for (const one of lines) {
+        if (one.author === "you") {
+          sends.claim(one.send, threadId, one.at);
+          continue;
+        }
         const added = db.addThreadMessage({
           threadId,
-          author: line.author,
-          body: line.body,
-          createdAt: line.at,
+          author: "caw",
+          body: one.body,
+          createdAt: one.at,
         });
         said(added.thread, added.message);
       }
@@ -2836,41 +2698,41 @@ export const createCaw = ({
     },
 
     /**
-     * "Ask Caw for a view": a new thread with your words, answered once
-     * kept, and Caw woken by `view-request` behind it. Asked from a page's
-     * end (`place`), his draft stands on that page as a proposed block;
-     * from the strip, it is a draft tab. The same `id` again is the same
-     * ask ({@link once}).
+     * "Ask Caw for a view": a new thread with your words as its first send,
+     * answered once kept, and Caw woken by `view-request` behind it under
+     * that send's uuid. Asked from a page's end (`place`), his draft stands
+     * on that page as a proposed block; from the strip, it is a draft tab.
+     * The same `id` again is the same ask: its thread.
      */
-    async requestView(
+    requestView(
       projectId: string,
       raw: string,
       place: ViewPlace | null = null,
       id?: string
-    ): Promise<ThreadSaid> {
-      return await once(projectId, undefined, id, () => {
-        const body = bodyOf(raw);
-        listening(projectId);
-        const opened = open(projectId, body, id);
-        wakeForYou(projectId, opened.row.id, opened.said.message.id, {
-          by: "you",
-          text: viewRequest(opened.row, body, place),
-          threadId: opened.row.id,
-        });
-        return Promise.resolve({
-          ...opened.said,
-          thread: summaryOf(opened.row),
-        });
+    ): { thread: ThreadSummary } {
+      const again = id ? db.sendRecord(id) : undefined;
+      const asked = again?.threadId ? db.thread(again.threadId) : undefined;
+      if (asked) {
+        return { thread: summaryOf(asked) };
+      }
+      const body = bodyOf(raw);
+      listening(projectId);
+      const opened = openWith(projectId, body, id);
+      wakeForYou(projectId, opened.thread.id, opened.send.uuid, {
+        by: "you",
+        text: viewRequest(opened.thread, body, place),
+        threadId: opened.thread.id,
       });
+      return { thread: summaryOf(opened.thread) };
     },
 
     /**
-     * "Ask Caw to change it", on a kept view: a new thread with your words,
-     * and Caw woken by `view-change` behind it with the view's program. Your
-     * words wake him on or off, as they always do (WORDS.md: "Off is never
-     * 'can't be messaged'"); only a Caw who cannot start, or the spend cap,
-     * refuses them, before they are kept. Answers the thread, and whether he
-     * is on, which the page says.
+     * "Ask Caw to change it", on a kept view: a new thread with your words
+     * as its first send, and Caw woken by `view-change` behind it with the
+     * view's program. Your words wake him on or off, as they always do
+     * (WORDS.md: "Off is never 'can't be messaged'"); only a Caw who cannot
+     * start, or the spend cap, refuses them, before they are kept. Answers
+     * the thread, and whether he is on, which the page says.
      */
     async askAboutView(
       projectId: string,
@@ -2880,25 +2742,25 @@ export const createCaw = ({
       const body = bodyOf(raw);
       listening(projectId);
       const kept = await views.view(projectId, name).catch(refusedBy);
-      const opened = open(projectId, body);
-      wakeForYou(projectId, opened.row.id, opened.said.message.id, {
+      const opened = openWith(projectId, body);
+      wakeForYou(projectId, opened.thread.id, opened.send.uuid, {
         by: "you",
-        text: viewChange(opened.row, kept, body),
-        threadId: opened.row.id,
+        text: viewChange(opened.thread, kept, body),
+        threadId: opened.thread.id,
       });
       return {
-        ...opened.said,
-        thread: summaryOf(opened.row),
+        thread: summaryOf(opened.thread),
         caw: projectOf(projectId).caw ? "on" : "off",
       };
     },
 
     /**
      * A project made with Caw (New project, an accepted offer): its Setup
-     * thread, opened with your prompt (`promptId`, the id the dashboard sent
-     * it as, so your words fly into their row) or a note of where it came
-     * from, and Caw woken once to set the project up (setup.ts). A Caw that
-     * cannot start is noted in the thread: the project stands either way.
+     * thread, opened with your prompt as its first send (`promptId`, the
+     * uuid the dashboard sent it as, so your words fly into their row) or a
+     * note of where it came from, and Caw woken once to set the project up
+     * (setup.ts). A Caw that cannot start leaves the prompt queued for a
+     * machine, or says why: the project stands either way.
      */
     setup(
       projectId: string,
@@ -2912,39 +2774,45 @@ export const createCaw = ({
     ): ThreadSummary {
       const project = projectOf(projectId);
       const prompt = ask.prompt?.trim();
-      unsaid(ask.promptId);
+      if (ask.promptId && db.sendRecord(ask.promptId)) {
+        refuse(409, "That message is already in its thread.");
+      }
+      if (prompt) {
+        const opened = openWith(projectId, prompt, ask.promptId, {
+          title: `Set up ${project.name}`,
+          setup: true,
+        });
+        wakeForSetup(
+          project,
+          opened.thread.id,
+          "prompt",
+          ask.template,
+          opened.send
+        );
+        return summaryOf(opened.thread);
+      }
       const made = db.createThread({
         id: crypto.randomUUID(),
         projectId,
         title: `Set up ${project.name}`,
         setup: true,
-        first: prompt
-          ? {
-              author: "you",
-              body: prompt,
-              ...(ask.promptId ? { id: ask.promptId } : {}),
-            }
-          : eventRow(
-              ask.note ?? {
-                title: `Project · ${project.name} made`,
-                event: { kind: "project", what: "made", name: project.name },
-              }
-            ),
+        first: eventRow(
+          ask.note ?? {
+            title: `Project · ${project.name} made`,
+            event: { kind: "project", what: "made", name: project.name },
+          }
+        ),
       });
       said(made.thread, made.message, false);
-      wakeForSetup(
-        project,
-        made.thread.id,
-        prompt ? "prompt" : "offer",
-        ask.template
-      );
+      wakeForSetup(project, made.thread.id, "offer", ask.template);
       return summaryOf(made.thread);
     },
 
     /**
      * A machine came online: a project whose Setup thread Caw never answered
      * (none was online when it was made, or his session went with its
-     * machine) is set up now, on or off: setting it up was your ask.
+     * machine) is set up now, on or off: setting it up was your ask. A
+     * prompt still queued goes under its own uuid.
      */
     machineOnline(): void {
       for (const thread of db.allThreads()) {
@@ -2957,14 +2825,15 @@ export const createCaw = ({
         ) {
           continue;
         }
-        const [first] = db.threadMessages(thread.id);
+        const [first] = db.threadSends(thread.id);
         templateOf(project.id).then(
           (template) =>
             wakeForSetup(
               project,
               thread.id,
-              first?.author === "you" ? "prompt" : "offer",
-              template
+              first ? "prompt" : "offer",
+              template,
+              first
             ),
           (error: unknown) =>
             console.warn(
@@ -3364,11 +3233,11 @@ export const createCaw = ({
               ...(tasks?.length ? { tasks: [...new Set(tasks)] } : {}),
               ...(named.length ? { files: named } : {}),
             });
-            // Answered before the thread's row goes out, so the row no
-            // longer names his turn as hearing it (`hearingOf`).
+            // His reply stands where his words as he wrote them were.
             if (actor) {
               speech.get(actor.id)?.replied.add(thread);
             }
+            tail(thread, { streaming: "" });
             said(added.thread, added.message);
             return { ok: true, message: added.message.id };
           },
@@ -3522,54 +3391,6 @@ const answer = (error: unknown) => {
 const HARNESS = t.Union(CAW_HARNESSES.map((harness) => t.Literal(harness)));
 const BLOCK_PAGE = t.Union(BLOCK_PAGES.map((page) => t.Literal(page)));
 
-/**
- * Your words to Caw, the id the dashboard sent them as (its own, like a
- * session's), and what rides with them as a send carries it: pictures
- * (base64) and attachments (pastes, and files by the hub's reference).
- */
-const YOUR_WORDS = t.Object({
-  body: t.String(),
-  id: t.Optional(t.String({ format: "uuid" })),
-  images: t.Optional(
-    t.Array(t.Object({ mediaType: t.String(), data: t.String() }))
-  ),
-  attachments: t.Optional(
-    t.Array(
-      t.Union([
-        t.Object({
-          kind: t.Literal("text"),
-          name: t.String(),
-          content: t.String(),
-        }),
-        t.Object({
-          kind: t.Literal("file"),
-          name: t.String(),
-          mediaType: t.String(),
-          size: t.Integer({ minimum: 0 }),
-          ref: t.String({ pattern: "^/api/files/" }),
-        }),
-      ])
-    )
-  ),
-});
-
-/** A thread send's body as `start` and `say` take it. */
-const yourSend = ({
-  id,
-  images,
-  attachments,
-}: Carried & { id?: string }): YourSend => ({
-  ...(id ? { id } : {}),
-  ...(images?.length || attachments?.length
-    ? {
-        carried: {
-          ...(images?.length ? { images } : {}),
-          ...(attachments?.length ? { attachments } : {}),
-        },
-      }
-    : {}),
-});
-
 /** The routes for a project's Caw, its threads and your asks for views. */
 export const cawRoutes = (caw: Caw) =>
   new Elysia()
@@ -3616,43 +3437,6 @@ export const cawRoutes = (caw: Caw) =>
         return answer(error);
       }
     })
-    .post(
-      "/api/projects/:id/threads",
-      { body: YOUR_WORDS },
-      async ({ params, body, request, server }) => {
-        // Caw's session may be starting on a machine; that can take a while.
-        server?.timeout(request, 0);
-        try {
-          return await caw.start(params.id, body.body, yourSend(body));
-        } catch (error) {
-          return answer(error);
-        }
-      }
-    )
-    .get("/api/projects/:id/threads/:threadId", ({ params }) => {
-      try {
-        return caw.read(params.id, params.threadId);
-      } catch (error) {
-        return answer(error);
-      }
-    })
-    .post(
-      "/api/projects/:id/threads/:threadId/messages",
-      { body: YOUR_WORDS },
-      async ({ params, body, request, server }) => {
-        server?.timeout(request, 0);
-        try {
-          return await caw.say(
-            params.id,
-            params.threadId,
-            body.body,
-            yourSend(body)
-          );
-        } catch (error) {
-          return answer(error);
-        }
-      }
-    )
     // Archive a thread: the rails leave it and what it started out; a new
     // message in it, or Unarchive, brings it back.
     .post("/api/projects/:id/threads/:threadId/archive", ({ params }) => {
@@ -3665,14 +3449,6 @@ export const cawRoutes = (caw: Caw) =>
     .post("/api/projects/:id/threads/:threadId/unarchive", ({ params }) => {
       try {
         return caw.archive(params.id, params.threadId, false);
-      } catch (error) {
-        return answer(error);
-      }
-    })
-    // Try again on a not-woken note: Caw woken with the words he has not read.
-    .post("/api/projects/:id/threads/:threadId/wake", ({ params }) => {
-      try {
-        return caw.wakeAgain(params.id, params.threadId);
       } catch (error) {
         return answer(error);
       }
@@ -3690,10 +3466,10 @@ export const cawRoutes = (caw: Caw) =>
           id: t.Optional(t.String()),
         }),
       },
-      async ({ params, body, request, server }) => {
+      ({ params, body, request, server }) => {
         server?.timeout(request, 0);
         try {
-          return await caw.requestView(
+          return caw.requestView(
             params.id,
             body.text,
             body.page

@@ -109,9 +109,10 @@ final class RoutinesPane: UIView {
         // His words open a thread with him in the project, and the page goes there.
         ask.submit = { [weak self] text, id in
             guard let self else { return }
-            let said = try await hub.threads.say(projectId: projectId, threadId: nil, body: text, id: id)
+            _ = id
+            let viewId = hub.threads.start(projectId: projectId, text: text)
             asking = false
-            openThread(said.id)
+            openThread(ThreadTabs.threadId(of: viewId) ?? viewId)
         }
         newRoutine = KitButton.make(Words.Routines.newRoutine, variant: .outline, height: .sm) { [weak self] in
             guard let self else { return }

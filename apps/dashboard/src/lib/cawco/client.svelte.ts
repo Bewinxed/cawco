@@ -122,9 +122,6 @@ import type {
   OnCap,
   ProjectCap,
   ProjectSpend,
-  ThreadMessage,
-  ThreadRead,
-  ThreadSaid,
   ThreadSummary,
 } from "@cawco/core/threads";
 import { capHolds } from "@cawco/core/threads";
@@ -1220,11 +1217,6 @@ const state = $state({
    * with the fleet, then kept by `thread.upsert` frames.
    */
   threads: {} as Record<string, ThreadSummary[]>,
-  /**
-   * The messages of each thread this tab has read, oldest first, by thread
-   * id: kept by `thread.message` frames from the read on.
-   */
-  threadMessages: {} as Record<string, ThreadMessage[]>,
   /**
    * How many times each project's tasks have changed since this page
    * connected, by project id (`tasks.changed` frames): what shows its tasks
@@ -3561,11 +3553,6 @@ function handleFrame(frame: FramePayload): void {
     return;
   }
 
-  if (frame.kind === "thread.message") {
-    adoptThreadMessage(frame.threadId, frame.message);
-    return;
-  }
-
   if (frame.kind === "project.cap") {
     heardFrame(`project.cap:${frame.projectId}`);
     const project = state.projects.find((row) => row.id === frame.projectId);
@@ -5356,10 +5343,10 @@ function isSubscribed(instanceId: string): boolean {
 
 /**
  * Every session something on this page shows: the tabs, the peek, the
- * delegate cards. A thread's tab streams no frames of its own: they come with
- * the thread frames, which every dashboard receives. Its streams' places
- * ({@link forgetUnwatched}) are kept for all of them, a tab waiting on its
- * name included, so a page read before the tab was asked keeps its `seq`.
+ * delegate cards, and a Caw thread's panel (`thread:<id>`, a session's
+ * stream like any). Its streams' places ({@link forgetUnwatched}) are kept
+ * for all of them, a tab waiting on its name included, so a page read
+ * before the tab was asked keeps its `seq`.
  */
 function watchedIds(): string[] {
   const ids = new Set(workspace.openIds);
@@ -5369,7 +5356,7 @@ function watchedIds(): string[] {
   for (const id of watchedDelegates.keys()) {
     ids.add(id);
   }
-  return [...ids].filter((id) => !isThreadTab(id));
+  return [...ids];
 }
 
 /**
@@ -5478,10 +5465,6 @@ export function setPeeked(id: string | null): void {
 
 /** One more reader of this delegate: its frames stream while any reader remains. */
 export function watchDelegate(instanceId: string): void {
-  // A thread streams no frames of its own (see `subscriptionIds`).
-  if (isThreadTab(instanceId)) {
-    return;
-  }
   watchedDelegates.set(instanceId, (watchedDelegates.get(instanceId) ?? 0) + 1);
   syncSubscriptions();
 }
@@ -6440,7 +6423,11 @@ export async function forkSession({
 }
 
 /** What a turn carries besides its typed text — pastes turned into chips, images. */
-export type SendExtras = Pick<SendPayload, "attachments" | "images">;
+/** What rides with a send besides its words; `projectId` names the project a new Caw thread is made in (core `SendPayload.projectId`). */
+export type SendExtras = Pick<
+  SendPayload,
+  "attachments" | "images" | "projectId"
+>;
 
 /**
  * What a send does to the LOCAL store: the row it draws under the message's
@@ -7133,29 +7120,6 @@ function adoptThread(thread: ThreadSummary): void {
   ].sort(byLastAt);
 }
 
-/**
- * The messages that reached a thread while a read of it was on its way, by
- * thread id, with how many reads are: a read's answer may have been taken
- * before them, so it lands them after its own ({@link readThread}). Held
- * only while a read is in flight.
- */
-const heardWhileReading = new Map<
-  string,
-  { heard: ThreadMessage[]; reads: number }
->();
-
-/**
- * A message added to a thread this tab has read, or is reading; a thread
- * not read yet is read whole when it opens.
- */
-function adoptThreadMessage(threadId: string, message: ThreadMessage): void {
-  heardWhileReading.get(threadId)?.heard.push(message);
-  const messages = state.threadMessages[threadId];
-  if (messages && !messages.some((held) => held.id === message.id)) {
-    messages.push(message);
-  }
-}
-
 /** A thread's row as a request that left at `mark` answered it, unless a frame for it came since. */
 function keepThread(thread: ThreadSummary, mark: number): void {
   if (!heardSince(`thread:${thread.id}`, mark)) {
@@ -7283,106 +7247,6 @@ export const threadsOf = (projectId: string): ThreadSummary[] =>
   state.threads[projectId] ?? [];
 
 /**
- * Reads a thread whole; `thread.message` frames keep it from then on. A
- * frame that lands while the read is on its way is newer than the read's
- * answer (the hub took that answer before it), so the thread is the read's
- * messages and then each such one the read does not have: the read never
- * drops a message the frames already brought.
- */
-export async function readThread(
-  projectId: string,
-  threadId: string
-): Promise<ThreadRead> {
-  const reading = heardWhileReading.get(threadId) ?? { heard: [], reads: 0 };
-  reading.reads += 1;
-  heardWhileReading.set(threadId, reading);
-  const mark = readLeaves();
-  try {
-    const read = await askHub<ThreadRead>(
-      `${projectPath(projectId)}/threads/${encodeURIComponent(threadId)}`
-    );
-    const ids = new Set(read.messages.map((message) => message.id));
-    const after = reading.heard.filter(
-      (message) => !ids.has(message.id) && ids.add(message.id)
-    );
-    state.threadMessages[threadId] = [...read.messages, ...after];
-    keepThread(read.thread, mark);
-    return read;
-  } finally {
-    reading.reads -= 1;
-    if (reading.reads === 0) {
-      heardWhileReading.delete(threadId);
-    }
-  }
-}
-
-/**
- * Starts a thread with your first message; Caw is woken with it. `id` is the
- * message's, chosen here as a session's composer chooses its own: the row it
- * becomes lands the words that flew under it, whenever the hub draws it.
- * `extras`: the pictures and attachments that ride with it.
- */
-export async function startThread(
-  projectId: string,
-  body: string,
-  id?: string,
-  extras: SendExtras = {}
-): Promise<ThreadSaid> {
-  const mark = readLeaves();
-  const said = await askHub<ThreadSaid>(
-    `${projectPath(projectId)}/threads`,
-    json("POST", { body, ...(id ? { id } : {}), ...carriedOf(extras) })
-  );
-  state.threadMessages[said.thread.id] ??= [];
-  adoptThreadMessage(said.thread.id, said.message);
-  keepThread(said.thread, mark);
-  return said;
-}
-
-/**
- * What rode with your words in a thread, as the hub's thread routes take it
- * (a send's `images` and `attachments`); the thread message keeps it.
- */
-const carriedOf = ({ images, attachments }: SendExtras): SendExtras => ({
-  ...(images?.length ? { images } : {}),
-  ...(attachments?.length ? { attachments } : {}),
-});
-
-/** Writes in a thread; Caw is woken with it. `id` and `extras` as for {@link startThread}. */
-export async function sayInThread(
-  projectId: string,
-  threadId: string,
-  body: string,
-  id?: string,
-  extras: SendExtras = {}
-): Promise<ThreadSaid> {
-  const mark = readLeaves();
-  const said = await askHub<ThreadSaid>(
-    `${projectPath(projectId)}/threads/${encodeURIComponent(threadId)}/messages`,
-    json("POST", { body, ...(id ? { id } : {}), ...carriedOf(extras) })
-  );
-  adoptThreadMessage(threadId, said.message);
-  keepThread(said.thread, mark);
-  return said;
-}
-
-/**
- * Try again on a thread's not-woken note: Caw woken with your newest words
- * in it, the ones a wake failed to carry; nothing of yours is added. The
- * thread's frames carry what comes of it (working, his reply, or a new
- * not-woken note), so the answer is not adopted over them.
- */
-export async function wakeThread(
-  projectId: string,
-  threadId: string
-): Promise<void> {
-  await askHub<ThreadSummary>(
-    `${projectPath(projectId)}/threads/${encodeURIComponent(threadId)}/wake`,
-    json("POST", {})
-  );
-}
-
-/**
  * Archives one of a project's threads (`archived`), or brings it back: the
  * rails leave an archived thread and the sessions under it out, and the
  * project's thread list keeps it under Archived. The hub's answer is the
@@ -7408,16 +7272,14 @@ export async function requestView(
   text: string,
   /** The ask's id: the hub takes the same id again as the same ask. */
   id: string
-): Promise<ThreadSaid> {
+): Promise<{ thread: ThreadSummary }> {
   const mark = readLeaves();
-  const said = await askHub<ThreadSaid>(
+  const asked = await askHub<{ thread: ThreadSummary }>(
     `${projectPath(projectId)}/view-requests`,
     json("POST", { text, id })
   );
-  state.threadMessages[said.thread.id] ??= [];
-  adoptThreadMessage(said.thread.id, said.message);
-  keepThread(said.thread, mark);
-  return said;
+  keepThread(asked.thread, mark);
+  return asked;
 }
 
 /** What a project has spent: today, this month, its Caw's share, each attempt and thread. */
@@ -8211,9 +8073,9 @@ export function readTranscript(
   cause: ReadCause = "open",
   fresh = false
 ): Promise<TranscriptOutcome> {
-  // A thread's transcript is its messages (`readThread`); a tab the hub has
-  // not named yet is read once it has (workspace `named`), if it names one.
-  if (isThreadTab(viewId) || !workspace.named(viewId)) {
+  // A tab the hub has not named yet is read once it has (workspace
+  // `named`), if it names one.
+  if (!workspace.named(viewId)) {
     return Promise.resolve({ ok: true, skipped: true });
   }
   const target = session(viewId);
@@ -8280,7 +8142,8 @@ export function storedReadWaits(viewId: string): StoredWait | null {
   // Read first, so a reader that runs before the first board runs again
   // when the board's machines land.
   const { machines } = state;
-  if (instanceIndex.byId.has(viewId)) {
+  // A Caw thread is the hub's own: its page waits on no machine.
+  if (instanceIndex.byId.has(viewId) || threadIdOf(viewId)) {
     return null;
   }
   const machineId = contextOf(viewId)?.machine;
@@ -9790,7 +9653,6 @@ export const cawco = {
   },
   /** A project's threads with its Caw, newest first, live. */
   threadsOf,
-  /** A thread's messages, oldest first, once {@link readThread} read it; null before. */
   /** A count that moves each time the project's tasks change (`tasks.changed`). */
   tasksChangedOf: (projectId: string): number =>
     state.tasksChanged[projectId] ?? 0,
@@ -9813,8 +9675,6 @@ export const cawco = {
     where: StarterPlace,
     read: ProjectStarter[] | undefined
   ): ProjectStarter[] => state.starters[`${where}:${projectId}`] ?? read ?? [],
-  threadMessagesOf: (threadId: string): ThreadMessage[] | null =>
-    state.threadMessages[threadId] ?? null,
   session: (instanceId: string): SessionState | null =>
     state.sessions[instanceId] ?? null,
   /**

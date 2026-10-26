@@ -142,6 +142,7 @@ export {
   getToolGlance,
   interruptLine,
   personWords,
+  sendRef,
   transcriptUserText,
 } from "./transcript-rules";
 export * from "./transcript-types";
@@ -490,9 +491,16 @@ export interface SendPayload {
   from?: string;
   /** Images the turn carries: base64, with no `data:` URI prefix. */
   images?: { mediaType: string; data: string }[];
+  /** The session it goes to, or a Caw thread's view id (`thread:<id>`, core threads.ts `threadTarget`). */
   instanceId: string;
   /** The user turn, under the uuid it keeps everywhere it is shown. */
   message: import("./harness").SentMessage;
+  /**
+   * A send to a Caw thread not made yet: the project it is made in, under
+   * the id its `thread:<id>` names (the composer mints it as it mints a
+   * send's uuid). Absent on every other send.
+   */
+  projectId?: string;
 }
 
 /**
@@ -1559,7 +1567,6 @@ export type FramePayload =
   | import("./frames").WorkItemFrame
   | import("./frames").ProjectOfferFrame
   | import("./frames").ThreadUpsertFrame
-  | import("./frames").ThreadMessageFrame
   | import("./frames").TasksChangedFrame
   | import("./frames").DecisionsChangedFrame
   | import("./frames").BlocksChangedFrame

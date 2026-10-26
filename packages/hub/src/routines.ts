@@ -1545,7 +1545,9 @@ export const createRoutines = ({
    * run, as any failure.
    */
   const sendLeft = (
-    send: Pick<SentMessageRow, "body" | "instanceId" | "reason" | "state">
+    send: Pick<SentMessageRow, "body" | "reason" | "state"> & {
+      instanceId: string;
+    }
   ): void => {
     const origin: NeutralOrigin | undefined = send.body?.origin;
     const routineId =

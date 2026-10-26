@@ -148,17 +148,24 @@ const cawProject = async (
     })
   ).id;
 
-/** A thread of project `id` opened with your words, which wake Caw. */
+/**
+ * A thread of project `id` opened with your words, which wake Caw: a send
+ * to a new thread's id (`thread:<id>`), which the hub makes the thread under.
+ */
 const openThread = async (
   fleet: KitFleet,
   id: string,
   name: string
-): Promise<string> =>
-  (
-    await fleet.api<{ thread: { id: string } }>(`/api/projects/${id}/threads`, {
-      body: `PROBE-${name.toUpperCase()}: hello Caw.`,
-    })
-  ).thread.id;
+): Promise<string> => {
+  const thread = crypto.randomUUID();
+  await fleet.send(
+    `thread:${thread}`,
+    `PROBE-${name.toUpperCase()}: hello Caw.`,
+    "hub",
+    id
+  );
+  return thread;
+};
 
 /** Caw's place id for project `project` over `cwd` on `machine` (hub caw.ts `leadPlaceRef`). */
 const placeIdOf = (project: string, machine: string, cwd: string): string =>
@@ -386,32 +393,18 @@ const refusedLeg = async (kit: Kit, fleet: KitFleet, home: string) => {
     })
   );
   const thread = await openThread(fleet, project, "Spilled");
-  // Your first words in a project made from a folder open its Setup thread
-  // (caw.ts `wakeForSetup`), which notes a start that failed as "could not
-  // start", its words the note's body; a later thread's words note it as not
-  // woken, its words in `notWoken` (`wakeForYou`). Either is the person's.
+  // Your words are a send to the thread (caw.ts `sent`): a wake that does
+  // not go out fails its record with why, which its row says.
   const notes = () =>
     fleet
-      .query<{ body: string; event: string | null }>(
-        "SELECT body, event FROM thread_messages WHERE thread_id = ? AND author = 'event'",
+      .query<{ reason: string | null }>(
+        "SELECT reason FROM sent_messages WHERE thread_id = ? AND state = 'failed'",
         thread
       )
-      .map((row) => {
-        const event = JSON.parse(row.event ?? "{}") as {
-          notWoken?: { reason?: string; words?: string };
-          what?: string;
-        };
-        return {
-          what: event.what ?? "",
-          words: event.notWoken?.words ?? row.body,
-        };
-      });
+      .map((row) => ({ words: row.reason ?? "" }));
   const note = await until(
-    "C: the note that Caw did not start",
-    () =>
-      notes().find((one) =>
-        ["not-woken", "could-not-start"].includes(one.what)
-      ),
+    "C: the send Caw did not take",
+    () => notes().find((one) => one.words),
     () => true,
     240_000
   ).catch(() => undefined);
@@ -421,7 +414,7 @@ const refusedLeg = async (kit: Kit, fleet: KitFleet, home: string) => {
     thread
   )[0]?.n;
   kit.check(
-    "C: past srt's cap, your words do not wake Caw, and the thread's note names why in srt's own words after the host's line: its profile's size and bwrap's cap",
+    "C: past srt's cap, your words do not wake Caw, and their failed row names why in srt's own words after the host's line: its profile's size and bwrap's cap",
     note !== undefined &&
       caw === 0 &&
       words.includes(`${SRT_REFUSED}: Sandbox profile has`) &&

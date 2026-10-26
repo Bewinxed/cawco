@@ -37,7 +37,7 @@ import {
   type TailnetHttps,
   type TailnetOrigin,
 } from "./tailnet-https";
-import type { ThreadMessage, ThreadSummary } from "./threads";
+import type { ThreadSummary } from "./threads";
 import type { AccountLimits, MachineGoLimits, UsageSpend } from "./usage";
 
 export interface FleetMcpFrame {
@@ -939,14 +939,6 @@ export interface BlocksChangedFrame {
    */
   kind: "blocks.changed";
   projectId: string;
-}
-
-export interface ThreadMessageFrame {
-  instanceId?: undefined;
-  /** Hub-originated: a message was added to a thread. */
-  kind: "thread.message";
-  message: ThreadMessage;
-  threadId: string;
 }
 
 export interface DelegateEventFrame {

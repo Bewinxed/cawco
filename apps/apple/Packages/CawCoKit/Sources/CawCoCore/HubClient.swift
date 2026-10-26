@@ -74,10 +74,6 @@ private struct LossyReads: ClientMiddleware {
         // A transcript's page: the read again an unreadable stream event asks
         // for (`SessionsStore.apply`) reads without what it cannot, and ends.
         Operations.GetApiInstancesByIdTranscript.id: prune(Components.Schemas.TranscriptPage.self),
-        // A Caw thread, as its `thread.message` frames already read: a note
-        // whose event is of a kind this build does not know keeps its line,
-        // its event read as absent, and the thread reads.
-        Operations.GetApiProjectsByIdThreadsByThreadId.id: prune(Components.Schemas.ThreadRead.self),
     ]
 
     private static func prune<T: Codable & Sendable>(_: T.Type) -> Prune {

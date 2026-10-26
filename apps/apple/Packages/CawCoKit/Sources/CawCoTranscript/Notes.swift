@@ -236,7 +236,7 @@ final class SystemLineView: RailRow, RowContent, Disclosing {
                     below.addArrangedSubview(spaced)
                 }
                 alpha = waiting ? Effect.ghostPresence : 1
-            case "ui.system_note" where block.string("noteKind") == ThreadNote.cawEvent:
+            case "ui.system_note" where block.string("noteKind") == ThreadTabs.cawEvent:
                 // Something that woke a project's Caw (SystemLine.svelte `wokeCaw`):
                 // its line is code, in the dashed box, with when it happened in
                 // the reader's own time; what happened opens under it.

@@ -1175,6 +1175,49 @@ export class TranscriptBuilder {
     return this.flush();
   }
 
+  /* ------------------------------------------------ a kept transcript — */
+
+  /**
+   * A transcript the hub keeps itself rather than reads off a machine (a Caw
+   * thread's, hub thread-transcript.ts): its rows ready-made, oldest first,
+   * with a placeholder ({@link sendRef}) wherever a send was read, and the
+   * records of its sends. The first build: it says nothing.
+   */
+  seed(rows: TranscriptBlock[], records: Record<string, SendRecord>): void {
+    this.rows = [...rows];
+    this.rowIds = new Set(rows.map((row) => row.id));
+    this.records = { ...records };
+    this.reads = 1;
+    this.complete = true;
+    ({ blocks: this.placed, queued: this.queued } = placeSends(
+      this.rows,
+      this.records
+    ));
+    this.facts = { ...this.facts, initialized: true };
+  }
+
+  /**
+   * One ready-made row of a kept transcript ({@link seed}): at the end, or
+   * said again in its place when it is held.
+   */
+  applyBlock(block: TranscriptBlock): TranscriptEvent[] {
+    const at = this.rows.findIndex((row) => row.id === block.id);
+    if (at === -1) {
+      this.rows.push(block);
+      this.rowIds.add(block.id);
+    } else {
+      this.rows = this.rows.with(at, block);
+    }
+    this.replace();
+    return this.flush();
+  }
+
+  /** The live tail of a kept transcript ({@link seed}): the fields this change moves. */
+  applyTail(patch: Partial<TranscriptTail>): TranscriptEvent[] {
+    this.setTail(patch);
+    return this.flush();
+  }
+
   /* ---------------------------------------------------------- reading — */
 
   /**

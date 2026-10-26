@@ -45,24 +45,6 @@ export type SendRowState =
 export interface MessageMetadata extends BlockMetadata {
   /** A folded command line's command (SystemLine). */
   command?: string;
-  /** A project's Caw's turn: the project folder's files it wrote, drawn as chips under it. */
-  files?: string[];
-  /**
-   * A thread's note that your words did not wake Caw (core `CawNotWoken`):
-   * SystemLine draws it as a row of its own, and the pane hangs the reason
-   * and Try again under its title (TranscriptVoice `event`).
-   */
-  notWoken?: true;
-  /**
-   * A thread's notice that a session made a routine (core ThreadEvent
-   * `routine-made`): SystemLine draws Keep, Turn off and Open beside it.
-   */
-  routineMade?: {
-    expiresAt: number | null;
-    routineId: string;
-  };
-  /** A project's Caw's turn: the tasks it is about (`tsk-12`), drawn as cards under it. */
-  tasks?: string[];
 }
 
 /** The two kinds a card renders directly; an answer only settles its ask. */

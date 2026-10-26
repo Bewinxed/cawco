@@ -150,12 +150,19 @@ import type { TailnetServing } from "./tailnet-https";
  *    `waitsOn` is a wait as a task keeps it (a string), and the hub's own
  *    wait on a page whole is `waitsOnPage`. A page built for 29 would read
  *    links the hub no longer sends, so it reloads first.
+ * 31: a Caw thread is addressed as a session: its page is
+ *    `GET /api/instances/thread:<id>/transcript`, its stream is followed
+ *    under `thread:<id>`, and a send to it is a `send` command to that id.
+ *    No `thread.message` frame is sent, a thread's row says no `hearing`,
+ *    and the thread routes that took and read its messages are gone. A
+ *    page built for 30 would read a thread no hub serves, so it reloads
+ *    first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 30;
+export const WIRE_PROTOCOL = 31;
 
 /**
  * What a session's stream carries: the changes each frame made to its

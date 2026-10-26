@@ -7,33 +7,34 @@ import OSLog
 import UIKit
 import UniformTypeIdentifiers
 
-/// A thread with a project's Caw, as a session tab (ThreadPane.svelte): the
-/// thread's messages shaped into the transcript's session, so the real
-/// transcript draws them, and the group's one composer lent to it. Your
-/// words are your turns, Caw's are his, his face on the speaker line, the
-/// tasks they are about as cards and the files he wrote as chips under
-/// them; what woke him is a code line. His question, and every ask made in
-/// this thread, stands on the composer as its card; answered, it is drawn
-/// as its settled question row; withdrawn, a quiet line says so.
+/// A thread with a project's Caw, as a session tab (ThreadPane.svelte). A
+/// thread is addressed as a session (`thread:<id>`) and the hub serves it
+/// as one (thread-transcript.ts), so this screen reads it through the
+/// sessions store (`hub.sessions.transcripts[viewId]`): the real transcript
+/// draws it, and the group's one composer lent to it sends to it as to any
+/// session, through the outbox. Your words are your turns, Caw's are his,
+/// his face on the speaker line, the tasks they are about as cards and the
+/// files he wrote as chips under them; what woke him is a code line. His
+/// question, and every ask made in this thread, stands on the composer as
+/// its card; answered, it is drawn as its settled question row.
 ///
 /// Caw sits on the composer: his ledge peek over the pill's top-leading
 /// corner, playing the thread's status, and his plan's ring at the row's
 /// other end. On or off, your words start him; only when he cannot start
 /// (no machine for him) does the composer give way to a line that says why.
 ///
-/// What you write goes to the thread through the hub's thread route, never
-/// to his session. `thread:new:<project>` is a thread not yet started: its
-/// first message makes it, and the tab is re-addressed to the thread the
-/// hub made.
+/// What you write is a send to the thread, never to his session. A thread
+/// not started yet has its id already (`ThreadTabs.newTabId`): its first
+/// send carries its project, and the hub makes it under that id.
 final class ThreadViewController: ObservedViewController, ComposerPane {
-    private(set) var viewId: String
+    let viewId: String
     private let hub: HubConnection
-    private var threadId: String?
+    private let threadId: String
     /// The thread's project: the hub's word on the thread, which a tab
-    /// opened at launch may be built before (a push, a restore); a new
-    /// thread's is in its id.
+    /// opened at launch may be built before (a push, a restore); a thread
+    /// this device minted and has not sent to yet keeps it from its minting.
     private var projectId: String {
-        threadId.flatMap { hub.threads.byId[$0]?.projectId } ?? ThreadTabs.newProject(of: viewId) ?? ""
+        hub.threads.byId[threadId]?.projectId ?? ThreadTabs.mintedProject(of: viewId) ?? ""
     }
     private let transcriptView = TranscriptView()
     private let transcriptHost = UIViewController()
@@ -54,8 +55,6 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
     var onOpenProject: (String) -> Void = { _ in }
     /// "Check machines": the machines card.
     var onCheckMachines: (UIView) -> Void = { _ in }
-    /// A new thread's first message made it: its tab is re-addressed.
-    var onRetarget: (_ from: String, _ to: String) -> Void = { _, _ in }
     /// Whether it takes a composer changed (Caw can or cannot start now).
     var onComposes: () -> Void = {}
     var onTranscriptShare: () -> Void = {}
@@ -73,8 +72,9 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
     init(hub: HubConnection, id: String) {
         self.hub = hub
         viewId = id
-        threadId = ThreadTabs.threadId(of: id)
-        transcript = threadId.map(hub.threads.transcript) ?? hub.threads.blank(ThreadTabs.newProject(of: id) ?? "")
+        threadId = ThreadTabs.threadId(of: id) ?? id
+        // Read and followed as a session is: its page, then its stream.
+        transcript = hub.sessions.open(id)
         composerBinding = SessionComposerBinding(sessionId: id)
         seat = CawView(status: .ready, ledge: .peek)
         super.init(nibName: nil, bundle: nil)
@@ -96,8 +96,8 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("ThreadViewController is built in code") }
 
-    /// The thread as the hub has it now, when it has been started.
-    private var thread: ThreadSummary? { threadId.flatMap { hub.threads.byId[$0] } }
+    /// The thread as the hub has it now, once it has been started.
+    private var thread: ThreadSummary? { hub.threads.byId[threadId] }
 
     // MARK: The pane
 
@@ -239,12 +239,11 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
         placeSeat()
     }
 
-    /// The tab closed: the plan it followed, and his session it watched, are let go.
+    /// The tab closed: the plan it followed, and the thread's stream, are let go.
     func close() {
         if let followed { hub.plans.unfollow(followed) }
         followed = nil
-        if let hearingLead { hub.sessions.unwatchDelegate(hearingLead) }
-        hearingLead = nil
+        hub.sessions.close(viewId)
     }
 
     var restorationValues: [String: Any] { ["draft": composerBinding.draft] }
@@ -274,8 +273,9 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
     private var caw: CawLeadView?
     /// What his view was last read on: the connection and the thread's status.
     private var cawReadOn = ""
-    private var readProblem: String?
-    private var readAsked = false
+    /// The thread was read since the hub made it: a thread minted here reads
+    /// nothing until its first send makes it.
+    private var readMade = false
     /// You can write to Caw, on or off: your words start him. Only a reason
     /// he cannot start (no machine for him) takes the composer away.
     private var writable: Bool { caw != nil && caw?.problem == nil }
@@ -286,11 +286,11 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
     override func refreshContent() {
         let connected = hub.state == .connected
         let status = thread?.status
-        // The thread is read whole on each connection; frames keep it from then on.
-        if !connected { readAsked = false }
-        if connected, !readAsked, let threadId, !projectId.isEmpty {
-            readAsked = true
-            read(threadId)
+        // A thread minted here was asked for before the hub made it, and the
+        // hub said none: once its row is here, it is read.
+        if connected, thread != nil, !readMade {
+            readMade = true
+            if transcript.missing { hub.sessions.read(viewId, because: .open) }
         }
         // A thread's status moves with the lead; his view is read again with it.
         let on = "\(connected)|\(status?.rawValue ?? "")|\(projectId)"
@@ -298,13 +298,15 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
             cawReadOn = on
             readCaw()
         }
-        transcriptView.voice = TranscriptVoice(name: "Caw", extras: threadId.map(hub.threads.extras) ?? [:], revision: tasksRead + wakesDrawn) { [weak self] extras, blockId in
+        transcriptView.voice = TranscriptVoice(name: "Caw", extras: ThreadExtras.of(transcript.blocks), revision: tasksRead) { [weak self] extras, blockId in
             self?.accessory(extras, blockId: blockId)
         }
         transcriptView.configure(transcript)
         _ = transcript.blockRevision
 
-        let veiled = transcript.loading && readProblem == nil
+        // A thread not made yet has nothing on its way: no veil, the hero's place.
+        let readProblem = thread == nil ? nil : transcript.fault?.message
+        let veiled = thread != nil && transcript.loading && readProblem == nil
         veil.isHidden = !veiled
         problem.text = readProblem.map { "The thread could not be read: \($0)" }
         problem.isHidden = readProblem == nil
@@ -326,13 +328,11 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
         if off.isHidden != (cannot == nil) { off.isHidden = cannot == nil }
 
         follow(caw?.leadInstanceId)
-        hear()
         syncPlan()
         syncTasks()
 
         composerBinding.writable = connected && writable
-        composerBinding.action = sending ? .sending : (status == .working ? .stop : .send)
-        composerBinding.sendError = sendError
+        composerBinding.action = status == .working ? .stop : .send
         composerBinding.sendBlock = sendBlock(hub)
         syncCards()
         composerBinding.publish()
@@ -345,19 +345,6 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
         probe()
         // The thread becomes writable once the hub's word on Caw is read: the probe's carry waits for it.
         #endif
-    }
-
-    private func read(_ threadId: String) {
-        Task { [weak self, hub, projectId] in
-            do {
-                try await hub.threads.read(projectId: projectId, threadId: threadId)
-                self?.readProblem = nil
-            } catch {
-                self?.readProblem = ThreadsStore.failureWords(error)
-                Self.log.error("thread \(threadId, privacy: .public) unreadable: \(error.localizedDescription, privacy: .public)")
-            }
-            self?.requestRefresh()
-        }
     }
 
     private func readCaw() {
@@ -415,23 +402,6 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
         if let lead { hub.plans.follow(lead) }
     }
 
-    // MARK: His words as he writes them
-
-    /// His session, watched while his turn answers your words here (the
-    /// thread's `hearing`): it is no tab of this app's (ThreadPane.svelte
-    /// `hearingLead`).
-    private var hearingLead: String?
-
-    private func hear() {
-        let lead = thread?.hearing?.instanceId
-        if lead != hearingLead {
-            if let hearingLead { hub.sessions.unwatchDelegate(hearingLead) }
-            hearingLead = lead
-            if let lead { hub.sessions.watchDelegate(lead) }
-        }
-        if let threadId { hub.threads.hear(threadId) }
-    }
-
     private func syncPlan() {
         let plan = followed.flatMap { hub.plans.plans[$0] }
         if let plan, plan.shows {
@@ -454,10 +424,8 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
     /// setting, a memory proposal he asked about, wherever the hub parked
     /// it, each answered on the machine its envelope named.
     private func syncCards() {
-        let asks = threadId.map { id in
-            hub.needs.parked.values.joined().filter { $0.threadId == id }
-                .sorted { ($0.raisedAt ?? .infinity, $0.requestId) < ($1.raisedAt ?? .infinity, $1.requestId) }
-        } ?? []
+        let asks = hub.needs.parked.values.joined().filter { $0.threadId == threadId }
+            .sorted { ($0.raisedAt ?? .infinity, $0.requestId) < ($1.raisedAt ?? .infinity, $1.requestId) }
         // One at a time (ThreadPane.svelte `firstAsk`): the first stands, "N of M", the rest counted.
         let place = askRun.place(first: asks.first?.requestId, more: max(0, asks.count - 1))
         let standing = asks.prefix(1)
@@ -532,7 +500,7 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
         case .answer: hub.needs.answerQuestion(ask, answers: picks)
         }
         if !sent { cards[ask.requestId]?.refuse("Couldn't send that answer.") }
-        Self.log.notice("thread \(self.threadId ?? "new", privacy: .public) ask \(ask.requestId, privacy: .public) answered: \(String(describing: choice), privacy: .public) \(picks.description, privacy: .public)")
+        Self.log.notice("thread \(self.threadId, privacy: .public) ask \(ask.requestId, privacy: .public) answered: \(String(describing: choice), privacy: .public) \(picks.description, privacy: .public)")
         requestRefresh()
     }
 
@@ -544,7 +512,7 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
     private var tasksRead = 0
 
     private func syncTasks() {
-        let named = (threadId.flatMap { hub.threads.messages[$0] } ?? []).filter { !$0.tasks.isEmpty }
+        let named = transcript.blocks.filter { !($0.metadata?.tasks ?? []).isEmpty }
         guard !named.isEmpty, !projectId.isEmpty else { return }
         // Read again when a reply may name new tasks, and when the project's tasks change.
         let on = "\(named.count)|\(hub.tasksChanged[projectId] ?? 0)"
@@ -562,7 +530,6 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
     /// and under the Setup thread's newest reply that names files, the way
     /// to the board (ThreadPane.svelte `taskCards`, `folderFiles`).
     private func accessory(_ extras: ThreadExtras, blockId: String) -> UIView? {
-        if let woken = extras.notWoken { return notWoken(woken, note: blockId, again: extras.wakeAgain) }
         let column = UIStackView()
         column.axis = .vertical
         column.spacing = Space.space3
@@ -592,61 +559,10 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
         return column.arrangedSubviews.isEmpty ? nil : column
     }
 
-    // MARK: Your words he has not read
-
-    /// What Try again last came to, by note: under way, or the refusal.
-    private var wakingAgain: [String: String?] = [:] {
-        didSet { wakesDrawn += 1 }
-    }
-    /// Moves with `wakingAgain`: the notes' lines are drawn again.
-    private var wakesDrawn = 0
-
-    /// A not-woken note's reason, in the hub's words, and the way on with
-    /// the words he has not read where the note still stands for them
-    /// (ThreadPane.svelte `eventUnder`, RowFault).
-    private func notWoken(_ woken: ThreadNotWoken, note: String, again: Bool) -> UIView {
-        let refused = wakingAgain[note] ?? nil
-        let reason = KitLabel(TypeScale.typeMeta, ink: Palette.statusFailInk, lines: 0)
-        reason.text = refused ?? "Caw hasn't read your message: \(woken.words)"
-        reason.accessibilityIdentifier = "not-woken-\(woken.reason)"
-        let line = UIStackView(arrangedSubviews: [reason])
-        line.axis = .vertical
-        line.alignment = .leading
-        line.spacing = Space.space1
-        line.isLayoutMarginsRelativeArrangement = true
-        line.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: Space.space2, bottom: 0, trailing: 0)
-        if again {
-            let trying = wakingAgain.keys.contains(note) && refused == nil
-            let button = KitButton.make(trying ? "Waking Caw…" : "Try again", glyph: .refresh, variant: .ghost, height: .xs) { [weak self] in
-                self?.wakeAgain(note)
-            }
-            button.isEnabled = !trying
-            button.accessibilityIdentifier = "wake-again"
-            line.addArrangedSubview(button)
-        }
-        return line
-    }
-
-    private func wakeAgain(_ note: String) {
-        guard let threadId, !projectId.isEmpty, wakingAgain[note] != .some(nil) else { return }
-        wakingAgain[note] = .some(nil)
-        requestRefresh()
-        Task { [weak self, hub, projectId] in
-            do {
-                try await hub.threads.wake(projectId: projectId, threadId: threadId, note: note)
-                self?.wakingAgain[note] = nil
-            } catch {
-                self?.wakingAgain[note] = .some(ThreadsStore.failureWords(error))
-                Self.log.error("thread \(threadId, privacy: .public) not woken again: \(error.localizedDescription, privacy: .public)")
-            }
-            self?.requestRefresh()
-        }
-    }
-
     /// The Setup thread's newest reply that names files: setup ends there.
     private var boardAfter: String? {
-        guard thread?.setup == true, let threadId else { return nil }
-        return hub.threads.messages[threadId]?.last { $0.author == .caw && !$0.files.isEmpty }?.id
+        guard thread?.setup == true else { return nil }
+        return transcript.blocks.last { $0._type.value3 == .assistant && !($0.metadata?.files ?? []).isEmpty }?.id
     }
 
     /// A file a reply names, read as it is in the project's folder on the hub.
@@ -657,59 +573,20 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
 
     // MARK: The composer
 
-    private var sending = false
-    private var sendError: String?
-    /// The words a send got no answer for, and the id they went as
-    /// (ThreadPane.svelte `unanswered`): the hub may have kept them, so the
-    /// same words sent again go under the same id, which the hub answers with
-    /// the message it kept rather than a second one.
-    private var unanswered: (words: String, id: String)?
-
-    /// Your words go to the thread as one message (ThreadPane.svelte
-    /// `onsubmit`): its row lands them however soon its frame draws it; a
-    /// refusal gives them back to the field with why.
+    /// Your words go to the thread as a send to any session does
+    /// (ThreadPane.svelte `onsubmit`, `SessionsStore.steer`): kept in the
+    /// outbox with all they carry, drawn at once under their uuid, and the
+    /// hub's record of them is their row from then on, queued, read or
+    /// failed with Try again. A thread not made yet is made by it, in its
+    /// project.
     private func send(_ words: String, _ attachments: [ComposerAttachment]) {
-        guard hub.state == .connected, writable, !sending, !projectId.isEmpty else { return }
+        guard writable, !projectId.isEmpty else { return }
         // Nothing goes while a pick is being read or a file is not on the hub yet.
         guard let carried = ComposerAttacher.carried(attachments) else { return }
-        let id = unanswered.flatMap { $0.words == words ? $0.id : nil } ?? UUID().uuidString.lowercased()
-        sending = true
-        sendError = nil
+        _ = hub.sessions.steer(sessionId: viewId, machineId: "hub", text: words, images: carried.images,
+                               texts: carried.texts, files: carried.files,
+                               projectId: thread == nil ? projectId : nil)
         composerBinding.sent()
-        requestRefresh()
-        Task { [weak self, hub, projectId, threadId] in
-            do {
-                let said = try await hub.threads.say(projectId: projectId, threadId: threadId, body: words, id: id,
-                                                     images: carried.images, texts: carried.texts, files: carried.files)
-                self?.unanswered = nil
-                if threadId == nil { self?.started(said.id) }
-            } catch {
-                // The words and what rode with them come back (`draft.restore(text, extras)`).
-                self?.composerBinding.setDraft(words)
-                for attachment in attachments { self?.composerBinding.attach(attachment) }
-                let unreached = ThreadsStore.unreachable(error)
-                self?.unanswered = unreached ? (words, id) : nil
-                self?.sendError = unreached ? ThreadsStore.sendUnreached : ThreadsStore.failureWords(error)
-                Self.log.error("thread send refused: \(error.localizedDescription, privacy: .public)")
-                #if DEBUG
-                if let self {
-                    let held = composerBinding.attachments.map(Self.probeName).joined(separator: ",")
-                }
-                #endif
-            }
-            self?.sending = false
-            self?.requestRefresh()
-        }
-    }
-
-    /// The first message made the thread: the tab is the thread's now.
-    private func started(_ threadId: String) {
-        let from = viewId
-        self.threadId = threadId
-        viewId = ThreadTabs.tabId(threadId)
-        transcript = hub.threads.transcript(threadId)
-        readAsked = true
-        onRetarget(from, viewId)
         requestRefresh()
     }
 
@@ -720,12 +597,7 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
     }
 
     /// What you wrote in this thread, newest first: the recall wheel's.
-    private func recall() -> [RecallEntry] {
-        guard let threadId else { return [] }
-        return (hub.threads.messages[threadId] ?? []).filter { $0.author == .you && !$0.body.isEmpty }.reversed().map {
-            RecallEntry(id: $0.id, text: $0.body, date: Date(timeIntervalSince1970: $0.createdAt / 1000), queued: false)
-        }
-    }
+    private func recall() -> [RecallEntry] { SentMessages.recall(transcript) }
 
     #if DEBUG
     private var probed = ""
@@ -738,11 +610,10 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
     /// `probe thread <id> …`; then, when the messages change, each in order
     /// as `probe thread-message <id> <n>/<count> <author>:<first 40>`.
     private func probe() {
-        guard let threadId else { return }
-        let notes = hub.threads.messages[threadId] ?? []
+        let notes = transcript.blocks + transcript.queued
         let said = "probe thread \(threadId) status \(thread?.status.rawValue ?? "?") messages \(notes.count)"
             + " asks [\(cards.keys.sorted().joined(separator: ","))] place \(cards.values.first?.probePlace ?? "none") composer \(writable ? "on" : "off")"
-        let listed = notes.map { "\($0.author):\($0.body.prefix(40).replacingOccurrences(of: "\n", with: " "))" }
+        let listed = notes.map { "\($0.id.prefix(8)):\($0.content.prefix(40).replacingOccurrences(of: "\n", with: " "))" }
         if listed != probedMessages {
             probedMessages = listed
             for (at, words) in listed.enumerated() {

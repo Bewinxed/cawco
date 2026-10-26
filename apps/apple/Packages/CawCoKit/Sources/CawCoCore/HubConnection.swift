@@ -1526,11 +1526,8 @@ public final class HubConnection {
         sayAskEnd(settled.instanceId, ask, line)
     }
 
-    /// An ask's quiet line: in its thread when it is a thread's, and in its session.
-    private func sayAskEnd(_ instanceId: String, _ ask: ParkedAsk?, _ line: String) {
-        if let ask, ask.threadId != nil {
-            threads.ended(ask, line: line)
-        }
+    /// An ask's quiet line, in its session.
+    private func sayAskEnd(_ instanceId: String, _: ParkedAsk?, _ line: String) {
         sessions.noteAskEnd(instanceId, line)
     }
 
@@ -1589,8 +1586,6 @@ public final class HubConnection {
         case let .threadUpsert(thread):
             threads.adopt(thread)
             threadsMoved[thread.projectId, default: 0] += 1
-        case let .threadMessage(note):
-            if let note { threads.adopt(note) }
         case let .preview(frame):
             previews.adopt(frame)
         case let .moves(jobs):

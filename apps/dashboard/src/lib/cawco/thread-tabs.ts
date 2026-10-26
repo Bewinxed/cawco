@@ -5,56 +5,62 @@
  * a tab in a group, drawn by ThreadPane. This is the one place that says how
  * a thread reads as a session row.
  *
- * A thread is addressed as `thread:<thread id>`; a thread not started yet,
- * whose first message will make it, as `thread:new:<project id>`.
+ * A thread is addressed as `thread:<thread id>`, wherever a session is
+ * addressed by its id: its page, its stream, a send to it. A thread not
+ * started yet has its id already, minted as a send's is
+ * ({@link newThreadTab}): its first send carries its project, and the hub
+ * makes the thread under that id.
  */
-import type {
-  DesignOfferEvent,
-  EventThreadMessage,
-  InstanceRow,
-  RoutineMadeEvent,
-  ThreadSummary,
+import {
+  type InstanceRow,
+  type ThreadSummary,
+  threadTarget,
+  threadTargetOf,
 } from "@cawco/core";
 import type { ProjectRow } from "./client.svelte";
+import { newId } from "./id";
 import type { BoardRow } from "./links";
 import { checkoutOf } from "./projects";
-
-const PREFIX = "thread:";
-const NEW = "thread:new:";
+import { readJson, writeJson } from "./storage";
 
 /** The session-shaped id a thread is listed, opened and linked by. */
-export const threadTabId = (threadId: string): string => `${PREFIX}${threadId}`;
+export const threadTabId = (threadId: string): string =>
+  threadTargetOf(threadId);
 
-/** The tab for a new thread in `projectId`, before its first message. */
-export const newThreadTabId = (projectId: string): string =>
-  `${NEW}${projectId}`;
-
-/** The thread an id names, or `null` for anything else (a new thread's tab included). */
+/** The thread an id names, or `null` for anything else. */
 export const threadIdOf = (id: string): string | null =>
-  id.startsWith(PREFIX) && !id.startsWith(NEW) ? id.slice(PREFIX.length) : null;
+  threadTarget(id) ?? null;
 
-/** The project a new thread's tab is for, or `null`. */
-export const newThreadProjectOf = (id: string): string | null =>
-  id.startsWith(NEW) ? id.slice(NEW.length) : null;
+/** A thread's tab: the ids ThreadPane draws. */
+export const isThreadTab = (id: string): boolean =>
+  threadTarget(id) !== undefined;
 
-/** A thread's tab or a new thread's: the ids ThreadPane draws. */
-export const isThreadTab = (id: string): boolean => id.startsWith(PREFIX);
+/** Where this browser keeps the project of each thread it minted and has not seen made yet. */
+const MINTED_KEY = "cawco.threads.minted";
+
+/** The threads this browser minted, by view id: their project, until the hub has made them. */
+const minted = (): Record<string, string> =>
+  readJson<Record<string, string>>(MINTED_KEY, {}, "session");
+
+/**
+ * A new thread of `projectId`'s: its id minted here, as a send's is, so
+ * its tab is addressed by it from the first frame and its first send makes
+ * it under that id (that send carries the project, {@link mintedProjectOf}).
+ * Kept for a reload of its tab before anything was sent.
+ */
+export function newThreadTab(projectId: string): string {
+  const id = threadTabId(newId());
+  writeJson(MINTED_KEY, { ...minted(), [id]: projectId }, "session");
+  return id;
+}
+
+/** The project of a thread this browser minted and the hub has not made yet, or `null`. */
+export const mintedProjectOf = (id: string): string | null =>
+  minted()[id] ?? null;
 
 /** Where a thread opens: its tab, the way `/session/<id>` opens a session's. */
 export const threadHref = (threadId: string): string =>
   `/session/${threadTabId(threadId)}`;
-
-/** The routine a thread's note says a session made. */
-export const routineMadeOf = (
-  message: EventThreadMessage
-): RoutineMadeEvent | undefined =>
-  message.event?.kind === "routine-made" ? message.event : undefined;
-
-/** Caw's design-system offer a thread's note carries. */
-export const designOfferOf = (
-  message: EventThreadMessage
-): DesignOfferEvent | undefined =>
-  message.event?.kind === "design-offer" ? message.event : undefined;
 
 /**
  * Where a routine opens: open in its project's Routines tab

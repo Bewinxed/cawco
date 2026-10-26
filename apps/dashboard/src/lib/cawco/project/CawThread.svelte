@@ -3,7 +3,7 @@
    * Caw's panel, floating over the project's page (CawFloat): a
    * conversation with him drawn by the pane a thread tab is (ThreadPane,
    * docked), so it is the transcript's own rows and the session Composer
-   * at its foot, with every message, question, not-woken Try again and
+   * at its foot, with every message, question, failed send's Try again and
    * streamed word a thread tab has.
    *
    * - It opens on the project's newest thread, or on the hero when there is
@@ -18,8 +18,10 @@
    *   the thread as a tab. His name opens his lead session's card, the card
    *   a session tab's hover opens (SessionDetails), where his harness and
    *   model are chosen as any session's model is (ModelSection).
-   * - Your first words on the hero start the thread, and the panel shows it
-   *   in place, the composer staying where it is. Ask Caw (the head's
+   * - A new thread's id is minted as the panel shows it (thread-tabs.ts
+   *   `newThreadTab`): your first words on the hero go to it and the hub
+   *   makes it under that id, so the panel keeps showing it in place, the
+   *   composer staying where it is. Ask Caw (the head's
    *   button, the views bar's "+") shows a new thread here (`lead.fresh`).
    */
   import { CAW_DENIED_TOOLS, type HarnessKind, threadWords } from "@cawco/core";
@@ -30,8 +32,9 @@
   import SessionRow from "#lib/cawco/SessionRow.svelte";
   import ThreadPane from "#lib/cawco/ThreadPane.svelte";
   import {
-    newThreadTabId,
+    newThreadTab,
     threadHref,
+    threadIdOf,
     threadTabId,
   } from "#lib/cawco/thread-tabs.js";
   import SessionDetails from "#lib/cawco/workspace/SessionDetails.svelte";
@@ -104,11 +107,22 @@
   function choose(next: string | null) {
     threadId = next;
     fresh = next === null;
+    if (next === null) {
+      minted = newThreadTab(projectId);
+    }
     chosen += 1;
   }
-  const viewId = $derived(
-    threadId ? threadTabId(threadId) : newThreadTabId(projectId)
-  );
+  /** The new thread on show while `threadId` is null: its id minted, made by its first send. */
+  let minted = $state(untrack(() => newThreadTab(projectId)));
+  const viewId = $derived(threadId ? threadTabId(threadId) : minted);
+  // The new thread's first send made it: it is the thread on show now, in
+  // the same pane, its words landing where they flew.
+  $effect(() => {
+    if (threadId === null && cawco.threadOf(minted)) {
+      threadId = threadIdOf(minted);
+      fresh = false;
+    }
+  });
   /** The project's threads past the one on show, newest first. */
   const earlier = $derived(
     unarchived.filter((each) => each.id !== threadId).slice(0, 5)
@@ -419,10 +433,6 @@
         docked={{
           caw: { on: lead.on, canStart: lead.problem === null },
           draft: lead.draft,
-          onthread: (id) => {
-            threadId = id;
-            fresh = false;
-          },
           under,
         }}
         focused

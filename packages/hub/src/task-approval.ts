@@ -102,7 +102,7 @@ export const createTaskApproval = ({
       threadId: db.threadOfTask(projectId, id)?.id,
     });
     console.log(
-      `[tasks] ${id} in ${projectId}: approved; ${why}: Caw ${woke.woke ? "hears it" : `was not woken: ${woke.why.words}`}`
+      `[tasks] ${id} in ${projectId}: approved; ${why}: Caw ${woke.woke ? "hears it" : `was not woken: ${woke.why}`}`
     );
   };
 

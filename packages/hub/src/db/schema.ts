@@ -1796,8 +1796,26 @@ export const sentMessages = sqliteTable(
   {
     /** The send's own uuid (`SentMessage.uuid`), the id it keeps everywhere. */
     uuid: text("uuid").primaryKey(),
-    instanceId: text("instance_id").notNull(),
+    /**
+     * The session it went to. A send to a Caw thread (`thread_id`) names the
+     * lead session it was handed to, and none until one took it or when none
+     * could (it failed first).
+     */
+    instanceId: text("instance_id"),
+    /**
+     * The Caw thread it was written in (core threads.ts): the person's words
+     * there are sends, kept here as any send is, and the thread's page draws
+     * them from these records (thread-transcript.ts).
+     */
+    threadId: text("thread_id").references(
+      (): AnySQLiteColumn => projectThreads.id,
+      {
+        onDelete: "cascade",
+      }
+    ),
     acceptedAt: timestamp("accepted_at").notNull(),
+    /** When its reader read it (`readSend`): where a thread's page places it. Null until then. */
+    readAt: timestamp("read_at"),
     /**
      * The id the harness stores the message under, where that is not the uuid
      * (opencode's message id, pi's entry id), as its adapter reported it
@@ -1866,6 +1884,11 @@ export const sentMessages = sqliteTable(
   (table) => [
     index("sent_messages_harness_id").on(table.harnessId),
     index("sent_messages_state").on(table.instanceId, table.state),
+    index("sent_messages_thread").on(table.threadId, table.state),
+    check(
+      "sent_messages_target",
+      sql`${table.instanceId} IS NOT NULL OR ${table.threadId} IS NOT NULL`
+    ),
   ]
 );
 
@@ -4508,9 +4531,12 @@ export const leadTurnWaiting = sqliteTable(
     sendUuid: text("send_uuid")
       .notNull()
       .references(() => sentMessages.uuid, { onDelete: "cascade" }),
-    threadId: text("thread_id").references(() => projectThreads.id, {
-      onDelete: "set null",
-    }),
+    threadId: text("thread_id").references(
+      (): AnySQLiteColumn => projectThreads.id,
+      {
+        onDelete: "set null",
+      }
+    ),
   },
   (table) => [primaryKey({ columns: [table.instanceId, table.sendUuid] })]
 );
@@ -4702,9 +4728,12 @@ export const cawTurns = sqliteTable(
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
     /** The thread that woke the turn; null when none did. */
-    threadId: text("thread_id").references(() => projectThreads.id, {
-      onDelete: "set null",
-    }),
+    threadId: text("thread_id").references(
+      (): AnySQLiteColumn => projectThreads.id,
+      {
+        onDelete: "set null",
+      }
+    ),
     /**
      * The harness whose own result said what the turn cost: Claude Code's
      * `total_cost_usd`, or the agent's OpenCode adapter's, which sums each

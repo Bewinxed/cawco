@@ -11,7 +11,6 @@
     IconArtifactPage,
     IconArtifactSheet,
     IconChevronRight,
-    IconClock,
     IconError,
     IconGlobe,
     IconInfo,
@@ -21,7 +20,7 @@
     IconWindow,
   } from "#lib/icons.js";
   import MessageBody from "../MessageBody.svelte";
-  import { CAW_EVENT, useVoice } from "../turn/voice";
+  import { CAW_EVENT } from "../turn/voice";
   /**
    * The quiet ledger's non-turn lines: a command's output in a recessed well, a
    * system note folded on the rail, and a failure or refusal as a named card
@@ -97,8 +96,6 @@
    * and when it happened is said in the reader's own time.
    */
   const wokeCaw = $derived(message?.metadata?.noteKind === CAW_EVENT);
-  /** Your words in a thread that did not wake Caw: a row of its own, not a code line. */
-  const unread = $derived(wokeCaw && message?.metadata?.notWoken === true);
   /** A session made a routine: Keep, Turn off and Open under its line. */
   const routineMade = $derived(
     wokeCaw ? message?.metadata?.routineMade : undefined
@@ -109,13 +106,6 @@
   );
   /** A folder made a repository with large files left out: Git LFS offered for them under its line. */
   const lfsOffer = $derived(wokeCaw ? message?.metadata?.lfsOffer : undefined);
-  /** The pane's word under a not-woken note's title: the reason and Try again. */
-  const voice = useVoice();
-  const under = $derived(
-    unread && message && voice?.event
-      ? { snippet: voice.event, id: message.id }
-      : null
-  );
   /**
    * The line a session moved to its machine opens on (core `MOVED_HERE`):
    * what moved, with the done glyph, and what stayed under it, open. It is
@@ -407,48 +397,6 @@
       >
         {message.content}
       </p>
-    {/if}
-  </div>
-{:else if unread}
-  <!-- Your words he has not read: one row on the rail, drawn as a failure's
-       is but in no fail hue, since nothing failed and the words are kept.
-       The clock in the glyph cell, the title on the line with its time, and
-       under it, at the text column, why and the way on (the pane's
-       `event`: the reason and Try again). -->
-  <!-- The rows' height (`space-2` above and below), the clock at the 16px
-       glyph size with both its tones standing clear of the row, the title
-       in the strong ink, and what hangs under it at the text column free to
-       shrink and wrap. -->
-  <div
-    data-tx-rail
-    data-slot="note"
-    class="py-space-2 text-size-label font-medium text-ink-muted rail-row"
-    data-unread-note={message?.id}
-  >
-    <span
-      class="inline-flex max-w-full text-size-label font-medium text-ink-strong rail-line"
-    >
-      <span data-slot="rail-cell" class="rail-cell"
-        ><IconClock class="size-icon-md" /></span
-      >
-      <span
-        data-slot="ftitle"
-        class="min-w-0 overflow-clip text-ellipsis wrap-anywhere text-pretty"
-        >Caw hasn't read this</span
-      >
-      {#if eventAt}
-        <time
-          data-slot="num"
-          data-eat
-          class="flex-none ms-space-2 font-normal text-ink-subtle num"
-          datetime={eventAt.toISOString()}>{eventClock}</time
-        >
-      {/if}
-    </span>
-    {#if under}
-      <div data-slot="why" class="min-w-0 rail-hang">
-        {@render under.snippet(under.id)}
-      </div>
     {/if}
   </div>
 {:else if isFail}

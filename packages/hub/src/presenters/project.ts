@@ -8,8 +8,6 @@ import {
   type ApprovedActionView,
   type RelayView,
   routineLink,
-  type ThreadMessage,
-  type ThreadRead,
   type ThreadSummary,
   taskLink,
 } from "@cawco/core";
@@ -37,22 +35,44 @@ import {
 /** A list line's mark, which a single answer says as its kind. */
 const LIST_MARK = /^- /u;
 
+/**
+ * One thing said in a thread, as `thread_read` reads it: the person's send
+ * (`unread` while you have not read it) or answer to your question, your
+ * reply, or a note.
+ */
+export type ThreadLine =
+  | { answer?: true; at: number; author: "you"; body: string; unread?: true }
+  | {
+      at: number;
+      author: "caw";
+      body: string;
+      files?: string[];
+      tasks?: string[];
+    }
+  | { at: number; author: "event"; body?: string; noteTitle: string };
+
+/** A thread and what was said in it, oldest first. */
+export interface ThreadLines {
+  lines: ThreadLine[];
+  thread: ThreadSummary;
+}
+
 /** One thread of Caw's, a line. */
 const threadLine = (
   thread: ThreadSummary & { last?: string | null },
   now: number
 ): string =>
-  `- ${quote(thread.title, 120)} ${handle(thread.id)} · ${thread.status}${thread.setup ? " · setup" : ""}${thread.hearing ? " · you heard it and have not answered" : ""} · last ${ago(thread.lastAt, now)}${thread.last ? `: ${quote(thread.last, 240)}` : ""}`;
+  `- ${quote(thread.title, 120)} ${handle(thread.id)} · ${thread.status}${thread.setup ? " · setup" : ""} · last ${ago(thread.lastAt, now)}${thread.last ? `: ${quote(thread.last, 240)}` : ""}`;
 
-/** One message of a thread, a line. */
-const messageLine = (message: ThreadMessage, now: number): string => {
+/** One thing said in a thread, a line. */
+const messageLine = (message: ThreadLine, now: number): string => {
   switch (message.author) {
     case "you":
-      return `- the person, ${ago(message.createdAt, now)}: ${verbatim(message.body)}${message.attachments?.length ? ` (attached ${count(message.attachments.length, "file")})` : ""}${message.question ? " (asked a question)" : ""}`;
+      return `- the person, ${ago(message.at, now)}: ${verbatim(message.body)}${message.answer ? " (answered your question)" : ""}${message.unread ? " (not read yet)" : ""}`;
     case "caw":
-      return `- you, ${ago(message.createdAt, now)}: ${quote(message.body, 1200)}${message.tasks?.length ? ` (tasks ${listed(message.tasks)})` : ""}${message.files?.length ? ` (files ${listed(message.files)})` : ""}`;
+      return `- you, ${ago(message.at, now)}: ${quote(message.body, 1200)}${message.tasks?.length ? ` (tasks ${listed(message.tasks)})` : ""}${message.files?.length ? ` (files ${listed(message.files)})` : ""}`;
     case "event":
-      return `- event, ${ago(message.createdAt, now)}: ${message.noteTitle}${message.body ? `: ${quote(message.body, 600)}` : ""}`;
+      return `- event, ${ago(message.at, now)}: ${message.noteTitle}${message.body ? `: ${quote(message.body, 600)}` : ""}`;
     default: {
       const unhandled: never = message;
       return String(unhandled);
@@ -62,7 +82,7 @@ const messageLine = (message: ThreadMessage, now: number): string => {
 
 /** `thread_read`: every thread, newest first, or one thread's messages. */
 export const threadReadWords = (
-  read: (ThreadSummary & { last?: string | null })[] | ThreadRead
+  read: (ThreadSummary & { last?: string | null })[] | ThreadLines
 ): string => {
   const now = Date.now();
   if (Array.isArray(read)) {
@@ -75,9 +95,9 @@ export const threadReadWords = (
   }
   return lines(
     threadLine(read.thread, now),
-    read.messages.length === 0
+    read.lines.length === 0
       ? "No messages yet."
-      : read.messages.map((message) => messageLine(message, now))
+      : read.lines.map((message) => messageLine(message, now))
   );
 };
 

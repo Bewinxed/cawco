@@ -1,21 +1,24 @@
 <script lang="ts">
   /**
-   * A thread with a project's Caw, as a session tab (design §3): the
-   * thread's messages shaped into the transcript's session, so the real
-   * Transcript draws it, and the group's one composer lent to it. Your
-   * words are your turns in the reader's well; Caw's are his turns, his
-   * still on the speaker line, the tasks they are about as cards under
-   * them; what woke him is a code line. His question is the composer while
-   * it waits (it grows into it) and, answered, is drawn as its QuestionCard
-   * row; withdrawn, a quiet line says so.
+   * A thread with a project's Caw, as a session tab (design §3). A thread is
+   * addressed as a session (`thread:<id>`) and the hub serves it as one
+   * (thread-transcript.ts), so this pane shows it through the real session
+   * state: its page read and its stream followed under that id
+   * (`cawco.session(viewId)`), the real rows, and the group's one composer
+   * lent to it, whose words are sends to the thread like any session's
+   * (outbox, retry, edit, withdraw, a failed row's Try again). What is
+   * Caw's alone stays here: the hero, his seat on the composer, the tasks
+   * his replies are about as cards under them, the folder files they name,
+   * and his questions, parked on the composer while they wait.
    *
    * Caw sits on the composer: his ledge peek over the pill's top-leading
    * corner, then the thread's status, clipped at the pill's edge. On or off,
    * your words start him; only when he cannot start (no machine for him)
    * does the composer give way to a line that says why.
    *
-   * `thread:new:<project>` is a thread not yet started: its first message
-   * makes it, and the tab is re-addressed to the thread the hub made.
+   * A thread not made yet has its id already (thread-tabs.ts
+   * `newThreadTab`): its first send carries its project, and the hub makes
+   * it under that id, so the pane stays where it is.
    *
    * A thread with nothing said yet opens on the hero (PRD §5.6, the New
    * project page's and the empty board's): Caw at 80 over the question,
@@ -23,11 +26,7 @@
    * composer. He stands there instead of on the composer; your first words
    * send him from the hero to his seat on it.
    */
-  import {
-    CAW_NO_MACHINE,
-    type PermissionResult,
-    type ThreadMessage,
-  } from "@cawco/core";
+  import { CAW_NO_MACHINE, type PermissionResult } from "@cawco/core";
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
@@ -54,26 +53,24 @@
   import { barGlass } from "./bar-glass.svelte";
   import {
     type BlockedRequest,
-    blankSession,
     cawco,
+    clearRestore,
     commandFault,
-    readThread,
+    latestCommandFor,
+    pendingRestore,
     readTranscript,
     type SendExtras,
-    type SessionState,
-    sayInThread,
-    startThread,
+    sendFailureNotice,
     submitCommand,
     unwatchDelegate,
     unwatchPlan,
-    wakeThread,
     watchDelegate,
     watchPlan,
   } from "./client.svelte";
   import { frameSize } from "./frame-observer";
   import Caw, { CAW_HEADROOM, LEDGE_LINE } from "./home/Caw.svelte";
   import CawFace from "./home/CawFace.svelte";
-  import { failureWords, THREAD_SEND_UNREACHED, unreachable } from "./hub-read";
+  import { markOpened } from "./home/home-state.svelte";
   import PlanPane, { planProgress, planShows } from "./plan/PlanPane.svelte";
   import PlanRing from "./plan/PlanRing.svelte";
   import FolderFiles from "./project/FolderFiles.svelte";
@@ -83,7 +80,6 @@
     moveTask,
     type ProjectStarter,
     readStages,
-    type StageKind,
     type StagesView,
     stageLabel,
     type TaskSummary,
@@ -91,33 +87,29 @@
     tellStarterOutcome,
   } from "./project-tasks";
   import RegionBoundary from "./RegionBoundary.svelte";
-  import RowFault from "./RowFault.svelte";
   import SideSplit from "./side/SideSplit.svelte";
   import { setTaskProject, waitsOnYou } from "./tasks/needs.svelte";
   import TaskCard from "./tasks/TaskCard.svelte";
   import TaskNeedsFor from "./tasks/TaskNeedsFor.svelte";
   import TaskPane from "./tasks/TaskPane.svelte";
-  import { threadBlockOf } from "./thread-blocks";
-  import { newThreadProjectOf, threadIdOf, threadTabId } from "./thread-tabs";
+  import { mintedProjectOf, threadIdOf } from "./thread-tabs";
   import Composer, {
     type ComposerAsk,
     type ComposerFoot,
   } from "./transcript/Composer.svelte";
   import { ComposerDraft } from "./transcript/composer-draft.svelte";
   import { composerFleet } from "./transcript/composer-fleet";
-  import FootFade from "./transcript/FootFade.svelte";
+  import FootFade, { footFadeRun } from "./transcript/FootFade.svelte";
   import HeadFade from "./transcript/HeadFade.svelte";
   import Transcript from "./transcript/Transcript.svelte";
   import TranscriptSkeleton from "./transcript/TranscriptSkeleton.svelte";
   import { setVoice } from "./turn/voice";
-  import type { Message } from "./types";
   import {
     type ComposerBinding,
     composerBindings,
   } from "./workspace/composer-dock.svelte";
   import { settleWhile } from "./workspace/dock.svelte";
   import { layoutPolicy } from "./workspace/layout-policy.svelte";
-  import { workspace } from "./workspace/workspace.svelte";
 
   let {
     viewId,
@@ -135,13 +127,11 @@
      * Drawn in Caw's panel floating over a project's page (CawThread), not
      * as a tab: it draws its own composer (there is no group to lend one)
      * on the panel's `draft`, so your half-written words outlive the panel
-     * being put away; nothing beside it; and the thread its first message
-     * makes is handed to the panel (`onthread`) where a tab would be
-     * re-addressed. Its hero offers the starters as chips, then `under`
-     * (the project's earlier threads).
+     * being put away, and the FootFade over its foot as a tab's; nothing
+     * beside it. Its hero offers the starters as chips, then `under` (the
+     * project's earlier threads).
      */
     docked?: {
-      onthread: (threadId: string) => void;
       draft: ComposerDraft;
       under?: Snippet;
       /**
@@ -156,7 +146,7 @@
   const threadId = $derived(threadIdOf(viewId));
   const thread = $derived(cawco.threadOf(viewId) ?? null);
   const projectId = $derived(
-    thread?.projectId ?? newThreadProjectOf(viewId) ?? ""
+    thread?.projectId ?? mintedProjectOf(viewId) ?? ""
   );
   setTaskProject(() => projectId);
 
@@ -178,132 +168,55 @@
     (laidWidth > 0 && laidWidth < 900) || coarse.current ? 48 : 56
   );
 
-  // --- the thread's messages ------------------------------------------------
+  // --- the thread, as a session ------------------------------------------------
 
-  /** Null until read; kept by `thread.message` frames from the read on. */
-  const messages = $derived<ThreadMessage[] | null>(
-    threadId ? cawco.threadMessagesOf(threadId) : []
-  );
+  /** The thread's session state: its page and stream, and this tab's own sends. */
+  const session = $derived(cawco.session(viewId));
+  const blocks = $derived(session?.messages ?? []);
   let readProblem = $state<string | null>(null);
+  // Read as a session is: its newest page, which follows its stream from
+  // the page's `seq`. A thread the hub has not made yet has nothing to read:
+  // its first send makes it, and its row arriving reads it.
   $effect(() => {
-    const id = threadId;
-    const pid = projectId;
+    const id = viewId;
+    const made = thread !== null;
     const live = cawco.status === "connected";
-    if (!(id && pid && live)) {
+    if (!(made && live)) {
       return;
     }
     untrack(() => {
-      readThread(pid, id).then(
-        () => {
-          readProblem = null;
-        },
-        (error: unknown) => {
-          readProblem = failureWords(error);
-        }
-      );
+      readTranscript(id).then((outcome) => {
+        readProblem = outcome.ok ? null : outcome.message;
+      });
     });
   });
-
-  /** One message as the transcript's block (`Message`). */
-  const blockOf = (message: ThreadMessage): Message =>
-    threadBlockOf(message, viewId);
-
-  /**
-   * His questions withdrawn before they were answered (his turn
-   * interrupted): each leaves its quiet line in the thread, where it was
-   * asked. Declared before the effect below reads it: a pre-effect runs as
-   * the component is set up, and a later `let` is not yet initialised.
-   */
-  let withdrawn = $state<Message[]>([]);
-
-  // --- his words as he writes them ----------------------------------------------
-
-  /**
-   * His turn that has read your words here and not answered them yet: his
-   * session, and the send it read them as (core `ThreadHearing`). Declared
-   * before the transcript's effect that reads what it gives.
-   */
-  const hearing = $derived(thread?.hearing ?? null);
-  const hearingLead = $derived(hearing?.instanceId ?? null);
-  // His session is no tab of this dashboard's: its frames are followed while
-  // his turn answers this thread, and its newest page read to stand on.
+  // Docked in his panel, the thread is no tab of the workspace's: its
+  // stream is followed while the panel shows it, as a delegate card's is.
   $effect(() => {
-    const id = hearingLead;
-    if (!id) {
+    const id = viewId;
+    if (!docked) {
       return;
     }
-    untrack(() => {
-      watchDelegate(id);
-      // biome-ignore lint/complexity/noVoid: fire-and-forget: the read adopts the page and the stream follows it
-      void readTranscript(id);
-    });
+    untrack(() => watchDelegate(id));
     return () => unwatchDelegate(id);
   });
-  /**
-   * What he has said since reading your words, as the hub posts it here as
-   * his reply when his turn ends (caw.ts `answerUnreplied`): his plain words
-   * in his session after the send `hearing` names, the one he is writing
-   * last. None once a reply of his stands after your newest words: it lands
-   * a frame before the thread's row lets go of the hearing, and the live
-   * row settles into it.
-   */
-  const liveWords = $derived.by(() => {
-    if (!hearing) {
-      return "";
-    }
-    const newest = (messages ?? []).findLast(
-      (message) => message.author !== "event"
-    );
-    const lead = cawco.session(hearing.instanceId);
-    const at = lead?.blocks.findIndex((block) => block.id === hearing.send);
-    if (!(lead && at !== undefined && at >= 0 && newest?.author === "you")) {
-      return "";
-    }
-    const words = lead.blocks
-      .slice(at + 1)
-      .filter(
-        (block) =>
-          block.type === "assistant" &&
-          !block.parentToolUseId &&
-          block.content.trim()
-      )
-      .map((block) => block.content);
-    if (lead.streaming) {
-      words.push(lead.streaming);
-    }
-    return words.join("\n\n").trim();
-  });
 
-  /**
-   * The thread as the transcript's session: one object, its fields kept
-   * current. Its id is the pane's address, which a new thread's first
-   * message moves to the thread it made: the transcript's turn, landing and
-   * sizes are that thread's from then on, never the next new thread's.
-   */
-  const session = $state<SessionState>(
-    untrack(() => ({ ...blankSession(viewId), harness: "claude" }))
-  );
-  $effect.pre(() => {
-    session.instanceId = viewId;
-    const blocks = (messages ?? []).map(blockOf);
-    // A withdrawn question's line stands after what was said before it went.
-    for (const note of withdrawn) {
-      const at = blocks.findLastIndex(
-        (block) => (block.timestamp ?? "") <= (note.timestamp ?? "")
-      );
-      blocks.splice(at + 1, 0, note);
+  // The thread in front is looked at, as a session's is: a reply of his
+  // that lands while it is shown pushes nothing (hub push.ts `threadReply`).
+  $effect(() => {
+    if (!(visible && thread)) {
+      return;
     }
-    session.blocks = blocks;
-    session.messages = blocks;
-    session.initialized = messages !== null;
-    session.busy = thread?.status === "working";
-    session.streaming = liveWords;
-    session.lastActivityAt = thread ? new Date(thread.lastAt) : null;
+    // biome-ignore lint/complexity/noVoid: read-only dependency: each new message is looked at again
+    void thread.lastAt;
+    untrack(() => markOpened(viewId));
   });
 
   let shown = $state(false);
-  const waiting = $derived(messages === null && !readProblem);
-  const veiled = $derived(waiting || (!shown && (messages?.length ?? 0) > 0));
+  const waiting = $derived(
+    thread !== null && !session?.initialized && !readProblem
+  );
+  const veiled = $derived(waiting || (!shown && blocks.length > 0));
   // Hidden while veiled, the pane is still laid out, so its transcript can
   // measure and draw before its tab is chosen (dock.svelte.ts `settling`).
   settleWhile(
@@ -408,32 +321,15 @@
       : null;
   });
 
-  // His questions withdrawn (`withdrawn`, declared before the transcript's
-  // effect that reads them) are read from the store as one leaves.
-  let waitingOn = new Set<string>();
-  $effect(() => {
-    const now = new Set(asks.map((ask) => ask.request.requestId));
-    untrack(() => {
-      const gone = [...waitingOn].filter((id) => !now.has(id));
-      const lines = gone.flatMap((id) => {
-        const note = cawco.askEnd(id);
-        return note ? [{ ...note, instanceId: viewId }] : [];
-      });
-      if (lines.length > 0) {
-        withdrawn = [...withdrawn, ...lines];
-      }
-      waitingOn = now;
-    });
-  });
-
   // --- the tasks his turns are about -------------------------------------------
 
   let tasks = $state<TaskSummary[]>([]);
   let stages = $state<StagesView | null>(null);
   let openTask = $state<string | null>(null);
+  /** His replies that name tasks: their cards stand under them. */
   const named = $derived(
-    (messages ?? []).some(
-      (message) => message.author === "caw" && message.tasks?.length
+    blocks.some(
+      (block) => block.type === "assistant" && block.metadata?.tasks?.length
     )
   );
   /** Reads of the tasks so far: only the newest one's answer is kept. */
@@ -455,10 +351,10 @@
     if (!(named && projectId)) {
       return;
     }
-    // Read again when a new message may name new tasks, and when the
+    // Read again when a new reply may name new tasks, and when the
     // project's tasks change (a card's stage moves under it).
     // biome-ignore lint/complexity/noVoid: read-only dependencies
-    void [messages?.length, cawco.tasksChangedOf(projectId)];
+    void [blocks.length, cawco.tasksChangedOf(projectId)];
     untrack(() => {
       readTasks().catch(() => undefined);
     });
@@ -491,14 +387,14 @@
   const taskHref = (id: string) =>
     `/project/${encodeURIComponent(projectId)}?task=${encodeURIComponent(id)}`;
   /**
-   * The messages the first read found: a reply not among them landed while
-   * the thread was open, and its cards are uncovered one by one; read back
-   * from history nothing moves (design f2640f55 §2, Motion).
+   * The rows the first read found: a reply not among them landed while the
+   * thread was open, and its cards are uncovered one by one; read back from
+   * history nothing moves (design f2640f55 §2, Motion).
    */
   let readBefore: Set<string> | null = null;
   $effect.pre(() => {
-    if (readBefore === null && messages !== null) {
-      readBefore = new Set(messages.map((message) => message.id));
+    if (readBefore === null && (session?.initialized || thread === null)) {
+      readBefore = new Set(blocks.map((block) => block.id));
     }
   });
   const landedLive = (messageId: string) =>
@@ -537,71 +433,7 @@
     readTasks().catch(() => undefined);
   };
 
-  // --- your words he has not read ----------------------------------------------
-
-  /** A thread message's not-woken data, when it is a not-woken note (core `CawNotWoken`). */
-  const notWokenOf = (message: ThreadMessage | undefined) =>
-    message?.author === "event" && message.event?.kind === "caw"
-      ? message.event.notWoken
-      : undefined;
-  /**
-   * A not-woken note's sentence, by why: one plain line the person reads.
-   * The hub's own words for it (a machine's error, its paths and ids) wait
-   * under Show details; the spend cap's line is plain already, and stands
-   * as the hub says it.
-   */
-  const notWokenLine = (
-    why: NonNullable<ReturnType<typeof notWokenOf>>
-  ): string => {
-    switch (why.reason) {
-      case "no-machine":
-        return "No machine was online when you wrote. He reads it when one is back.";
-      case "capped":
-        return why.words;
-      case "could-not-start":
-        return "Caw couldn’t start on his machine.";
-      case "place":
-        return "Caw couldn’t be kept to the project’s folder on his machine.";
-      case "not-taken":
-        return "His session didn’t take your words.";
-      case "failed":
-        break;
-    }
-    return "Caw couldn’t be woken.";
-  };
-  /** The note Try again was pressed on and went: its wake is under way, so it is not offered twice. */
-  let retried = $state<string | null>(null);
-  /**
-   * The one not-woken note that offers Try again: the newest, about your
-   * newest words, with no reply of his after them, while no turn of his is
-   * on the thread (the hub refuses the rest the same way).
-   */
-  const retryable = $derived.by(() => {
-    const said = messages ?? [];
-    if (thread?.status === "working") {
-      return null;
-    }
-    const at = said.findLastIndex(
-      (message) => message.author === "you" && !message.answer
-    );
-    const yours = said[at];
-    const after = said.slice(at + 1);
-    const note = after.findLast(
-      (message) => notWokenOf(message)?.message === yours?.id
-    );
-    return yours &&
-      note &&
-      note.id !== retried &&
-      !after.some((message) => message.author === "caw")
-      ? note.id
-      : null;
-  });
-  async function wakeAgain(noteId: string): Promise<void> {
-    await wakeThread(projectId, threadId ?? "");
-    retried = noteId;
-  }
-
-  setVoice({ event: eventUnder, face, tasks: taskCards, files: folderFiles });
+  setVoice({ face, tasks: taskCards, files: folderFiles });
 
   /**
    * The Setup thread's newest reply that names files is where setup ends:
@@ -610,30 +442,54 @@
    */
   const boardAfter = $derived.by(() => {
     const last = thread?.setup
-      ? (messages ?? []).findLast(
-          (message) => message.author === "caw" && message.files?.length
+      ? blocks.findLast(
+          (block) => block.type === "assistant" && block.metadata?.files?.length
         )
       : undefined;
-    return last?.author === "caw" && last.tasks?.length ? undefined : last?.id;
+    return last?.metadata?.tasks?.length ? undefined : last?.id;
   });
 
   // --- the composer -------------------------------------------------------------
 
   const draft = untrack(() => docked?.draft) ?? new ComposerDraft();
-  let sending = $state(false);
-  let sendError = $state("");
-  /** The failed send never reached the hub: its line offers Send again. */
-  let sendAgain = $state(false);
+
+  // The hub took the send: the message it carried needs no keeping.
+  $effect(() => {
+    const stage = latestCommandFor(viewId, "send")?.stage;
+    if (stage === "accepted" || stage === "applied") {
+      untrack(() => draft.settle());
+    }
+  });
+  // "Edit" on a message that never sent: its words back into the draft.
+  $effect(() => {
+    const slot = pendingRestore(viewId);
+    if (!slot) {
+      return;
+    }
+    const id = viewId;
+    untrack(() => {
+      draft.restore(slot.text, slot.extras);
+      clearRestore(id);
+    });
+  });
+
+  /** Whether this thread's last message is out of this tab but not yet taken. */
+  const sending = $derived(
+    latestCommandFor(viewId, "send")?.stage === "submitted" &&
+      !latestCommandFor(viewId, "send")?.waiting
+  );
 
   // --- the hero: a thread with nothing said yet ---------------------------------
 
   /**
    * Nothing said here yet and nothing on its way: the hero stands where the
    * transcript will. Your first send takes it away as it leaves, and a send
-   * the hub refused brings it back with your words in the field.
+   * the hub refused stays as its own failed row.
    */
   const hero = $derived(
-    messages !== null && messages.length === 0 && !sending && !readProblem
+    (thread === null || session?.initialized === true) &&
+      blocks.length === 0 &&
+      !readProblem
   );
   /** The project's starters its stages carried, read for the hero. */
   let startersRead = $state<ProjectStarter[] | undefined>(undefined);
@@ -672,56 +528,38 @@
   }
 
   /**
-   * The words a send got no answer for, and the id they went as: the hub may
-   * have kept them, so the same words sent again go under the same id, which
-   * the hub answers with the message it kept rather than a second one.
+   * Your words to the thread: a send to it as to any session, under the id
+   * the composer minted for it. A thread the hub has not made yet is made by
+   * it, in its project (`projectId`, core `SendPayload.projectId`).
    */
-  let unanswered: { text: string; id: string } | null = null;
-
-  async function onsubmit(text: string, extras: SendExtras, fresh: string) {
-    sending = true;
-    sendError = "";
-    sendAgain = false;
-    const id = unanswered?.text === text ? unanswered.id : fresh;
-    try {
-      // The words left the field as `sent:<id>`, and go to the hub as that
-      // message: its row lands them however soon its frame draws it.
-      const said = threadId
-        ? await sayInThread(projectId, threadId, text, id, extras)
-        : await startThread(projectId, text, id, extras);
-      unanswered = null;
-      // A starter pressed into the field went: as its words stood, or
-      // changed. Told after the hub took the words; the hub keeps it as
-      // Jev's steering, and nothing here waits on it.
-      const pressed = draft.takePressed(text);
-      if (pressed) {
-        tellStarterOutcome(projectId, pressed).catch(() => undefined);
-      }
-      if (!threadId) {
-        if (docked) {
-          docked.onthread(said.thread.id);
-        } else {
-          workspace.retarget(viewId, threadTabId(said.thread.id));
-        }
-      }
-    } catch (error) {
-      draft.restore(text, extras);
-      sendAgain = unreachable(error);
-      unanswered = sendAgain ? { text, id } : null;
-      sendError = sendAgain ? THREAD_SEND_UNREACHED : failureWords(error);
-    } finally {
-      sending = false;
+  function onsubmit(text: string, extras: SendExtras, id: string) {
+    // A starter pressed into the field went: as its words stood, or
+    // changed. The hub keeps it as Jev's steering; nothing waits on it.
+    const pressed = draft.takePressed(text);
+    if (pressed) {
+      tellStarterOutcome(projectId, pressed).catch(() => undefined);
     }
+    submitCommand(
+      viewId,
+      session?.machineId || "hub",
+      "send",
+      { text, extras: thread ? extras : { ...extras, projectId } },
+      id
+    );
   }
 
   /**
-   * A stop of the lead's turn that failed, said over this composer with Try
-   * again (client.svelte.ts `commandFault`), unless a send's failure stands
-   * there already.
+   * Why this thread's last send failed, said over its composer's field; or
+   * else a stop of the lead's turn that failed, with Try again
+   * (client.svelte.ts `commandFault`).
    */
   const leadFault = $derived(lead ? commandFault(lead) : null);
-  const composerError = $derived(sendError || (leadFault?.words ?? ""));
-  const faultAgain = $derived(sendError ? undefined : leadFault?.again);
+  const composerError = $derived(
+    sendFailureNotice(viewId) || (leadFault?.words ?? "")
+  );
+  const faultAgain = $derived(
+    sendFailureNotice(viewId) ? undefined : leadFault?.again
+  );
 
   /** Stop interrupts the lead's turn. */
   function onstop() {
@@ -746,9 +584,6 @@
     },
     get sendError() {
       return composerError;
-    },
-    get sendAgain() {
-      return sendAgain;
     },
     get faultAgain() {
       return faultAgain;
@@ -809,6 +644,20 @@
     `max(calc(var(--space-4) + ${foot.stack + foot.perch}px), calc(${latestFoot} + var(--c-btn-h-sm)))`
   );
   /**
+   * The foot fade over the transcript while the composer can be written:
+   * solid up to Caw and the way back where the composer stands over the
+   * rows; docked, where the composer has its own place under them, the fade
+   * at rest. Its run is published to the transcript's foot room
+   * (`--foot-fade-run`), so the last row scrolls clear of it.
+   */
+  const fade = $derived.by(() => {
+    if (!writable) {
+      return null;
+    }
+    const solid = !docked && foot.stack ? fadeSolid : undefined;
+    return { solid, run: footFadeRun(solid) };
+  });
+  /**
    * The problem line's height, standing where the composer would: the foot
    * clears it. Read as it mounts, and a change in the next frame (frameSize).
    */
@@ -868,28 +717,6 @@
 
 {#snippet face(live: boolean)}
   <CawFace size={18} status={live ? "working" : "ready"} />
-{/snippet}
-
-{#snippet eventUnder(id: string)}
-  <!-- A not-woken note: why, in one plain sentence, the hub's own words
-       under Show details, and the way on with the words he has not read
-       (only on the note that still stands for them). -->
-  {@const why = notWokenOf(
-    (messages ?? []).find((message) => message.id === id)
-  )}
-  {#if why}
-    {@const line = notWokenLine(why)}
-    <RowFault
-      class="fault-ink-muted"
-      again={retryable === id ? () => wakeAgain(id) : undefined}
-      againPending="Waking Caw…"
-      data-not-woken={why.reason}
-      details={why.words === line || why.reason === "no-machine"
-        ? null
-        : why.words}
-      reason={line}
-    />
-  {/if}
 {/snippet}
 
 {#snippet taskCards(ids: string[], messageId: string)}
@@ -1079,7 +906,7 @@
           {/snippet}
         </EmptyState>
       </div>
-    {:else if messages !== null}
+    {:else if session}
       <div
         data-slot="thread-pane-state"
         class="flex flex-col flex-auto min-h-0"
@@ -1103,8 +930,8 @@
          place to them in its reveal (motion/curves `reveal`) once they are
          drawn: its blur carries its rows into the real ones, which fall
          elsewhere. -->
-    {#if writable && !docked}
-      <FootFade solid={foot.stack ? fadeSolid : undefined} />
+    {#if fade}
+      <FootFade solid={fade.solid} />
     {/if}
     {#if veiled}
       <div
@@ -1129,6 +956,7 @@
     style:--composer-clearance={reserved
       ? "var(--space-4)"
       : `calc(${composerRoom} + var(--space-4) + var(--space-4))`}
+    style:--foot-fade-run={fade?.run ?? null}
     style:padding-block-end={reserved}
   >
     {#if docked}
@@ -1173,7 +1001,6 @@
             placeholder={binding.placeholder}
             recallOf={viewId}
             {faultAgain}
-            {sendAgain}
             sendError={composerError}
             {sending}
             suggest={binding.suggest}

@@ -10870,465 +10870,6 @@
             }
           }
         }
-      },
-      "post": {
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "body": {
-                    "type": "string"
-                  },
-                  "id": {
-                    "type": "string",
-                    "format": "uuid"
-                  },
-                  "images": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "mediaType": {
-                          "type": "string"
-                        },
-                        "data": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "mediaType",
-                        "data"
-                      ]
-                    }
-                  },
-                  "attachments": {
-                    "type": "array",
-                    "items": {
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "const": "text"
-                            },
-                            "name": {
-                              "type": "string"
-                            },
-                            "content": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "name",
-                            "content"
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "const": "file"
-                            },
-                            "name": {
-                              "type": "string"
-                            },
-                            "mediaType": {
-                              "type": "string"
-                            },
-                            "size": {
-                              "minimum": 0,
-                              "type": "integer"
-                            },
-                            "ref": {
-                              "pattern": "^/api/files/",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "name",
-                            "mediaType",
-                            "size",
-                            "ref"
-                          ]
-                        }
-                      ]
-                    }
-                  }
-                },
-                "required": [
-                  "body"
-                ]
-              }
-            }
-          }
-        },
-        "operationId": "postApiProjectsByIdThreads",
-        "responses": {
-          "200": {
-            "description": "postApiProjectsByIdThreads 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ThreadSaid"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "postApiProjectsByIdThreads 400",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "postApiProjectsByIdThreads 403",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "postApiProjectsByIdThreads 404",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "postApiProjectsByIdThreads 409",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "postApiProjectsByIdThreads 422",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "postApiProjectsByIdThreads 502",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/projects/{id}/threads/{threadId}": {
-      "get": {
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "threadId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "operationId": "getApiProjectsByIdThreadsByThreadId",
-        "responses": {
-          "200": {
-            "description": "getApiProjectsByIdThreadsByThreadId 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ThreadRead"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "getApiProjectsByIdThreadsByThreadId 400",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "getApiProjectsByIdThreadsByThreadId 403",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "getApiProjectsByIdThreadsByThreadId 404",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "getApiProjectsByIdThreadsByThreadId 409",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "getApiProjectsByIdThreadsByThreadId 502",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/projects/{id}/threads/{threadId}/messages": {
-      "post": {
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "threadId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "body": {
-                    "type": "string"
-                  },
-                  "id": {
-                    "type": "string",
-                    "format": "uuid"
-                  },
-                  "images": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "mediaType": {
-                          "type": "string"
-                        },
-                        "data": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "mediaType",
-                        "data"
-                      ]
-                    }
-                  },
-                  "attachments": {
-                    "type": "array",
-                    "items": {
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "const": "text"
-                            },
-                            "name": {
-                              "type": "string"
-                            },
-                            "content": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "name",
-                            "content"
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "const": "file"
-                            },
-                            "name": {
-                              "type": "string"
-                            },
-                            "mediaType": {
-                              "type": "string"
-                            },
-                            "size": {
-                              "minimum": 0,
-                              "type": "integer"
-                            },
-                            "ref": {
-                              "pattern": "^/api/files/",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "name",
-                            "mediaType",
-                            "size",
-                            "ref"
-                          ]
-                        }
-                      ]
-                    }
-                  }
-                },
-                "required": [
-                  "body"
-                ]
-              }
-            }
-          }
-        },
-        "operationId": "postApiProjectsByIdThreadsByThreadIdMessages",
-        "responses": {
-          "200": {
-            "description": "postApiProjectsByIdThreadsByThreadIdMessages 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ThreadSaid"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "postApiProjectsByIdThreadsByThreadIdMessages 400",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "postApiProjectsByIdThreadsByThreadIdMessages 403",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "postApiProjectsByIdThreadsByThreadIdMessages 404",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "postApiProjectsByIdThreadsByThreadIdMessages 409",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "postApiProjectsByIdThreadsByThreadIdMessages 422",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "postApiProjectsByIdThreadsByThreadIdMessages 502",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
       }
     },
     "/api/projects/{id}/threads/{threadId}/archive": {
@@ -11501,91 +11042,6 @@
         }
       }
     },
-    "/api/projects/{id}/threads/{threadId}/wake": {
-      "post": {
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "threadId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "operationId": "postApiProjectsByIdThreadsByThreadIdWake",
-        "responses": {
-          "200": {
-            "description": "postApiProjectsByIdThreadsByThreadIdWake 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ThreadSummary"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "postApiProjectsByIdThreadsByThreadIdWake 400",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "postApiProjectsByIdThreadsByThreadIdWake 403",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "postApiProjectsByIdThreadsByThreadIdWake 404",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "postApiProjectsByIdThreadsByThreadIdWake 409",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "postApiProjectsByIdThreadsByThreadIdWake 502",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/projects/{id}/view-requests": {
       "post": {
         "parameters": [
@@ -11639,7 +11095,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ThreadSaid"
+                  "$ref": "#/components/schemas/postApiProjectsByIdViewRequests200"
                 }
               }
             }
@@ -27599,6 +27055,17 @@
           "$ref": "#/components/schemas/ThreadSummary"
         }
       },
+      "postApiProjectsByIdViewRequests200": {
+        "type": "object",
+        "properties": {
+          "thread": {
+            "$ref": "#/components/schemas/ThreadSummary"
+          }
+        },
+        "required": [
+          "thread"
+        ]
+      },
       "getApiRoutines200": {
         "type": "array",
         "items": {
@@ -32220,9 +31687,6 @@
             "$ref": "#/components/schemas/ThreadUpsertFrame"
           },
           {
-            "$ref": "#/components/schemas/ThreadMessageFrame"
-          },
-          {
             "$ref": "#/components/schemas/TasksChangedFrame"
           },
           {
@@ -32332,7 +31796,6 @@
             "work_item": "#/components/schemas/WorkItemFrame",
             "project_offer": "#/components/schemas/ProjectOfferFrame",
             "thread.upsert": "#/components/schemas/ThreadUpsertFrame",
-            "thread.message": "#/components/schemas/ThreadMessageFrame",
             "tasks.changed": "#/components/schemas/TasksChangedFrame",
             "decisions.changed": "#/components/schemas/DecisionsChangedFrame",
             "blocks.changed": "#/components/schemas/BlocksChangedFrame",
@@ -32840,11 +32303,16 @@
             }
           },
           "instanceId": {
+            "description": "The session it goes to, or a Caw thread's view id (`thread:<id>`, core threads.ts `threadTarget`).",
             "type": "string"
           },
           "message": {
             "$ref": "#/components/schemas/SentMessage",
             "description": "The user turn, under the uuid it keeps everywhere it is shown."
+          },
+          "projectId": {
+            "description": "A send to a Caw thread not made yet: the project it is made in, under\nthe id its `thread:<id>` names (the composer mints it as it mints a\nsend's uuid). Absent on every other send.",
+            "type": "string"
           }
         },
         "required": [
@@ -32904,7 +32372,7 @@
           {
             "allOf": [
               {
-                "$ref": "#/components/schemas/NeutralAssistantMessage"
+                "$ref": "#/components/schemas/NeutralUserMessage"
               },
               {
                 "type": "object",
@@ -32920,7 +32388,7 @@
           {
             "allOf": [
               {
-                "$ref": "#/components/schemas/NeutralUserMessage"
+                "$ref": "#/components/schemas/NeutralAssistantMessage"
               },
               {
                 "type": "object",
@@ -40281,10 +39749,6 @@
             "description": "When you archived it, ms epoch: the rails leave it and the sessions\nunder it out, and the project's thread list keeps it under Archived.\nAbsent while it is not archived; a new message in it brings it back.",
             "type": "number"
           },
-          "hearing": {
-            "$ref": "#/components/schemas/ThreadHearing",
-            "description": "While his turn has read your words here and not yet answered them: what\nhe says in plain text after that send in his session is posted here as\nhis reply when the turn ends, so the thread draws it as he writes it.\nAbsent otherwise."
-          },
           "id": {
             "type": "string"
           },
@@ -40313,22 +39777,6 @@
           "setup",
           "status",
           "title"
-        ]
-      },
-      "ThreadHearing": {
-        "description": "Caw's turn answering your words in a thread, before his reply lands: his\nsession, and the send his turn read your words as.",
-        "type": "object",
-        "properties": {
-          "instanceId": {
-            "type": "string"
-          },
-          "send": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "instanceId",
-          "send"
         ]
       },
       "ThreadStatus": {
@@ -41168,944 +40616,6 @@
           "month"
         ]
       },
-      "ThreadSaid": {
-        "description": "Your message as the hub took it: the thread (new or moved) and the message.",
-        "type": "object",
-        "properties": {
-          "message": {
-            "$ref": "#/components/schemas/ThreadMessage"
-          },
-          "thread": {
-            "$ref": "#/components/schemas/ThreadSummary"
-          }
-        },
-        "required": [
-          "message",
-          "thread"
-        ]
-      },
-      "ThreadMessage": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/YourThreadMessage"
-          },
-          {
-            "$ref": "#/components/schemas/CawThreadMessage"
-          },
-          {
-            "$ref": "#/components/schemas/EventThreadMessage"
-          }
-        ]
-      },
-      "YourThreadMessage": {
-        "description": "Yours: words you wrote, or your answer to the lead's question. An answer\ncarries `question` and `answer`, and `body` reads it in one line. Words\ncarry what rode with them as a send's do: `images`, and `attachments`\n(pastes, and files by the hub's reference); Try again wakes Caw with all\nof it.",
-        "type": "object",
-        "properties": {
-          "answer": {
-            "description": "How you answered them: your choices, or that you walked away from them.",
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "annotations": {
-                    "type": "object",
-                    "description": "Per-question notes (preview selections), keyed by question text."
-                  },
-                  "answers": {
-                    "$ref": "#/components/schemas/UserAnswers"
-                  },
-                  "outcome": {
-                    "type": "string",
-                    "enum": [
-                      "answered"
-                    ]
-                  }
-                },
-                "required": [
-                  "answers",
-                  "outcome"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "outcome": {
-                    "type": "string",
-                    "enum": [
-                      "dismissed"
-                    ]
-                  }
-                },
-                "required": [
-                  "outcome"
-                ]
-              }
-            ]
-          },
-          "attachments": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SendAttachment"
-            }
-          },
-          "author": {
-            "type": "string",
-            "enum": [
-              "you"
-            ]
-          },
-          "body": {
-            "type": "string"
-          },
-          "images": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ThreadImage"
-            }
-          },
-          "question": {
-            "$ref": "#/components/schemas/ThreadQuestion",
-            "description": "The questions the lead asked you in a thread (its AskUserQuestion)."
-          },
-          "createdAt": {
-            "type": "number"
-          },
-          "id": {
-            "type": "string"
-          },
-          "threadId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "author",
-          "body",
-          "createdAt",
-          "id",
-          "threadId"
-        ]
-      },
-      "UserAnswers": {
-        "description": "The reader's choices, back the way the tool reads them.",
-        "type": "object"
-      },
-      "SendAttachment": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/TextAttachment"
-          },
-          {
-            "$ref": "#/components/schemas/FileAttachment"
-          }
-        ]
-      },
-      "TextAttachment": {
-        "description": "What a turn carries beside its typed words, other than pictures: a text\nthe reader attached or pasted at length, folded into the prompt as quoted\nmaterial; or any other file, which the hub stores (`POST /api/files`) and\nthe session's machine fetches and puts on its own disk before the harness\nsees the turn, naming its path in one line of the message.",
-        "type": "object",
-        "properties": {
-          "content": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "text"
-            ]
-          },
-          "name": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "content",
-          "kind",
-          "name"
-        ]
-      },
-      "FileAttachment": {
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": [
-              "file"
-            ]
-          },
-          "mediaType": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "ref": {
-            "description": "The hub's reference to its bytes: `/api/files/<sha256>`.",
-            "type": "string"
-          },
-          "size": {
-            "description": "Its length in bytes.",
-            "type": "number"
-          }
-        },
-        "required": [
-          "kind",
-          "mediaType",
-          "name",
-          "ref",
-          "size"
-        ]
-      },
-      "ThreadImage": {
-        "description": "A picture your words carried, in the hub's media store (media.ts): its\naddress there (`/api/media/<sha256>.<ext>`), as a send's row names it.",
-        "type": "object",
-        "properties": {
-          "mediaType": {
-            "type": "string"
-          },
-          "src": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "mediaType",
-          "src"
-        ]
-      },
-      "ThreadQuestion": {
-        "description": "The questions the lead asked you in a thread (its AskUserQuestion).",
-        "type": "object",
-        "properties": {
-          "questions": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/UserQuestion"
-            }
-          },
-          "toolUseId": {
-            "description": "The lead's call that asked them: the parked card on the thread's\ncomposer settles into the answered row that carries it.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "questions"
-        ]
-      },
-      "UserQuestion": {
-        "description": "One question of an `AskUserQuestion`-shaped prompt, as every harness can express.",
-        "type": "object",
-        "properties": {
-          "header": {
-            "type": "string"
-          },
-          "multiSelect": {
-            "type": "boolean"
-          },
-          "options": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "label": {
-                  "type": "string"
-                },
-                "description": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "description",
-                "label"
-              ]
-            }
-          },
-          "question": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "header",
-          "multiSelect",
-          "options",
-          "question"
-        ]
-      },
-      "CawThreadMessage": {
-        "description": "Caw's, through `thread_reply`; `tasks` names the tasks it is about\n(`tsk-12`), `files` the project folder's files it wrote (`stages.md`).",
-        "type": "object",
-        "properties": {
-          "author": {
-            "type": "string",
-            "enum": [
-              "caw"
-            ]
-          },
-          "body": {
-            "type": "string"
-          },
-          "files": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "tasks": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "createdAt": {
-            "type": "number"
-          },
-          "id": {
-            "type": "string"
-          },
-          "threadId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "author",
-          "body",
-          "createdAt",
-          "id",
-          "threadId"
-        ]
-      },
-      "EventThreadMessage": {
-        "description": "Something that happened and woke Caw: a routine, an attempt landing, a task waiting for you.",
-        "type": "object",
-        "properties": {
-          "author": {
-            "type": "string",
-            "enum": [
-              "event"
-            ]
-          },
-          "body": {
-            "description": "What happened, opened like a fold; absent when the title says it all.",
-            "type": "string"
-          },
-          "event": {
-            "description": "What happened, as typed data; null on a note stored before events were typed.",
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "enum": [
-                      "routine"
-                    ]
-                  },
-                  "name": {
-                    "type": "string"
-                  },
-                  "phase": {
-                    "description": "`started`: a lead run woke Caw; `delivered`: a run's output;\n`failed`: its second failure, which needs you.",
-                    "enum": [
-                      "delivered",
-                      "failed",
-                      "started"
-                    ],
-                    "type": "string"
-                  },
-                  "routineId": {
-                    "type": "string"
-                  },
-                  "runId": {
-                    "type": "string"
-                  },
-                  "schedule": {
-                    "$ref": "#/components/schemas/RoutineSchedule"
-                  },
-                  "slot": {
-                    "description": "The run's slot (a time, `test:…`, `now:…`, `event:…`, `inbox:…`).",
-                    "type": "string"
-                  },
-                  "slotLabel": {
-                    "description": "The slot in words: \"09:00\" in the routine's zone, \"test\", \"by-hand\", \"event\", \"inbox\".",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "name",
-                  "phase",
-                  "routineId",
-                  "runId",
-                  "schedule",
-                  "slot",
-                  "slotLabel"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "instanceId": {
-                    "description": "The session the attempt ran in.",
-                    "type": "string"
-                  },
-                  "kind": {
-                    "type": "string",
-                    "enum": [
-                      "attempt"
-                    ]
-                  },
-                  "phase": {
-                    "description": "`ended`: the attempt ended (`state`); `judge`: its acceptance criteria wait for Caw.",
-                    "enum": [
-                      "ended",
-                      "judge"
-                    ],
-                    "type": "string"
-                  },
-                  "state": {
-                    "$ref": "#/components/schemas/ItemEnd",
-                    "description": "Its outcome, once ended; null while its criteria wait."
-                  },
-                  "taskId": {
-                    "type": "string"
-                  },
-                  "title": {
-                    "description": "The task's title as the hub had it.",
-                    "type": "string"
-                  },
-                  "try": {
-                    "description": "Which try at the task this was, 1 for the first.",
-                    "type": "number"
-                  },
-                  "workItemId": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "instanceId",
-                  "kind",
-                  "phase",
-                  "taskId",
-                  "title",
-                  "try",
-                  "workItemId"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "instanceId": {
-                    "description": "The delegate's session.",
-                    "type": "string"
-                  },
-                  "kind": {
-                    "type": "string",
-                    "enum": [
-                      "delegate"
-                    ]
-                  },
-                  "state": {
-                    "$ref": "#/components/schemas/ItemEnd"
-                  },
-                  "title": {
-                    "type": "string"
-                  },
-                  "workItemId": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "instanceId",
-                  "kind",
-                  "state",
-                  "title",
-                  "workItemId"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "enum": [
-                      "task"
-                    ]
-                  },
-                  "stage": {
-                    "description": "The stage of kind `you` it now waits in.",
-                    "type": "string"
-                  },
-                  "taskId": {
-                    "type": "string"
-                  },
-                  "title": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "stage",
-                  "taskId",
-                  "title"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "command": {
-                    "description": "The command or file of one of Caw's gated calls; absent for a wake.",
-                    "type": "string"
-                  },
-                  "kind": {
-                    "type": "string",
-                    "enum": [
-                      "caw"
-                    ]
-                  },
-                  "notWoken": {
-                    "$ref": "#/components/schemas/CawNotWoken",
-                    "description": "Your words that did not wake him: on every `not-woken` event, and only there."
-                  },
-                  "what": {
-                    "enum": [
-                      "could-not-start",
-                      "denied",
-                      "edited",
-                      "guard",
-                      "not-woken",
-                      "ran",
-                      "refused"
-                    ],
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "what"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "enum": [
-                      "view"
-                    ]
-                  },
-                  "name": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "name"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "enum": [
-                      "agents"
-                    ]
-                  },
-                  "sha": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "sha"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "instanceId": {
-                    "description": "The session fleet watch nudged about.",
-                    "type": "string"
-                  },
-                  "kind": {
-                    "type": "string",
-                    "enum": [
-                      "fleet"
-                    ]
-                  },
-                  "name": {
-                    "description": "The session's name as fleet watch had it.",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "instanceId",
-                  "kind",
-                  "name"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "enum": [
-                      "phone"
-                    ]
-                  },
-                  "task": {
-                    "description": "The task the sentence is about, and its title; null for none.",
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "title": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "id",
-                      "title"
-                    ]
-                  }
-                },
-                "required": [
-                  "kind"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "enum": [
-                      "project"
-                    ]
-                  },
-                  "from": {
-                    "description": "The offer or session the project was made from, in words; absent when it had none.",
-                    "type": "string"
-                  },
-                  "name": {
-                    "type": "string"
-                  },
-                  "what": {
-                    "enum": [
-                      "made",
-                      "settings-approved",
-                      "settings-changed",
-                      "settings-declined"
-                    ],
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "name",
-                  "what"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "enum": [
-                      "file"
-                    ]
-                  },
-                  "path": {
-                    "description": "The project memory file (`AGENTS.md`, `knowledge/<topic>.md`).",
-                    "type": "string"
-                  },
-                  "sha": {
-                    "description": "Its commit; null for a change you declined.",
-                    "type": [
-                      "null",
-                      "string"
-                    ]
-                  },
-                  "what": {
-                    "description": "Caw wrote it, or you answered his proposal for it.",
-                    "enum": [
-                      "approved",
-                      "declined",
-                      "wrote"
-                    ],
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "path",
-                  "sha",
-                  "what"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "commit": {
-                    "type": [
-                      "null",
-                      "string"
-                    ]
-                  },
-                  "kind": {
-                    "type": "string",
-                    "enum": [
-                      "repo"
-                    ]
-                  },
-                  "lfsOffer": {
-                    "description": "The large files its first commit left out, offered to Git LFS: the\noffer, read and answered at `/api/lfs-offers/:id` (hub\nlfs-offers.ts). Absent when nothing was left out for its size.",
-                    "type": "string"
-                  },
-                  "lfsRefused": {
-                    "description": "An LFS endpoint the repository's `.lfsconfig` names that is neither\nits origin's nor the project's declared one: its large files stayed\npointers, and nothing was fetched from there (agent host-lfs.ts).",
-                    "type": "string"
-                  },
-                  "machineId": {
-                    "type": "string"
-                  },
-                  "root": {
-                    "description": "The folder made a repository, or the clone the refusal was in.",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "commit",
-                  "kind",
-                  "machineId",
-                  "root"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "enum": [
-                      "hub"
-                    ]
-                  },
-                  "what": {
-                    "type": "string",
-                    "enum": [
-                      "thread-repaired"
-                    ]
-                  }
-                },
-                "required": [
-                  "kind",
-                  "what"
-                ]
-              },
-              {
-                "$ref": "#/components/schemas/RoutineMadeThreadEvent"
-              },
-              {
-                "$ref": "#/components/schemas/DesignOfferThreadEvent"
-              }
-            ]
-          },
-          "noteTitle": {
-            "description": "One line: source and what, like \"Routine · Triage issues · 09:00\". The\ntime is not in it: a reader draws `createdAt` in their own time zone.",
-            "type": "string"
-          },
-          "createdAt": {
-            "type": "number"
-          },
-          "id": {
-            "type": "string"
-          },
-          "threadId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "author",
-          "createdAt",
-          "id",
-          "noteTitle",
-          "threadId"
-        ]
-      },
-      "RoutineSchedule": {
-        "description": "A routine's schedule as the person reads it: its cron in words, in its zone, and its next run.",
-        "type": "object",
-        "properties": {
-          "cron": {
-            "description": "The cron expression, as written.",
-            "type": "string"
-          },
-          "nextAt": {
-            "description": "When the next scheduled run is due, ms epoch; null for a routine that is off.",
-            "type": [
-              "null",
-              "number"
-            ]
-          },
-          "timeZone": {
-            "type": "string"
-          },
-          "words": {
-            "description": "\"At 03:00, every day (Europe/London)\".",
-            "type": "string"
-          }
-        },
-        "required": [
-          "cron",
-          "nextAt",
-          "timeZone",
-          "words"
-        ]
-      },
-      "ItemEnd": {
-        "description": "How an attempt or a delegate's work item ended.",
-        "type": "string",
-        "enum": [
-          "cancelled",
-          "done",
-          "failed"
-        ]
-      },
-      "CawNotWoken": {
-        "description": "Your words in a thread that did not wake Caw (a `not-woken` event): why,\nthe hub's sentence for it, and your message he has not read, which Try\nagain (`POST /api/projects/:id/threads/:threadId/wake`) wakes him with.",
-        "type": "object",
-        "properties": {
-          "message": {
-            "description": "Your message in the thread he has not read.",
-            "type": "string"
-          },
-          "reason": {
-            "$ref": "#/components/schemas/CawNotWokenReason"
-          },
-          "words": {
-            "description": "The cause, in the hub's words (\"No machine is online, so Caw can't start.\").",
-            "type": "string"
-          }
-        },
-        "required": [
-          "message",
-          "reason",
-          "words"
-        ]
-      },
-      "CawNotWokenReason": {
-        "description": "Why your words did not wake Caw: `no-machine`, no machine is online for\nhim; `capped`, the project is past its spend cap; `could-not-start`, his\nsession could not be started; `place`, his place's boundary could not be\nheld on his machine; `not-taken`, his session did not take the message;\n`failed`, anything else (its words say what).",
-        "type": "string",
-        "enum": [
-          "capped",
-          "could-not-start",
-          "failed",
-          "no-machine",
-          "not-taken",
-          "place"
-        ]
-      },
-      "RoutineMadeThreadEvent": {
-        "description": "{@link RoutineMadeEvent} as a ThreadEvent kind.",
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": [
-              "routine-made"
-            ]
-          },
-          "by": {
-            "$ref": "#/components/schemas/RoutineMadeInBy",
-            "description": "`caw`: the project's Caw made it; `delegate` or `session`: another session."
-          },
-          "expiresAt": {
-            "description": "When it turns itself off unless kept, ms epoch; null when it was kept as it was made.",
-            "type": [
-              "null",
-              "number"
-            ]
-          },
-          "instanceId": {
-            "description": "The session that made it.",
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "routineId": {
-            "type": "string"
-          },
-          "schedule": {
-            "$ref": "#/components/schemas/RoutineSchedule"
-          },
-          "why": {
-            "description": "What the making turn said just before the call, one paragraph; null when it said nothing.",
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        },
-        "required": [
-          "by",
-          "expiresAt",
-          "instanceId",
-          "kind",
-          "name",
-          "routineId",
-          "schedule",
-          "why"
-        ]
-      },
-      "DesignOfferThreadEvent": {
-        "description": "{@link DesignOfferEvent} as a ThreadEvent kind.",
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": [
-              "design-offer"
-            ]
-          },
-          "projectId": {
-            "type": "string"
-          },
-          "sources": {
-            "description": "What the build would read, in words: \"the repository's styles and components\", \"the brand kit\".",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "taskId": {
-            "description": "The task whose move raised it.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "kind",
-          "projectId",
-          "sources",
-          "taskId"
-        ]
-      },
-      "ThreadRead": {
-        "description": "A thread and its messages, oldest first: `GET /api/projects/:id/threads/:threadId`.",
-        "type": "object",
-        "properties": {
-          "messages": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ThreadMessage"
-            }
-          },
-          "thread": {
-            "$ref": "#/components/schemas/ThreadSummary"
-          }
-        },
-        "required": [
-          "messages",
-          "thread"
-        ]
-      },
       "ViewAsked": {
         "description": "\"Ask Caw to change it\" (`POST /api/projects/:id/views/:name/asks`): the\nthread your words and the view went to Caw in, and whether he is on. Off,\nhe still answers your words (WORDS.md: \"Off is never 'can't be\nmessaged'\"); the page says so.",
         "type": "object",
@@ -42113,16 +40623,12 @@
           "caw": {
             "$ref": "#/components/schemas/ViewAskedCaw"
           },
-          "message": {
-            "$ref": "#/components/schemas/ThreadMessage"
-          },
           "thread": {
             "$ref": "#/components/schemas/ThreadSummary"
           }
         },
         "required": [
           "caw",
-          "message",
           "thread"
         ]
       },
@@ -42426,6 +40932,36 @@
           "running",
           "skipped",
           "starting"
+        ]
+      },
+      "RoutineSchedule": {
+        "description": "A routine's schedule as the person reads it: its cron in words, in its zone, and its next run.",
+        "type": "object",
+        "properties": {
+          "cron": {
+            "description": "The cron expression, as written.",
+            "type": "string"
+          },
+          "nextAt": {
+            "description": "When the next scheduled run is due, ms epoch; null for a routine that is off.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "timeZone": {
+            "type": "string"
+          },
+          "words": {
+            "description": "\"At 03:00, every day (Europe/London)\".",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cron",
+          "nextAt",
+          "timeZone",
+          "words"
         ]
       },
       "RoutineTarget": {
@@ -47950,6 +46486,13 @@
           "exitCode": {
             "type": "number"
           },
+          "files": {
+            "description": "A Caw thread's reply: the project folder's files it says he wrote (`stages.md`), drawn as chips under it.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "handoffBrief": {
             "type": "string"
           },
@@ -48070,6 +46613,25 @@
           },
           "resultSubtype": {
             "type": "string"
+          },
+          "routineMade": {
+            "description": "A Caw thread's notice that a session made a routine (ThreadEvent\n`routine-made`): the note draws Keep, Turn off and Open beside it.",
+            "type": "object",
+            "properties": {
+              "expiresAt": {
+                "type": [
+                  "null",
+                  "number"
+                ]
+              },
+              "routineId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "expiresAt",
+              "routineId"
+            ]
           },
           "ruleName": {
             "description": "A `user.rule`'s rule name, read off its `[Rule: <name>]` marker line.",
@@ -48256,6 +46818,13 @@
           },
           "subtype": {
             "type": "string"
+          },
+          "tasks": {
+            "description": "A Caw thread's reply: the tasks it is about (`tsk-12`), drawn as cards under it.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "thinking": {
             "type": "string"
@@ -48820,6 +47389,49 @@
           "answers",
           "outcome",
           "questions"
+        ]
+      },
+      "UserAnswers": {
+        "description": "The reader's choices, back the way the tool reads them.",
+        "type": "object"
+      },
+      "UserQuestion": {
+        "description": "One question of an `AskUserQuestion`-shaped prompt, as every harness can express.",
+        "type": "object",
+        "properties": {
+          "header": {
+            "type": "string"
+          },
+          "multiSelect": {
+            "type": "boolean"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "description",
+                "label"
+              ]
+            }
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "header",
+          "multiSelect",
+          "options",
+          "question"
         ]
       },
       "UserQuestionDismissed": {
@@ -54855,6 +53467,7 @@
             "type": "string"
           },
           "instanceId": {
+            "description": "The session it went to. A send to a Caw thread ({@link threadId}) names\nthe thread's view id (`thread:<id>`) until a lead session was handed it,\nand that lead's id from then on.",
             "type": "string"
           },
           "keepAlive": {
@@ -54867,6 +53480,10 @@
           "modeAsk": {
             "$ref": "#/components/schemas/ModeAsk",
             "description": "No permission mode to wake its session on: the page asks for one, and it goes again ({@link ModeAsk})."
+          },
+          "readAt": {
+            "description": "ISO-8601: when its reader read it; absent until then. A thread's page places it here.",
+            "type": "string"
           },
           "reason": {
             "description": "Why it failed, in the harness's words or the hub's.",
@@ -55026,6 +53643,10 @@
           },
           "state": {
             "$ref": "#/components/schemas/SendState"
+          },
+          "threadId": {
+            "description": "The Caw thread it was written in (core threads.ts), when it was a thread's.",
+            "type": "string"
           },
           "uuid": {
             "type": "string"
@@ -57330,6 +55951,71 @@
           "send"
         ]
       },
+      "SendAttachment": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/TextAttachment"
+          },
+          {
+            "$ref": "#/components/schemas/FileAttachment"
+          }
+        ]
+      },
+      "TextAttachment": {
+        "description": "What a turn carries beside its typed words, other than pictures: a text\nthe reader attached or pasted at length, folded into the prompt as quoted\nmaterial; or any other file, which the hub stores (`POST /api/files`) and\nthe session's machine fetches and puts on its own disk before the harness\nsees the turn, naming its path in one line of the message.",
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "text"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "content",
+          "kind",
+          "name"
+        ]
+      },
+      "FileAttachment": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "file"
+            ]
+          },
+          "mediaType": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "ref": {
+            "description": "The hub's reference to its bytes: `/api/files/<sha256>`.",
+            "type": "string"
+          },
+          "size": {
+            "description": "Its length in bytes.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "kind",
+          "mediaType",
+          "name",
+          "ref",
+          "size"
+        ]
+      },
       "SentMessage": {
         "description": "A message sent to a session, by the reader or by cawco. `uuid` is its one\nidentity from the press to a reload: the dashboard's command id for a\nreader's send, minted where the hub builds its own. The hub keeps one\n{@link SendRecord} under it, and every copy of the message on every screen\nis drawn from that record.",
         "allOf": [
@@ -59012,29 +57698,6 @@
         "required": [
           "kind",
           "thread"
-        ]
-      },
-      "ThreadMessageFrame": {
-        "type": "object",
-        "properties": {
-          "kind": {
-            "description": "Hub-originated: a message was added to a thread.",
-            "type": "string",
-            "enum": [
-              "thread.message"
-            ]
-          },
-          "message": {
-            "$ref": "#/components/schemas/ThreadMessage"
-          },
-          "threadId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "kind",
-          "message",
-          "threadId"
         ]
       },
       "TasksChangedFrame": {

@@ -10,17 +10,12 @@
     type BlockItem,
   } from "#lib/cawco/blocks/BlockPage.svelte";
   import CantStart from "#lib/cawco/CantStart.svelte";
-  import { cawco, startThread, threadsOf } from "#lib/cawco/client.svelte.js";
+  import { cawco, submitCommand, threadsOf } from "#lib/cawco/client.svelte.js";
   import RowMenu, { type RowAction } from "#lib/cawco/config/RowMenu.svelte";
   import { connect } from "#lib/cawco/connect/installs.svelte.js";
   import EmptyAsk from "#lib/cawco/EmptyAsk.svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
-  import {
-    failureWords as message,
-    THREAD_SEND_UNREACHED,
-    unreachable,
-  } from "#lib/cawco/hub-read.js";
-  import { idForWords, type SentWords } from "#lib/cawco/id.js";
+  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   /**
    * A project's routines: what runs on its own (Routines), what fires it
@@ -89,7 +84,7 @@
   import { exactOf, scheduleOf, whenOf } from "#lib/cawco/routines/schedule.js";
   import { since } from "#lib/cawco/rules.js";
   import { GLYPHS } from "#lib/cawco/starter-glyphs.js";
-  import { threadHref } from "#lib/cawco/thread-tabs.js";
+  import { newThreadTab } from "#lib/cawco/thread-tabs.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
@@ -602,41 +597,31 @@
 
   /**
    * The words to Caw, in the session Composer with words alone (`attach`
-   * off), as the project page's view ask is: they open a thread with him in
-   * the project, and the page goes there. A refusal puts the words back in
-   * the composer with the reason over them.
+   * off), as the project page's view ask is: they are the first send of a
+   * new thread with him in the project, whose id is minted here as the
+   * send's is (thread-tabs.ts `newThreadTab`), and the page goes there,
+   * where the send's row says what became of it.
    */
   const askDraft = new ComposerDraft();
-  let askSending = $state(false);
-  let askRefused = $state("");
-  /** The words never reached the hub: the line offers Send again. */
-  let askAgain = $state(false);
   /** What the Composer stands over its foot: its box holds that much room. */
   let askFoot = $state(0);
-  /** The words an ask that did not go through carried, and its id: the same words again are the same ask. */
-  let askUnsent: SentWords | null = null;
-  async function ask(text: string, fresh: string) {
-    askSending = true;
-    askRefused = "";
-    askAgain = false;
-    askUnsent = idForWords(askUnsent, text, fresh);
-    try {
-      const said = await startThread(project.id, text, askUnsent.id);
-      askUnsent = null;
-      // A starter pressed into the field went, as it stood or changed:
-      // Jev's steering (hub project-starters.ts), told without a wait.
-      const pressed = askDraft.takePressed(text);
-      if (pressed) {
-        tellStarterOutcome(project.id, pressed).catch(() => undefined);
-      }
-      await goto(threadHref(said.thread.id));
-    } catch (error) {
-      askDraft.restore(text);
-      askAgain = unreachable(error);
-      askRefused = askAgain ? THREAD_SEND_UNREACHED : message(error);
-    } finally {
-      askSending = false;
+  async function ask(text: string, id: string) {
+    const viewId = newThreadTab(project.id);
+    submitCommand(
+      viewId,
+      "hub",
+      "send",
+      { text, extras: { projectId: project.id } },
+      id
+    );
+    // A starter pressed into the field went, as it stood or changed:
+    // Jev's steering (hub project-starters.ts), told without a wait.
+    const pressed = askDraft.takePressed(text);
+    if (pressed) {
+      tellStarterOutcome(project.id, pressed).catch(() => undefined);
     }
+    askDraft.settle();
+    await goto(`/session/${viewId}`);
   }
   /** A starter: its words in the composer, the caret after them; nothing is sent. */
   function pick(text: string) {
@@ -817,9 +802,6 @@
         void ask(text, id);
       }}
       placeholder={words.placeholder}
-      sendAgain={askAgain}
-      sendError={askRefused}
-      sending={askSending}
     />
   </div>
 {/snippet}

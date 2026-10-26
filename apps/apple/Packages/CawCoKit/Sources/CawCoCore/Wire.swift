@@ -238,8 +238,6 @@ enum Frame {
     case workItem(Components.Schemas.WorkItemSummary)
     /// A Caw thread started, or its last message or status changed.
     case threadUpsert(ThreadSummary)
-    /// A message added to a Caw thread; nil when it does not read as one.
-    case threadMessage(ThreadNote?)
     /// A session's preview opened, changed or closed.
     case preview(Components.Schemas.PreviewFrame)
     /// Every project move the hub is carrying, whole, on each change.
@@ -301,8 +299,6 @@ enum Frame {
             self = .workItem(frame.item)
         case .thread_upsert(let frame):
             self = .threadUpsert(frame.thread)
-        case .thread_message(let frame):
-            self = .threadMessage(ThreadNote.read(frame.message))
         case .preview(let frame):
             self = .preview(frame)
         case .moves(let frame):

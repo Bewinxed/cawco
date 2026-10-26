@@ -368,6 +368,8 @@ import {
   strategiesFor,
   TARGET_HEADROOM_TOKENS,
   TOOL_CATALOG,
+  threadTarget,
+  threadTargetOf,
   tokenWords,
   toolSpec,
   transcriptUserText,
@@ -619,13 +621,16 @@ import type {
   ProjectRow,
   PublicInstanceRow,
   SentMessageRow,
+  SessionSendRow,
   SourceNote,
+  ThreadMessageRow,
   WorkItemRow,
   WorkspaceRow,
 } from "./db";
 import {
   checkoutOf,
   hashHookMaterial,
+  isSessionSend,
   listedAt,
   MEMORY_ID,
   TURN_UNRECORDED,
@@ -909,6 +914,7 @@ import {
   YOU_ACTOR,
 } from "./tasks";
 import { createThreadRepair } from "./thread-repair";
+import { createThreadTranscripts } from "./thread-transcript";
 import {
   createToolCallKeys,
   mcpRefused,
@@ -1219,6 +1225,12 @@ const keepSendsAtStart = (db: DbShape): void => {
   if (tagged !== null) {
     console.info(`[hub] ${tagged} stored send(s) given their marker's tag`);
   }
+  // Once: the person's words kept as a thread's messages become the sends
+  // they are, read where they stood (caw.ts `sent`).
+  const moved = db.migrateThreadWordsOnce(THREAD_WORDS_SENDS, threadWordsSent);
+  if (moved !== null) {
+    console.info(`[hub] ${moved} thread message(s) of yours kept as sends`);
+  }
   const owedAgain = foldFormerSessions(db);
   keepPendingWhole(db);
   for (const uuid of owedAgain) {
@@ -1232,9 +1244,84 @@ const keepSendsAtStart = (db: DbShape): void => {
   }
 };
 
+/** The one-time move of the person's thread messages into `sent_messages` (`data_migrations`). */
+const THREAD_WORDS_SENDS = "thread-words-sends";
+
+/**
+ * A thread message of the person's words as its send's record keeps it
+ * (server.ts `sentFrame`): its pictures first, by the media store's
+ * address they were kept under, then its words, with its files' lines and
+ * its pastes folded in as a send's are.
+ */
+const threadWordsSent = (row: ThreadMessageRow): NeutralUserMessage => {
+  const viewId = threadTargetOf(row.threadId);
+  const attachments = row.attachments ?? [];
+  const files = attachments
+    .flatMap((attachment) =>
+      attachment.kind === "file"
+        ? [
+            attachedFileLine(
+              `${ATTACHMENTS_HOME}/${attachedFileName(viewId, attachment, true)}`,
+              attachment
+            ),
+          ]
+        : []
+    )
+    .join("\n");
+  const pasted = attachments
+    .map((attachment) =>
+      attachment.kind === "text"
+        ? `\n\n<pasted-text name="${attachment.name}">\n${attachment.content}\n</pasted-text>`
+        : ""
+    )
+    .join("");
+  const words = `${row.body}${files ? `\n\n${files}` : ""}${pasted}`;
+  const images = row.images ?? [];
+  return {
+    type: "user",
+    uuid: row.id,
+    message: {
+      role: "user",
+      content:
+        images.length > 0
+          ? [
+              ...images.map(({ mediaType, src }) => ({
+                type: "image" as const,
+                source: {
+                  type: "url",
+                  url: src,
+                  media_type: mediaType,
+                } as unknown as {
+                  type: "base64";
+                  media_type: string;
+                  data: string;
+                },
+              })),
+              { type: "text" as const, text: words },
+            ]
+          : words,
+    },
+    parent_tool_use_id: null,
+    origin: { kind: "human" },
+  };
+};
+
+/** Why a thread's send no lead was handed before the hub restarted did not wake Caw. */
+const CAW_NOT_WOKEN_RESTART =
+  "The hub restarted before Caw was woken with this. Try again.";
+
 const keepPendingWhole = (db: DbShape): void => {
   let keptWhole = 0;
   for (const send of db.unkeptSends()) {
+    // A Caw thread's send no lead was handed before the hub stopped: its
+    // wake went with the hub, and its row offers Try again.
+    if (!isSessionSend(send)) {
+      db.updateSend(send.uuid, {
+        state: "failed",
+        reason: CAW_NOT_WOKEN_RESTART,
+      });
+      continue;
+    }
     const [row] = db.getInstancesByIds([send.instanceId]);
     const envelope = row && envelopeOf(send, row.machineId);
     if (envelope) {
@@ -1259,7 +1346,7 @@ const keepPendingWhole = (db: DbShape): void => {
  * image it carried is no longer stored.
  */
 const envelopeOf = (
-  send: SentMessageRow,
+  send: SessionSendRow,
   machineId: string
 ): Envelope<SendPayload> | undefined => {
   const body = send.body as unknown as SentMessage;
@@ -2768,12 +2855,22 @@ const refusedStart = (
     : refused;
 };
 
-/** A record as it goes out: on the stream, and with a history read. */
-const toSendRecord = (row: SentMessageRow): SendRecord => ({
+/**
+ * A record as it goes out: on the stream, and with a history read. `view`
+ * is the transcript it goes out on, where that is not its session's: a Caw
+ * thread's (`thread:<id>`), whose rows are its own. A thread's send no lead
+ * took yet names its thread.
+ */
+const toSendRecord = (row: SentMessageRow, view?: string): SendRecord => ({
   ...(isKeepAlive(row.body) ? { keepAlive: true } : {}),
   uuid: row.uuid,
-  instanceId: row.instanceId,
+  instanceId:
+    view ??
+    row.instanceId ??
+    threadTargetOf(row.threadId ?? "") /* the CHECK names one of the two */,
   acceptedAt: row.acceptedAt.toISOString(),
+  ...(row.threadId ? { threadId: row.threadId } : {}),
+  ...(row.readAt ? { readAt: row.readAt.toISOString() } : {}),
   body: row.body,
   mode: row.mode,
   state: row.state,
@@ -3148,6 +3245,10 @@ export const createServer = (
     },
     withdrawSend: async (machineId, instanceId, sendId) => {
       const row = db.sendRecord(sendId);
+      const thread = threadTarget(instanceId);
+      if (thread) {
+        return await withdrawThreadSend(thread, row);
+      }
       const [instance] = db.getInstancesByIds([instanceId]);
       if (
         !row ||
@@ -3166,10 +3267,11 @@ export const createServer = (
         changeSend(row, { state: "cancelled" });
         return "withdrawn";
       }
-      if (row.state !== "pending") {
+      const handed = handedSend(row);
+      if (row.state !== "pending" || !handed) {
         return "started";
       }
-      return await withdrawPending(row, machineId);
+      return await withdrawPending(handed, machineId);
     },
     isMachineConnected: (machineId) => registry.agent(machineId) !== undefined,
     machineAwayWords: (machineId) => commandAwayWords(machineId),
@@ -5855,8 +5957,18 @@ export const createServer = (
   /** Pending sends a transcript read is deciding, so none is decided twice. */
   const deciding = new Set<string>();
 
-  /** A record's latest state onto its session's stream: where every screen hears it. */
+  /**
+   * A record's latest state onto its session's stream: where every screen
+   * hears it. A send written in a Caw thread goes onto the thread's own
+   * transcript too, and onto the lead's once he was handed it.
+   */
   const publishSend = (row: SentMessageRow): void => {
+    if (row.threadId) {
+      threadTranscripts.send(row);
+    }
+    if (!isSessionSend(row)) {
+      return;
+    }
     if (isKeepAlive(row.body)) {
       streams.sequence(row.instanceId, {
         kind: "send",
@@ -5873,12 +5985,48 @@ export const createServer = (
     });
   };
 
-  /** One change to a record: stored, then said. The only way a record moves. */
-  const changeSend = (
-    row: SentMessageRow,
+  /**
+   * A Caw thread's send withdrawn from the thread (its row's Remove, or
+   * Edit taking its words back): from the lead it was handed to, once one
+   * was; before that, and once it failed, the record alone says it is gone.
+   */
+  const withdrawThreadSend = async (
+    threadId: string,
+    row: SentMessageRow | undefined
+  ): Promise<"withdrawn" | "started"> => {
+    if (row?.threadId !== threadId) {
+      throw new Error("That send does not belong to this thread.");
+    }
+    if (row.state === "cancelled") {
+      return "withdrawn";
+    }
+    const handed = handedSend(row);
+    if (row.state === "failed" || (row.state === "pending" && !handed)) {
+      changeSend(row, { state: "cancelled" });
+      return "withdrawn";
+    }
+    const [reader] = handed ? db.getInstancesByIds([handed.instanceId]) : [];
+    if (!(handed && reader) || row.state !== "pending") {
+      return "started";
+    }
+    return await withdrawPending(handed, reader.machineId);
+  };
+
+  /** A record a session was handed, or undefined: none, or a thread's no lead took yet. */
+  const handedSend = (
+    row: SentMessageRow | undefined
+  ): SessionSendRow | undefined =>
+    row && isSessionSend(row) ? row : undefined;
+
+  /**
+   * One change to a record: stored, then said. The only way a record moves.
+   * A record a session was handed stays its session's.
+   */
+  const changeSend = <Row extends SentMessageRow>(
+    row: Row,
     change: Parameters<DbShape["updateSend"]>[1]
-  ): SentMessageRow => {
-    const moved = db.updateSend(row.uuid, change) ?? row;
+  ): Row => {
+    const moved = (db.updateSend(row.uuid, change) ?? row) as Row;
     publishSend(moved);
     // A send leaving `pending`, read or never to be: what a lead's turn and
     // a lead routine's run wait on (caw.ts `sendLeft`, routines.ts `sendLeft`).
@@ -5887,8 +6035,10 @@ export const createServer = (
       moved.state !== "pending" &&
       !isKeepAlive(moved.body)
     ) {
-      lead?.sendLeft(moved.instanceId, moved.uuid, moved.state === "read");
-      leadRuns?.sendLeft(moved);
+      if (isSessionSend(moved)) {
+        lead?.sendLeft(moved.instanceId, moved.uuid, moved.state === "read");
+        leadRuns?.sendLeft(moved);
+      }
       sendSettles.get(moved.uuid)?.(moved);
     }
     return moved;
@@ -5965,11 +6115,11 @@ export const createServer = (
    * model's turn follows; a read found in a stored transcript follows no turn.
    */
   const readSend = (
-    row: SentMessageRow,
+    row: SessionSendRow,
     answering: boolean
-  ): SentMessageRow => {
+  ): SessionSendRow => {
     if (isKeepAlive(row.body)) {
-      return changeSend(row, { state: "read" });
+      return changeSend(row, { state: "read", readAt: new Date() });
     }
     const origin = (row.body as SentMessage | null)?.origin;
     // A live process took it up: finished work it was sent to runs again,
@@ -5983,12 +6133,12 @@ export const createServer = (
       unanswered.set(row.instanceId, waiting);
     }
     anchors.set(row.instanceId, row.uuid);
-    return changeSend(row, { state: "read" });
+    return changeSend(row, { state: "read", readAt: new Date() });
   };
 
   /** A send that will never be read, and why (what refused it, when the hub did). Final. */
   const failSend = (
-    row: SentMessageRow,
+    row: SessionSendRow,
     reason: string,
     refusal?: StoredSendRefusal
   ): void => {
@@ -6017,7 +6167,7 @@ export const createServer = (
    * hears a report. A screen reads the record itself; CawCo's own notices
    * tell nobody.
    */
-  const tellSender = (row: SentMessageRow, reason: string): void => {
+  const tellSender = (row: SessionSendRow, reason: string): void => {
     const { origin } = row.body as SentMessage;
     const sender = origin.kind === "peer" ? origin.fromSession : undefined;
     if (!sender || sender === row.instanceId) {
@@ -6312,7 +6462,7 @@ export const createServer = (
    * ({@link oweUnread}), a machine that cannot be asked counting as having
    * taken none; `wait` — a live process may still hand it over and say so;
    * `unheld` — what the process holds is known, so a send it neither stored
-   * nor said it held ({@link SentMessageRow.held}), or one a later send
+   * nor said it held ({@link SessionSendRow.held}), or one a later send
    * overtook, never reached it, and is owed to it again. That is decided only
    * on a read the machine answered.
    */
@@ -6323,7 +6473,7 @@ export const createServer = (
    * Every harness takes up what it is sent in the order it was sent, so a
    * send overtaken like this was never handed to it.
    */
-  const overtaken = (send: SentMessageRow): boolean =>
+  const overtaken = (send: SessionSendRow): boolean =>
     db
       .sendsIn(send.instanceId, ["read"])
       .some((later) => later.acceptedAt.getTime() > send.acceptedAt.getTime());
@@ -6340,7 +6490,7 @@ export const createServer = (
     instanceId: string,
     why: string,
     unstored: Unstored,
-    only: (send: SentMessageRow) => boolean = () => true,
+    only: (send: SessionSendRow) => boolean = () => true,
     decided: () => void = () => undefined,
     /** What a failed send offers back, beside `why`. */
     refusal?: StoredSendRefusal
@@ -6431,14 +6581,14 @@ export const createServer = (
    * taken up. True when it is owed again.
    */
   const settleSend = (
-    send: SentMessageRow,
+    send: SessionSendRow,
     stored: Map<string, boolean>,
     unstored: Unstored,
     why: string,
     refusal?: StoredSendRefusal
   ): boolean => {
     // Read meanwhile, or thrown away with its session: that stands.
-    const now = db.sendRecord(send.uuid);
+    const now = handedSend(db.sendRecord(send.uuid));
     if (now?.state !== "pending") {
       return false;
     }
@@ -6468,7 +6618,7 @@ export const createServer = (
     console.log(
       `[hub] send ${now.uuid} to ${now.instanceId} owed again: ${why}`
     );
-    publishSend(db.sendRecord(now.uuid) ?? now);
+    publishSend(handedSend(db.sendRecord(now.uuid)) ?? now);
     return true;
   };
 
@@ -6503,7 +6653,7 @@ export const createServer = (
 
   /** Whether a pending send's current hand-off is the one `send` was given. */
   const currentHandOff = (instanceId: string, send: SendPayload): boolean => {
-    const record = db.sendRecord(send.message.uuid);
+    const record = handedSend(db.sendRecord(send.message.uuid));
     return (
       record?.instanceId === instanceId &&
       record.state === "pending" &&
@@ -6526,7 +6676,7 @@ export const createServer = (
     if (!currentHandOff(instanceId, one.payload)) {
       return Number.POSITIVE_INFINITY;
     }
-    const now = db.sendRecord(uuid);
+    const now = handedSend(db.sendRecord(uuid));
     // Unread: the machine handed it back whole, its own word that no
     // process took it, so it is owed as one the transcript does not hold.
     if (now && !("unread" in stored) && stored.get(uuid)) {
@@ -6537,7 +6687,7 @@ export const createServer = (
     console.log(
       `[hub] send ${uuid} to ${instanceId} came back: no process took it; owed to the session's next process`
     );
-    const owed = db.sendRecord(uuid);
+    const owed = handedSend(db.sendRecord(uuid));
     if (owed) {
       publishSend(owed);
     }
@@ -6650,7 +6800,7 @@ export const createServer = (
       ? commandAwayWords(machineId)
       : `Withdrawal got no answer: ${silentWords(machineId, reply)}.`;
   const withdrawPending = async (
-    row: SentMessageRow,
+    row: SessionSendRow,
     machineId: string
   ): Promise<"withdrawn" | "started"> => {
     if (row.owed !== null && db.takeOwedSend(row.uuid) !== undefined) {
@@ -6676,7 +6826,7 @@ export const createServer = (
       default:
         throw unreachable(reply);
     }
-    const now = db.sendRecord(row.uuid);
+    const now = handedSend(db.sendRecord(row.uuid));
     if (now?.state === "cancelled") {
       return "withdrawn";
     }
@@ -6721,7 +6871,7 @@ export const createServer = (
         workItems.finishingFor(instanceId, origin)
       );
     });
-    const takeBackOne = async (send: SentMessageRow): Promise<void> => {
+    const takeBackOne = async (send: SessionSendRow): Promise<void> => {
       const reply = await callAgent(
         row.machineId,
         "withdrawSend",
@@ -6739,7 +6889,7 @@ export const createServer = (
         console.log(
           `[hub] send ${send.uuid} to ${instanceId} taken back as it called finish_item: it goes as its next turn`
         );
-        publishSend(db.sendRecord(send.uuid) ?? send);
+        publishSend(handedSend(db.sendRecord(send.uuid)) ?? send);
       }
     };
     await Promise.all(unread.map(takeBackOne));
@@ -6763,7 +6913,7 @@ export const createServer = (
    */
   const takeSendSignal = (instanceId: string, signal: SendSignal): void => {
     if (signal.kind === "rejected") {
-      const row = db.sendRecord(signal.uuid);
+      const row = handedSend(db.sendRecord(signal.uuid));
       if (row?.state === "pending" || row?.state === "read") {
         if (isKeepAlive(row.body)) {
           db.updateKeepAlive(instanceId, { keepAliveTurn: null });
@@ -6790,7 +6940,7 @@ export const createServer = (
    * follow. One settled meanwhile stands.
    */
   const takeTaken = (instanceId: string, uuid: string): void => {
-    const row = db.sendRecord(uuid);
+    const row = handedSend(db.sendRecord(uuid));
     if (row?.instanceId !== instanceId || row.state !== "pending") {
       return;
     }
@@ -6805,14 +6955,14 @@ export const createServer = (
    * which, when the hub has heard nothing of the session since it started,
    * a transcript read tells first ({@link storedIn}).
    */
-  const rejectSend = (row: SentMessageRow, reason: string): void => {
+  const rejectSend = (row: SessionSendRow, reason: string): void => {
     if (anchors.has(row.instanceId)) {
       failSend(row, reason);
       return;
     }
     detach(
       storedIn(row.instanceId).then(() => {
-        const now = db.sendRecord(row.uuid);
+        const now = handedSend(db.sendRecord(row.uuid));
         if (now?.state === "pending" || now?.state === "read") {
           failSend(now, reason);
         }
@@ -6848,7 +6998,7 @@ export const createServer = (
    * ({@link overtaken}), and decided against the transcript at once.
    */
   const takeRead = (instanceId: string, ids: string[]): void => {
-    const order = (row: SentMessageRow): number => {
+    const order = (row: SessionSendRow): number => {
       const at = ids.indexOf(row.uuid);
       return at >= 0 ? at : ids.indexOf(row.harnessId ?? "");
     };
@@ -7052,7 +7202,7 @@ export const createServer = (
     onPage: Set<string>,
     newest: boolean,
     start: boolean
-  ): SentMessageRow[] =>
+  ): SessionSendRow[] =>
     db
       .sendsIn(instanceId, newest ? ["pending", "failed"] : ["failed"])
       .filter(
@@ -7071,9 +7221,9 @@ export const createServer = (
   const linkEntries = (
     instanceId: string | undefined,
     entries: SessionMessage[]
-  ): { lines: Map<string, SentMessageRow>; last: string | undefined } => {
+  ): { lines: Map<string, SessionSendRow>; last: string | undefined } => {
     const sendsOf = sendFinder(instanceId, entries);
-    const lines = new Map<string, SentMessageRow>();
+    const lines = new Map<string, SessionSendRow>();
     let last: string | undefined;
     let failures: string[] = [];
     for (const entry of entries) {
@@ -7130,7 +7280,7 @@ export const createServer = (
   const sendFinder = (
     instanceId: string | undefined,
     entries: SessionMessage[]
-  ): ((entry: SessionMessage) => SentMessageRow[]) => {
+  ): ((entry: SessionMessage) => SessionSendRow[]) => {
     const found = db.sendsFor(
       entries
         .filter((entry) => entry.type === "user" || entry.sourceUuid)
@@ -7159,7 +7309,7 @@ export const createServer = (
   };
 
   /** A send's words as the harness was handed them, when they are words alone. */
-  const sentWords = (send: SentMessageRow): string | null => {
+  const sentWords = (send: SessionSendRow): string | null => {
     const content = (send.body as NeutralUserMessage | null)?.message.content;
     return typeof content === "string" ? content : null;
   };
@@ -7176,8 +7326,8 @@ export const createServer = (
   const joinedWith = (
     instanceId: string,
     entry: SessionMessage,
-    last: SentMessageRow
-  ): SentMessageRow[] => {
+    last: SessionSendRow
+  ): SessionSendRow[] => {
     const stored = (entry.message as { content?: unknown }).content;
     const own = sentWords(last);
     if (!(typeof stored === "string" && own && stored.endsWith(`\n${own}`))) {
@@ -7185,7 +7335,7 @@ export const createServer = (
     }
     // What is left to account for, ending in the newline before the next part.
     let rest = stored.slice(0, stored.length - own.length);
-    const partners: SentMessageRow[] = [];
+    const partners: SessionSendRow[] = [];
     const earlier = db
       .sendsIn(instanceId, ["pending", "read", "failed", "replaced"])
       .filter(
@@ -7223,8 +7373,8 @@ export const createServer = (
    */
   const linkEntry = (
     entry: SessionMessage,
-    found: SentMessageRow[]
-  ): SentMessageRow[] => {
+    found: SessionSendRow[]
+  ): SessionSendRow[] => {
     if (found.length === 0) {
       return found;
     }
@@ -8975,14 +9125,29 @@ export const createServer = (
    * one who may reopen it (work-items.ts `finishingFor`), and a send owed before it
    * to the same session, which it never overtakes — but that compaction's
    * own steps (`ahead`), which go first ({@link compactionSend}).
+   *
+   * A Caw thread is a target too (`thread:<id>`, core threads.ts): a send to
+   * it is kept as the thread's and wakes the lead that reads it under its
+   * own uuid (caw.ts `sent`), which comes back through here to his session,
+   * where its record is handed on as his ({@link deliverToSession}). The
+   * person's words sent straight to a project's Caw's session are his
+   * thread's ({@link toCawThread}).
    */
   const deliverSend = (
     asked: Envelope<SendPayload>,
     ahead = false
   ): SentMessageRow | undefined => {
+    const thread = threadTarget(asked.payload.instanceId);
+    if (thread) {
+      return lead?.sent(thread, asked.payload);
+    }
     const envelope = toContinuation(byIdNow(asked), "refused");
-    if (!envelope || toCawThread(envelope)) {
+    if (!envelope) {
       return;
+    }
+    const toThread = toCawThread(envelope);
+    if (toThread) {
+      return toThread;
     }
     tellForkFirst(envelope);
     tellPlanFirst(envelope);
@@ -9070,7 +9235,7 @@ export const createServer = (
    * goes to the session the work goes on in under a fresh uuid, behind what
    * that session was owed; the hub's word to the old process is cancelled.
    */
-  const moveOwedSend = (send: SentMessageRow): void => {
+  const moveOwedSend = (send: SessionSendRow): void => {
     const owed = db.takeOwedSend(send.uuid);
     if (owed === undefined) {
       return;
@@ -9183,16 +9348,17 @@ export const createServer = (
   };
 
   /**
-   * A person's words to a project's Caw are a thread's (caw.ts
-   * `personSent`), whatever sent them to his session: they go into the
-   * thread he is in, and the wake that carries them to him goes under the
-   * send's own uuid, so the row the sender's screen drew becomes that wake's
-   * record. A refusal there (no machine for him, the spend cap, no words)
-   * fails the send's record with its sentence. True when the thread took it;
-   * a send the hub already has a record of is the same send again, and goes
-   * on to say that record.
+   * A person's words to a project's Caw are a thread's, whatever sent them
+   * to his session (the app's composer on his session, a push's Reply, a
+   * relay): a send to the thread he is in (caw.ts `leadThread`, a new one
+   * when the project has none), under its own uuid, which wakes him under
+   * that uuid. A send the hub already has a record of is the wake carrying
+   * a thread's send to him, or the same send again, and goes on to his
+   * session. Undefined for any other send.
    */
-  const toCawThread = (envelope: Envelope<SendPayload>): boolean => {
+  const toCawThread = (
+    envelope: Envelope<SendPayload>
+  ): SentMessageRow | undefined => {
     const { payload } = envelope;
     const { message } = payload;
     if (
@@ -9200,50 +9366,17 @@ export const createServer = (
       isKeepAlive(message) ||
       db.sendRecord(message.uuid)
     ) {
-      return false;
+      return;
     }
-    const taken = lead?.personSent(payload);
-    if (!taken) {
-      return false;
+    const target = lead?.leadThread(payload.instanceId);
+    if (!target) {
+      return;
     }
-    /** The send's own record, when no wake under its uuid made one. */
-    const settle = (
-      outcome: { state: "read" } | { state: "failed"; reason: string }
-    ): void => {
-      if (db.sendRecord(message.uuid)) {
-        return;
-      }
-      publishSend(
-        db.recordSend({
-          uuid: message.uuid,
-          instanceId: payload.instanceId,
-          acceptedAt: new Date(),
-          body: externalizeImages(sentFrame(payload)),
-          mode: sendMode(payload),
-          ...(outcome.state === "failed"
-            ? {
-                state: "failed" as const,
-                reason: outcome.reason,
-                refusal: null,
-                anchor: anchors.get(payload.instanceId) ?? null,
-              }
-            : { state: "read" as const }),
-        })
-      );
-    };
-    taken.then(
-      // Taken with no wake: "Make a note: …" went into AGENTS.md as the
-      // thread's composer sends it, which is what taking it means.
-      () => settle({ state: "read" }),
-      (error: unknown) => {
-        const reason = error instanceof Error ? error.message : String(error);
-        console.warn(
-          `[caw] ${payload.instanceId}: your words to Caw did not reach him: ${reason}`
-        );
-        settle({ state: "failed", reason });
-      }
-    );
-    return true;
+    return lead?.sent(target.threadId, {
+      ...payload,
+      instanceId: threadTargetOf(target.threadId),
+      projectId: target.projectId,
+    });
   };
 
   /**
@@ -9433,14 +9566,30 @@ export const createServer = (
     envelope: Envelope<SendPayload>,
     ahead: boolean
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the single send transaction orders refusal, recovery, delivery and persistence.
-  ): SentMessageRow => {
+  ): SessionSendRow => {
     const { instanceId, message } = envelope.payload;
     const { machineId } = envelope;
     const keepAlive = isKeepAlive(message);
     const known = db.sendRecord(message.uuid);
-    if (known) {
+    // A Caw thread's send no lead was handed yet is handed on here, as his,
+    // under its uuid (caw.ts `wakeForYou`): its record keeps the words as
+    // the person wrote them, and his session reads them as his wake says.
+    const adopting =
+      known?.threadId && known.instanceId === null && known.state === "pending"
+        ? known
+        : undefined;
+    if (known && !adopting) {
       publishSend(known);
-      return known;
+      const handed = handedSend(known);
+      // A thread's send that failed before any lead was handed it is never
+      // handed on now: its row's Try again sends it anew.
+      if (!handed) {
+        throw new WorkItemRefusal(
+          409,
+          known.reason ?? "This message didn't go to Caw. Try it again."
+        );
+      }
+      return handed;
     }
     const refused = keepAlive
       ? undefined
@@ -9545,28 +9694,36 @@ export const createServer = (
     // the record a reference to them.
     const mode = sendMode(envelope.payload);
     const whole = JSON.stringify(envelope);
-    let record = db.recordSend({
-      uuid: message.uuid,
-      instanceId,
-      acceptedAt: new Date(),
-      body: externalizeImages(sentFrame(asSent)),
-      mode,
-      ...(message.replaces ? { replaces: message.replaces } : {}),
-      ...(accepted
-        ? {
-            state: "pending" as const,
-            ...(owed ? { owed: whole } : {}),
-            ...(delivery ? { envelope: whole, delivery } : {}),
-          }
-        : {
-            state: "failed" as const,
-            reason: refused?.reason ?? machineAwayWords(machineId),
-            refusal: refused
-              ? (refused.refusal ?? null)
-              : { kind: "machine-away" as const, machineId },
-            anchor: anchors.get(instanceId) ?? null,
-          }),
-    });
+    const outcome = accepted
+      ? {
+          state: "pending" as const,
+          ...(owed ? { owed: whole } : {}),
+          ...(delivery ? { envelope: whole, delivery } : {}),
+        }
+      : {
+          state: "failed" as const,
+          reason: refused?.reason ?? machineAwayWords(machineId),
+          refusal: refused
+            ? (refused.refusal ?? null)
+            : { kind: "machine-away" as const, machineId },
+          anchor: anchors.get(instanceId) ?? null,
+        };
+    let record: SessionSendRow = adopting
+      ? {
+          ...adopting,
+          ...(db.updateSend(adopting.uuid, { instanceId, ...outcome }) ??
+            adopting),
+          instanceId,
+        }
+      : (db.recordSend({
+          uuid: message.uuid,
+          instanceId,
+          acceptedAt: new Date(),
+          body: externalizeImages(sentFrame(asSent)),
+          mode,
+          ...(message.replaces ? { replaces: message.replaces } : {}),
+          ...outcome,
+        }) as SessionSendRow);
     if (owed) {
       record = keepHold(record);
     }
@@ -9720,7 +9877,7 @@ export const createServer = (
    * `HOLD_WORDS`). A hub that starts reads each one back
    * ({@link sayKeptAtStart}). Answers the record as stored.
    */
-  const keepHold = (record: SentMessageRow): SentMessageRow => {
+  const keepHold = (record: SessionSendRow): SessionSendRow => {
     const hold = holdOf(record);
     if (!hold || hold === record.hold) {
       return record;
@@ -9728,7 +9885,7 @@ export const createServer = (
     console.log(
       `[hub] send ${record.uuid} to ${record.instanceId} queued: ${hold}${record.hold ? ` (was ${record.hold})` : ""}`
     );
-    return db.updateSend(record.uuid, { hold }) ?? record;
+    return handedSend(db.updateSend(record.uuid, { hold })) ?? record;
   };
 
   /**
@@ -9739,7 +9896,7 @@ export const createServer = (
    * a build older than the hub's), else sends owed before it. Undefined for
    * a send its machine has.
    */
-  const holdOf = (record: SentMessageRow): SendHold | undefined => {
+  const holdOf = (record: SessionSendRow): SendHold | undefined => {
     if (!record.owed) {
       return;
     }
@@ -9763,7 +9920,7 @@ export const createServer = (
 
   /** {@link holdOf}'s last word: its machine away, its start held, or sends before it. */
   const machineHold = (
-    record: SentMessageRow,
+    record: SessionSendRow,
     row: InstanceRow | undefined
   ): SendHold => {
     const away = row ? machinePresence(row.machineId) : undefined;
@@ -9812,7 +9969,7 @@ export const createServer = (
     if (record.state === "failed") {
       throw new WorkItemRefusal(404, record.reason ?? "the send failed");
     }
-    const hold = holdOf(record);
+    const hold = isSessionSend(record) ? holdOf(record) : undefined;
     const plan =
       !hold && before && wakesForSend(before) ? relaunchOf(before) : undefined;
     return {
@@ -9899,7 +10056,7 @@ export const createServer = (
    * it did; what is owed goes once it is up.
    */
   const relaunchForStep = (
-    send: SentMessageRow,
+    send: SessionSendRow,
     row: ReturnType<typeof db.getInstancesByIds>[number],
     agent: NonNullable<ReturnType<typeof registry.agent>>
   ): boolean => {
@@ -9926,18 +10083,18 @@ export const createServer = (
    * One owed send, as {@link releaseOwed} hands it over; one that stays
    * owed has its hold written again ({@link keepHold}).
    */
-  const releaseOne = (send: SentMessageRow): void => {
+  const releaseOne = (send: SessionSendRow): void => {
     if (handOwed(send)) {
       return;
     }
-    const still = db.sendRecord(send.uuid);
+    const still = handedSend(db.sendRecord(send.uuid));
     if (still?.state === "pending" && still.owed) {
       keepHold(still);
     }
   };
 
   /** {@link releaseOne}'s hand: true once the send has left the hub's keeping (handed, moved or failed). */
-  const handOwed = (send: SentMessageRow): boolean => {
+  const handOwed = (send: SessionSendRow): boolean => {
     const [row] = db.getInstancesByIds([send.instanceId]);
     // Owed to a session whose work a continuation took on: it goes there.
     if (row?.continuedInto) {
@@ -9985,7 +10142,7 @@ export const createServer = (
   /** `send` handed over once its session has a process up or starting and no start held; else it stays owed for that. True when handed. */
   const handToProcess = (
     agent: NonNullable<ReturnType<typeof registry.agent>>,
-    send: SentMessageRow,
+    send: SessionSendRow,
     envelope: Envelope<SendPayload>
   ): boolean => {
     const [now] = db.getInstancesByIds([send.instanceId]);
@@ -10013,7 +10170,7 @@ export const createServer = (
    */
   const handReleased = (
     agent: NonNullable<ReturnType<typeof registry.agent>>,
-    send: SentMessageRow,
+    send: SessionSendRow,
     envelope: Envelope<SendPayload>
   ): void => {
     const delivery = crypto.randomUUID();
@@ -10062,7 +10219,7 @@ export const createServer = (
    * session has moved, its machine back by then), nor one whose start an
    * update still holds.
    */
-  const waitsOnMachine = (send: SentMessageRow): boolean => {
+  const waitsOnMachine = (send: SessionSendRow): boolean => {
     const [row] = db.getInstancesByIds([send.instanceId]);
     const origin = (send.body as SentMessage | null)?.origin;
     return !(
@@ -13561,7 +13718,7 @@ export const createServer = (
       })
       .catch((error: unknown) => ({
         woke: false as const,
-        why: { words: error instanceof Error ? error.message : String(error) },
+        why: error instanceof Error ? error.message : String(error),
       }));
     if (woke.woke) {
       console.log(
@@ -13573,7 +13730,7 @@ export const createServer = (
       );
       return { ok: true };
     }
-    const reason = `This session takes no input now, and the project's Caw couldn't take them: ${woke.why.words.replace(CLOSING_STOP, "")}.`;
+    const reason = `This session takes no input now, and the project's Caw couldn't take them: ${woke.why.replace(CLOSING_STOP, "")}.`;
     recordUndelivered(instance, text, images, reason, attachments);
     return { ok: false, reason };
   };
@@ -23103,6 +23260,25 @@ export const createServer = (
     });
   };
 
+  /** A Caw thread's page as the transcript route answers it (thread-transcript.ts). */
+  const threadPage = (
+    threadId: string,
+    limit: number | undefined,
+    before: string | undefined
+  ): TranscriptPage | Response => {
+    const page = threadTranscripts.page(threadId, limit, before);
+    if (!page) {
+      return new Response("This thread is not on this hub any more.", {
+        status: 404,
+      });
+    }
+    return "gone" in page
+      ? new Response(`the transcript no longer holds block ${page.gone}`, {
+          status: 409,
+        })
+      : page;
+  };
+
   /** A stored transcript's machine is away, as its routes answer it: 503 with {@link awayHeaders}. */
   const historyAway = (fault: HistoryFault): Response =>
     new Response(fault.message, {
@@ -23134,6 +23310,38 @@ export const createServer = (
     commands: (instanceId) => db.instanceCommands(instanceId) ?? undefined,
     cuts: (instanceId) => db.turnCuts.of(instanceId),
     tooling: (instanceId) => db.instanceTooling(instanceId) ?? undefined,
+  });
+
+  /**
+   * Every Caw thread's blocks, built here from the hub's own tables
+   * (thread-transcript.ts): a thread is read and followed as a session is,
+   * under `thread:<id>`.
+   */
+  const threadTranscripts = createThreadTranscripts({
+    db,
+    head: (viewId) => streams.head(viewId),
+    hubRun,
+    record: (row, viewId) => toSendRecord(row, viewId),
+    sequence: (viewId, frame) => streams.sequence(viewId, frame),
+    where: (thread) => {
+      const project = db.project(thread.projectId);
+      const [reader] = project?.leadInstanceId
+        ? db.getInstancesByIds([project.leadInstanceId])
+        : [];
+      return reader
+        ? {
+            machineId: reader.machineId,
+            cwd: reader.cwd,
+            harness: reader.harness,
+            sessionKey: reader.sessionId ?? "",
+          }
+        : {
+            machineId: "hub",
+            cwd: "",
+            harness: project?.cawHarness ?? "claude",
+            sessionKey: "",
+          };
+    },
   });
 
   /** A rewind's spawn, by its request: its transcript is read whole again if the spawn fails. */
@@ -24519,17 +24727,66 @@ export const createServer = (
         : { domain: lastRelayDomain },
     upstreamAnswered: () => db.upstreamPosts() !== null,
     projectsChanged,
-    // Thread rows and messages reach every dashboard on the ledger, as sessions do.
-    // Caw's answer in a thread is his turn there ending: the project's
-    // starters are asked again (project-starters.ts).
+    // Thread rows reach every dashboard on the ledger, as sessions do.
     publish: (payload) => {
       registry.broadcast({ verb: "frames", machineId: "hub", payload });
-      if (
-        payload.kind === "thread.message" &&
-        payload.message.author === "caw"
-      ) {
-        projectStarters.threadAnswered(payload.threadId);
-      }
+    },
+    // A thread's own rows and its tail, onto its transcript.
+    posted: (row) => threadTranscripts.line(row),
+    tail: (threadId, patch) => threadTranscripts.tail(threadId, patch),
+    // Caw's answer in a thread is his turn there ending: the project's
+    // starters are asked again (project-starters.ts), and the person's
+    // phone hears it unless they looked at the thread since.
+    replied: (thread, reply) => {
+      projectStarters.threadAnswered(thread.id);
+      push.threadReply(thread, reply);
+    },
+    // The person's words in a thread are sends, kept as every send is.
+    sends: {
+      record: (payload, threadId, failed) => {
+        const { message } = payload;
+        const record = db.recordSend({
+          uuid: message.uuid,
+          instanceId: null,
+          threadId,
+          acceptedAt: new Date(),
+          body: externalizeImages(sentFrame(payload)),
+          mode: sendMode(payload),
+          ...(message.replaces ? { replaces: message.replaces } : {}),
+          ...(failed
+            ? { state: "failed" as const, reason: failed, refusal: null }
+            : { state: "pending" as const }),
+        });
+        if (message.replaces) {
+          replaceSend(message.replaces, record.uuid);
+        }
+        publishSend(record);
+        return record;
+      },
+      fail: (uuid, reason) => {
+        const row = db.sendRecord(uuid);
+        if (row?.state !== "pending") {
+          return;
+        }
+        const handed = handedSend(row);
+        if (handed) {
+          failSend(handed, reason);
+        } else {
+          changeSend(row, { state: "failed", reason, refusal: null });
+        }
+      },
+      read: (uuid) => {
+        const row = db.sendRecord(uuid);
+        if (row?.state === "pending") {
+          changeSend(row, { state: "read", readAt: new Date() });
+        }
+      },
+      claim: (uuid, threadId, at) => {
+        const row = db.sendRecord(uuid);
+        if (row && !row.threadId) {
+          changeSend(row, { threadId, readAt: at });
+        }
+      },
     },
     // Caw's own session, and what his turns start.
     spawn: async (machineId, payload, mode) => {
@@ -24872,8 +25129,24 @@ export const createServer = (
         },
       });
     },
-    wakeCaw: async (projectId, text) =>
-      (await caw.start(projectId, text)).thread.id,
+    // A new thread with the person's words, which wake Caw (caw.ts `sent`).
+    wakeCaw: (projectId, text) => {
+      const threadId = crypto.randomUUID();
+      const sent = caw.sent(threadId, {
+        instanceId: threadTargetOf(threadId),
+        projectId,
+        message: {
+          type: "user",
+          uuid: crypto.randomUUID(),
+          message: { role: "user", content: text },
+          parent_tool_use_id: null,
+          origin: { kind: "human" },
+        },
+      });
+      return sent.state === "failed"
+        ? Promise.reject(new Error(sent.reason ?? "Caw couldn't take them."))
+        : Promise.resolve(threadId);
+    },
     working: (instance) =>
       !ENDED_STATUSES.has(instance.status) &&
       pulses.get(instance.id)?.busy === true,
@@ -25119,7 +25392,7 @@ export const createServer = (
     tell: tellPlan,
     wakeCaw: async (projectId, text) => {
       const woke = await caw.wakeOnce(projectId, { by: "you", text });
-      return woke.woke ? undefined : woke.why.words;
+      return woke.woke ? undefined : woke.why;
     },
   });
   planChanges.resume();
@@ -26922,7 +27195,7 @@ export const createServer = (
     plan: LimitCompaction,
     row: { id: string; machineId: string }
   ): boolean => {
-    const sent = db.sendRecord(stepUuid(plan));
+    const sent = handedSend(db.sendRecord(stepUuid(plan)));
     if (!sent) {
       sendStep(row, plan);
       return false;
@@ -30424,6 +30697,12 @@ export const createServer = (
             Number(query.limit) > 0
               ? Math.floor(Number(query.limit))
               : undefined;
+          // A Caw thread is read as a session is: its page is the hub's own
+          // (thread-transcript.ts), never a machine's.
+          const thread = threadTarget(params.id);
+          if (thread) {
+            return threadPage(thread, limit, query.before);
+          }
           // A former id is its session's (the hub's fold of older continuations).
           const id = db.instanceIdOf(params.id);
           const page = await transcripts.page(id, limit, query.before);
@@ -30607,6 +30886,9 @@ export const createServer = (
           }
           const at = body.kind === "unarchive" ? null : new Date();
           const seen = db.markSeen(instanceIds, at);
+          if (body.kind === "look" && at) {
+            push.looked(instanceIds, at);
+          }
           if (body.kind === "look") {
             // Looked at: a session's finished turn or failure, its message
             // and its asks are read, so their notifications come down.

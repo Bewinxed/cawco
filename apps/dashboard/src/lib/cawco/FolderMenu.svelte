@@ -24,7 +24,7 @@
   import { forgetAtRail, forgetHost, forgetProject } from "./forget.svelte";
   import { HUES } from "./identity";
   import { rail } from "./rail.svelte";
-  import { newThreadTabId } from "./thread-tabs";
+  import { newThreadTab } from "./thread-tabs";
 
   interface Props {
     children: Snippet;
@@ -100,7 +100,7 @@
     </ContextMenu.Item>
     {#if project && canTalk}
       <ContextMenu.Item
-        onSelect={() => goto(`/session/${newThreadTabId(project.id)}`)}
+        onSelect={() => goto(`/session/${newThreadTab(project.id)}`)}
       >
         <IconChatAdd />
         <span>New thread</span>

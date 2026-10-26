@@ -3166,7 +3166,9 @@ async function standUp(
     instanceId: string,
     text: string,
     /** The session's machine: one {@link launchMachine} added, say. */
-    machineId = MACHINE
+    machineId = MACHINE,
+    /** A Caw thread not made yet (`thread:<id>`): the project it is made in. */
+    projectId?: string
   ): Promise<string> => {
     const uuid = crypto.randomUUID();
     await post({
@@ -3177,6 +3179,7 @@ async function standUp(
       sessionId: instanceId,
       payload: {
         instanceId,
+        ...(projectId ? { projectId } : {}),
         message: {
           type: "user",
           uuid,

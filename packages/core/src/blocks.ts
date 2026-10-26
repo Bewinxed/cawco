@@ -10,7 +10,7 @@
  * it stands where it asked to, not as a tab, until the person keeps it
  * (placed there) or removes it (the draft discarded).
  */
-import type { ThreadSaid } from "./threads";
+import type { ThreadSummary } from "./threads";
 
 /**
  * The pages that hold blocks: the three tabs every project has, as the
@@ -146,8 +146,9 @@ export interface ViewRemoved {
  * he still answers your words (WORDS.md: "Off is never 'can't be
  * messaged'"); the page says so.
  */
-export interface ViewAsked extends ThreadSaid {
+export interface ViewAsked {
   caw: "on" | "off";
+  thread: ThreadSummary;
 }
 
 /** A view's name as a person reads it: `spend-per-routine` is "Spend per routine". */

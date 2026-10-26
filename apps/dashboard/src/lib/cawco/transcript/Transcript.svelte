@@ -1265,9 +1265,14 @@
    * measured a viewport's worth it renders no buffer at all.
    */
   const ROW_ESTIMATE = 21;
-  /** The foot's height (the markup's `foot`): the composer's standing box cleared, the old fixed reserve its floor. */
+  /**
+   * The foot's height (the markup's `foot`): the composer's standing box
+   * cleared, and the run its pane's foot fade covers (`--foot-fade-run`,
+   * FootFade `footFadeRun`), so the last row ends above the fade; the old
+   * fixed reserve its floor.
+   */
   const FOOT_ROOM =
-    "max(calc(var(--space-8) * 3), var(--composer-clearance, 0px))";
+    "max(calc(var(--space-8) * 3), var(--composer-clearance, 0px), var(--foot-fade-run, 0px))";
   /** What every list item carries: the name its drawn rule finds it by (the style's `[data-item]`). */
   const ITEM_ATTRS = { "data-item": "" };
   /**

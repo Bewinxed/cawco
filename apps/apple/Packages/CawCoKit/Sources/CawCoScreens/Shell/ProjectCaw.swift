@@ -466,21 +466,14 @@ final class ProjectCawPanel: KitPopoverController {
         }
     }
 
-    /// "Message Caw": a new thread with your words; the field closes once the hub has it.
+    /// "Message Caw": a new thread with your words, its first send kept in
+    /// the outbox until the hub has it (`ThreadsStore.start`); the field closes.
     private func startThread() {
         let words = (field.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !words.isEmpty, hub.state == .connected else { return }
-        send.isEnabled = false
-        Task { [weak self, hub, lead] in
-            do {
-                try await hub.threads.say(projectId: lead.projectId, threadId: nil, body: words, id: UUID().uuidString.lowercased())
-                self?.field.text = ""
-                self?.talking = false
-            } catch {
-                lead.refused = error.localizedDescription
-            }
-            self?.send.isEnabled = true
-            self?.render()
-        }
+        hub.threads.start(projectId: lead.projectId, text: words)
+        field.text = ""
+        talking = false
+        render()
     }
 }

@@ -20,11 +20,13 @@ import {
   purgedSessions,
   routineRuns,
   routines,
+  sentMessages,
   sessionPlans,
   threadMessages,
   workItems,
   workspaces,
 } from "./schema";
+import { sendWords } from "./words";
 
 /** An artifact as the find engine reads it: its row, and whether the person changed any of its keys. */
 export type FindArtifactRow = typeof artifacts.$inferSelect & {
@@ -338,8 +340,10 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
         labels: labels.get(`${row.projectId}\0${row.path}`) ?? [],
       }));
   },
-  threadWords: () =>
-    db
+  // A thread's words: Caw's replies, and the person's sends written there
+  // (their words, whatever rode with them).
+  threadWords: () => [
+    ...(db
       .select({
         id: threadMessages.id,
         threadId: threadMessages.threadId,
@@ -348,14 +352,32 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
         at: threadMessages.createdAt,
       })
       .from(threadMessages)
-      .where(inArray(threadMessages.author, ["you", "caw"]))
+      .where(eq(threadMessages.author, "caw"))
       .all() as {
       at: Date;
       author: "you" | "caw";
       body: string;
       id: string;
       threadId: string;
-    }[],
+    }[]),
+    ...db
+      .select({
+        id: sentMessages.uuid,
+        threadId: sentMessages.threadId,
+        body: sentMessages.body,
+        at: sentMessages.acceptedAt,
+      })
+      .from(sentMessages)
+      .where(isNotNull(sentMessages.threadId))
+      .all()
+      .map((row) => ({
+        id: row.id,
+        threadId: row.threadId as string,
+        author: "you" as const,
+        body: sendWords(row.body),
+        at: row.at,
+      })),
+  ],
   workItems: () =>
     db
       .select({

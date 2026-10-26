@@ -1093,10 +1093,6 @@
   );
 }
 
-/* A RowFault whose reason is a note, nothing failed (a not-woken note). */
-@utility fault-ink-muted {
-  --fault-ink: var(--ink-muted);
-}
 /* The compaction line's dash, `--run` long with twice its gap. */
 @utility wave-dash {
   stroke-linecap: round;

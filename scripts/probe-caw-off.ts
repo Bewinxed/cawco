@@ -4,14 +4,14 @@
  * work_items.origin, WORDS.md Caw on / Caw off). On a scratch fleet (real
  * hub, agent and sessiond on loopback, Claude Code against the mock model).
  *
- * a. Caw off: starting a thread is answered (not 409), his session starts,
+ * a. Caw off: a thread's first send is kept (not failed), his session starts,
  *    he answers in the thread, and his task_create makes a task.
  * b. Caw off: a lead routine is skipped, in the off state's words.
  * c. Caw on: a lead routine wakes him; his turn lists as running.
  * d. Off with his own event turn in flight: without a choice it is refused
  *    (409); `stop` cuts it (a `project.stop` frame for it); `finish` lets it
  *    end. A turn your words started runs to its end with no choice asked.
- * e. With no machine for him, your words are refused with the problem's
+ * e. With no machine for him, your words' send fails with the problem's
  *    sentence.
  * Needing delegate workspaces (a nested sandbox: run on a host, outside any
  * CawCo workspace):
@@ -469,12 +469,20 @@ try {
       cron: "0 0 1 1 *",
       prompt,
     });
-  /** Your words in the first thread. */
+  /** Your words in the first thread: a send to it, as a dashboard sends (caw.ts `sent`). */
   let firstThread = "";
   const say = (body: string) =>
-    hub("POST", `/api/projects/${project.id}/threads/${firstThread}/messages`, {
-      body,
-    });
+    fleet.send(`thread:${firstThread}`, body, "hub", project.id);
+  /** A send's record, by its uuid. */
+  const record = (uuid: string) =>
+    fleet.query<{
+      state: string;
+      reason: string | null;
+      thread_id: string | null;
+    }>(
+      "SELECT state, reason, thread_id FROM sent_messages WHERE uuid = ?",
+      uuid
+    )[0];
   /** Caw's session has no turn in flight. */
   /**
    * Caw's session is between turns: the hub holds no turn for him
@@ -491,15 +499,20 @@ try {
 
   // ── a: Caw off, you start a thread ─────────────────────────────────────
   await section("a: Caw off answers your thread", async () => {
-    const started = await hub("POST", `/api/projects/${project.id}/threads`, {
-      body: "PROBE-TASK: file a task for the README.",
-    });
-    const thread = (started.body as { thread?: { id: string } }).thread?.id;
-    firstThread = thread ?? "";
+    firstThread = crypto.randomUUID();
+    const started = await say("PROBE-TASK: file a task for the README.");
+    const kept = await until(
+      "the thread's first send kept",
+      () => record(started),
+      (row) => row !== undefined,
+      60_000
+    );
     check(
       "a: starting a thread with Caw off is answered, not refused",
-      started.status !== 409 && Boolean(thread) && lead()?.caw === 0,
-      `HTTP ${started.status}, thread ${thread}, caw ${lead()?.caw}: ${started.raw.slice(0, 200)}`
+      kept?.thread_id === firstThread &&
+        kept.state !== "failed" &&
+        lead()?.caw === 0,
+      `send ${JSON.stringify(kept)}, caw ${lead()?.caw}`
     );
     check(
       "a: his session started",
@@ -653,10 +666,10 @@ try {
     );
     check(
       "d: off with your turn in flight asks nothing, and your turn runs to its end",
-      sent.status === 200 &&
+      record(sent)?.state === "read" &&
         off.status === 200 &&
         said.includes("PROBE-SLOW-YOU done"),
-      `say: HTTP ${sent.status}; PATCH off: HTTP ${off.status}; Caw said ${JSON.stringify(said)}`
+      `say: ${JSON.stringify(record(sent))}; PATCH off: HTTP ${off.status}; Caw said ${JSON.stringify(said)}`
     );
   });
 
@@ -994,14 +1007,21 @@ try {
         ),
       60_000
     );
-    const refused = await hub("POST", `/api/projects/${project.id}/threads`, {
-      body: "Anyone there?",
-    });
+    firstThread = crypto.randomUUID();
+    const asked = await say("Anyone there?");
+    const refused = await until(
+      "the send Caw can't take kept failed",
+      () => record(asked),
+      (row) => row !== undefined,
+      60_000
+    );
     check(
-      "e: with no machine for Caw, your words are refused with the problem's sentence",
-      refused.status === 409 &&
-        refused.raw.startsWith("No machine is online, so Caw can't start."),
-      `HTTP ${refused.status}: ${refused.raw}`
+      "e: with no machine for Caw, your words fail with the problem's sentence",
+      refused?.state === "failed" &&
+        (refused.reason ?? "").startsWith(
+          "No machine is online, so Caw can't start."
+        ),
+      `send ${JSON.stringify(refused)}`
     );
   });
   listener.close();

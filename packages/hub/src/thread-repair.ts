@@ -7,7 +7,8 @@
  * he dismissed Caw's question there, and Caw answered it in plain text: the
  * session has both, the thread neither. Here the person's sends to the
  * project's Caw after that question's card, that no thread has, are written
- * into the thread at the times they were accepted, each followed by what
+ * into the thread (each send made the thread's, read at the time it was
+ * accepted), each followed by what
  * Caw said in plain text in the turn that read it, at the times his session
  * stored it (a turn that answered with thread_reply is in a thread already).
  * Then a note from the hub says so. It runs once: the note is its mark. Caw's
@@ -16,7 +17,8 @@
  */
 import type { NeutralContentBlock, SessionMessage } from "@cawco/core";
 import type { Caw } from "./caw";
-import type { DbShape, SentMessageRow } from "./db";
+import type { DbShape, SessionSendRow } from "./db";
+import { isSessionSend } from "./db";
 import type { HistoryRead } from "./transcripts";
 
 export const REPAIRED_THREAD = "ad5f8277-a861-4110-9089-b8d423699beb";
@@ -48,7 +50,7 @@ const isPrompt = (entry: SessionMessage): boolean =>
   !blocksOf(entry).every((block) => block.type === "tool_result");
 
 /** The words a send carried. */
-const wordsOf = (send: SentMessageRow): string => {
+const wordsOf = (send: SessionSendRow): string => {
   const content = send.body?.message.content;
   return typeof content === "string"
     ? content
@@ -61,7 +63,7 @@ const wordsOf = (send: SentMessageRow): string => {
  * What Caw said in plain text in the turn that read `send`, each stored
  * message at its own time; none when that turn answered with thread_reply.
  */
-const turnWords = (entries: SessionMessage[], send: SentMessageRow): Line[] => {
+const turnWords = (entries: SessionMessage[], send: SessionSendRow): Line[] => {
   const start = entries.findIndex(
     (entry) =>
       entry.uuid === send.uuid ||
@@ -121,7 +123,7 @@ export const createThreadRepair = ({
    * The person's sends to the project's Caw after the card that no thread
    * has, oldest first; none once repaired, or on a hub without the thread.
    */
-  const missedSends = (): SentMessageRow[] => {
+  const missedSends = (): SessionSendRow[] => {
     const thread = db.thread(REPAIRED_THREAD);
     if (!thread || done()) {
       return [];
@@ -135,9 +137,11 @@ export const createThreadRepair = ({
     }
     return db
       .leadSends(thread.projectId, card.createdAt)
+      .filter(isSessionSend)
       .filter(
         (send) =>
           send.body?.origin?.kind === "human" &&
+          !send.threadId &&
           !messages.some((one) => one.id === send.uuid) &&
           wordsOf(send).trim()
       );
@@ -145,7 +149,7 @@ export const createThreadRepair = ({
 
   /** Each send and what Caw said in the turn that read it; undefined while a transcript cannot be read. */
   const linesOf = async (
-    missed: SentMessageRow[]
+    missed: SessionSendRow[]
   ): Promise<Line[] | undefined> => {
     const read = new Map<string, SessionMessage[]>();
     const lines: Line[] = [];
@@ -164,7 +168,7 @@ export const createThreadRepair = ({
         read.set(send.instanceId, entries);
       }
       lines.push(
-        { author: "you", body: wordsOf(send).trim(), at: send.acceptedAt },
+        { author: "you", send: send.uuid, at: send.acceptedAt },
         ...turnWords(entries, send)
       );
     }

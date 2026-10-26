@@ -41,8 +41,6 @@ final class PaneHost {
     var onOpenProject: (String) -> Void = { _ in }
     /// A thread's "Check machines": the machines card, from the button.
     var onCheckMachines: (UIView) -> Void = { _ in }
-    /// A new thread's tab is the thread's now: the workspace re-addresses it.
-    var onRetarget: (_ from: String, _ to: String) -> Void = { _, _ in }
 
     init(hub: HubConnection) {
         self.hub = hub
@@ -69,7 +67,6 @@ final class PaneHost {
             thread.onOpenTask = { [weak self] projectId, taskId in self?.onOpenTask(projectId, taskId) }
             thread.onOpenProject = { [weak self] projectId in self?.onOpenProject(projectId) }
             thread.onCheckMachines = { [weak self] source in self?.onCheckMachines(source) }
-            thread.onRetarget = { [weak self] from, to in self?.retarget(from, to: to) }
             if let values = parked.removeValue(forKey: id) { thread.restoreValues(values) }
             made = thread
         } else {
@@ -82,13 +79,6 @@ final class PaneHost {
         }
         built[id] = made
         return made
-    }
-
-    /// A new thread's first message made it: the screen that wrote it is the
-    /// thread's tab now, under the thread's id.
-    private func retarget(_ from: String, to: String) {
-        if let screen = built.removeValue(forKey: from) { built[to] = screen }
-        onRetarget(from, to)
     }
 
     /// Ends what a closed tab held.
@@ -189,7 +179,7 @@ final class PaneHost {
     /// on it (an ask no row stands behind: a memory proposal), else its id.
     func label(_ id: String) -> String {
         // A thread not started yet (FolderMenu.svelte "New thread").
-        if ThreadTabs.newProject(of: id) != nil { return "New thread" }
+        if ThreadTabs.mintedProject(of: id) != nil, hub.threads.thread(id) == nil { return "New thread" }
         // An artifact's own tab: its name once the hub has said it.
         if ArtifactTabs.artifactId(of: id) != nil { return names[id] ?? "Artifact" }
         let fleet = hub.fleet
