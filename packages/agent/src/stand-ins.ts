@@ -53,8 +53,8 @@ import { mountedAnywhere } from "@cawco/core/mount-table";
 import { projectClaudeDir, workspaceStateDir } from "@cawco/core/paths";
 import { parseRecord, writeStateFile } from "@cawco/core/state-file";
 import { isPlace } from "@cawco/core/workspace-policy";
-import { excludeStandIns, gitIn, infoExcludeOf } from "./checkout-exclude";
 import { z } from "zod";
+import { excludeStandIns, gitIn, infoExcludeOf } from "./checkout-exclude";
 
 /**
  * A mount point a sandbox left on the host, as the host tests it
