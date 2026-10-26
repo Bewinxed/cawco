@@ -101,6 +101,7 @@
     "./upstream-guard": "./src/upstream-guard.ts",
     "./upstream-post": "./src/upstream-post.ts",
     "./claude-dirs": "./src/claude-dirs.ts",
+    "./clone-denies": "./src/clone-denies.ts",
     "./boundary-nesting": "./src/boundary-nesting.ts",
     "./git-dir": "./src/git-dir.ts",
     "./srt-refusal": "./src/srt-refusal.ts",

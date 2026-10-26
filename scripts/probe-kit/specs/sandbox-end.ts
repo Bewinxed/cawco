@@ -207,6 +207,7 @@ const importLeg = (kit: Kit): void => {
 const HOST_REACHES = new Set([
   "packages/agent/src/boundary-host.ts",
   "packages/core/src/claude-dirs.ts",
+  "packages/core/src/clone-denies.ts",
   "packages/core/src/mount-table.ts",
   "packages/core/src/boundary-nesting.ts",
   "packages/core/src/session-env.ts",

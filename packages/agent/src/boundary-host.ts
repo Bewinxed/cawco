@@ -23,7 +23,7 @@
  *
  * Before each sandbox it makes every dir srt is to bind back from under the
  * runtime dir (PLACE, {@link makePlaces}), and every clone-side deny path the clone lacks
- * (DENIES, `cloneDenies` in workspace-policy.ts) a real, empty one
+ * (DENIES, `cloneDenies` in clone-denies.ts) a real, empty one
  * ({@link standIn}): srt binds an existing path onto itself and leaves
  * nothing on the host, where an absent one gets a read-only empty file a
  * host harness then reads as its config.
@@ -37,7 +37,8 @@
  * A plain Bun script, never a module of cawco, importing nothing of it but
  * these, which reach no other file of the repository and never core's index
  * (the probe kit's sandbox-end e5 walks them): core's dir names
- * (`claude-dirs.ts`), mount table (`mount-table.ts`), nested-boundary words
+ * (`claude-dirs.ts`), the one list of what a clone protects
+ * (`clone-denies.ts`), mount table (`mount-table.ts`), nested-boundary words
  * (`boundary-nesting.ts`, with the host environment it reads,
  * `session-env.ts`, and CawCo's variable names, `cawco-env.ts`), socat
  * backlog (`socat.ts`), hub preview origins (`hub-previews.ts`), git dir
@@ -72,7 +73,7 @@ import {
   nestedBoundaryReason,
   nestedBwrapLabel,
 } from "@cawco/core/boundary-nesting";
-import { projectClaudeRelative, TREE_STORE_DIR } from "@cawco/core/claude-dirs";
+import { type CloneDeny, cloneDenies } from "@cawco/core/clone-denies";
 import { isGitDirSync } from "@cawco/core/git-dir";
 import { HUB_PREVIEWS_ENV } from "@cawco/core/hub-previews";
 import { mountedAnywhere, mountPointsOf } from "@cawco/core/mount-table";
@@ -232,15 +233,8 @@ const settings = JSON.parse(
 ) as SandboxRuntimeConfig;
 const runner = readFileSync(runnerFile, "utf8");
 
-/** A clone-side deny path and what stands in for it, as `cloneDenies` (workspace-policy.ts) lists them. */
-interface Deny {
-  readonly empty:
-    | { readonly kind: "dir"; readonly readOnly?: true }
-    | { readonly kind: "file"; readonly text: string }
-    | { readonly kind: "none" };
-  readonly path: string;
-}
-const denies = JSON.parse(readFileSync(deniesFile, "utf8")) as Deny[];
+/** The clone-side deny paths the agent named (workspace-policy.ts `workspaceDenies`), each with what stands in for it. */
+const denies = JSON.parse(readFileSync(deniesFile, "utf8")) as CloneDeny[];
 /** `<state>/sandbox`: `OUTER INNER IDLE...`, the running sandbox's pids, which the executor and the agent read. */
 const placeFile = join(process.cwd(), "sandbox");
 /** `<state>/guarded`: the running sandbox's protected binds, which the executor checks before every command. */
@@ -394,7 +388,7 @@ const above = (path: string): string[] => {
  */
 const makeStandIn = (
   path: string,
-  empty: Exclude<Deny["empty"], { kind: "none" }>,
+  empty: Exclude<CloneDeny["empty"], { kind: "none" }>,
   left: boolean
 ): void => {
   for (const dir of above(path)) {
@@ -529,65 +523,12 @@ const standIn = (): void => {
 };
 
 /**
- * Every clone-side deny path the guard covers, relative to the clone: what
- * host git runs or reads (its config, hooks, submodules' git dirs) and the
- * harness project config a host harness loads at the workspace's next
- * session (Claude Code's project settings, hooks, commands, agents,
- * workflows, routines, scheduled tasks, launch config and output styles,
- * OpenCode's config, pi's `.pi`, `.agents/skills`, `.mcp.json`), the placed
- * skills and memory documents, and srt's own mandatory names at the
- * clone's root, each given a stand-in too. The guard covers these whatever DENIES
- * names, and every path DENIES names besides (`cloneDenies` in
- * workspace-policy.ts, the policy's list, which names the same).
- */
-const PROTECTED = [
-  ".git/config",
-  ".git/hooks",
-  ".git/modules",
-  ...[
-    "settings.json",
-    "settings.local.json",
-    "hooks",
-    "commands",
-    "agents",
-    "workflows",
-    "routines",
-    "output-styles",
-    "launch.json",
-    "scheduled_tasks.json",
-    "loop.md",
-    // The skills the fleet places, and the store their links land in.
-    "skills",
-    TREE_STORE_DIR,
-    // The project's memory documents as the fleet places them.
-    "rules/cawco",
-  ].map((name) => projectClaudeRelative(name)),
-  "opencode.json",
-  "opencode.jsonc",
-  ".opencode",
-  ".mcp.json",
-  ".pi",
-  ".agents/skills",
-  // srt's own mandatory names at the clone's root (`DANGEROUS_FILES`,
-  // `getDangerousDirectories()` in sandbox-utils.js at 0.0.81).
-  ".gitconfig",
-  ".gitmodules",
-  ".bashrc",
-  ".bash_profile",
-  ".zshrc",
-  ".zprofile",
-  ".profile",
-  ".ripgreprc",
-  ".vscode",
-  ".idea",
-];
-
-/**
  * What srt is to protect in the clone with read-only binds, each with the
- * inode it has as the sandbox is wrapped: every {@link PROTECTED} path and
- * DENIES path the clone has as a file or directory of its own, and the
- * clone's directories above them,
- * which srt binds too so that what holds a deny path cannot be renamed. The
+ * inode it has as the sandbox is wrapped: every path of the one list of
+ * what CawCo protects in a clone (core clone-denies.ts `cloneDenies`),
+ * whatever DENIES names, and every DENIES path besides (a place's own
+ * protected config), that the clone has as a file or directory of its own,
+ * and the clone's directories above them, which srt binds too so that what holds a deny path cannot be renamed. The
  * kernel drops such a bind in every other mount namespace when the host
  * renames or unlinks what it covers (a host-side `git config` locks, then
  * renames), and nothing can put it back into a running sandbox
@@ -596,7 +537,7 @@ const PROTECTED = [
 const toProtect = (): Map<string, string> => {
   const found = new Map<string, string>();
   const paths = new Set([
-    ...PROTECTED.map((name) => join(clone, name)),
+    ...cloneDenies(clone).map(({ path }) => path),
     ...denies.map(({ path }) => path),
   ]);
   for (const path of paths) {

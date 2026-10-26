@@ -1,6 +1,6 @@
 /**
  * The paths a workspace's boundary keeps from every command (core
- * workspace-policy.ts `cloneDenies`: `.mcp.json`, OpenCode's config, Claude
+ * clone-denies.ts `cloneDenies`: `.mcp.json`, OpenCode's config, Claude
  * Code's project settings, hooks, commands, agents and placed skills), as
  * git inside it meets them, and the `git` every command there runs first on
  * its PATH, which judges a move of the worktree on them.
@@ -17,7 +17,8 @@
 import { realpath } from "node:fs/promises";
 import { relative } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
-import { HARNESS_CONFIG, workspaceDenies } from "@cawco/core/workspace-policy";
+import { HARNESS_CONFIG } from "@cawco/core/clone-denies";
+import { workspaceDenies } from "@cawco/core/workspace-policy";
 
 /**
  * Which deny paths: those the boundary keeps from git here (`boundary`: on

@@ -16,6 +16,9 @@ import { fileURLToPath } from "node:url";
 import {
   CLAUDE_DIR_NAME,
   CLAUDE_JSON_NAME,
+  PLACED_MEMORY,
+  PLACED_SYNCED,
+  PROJECT_SKILLS,
   TREE_STORE_DIR,
 } from "./claude-dirs";
 import { hostEnvironment } from "./session-env";
@@ -104,7 +107,7 @@ export const projectClaudeDir = (cwd: string, ...parts: string[]): string =>
  * are discovered recursively", code.claude.com/docs/en/memory).
  */
 export const placedMemoryDir = (cwd: string): string =>
-  projectClaudeDir(cwd, "rules", "cawco");
+  join(cwd, PLACED_MEMORY);
 
 /** The store of the trees the entries of `dir` link to (claude-dirs.ts {@link TREE_STORE_DIR}). */
 export const treeStoreOf = (dir: string): string =>
@@ -269,21 +272,19 @@ export const fleetSyncedPaths = (): string[] => [
 
 /** Where a project's fleet skills are placed in a folder: its project skills, which Claude Code and OpenCode both read. */
 export const placedSkillsDir = (cwd: string): string =>
-  projectClaudeDir(cwd, "skills");
+  join(cwd, PROJECT_SKILLS);
 
 /**
  * What the fleet sync places in a folder that a harness loads, the folder's
  * part of {@link fleetSyncedPaths}: its skills dir ({@link placedSkillsDir})
  * and the tree store beside it that its links land in (`.claude/.cawco-trees`,
  * agent fleet.ts `placeSkill`). In a workspace's clone each is held read only
- * (core workspace-policy.ts `cloneDenies`): a delegate reads a placed skill
+ * (core clone-denies.ts `cloneDenies`): a delegate reads a placed skill
  * and cannot change it, nor put another in its place for the clone's later
  * sessions to load.
  */
-export const placedSyncedPaths = (cwd: string): string[] => {
-  const dir = placedSkillsDir(cwd);
-  return [dir, dirname(treeStoreOf(dir))];
-};
+export const placedSyncedPaths = (cwd: string): string[] =>
+  PLACED_SYNCED.map((name) => join(cwd, name));
 
 /** The user layer's files ({@link USER_LAYER_DIRS} has why each is the user's). */
 export const USER_LAYER_FILES = [

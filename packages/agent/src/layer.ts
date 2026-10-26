@@ -47,7 +47,7 @@
  *
  * The change set ({@link changesOf}) is the upper on Linux and the clone's
  * differences from its base on the Mac, the root `node_modules` and CawCo's
- * own deny paths (core workspace-policy.ts `cloneDenies`, their stand-ins)
+ * own deny paths (core clone-denies.ts `cloneDenies`, their stand-ins)
  * left out. A path the delegate changed that F changed too since the start
  * is a conflict ({@link conflictsOf}): on Linux by F's ctime past the start,
  * on the Mac by F against the base; either way both versions are shown, the
@@ -78,12 +78,12 @@ import type {
   WorkspaceConflict,
   WorkspaceKind,
 } from "@cawco/core";
+import { cloneDenies } from "@cawco/core/clone-denies";
 import { claudeHome, workspacesDir } from "@cawco/core/paths";
 import { commandLine } from "@cawco/core/process-identity";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { listedPid, signal as signalPid } from "@cawco/core/signal";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
-import { cloneDenies } from "@cawco/core/workspace-policy";
 import { removeTree } from "./remove-tree";
 import { SYSTEM_PATH } from "./workspace-needs";
 
@@ -335,7 +335,7 @@ const standInsOf = (mount: LayerMount): string =>
 
 /**
  * What stands in for each of CawCo's and srt's own paths at F that F lacks
- * (core workspace-policy.ts `cloneDenies`, the one list a clone's stand-ins
+ * (core clone-denies.ts `cloneDenies`, the one list a clone's stand-ins
  * and the change set's exclusions read too), made fresh in each overlay's
  * own stand-ins dir before the view is mounted: that dir is the overlay's
  * lowest layer, under F, so the view shows each where F has none, F's own

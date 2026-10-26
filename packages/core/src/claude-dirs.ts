@@ -51,3 +51,20 @@ export const CLAUDE_DIR_NAME = CLAUDE_DIR;
  * boundary's host names it too.
  */
 export const TREE_STORE_DIR = ".cawco-trees";
+
+/** A project's skills dir, relative to the project: where Claude Code and OpenCode read its skills, and where the fleet places a project's skills (paths.ts `placedSkillsDir`). */
+export const PROJECT_SKILLS = projectClaudeRelative("skills");
+
+/**
+ * What the fleet sync places in a project that a harness loads, relative to
+ * the project: its skills dir ({@link PROJECT_SKILLS}) and the tree store
+ * beside it that its links land in ({@link TREE_STORE_DIR}; paths.ts
+ * `placedSyncedPaths`).
+ */
+export const PLACED_SYNCED: readonly string[] = [
+  PROJECT_SKILLS,
+  projectClaudeRelative(TREE_STORE_DIR),
+];
+
+/** Where the fleet places a project's memory documents, relative to the project (paths.ts `placedMemoryDir`). */
+export const PLACED_MEMORY = projectClaudeRelative("rules", "cawco");

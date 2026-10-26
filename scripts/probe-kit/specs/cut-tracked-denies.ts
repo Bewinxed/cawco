@@ -1,6 +1,6 @@
 /**
  * Git moves a workspace's worktree over the clone-side deny paths (core
- * workspace-policy.ts `cloneDenies`: `.mcp.json`, OpenCode's config, Claude
+ * clone-denies.ts `cloneDenies`: `.mcp.json`, OpenCode's config, Claude
  * Code's project settings) without dropping one, a session in the boundary
  * still cannot rewrite them, and no workspace's commit carries a change to
  * them. On a scratch fleet (real hub, agent and sessiond; Claude Code against
@@ -55,7 +55,7 @@
  *   "unable to unlink old '.mcp.json'" and the checkout moved the rest.
  *
  * Harness config is judged at any depth and in any letter case (core
- * workspace-policy.ts `HARNESS_CONFIG`; agent worktree-guard.ts
+ * clone-denies.ts `HARNESS_CONFIG`; agent worktree-guard.ts
  * `denyPathspecs(…, "config")` with case-insensitive globs at any depth;
  * boundary-policy.ts `anyCase`):
  *

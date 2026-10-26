@@ -59,6 +59,7 @@ import {
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { LOCKFILES, type WorkspaceRef } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
+import { cloneDenies } from "@cawco/core/clone-denies";
 import { workspaceScratchDir, workspaceStateDir } from "@cawco/core/paths";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -68,7 +69,7 @@ import {
   type StageCloneFrame,
 } from "@cawco/core/stage";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
-import { cloneDenies, stageCloneId } from "@cawco/core/workspace-policy";
+import { stageCloneId } from "@cawco/core/workspace-policy";
 import { ensureBoundary, stopWorkspaceBoundary } from "./boundary";
 import { expandHome } from "./fs";
 import { runHubCommand } from "./hub-command";

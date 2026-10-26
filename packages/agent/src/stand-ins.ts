@@ -44,14 +44,11 @@ import {
 } from "node:fs/promises";
 import { join, relative } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
+import { type CloneDeny, cloneDenies } from "@cawco/core/clone-denies";
 import { isGitDir } from "@cawco/core/git-dir";
 import { mountedAnywhere } from "@cawco/core/mount-table";
 import { projectClaudeDir } from "@cawco/core/paths";
-import {
-  type CloneDeny,
-  cloneDenies,
-  isPlace,
-} from "@cawco/core/workspace-policy";
+import { isPlace } from "@cawco/core/workspace-policy";
 import { excludedStandIns, excludeStandIns, gitIn } from "./checkout-exclude";
 
 /**

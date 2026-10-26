@@ -751,7 +751,7 @@ const namesIn = (out: string): string[] =>
 /**
  * A {@link CommandRun.moves} command in `workspace`: the hub's rebase onto
  * a commit, a checkout of one. The boundary keeps every clone-side deny path
- * from its commands (workspace-policy.ts `cloneDenies`: `.mcp.json`,
+ * from its commands (clone-denies.ts `cloneDenies`: `.mcp.json`,
  * OpenCode's config, Claude Code's project settings), so a move that writes
  * one there fails, or, for a checkout without `--force`, prints "unable to
  * create file" and exits 0 with the file gone. A move whose commit holds

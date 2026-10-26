@@ -11,7 +11,7 @@
  * prefix (agent boundary.ts `claudeBoundaryOptions`, HOOKED_TOOLS), but the
  * clone-side deny list only names the clone's ROOT config
  * (`<clone>/.claude/{settings.json,hooks,commands,agents,skills}`, core
- * workspace-policy.ts `cloneDenies`); a NESTED `sub/.claude/skills/<x>/` is
+ * clone-denies.ts `cloneDenies`); a NESTED `sub/.claude/skills/<x>/` is
  * not on it, and on Linux srt's denyWrite takes literal paths only, so the
  * delegate can write the skill there. Whether the skill's own shell then runs
  * inside the boundary (contained) or on the host (escaped) is what this spec

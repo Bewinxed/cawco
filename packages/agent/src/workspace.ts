@@ -1432,7 +1432,7 @@ export const workspaceBundle = async (
  * file gone, by git on this host with the boundary closed
  * ({@link whileBoundaryClosed}, {@link closedCloneGit}'s checks first), as a
  * first cut checks out before its boundary exists: the policy denies the
- * workspace every clone-side deny path (workspace-policy.ts `cloneDenies`),
+ * workspace every clone-side deny path (clone-denies.ts `cloneDenies`),
  * so a commit that tracks one the clone lacks, or holds another text of, is
  * refused inside it ("unable to create file .mcp.json: Operation not
  * permitted", Seatbelt's `(deny file-write* (subpath …))` on macOS; srt's

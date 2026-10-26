@@ -2216,7 +2216,7 @@ const syncMemoryDocs = async (
 /**
  * The folders a placed document's removal emptied, from its own up to, not
  * including, `.claude/rules/cawco/`: that dir is a deny path of a delegate's
- * clone (core workspace-policy.ts `cloneDenies`), bound read-only into a
+ * clone (core clone-denies.ts `cloneDenies`), bound read-only into a
  * Linux sandbox, and removed on the host it would leave the sandbox free to
  * make it again with documents of its own.
  */
