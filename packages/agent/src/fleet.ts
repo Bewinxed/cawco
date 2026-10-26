@@ -1890,8 +1890,7 @@ const fileHashAt = async (path: string): Promise<string | null> => {
   return (await file.exists()) ? hashText(await file.text()) : null;
 };
 
-type MemoryPlan =
-  "write" | "skip" | "drift" | "remove" | "unmanage" | "none";
+type MemoryPlan = "write" | "skip" | "drift" | "remove" | "unmanage" | "none";
 
 /**
  * What to do about the user CLAUDE.md, from hashes alone. Drift is a machine
@@ -3228,7 +3227,6 @@ const hookState = async (
  * it. The sidecar is the question — a server or a plugin nobody here manages is
  * not this report's business.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: checks every category the sidecar manages against what is really on disk, one report row per item
 export const fleetStatus = async (): Promise<FleetSyncReport> => {
   const managed = await readSidecar();
   const skills: Record<string, FleetItemState> = {};
