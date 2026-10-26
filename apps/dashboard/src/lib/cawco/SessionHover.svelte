@@ -195,6 +195,7 @@
     aria-hidden="true"
     {gliding}
     key={openId}
+    onclose={close}
     onpointerenter={hold}
     onpointerleave={release}
     side="right"

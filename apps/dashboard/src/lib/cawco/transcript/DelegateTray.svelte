@@ -1803,6 +1803,7 @@
         {gliding}
         id={panelId}
         key={openKey}
+        onclose={close}
         onmousedown={(event) => event.preventDefault()}
         onpointerenter={() => clearTimeout(dwell)}
         role="presentation"

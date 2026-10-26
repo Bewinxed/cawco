@@ -18,6 +18,7 @@
   import { holdStyle } from "#lib/components/ui/drawer/hold-style.js";
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import { cawco } from "../client.svelte";
+  import { closePeeks } from "../HoverPanel.svelte";
   import { lightbox } from "../lightbox/lightbox-state.svelte";
   import { land, waiting } from "../motion/share.svelte";
   import { visible as visibleArea } from "../visible-viewport.svelte";
@@ -244,6 +245,29 @@
   });
   let host = $state<HTMLDivElement>();
   let drawer = $state<HTMLElement | null>(null);
+  /**
+   * No hover panel opened from the page stands over the open sheet
+   * (HoverPanel): the sheet rising, and the focus going into it (into its
+   * page's frame, which the window's `blur` hears), put every one away.
+   */
+  $effect(() => {
+    const sheet = drawer;
+    if (!(open && sheet)) {
+      return;
+    }
+    untrack(closePeeks);
+    const focused = () => {
+      if (sheet.contains(document.activeElement)) {
+        closePeeks();
+      }
+    };
+    sheet.addEventListener("focusin", closePeeks);
+    window.addEventListener("blur", focused);
+    return () => {
+      sheet.removeEventListener("focusin", closePeeks);
+      window.removeEventListener("blur", focused);
+    };
+  });
   let handleStartY = 0;
   let handleDragged = false;
   async function cycleSnap() {

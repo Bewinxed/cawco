@@ -83,6 +83,7 @@
     aria-label={title}
     id={panelId}
     key={panel.open ? id : null}
+    onclose={() => panel.close(false)}
     role="dialog"
     side="right"
     style="--x: {panel.place.x}px; --y: {panel.place.y}px; --origin: {panel

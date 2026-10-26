@@ -1,3 +1,19 @@
+<script lang="ts" module>
+  /** Every shown panel's close (closePeeks). */
+  const shown = new Set<() => void>();
+
+  /**
+   * Puts every shown hover panel away: a phone's preview sheet rising or
+   * taking the focus (SideSheet), which no panel opened from the page
+   * stands over.
+   */
+  export function closePeeks(): void {
+    for (const close of [...shown]) {
+      close();
+    }
+  }
+</script>
+
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
   /**
@@ -18,12 +34,20 @@
    * `right` of a list at `--x`/`--y` in the viewport. Either way a 4px
    * bridge on the side facing the trigger keeps the pointer over the panel
    * as it crosses the gap.
+   *
+   * A panel never outlives the place it was opened from. A conversation
+   * left is kept mounted (SessionSurface), its panels with it, so while
+   * one is shown it asks its owner to close it (`onclose`) when a link in
+   * it is followed, when the page navigates (a session's tab is a shallow
+   * one), and when a phone's preview sheet rises or takes the focus
+   * (closePeeks).
    */
   import type { Snippet } from "svelte";
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import type { HTMLAttributes } from "svelte/elements";
   import type { TransitionConfig } from "svelte/transition";
+  import { onNavigate } from "$app/navigation";
   import {
     cawco,
     readTranscript,
@@ -39,11 +63,14 @@
     watch = null,
     gliding = false,
     side,
+    onclose,
     children,
     ...rest
   }: Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
     /** What the panel shows; null closes it. A new key cross-fades. */
     key: string | null;
+    /** Its owner's close: sets `key` to null. */
+    onclose: () => void;
     /** The session whose live tail the content draws. */
     watch?: string | null;
     /** Moving from one trigger to the next: the panel travels. */
@@ -123,6 +150,31 @@
     }, dur("--dur-wait-grace"));
     return () => clearTimeout(release);
   });
+
+  const isShown = $derived(key !== null);
+  $effect(() => {
+    if (!isShown) {
+      return;
+    }
+    const close = () => onclose();
+    shown.add(close);
+    return () => shown.delete(close);
+  });
+  onNavigate(() => {
+    if (key !== null) {
+      onclose();
+    }
+  });
+  /** A link in it followed: the panel stays where it was opened from. */
+  const followed: Attachment<HTMLElement> = (node) => {
+    const click = (event: MouseEvent) => {
+      if (event.target instanceof Element && event.target.closest("a[href]")) {
+        onclose();
+      }
+    };
+    node.addEventListener("click", click);
+    return () => node.removeEventListener("click", click);
+  };
 
   const releases = new Map<string, ReturnType<typeof setTimeout>>();
   $effect(() => {
@@ -226,6 +278,7 @@
     }}
     in:panelIn
     out:panelOut
+    {@attach followed}
     {@attach entered ? morph({ width: true }) : undefined}
   >
     <!-- The content's own width, capped at 440px or the room (less the
