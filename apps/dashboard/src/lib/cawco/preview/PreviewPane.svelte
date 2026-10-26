@@ -182,6 +182,7 @@
   import SheetInspector from "./SheetInspector.svelte";
   import { isSetupPage } from "./setup-page";
   import { SheetInspector as Inspector } from "./sheet-inspector.svelte";
+  import ThreadSheet from "./ThreadSheet.svelte";
   import {
     type ComposeTarget,
     type PreviewPinAt,
@@ -4538,58 +4539,62 @@
     {#if cardPin && kit && replyDraft}
       {@const Card = kit.PinCard}
       {#key cardPin.id}
-        <PinFloat
-          exit={cardExit}
-          box={pinAt?.box ?? null}
-          face={markFace(markState(cardPin))}
-          label={`Comment ${cardPin.number}`}
-          mark={pinAt?.mark ?? null}
-          pin={cardPin.number}
-          room={{ w: roomW, h: roomH }}
-          sheet={floatSheet}
-          slot="pin-card"
-          bind:float={cardFloat}
-        >
+        {#snippet thread(pin: Pin)}
           <Card
             agentName={owner ? ownerName : "The session"}
-            changes={(view?.activity[cardPin.id]?.length ?? 0) > 0
+            changes={(view?.activity[pin.id]?.length ?? 0) > 0
               ? threadChanges
               : undefined}
             marked={!!pinAt?.mark}
             session={owner ? instanceId : null}
             draft={replyDraft}
-            link={pinLink(cardPin.number)}
-            live={live.has(cardPin.id)}
-            name={cardPin.movedAt ? commentWords.elementGone : pinName(cardPin)}
+            link={pinLink(pin.number)}
+            live={live.has(pin.id)}
+            name={pin.movedAt ? commentWords.elementGone : pinName(pin)}
             onclose={() => closeCard()}
             ondelete={deleteOpenPin}
-            ondraft={() => {
-              if (cardPin) {
-                drafts?.changed(cardPin.id);
-              }
-            }}
-            onfind={() => {
-              if (cardPin) {
-                post({ type: "cawco:focus-pin", id: cardPin.id, scroll: true });
-              }
-            }}
+            ondraft={() => drafts?.changed(pin.id)}
+            onfind={() =>
+              post({ type: "cawco:focus-pin", id: pin.id, scroll: true })}
             onplace={placeElsewhere}
             onreply={(text) => reply(text)}
             onresolve={(resolved) => resolvePin(resolved)}
-            onretry={() => {
-              if (cardPin) {
-                retryPin(cardPin.id);
-              }
-            }}
-            parent={cardParent?.id === cardPin.id ? cardParent.name : null}
-            pin={cardPin}
-            placing={placing === cardPin.id}
+            onretry={() => retryPin(pin.id)}
+            parent={cardParent?.id === pin.id ? cardParent.name : null}
+            {pin}
+            placing={placing === pin.id}
             problem={cardError}
             sending={replying}
-            retrying={pinsRetrying.has(cardPin.id)}
-            whyNotSent={notSentWhy(cardPin)}
+            retrying={pinsRetrying.has(pin.id)}
+            whyNotSent={notSentWhy(pin)}
           />
-        </PinFloat>
+        {/snippet}
+        {#if floatSheet}
+          <!-- On a phone and under a finger, the thread is the well's
+               bottom sheet, dragged between its stops (ThreadSheet). -->
+          <ThreadSheet
+            label={`Comment ${cardPin.number}`}
+            onclose={() => closeCard()}
+            open
+            bind:surface={cardFloat}
+          >
+            {@render thread(cardPin)}
+          </ThreadSheet>
+        {:else}
+          <PinFloat
+            exit={cardExit}
+            box={pinAt?.box ?? null}
+            face={markFace(markState(cardPin))}
+            label={`Comment ${cardPin.number}`}
+            mark={pinAt?.mark ?? null}
+            pin={cardPin.number}
+            room={{ w: roomW, h: roomH }}
+            slot="pin-card"
+            bind:float={cardFloat}
+          >
+            {@render thread(cardPin)}
+          </PinFloat>
+        {/if}
       {/key}
     {/if}
     {#if peekPin && peekAt}

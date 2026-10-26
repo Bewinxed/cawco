@@ -26,16 +26,7 @@
   import { refusals } from "./refusals.svelte";
   import { sessionHere } from "./session-here";
 
-  let {
-    id,
-    label = "",
-    peek = true,
-  }: {
-    id: string;
-    label?: string;
-    /** Whether resting a mouse on it peeks its thread: not where the thread stands whole beside it (a comment_reply's row, ToolGroup). */
-    peek?: boolean;
-  } = $props();
+  let { id, label = "" }: { id: string; label?: string } = $props();
   const here = sessionHere();
 
   const named = $derived(pinReference(id));
@@ -66,7 +57,7 @@
   const fine = new MediaQuery("(hover: hover) and (pointer: fine)");
   function rest() {
     clearTimeout(peekTimer);
-    if (!(peek && fine.current && pin && chip)) {
+    if (!(fine.current && pin && chip)) {
       return;
     }
     const at = chip;

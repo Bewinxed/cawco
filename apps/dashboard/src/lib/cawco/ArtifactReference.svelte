@@ -7,16 +7,8 @@
    * conversation it stands in, else of its own session's
    * (reference-open.svelte.ts).
    */
-  import type { ArtifactKind } from "@cawco/core";
-  import type { Component } from "svelte";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
-  import {
-    IconArtifactCanvas,
-    IconArtifactPage,
-    IconArtifactSheet,
-    IconGlobe,
-    IconWindow,
-  } from "#lib/icons.js";
+  import { ARTIFACT_GLYPH } from "./artifact-glyph";
   import { artifactNamed } from "./artifact-names.svelte";
   import RowFault from "./RowFault.svelte";
   import { openReference } from "./reference-open.svelte";
@@ -26,17 +18,8 @@
   let { id, label = "" }: { id: string; label?: string } = $props();
   const here = sessionHere();
 
-  /** Each kind's glyph, as Files and Go to draw it. */
-  const GLYPH: Record<ArtifactKind, Component> = {
-    page: IconArtifactPage,
-    canvas: IconArtifactCanvas,
-    preview: IconWindow,
-    component: IconArtifactSheet,
-    browser: IconGlobe,
-  };
-
   const named = $derived(artifactNamed(id));
-  const Glyph = $derived(GLYPH[named?.kind ?? "page"]);
+  const Glyph = $derived(ARTIFACT_GLYPH[named?.kind ?? "page"]);
   const words = $derived(named?.name ?? label);
   /** Where the last press's refusal is said: beside the chip, kept through a reload. */
   const refKey = $derived(`ref:${id}:top`);

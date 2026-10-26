@@ -27,7 +27,8 @@
    * never a speaker line, which would read as a reply. Then the chat
    * composer as the reply, with
    * its own Attach and the send glyph "Reply" ("Reply to reopen" once
-   * resolved, and its reply reopens it).
+   * resolved, and its reply reopens it), which takes the keyboard only when
+   * he reaches for it, never as the thread opens.
    *
    * It closes by its Close or Esc, or a press on another row or pin, never
    * by a press on the page. Delete is asked in the card itself.
@@ -616,11 +617,13 @@
     indent="var(--space-3)"
     reason={linkRefused ? copyRefused("Link") : null}
   />
-  <!-- The reply takes the keyboard as the thread opens; its caret is its focus (The Caret Rule). -->
+  <!-- The reply takes the keyboard only when he reaches for it (a tap or a
+       click in the field, Tab): a thread opens to be read, and a phone's
+       keyboard rising with it covered most of what it says. Its caret is its
+       focus (The Caret Rule). -->
   <CommentComposer
     action="Reply"
     {draft}
-    focus
     onchange={ondraft}
     onsubmit={onreply}
     {placeholder}

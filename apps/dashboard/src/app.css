@@ -758,12 +758,16 @@
 }
 
 /* The preview's phone sheet's grabber (SideSheet's `data-preview-grab`
-   handle), DESIGN.md's 100×6, and its hit area. The sheet itself is the
-   kit's hosted DrawerContent. vaul-svelte's own handle rules stand in the
+   handle) and a thread's sheet's (ThreadSheet's `data-thread-grab`),
+   DESIGN.md's 100×6, and their hit areas. Each sheet is the kit's hosted
+   DrawerContent. vaul-svelte's own handle rules stand in the
    `vendor` layer (vite.config.ts, vendorComponentSheets), so these win by
    layer. */
 @layer components {
-  [data-preview-sheet] [data-preview-grab][data-vaul-handle] {
+  :is(
+    [data-preview-sheet] [data-preview-grab],
+    [data-slot="thread-sheet"] [data-thread-grab]
+  )[data-vaul-handle] {
     touch-action: none;
     position: absolute;
     top: var(--space-1);
@@ -775,7 +779,8 @@
     margin: 0;
     opacity: 1;
   }
-  [data-preview-sheet] [data-vaul-handle-hitarea] {
+  :is([data-preview-sheet], [data-slot="thread-sheet"])
+    [data-vaul-handle-hitarea] {
     height: var(--c-sheet-inspector-head-h);
   }
 }

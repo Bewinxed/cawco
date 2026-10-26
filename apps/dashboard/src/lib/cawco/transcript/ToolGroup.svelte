@@ -18,13 +18,13 @@
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import { ArtifactRefused, showArtifact } from "#lib/cawco/artifact-api.js";
   import { pinNamed } from "#lib/cawco/artifact-names.svelte.js";
+  import CommentChip from "#lib/cawco/CommentChip.svelte";
   import { cawco, revealPreview } from "#lib/cawco/client.svelte.js";
   import { fleetMcpServers } from "#lib/cawco/fleet-mcp.svelte.js";
   import { hubSeam } from "#lib/cawco/hub-live.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { mcpServerHost } from "#lib/cawco/mcp.js";
   import { dur, easeOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
-  import PinReference from "#lib/cawco/PinReference.svelte";
   import {
     type CalledArtifact,
     calledArtifact,
@@ -561,6 +561,29 @@
         <span class="text-ink-strong num flex-none" in:factIn>{d.fact}</span>
       {/if}
     {/snippet}
+    {#snippet chips()}
+      {#if pointedBy(m).length > 0}
+        <!-- What the call changed on the page, or the comment it answered: each a chip that opens it there. -->
+        <p
+          data-slot="call-chips"
+          class="flex flex-wrap items-baseline gap-x-space-1 gap-y-space-1 m-0 ms-(--x-hang) mt-space-1 mb-space-2 text-size-label"
+        >
+          {#each pointedBy(m) as pointed (pointed.href)}
+            {@const drawn = referenceOf(pointed.href)}
+            {#if drawn.draw === "element" && drawn.kind === "pin" && exchange}
+              <!-- The comment it answered: its chip opens the thread and its reply. -->
+              <CommentChip id={drawn.id} label={pointed.label} />
+            {:else if drawn.draw === "element"}
+              <drawn.element
+                id={drawn.id}
+                kind={drawn.kind}
+                label={pointed.label}
+              />
+            {/if}
+          {/each}
+        </p>
+      {/if}
+    {/snippet}
     <!-- The call opens its own line, so a run's rail grows one call at a time. -->
     <TranscriptRow id={callId(m)}>
       {#snippet children()}
@@ -659,11 +682,9 @@
                 Couldn't open {name}: {openFailed.get(callId(m))}
               </p>
             {/if}
-          {:else if hasBody && !exchange}
+          {:else if hasBody || exchange?.length}
             {@const disclosed = disclosure(m)}
             {@const body = `${uid}-${m.id ?? m.toolCallId}`}
-            <!-- A call answering a pin opens nothing: its exchange stands
-                 whole under its line (below). -->
             <!-- The trigger is a plain button and the disclosure is built only
                  once the call is first opened: a scroll mounts calls by the
                  dozen, and a closed Collapsible with its trigger was most of
@@ -690,6 +711,10 @@
                 data-box><IconChevronRight class="size-icon-md block" /></span
               >
             </button>
+            {#if exchange?.length}
+              <!-- The comment it answered stands under its line, over what the chevron unfolds. -->
+              {@render chips()}
+            {/if}
             {#if disclosed.get() || opened.has(callId(m))}
               <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
                 <Collapsible.Content
@@ -702,7 +727,55 @@
                      so every tool row the list mounted built its diff, its
                      highlighting and its fields for a body nobody opened. -->
                   <CollapsibleLazy count={1} open={disclosed.get()}>
-                    {#if d.expanded === "diff"}
+                    {#if exchange?.length}
+                      <!-- The exchange the call answered, unfolded as any
+                           call's body: his words, then the reply, each by its
+                           speaker's glyph (the rail's row line's: the person's
+                           user glyph, the agent's ghost; WORDS.md, Speakers),
+                           in the fields body's well, its words at the row's
+                           text column. Nothing in it is cut or capped. -->
+                      <ol
+                        data-slot="pin-exchange"
+                        class="flex flex-col gap-space-3 m-0 mt-space-1 mb-space-3 ms-(--fields-start) p-space-3 list-none rounded-sm bg-surface-recess"
+                        style:--fields-start={"calc(var(--x-hang) - var(--space-3))"}
+                      >
+                        {#each exchange as said (said.key)}
+                          {@const Speaker =
+                            said.by === "agent" ? IconAgent : IconUser}
+                          <li
+                            data-slot="exchange-entry"
+                            class="flex items-start gap-space-2 min-w-0 text-size-body leading-body"
+                            data-by={said.by}
+                          >
+                            <span class="sr-only"
+                              >{said.by === "agent" ? "Agent: " : "You: "}</span
+                            >
+                            <span
+                              aria-hidden="true"
+                              class="mark-cell text-ink-muted data-you:text-brand-ink"
+                              data-box
+                              data-you={said.by === "person" || undefined}
+                              ><Speaker class="size-icon-sm" /></span
+                            >
+                            <div
+                              class="flex flex-col gap-space-1 flex-1 min-w-0 wrap-anywhere text-pretty"
+                            >
+                              <ToolProse source={said.text} />
+                              {#if said.files.length > 0}
+                                <p class="flex flex-wrap gap-space-1 m-0">
+                                  {#each said.files as file, i (i)}
+                                    <code
+                                      class="min-w-0 wrap-anywhere px-space-1 py-0 rounded-xs bg-code-bg type-code"
+                                      >{file}</code
+                                    >
+                                  {/each}
+                                </p>
+                              {/if}
+                            </div>
+                          </li>
+                        {/each}
+                      </ol>
+                    {:else if d.expanded === "diff"}
                       <!-- What the call changed, as the file's own diff: one per
                        replacement a multi-edit made. A failed call is the diff
                        it attempted, under the harness's reason. The file path
@@ -871,78 +944,8 @@
               {/each}
             </div>
           {/if}
-          {#if pointedBy(m).length > 0}
-            <!-- What the call changed on the page, or the comment it answered: each a chip that opens it there. -->
-            <p
-              data-slot="call-chips"
-              class="flex flex-wrap items-baseline gap-x-space-1 gap-y-space-1 m-0 ms-(--x-hang) mt-space-1 mb-space-2 text-size-label"
-            >
-              {#each pointedBy(m) as pointed (pointed.href)}
-                {@const drawn = referenceOf(pointed.href)}
-                {#if drawn.draw === "element" && drawn.kind === "pin" && exchange}
-                  <!-- The thread stands whole under it: no peek to stand in for it. -->
-                  <PinReference
-                    id={drawn.id}
-                    label={pointed.label}
-                    peek={false}
-                  />
-                {:else if drawn.draw === "element"}
-                  <drawn.element
-                    id={drawn.id}
-                    kind={drawn.kind}
-                    label={pointed.label}
-                  />
-                {/if}
-              {/each}
-            </p>
-          {/if}
-          {#if exchange?.length}
-            <!-- The exchange the call answered, whole: his words, then the
-                 reply, each by its speaker's glyph (the rail's row line's:
-                 the person's user glyph, the agent's ghost; WORDS.md,
-                 Speakers), in the fields body's well, its words at the
-                 row's text column. Nothing in it is cut or capped: the
-                 words wrap, a word longer than the line breaks. -->
-            <ol
-              data-slot="pin-exchange"
-              class="flex flex-col gap-space-3 m-0 mt-space-1 mb-space-3 ms-(--fields-start) p-space-3 list-none rounded-sm bg-surface-recess"
-              style:--fields-start={"calc(var(--x-hang) - var(--space-3))"}
-            >
-              {#each exchange as said (said.key)}
-                {@const Speaker = said.by === "agent" ? IconAgent : IconUser}
-                <li
-                  data-slot="exchange-entry"
-                  class="flex items-start gap-space-2 min-w-0 text-size-body leading-body"
-                  data-by={said.by}
-                >
-                  <span class="sr-only"
-                    >{said.by === "agent" ? "Agent: " : "You: "}</span
-                  >
-                  <span
-                    aria-hidden="true"
-                    class="mark-cell text-ink-muted data-you:text-brand-ink"
-                    data-box
-                    data-you={said.by === "person" || undefined}
-                    ><Speaker class="size-icon-sm" /></span
-                  >
-                  <div
-                    class="flex flex-col gap-space-1 flex-1 min-w-0 wrap-anywhere text-pretty"
-                  >
-                    <ToolProse source={said.text} />
-                    {#if said.files.length > 0}
-                      <p class="flex flex-wrap gap-space-1 m-0">
-                        {#each said.files as file, i (i)}
-                          <code
-                            class="min-w-0 wrap-anywhere px-space-1 py-0 rounded-xs bg-code-bg type-code"
-                            >{file}</code
-                          >
-                        {/each}
-                      </p>
-                    {/if}
-                  </div>
-                </li>
-              {/each}
-            </ol>
+          {#if !exchange?.length}
+            {@render chips()}
           {/if}
           {#if m.metadata?.resultImages?.length}
             <div
