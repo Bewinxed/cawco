@@ -47,14 +47,21 @@ export const BLOCK_END = "# cawco: end of stand-ins";
 
 const LEADING_SLASH = /^\//u;
 
-/** A clone's own `info/exclude`, by its absolute path. */
-const excludeFileOf = async (clone: string): Promise<string> => {
-  const exclude = await gitIn(clone, [
+/**
+ * The `info/exclude` of the checkout `dir` lies in, by its absolute path (the
+ * common one for a linked worktree); undefined outside a checkout.
+ */
+export const infoExcludeOf = (dir: string): Promise<string | undefined> =>
+  gitIn(dir, [
     "rev-parse",
     "--path-format=absolute",
     "--git-path",
     "info/exclude",
   ]);
+
+/** A clone's own `info/exclude`, by its absolute path. */
+const excludeFileOf = async (clone: string): Promise<string> => {
+  const exclude = await infoExcludeOf(clone);
   if (!exclude) {
     throw new Error(`${clone} has no git dir to keep its stand-ins out of`);
   }
@@ -159,12 +166,7 @@ export const excludeFromCheckout = async (path: string): Promise<void> => {
   const cwd = dirname(path);
   const [top, exclude] = await Promise.all([
     gitIn(cwd, ["rev-parse", "--show-toplevel"]),
-    gitIn(cwd, [
-      "rev-parse",
-      "--path-format=absolute",
-      "--git-path",
-      "info/exclude",
-    ]),
+    infoExcludeOf(cwd),
   ]);
   if (!(top && exclude)) {
     return;

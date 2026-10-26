@@ -6,6 +6,7 @@ import {
   configurePage,
   type GeneratedImage,
   IMAGE_GENERATION_TIMEOUT_MS,
+  IMAGE_QUALITIES,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { credentialAccountIds } from "@cawco/core/paths";
@@ -26,7 +27,7 @@ const requestSchema = z
       .max(MAX_EDIT_IMAGES)
       .optional(),
     size: z.string().default("auto"),
-    quality: z.enum(["auto", "low", "medium", "high"]).default("auto"),
+    quality: z.enum(IMAGE_QUALITIES).default("auto"),
   })
   .strict();
 /** The ChatGPT sign-in a request goes out on: its access token and ChatGPT account. */

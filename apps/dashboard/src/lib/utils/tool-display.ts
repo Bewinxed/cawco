@@ -51,15 +51,6 @@ export function extractResultText(content: unknown): string {
 }
 
 /**
- * Get tool status from message metadata.
- */
-export function getToolStatus(
-  metadata: { toolStatus?: string } | undefined
-): "pending" | "success" | "error" {
-  return (metadata?.toolStatus as "pending" | "success" | "error") || "pending";
-}
-
-/**
  * Format tool result as string for display.
  */
 export function formatToolResult(result: unknown): string | null {

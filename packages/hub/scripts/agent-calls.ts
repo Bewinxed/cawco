@@ -13,7 +13,6 @@
  * file existed is read the same way as one built now (openapi.ts holds the
  * hub to every published nightly's agent).
  */
-import { join } from "node:path";
 // The compiler openapi.ts reads the hub with: the schema generator's own,
 // which has the classic parser API (the repository's TypeScript 7 does not).
 import { ts } from "typescript-json-schema";
@@ -318,29 +317,6 @@ export const agentSourceAt = (cwd: string, commit: string): SourceFile[] => {
     path,
     text: blobs.get(sha) ?? "",
   }));
-};
-
-/** The agent's source in the working tree, tracked and untracked alike. */
-export const agentSourceNow = async (repo: string): Promise<SourceFile[]> => {
-  const paths = git(repo, [
-    "ls-files",
-    "-co",
-    "--exclude-standard",
-    "--",
-    AGENT_SOURCE,
-  ])
-    .toString()
-    .split("\n")
-    .filter((path) => path.endsWith(".ts") && !TEST_FILE.test(path));
-  const files = await Promise.all(
-    paths.map(async (path) => {
-      const file = Bun.file(join(repo, path));
-      return (await file.exists())
-        ? { path, text: await file.text() }
-        : undefined;
-    })
-  );
-  return files.filter((file): file is SourceFile => file !== undefined);
 };
 
 /** A hub route as its table lists it: a method and an Elysia path (`:param`, `*`). */

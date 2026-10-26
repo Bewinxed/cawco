@@ -77,16 +77,24 @@ function elementWords(element: PinnedElement | undefined): string {
   return element ? elementName(element) : "Element";
 }
 
+/** Elements whose insides are no text a person sees on the page: what the overlay reads as no words and a page's diff as no change. */
+export const UNSHOWN_ELEMENTS = [
+  "script",
+  "style",
+  "template",
+  "noscript",
+] as const;
+
+/** Form controls: their text is their own though no text node says it, and each is drawn and named whole. */
+export const FORM_CONTROLS = ["input", "textarea", "select", "button"] as const;
+
 /** Elements a person names by what they are, whatever their id says: a button is "Button", never "Cta". */
-const KIND_FIRST = new Set([
+const KIND_FIRST: ReadonlySet<string> = new Set([
   "a",
-  "button",
   "img",
-  "input",
   "picture",
-  "select",
-  "textarea",
   "video",
+  ...FORM_CONTROLS,
 ]);
 
 /**

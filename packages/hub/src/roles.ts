@@ -45,6 +45,8 @@
  */
 import type { InstanceRow, MemoryRole, SessionRole } from "@cawco/core";
 import { ARTIFACT_TOOLS } from "./artifacts/tools";
+import type { RoutineTool } from "./routines";
+import type { TaskTool } from "./task-tools";
 
 /**
  * The role a session's row runs in: the one its spawn named, else derived
@@ -77,7 +79,11 @@ const BROWSER = ["browser_ask"] as const;
 const CONNECT = ["connect_ask"] as const;
 
 /** The task tools every role but the worker's and the lead's is limited to. */
-const TASK_READ = ["task_read", "todo_write", "task_comment"] as const;
+const TASK_READ = [
+  "task_read",
+  "todo_write",
+  "task_comment",
+] as const satisfies readonly TaskTool[];
 
 /** The tools that file, change or start tasks. */
 const TASK_WRITE = [
@@ -87,7 +93,7 @@ const TASK_WRITE = [
   "task_start",
   "task_retry",
   "task_archive",
-] as const;
+] as const satisfies readonly TaskTool[];
 
 /**
  * Caw's own: a project's conversations with it, the views it drafts, its
@@ -122,7 +128,7 @@ const ROUTINE = [
   "routine_update",
   "routine_delete",
   "routine_run_now",
-] as const;
+] as const satisfies readonly RoutineTool[];
 
 /**
  * A project's ingress (ingress.ts): its event routes and connector polls,

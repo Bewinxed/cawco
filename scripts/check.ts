@@ -64,6 +64,7 @@ import {
 } from "../packages/core/src/heavy-slots";
 import { type Check, runChecks } from "./lib/checks";
 import { diskRoomOrExit } from "./lib/disk-room";
+import { repoFiles } from "./lib/repo-files";
 
 diskRoomOrExit("bun run check");
 
@@ -150,6 +151,7 @@ const EVERYTHING = [
   /^biome\.jsonc$/u,
   /^scripts\/check\.ts$/u,
   /^scripts\/lib\/checks\.ts$/u,
+  /^scripts\/lib\/repo-files\.ts$/u,
   /^scripts\/lint\//u,
 ];
 const CODE = /\.(?:[cm]?[jt]sx?|svelte)$/u;
@@ -166,9 +168,7 @@ const SPECIFIER =
 
 /* ---------------------------------------------------------- the tree */
 
-const files = lines(
-  await git("ls-files", "--cached", "--others", "--exclude-standard")
-);
+const files = repoFiles();
 const present = new Set(files);
 
 interface Project {

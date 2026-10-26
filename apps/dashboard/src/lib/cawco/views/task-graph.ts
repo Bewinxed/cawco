@@ -10,11 +10,14 @@
  * the canvas holds larger); `found_in` is drawn but places nothing. No
  * coordinate is ever stored or set by hand.
  */
+
+import type { TaskEdge as TaskLink } from "@cawco/core/task-edges";
 import dagre from "@dagrejs/dagre";
 import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
 import type { TaskSummary } from "#lib/cawco/project-tasks.js";
 
-export type TaskEdgeKind = "waits_on" | "part_of" | "found_in";
+/** The edges the graph draws (core `TASK_EDGES`): a duplicate closes its task, so it draws none. */
+export type TaskEdgeKind = Exclude<TaskLink, "duplicate_of">;
 
 export interface TaskEdge {
   id: string;

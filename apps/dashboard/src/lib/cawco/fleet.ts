@@ -6,7 +6,7 @@
  * ever loops over machines — it changes the fleet's mind and lets the
  * `instances` frames say what came of it.
  */
-import type { FsEntry } from "@cawco/core";
+import { type FsEntry, PACKAGE_MANAGERS } from "@cawco/core";
 import type { Bounded } from "@cawco/core/bounded";
 import {
   CAWCO_OAUTH_URL,
@@ -196,14 +196,11 @@ const SKILL_PATH_SPLIT_PATTERN = /[/?]/u;
  * subcommand, and the tool being run. A paste is stripped down to the slug
  * they surround.
  */
-const WRAPPERS = new Set([
+const WRAPPERS: ReadonlySet<string> = new Set([
+  ...PACKAGE_MANAGERS,
   "bunx",
-  "bun",
   "npx",
-  "npm",
-  "pnpm",
   "pnpx",
-  "yarn",
   "dlx",
   "x",
   "run",

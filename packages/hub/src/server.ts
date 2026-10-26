@@ -471,6 +471,7 @@ import {
   storiesKey,
 } from "@cawco/core/stage";
 import type { RelayFrame } from "@cawco/core/stream-relay";
+import { CAPABILITY_KINDS } from "@cawco/core/suggest";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import { decideWrite, type UpstreamRules } from "@cawco/core/upstream-guard";
 import {
@@ -31427,11 +31428,7 @@ export const createServer = (
             candidates: t.Array(
               t.Object({
                 id: t.String(),
-                kind: t.Union([
-                  t.Literal("skill"),
-                  t.Literal("tool"),
-                  t.Literal("mcp"),
-                ]),
+                kind: t.Union(CAPABILITY_KINDS.map((kind) => t.Literal(kind))),
                 name: t.String(),
                 description: t.String(),
               })

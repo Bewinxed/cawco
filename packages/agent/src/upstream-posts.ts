@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { CAWCO_ENV, type WorkspaceRef } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { repositoryConfigProblem } from "@cawco/core/safe-git";
-import { GITHUB_API } from "@cawco/core/upstream-guard";
+import { GITHUB_API, isWriteMethod } from "@cawco/core/upstream-guard";
 import {
   FORGE_NAMES,
   type GitPost,
@@ -103,7 +103,6 @@ export const raiseUpstreamAsk = async (
 const cut = (text: string): string =>
   text.length > SAID_MAX ? `${text.slice(0, SAID_MAX)}…` : text;
 
-const WRITE_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
 const TRAILING_SLASHES = /\/+$/u;
 
 /** What @octokit/endpoint reads as its URL template's own (`:name`, `{name}`): kept as the URL's escapes, which GitHub reads alike. */
@@ -118,7 +117,7 @@ const TEMPLATE_MARKS = /[:{}]/gu;
  * followed.
  */
 const makeHttp = async (post: HttpPost): Promise<PostMade> => {
-  if (!(GITHUB_API.has(post.host) && WRITE_METHODS.has(post.method))) {
+  if (!(GITHUB_API.has(post.host) && isWriteMethod(post.method))) {
     return {
       ok: false,
       said: `CawCo did not send it: ${post.method} ${post.host} is no write to GitHub's API.`,

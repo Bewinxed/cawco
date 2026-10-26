@@ -61,6 +61,7 @@ import { humanSize } from "./attachments";
 import type { DocMap, MapDoc } from "./doc-maps";
 import type { PreviewElement } from "./index";
 import type { InkGroup } from "./ink";
+import type { Interaction } from "./stage";
 
 /**
  * The preview pane's modes, its head's segmented control (V, C, D), told to
@@ -212,7 +213,7 @@ export interface PageAnchor {
   sheet?: {
     file: string;
     state?: {
-      interaction: "rest" | "hover" | "focus" | "pressed";
+      interaction: Interaction;
       scheme: "light" | "dark" | "page";
       width: number | null;
     };

@@ -12,6 +12,7 @@ import {
   readEnv,
 } from "@cawco/core";
 import { AGENT_BUNDLE_ID } from "@cawco/core/agent-bundle";
+import { SERVICE_IDS, type ServiceId } from "@cawco/core/binary-installation";
 import { holdPhrases, type RestartReadiness } from "@cawco/core/binary-updates";
 import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
 import { keeperEndpoint, keeperService } from "@cawco/core/keepers";
@@ -42,24 +43,8 @@ import { writeStateFile } from "@cawco/core/state-file";
 const sessiondSocket = (): string =>
   process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpointPath();
 
-/**
- * The whole stack, as four services this machine can run for you, in the order
- * they should come up. A machine runs whichever of them it is for: a worker
- * wants `sessiond` and `agent`, and the box you point a browser at wants all
- * four. `sessiond` sits before `agent` on purpose — it owns the harness
- * children, so the daemon that talks to it comes up second (design §11).
- */
-export type ServiceId = "hub" | "dashboard" | "sessiond" | "agent";
-
-export const SERVICE_IDS: readonly ServiceId[] = [
-  "hub",
-  "dashboard",
-  "sessiond",
-  "agent",
-];
-
 export const isServiceId = (value: string): value is ServiceId =>
-  SERVICE_IDS.includes(value as ServiceId);
+  SERVICE_IDS.some((id) => id === value);
 
 export type ServiceAction =
   "install" | "uninstall" | "restart" | "status" | "logs";

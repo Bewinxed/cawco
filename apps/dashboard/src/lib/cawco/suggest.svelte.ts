@@ -4,21 +4,12 @@
  * chooses to add to a prompt; the harness's tool set is never touched.
  */
 
+import type { SuggestCandidate } from "@cawco/core/suggest";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
 import type { HubSeam } from "./hub-seam";
 import { send } from "./project-tasks";
 
-/**
- * One thing Jev can be asked about: a skill, a tool or an MCP server the
- * session has. The hub ranks them by the operator's usage and asks about the
- * top ones, so the composer sends them all.
- */
-export interface SuggestCandidate {
-  description: string;
-  id: string;
-  kind: "skill" | "tool" | "mcp";
-  name: string;
-}
+export type { SuggestCandidate } from "@cawco/core/suggest";
 
 /** What `GET /api/openrouter` answers with. The key itself never leaves the hub. */
 export interface OpenRouterState {

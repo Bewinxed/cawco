@@ -149,6 +149,8 @@ import { PNG } from "pngjs";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { previewWords } from "../../../packages/core/src/words/preview";
 import { shellWords } from "../../../packages/core/src/words/shell";
+import type { PromotedFile } from "../../../packages/hub/src/artifacts/service";
+import type { ArtifactTool } from "../../../packages/hub/src/artifacts/tools";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import {
   type Kit,
@@ -645,7 +647,14 @@ const run = async (kit: Kit) => {
   kit.check(
     "6: none of the tools the artifact tools replaced is in the tool list; the artifact tools are",
     strays.length === 0 &&
-      ["artifact_create", "artifact_update", "artifact_read", "artifact_show"]
+      (
+        [
+          "artifact_create",
+          "artifact_update",
+          "artifact_read",
+          "artifact_show",
+        ] satisfies readonly ArtifactTool[]
+      )
         .map(names)
         .every(Boolean),
     `replaced tools: ${strays.join(", ") || "none"}; artifact_read ${names("artifact_read")}`
@@ -1838,9 +1847,14 @@ const promoteChecks = async ({
   const keptPins = firstCommit
     ? await gitIn(folder, "show", `${firstCommit}:artifacts/kept/pins.json`)
     : "";
-  const wanted = ["index.html", "state.json", "pins.json", "artifact.json"].map(
-    (name) => `artifacts/kept/${name}`
-  );
+  const wanted = (
+    [
+      "index.html",
+      "state.json",
+      "pins.json",
+      "artifact.json",
+    ] satisfies readonly PromotedFile[]
+  ).map((name) => `artifacts/kept/${name}`);
   kit.check(
     "15: a promote answers a commit and artifacts/kept/, and that commit holds index.html, state.json (the pick), pins.json (the pin) and artifact.json",
     !!firstCommit &&

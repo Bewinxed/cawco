@@ -18,6 +18,7 @@ import { COMMENT_LIMITS } from "@cawco/core/comments";
 import {
   CANVAS_SPEC_LIMITS,
   DESIGN_MAP_LIMITS,
+  interactionOf,
   SERVE_COMMAND_LIMIT,
   STORY_FILE,
   type StoryOp,
@@ -40,8 +41,6 @@ import {
 import { PNG_SIGNATURE } from "./sync";
 import { ARGS_LIMIT, PATCH_LIMIT, STORY_NAME, WORKSPACE_ID } from "./tools";
 
-const INTERACTION_NAMES = ["rest", "hover", "focus", "pressed"];
-
 /** A read's frame, from its JSON; refused with the shape when it is none. */
 const stateOf = (text: string): StateAsk => {
   let value: Partial<StateAsk> | null = null;
@@ -56,8 +55,7 @@ const stateOf = (text: string): StateAsk => {
       typeof value.story === "string" &&
       STORY_NAME.test(value.story)
     ) ||
-    (value.interaction !== undefined &&
-      !INTERACTION_NAMES.includes(value.interaction)) ||
+    (value.interaction !== undefined && !interactionOf(value.interaction)) ||
     (value.scheme !== undefined &&
       value.scheme !== "light" &&
       value.scheme !== "dark") ||

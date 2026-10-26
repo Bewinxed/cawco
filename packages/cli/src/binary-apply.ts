@@ -54,6 +54,7 @@ import {
   readTrial,
   readUpdateState,
   recordInstall,
+  type ServiceId,
   type TrialMarker,
   trialPath,
   trialUnits,
@@ -97,7 +98,7 @@ import {
 } from "@cawco/core/state-file";
 import { recordApply } from "./apply-record";
 import { binaryLayout } from "./binary-install";
-import { type ServiceId, service, stopService } from "./service";
+import { service, stopService } from "./service";
 
 /** How long a keeper handed over to gets to answer at its own endpoint. */
 const HEALTH_MS = 45_000;

@@ -1,6 +1,7 @@
 import {
   HARNESSES,
   IMAGE_GENERATION_DESCRIPTION,
+  IMAGE_QUALITIES,
   LANDS_MODES,
   type LandsMode,
   REFERENCE_GUIDANCE,
@@ -77,6 +78,7 @@ import {
   buildsFromParameter,
   groupParameter,
   ownsParameter,
+  type TaskTool,
 } from "./task-tools";
 import {
   SESSION_TITLE_DESCRIPTION,
@@ -282,7 +284,7 @@ export function handoffTools(deps: HandoffDeps) {
             "auto or WIDTHxHEIGHT, multiples of 16, edge at most 3840."
           ),
         quality: z
-          .enum(["auto", "low", "medium", "high"])
+          .enum(IMAGE_QUALITIES)
           .optional()
           .describe("low for drafts; high for dense text or fine detail."),
       },
@@ -1125,7 +1127,7 @@ const CORE_TASK_TOOLS: ReadonlySet<string> = new Set([
   "task_create",
   "task_read",
   "task_link",
-]);
+] satisfies readonly TaskTool[]);
 
 /**
  * The deferred groups by prefix, as the server's instructions name them:

@@ -67,6 +67,10 @@ const installPick = (lockfile: (typeof LOCKFILES)[number]): string => {
   }
 };
 
+/** The JavaScript package managers a checkout installs with, each named by its lockfile ({@link LOCKFILES}) or its `packageManager`. */
+export const PACKAGE_MANAGERS = ["npm", "pnpm", "yarn", "bun"] as const;
+export type PackageManager = (typeof PACKAGE_MANAGERS)[number];
+
 /** The lockfiles {@link installPick} knows, most specific first. */
 export const LOCKFILES = [
   "bun.lock",

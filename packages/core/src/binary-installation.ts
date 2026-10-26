@@ -131,6 +131,17 @@ export const trialPath = (): string => join(binaryRoot(), "trial.json");
 export const readTrial = (): Promise<TrialMarker | undefined> =>
   readRecord<TrialMarker>(trialPath());
 /**
+ * The whole stack, as four services a machine can run, in the order they
+ * come up (cli service.ts installs each). A machine runs whichever of them
+ * it is for: a worker wants `sessiond` and `agent`, and the box you point a
+ * browser at wants all four. `sessiond` sits before `agent` on purpose — it
+ * owns the harness children, so the daemon that talks to it comes up second
+ * (design §11).
+ */
+export const SERVICE_IDS = ["hub", "dashboard", "sessiond", "agent"] as const;
+export type ServiceId = (typeof SERVICE_IDS)[number];
+
+/**
  * The services an update restarts, and its rollback restarts again: every one
  * that runs from `current`, one at a time in this order. The agent first: it
  * writes every held workspace's boundary hook again as it starts
@@ -140,7 +151,7 @@ export const readTrial = (): Promise<TrialMarker | undefined> =>
  */
 export const trialUnits = (
   role: BinaryInstallation["role"]
-): ("hub" | "dashboard" | "agent")[] =>
+): Exclude<ServiceId, "sessiond">[] =>
   role === "hub" ? ["agent", "hub", "dashboard"] : ["agent"];
 
 /**

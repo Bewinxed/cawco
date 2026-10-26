@@ -53,7 +53,7 @@ import {
 } from "./tasks";
 
 /** Every task tool, by name. */
-export const TASK_TOOLS: ReadonlySet<string> = new Set([
+const TASK_TOOL_NAMES = [
   "task_create",
   "task_read",
   "task_update",
@@ -64,7 +64,9 @@ export const TASK_TOOLS: ReadonlySet<string> = new Set([
   "task_comment",
   "task_archive",
   "task_result",
-]);
+] as const;
+export type TaskTool = (typeof TASK_TOOL_NAMES)[number];
+export const TASK_TOOLS: ReadonlySet<string> = new Set(TASK_TOOL_NAMES);
 
 export interface TaskToolContext {
   actor: InstanceRow;

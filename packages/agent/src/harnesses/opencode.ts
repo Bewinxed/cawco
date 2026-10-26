@@ -89,7 +89,7 @@ import type {
   V2Event,
 } from "@opencode/client";
 import { CHROME_DEVTOOLS } from "../browser/door";
-import { gitIn } from "../checkout-exclude";
+import { gitIn, infoExcludeOf } from "../checkout-exclude";
 import { harnessMcpUrl } from "../delegation";
 import {
   type OpencodeRule,
@@ -1118,12 +1118,7 @@ const removeCawcoSessionConfigsIn = async (
   ref: WorkspaceRef,
   fleet: Record<string, unknown>
 ): Promise<number> => {
-  const exclude = await gitIn(ref.path, [
-    "rev-parse",
-    "--path-format=absolute",
-    "--git-path",
-    "info/exclude",
-  ]);
+  const exclude = await infoExcludeOf(ref.path);
   if (!exclude) {
     return 0;
   }

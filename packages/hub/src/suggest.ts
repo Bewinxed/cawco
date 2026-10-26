@@ -1,4 +1,5 @@
 import type { JevResult } from "@cawco/core/jev";
+import type { SuggestCandidate } from "@cawco/core/suggest";
 import { DAY_MS } from "@cawco/core/time";
 import { HUB_DEBUG } from "./config";
 import type { DbShape } from "./db";
@@ -35,13 +36,6 @@ export const NEVER_SUGGEST_TOOLS = new Set([
   "ToolSearch",
   "Skill",
 ]);
-
-export interface SuggestCandidate {
-  description: string;
-  id: string;
-  kind: "skill" | "tool" | "mcp";
-  name: string;
-}
 
 /**
  * The name a candidate's usage is recorded under. MCP usage is keyed by the

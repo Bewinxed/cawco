@@ -36560,16 +36560,6 @@
           "unshown"
         ]
       },
-      "Interaction": {
-        "description": "The states the canvas derives from a component's CSS, never authored: `rest` is the story as mounted.",
-        "type": "string",
-        "enum": [
-          "focus",
-          "hover",
-          "pressed",
-          "rest"
-        ]
-      },
       "SheetRead": {
         "description": "A sheet as its stage reads it: its stories, its meta, and the props of each component they mount.",
         "type": "object",
@@ -38595,6 +38585,16 @@
           "component",
           "file",
           "line"
+        ]
+      },
+      "Interaction": {
+        "description": "The states the canvas derives from a component's CSS, never authored: `rest` is the story as mounted.",
+        "type": "string",
+        "enum": [
+          "focus",
+          "hover",
+          "pressed",
+          "rest"
         ]
       },
       "CanvasAnchor": {

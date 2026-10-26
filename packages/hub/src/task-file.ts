@@ -78,6 +78,7 @@ import {
   waitHandle,
   waitTarget,
 } from "@cawco/core";
+import { TASK_EDGES } from "@cawco/core/task-edges";
 import type { WorkBudget } from "./db/schema";
 
 /** The front matter fields a task file knows, in the order a new file writes them. */
@@ -103,21 +104,6 @@ export const TASK_FIELDS = [
   "accounts",
 ] as const;
 export type TaskField = (typeof TASK_FIELDS)[number];
-
-/**
- * A task's edges (tasks.ts carries out what each makes the hub do):
- * `waits_on`, what it waits on, any kind wait-targets.ts reads; `part_of`,
- * the task it is a part of, whose waits it inherits; `found_in`, the task
- * or pin it was found in, written by the hub; `duplicate_of`, the task it
- * repeats, which closes it.
- */
-export const EDGES = [
-  "waits_on",
-  "part_of",
-  "found_in",
-  "duplicate_of",
-] as const;
-export type Edge = (typeof EDGES)[number];
 
 /** The keys a task file carried before task links were one blocking edge: tasks.ts `migrateLinks` takes them out. */
 export const LEGACY_LINK_KEYS = ["after", "parent", "related"] as const;
@@ -424,7 +410,10 @@ const FIELD_KEYS = {
 export type TaskFieldValue<F extends TaskField> =
   TaskFields[(typeof FIELD_KEYS)[F]];
 
-const EDGE_FIELDS: ReadonlySet<TaskField> = new Set(EDGES);
+/** A task's edges (core task-edges.ts), each one of its {@link TASK_FIELDS}. */
+const EDGE_FIELDS: ReadonlySet<TaskField> = new Set(
+  TASK_EDGES satisfies readonly TaskField[]
+);
 
 /** A field's value as its line writes it, or undefined when the field should not be written. */
 const renderField = (
@@ -606,14 +595,14 @@ const LIST_FIELDS: ReadonlySet<string> = new Set([
   "builds_from",
   "labels",
   "accounts",
-]);
+] satisfies readonly TaskField[]);
 const SCALAR_FIELDS: ReadonlySet<string> = new Set([
   "stage",
   "issue",
   "type",
   "group",
   "rank",
-]);
+] satisfies readonly TaskField[]);
 
 /** Reads one known field into `fields`; false for a key a task file does not know. */
 const readField = (

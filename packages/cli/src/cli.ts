@@ -17,6 +17,7 @@ import {
   pinnedTools,
   readEnv,
 } from "@cawco/core";
+import { SERVICE_IDS } from "@cawco/core/binary-installation";
 import { hubCredentialSocket } from "@cawco/core/paths";
 import { protocolRange, runtimeCommit } from "@cawco/core/runtime";
 import { discoverHub, findExistingHub, type Hub } from "./discover";
@@ -26,7 +27,6 @@ import {
   isServiceAction,
   isServiceId,
   SERVICE_ACTIONS,
-  SERVICE_IDS,
   service,
 } from "./service";
 import { callTool, listTools, sessionOf, toolDoor } from "./tools";

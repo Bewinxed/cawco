@@ -16,6 +16,7 @@
  * Then the person's ink is filled over it from the ink layer's own paths,
  * which stand in the page's px.
  */
+import { FORM_CONTROLS, UNSHOWN_ELEMENTS } from "@cawco/core/pin-name";
 import { createContext, destroyContext, domToCanvas } from "modern-screenshot";
 import { NON_INHERITED } from "./non-inherited";
 
@@ -864,20 +865,24 @@ async function partRoot(
 
 const PNG_PREFIX = /^data:image\/png;base64,/u;
 /** What a picture never draws: the overlay's own UI and layers, and what has no box. */
-export const SKIPPED =
-  "cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins], [data-cawco-stand-ins], script, style, template, noscript, link, meta";
+export const SKIPPED = [
+  "cawco-overlay",
+  "svg[data-cawco-ink]",
+  "svg[data-cawco-pins]",
+  "[data-cawco-stand-ins]",
+  ...UNSHOWN_ELEMENTS,
+  "link",
+  "meta",
+].join(", ");
 /** Elements drawn whole wherever the crop meets them: their insides are not boxes of their own. */
-const WHOLE = new Set([
+const WHOLE: ReadonlySet<string> = new Set([
   "img",
   "svg",
   "canvas",
   "video",
   "iframe",
   "frame",
-  "input",
-  "textarea",
-  "select",
-  "button",
+  ...FORM_CONTROLS,
   "picture",
   "math",
   "object",

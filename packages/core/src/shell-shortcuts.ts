@@ -24,6 +24,29 @@ export const SHELL_SHORTCUTS = [
 
 export type ShellShortcut = (typeof SHELL_SHORTCUTS)[number]["name"];
 
+/**
+ * The preview pane's keys, which a page under preview hands the pane while
+ * it has the keyboard (the overlay's page.ts, the dashboard's preview
+ * wire.ts): V, C and D its modes, `C` (⇧C) its pins shown or hidden, J and K
+ * a step, `/` the rail's search, Enter and Esc.
+ */
+export const PANE_KEYS = [
+  "v",
+  "c",
+  "d",
+  "C",
+  "j",
+  "k",
+  "/",
+  "Enter",
+  "Escape",
+] as const;
+export type PaneKey = (typeof PANE_KEYS)[number];
+
+/** `value` as one of the {@link PANE_KEYS}, or undefined when it is none. */
+export const paneKeyOf = (value: unknown): PaneKey | undefined =>
+  PANE_KEYS.find((key) => key === value);
+
 /** The keys of a keydown that a shortcut is told by. */
 export interface ShortcutPress {
   ctrlKey: boolean;

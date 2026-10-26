@@ -161,12 +161,13 @@ const GITHUB_API_HOSTS: ReadonlySet<string> = new Set([
   "api.github.com",
   "uploads.github.com",
 ]);
-const WRITE_METHODS: ReadonlySet<string> = new Set([
-  "POST",
-  "PATCH",
-  "PUT",
-  "DELETE",
-]);
+/** The HTTP methods that write: what a guarded host is asked before, and what the hub's own write routes take. */
+export const WRITE_METHODS = ["POST", "PATCH", "PUT", "DELETE"] as const;
+export type WriteMethod = (typeof WRITE_METHODS)[number];
+
+/** Whether `method`, upper case, is one of {@link WRITE_METHODS}. */
+export const isWriteMethod = (method: string): method is WriteMethod =>
+  WRITE_METHODS.some((write) => write === method);
 
 const REPOS_PATH = /^repos\/([^/?#]+)\/([^/?#]+)/u;
 /** GitHub Enterprise's API prefix, `api/v3/`, before an API path. */
@@ -444,7 +445,7 @@ export const upstreamHttpWrite = (call: HttpCall): HttpWrite | undefined => {
   const method = call.method.toUpperCase();
   const path = call.path.replace(EDGE_SLASHES, "");
   if (!GITHUB_API_HOSTS.has(call.host)) {
-    return WRITE_METHODS.has(method)
+    return isWriteMethod(method)
       ? { what: `${method} ${call.host}/${path}` }
       : undefined;
   }
@@ -456,7 +457,7 @@ export const upstreamHttpWrite = (call: HttpCall): HttpWrite | undefined => {
       ? { ...write, nodeIds: nodeIdsOf(body) }
       : write;
   }
-  if (!WRITE_METHODS.has(method)) {
+  if (!isWriteMethod(method)) {
     return;
   }
   const repo = githubApiRepo(path);

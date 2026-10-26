@@ -22,6 +22,8 @@ import {
   installationPath,
   readInstallation,
   recordInstall,
+  SERVICE_IDS,
+  type ServiceId,
   updateStatePath,
   versionExecutable,
   writeJsonAtomic,
@@ -181,8 +183,8 @@ async function bringUp(options: BinaryInstallOptions): Promise<void> {
   await service("install", {
     ids:
       options.role === "hub"
-        ? ["hub", "dashboard", "sessiond", "agent"]
-        : ["sessiond", "agent"],
+        ? SERVICE_IDS
+        : (["sessiond", "agent"] satisfies readonly ServiceId[]),
     mode: "prod",
     follow: false,
     force: false,

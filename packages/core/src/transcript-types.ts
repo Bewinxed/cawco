@@ -23,6 +23,7 @@ import type {
   SlashCommand,
   UserQuestionResult,
 } from "./harness";
+import type { ToolStatus } from "./tool-presentation";
 
 /** What a block is: the row kind a renderer draws it as. */
 export type BlockType =
@@ -209,7 +210,7 @@ export interface BlockMetadata {
   tooling?: BlockTooling;
   toolName?: string;
   toolResult?: string;
-  toolStatus?: "pending" | "success" | "error";
+  toolStatus?: ToolStatus;
   /** The reader's answers to an `AskUserQuestion`, normalised by the harness adapter. */
   toolUseResult?: UserQuestionResult;
   totalCost?: number;

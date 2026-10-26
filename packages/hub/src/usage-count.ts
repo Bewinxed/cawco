@@ -1,6 +1,7 @@
 import { existsSync, statSync } from "node:fs";
 import type { NeutralMessage } from "@cawco/core";
 import { listClaudeFiles } from "@cawco/core/paths";
+import type { CapabilityKind } from "@cawco/core/suggest";
 import { DAY_MS } from "@cawco/core/time";
 import type { DbShape } from "./db";
 
@@ -18,7 +19,6 @@ import type { DbShape } from "./db";
  *   use of `x` when `x` is a known skill.
  */
 
-export type CapabilityKind = "skill" | "tool" | "mcp";
 export interface CapabilityUse {
   kind: CapabilityKind;
   name: string;

@@ -117,6 +117,8 @@
     "./permission-presentation": "./src/permission-presentation.ts",
     "./tool-presentation": "./src/tool-presentation.ts",
     "./tool-names": "./src/tool-names.ts",
+    "./task-edges": "./src/task-edges.ts",
+    "./suggest": "./src/suggest.ts",
     "./session-env": "./src/session-env.ts",
     "./cawco-env": "./src/cawco-env.ts",
     ".": {

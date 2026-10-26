@@ -36,6 +36,7 @@
     previewUnreachedWords,
     probePreview,
   } from "@cawco/core/preview-reach";
+  import type { PaneKey } from "@cawco/core/shell-shortcuts";
   import {
     STAGE_CLONE_MS,
     STAGE_READY_MS,
@@ -177,7 +178,6 @@
   import { SheetInspector as Inspector } from "./sheet-inspector.svelte";
   import {
     type ComposeTarget,
-    type PaneKey,
     type PreviewPinAt,
     pageMessage,
     previewBox,

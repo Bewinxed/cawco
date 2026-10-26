@@ -206,14 +206,14 @@ export const STAGE_RENDER = "stageRender";
 /** How long a daemon's render of a canvas may take, page load to the last section's report, past the stage's own start. Ours: a screen's first load transforms its modules. */
 export const STAGE_RENDER_MS = 90_000;
 
+/** The {@link Interaction}s, in the order the canvas draws them. */
+export const INTERACTIONS = ["rest", "hover", "focus", "pressed"] as const;
 /** The states the canvas derives from a component's CSS, never authored: `rest` is the story as mounted. */
-export type Interaction = "rest" | "hover" | "focus" | "pressed";
-export const INTERACTIONS: readonly Interaction[] = [
-  "rest",
-  "hover",
-  "focus",
-  "pressed",
-];
+export type Interaction = (typeof INTERACTIONS)[number];
+
+/** `value` as one of the {@link INTERACTIONS}, or undefined when it is none. */
+export const interactionOf = (value: unknown): Interaction | undefined =>
+  INTERACTIONS.find((one) => one === value);
 
 export type Scheme = "light" | "dark";
 

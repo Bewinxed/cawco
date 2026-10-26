@@ -31,6 +31,7 @@ import {
   type FormName,
   type FramePictureRead,
   type FrameRender,
+  INTERACTIONS,
   type Interaction,
   type MoveRender,
   type PageError,
@@ -1332,9 +1333,10 @@ export function boot(options: BootOptions): void {
       }
     }
     return slotsOf().flatMap((slot) =>
-      (["rest", "hover", "focus", "pressed"] as Interaction[])
-        .filter((one) => reached.has(one))
-        .map((interaction) => ({ interaction, ...slot }))
+      INTERACTIONS.filter((one) => reached.has(one)).map((interaction) => ({
+        interaction,
+        ...slot,
+      }))
     );
   }
 

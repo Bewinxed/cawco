@@ -21,6 +21,7 @@
  * (or dark-only): it is said `same`, and nothing more is drawn.
  */
 import { readWithin } from "@cawco/core/bounded";
+import { FORM_CONTROLS } from "@cawco/core/pin-name";
 import { cropPicture, groundOf, SKIPPED } from "./picture";
 
 export type Scheme = "light" | "dark";
@@ -37,7 +38,7 @@ const TEXT_PAINT = ["color", "text-decoration-color", "text-shadow"];
 const SHAPE_PAINT = ["fill", "stroke"];
 const SIDES = ["top", "right", "bottom", "left"];
 /** Elements whose text is their own though no text node says it. */
-const TEXT_CONTROLS = new Set(["input", "textarea", "select", "button"]);
+const TEXT_CONTROLS: ReadonlySet<string> = new Set(FORM_CONTROLS);
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 /** Whether `el` holds words of its own (a text node, a control's value). */

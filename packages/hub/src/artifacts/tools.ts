@@ -16,6 +16,7 @@ import { COMMENT_LIMITS } from "@cawco/core/comments";
 import {
   CANVAS_SPEC_LIMITS,
   DESIGN_MAP_LIMITS,
+  INTERACTIONS,
   SERVE_COMMAND_LIMIT,
   STORY_FILE,
 } from "@cawco/core/stage";
@@ -46,6 +47,7 @@ export const ARTIFACT_TOOLS = [
   "comment_resolve",
   "design_map",
 ] as const;
+export type ArtifactTool = (typeof ARTIFACT_TOOLS)[number];
 
 /** A story's export name in a CSF file: `Roomy`. */
 export const STORY_NAME = /^[A-Z][A-Za-z0-9_]{0,99}$/u;
@@ -279,7 +281,7 @@ export const artifactRead = {
     state: z
       .object({
         story: z.string(),
-        interaction: z.enum(["rest", "hover", "focus", "pressed"]).optional(),
+        interaction: z.enum(INTERACTIONS).optional(),
         scheme: z.enum(["light", "dark"]).optional(),
         width: z.number().int().positive().optional(),
       })

@@ -138,7 +138,7 @@ import type {
   TranscriptPageBranch,
   TranscriptTail,
 } from "@cawco/core/transcript-types";
-import type { UpstreamPosts } from "@cawco/core/upstream-guard";
+import type { UpstreamPosts, WriteMethod } from "@cawco/core/upstream-guard";
 import { UPSTREAM_POST_TOOL } from "@cawco/core/upstream-post";
 import type {
   ClaudeLimits,
@@ -2840,7 +2840,7 @@ export async function readAccounts(): Promise<void> {
  */
 async function accountsWrite<T>(
   url: string,
-  method: "POST" | "PATCH" | "PUT" | "DELETE",
+  method: WriteMethod,
   body?: unknown
 ): Promise<T> {
   const response = await fetch(url, {

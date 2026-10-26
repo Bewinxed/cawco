@@ -57,7 +57,12 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
-import { LOCKFILES, type WorkspaceRef } from "@cawco/core";
+import {
+  LOCKFILES,
+  PACKAGE_MANAGERS,
+  type PackageManager,
+  type WorkspaceRef,
+} from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { cloneDenies } from "@cawco/core/clone-denies";
 import { workspaceScratchDir, workspaceStateDir } from "@cawco/core/paths";
@@ -405,13 +410,8 @@ const mirror = async (
   return { changed, kept: { ...kept, head, mirrored: paths } };
 };
 
-/** The package managers a stage clone installs with. */
-type Manager = "npm" | "pnpm" | "yarn" | "bun";
-
-const MANAGERS: readonly Manager[] = ["npm", "pnpm", "yarn", "bun"];
-
 /** Each lockfile and the manager it names, in core move.ts `LOCKFILES` order. */
-const LOCK_MANAGER: Record<(typeof LOCKFILES)[number], Manager> = {
+const LOCK_MANAGER: Record<(typeof LOCKFILES)[number], PackageManager> = {
   "bun.lock": "bun",
   "bun.lockb": "bun",
   "pnpm-lock.yaml": "pnpm",
@@ -420,7 +420,7 @@ const LOCK_MANAGER: Record<(typeof LOCKFILES)[number], Manager> = {
 };
 
 /** How a machine gets each manager, from its own install page. */
-const HOW_TO_GET: Record<Manager, string> = {
+const HOW_TO_GET: Record<PackageManager, string> = {
   npm: "install Node.js, which brings npm (nodejs.org/en/download)",
   pnpm: "run `corepack enable pnpm` or `npm install -g pnpm` (pnpm.io/installation)",
   yarn: "run `corepack enable yarn` or `npm install -g yarn` (yarnpkg.com/getting-started/install)",
@@ -435,7 +435,7 @@ interface Install {
   dir: string;
   /** The major version its `packageManager` names, when it names one. */
   major?: number;
-  manager: Manager;
+  manager: PackageManager;
   /** What named the manager, in words: `its packageManager pnpm@9.1.0`, `its yarn.lock`. */
   named: string;
 }
@@ -475,7 +475,7 @@ const installOf = async (
     const field = await packageManagerIn(dir);
     if (field) {
       const [name = "", version = ""] = field.split("@");
-      const manager = MANAGERS.find((one) => one === name);
+      const manager = PACKAGE_MANAGERS.find((one) => one === name);
       if (!manager) {
         throw new Error(
           `${join(repo, relative(clone, dir))}'s package.json names ${field} as its packageManager, and a sheet's stage installs with npm, pnpm, yarn or bun.`

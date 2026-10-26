@@ -30,7 +30,7 @@
  *   read carries a task's attempts and what follows from them and its edges:
  *   a live attempt, what it still waits on, a last attempt that failed or
  *   was stopped, and how.
- * - **Links** (task-file.ts `EDGES`). `waits_on` blocks: a task is ready
+ * - **Links** (core task-edges.ts `TASK_EDGES`). `waits_on` blocks: a task is ready
  *   exactly when it is in a `todo` stage, every target it and its `part_of`
  *   ancestors wait on is settled (task-waits.ts `settled`, the one
  *   resolver), no attempt at it is live, and no coordinator holds it (a
@@ -73,6 +73,7 @@ import {
   waitTarget,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
+import type { TaskEdge } from "@cawco/core/task-edges";
 import { Elysia, t } from "elysia";
 import type { TaskIndexRow, WorkItemRow } from "./db";
 import type {
@@ -135,7 +136,6 @@ import {
 import {
   ARCHIVE_DIR,
   archivePath,
-  type Edge,
   EXTRA_KEY,
   type ExtraValue,
   fileTaskNumber,
@@ -143,6 +143,7 @@ import {
   TASK_FIELDS,
   type TaskComment,
   TaskDoc,
+  type TaskField,
   type TaskFields,
   type Todo,
   taskId,
@@ -1361,7 +1362,7 @@ const byRank = (a: TaskSummary, b: TaskSummary): number => {
 };
 
 /** What an edge's commit message says it did. */
-const EDGE_PHRASE: Record<Edge, string> = {
+const EDGE_PHRASE: Record<TaskEdge, string> = {
   waits_on: "waits on",
   part_of: "part of",
   found_in: "found in",
@@ -1423,7 +1424,12 @@ const applyPatch = (doc: TaskDoc, patch: TaskPatch): string => {
     const pages = items("builds_from", patch.buildsFrom);
     set("builds_from", () => doc.setField("builds_from", pages));
   }
-  for (const field of ["checks", "outputs", "context", "labels"] as const) {
+  for (const field of [
+    "checks",
+    "outputs",
+    "context",
+    "labels",
+  ] as const satisfies readonly TaskField[]) {
     const list = patch[field];
     if (list !== undefined) {
       set(field, () => doc.setField(field, items(field, list)));

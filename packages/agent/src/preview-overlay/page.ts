@@ -29,8 +29,9 @@ import {
 } from "@cawco/core/comments";
 import type { DocMap } from "@cawco/core/doc-maps";
 import type { InkGroup } from "@cawco/core/ink";
-import { pinName } from "@cawco/core/pin-name";
-import { shellShortcutOf } from "@cawco/core/shell-shortcuts";
+import { pinName, UNSHOWN_ELEMENTS } from "@cawco/core/pin-name";
+import { paneKeyOf, shellShortcutOf } from "@cawco/core/shell-shortcuts";
+import { interactionOf } from "@cawco/core/stage";
 import {
   type Anchorable,
   anchorable,
@@ -1302,9 +1303,7 @@ function sheetChain(el: Element): Pick<PageAnchor, "chain" | "sheet"> | null {
       ...(interaction && scheme
         ? {
             state: {
-              interaction: FRAME_INTERACTIONS.includes(interaction)
-                ? (interaction as "rest")
-                : "rest",
+              interaction: interactionOf(interaction) ?? "rest",
               scheme: scheme === "light" || scheme === "dark" ? scheme : "page",
               // A frame at its story's own form is as wide as its body laid out (unscaled by the canvas's zoom).
               width: Number.isFinite(width)
@@ -1319,7 +1318,6 @@ function sheetChain(el: Element): Pick<PageAnchor, "chain" | "sheet"> | null {
     },
   };
 }
-const FRAME_INTERACTIONS = ["rest", "hover", "focus", "pressed"];
 /** The widest frame a pane may ask a canvas for, px. Ours: past a desk's. */
 const CANVAS_WIDTH_MAX = 3840;
 
@@ -1611,7 +1609,7 @@ function ownSource(el: Element): Source | null {
 }
 
 /** Elements whose text is never what an element shows. */
-const UNSHOWN = new Set(["script", "style", "template", "noscript"]);
+const UNSHOWN: ReadonlySet<string> = new Set(UNSHOWN_ELEMENTS);
 
 /**
  * What an element with no words of its own reads as, in this order: the
@@ -2558,19 +2556,6 @@ window.addEventListener(
   true
 );
 
-/** The pane's keys, heard while the page has the keyboard: V, C and D, ⇧C (as `C`), J, K, `/` (the rail's search), Enter and Esc. */
-const PANE_KEYS = new Set([
-  "v",
-  "c",
-  "d",
-  "C",
-  "j",
-  "k",
-  "/",
-  "Enter",
-  "Escape",
-]);
-
 /**
  * The page's own controls: Enter on one presses it (a card's Clear, its
  * Continue, Change), and is never the pane's Enter, which opens the focused
@@ -2609,7 +2594,7 @@ window.addEventListener(
     // ⇧C (Figma's hide/show comments) goes as `C`; every other letter as itself.
     const key = letter === "c" && event.shiftKey ? "C" : (letter ?? event.key);
     if (
-      !PANE_KEYS.has(key) ||
+      !paneKeyOf(key) ||
       event.metaKey ||
       event.ctrlKey ||
       event.altKey ||

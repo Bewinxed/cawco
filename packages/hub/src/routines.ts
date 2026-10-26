@@ -2515,14 +2515,16 @@ export const createRoutines = ({
 export type Routines = ReturnType<typeof createRoutines>;
 
 /** Every routine tool, by name. */
-export const ROUTINE_TOOLS: ReadonlySet<string> = new Set([
+const ROUTINE_TOOL_NAMES = [
   "routine_create",
   "routine_list",
   "routine_update",
   "routine_delete",
   "routine_run_now",
   "routine_result",
-]);
+] as const;
+export type RoutineTool = (typeof ROUTINE_TOOL_NAMES)[number];
+export const ROUTINE_TOOLS: ReadonlySet<string> = new Set(ROUTINE_TOOL_NAMES);
 
 /** A refusal as the route's answer. */
 const answer = (error: unknown) => {

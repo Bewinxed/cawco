@@ -27,10 +27,10 @@ import {
   generatedId,
 } from "@cawco/core/comments";
 import type { DecisionCard } from "@cawco/core/decisions";
-import { elementName } from "@cawco/core/pin-name";
+import { elementName, UNSHOWN_ELEMENTS } from "@cawco/core/pin-name";
 
 /** Elements whose insides are no part of what the person sees. */
-const UNSEEN = new Set(["script", "style", "template", "noscript", "head"]);
+const UNSEEN: ReadonlySet<string> = new Set([...UNSHOWN_ELEMENTS, "head"]);
 /** Words a label keeps. Our call. */
 const LABEL_CHARS = 60;
 const SPACES = /\s+/gu;

@@ -1,8 +1,12 @@
+/** How hard an image is drawn: `auto` the model's pick, `low` for drafts, `high` for dense text or fine detail. */
+export const IMAGE_QUALITIES = ["auto", "low", "medium", "high"] as const;
+export type ImageQuality = (typeof IMAGE_QUALITIES)[number];
+
 /** One subscription-backed image request, independent of the calling harness. */
 export interface ImageGenerationRequest {
   output_path: string;
   prompt: string;
-  quality?: "auto" | "low" | "medium" | "high";
+  quality?: ImageQuality;
   reference_images?: string[];
   size?: string;
 }

@@ -887,7 +887,7 @@ const PROMOTED_FILES = [
   "ink.json",
   "picture.png",
 ] as const;
-type PromotedFile = (typeof PROMOTED_FILES)[number];
+export type PromotedFile = (typeof PROMOTED_FILES)[number];
 
 /** `artifacts/<name>`, inside the project folder; refused for a name that would leave it. */
 const promotedFolder = (name: string): string => {

@@ -24,23 +24,15 @@
  * with that.
  */
 import { availableParallelism } from "node:os";
-import { join, relative, resolve } from "node:path";
+import { relative, resolve } from "node:path";
+import { ROOT, repoFiles } from "./lib/repo-files";
 
 /** The first stable Bun with `bun fmt` (bun.com/blog/bun-v1.4.4). */
 const FIRST_FMT = "1.4.4";
-const ROOT = join(import.meta.dir, "..");
 
 const fail = (why: string): never => {
   console.error(`fmt: ${why}`);
   process.exit(2);
-};
-
-const git = (...argv: string[]): string[] => {
-  const run = Bun.spawnSync(["git", ...argv], { cwd: ROOT });
-  if (run.exitCode !== 0) {
-    fail(`git ${argv.join(" ")}: ${run.stderr.toString().trim()}`);
-  }
-  return run.stdout.toString().split("\0").filter(Boolean);
 };
 
 /** The bun this runs on, refused where it has no `bun fmt`. */
@@ -194,11 +186,7 @@ async function main(): Promise<number> {
     fail(`unknown flag ${unknown.join(", ")}`);
   }
 
-  const files = [
-    ...new Set(
-      git("ls-files", "-z", "-co", "--exclude-standard", "--", ...paths)
-    ),
-  ];
+  const files = [...new Set(repoFiles(paths))];
   // `bun fmt` with no paths formats the whole directory: an empty list is done.
   if (files.length === 0) {
     return 0;
