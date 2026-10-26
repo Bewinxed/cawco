@@ -15,7 +15,7 @@ import type {
   CanvasDial,
   CanvasSpec,
   MoveRender,
-  RenderReport,
+  PageReport,
 } from "@cawco/core/stage";
 import { bridge, type Section, type View } from "./runtime";
 import { type PageScheme, pageScheme } from "./scheme";
@@ -767,7 +767,7 @@ export class Chrome {
 
   /** The count line: frames, sections, how each drew, and the unnamed. The agent's dials once the first frames stand, from what they draw with. */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the count line and each frame's status line from one report
-  counts(report: RenderReport): void {
+  counts(report: PageReport): void {
     if (
       !this.#flags.dialed &&
       this.#o.spec.dials?.length &&

@@ -203,6 +203,14 @@ export const CANVAS_PLAN_ID = "cawco-plan";
 /** Where a canvas page posts its {@link RenderReport} (`POST`), beside the page so a panel's preview reaches it. */
 export const RENDERED_PATH = "/@cawco/rendered";
 
+/**
+ * Where a canvas page reads a states file's whole {@link SheetRead}, its
+ * components' props too (`?file=…`), beside the page as {@link RENDERED_PATH}
+ * is: once it has drawn, for the pane's inspector. A section's module
+ * carries only its {@link SectionSheet}, so no draw waits on docgen.
+ */
+export const SHEET_PATH = "/@cawco/sheet";
+
 /** Where the daemon reads a canvas's newest {@link RenderReport} (`?file=…` per section), next to the stage. */
 export const REPORT_PATH = "/__cawco/report";
 
@@ -311,7 +319,7 @@ export interface MoveRender {
 export interface SectionRender {
   file: string;
   frames: FrameRender[];
-  /** The content hash of the states file and the components it mounts it was drawn from. */
+  /** The content hash of the states file and every file of the project's its frames are drawn from, as they stood when the stage kept the report: an edit since the draw loads the section again, which draws and reports again. */
   hash: string;
   moves: MoveRender[];
   /** What the canvas could not draw as asked: interaction selectors it could not force (§7.1), whose columns are not drawn, and width media it leaves to the window (canvas width.ts), which a frame's width does not answer. */
@@ -347,8 +355,16 @@ export interface SectionUnloaded {
  * section whose module didn't load in the page, which posts no section of
  * its own. The stage keeps each as that section's `page` problem.
  */
-export interface PostedReport extends RenderReport {
+export interface PostedReport extends PageReport {
   unloaded: SectionUnloaded[];
+}
+
+/** A section as its page drew it: the stage stamps its content hash as it keeps it ({@link SectionRender} `hash`). */
+export type PageSection = Omit<SectionRender, "hash">;
+
+/** A report as the canvas page reads it of itself, before the stage keeps it: its sections unstamped ({@link PageSection}). */
+export interface PageReport extends Omit<RenderReport, "sections"> {
+  sections: PageSection[];
 }
 
 /**
@@ -1101,3 +1117,6 @@ export interface StageOpened {
 export interface SheetOnPage extends SheetRead {
   file: string;
 }
+
+/** A states file's sheet as its section's module carries it: its stories and meta, no props (those are read at {@link SHEET_PATH}). */
+export type SectionSheet = Omit<SheetOnPage, "components">;

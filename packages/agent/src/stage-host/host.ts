@@ -74,6 +74,7 @@ import {
   HEALTH_PATH,
   MODULES_PATH,
   type PageError,
+  type PageSection,
   type PostedReport,
   RENDERED_PATH,
   REPORT_PATH,
@@ -83,9 +84,10 @@ import {
   SECTION_WRITTEN,
   type SectionPlan,
   type SectionRender,
+  type SectionSheet,
   type SectionUnloaded,
+  SHEET_PATH,
   type SheetImport,
-  type SheetOnPage,
   type SheetRead,
   type SheetWeight,
   type SheetWrite,
@@ -458,12 +460,18 @@ async function resolved(
 }
 
 /**
- * A story file as its stage reads it: its stories (each its export's name,
- * 1-based place and args), its meta, and the props of each component its
- * stories mount, by each framework's docgen (docgen.ts). A component the
- * stage could not resolve has no props, and says so.
+ * A story file's sheet without its props: its stories (each its export's
+ * name, 1-based place and args) and its meta, and each component its stories
+ * mount, by its file, under the name the file imports it by. What a
+ * section's module carries ({@link sectionModule}): no draw waits on docgen.
  */
-async function sheetRead(file: string, text?: string): Promise<SheetRead> {
+async function sheetOf(
+  file: string,
+  text?: string
+): Promise<{
+  mounted: Map<string, string>;
+  sheet: Omit<SheetRead, "components">;
+}> {
   const abs = resolve(root, file);
   const read = readStoryFile(abs, text ?? readFileSync(abs, "utf8"));
   const local = new Map<string, Promise<string | null>>();
@@ -492,7 +500,6 @@ async function sheetRead(file: string, text?: string): Promise<SheetRead> {
     const own = owns[at];
     return { ...story, component: own ? relative(root, own) : null };
   });
-  // Each component a story mounts, by its file, under the name the file imports it by.
   const names = new Map<string, string>();
   if (metaFile && read.meta.component) {
     names.set(metaFile, read.meta.component);
@@ -503,19 +510,32 @@ async function sheetRead(file: string, text?: string): Promise<SheetRead> {
       names.set(own, story.component);
     }
   });
-  const components: ComponentDoc[] = await Promise.all(
-    [...names].map(([component, name]) => propsOf(component, name))
-  );
   return {
-    stories,
-    meta: {
-      args: read.meta.args,
-      code: read.meta.code,
-      component: metaFile ? relative(root, metaFile) : null,
-      title: read.meta.title,
+    mounted: names,
+    sheet: {
+      stories,
+      meta: {
+        args: read.meta.args,
+        code: read.meta.code,
+        component: metaFile ? relative(root, metaFile) : null,
+        title: read.meta.title,
+      },
     },
-    components,
   };
+}
+
+/**
+ * A story file as its stage reads it: its sheet ({@link sheetOf}) and the
+ * props of each component its stories mount, by each framework's docgen
+ * (docgen.ts). A component the stage could not resolve has no props, and
+ * says so.
+ */
+async function sheetRead(file: string, text?: string): Promise<SheetRead> {
+  const { mounted, sheet } = await sheetOf(file, text);
+  const components: ComponentDoc[] = await Promise.all(
+    [...mounted].map(([component, name]) => propsOf(component, name))
+  );
+  return { ...sheet, components };
 }
 
 /** The component files a states file mounts (its meta's and its stories' own), absolute: what its frames are drawn from. */
@@ -840,21 +860,23 @@ if (import.meta.hot) {
 }
 
 /**
- * One section's module: its states file, the sheet as the stage reads it
- * (stories with their labels, forms and moves; the meta; each component's
- * props), and the content hash its report is kept under. It accepts itself:
- * an edit to any file its frames are drawn from (the plugin's `hotUpdate`)
- * loads it again, with its sheet and hash read anew, and the runtime
- * remounts that section alone (`cawco:section`) and hands the inspector the
- * new sheet.
+ * One section's module: its states file and its sheet as the stage reads it
+ * (stories with their labels, forms and moves; the meta), never its
+ * components' props nor its content hash. Both cost a cold stage a second
+ * on the first module of a canvas's graph (NeedsCard: docgen 0.5 s, the
+ * hash's walk of every import 0.5 s), and nothing drawn needs them: the
+ * page reads the props at {@link SHEET_PATH} once it has drawn, for the
+ * inspector, and the stage stamps the hash on each report it keeps
+ * ({@link keepReport}). It accepts itself: an edit to any file its frames
+ * are drawn from (the plugin's `hotUpdate`) loads it again, with its sheet
+ * read anew, and the runtime remounts that section alone (`cawco:section`)
+ * and hands the inspector the new sheet.
  */
 async function sectionModule(file: string): Promise<string> {
   const abs = resolve(root, file);
-  const sheet: SheetOnPage = { ...(await sheetRead(file)), file };
-  const hash = await contentHash(file);
+  const sheet: SectionSheet = { ...(await sheetOf(file)).sheet, file };
   return `import * as module from ${JSON.stringify(abs)};
 export const SHEET = ${JSON.stringify(sheet)};
-export const HASH = ${JSON.stringify(hash)};
 export { module };
 if (import.meta.hot) {
   import.meta.hot.accept((next) => {
@@ -922,16 +944,22 @@ const frameId = (frame: FrameRender): string =>
 
 /**
  * Keeps what a canvas page posted (its body, unchecked until here): each
- * section under its file. A frame the page did not show (`unshown`: a
- * phone's canvas shows one frame at a time) keeps the frame the last draw
- * of the same content recorded, so a phone looking never drops what a desk
- * saw from the map's counts.
+ * section under its file, stamped with its content hash as its files stand
+ * now (`contentHash`, read here and never on the page's path: an edit
+ * since the draw loaded the section again, which draws and posts again). A
+ * frame the page did not show (`unshown`: a phone's canvas shows one frame
+ * at a time) keeps the frame the last draw of the same content recorded, so
+ * a phone looking never drops what a desk saw from the map's counts.
  */
-function keepReport(body: unknown): void {
+async function keepReport(body: unknown): Promise<void> {
   const report = body as Partial<PostedReport> | null;
   keepUnloaded(report?.unloaded ?? [], report?.sections ?? []);
-  for (const section of report?.sections ?? []) {
-    if (typeof section?.file === "string" && storyFile(section.file)) {
+  for (const drawn of report?.sections ?? []) {
+    if (typeof drawn?.file === "string" && storyFile(drawn.file)) {
+      const section: SectionRender = {
+        ...drawn,
+        hash: await contentHash(drawn.file),
+      };
       // A frame this page did not show (a phone's, one at a time) keeps what an earlier draw of the same content saw.
       const kept = reports.get(section.file);
       const seen =
@@ -2571,18 +2599,18 @@ async function serveStage(
     return;
   }
   if (path === RENDERED_PATH && req.method === "POST") {
-    await bodyOf(req).then(
-      (body) => {
-        keepReport(body);
-        json(res, 200, { ok: true });
-      },
-      (error) => refusedWith(res, error)
-    );
+    await bodyOf(req)
+      .then(keepReport)
+      .then(
+        () => json(res, 200, { ok: true }),
+        (error) => refusedWith(res, error)
+      );
     return;
   }
   if (
     path !== CANVAS_PATH &&
     path !== STORIES_PATH &&
+    path !== SHEET_PATH &&
     path !== WEIGHT_PATH &&
     path !== REPORT_PATH
   ) {
@@ -2718,10 +2746,7 @@ function keepMissing(files: string[]): void {
  * refused them as it linked or ran them. The stage's own word on a section
  * (missing, a compile error) stands over a page's.
  */
-function keepUnloaded(
-  unloaded: SectionUnloaded[],
-  drawn: SectionRender[]
-): void {
+function keepUnloaded(unloaded: SectionUnloaded[], drawn: PageSection[]): void {
   let changed = false;
   for (const one of unloaded) {
     const file = storyFile(one.file);

@@ -36,14 +36,16 @@ import {
   type Interaction,
   type MoveRender,
   type PageError,
+  type PageReport,
+  type PageSection,
   type PostedReport,
-  type RenderReport,
   type Scheme,
   SECTION_MISSING,
   SECTION_WRITTEN,
   type SectionPlan,
-  type SectionRender,
+  type SectionSheet,
   type SheetOnPage,
+  type SheetRead,
   type StageErrorKind,
   type Story,
   sectionName,
@@ -103,9 +105,8 @@ export interface Adapter {
 
 /** A states file's module as the stage serves it (`cawco:sheet/<file>.js`). */
 export interface SectionModule {
-  HASH: string;
   module: Record<string, unknown>;
-  SHEET: SheetOnPage;
+  SHEET: SectionSheet;
 }
 
 /** Vite's error as its server sends it to pages (`prepareError`): its message, the module's id and its place. */
@@ -369,7 +370,7 @@ export interface CanvasState {
    * room the window still lacks for it (`lacks`), read once it is shown.
    */
   pose: (key: string) => { h: number; w: number } | null;
-  report: RenderReport | null;
+  report: PageReport | null;
   reports: number;
   /** Whether frame `key` is settled: fonts loaded, no finite animation on it, in it or on what holds it still running. */
   settled: (key: string) => boolean;
@@ -513,6 +514,8 @@ export function boot(options: BootOptions): void {
   const overrides = new Map<string, Record<string, unknown>>();
   let chosen = window.__cawcoSheetChosen ?? null;
   let reportTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Each section's newest ask of its whole sheet, by its file (`said`). */
+  const sheetAsks = new Map<string, number>();
   let reports = 0;
   /** The person's drags, by frame key, from the artifact's doc. */
   let moved: Record<string, [number, number]> = {};
@@ -1719,7 +1722,7 @@ export function boot(options: BootOptions): void {
         .filter((frame) => !had.has(frame))
         .map((frame) => frame.el)
     );
-    said(section);
+    quietly(said(section));
     if (embed) {
       unnamedInEmbed();
       sayShape();
@@ -2313,11 +2316,37 @@ export function boot(options: BootOptions): void {
 
   /* --- What the page says: the sheet for the inspector, the report -------- */
 
-  function said(section: Section): void {
-    if (!section.mod) {
+  /**
+   * The section's whole sheet, its components' props too, read from the
+   * stage (core `SHEET_PATH`) once it has drawn and told the pane's inspector: its
+   * module carries none, so no draw waits on docgen. A page with no
+   * inspector (a map's card, a Preview's embed) asks for none. An answer
+   * older than the section's newest ask is let go.
+   */
+  async function said(section: Section): Promise<void> {
+    if (!section.mod || card || embed) {
       return;
     }
-    const sheet = { ...section.mod.SHEET, file: section.file };
+    const asked = (sheetAsks.get(section.file) ?? 0) + 1;
+    sheetAsks.set(section.file, asked);
+    // Beside the page, as its report is posted (core `SHEET_PATH`).
+    const at = new URL("sheet", location.href);
+    at.search = new URLSearchParams({ file: section.file }).toString();
+    let read: SheetRead;
+    try {
+      const answer = await fetch(at);
+      if (!answer.ok) {
+        return;
+      }
+      read = (await answer.json()) as SheetRead;
+    } catch {
+      // The stage is away: the next load of the section asks again.
+      return;
+    }
+    if (sheetAsks.get(section.file) !== asked) {
+      return;
+    }
+    const sheet: SheetOnPage = { ...read, file: section.file };
     window.__cawcoSheetOnPage = sheet;
     dispatchEvent(new CustomEvent("cawco:sheet", { detail: sheet }));
   }
@@ -2391,13 +2420,12 @@ export function boot(options: BootOptions): void {
     };
   }
 
-  function reportNow(): RenderReport {
-    const drawn: SectionRender[] = sections
+  function reportNow(): PageReport {
+    const drawn: PageSection[] = sections
       .filter((one) => one.loaded && one.mod)
       .map((section) => ({
         file: section.file,
         title: section.mod?.SHEET.meta.title ?? section.file,
-        hash: section.mod?.HASH ?? "",
         frames: [...section.frames.values()].map(frameRender),
         moves: section.moves,
         notForced: [...rewrite.refused].slice(0, 20),
