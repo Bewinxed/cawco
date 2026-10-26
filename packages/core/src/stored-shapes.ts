@@ -2201,6 +2201,7 @@ export const WorkspaceHoldingShape = z.object({
   bytes: z.number(),
   dirty: z.number(),
   excluded: z.array(z.string()).optional(),
+  refused: z.string().optional(),
   stashes: z.number(),
   strays: z.number().optional(),
 });

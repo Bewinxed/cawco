@@ -2586,6 +2586,16 @@ export interface WorkspaceHolding {
    * its landing this way, and retirement deleted it. Absent when none.
    */
   excluded?: string[];
+  /**
+   * Set when CawCo does not run git in the clone, so nothing of it was read
+   * and `ahead`, `dirty` and `stashes` are 0: why, as agent workspace.ts
+   * `gitRefusal` says it (its `.git` no folder of its own, or a key its own
+   * config sets past core safe-git.ts's allowlist). Only the person, or a
+   * session continuing it, can change that, so the workspace is held until
+   * one does, not tried again each sweep: on 2026-10-25 a clone whose config
+   * held git-lfs's `lfs.<url>.access` was archived and refused every minute.
+   */
+  refused?: string;
   stashes: number;
   /**
    * Set when the clone's folder is there and its `.git` is no repository
@@ -2606,14 +2616,18 @@ export const holdsNothing = (holding: WorkspaceHolding): boolean =>
   holding.ahead === 0 &&
   holding.dirty === 0 &&
   holding.stashes === 0 &&
+  !holding.refused &&
   !holding.strays &&
   !holding.excluded?.length;
 
 const counted = (count: number, one: string, many: string): string =>
   `${count} ${count === 1 ? one : many}`;
 
-/** What a workspace holds that is nowhere else, in words: "2 commits on no remote, 3 changed files, 1 stash, 2 excluded files". */
+/** What a workspace holds that is nowhere else, in words: "2 commits on no remote, 3 changed files, 1 stash, 2 excluded files", or the clone CawCo did not read and why. */
 export const holdingWords = (holding: WorkspaceHolding): string => {
+  if (holding.refused) {
+    return `a clone CawCo did not read: ${holding.refused}`;
+  }
   const excluded = holding.excluded ?? [];
   const folders = excluded.filter((path) => path.endsWith("/")).length;
   const files = excluded.length - folders;

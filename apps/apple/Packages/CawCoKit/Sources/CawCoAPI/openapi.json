@@ -52057,6 +52057,10 @@
               "type": "string"
             }
           },
+          "refused": {
+            "description": "Set when CawCo does not run git in the clone, so nothing of it was read\nand `ahead`, `dirty` and `stashes` are 0: why, as agent workspace.ts\n`gitRefusal` says it (its `.git` no folder of its own, or a key its own\nconfig sets past core safe-git.ts's allowlist). Only the person, or a\nsession continuing it, can change that, so the workspace is held until\none does, not tried again each sweep: on 2026-10-25 a clone whose config\nheld git-lfs's `lfs.<url>.access` was archived and refused every minute.",
+            "type": "string"
+          },
           "stashes": {
             "type": "number"
           },
@@ -52115,6 +52119,10 @@
             "items": {
               "type": "string"
             }
+          },
+          "refused": {
+            "description": "Set when CawCo does not run git in the clone, so nothing of it was read\nand `ahead`, `dirty` and `stashes` are 0: why, as agent workspace.ts\n`gitRefusal` says it (its `.git` no folder of its own, or a key its own\nconfig sets past core safe-git.ts's allowlist). Only the person, or a\nsession continuing it, can change that, so the workspace is held until\none does, not tried again each sweep: on 2026-10-25 a clone whose config\nheld git-lfs's `lfs.<url>.access` was archived and refused every minute.",
+            "type": "string"
           },
           "stashes": {
             "type": "number"

@@ -75,6 +75,35 @@ export const workWords = {
   /** That notice's headline. */
   carriedHeadline: (ws: string, carry: string, machine: string) =>
     `Workspace ${ws} retired; its commits are in the carry ${carry} on ${machine}.`,
+  /**
+   * What a held workspace whose clone CawCo did not read is (core
+   * `WorkspaceHolding.refused`, `refused` its machine's words: "<clone>/.git/config
+   * sets <key>, which CawCo does not run git under"), and the ways on: the
+   * session continuing it, or the person on its machine, undoes that in the
+   * clone, and it retires as that work ends, or archives when asked again.
+   * Discarding it as it is cannot: nothing of it can be carried unread.
+   */
+  refusedHeld: (
+    ws: string,
+    machine: string,
+    refused: string,
+    size: string,
+    path: string
+  ) =>
+    `Workspace ${ws} on ${machine} was not archived and nothing was deleted: ${refused}, so CawCo could not read what its clone holds (${size} at ${path}). It is held. Continue it (delegate with workspace: "${ws}") and have that session undo that in its clone, and it retires as that work ends; or undo it yourself on ${machine}, then archive or discard it again.`,
+  /** The notice to the session that started its work as it becomes held so ({@link workWords.refusedHeld}): `title` its latest item's. */
+  refusedNotice: (
+    ws: string,
+    title: string,
+    machine: string,
+    refused: string,
+    size: string,
+    path: string
+  ) =>
+    `Workspace ${ws} of “${title}” is yours to decide. ${workWords.refusedHeld(ws, machine, refused, size, path)}`,
+  /** That notice's headline. */
+  refusedHeadline: (ws: string) =>
+    `Workspace ${ws} is held: CawCo did not read its clone.`,
   /** `stop_delegate`'s word on a stopped item's workspace that holds work (`held`, in words): held, its stopper's to decide. */
   stopHolds: (ws: string, held: string) =>
     `Its workspace ${ws} holds ${held}, so it is held, not retired, once its session ends.`,

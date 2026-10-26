@@ -126,8 +126,21 @@ export const safeGitArgv = (args: readonly string[]): string[] => [
 
 /**
  * The keys a repository's own config may hold for git to run there: what
- * `git clone`, `git init`, a branch and its upstream, and a commit's author
- * write. Each is a pattern on the whole lower-cased key.
+ * `git clone`, `git init`, a branch and its upstream, a commit's author, and
+ * git-lfs as it fetches and pushes write. Each is a pattern on the whole
+ * lower-cased key.
+ *
+ * An allowlist, not a list of the keys that run programs: git keeps no such
+ * list. Its own word is "Some configuration options and hook files may cause
+ * Git to run arbitrary shell commands … it is not safe to run Git commands
+ * in a .git directory … when that .git directory itself comes from an
+ * untrusted source", and an untrusted one is to be "sanitized" first
+ * (https://git-scm.com/docs/git#_security). Releases add more: Git 2.54's
+ * config hooks run `hook.<name>.command` beside the hooks dir's, which
+ * `core.hooksPath` names (https://git-scm.com/docs/git-hook). Keys that run
+ * nothing still reach past the clone on the host:
+ * `core.worktree` checks out anywhere, `http.cookieFile` with
+ * `http.saveCookies` writes any file.
  */
 const ALLOWED_KEYS: readonly RegExp[] = [
   /^core\.(repositoryformatversion|filemode|bare|logallrefupdates|ignorecase|precomposeunicode|symlinks|autocrlf|eol|safecrlf|quotepath)$/u,
@@ -135,6 +148,15 @@ const ALLOWED_KEYS: readonly RegExp[] = [
   // git-lfs writes its format marker into any repository it runs in (a
   // checkout that smudges a large file); it names no program.
   /^lfs\.repositoryformatversion$/u,
+  // git-lfs writes these of its own for its endpoint: `access` "is normally
+  // set by LFS itself on receiving a 401 response" (basic, negotiate or
+  // none), and `locksverify` true or false as the server answers its lock
+  // check (https://github.com/git-lfs/git-lfs/blob/main/docs/man/git-lfs-config.adoc).
+  // Both are among the few keys git-lfs takes from a repository's committed
+  // `.lfsconfig`, a set it restricts "for security reasons". A delegate's
+  // push to an LFS endpoint left `access` in clone 8c921fcb on 2026-10-25,
+  // and its archive was refused every minute for it.
+  /^lfs\.[^\n]+\.(access|locksverify)$/u,
   /^remote\.[^\n]+\.(url|pushurl|fetch|push|tagopt|prune|mirror|skipdefaultupdate)$/u,
   /^branch\.[^\n]+\.(remote|merge|rebase|pushremote|description)$/u,
   /^(user|author|committer)\.(name|email)$/u,

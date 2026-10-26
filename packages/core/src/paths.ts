@@ -242,11 +242,19 @@ export const fleetHarnessSetFile = (): string =>
  * skills dir ({@link claudeSkillsDir}, {@link piSkillsDir}) with the tree
  * store its links land in ({@link treeStoreOf}), the vendored marketplaces
  * with their plugins' stores ({@link VENDOR_MARKETPLACES_DIR}), pi's
- * memory document (Claude Code's, `CLAUDE.md`, is the user layer's), the
- * fleet's installed MCP servers ({@link fleetMcpInstallsDir}), which a
- * session in a workspace launches, and the fleet's hook scripts
- * ({@link fleetHooksDir}), which a workspace session's harness runs inside
- * its boundary. Every workspace reads each and writes none
+ * memory document, the user layer's files ({@link USER_LAYER_FILES}: Claude
+ * Code's `CLAUDE.md` and `settings.json` among them), the fleet's installed
+ * MCP servers ({@link fleetMcpInstallsDir}), which a session in a workspace
+ * launches, and the fleet's hook scripts ({@link fleetHooksDir}), which a
+ * workspace session's harness runs inside its boundary. A Linux boundary
+ * binds a file as the file it was when the boundary started, and the sync
+ * writes a file whole (a new inode), so a boundary in use keeps the old one
+ * until it is handed over: each of these is in its form, a file by its
+ * content (agent boundary.ts `syncedPresence`), and a sync that changes one
+ * hands every boundary in use over as its work ends. On 2026-10-25 running
+ * boundaries read the CLAUDE.md of their start until each restarted. Its
+ * dir is no bind instead: `~/.claude` holds a session's credential and
+ * transcripts too. Every workspace reads each and writes none
  * (core workspace-policy.ts): a harness hands its model a skill's path, and
  * the model reads the skill's other files from there with its own tools,
  * through the boundary. pi's lie in its agent dir, a credential store, so
@@ -259,6 +267,7 @@ export const fleetSyncedPaths = (): string[] => [
   ]),
   userLayerPath(VENDOR_MARKETPLACES_DIR),
   piMemoryFile(),
+  ...USER_LAYER_FILES.map((name) => userLayerPath(name)),
   fleetMcpInstallsDir(),
   fleetHooksDir(),
 ];

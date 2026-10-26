@@ -3779,7 +3779,8 @@ const FORM_GENERATION = "form";
 
 /**
  * Which of the paths the fleet sync writes (core `fleetSyncedPaths`, the
- * fleet's hook scripts among them) stand on this machine now, for a Linux
+ * fleet's hook scripts and the user layer's `CLAUDE.md` among them) stand on
+ * this machine now, for a Linux
  * boundary's form: srt binds a read path back only when it resolves ("Not
  * restoring … nothing there resolves (absent, dangling or unreadable)", its
  * linux-sandbox-utils.js 0.0.81), so a boundary started before one was made

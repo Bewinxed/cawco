@@ -1635,14 +1635,32 @@ const runInCopy = async (
 };
 
 /**
+ * Why CawCo does not run git in workspace `workspace`'s copy, as `access`
+ * reaches it: its `.git` is no folder of its own (a link is never followed:
+ * a delegate can point one at any folder it can name), or its git directory
+ * names another or its config holds a key past the allowlist
+ * (`repositoryConfigProblem`). Nothing when git may run there. Throws when
+ * it has no `.git` at all.
+ */
+const gitRefusal = async (
+  workspace: WorkspaceRef,
+  access: CopyAccess
+): Promise<string | undefined> => {
+  const dotGit = access.at(join(workspace.path, ".git"));
+  const found = await lstat(dotGit);
+  if (!found.isDirectory()) {
+    return `${join(workspace.path, ".git")} is ${found.isSymbolicLink() ? "a link" : "no folder"}, which CawCo does not run git through`;
+  }
+  return await repositoryConfigProblem(dotGit);
+};
+
+/**
  * git in workspace `workspace`'s copy, as `access` reaches it
  * ({@link accessOf}), once its boundary is closed ({@link closeClone},
  * {@link workspaceAt}): nothing can write the copy meanwhile, so its config
  * cannot change between the look below and the run (safe-git.ts).
- * Refused, nothing run, when its `.git` is no folder of its own (a link is
- * never followed: a delegate can point one at any folder it can name) or
- * when its git directory names another or its config holds a key past the
- * allowlist (`repositoryConfigProblem`). Answers git's stdout, trimmed, for
+ * Refused, nothing run, for {@link gitRefusal}'s reason; an archive holds
+ * such a copy before it gets here ({@link readAndClose}). Answers git's stdout, trimmed, for
  * an argv, `input` on its stdin, `env` over the host's; an exit past
  * `exits` throws its stderr.
  */
@@ -1650,17 +1668,10 @@ const closedCloneGit = async (
   workspace: WorkspaceRef,
   access: CopyAccess
 ): Promise<(args: readonly string[], given?: GitGiven) => Promise<string>> => {
-  const dotGit = access.at(join(workspace.path, ".git"));
-  const found = await lstat(dotGit);
-  if (!found.isDirectory()) {
+  const refused = await gitRefusal(workspace, access);
+  if (refused) {
     throw new Error(
-      `Workspace ${workspace.id} was not archived: ${join(workspace.path, ".git")} is ${found.isSymbolicLink() ? "a link" : "no folder"}, which CawCo does not run git through, so nothing was deleted.`
-    );
-  }
-  const problem = await repositoryConfigProblem(dotGit);
-  if (problem) {
-    throw new Error(
-      `Workspace ${workspace.id} was not archived: ${problem}, so nothing was deleted.`
+      `Workspace ${workspace.id} was not archived: ${refused}, so nothing was deleted.`
     );
   }
   return async (args, { env = {}, exits = [0], input }: GitGiven = {}) => {
@@ -2464,7 +2475,11 @@ const keepHeld = async (
   access: CopyAccess,
   held: Held
 ): Promise<WorkspaceHolding> => {
-  if (access.layer.kind === "repo" && held.strays === undefined) {
+  if (
+    access.layer.kind === "repo" &&
+    held.strays === undefined &&
+    held.refused === undefined
+  ) {
     await ownObjects(workspace, access);
   }
   const kept: WorkspaceHolding = {
@@ -2534,8 +2549,28 @@ const closeClone = async (
 };
 
 /**
+ * {@link gitRefusal} for a copy {@link holding} would run git in: one that
+ * is there and a git clone. A copy already deleted, or no git clone any more
+ * (its entries counted as `strays`), runs no git and is refused nothing.
+ */
+const refusedClone = async (
+  workspace: WorkspaceRef,
+  access: CopyAccess
+): Promise<string | undefined> => {
+  const copy = access.at(workspace.path);
+  if (
+    !(await lstat(copy).catch(() => undefined)) ||
+    (await noRepositoryAt(copy))
+  ) {
+    return;
+  }
+  return await gitRefusal(workspace, access);
+};
+
+/**
  * {@link closeClone} once nothing runs in the copy but what reads it: what
  * it holds read ({@link holding}), then kept, or carried away and removed.
+ * A clone CawCo does not run git in ({@link refusedClone}) is kept unread.
  */
 const readAndClose = async (
   workspace: WorkspaceRef,
@@ -2549,6 +2584,16 @@ const readAndClose = async (
 ): Promise<WorkspaceArchived> => {
   const { path } = workspace;
   if (read && access.layer.kind === "repo") {
+    // A git clone CawCo does not run git in is held, with why, for a
+    // discard as for a keep: nothing of it can be read or carried, and only
+    // a change to the clone itself lets it go.
+    const refused = await refusedClone(workspace, access);
+    if (refused) {
+      return {
+        carry: null,
+        held: await keepHeld(workspace, access, { ...NOTHING_HELD, refused }),
+      };
+    }
     await refreshBase(workspace, access, request.base);
   }
   const held = read

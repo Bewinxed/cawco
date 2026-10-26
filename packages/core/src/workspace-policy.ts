@@ -1071,15 +1071,14 @@ export const workspacePolicy = async (
       ...hostToolCaches(),
       ...(await darwinDeveloperBundle()),
       binaryRoot(),
-      ...[...USER_LAYER_DIRS, ...USER_LAYER_FILES].map((name) =>
-        join(claudeHome(), name)
-      ),
+      ...USER_LAYER_DIRS.map((name) => join(claudeHome(), name)),
       // What the fleet sync writes that a harness loads, read only: every
       // skills dir with the tree store its links land in, the vendored
       // marketplaces Claude Code runs the fleet's plugins from (without them
       // every hook of such a plugin failed, `python3: can't open file
       // '…/cawco-marketplaces/axiom-marketplace/plugins/axiom/hooks/…'`),
-      // pi's memory (core paths.ts `fleetSyncedPaths`).
+      // pi's memory, the user layer's files (core paths.ts
+      // `fleetSyncedPaths`).
       ...fleetSyncedPaths(),
       ...(mac
         ? ["Developer", "Preferences", "Keychains"].map((name) =>

@@ -411,7 +411,15 @@ class WorkspaceHoldsWork extends WorkItemRefusal {
     const named = excludedNamed(held.excluded);
     super(
       409,
-      `Workspace ${handle(held.workspaceId)} on ${held.machine} holds ${held.holds} (${held.size} at ${held.path}), so it was not archived and nothing was deleted: it is held.${named ? ` Kept out of git by its own excludes: ${named}.` : ""} Continue its work, or pass discard: true to archive it with its unlanded commits, changes, stashes and excluded files saved to a carry in ~/.cawco/carries on ${held.machine}.`
+      held.refused
+        ? workWords.refusedHeld(
+            handle(held.workspaceId),
+            held.machine,
+            held.refused,
+            held.size,
+            held.path
+          )
+        : `Workspace ${handle(held.workspaceId)} on ${held.machine} holds ${held.holds} (${held.size} at ${held.path}), so it was not archived and nothing was deleted: it is held.${named ? ` Kept out of git by its own excludes: ${named}.` : ""} Continue its work, or pass discard: true to archive it with its unlanded commits, changes, stashes and excluded files saved to a carry in ~/.cawco/carries on ${held.machine}.`
     );
     this.held = held;
   }
@@ -3775,7 +3783,8 @@ export const createWorkItems = ({
   /**
    * Tells the session that started a workspace's work, its latest item's
    * parent, that the workspace was just held, through its report path as a
-   * notice: what it holds, and the two ways on. Only that session decides
+   * notice: what it holds, and the two ways on; a clone CawCo did not read
+   * (`refused`), why, and how it goes. Only that session decides
    * held work; nobody else is asked (2026-10-18: 38 held workspaces sat in
    * the owner's list, every one his to sort).
    */
@@ -3783,6 +3792,23 @@ export const createWorkItems = ({
     const [latest] = db.workItemsIn(workspace.id);
     const [row] = latest ? db.getInstancesByIds([latest.instanceId]) : [];
     if (!(latest && row)) {
+      return;
+    }
+    if (work.refused) {
+      report(
+        row,
+        workWords.refusedNotice(
+          handle(workspace.id),
+          latest.title,
+          work.machine,
+          work.refused,
+          work.size,
+          workspace.path
+        ),
+        false,
+        true,
+        workWords.refusedHeadline(workspace.id.slice(0, 8))
+      );
       return;
     }
     const named = work.excluded?.length
