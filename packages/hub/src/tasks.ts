@@ -3799,7 +3799,7 @@ export const createTasks = (store: TaskStore) => {
         doc.addComment(
           { name: AUTHOR.hub, mover: "hub", id: null },
           new Date(),
-          `See also: ${legacy.related
+          `${taskLinkWords.seeAlso} ${legacy.related
             .map((id) => {
               const title = titles.get(id);
               return title ? taskLink(projectId, id, title) : id;

@@ -44,11 +44,13 @@
  *   origin only: a next page anywhere else is not asked for, and a redirect
  *   is refused.
  */
+import type { WaitTarget } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type { Octokit } from "@octokit/rest";
 import { z } from "zod";
 import type { GitHubCursor, GitHubResource } from "./db/schema";
 import type { InboundEvent } from "./ingress";
+import type { GitHubWaitState } from "./task-waits";
 
 /** What {@link normalizeGitHub} reads: a polled object's kind, or a webhook's event name. */
 export type GitHubKind =
@@ -1023,4 +1025,61 @@ export const pollRepo = async (input: {
     }
   }
   return out;
+};
+
+/** An Actions run's conclusions that settle a wait on it: every other completed one is red. */
+const GREEN_RUNS: ReadonlySet<string> = new Set([
+  "success",
+  "skipped",
+  "neutral",
+]);
+
+/**
+ * A pull request's or Actions run's state as a task's wait reads it
+ * (task-waits.ts `settled`): `merged`, `closed` (unmerged) or `open`; a run
+ * `running` until it completes, then `green` or `red`. Read with the
+ * project's own client within {@link REQUEST_MS}; undefined when GitHub did
+ * not answer in time.
+ */
+export const readGitHubWait = async (
+  octokit: Octokit,
+  target: Extract<WaitTarget, { kind: "pr" | "run" }>
+): Promise<{ state: GitHubWaitState; title: string | null } | undefined> => {
+  const [owner = "", repo = ""] = target.repo.split("/");
+  const read = await readWithin(
+    REQUEST_MS,
+    (signal): Promise<{ state: GitHubWaitState; title: string | null }> =>
+      target.kind === "pr"
+        ? octokit.rest.pulls
+            .get({
+              owner,
+              repo,
+              pull_number: target.number,
+              request: { signal },
+            })
+            .then(({ data }) => {
+              let state: GitHubWaitState = "open";
+              if (data.merged) {
+                state = "merged";
+              } else if (data.state === "closed") {
+                state = "closed";
+              }
+              return { state, title: data.title };
+            })
+        : octokit.rest.actions
+            .getWorkflowRun({
+              owner,
+              repo,
+              run_id: Number(target.id),
+              request: { signal },
+            })
+            .then(({ data }) => {
+              let state: GitHubWaitState = "running";
+              if (data.status === "completed") {
+                state = GREEN_RUNS.has(data.conclusion ?? "") ? "green" : "red";
+              }
+              return { state, title: data.name ?? null };
+            })
+  );
+  return read.kind === "answered" ? read.value : undefined;
 };

@@ -26,6 +26,7 @@ import {
   githubTarget,
   referenceHref,
   type StageKind,
+  taskLinkWords,
   taskTarget,
   type WaitKind,
   type WaitTarget,
@@ -179,8 +180,8 @@ const GITHUB_SETTLED: ReadonlySet<GitHubWaitState> = new Set([
 
 /** Each red state's flag. */
 const GITHUB_FLAG: Partial<Record<GitHubWaitState, string>> = {
-  closed: "closed unmerged",
-  red: "failed",
+  closed: taskLinkWords.closedUnmerged,
+  red: taskLinkWords.runFailed,
 };
 
 /** A card target: settled once answered, flagged once its page is deleted or asks it no more. */

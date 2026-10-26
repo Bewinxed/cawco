@@ -20,6 +20,11 @@
  * 7. A whole nobody coordinates closes on its last part.
  * 8. A reopened card blocks a to-do dependent again, and a card answered
  *    differently flags a done one; the same answer again clears it.
+ * 9. A wait on GitHub: a project with no GitHub connection is refused one
+ *    where it is written; with one, the read its poll makes (hub github.ts
+ *    `readGitHubWait`, here against a stand-in of GitHub's REST API on the
+ *    loopback) settles a merged pull request and a green run, and flags a
+ *    pull request closed unmerged and a red run.
  *
  *   bun scripts/probe-kit/run.ts task-links
  */
@@ -27,7 +32,10 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { WebsocketProvider } from "y-websocket";
 import { Doc } from "yjs";
+import { githubTarget } from "../../../packages/core/src/wait-targets";
 import { taskLinkWords } from "../../../packages/core/src/words/task-links";
+import { readGitHubWait } from "../../../packages/hub/src/github";
+import { settled, type WaitWorld } from "../../../packages/hub/src/task-waits";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
@@ -182,6 +190,118 @@ const attempt = (
     now,
     state === "done" ? now : null
   );
+};
+
+const PULL_PATH = /\/repos\/probe\/repo\/pulls\/(\d+)$/;
+const RUN_PATH = /\/repos\/probe\/repo\/actions\/runs\/(\d+)$/;
+
+/** GitHub's REST API for one repository's pulls and runs, each in the state `states` names, on the loopback. */
+const githubStandIn = (
+  pulls: Record<number, { merged: boolean; state: string }>,
+  runs: Record<number, { conclusion: string | null; status: string }>
+) =>
+  Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request) {
+      const path = new URL(request.url).pathname;
+      const pull = PULL_PATH.exec(path);
+      const run = RUN_PATH.exec(path);
+      const one = pull ? pulls[Number(pull[1])] : undefined;
+      if (pull && one) {
+        return Response.json({ ...one, title: `Pull ${pull[1]}` });
+      }
+      const ran = run ? runs[Number(run[1])] : undefined;
+      if (run && ran) {
+        return Response.json({ ...ran, name: "CI" });
+      }
+      return new Response("Not Found", { status: 404 });
+    },
+  });
+
+/** 9b: each pull request and run read through the stand-in, then settled by the one resolver. */
+const githubWaits = async (kit: Kit): Promise<void> => {
+  const server = githubStandIn(
+    {
+      1: { merged: true, state: "closed" },
+      2: { merged: false, state: "closed" },
+      3: { merged: false, state: "open" },
+    },
+    {
+      7: { status: "completed", conclusion: "success" },
+      8: { status: "completed", conclusion: "failure" },
+      9: { status: "in_progress", conclusion: null },
+    }
+  );
+  try {
+    const { Octokit } = (await import(
+      Bun.resolveSync(
+        "@octokit/rest",
+        join(import.meta.dir, "../../../packages/hub/src")
+      )
+    )) as {
+      Octokit: new (
+        options: Record<string, unknown>
+      ) => Parameters<typeof readGitHubWait>[0];
+    };
+    const octokit = new Octokit({
+      auth: "probe-token",
+      baseUrl: `http://127.0.0.1:${server.port}`,
+      userAgent: "CawCo-hub",
+    });
+    const of = async (url: string) => {
+      const target = githubTarget(url);
+      if (!target) {
+        throw new Error(`${url} is no GitHub wait`);
+      }
+      const read = await readGitHubWait(octokit, target);
+      const world: WaitWorld = {
+        projectId: "probe",
+        card: () => undefined,
+        pin: () => undefined,
+        gone: () => false,
+        session: () => undefined,
+        task: () => undefined,
+        github: () => read ?? { state: "checking", title: null },
+      };
+      return settled(target, world);
+    };
+    const base = "https://github.com/probe/repo";
+    const merged = await of(`${base}/pull/1`);
+    const closed = await of(`${base}/pull/2`);
+    const open = await of(`${base}/pull/3`);
+    const green = await of(`${base}/actions/runs/7`);
+    const red = await of(`${base}/actions/runs/8`);
+    const running = await of(`${base}/actions/runs/9`);
+    kit.check(
+      "9: a merged pull request settles its wait",
+      merged.settled &&
+        merged.state === "merged" &&
+        merged.label === "PR #1 Pull 1",
+      JSON.stringify(merged)
+    );
+    kit.check(
+      "9: a pull request closed unmerged flags its wait, still unsettled",
+      !closed.settled && closed.flag === taskLinkWords.closedUnmerged,
+      JSON.stringify(closed)
+    );
+    kit.check(
+      "9: an open pull request holds its wait",
+      !(open.settled || open.flag) && open.state === "open",
+      JSON.stringify(open)
+    );
+    kit.check(
+      "9: a green run settles its wait, a red one flags it, a running one holds it",
+      green.settled &&
+        !red.settled &&
+        red.flag === taskLinkWords.runFailed &&
+        !running.settled &&
+        running.state === "running",
+      JSON.stringify([green, red, running].map((one) => one.state))
+    );
+  } finally {
+    server.stop(true);
+  }
 };
 
 const run = async (kit: Kit) => {
@@ -401,6 +521,18 @@ const run = async (kit: Kit) => {
     now.get(done.id)?.builtOn.length === 0,
     JSON.stringify(now.get(done.id)?.builtOn)
   );
+
+  // 9. A wait on GitHub.
+  const pr = await tool("task_link", {
+    task: done.id,
+    waits_on: ["https://github.com/probe/repo/pull/418"],
+  });
+  kit.check(
+    "9: a project with no GitHub connection is refused a pull request wait, saying why",
+    pr.refused && pr.text.includes(taskLinkWords.noGitHub),
+    pr.text
+  );
+  await githubWaits(kit);
 };
 
 export default { name: "task-links", run } satisfies Spec;

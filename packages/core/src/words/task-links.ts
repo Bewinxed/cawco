@@ -29,4 +29,13 @@ export const taskLinkWords = {
   decidedDifferently: "decided differently",
   /** A card or pin a done task was built on, reopened since. */
   reopened: "reopened",
+  /** A pull request waited on, closed without merging: its wait's flag. */
+  closedUnmerged: "closed unmerged",
+  /** An Actions run waited on, red: its wait's flag. */
+  runFailed: "failed",
+  /** Why a project cannot wait on a pull request or run. */
+  noGitHub:
+    "the project has no GitHub connection to read it. Connect GitHub for the project first.",
+  /** The comment a task's related links became when links were cut over. */
+  seeAlso: "See also:",
 } as const;

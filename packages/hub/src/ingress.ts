@@ -53,9 +53,9 @@ import {
   githubTarget,
   type InstanceRow,
   readsGitHubApi,
+  taskLinkWords,
   type WaitTarget,
 } from "@cawco/core";
-import { readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { Elysia, status, t } from "elysia";
 import { RE2JS } from "re2js";
@@ -71,7 +71,7 @@ import type {
 } from "./db/ingress";
 import type { GitHubCursor, GitHubResource, InboundVia } from "./db/schema";
 import type { Dispatcher } from "./dispatch";
-import { githubRepoOf, pollRepo } from "./github";
+import { githubRepoOf, pollRepo, readGitHubWait } from "./github";
 import { byHandle } from "./handles";
 import type { JevAccess } from "./jev";
 import { JevFailed, jevRoute, offLine, TO_LEAD } from "./jev-placement";
@@ -437,12 +437,6 @@ export interface IngressDeps {
 const WAIT_ASKED_MS = 60 * 60_000;
 /** The states a wait on GitHub keeps for good: the poll stops asking. */
 const FINAL_WAITS: ReadonlySet<GitHubWaitState> = new Set(["merged", "green"]);
-/** An Actions run's conclusions that settle it: every other completed one is red. */
-const GREEN_RUNS: ReadonlySet<string> = new Set([
-  "success",
-  "skipped",
-  "neutral",
-]);
 
 /** Each route's last delivery by its id (`IngressDb.deliveries`). */
 const deliveredBy = (deliveries: Delivery[]): Map<string, number> =>
@@ -740,52 +734,6 @@ export const createIngress = ({
     keepGitHubPoll(projectId, repo, now, poller.reason, polled, landed);
   };
 
-  /** One pull request's or run's state, read now with the project's client; undefined when GitHub did not answer. */
-  const waitStateOf = async (
-    octokit: ReturnType<Connections["githubClient"]>,
-    target: Extract<WaitTarget, { kind: "pr" | "run" }>
-  ): Promise<{ state: GitHubWaitState; title: string | null } | undefined> => {
-    const [owner = "", repo = ""] = target.repo.split("/");
-    const read = await readWithin(
-      30_000,
-      (signal): Promise<{ state: GitHubWaitState; title: string | null }> =>
-        target.kind === "pr"
-          ? octokit.rest.pulls
-              .get({
-                owner,
-                repo,
-                pull_number: target.number,
-                request: { signal },
-              })
-              .then(({ data }) => {
-                let state: GitHubWaitState = "open";
-                if (data.merged) {
-                  state = "merged";
-                } else if (data.state === "closed") {
-                  state = "closed";
-                }
-                return { state, title: data.title };
-              })
-          : octokit.rest.actions
-              .getWorkflowRun({
-                owner,
-                repo,
-                run_id: Number(target.id),
-                request: { signal },
-              })
-              .then(({ data }) => {
-                let state: GitHubWaitState = "running";
-                if (data.status === "completed") {
-                  state = GREEN_RUNS.has(data.conclusion ?? "")
-                    ? "green"
-                    : "red";
-                }
-                return { state, title: data.name ?? null };
-              })
-    );
-    return read.kind === "answered" ? read.value : undefined;
-  };
-
   /**
    * The pull requests and runs project `projectId` waits on, read with its
    * poller's client, each until it settles; one nobody asked about for an
@@ -810,7 +758,7 @@ export const createIngress = ({
         continue;
       }
       // biome-ignore lint/performance/noAwaitInLoops: a project's few waits, one request at a time against its rate limit
-      const read = await waitStateOf(octokit, target).catch(() => undefined);
+      const read = await readGitHubWait(octokit, target).catch(() => undefined);
       if (read && (read.state !== wait.state || read.title !== wait.title)) {
         waits.set(url, { ...wait, ...read });
         moved = true;
@@ -1643,9 +1591,7 @@ export const createIngress = ({
     },
     /** Why project `projectId` cannot wait on a pull request or run: no GitHub poller to read it; nothing when it can. */
     githubWaitRefusal(projectId: string): string | undefined {
-      return store.githubPoller(projectId)
-        ? undefined
-        : "the project has no GitHub connection to read it. Connect GitHub for the project first.";
+      return store.githubPoller(projectId) ? undefined : taskLinkWords.noGitHub;
     },
     createPoll,
     createRoute,
