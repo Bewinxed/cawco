@@ -9,7 +9,10 @@ import { dirname, join } from "node:path";
 import { placedMemoryDir } from "@cawco/core/paths";
 
 /** Every markdown file under `root`, by its path there, in path order; none when it is no folder. */
-export const markdownUnder = async (root: string, prefix = ""): Promise<string[]> => {
+export const markdownUnder = async (
+  root: string,
+  prefix = ""
+): Promise<string[]> => {
   const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
   const nested = await Promise.all(
     entries

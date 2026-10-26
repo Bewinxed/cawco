@@ -53,6 +53,7 @@ import {
 } from "./embeds";
 import { fillFields, trackFields } from "./fields";
 import {
+  type Box,
   deepElementAt,
   frameDocument,
   frameLoading,
@@ -69,13 +70,7 @@ import { startInk } from "./ink";
 import { morphPage, watchPointers, whenPointersUp } from "./morph";
 import { choiceOf, listenForPicks } from "./pick";
 import { cropPicture } from "./picture";
-import {
-  type Box,
-  type DraftTarget,
-  type Pins,
-  padded,
-  startPins,
-} from "./pins";
+import { type DraftTarget, type Pins, padded, startPins } from "./pins";
 import { inkChrome } from "./radial";
 import { drawInScheme, type Scheme } from "./schemes";
 

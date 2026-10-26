@@ -41,6 +41,7 @@ import {
   type AnchorFound,
   buryPin,
   changedAnchor,
+  newId,
   type PageAnchor,
   type Pin,
   type PinnedElement,
@@ -52,8 +53,15 @@ import { boxOf } from "@cawco/core/shapes";
 import { getStroke } from "perfect-freehand";
 import { absences } from "./absent";
 import { artifact } from "./artifact";
-import { clipOf, framesOf, frameWindows, rectOf, sizesIn } from "./frames";
-import { newId } from "./id";
+import {
+  type Box,
+  clipOf,
+  framesOf,
+  frameWindows,
+  grow,
+  pageBox,
+  sizesIn,
+} from "./frames";
 import type { Pins } from "./pins";
 import type { InkChrome, Pick } from "./radial";
 
@@ -106,12 +114,6 @@ const ERASING_OPACITY = "0.3";
 
 /** A point in the page, px, with its pressure. */
 type Point = [x: number, y: number, pressure: number];
-interface Box {
-  h: number;
-  w: number;
-  x: number;
-  y: number;
-}
 
 /** What the overlay lends the ink: its own describers, the pins, the host's chrome. */
 export interface InkDeps {
@@ -146,12 +148,6 @@ export interface Ink {
   replace: () => void;
 }
 
-/** `el`'s box in the top page, px, through any frames it stands in. */
-const pageBox = (el: Element): Box => {
-  const r = rectOf(el);
-  return { x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height };
-};
-
 /** `el`'s parent, out of its frame's document into the frame itself at the frame's root. */
 const outward = (el: Element): Element | null =>
   el.parentElement ?? framesOf(el).at(-1) ?? null;
@@ -184,17 +180,10 @@ const contains = (outer: Box, inner: Box, slack = 1) =>
 
 const round = (n: number) => Math.round(n * 10_000) / 10_000;
 
-const pad = (box: Box, by: number): Box => ({
-  x: box.x - by,
-  y: box.y - by,
-  w: box.w + 2 * by,
-  h: box.h + 2 * by,
-});
-
 const area = (box: Box) => Math.max(1, box.w) * Math.max(1, box.h);
 
 /** Whether a stroke is a loop: its box big enough both ways, its ends close against its longer side. */
-const isLoop = (points: Point[], box: Box) => {
+const isLoop = (points: Point[], box: Box): boolean => {
   const [first] = points;
   const end = points.at(-1);
   return (
@@ -711,7 +700,7 @@ export function startInk(deps: InkDeps): Ink {
   ): Box => {
     const box = strokeBox(points);
     const loop = isLoop(points, box);
-    const reach = pad(box, loop ? ENCLOSE_SLACK : LINE_REACH);
+    const reach = grow(box, loop ? ENCLOSE_SLACK : LINE_REACH);
     const encloses = (el: Element) =>
       !deps.pageSized(el) && contains(reach, boxed(el), 0);
     const hits = new Set(

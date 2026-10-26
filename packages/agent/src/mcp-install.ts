@@ -29,6 +29,7 @@ import { mkdir, readdir, readlink, rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
 import { fleetMcpInstallsDir } from "@cawco/core/paths";
+import { runCaptured } from "@cawco/core/run-captured";
 import { isAlive, listedPid } from "@cawco/core/signal";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { toolEnv } from "./tools";
@@ -179,19 +180,11 @@ const npmWithin = async (
   options: { cwd?: string; env: Record<string, string | undefined> }
 ): Promise<NpmRan> => {
   const read = await readWithin(ms, async (signal) => {
-    const child = Bun.spawn(command, {
-      ...(options.cwd ? { cwd: options.cwd } : {}),
-      env: options.env,
-      stdout: "pipe",
-      stderr: "pipe",
+    const { code, stdout, stderr } = await runCaptured(command, {
+      ...options,
       signal,
     });
-    const [stdout, stderr, exitCode] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    return { exitCode, stdout, stderr };
+    return { exitCode: code, stdout, stderr };
   });
   switch (read.kind) {
     case "answered":

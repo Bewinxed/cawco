@@ -1245,7 +1245,7 @@ export const pinDelivered = (pin: Pin, at: string): Pin =>
  * opened over plain http on a tailnet address has no `crypto.randomUUID`
  * (secure contexts only).
  */
-const entryId = (): string => {
+export const newId = (): string => {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   // biome-ignore lint/suspicious/noBitwiseOperators: RFC 4122's version bits
   bytes[6] = (bytes[6] & 0x0f) | 0x40;
@@ -1348,7 +1348,7 @@ function personEntry(
     return problem;
   }
   return {
-    id: entryId(),
+    id: newId(),
     by: "person",
     text,
     at: new Date().toISOString(),
@@ -1405,7 +1405,7 @@ export function commentOn(
   doc: MapDoc,
   target: CommentTarget,
   said: Said,
-  id: string = entryId()
+  id: string = newId()
 ): Pin | string {
   const pins = headsOf(doc);
   if (pins.size >= COMMENT_LIMITS.pins) {

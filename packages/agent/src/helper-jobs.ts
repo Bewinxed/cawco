@@ -16,6 +16,7 @@ import {
   launchdJobs,
   launchdProgram,
 } from "@cawco/core/launchd";
+import { runCaptured } from "@cawco/core/run-captured";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 
@@ -63,23 +64,15 @@ export async function launchHelper(
   const forwarded = helperEnvironment();
   if (process.platform === "linux") {
     const unit = `cawco-binary-apply-${Date.now()}`;
-    const child = Bun.spawn(
-      [
-        "systemd-run",
-        "--user",
-        "--collect",
-        `--unit=${unit}`,
-        "--property=Type=exec",
-        ...forwarded.map(([key, value]) => `--setenv=${key}=${value}`),
-        ...argv,
-      ],
-      { env: hostEnvironment(), stdout: "pipe", stderr: "pipe" }
-    );
-    if ((await child.exited) !== 0) {
-      throw new Error(
-        `The update helper could not start: ${(await new Response(child.stderr).text()).trim()}`
-      );
-    }
+    await startHelper([
+      "systemd-run",
+      "--user",
+      "--collect",
+      `--unit=${unit}`,
+      "--property=Type=exec",
+      ...forwarded.map(([key, value]) => `--setenv=${key}=${value}`),
+      ...argv,
+    ]);
     return { unit, name: `systemd (--user ${unit}.service)` };
   }
   const label = `${PLIST_PREFIX}${Date.now()}`;
@@ -98,17 +91,22 @@ export async function launchHelper(
 </dict></plist>
 `
   );
-  const child = Bun.spawn(
-    ["launchctl", "bootstrap", `gui/${process.getuid?.()}`, plist],
-    { env: hostEnvironment(), stdout: "pipe", stderr: "pipe" }
-  );
-  if ((await child.exited) !== 0) {
-    throw new Error(
-      `The update helper could not start: ${(await new Response(child.stderr).text()).trim()}`
-    );
-  }
+  await startHelper([
+    "launchctl",
+    "bootstrap",
+    `gui/${process.getuid?.()}`,
+    plist,
+  ]);
   return { label, name: `launchd (gui/${process.getuid?.()}/${label})` };
 }
+
+/** Has the service manager start the helper's job; throws its words when it refuses. */
+const startHelper = async (argv: string[]): Promise<void> => {
+  const ran = await runCaptured(argv, { env: hostEnvironment() });
+  if (ran.code !== 0) {
+    throw new Error(`The update helper could not start: ${ran.stderr.trim()}`);
+  }
+};
 
 /**
  * What the service manager says of a helper's job that holds no lock: how it

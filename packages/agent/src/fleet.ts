@@ -2306,7 +2306,12 @@ const syncPlacedMemory = async (
       await pruneEmptyPlaced(record.cwd, record.name);
     };
     if (
-      await takeBackPlaced(key, disk !== null && disk !== record.hash, remove, report)
+      await takeBackPlaced(
+        key,
+        disk !== null && disk !== record.hash,
+        remove,
+        report
+      )
     ) {
       placed[key] = record;
     }

@@ -191,15 +191,12 @@ export const gitUntil =
       ? access.run(root, safeGitArgv(args))
       : { argv: safeGitArgv(args), cwd: root };
     const ran = await readWithin(remaining, async (signal) => {
-      const { code, signalCode, stdout, stderr } = await runCaptured(
-        run.argv,
-        {
-          cwd: run.cwd,
-          env: { ...env, ...SAFE_GIT_ENV },
-          signal,
-          killSignal: "SIGKILL",
-        }
-      );
+      const { code, signalCode, stdout, stderr } = await runCaptured(run.argv, {
+        cwd: run.cwd,
+        env: { ...env, ...SAFE_GIT_ENV },
+        signal,
+        killSignal: "SIGKILL",
+      });
       if (code !== 0) {
         throw new Error(
           signalCode
@@ -1618,19 +1615,12 @@ const runInCopy = async (
   { env = {}, input }: GitGiven = {}
 ): Promise<{ exitCode: number; stderr: string; stdout: string }> => {
   const run = access.run(cwd, argv);
-  const child = Bun.spawn(run.argv, {
+  const { code, stderr, stdout } = await runCaptured(run.argv, {
     cwd: run.cwd,
     env: { ...hostEnvironment(), ...env, ...SAFE_GIT_ENV },
-    stdin: input === undefined ? "ignore" : Buffer.from(input),
-    stdout: "pipe",
-    stderr: "pipe",
+    input,
   });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
-  return { exitCode, stderr, stdout };
+  return { exitCode: code, stderr, stdout };
 };
 
 /**

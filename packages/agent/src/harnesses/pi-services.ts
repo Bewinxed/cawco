@@ -44,7 +44,14 @@ import {
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import { heldSkills, memoryState, skillDrift, skillRecords, syncMemory, syncSkillFiles } from "../fleet";
+import {
+  heldSkills,
+  memoryState,
+  skillDrift,
+  skillRecords,
+  syncMemory,
+  syncSkillFiles,
+} from "../fleet";
 import {
   hookStatesInSet,
   hookStatesOn,

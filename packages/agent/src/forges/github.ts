@@ -48,9 +48,7 @@ export const githubForge: ForgeAdapter = {
       Record<string, unknown> | undefined;
     const host =
       Object.keys(hosts ?? {}).find((each) => sameHost(each, asked)) ?? asked;
-    const token = (
-      await ghSays(["auth", "token", "--hostname", host])
-    )?.trim();
+    const token = (await ghSays(["auth", "token", "--hostname", host]))?.trim();
     if (!token) {
       return;
     }

@@ -1367,9 +1367,7 @@ export class OpencodeSession implements HarnessSession {
           type: "user",
           message: {
             role: "user",
-            content: [
-              endedToolResult(event, name, this.#toolInputs.get(id)),
-            ],
+            content: [endedToolResult(event, name, this.#toolInputs.get(id))],
           },
         });
         this.#toolsEmitted.set(id, "resolved");

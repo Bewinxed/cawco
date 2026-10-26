@@ -54,6 +54,7 @@ import { breathPhase } from "@cawco/core/breath";
 import {
   type AnchorFound,
   changedAnchor,
+  newId,
   type PageAnchor,
   type Pin,
   type PinnedElement,
@@ -70,8 +71,7 @@ import type { InkGroup } from "@cawco/core/ink";
 import { pinName } from "@cawco/core/pin-name";
 import { absences } from "./absent";
 import { artifact } from "./artifact";
-import { clipOf, rectOf } from "./frames";
-import { newId } from "./id";
+import { type Box, clipOf, grow, meets, pageBox } from "./frames";
 import { fitToPage, insetFoot } from "./ink";
 import { motionOk } from "./motion";
 import { durationMs, type InkChrome } from "./radial";
@@ -113,13 +113,6 @@ const BEHIND = 2;
 const FINGER = 44;
 /** The loops a needs-you dot echoes before it stands still (DESIGN.md, Status dot). */
 const ECHOES = 3;
-
-export interface Box {
-  h: number;
-  w: number;
-  x: number;
-  y: number;
-}
 
 /** What a comment being written stands on: an element and the point on it, or an ink group. */
 export interface DraftTarget {
@@ -217,12 +210,6 @@ export interface Pins {
   track: (id: string | null) => void;
 }
 
-/** `el`'s box in the top page, px, through any frames it stands in. */
-const pageBox = (el: Element): Box => {
-  const r = rectOf(el);
-  return { x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height };
-};
-
 /** Whether the page's point `at` lies where `el`'s frames and scroll containers show it; always, where nothing clips it. */
 const showsAt = (el: Element | null, at: [number, number]): boolean => {
   const clip = el ? clipOf(el) : null;
@@ -307,16 +294,6 @@ const corners = (
   ];
 };
 
-const grow = (box: Box, by: number): Box => ({
-  x: box.x - by,
-  y: box.y - by,
-  w: box.w + 2 * by,
-  h: box.h + 2 * by,
-});
-
-const meets = (a: Box, b: Box) =>
-  a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-
 /** A pin's pill as drawn: its `<g>`, its box and tail, and its number. */
 interface DrawnPill {
   group: SVGGElement;
@@ -394,6 +371,20 @@ function drawStack(
 
 /** Whether the page is under a finger now: a pill's hit area grows to {@link FINGER}. */
 const coarse = () => matchMedia("(pointer: coarse)").matches;
+
+/** A pill's hit area, clear of nothing it draws: 44px round it under a finger, its ring's width round it under a pointer. */
+const hitArea = (box: Box): SVGRectElement => {
+  const area = coarse()
+    ? grow(box, Math.max(0, (FINGER - box.h) / 2))
+    : grow(box, RING);
+  const hit = document.createElementNS(SVG, "rect");
+  hit.setAttribute("x", String(area.x));
+  hit.setAttribute("y", String(area.y));
+  hit.setAttribute("width", String(area.w));
+  hit.setAttribute("height", String(area.h));
+  hit.setAttribute("fill", "transparent");
+  return hit;
+};
 
 export function startPins(deps: PinsDeps): Pins {
   const { chrome } = deps;
@@ -898,16 +889,7 @@ export function startPins(deps: PinsDeps): Pins {
     g.setAttribute("data-pin-id", pin.id);
     g.style.pointerEvents = "auto";
     g.style.cursor = "pointer";
-    // A finger's hit area: 44px round the pill, clear of nothing it draws.
-    const reach = Math.max(0, (FINGER - pill.box.h) / 2);
-    const hit = document.createElementNS(SVG, "rect");
-    const area = coarse() ? grow(pill.box, reach) : grow(pill.box, RING);
-    hit.setAttribute("x", String(area.x));
-    hit.setAttribute("y", String(area.y));
-    hit.setAttribute("width", String(area.w));
-    hit.setAttribute("height", String(area.h));
-    hit.setAttribute("fill", "transparent");
-    g.prepend(hit);
+    g.prepend(hitArea(pill.box));
     g.addEventListener("pointerenter", () => {
       deps.outline(where.el, true);
       const shown = where.page ? 0 : 1;
@@ -1089,15 +1071,7 @@ export function startPins(deps: PinsDeps): Pins {
     dots.style.font = paint.font;
     dots.style.userSelect = "none";
     dots.textContent = "…";
-    const reach = Math.max(0, (FINGER - box.h) / 2);
-    const area = coarse() ? grow(box, reach) : grow(box, RING);
-    const hit = document.createElementNS(SVG, "rect");
-    hit.setAttribute("x", String(area.x));
-    hit.setAttribute("y", String(area.y));
-    hit.setAttribute("width", String(area.w));
-    hit.setAttribute("height", String(area.h));
-    hit.setAttribute("fill", "transparent");
-    g.prepend(hit);
+    g.prepend(hitArea(box));
     g.append(name, dots);
     g.addEventListener("click", (event) => {
       event.preventDefault();
@@ -1420,31 +1394,16 @@ export function startPins(deps: PinsDeps): Pins {
       return pin.id;
     },
     pinInk: (group, kind, elements) => {
-      // The apps' radial Comment pins the ink at once and opens its card (until tsk-59).
-      if (kind === "comment" && deps.appCommenting()) {
-        const pin: Pin = {
-          id: newId(),
-          number: nextNumber(),
-          kind,
-          anchor: group.anchor,
-          at: new Date().toISOString(),
-          by: "person",
-          elements,
-          ink: group.id,
-          thread: [],
-        };
-        write({ ...pin, title: pinName(pin) });
-        open(pin.id, true);
-        return;
-      }
-      if (kind === "comment") {
+      // A comment is composed first, but the apps' radial Comment pins the
+      // ink at once and opens its card (until tsk-59).
+      if (kind === "comment" && !deps.appCommenting()) {
         const el =
           ("selector" in group.anchor ? deps.locate(group.anchor)?.el : null) ??
           document.body;
         deps.compose({ el, ink: group.id }, elements);
         return;
       }
-      write({
+      const pin: Pin = {
         id: newId(),
         number: nextNumber(),
         kind,
@@ -1454,7 +1413,13 @@ export function startPins(deps: PinsDeps): Pins {
         elements,
         ink: group.id,
         thread: [],
-      });
+      };
+      if (kind !== "comment") {
+        write(pin);
+        return;
+      }
+      write({ ...pin, title: pinName(pin) });
+      open(pin.id, true);
     },
     placeAgain: (id, el, x, y) => {
       const pin = pinsMap().get(id);

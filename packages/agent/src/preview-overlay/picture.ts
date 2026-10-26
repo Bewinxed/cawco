@@ -18,14 +18,8 @@
  */
 import { FORM_CONTROLS, UNSHOWN_ELEMENTS } from "@cawco/core/pin-name";
 import { createContext, destroyContext, domToCanvas } from "modern-screenshot";
+import { type Box, meets } from "./frames";
 import { NON_INHERITED } from "./non-inherited";
-
-export interface Box {
-  h: number;
-  w: number;
-  x: number;
-  y: number;
-}
 
 /** The pixels a picture may hold, so its PNG stays inside a send's bound. Our call. */
 const PICTURE_AREA = 1_200_000;
@@ -890,9 +884,6 @@ const WHOLE: ReadonlySet<string> = new Set([
 ]);
 /** A colour that paints nothing. */
 const CLEAR = new Set(["transparent", "rgba(0, 0, 0, 0)"]);
-
-const meets = (a: Box, b: Box) =>
-  a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
 const holds = (outer: Box, inner: Box) =>
   inner.x >= outer.x &&

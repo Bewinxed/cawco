@@ -25,9 +25,12 @@ export const gitIn = async (
     return;
   }
   try {
-    const ran = await runCaptured([git, ...SAFE_GIT_FLAGS, "-C", cwd, ...args], {
-      env: { ...toolEnv(), ...SAFE_GIT_ENV },
-    });
+    const ran = await runCaptured(
+      [git, ...SAFE_GIT_FLAGS, "-C", cwd, ...args],
+      {
+        env: { ...toolEnv(), ...SAFE_GIT_ENV },
+      }
+    );
     return ran.code === 0 ? ran.stdout.trim() : undefined;
   } catch {
     // No git to run, or it could not start: not a checkout cawco can tell.

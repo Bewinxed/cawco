@@ -48,7 +48,12 @@ export class CdpCalls {
     const id = this.#next;
     this.#next += 1;
     this.#send(
-      JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) })
+      JSON.stringify({
+        id,
+        method,
+        params,
+        ...(sessionId ? { sessionId } : {}),
+      })
     );
     return id;
   }

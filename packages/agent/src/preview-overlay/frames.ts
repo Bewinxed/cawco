@@ -174,6 +174,32 @@ export const framesOf = (el: Element): FrameElement[] => {
   return chain;
 };
 
+/** A box in page or viewport px. */
+export interface Box {
+  h: number;
+  w: number;
+  x: number;
+  y: number;
+}
+
+/** `el`'s box in the top page, px, through any frames it stands in. */
+export const pageBox = (el: Element): Box => {
+  const r = rectOf(el);
+  return { x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height };
+};
+
+/** `box` grown by `by` px on every side (shrunk, for a negative `by`). */
+export const grow = (box: Box, by: number): Box => ({
+  x: box.x - by,
+  y: box.y - by,
+  w: box.w + 2 * by,
+  h: box.h + 2 * by,
+});
+
+/** Whether two boxes overlap. */
+export const meets = (a: Box, b: Box): boolean =>
+  a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
 /** `el`'s box in the top viewport: its own, moved and scaled by each frame it stands in. */
 export const rectOf = (el: Element): DOMRect =>
   mapped(framesOf(el).reduce(into, TOP), el.getBoundingClientRect());

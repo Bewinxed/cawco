@@ -15,19 +15,22 @@ export interface Ran {
   stdout: string;
 }
 
-/** Runs `argv` with no stdin and reads both streams to their end. A `signal` abort kills it with `killSignal`. */
+/** Runs `argv`, `input` its stdin, and reads both streams to their end. A `signal` abort kills it with `killSignal`. */
 export const runCaptured = async (
   argv: readonly string[],
   options: {
     cwd?: string;
     env?: Record<string, string | undefined>;
+    /** What it reads on stdin; none, it reads nothing. */
+    input?: string;
     killSignal?: NodeJS.Signals;
     signal?: AbortSignal;
   } = {}
 ): Promise<Ran> => {
+  const { input, ...spawned } = options;
   const child = Bun.spawn([...argv], {
-    ...options,
-    stdin: "ignore",
+    ...spawned,
+    stdin: input === undefined ? "ignore" : Buffer.from(input),
     stdout: "pipe",
     stderr: "pipe",
   });

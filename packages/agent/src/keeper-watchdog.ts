@@ -78,7 +78,6 @@ const KEEPER_BACK_MS = 30_000;
 /** The restart the dashboard announces (`BinaryUpdateState.keeperRestart`). */
 export type KeeperRestart = NonNullable<BinaryUpdateState["keeperRestart"]>;
 
-
 interface Row {
   args: string;
   pid: number;
