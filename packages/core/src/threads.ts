@@ -211,6 +211,14 @@ export interface RoutineSchedule {
 }
 
 /**
+ * What became of one of Caw's shell or edit calls (hub lead-gate.ts): `asked`
+ * while it waits on your Approve card, `ran` once it was let run (its exit
+ * once its result came), `refused` by the hub's rules, `denied` by you,
+ * `cut` when its ask left unanswered (its process ended or withdrew it).
+ */
+export type LeadCallOutcome = "asked" | "ran" | "refused" | "denied" | "cut";
+
+/**
  * What a thread's event is, as typed data: the ids the dashboard looks
  * things up by, and the words the hub had when it wrote it (a task's title,
  * a routine's name). A task or session is never named by its id in words.
@@ -267,12 +275,9 @@ export type ThreadEvent =
       command?: string;
       kind: "caw";
       what:
+        | Exclude<LeadCallOutcome, "asked">
         | "could-not-start"
-        | "ran"
         | "edited"
-        | "refused"
-        | "denied"
-        | "cut"
         | "guard";
     }
   | { kind: "view"; name: string }

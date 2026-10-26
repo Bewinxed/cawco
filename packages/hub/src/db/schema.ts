@@ -23,6 +23,7 @@ import type {
   HookEvent,
   InstanceStatus,
   LandsMode,
+  LeadCallOutcome,
   LimitWindow,
   MachineState,
   MemoryRole,
@@ -4658,14 +4659,6 @@ export const purgedSessions = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.machineId, table.sessionId] })]
 );
-
-/**
- * What became of one of Caw's shell or edit calls (lead-gate.ts): `asked`
- * while it waits on your Approve card, `ran` once it was let run (its exit
- * once its result came), `refused` by the hub's rules, `denied` by you,
- * `cut` when its ask left unanswered (its process ended or withdrew it).
- */
-export type LeadCallOutcome = "asked" | "ran" | "refused" | "denied" | "cut";
 
 /**
  * Every shell or edit call a project's Caw made (lead-gate.ts), one row each,

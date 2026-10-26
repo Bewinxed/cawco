@@ -228,6 +228,7 @@ import type {
 import type {
   DesignOfferEvent as DesignOfferEventType,
   DesignOfferThreadEvent as DesignOfferThreadEventType,
+  LeadCallOutcome as LeadCallOutcomeType,
   RoutineMadeEvent as RoutineMadeEventType,
   RoutineMadeThreadEvent as RoutineMadeThreadEventType,
   RoutineSchedule as RoutineScheduleType,
@@ -2061,6 +2062,16 @@ export const ItemEndShape = WorkItemStateShape.extract([
 ]);
 export const ItemEndSchema: z.ZodType<ItemEndType> = ItemEndShape;
 
+export const LeadCallOutcomeShape = z.enum([
+  "asked",
+  "ran",
+  "refused",
+  "denied",
+  "cut",
+]);
+export const LeadCallOutcomeSchema: z.ZodType<LeadCallOutcomeType> =
+  LeadCallOutcomeShape;
+
 export const RoutineMadeEventShape = z.object({
   by: z.enum(["caw", "delegate", "session"]),
   expiresAt: z.number().nullable(),
@@ -2130,14 +2141,11 @@ export const ThreadEventShape = z.union([
   z.object({
     command: z.string().optional(),
     kind: z.literal("caw"),
-    what: z.enum([
-      "could-not-start",
-      "ran",
-      "edited",
-      "refused",
-      "denied",
-      "cut",
-      "guard",
+    what: z.union([
+      LeadCallOutcomeShape.exclude(["asked"]),
+      z.literal("could-not-start"),
+      z.literal("edited"),
+      z.literal("guard"),
     ]),
   }),
   z.object({ kind: z.literal("view"), name: z.string() }),
@@ -2645,6 +2653,7 @@ export const proved: [
   Same<z.output<typeof RoutineScheduleShape>, RoutineScheduleType>,
   Same<z.output<typeof WorkItemStateShape>, WorkItemStateType>,
   Same<z.output<typeof ItemEndShape>, ItemEndType>,
+  Same<z.output<typeof LeadCallOutcomeShape>, LeadCallOutcomeType>,
   Same<z.output<typeof RoutineMadeEventShape>, RoutineMadeEventType>,
   Same<
     z.output<typeof RoutineMadeThreadEventShape>,
@@ -2683,6 +2692,7 @@ export const proved: [
   Same<z.output<typeof InstallShape>, InstallType>,
   Same<z.output<typeof NeutralSessionInfoShape>, NeutralSessionInfoType>,
 ] = [
+  true,
   true,
   true,
   true,
