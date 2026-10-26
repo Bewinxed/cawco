@@ -30,7 +30,7 @@ let newer = $state<string | null>(null);
 export const newerBuild = (): string | null => newer;
 
 /** The build a reload loads now, or null when the server can't be reached. */
-export async function runningBuild(): Promise<string | null> {
+async function runningBuild(): Promise<string | null> {
   const response = await fetch("/_app/running-version.json", {
     cache: "no-store",
   }).catch(() => null);
