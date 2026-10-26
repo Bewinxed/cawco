@@ -1099,7 +1099,7 @@ const dirExists = async (path: string): Promise<boolean> => {
  * Swapped in with one rename ({@link placeTree}), because a running session
  * reads it.
  */
-export const writeSkill = async (
+const writeSkill = async (
   skill: FleetSkillPayload,
   root = SKILLS_DIR
 ): Promise<void> => {
@@ -1230,7 +1230,7 @@ const carriedPaths = (skill: FleetSkillPayload): string[] | undefined =>
  * carried list is written once more when this sync carries its files, so it
  * gets one and is read by it from then on.
  */
-export const holdsFleetCopy = async (
+const holdsFleetCopy = async (
   dir: string,
   skill: FleetSkillPayload,
   held: string | undefined
@@ -1890,7 +1890,7 @@ const fileHashAt = async (path: string): Promise<string | null> => {
   return (await file.exists()) ? hashText(await file.text()) : null;
 };
 
-export type MemoryPlan =
+type MemoryPlan =
   "write" | "skip" | "drift" | "remove" | "unmanage" | "none";
 
 /**
@@ -1898,7 +1898,7 @@ export type MemoryPlan =
  * edit cawco did not make: managed hash exists, the file no longer matches
  * it — never overwritten without `force`, reported instead.
  */
-export function memoryPlan(
+function memoryPlan(
   desired: { hash: string; force?: boolean } | null | undefined,
   fileHash: string | null,
   managedHash: string | undefined

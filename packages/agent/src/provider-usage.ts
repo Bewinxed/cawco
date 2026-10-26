@@ -138,7 +138,7 @@ export const readDueProviderAccounts = async (): Promise<
 };
 
 /** A turn on the account just ended: its windows are read shortly, once for a burst. */
-export const readAccountSoon = (accountId: string): void => {
+const readAccountSoon = (accountId: string): void => {
   clearTimeout(soon.get(accountId));
   const timer = setTimeout(() => {
     soon.delete(accountId);
