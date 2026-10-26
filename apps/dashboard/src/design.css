@@ -1813,6 +1813,24 @@
   }
 }
 
+/* A touch area under its host's content (DESIGN.md, The 44 Touch Rule): a
+   field's. touch-hit's ::after is positioned, so it paints, and takes the
+   press, over the host's own in-flow content: over a text field that is
+   every press on the field itself, which then never places its caret nor
+   selects its words under a finger (the owner, on his iPhone: "I'm unable
+   to modify my notes on mobile can't select the text"). The host isolates
+   and the area stands at -1 inside it: over the host's own ground, under
+   the field, so the field takes its own presses and the area the room round
+   it. */
+@utility hit-under {
+  @media (pointer: coarse) {
+    isolation: isolate;
+    &::after {
+      z-index: -1;
+    }
+  }
+}
+
 /* Pointer hit area (DESIGN.md, The 24 Pointer Rule): the fine-pointer twin
    of touch-hit, reaching 24px. --hit-scale is the zoom of a scaled canvas
    (a graph), so the area stays 24px on screen. */

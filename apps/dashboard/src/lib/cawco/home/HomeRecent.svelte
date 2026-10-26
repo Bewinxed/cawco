@@ -192,7 +192,7 @@
       >
         <label
           data-slot="search"
-          class="touch-hit hit-edge-hair field-edge transition-control mx-0 mt-space-1 mb-space-2 flex h-c-input-h items-center gap-space-2 rounded-md border border-border-control bg-surface-raised px-space-3 text-ink-muted"
+          class="touch-hit hit-under hit-edge-hair field-edge transition-control mx-0 mt-space-1 mb-space-2 flex h-c-input-h items-center gap-space-2 rounded-md border border-border-control bg-surface-raised px-space-3 text-ink-muted"
         >
           <IconSearch aria-hidden="true" class="size-icon-md flex-none" />
           <input

@@ -11,8 +11,10 @@
 
   /**
    * A press on the frame's touch area beside its field: the field's own
-   * focus. Under a finger the area stands over the whole frame, the field
-   * included, so every tap on the field lands here. The field is found by
+   * focus. Under a finger the area stands under the frame's field and
+   * controls (`hit-under`), so a tap on the field is the field's own (its
+   * caret, its words' selection) and only one beside it lands here. The
+   * field is found by
    * `data-group-control`, which its kit part writes after the props it is
    * given: a field named by a `data-slot` of its own (the Comments rail's
    * `search`) is found all the same.
@@ -33,7 +35,7 @@
 <!-- biome-ignore lint/a11y/useKeyWithClickEvents: a keyboard reaches the field itself; only a finger lands on the frame's area. -->
 <div
   class={cn(
-    "touch-hit [--hit-edge:1px]",
+    "touch-hit hit-under [--hit-edge:1px]",
     "relative flex h-9 w-full min-w-0 items-center rounded-md",
     "border border-border-control",
     "field-edge bg-surface-raised shadow-xs",

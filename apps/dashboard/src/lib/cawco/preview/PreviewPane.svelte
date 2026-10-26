@@ -2248,17 +2248,27 @@
   });
   /**
    * Back on a page with something to check, the rail opens itself on To
-   * check, once per page as it is read; a change that lands while he is
-   * here only counts in its tab.
+   * check beside the page, once per page as it is read; a change that
+   * lands while he is here only counts in its tab. Where the rail is the
+   * well's foot sheet (a phone, a pane under 640px) it would stand over the
+   * page he came to see (the owner, on his iPhone: "the comments pane opens
+   * by default on mobile so I have to dismiss it"): there it opens from
+   * Comments alone.
    */
   let checkedFor: string | null = null;
   $effect(() => {
     const id = artifactId;
-    if (!id || listHold !== "ready" || checkedFor === id || isCanvas) {
+    if (
+      !id ||
+      listHold !== "ready" ||
+      checkedFor === id ||
+      isCanvas ||
+      !railPlaced
+    ) {
       return;
     }
     checkedFor = id;
-    if (untrack(() => checkCount) > 0) {
+    if (!railSheet && untrack(() => checkCount) > 0) {
       untrack(() => {
         listFilter = "check";
         showList(true);
