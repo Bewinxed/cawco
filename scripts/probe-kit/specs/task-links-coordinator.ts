@@ -100,10 +100,12 @@ const run = async (kit: Kit) => {
     cwd: repo,
     caw: true,
   });
+  /** A task filed as you, scored ready the way Caw scores one (jev-placement.ts `readyByRule`: with Jev off and Caw on, dispatch starts what the lead marked `ready: yes`). */
   const file = async (title: string, partOf?: string) =>
     (
       await fleet.api<{ id: string }>(`/api/projects/${project.id}/tasks`, {
         title,
+        fields: { ready: "yes" },
         ...(partOf ? { partOf } : {}),
       })
     ).id;
@@ -146,6 +148,19 @@ const run = async (kit: Kit) => {
     }
   );
   kit.check("b: dispatch turned on", patched.ok, String(patched.status));
+  const view = await fleet.api<{ frontier: string[] }>(
+    `/api/projects/${project.id}/dispatch`
+  );
+  kit.check(
+    "b: the frontier holds Z, and neither part nor the whole",
+    view.frontier.includes(z) &&
+      !(
+        view.frontier.includes(c) ||
+        view.frontier.includes(d) ||
+        view.frontier.includes(p)
+      ),
+    JSON.stringify(view.frontier)
+  );
   await until(
     "b: the hub's dispatch starts plain ready task Z",
     () => itemsOf(z)[0],
