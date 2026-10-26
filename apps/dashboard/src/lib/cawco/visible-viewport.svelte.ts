@@ -265,7 +265,7 @@ export function trackVisibleViewport(): () => void {
 
   /**
    * The visible height with no field focused (the keyboard down), and the
-   * orientation it was measured in.
+   * orientation it was measured in; a framed page's field counts as focused.
    */
   let rest = { height: 0, orientation: "" };
   /**
@@ -399,12 +399,19 @@ export function trackVisibleViewport(): () => void {
     const height = awaited(Math.min(viewport.height, layout), focused);
     const top = Math.min(Math.max(viewport.offsetTop, 0), layout - height);
     publish(top, height);
-    if (!focused) {
+    // A field in a framed page (a decision page's note) holds the focus in
+    // the frame's document, where `activeElement` here is the frame: with a
+    // keyboard over the screen (publish, just above), the page is typing.
+    const typing =
+      focused ||
+      (document.activeElement instanceof HTMLIFrameElement &&
+        root.hasAttribute("data-keyboard"));
+    if (!typing) {
       rest = { height, orientation: orientation() };
       opened = false;
       window.clearTimeout(settling.timer);
       settling = { height: 0, timer: 0 };
-    } else if (!(opened || ahead) && height !== settling.height) {
+    } else if (focused && !(opened || ahead) && height !== settling.height) {
       window.clearTimeout(settling.timer);
       settling = { height, timer: window.setTimeout(learn, STABLE_MS) };
     }
