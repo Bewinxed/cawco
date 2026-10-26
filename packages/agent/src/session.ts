@@ -189,7 +189,7 @@ import { reportDamaged } from "./damaged-records";
 import { harnessMcpUrl } from "./delegation";
 import { applyFleetDenials } from "./denied-tools";
 import { forgetFirstSession } from "./first-session";
-import { placeFolder } from "./fleet";
+import { hashText, placeFolder, readJson } from "./fleet";
 import { FleetDesired, itemStatuses } from "./fleet-desired";
 import { readFleetMcpSet, writeFleetMcpSet } from "./fleet-mcp-set";
 import {
@@ -214,7 +214,7 @@ import {
   SessionAddressRefused,
 } from "./harness";
 import { harnesses, harness as harnessOf } from "./harnesses";
-import { hashText, readJson, writeJson } from "./harnesses/fleet-common";
+import { writeJson } from "./harnesses/fleet-common";
 import { fetchDefaultBranch, hostGit } from "./host-git";
 import { folderTurn, runHubCommand } from "./hub-command";
 import { generateImage } from "./image-generation";

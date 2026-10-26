@@ -97,6 +97,7 @@ import {
   opencodeDenyRules,
   sessionFleetDenials,
 } from "../denied-tools";
+import { hashText, readJson, syncMemory } from "../fleet";
 import {
   hookStatesInSet,
   hookStatesOn,
@@ -145,13 +146,7 @@ import { storeRead, storeWork } from "../stores/client";
 import type { SessionQuery, StoredSession } from "../stores/opencode-reads";
 import { onToolsMoved, toolGate } from "../tools";
 import { workspaceRefs } from "../workspace-records";
-import {
-  hashText,
-  readJson,
-  readSidecar,
-  syncMemory,
-  writeJson,
-} from "./fleet-common";
+import { readSidecar, writeJson } from "./fleet-common";
 import { type ActivitySnapshot, OpencodeActivity } from "./opencode-activity";
 import {
   answerOf,

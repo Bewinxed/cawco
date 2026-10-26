@@ -91,9 +91,10 @@ import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import { JUDGE_SCRIPT } from "../boundary";
 import { CHROME_DEVTOOLS } from "../browser/door";
 import { delegationHubUrl, harnessMcpUrl } from "../delegation";
+import { readJson } from "../fleet";
 import { GATE_PREFIX } from "../mcp-gate";
 import { hostKeyFile } from "../mcp-host";
-import { readJson, writeJson } from "./fleet-common";
+import { writeJson } from "./fleet-common";
 import { CAWCO_PLUGIN_ID, SEND_NOW_METADATA } from "./opencode-client";
 import { opencodeCredentialFile } from "./opencode-credentials";
 

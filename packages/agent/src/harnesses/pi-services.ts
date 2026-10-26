@@ -44,7 +44,7 @@ import {
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import { heldSkills, skillDrift, skillRecords } from "../fleet";
+import { hashText, heldSkills, skillDrift, skillRecords, syncMemory, syncSkillFiles } from "../fleet";
 import {
   hookStatesInSet,
   hookStatesOn,
@@ -55,13 +55,7 @@ import type { TranscriptSpan } from "../harness";
 import { readSettledOnce } from "../mcp-status";
 import { probeStarted } from "../probe-count";
 import { toolGate } from "../tools";
-import {
-  hashText,
-  readSidecar,
-  syncMemory,
-  syncSkillFiles,
-  writeJson,
-} from "./fleet-common";
+import { readSidecar, writeJson } from "./fleet-common";
 import { machineWithAccountsRuntime } from "./pi-accounts";
 import { checkPiCredential, type PiCredentialState } from "./pi-auth";
 import { piMcpEntry, piMcpList } from "./pi-mcp";

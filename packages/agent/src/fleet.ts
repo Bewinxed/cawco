@@ -90,6 +90,7 @@ import {
 import { apartSignedOut, readFleetMcpSet } from "./fleet-mcp-set";
 import { expandHome } from "./fs";
 import { readMcpRuntime, readSettledOnce } from "./mcp-status";
+import { markdownUnder } from "./placed-memory";
 import { noRepositoryAt } from "./stand-ins";
 import { claudeHomeEnv, toolEnv, toolPath } from "./tools";
 import {
@@ -310,7 +311,7 @@ const scriptPathOf = (record: ManagedHook): string | undefined =>
     ? record.command
     : undefined);
 
-const readJson = async <T>(path: string): Promise<T | undefined> => {
+export const readJson = async <T>(path: string): Promise<T | undefined> => {
   const file = Bun.file(path);
   if (!(await file.exists())) {
     return undefined;
@@ -915,11 +916,7 @@ const syncPlugins = async (
     if (!(error instanceof ClaudeRefused)) {
       throw error;
     }
-    const refused: FleetItemState = {
-      state: "failed",
-      cause: error.reason === "version" ? "cli-too-old" : "cli-missing",
-      detail: error.message,
-    };
+    const refused = error.itemState;
     for (const { name } of config.marketplaces) {
       report.marketplaces[name] = refused;
     }
@@ -1558,7 +1555,8 @@ const syncVendoredPlugins = async (
  * touched: a plain skill is files, and the hash is the whole economy — an
  * unchanged skill costs one comparison however many megabytes it arrived with.
  */
-const syncSkillFiles = async (
+export const syncSkillFiles = async (
+  dir: string,
   desired: FleetSkillPayload[],
   sidecar: Sidecar["skills"],
   report: Record<string, FleetItemState>
@@ -1567,16 +1565,10 @@ const syncSkillFiles = async (
   const written: Sidecar["skills"] = {};
   // What is on this disk now, not what the sidecar says was written: the
   // sidecar is who owns a directory, the disk is what is in it.
-  const held = await heldSkills(SKILLS_DIR, Object.keys(sidecar), desired);
-  const managed = await skillRecords(SKILLS_DIR, sidecar, held, desired);
+  const held = await heldSkills(dir, Object.keys(sidecar), desired);
+  const managed = await skillRecords(dir, sidecar, held, desired);
   for (const skill of desired) {
-    if (
-      await holdsFleetCopy(
-        join(SKILLS_DIR, skill.name),
-        skill,
-        held[skill.name]
-      )
-    ) {
+    if (await holdsFleetCopy(join(dir, skill.name), skill, held[skill.name])) {
       written[skill.name] = skill.hash;
       report[skill.name] = { state: "applied" };
       continue;
@@ -1623,7 +1615,7 @@ const syncSkillFiles = async (
     try {
       // A forced write over an edit: the hub took that edited copy into the
       // skill's history before it sent the force.
-      await writeSkill(skill);
+      await writeSkill(skill, dir);
       written[skill.name] = skill.hash;
       report[skill.name] = { state: "applied" };
     } catch (error) {
@@ -1658,7 +1650,7 @@ const syncSkillFiles = async (
       continue;
     }
     try {
-      await removeTree(join(SKILLS_DIR, name));
+      await removeTree(join(dir, name));
       report[name] = { state: "removed" };
     } catch (error) {
       written[name] = managed[name];
@@ -1686,6 +1678,51 @@ const deletedClone = async (cwd: string): Promise<boolean> =>
     () => true
   ));
 
+/** Why nothing is placed in the folder `cwd`: it is not on this machine, or it is a delegate workspace's deleted clone ({@link deletedClone}). */
+const unplaceable = async (
+  cwd: string
+): Promise<FleetItemState | undefined> => {
+  if (!(await dirExists(cwd))) {
+    return {
+      state: "failed",
+      cause: "no-checkout",
+      detail: `${cwd} is not on this machine`,
+    };
+  }
+  if (await deletedClone(cwd)) {
+    return {
+      state: "failed",
+      cause: "no-checkout",
+      detail: `${cwd} is a delegate workspace whose clone was deleted, so nothing is placed there; archiving the workspace takes the folder away`,
+    };
+  }
+};
+
+/**
+ * A placed copy cawco no longer places, taken away by `remove` unless it was
+ * `edited` in the folder since. Answers whether its record is kept: only when
+ * the removal failed, so the next sync tries again.
+ */
+const takeBackPlaced = async (
+  key: string,
+  edited: boolean,
+  remove: () => Promise<void>,
+  report: Record<string, FleetItemState>
+): Promise<boolean> => {
+  if (edited) {
+    report[key] = { state: "removed", detail: "kept: edited in the folder" };
+    return false;
+  }
+  try {
+    await remove();
+    report[key] = { state: "removed" };
+    return false;
+  } catch (error) {
+    report[key] = { state: "failed", cause: "unwritable", detail: said(error) };
+    return true;
+  }
+};
+
 /**
  * One placed copy of a project's skill: written into its folder's
  * `.claude/skills/<name>/` and kept out of the checkout's status, unless the
@@ -1701,20 +1738,9 @@ const placeSkill = async (
 ): Promise<string | undefined> => {
   const key = placedKey(skill);
   const cwd = skill.cwd as string;
-  if (!(await dirExists(cwd))) {
-    report[key] = {
-      state: "failed",
-      cause: "no-checkout",
-      detail: `${cwd} is not on this machine`,
-    };
-    return recorded;
-  }
-  if (await deletedClone(cwd)) {
-    report[key] = {
-      state: "failed",
-      cause: "no-checkout",
-      detail: `${cwd} is a delegate workspace whose clone was deleted, so nothing is placed there; archiving the workspace takes the folder away`,
-    };
+  const refused = await unplaceable(cwd);
+  if (refused) {
+    report[key] = refused;
     return recorded;
   }
   const root = placedSkillsDir(cwd);
@@ -1808,20 +1834,9 @@ const syncPlacedSkills = async (
       continue;
     }
     const disk = await heldHash(dir);
-    if (disk !== undefined && record.hash && disk !== record.hash) {
-      report[key] = { state: "removed", detail: "kept: edited in the folder" };
-      continue;
-    }
-    try {
-      await removeTree(dir);
-      report[key] = { state: "removed" };
-    } catch (error) {
+    const edited = disk !== undefined && !!record.hash && disk !== record.hash;
+    if (await takeBackPlaced(key, edited, () => removeTree(dir), report)) {
       placed[key] = record;
-      report[key] = {
-        state: "failed",
-        cause: "unwritable",
-        detail: said(error),
-      };
     }
   }
   return placed;
@@ -1866,7 +1881,7 @@ export const placedAsMade = async (cwd: string): Promise<string[]> => {
 };
 
 /** The same hash the hub took of the same document: sha256 of its UTF-8 bytes. */
-const hashText = (content: string): string =>
+export const hashText = (content: string): string =>
   new Bun.CryptoHasher("sha256").update(content).digest("hex");
 
 /** What is really at a memory file; null is a machine that has none. */
@@ -1874,9 +1889,6 @@ const fileHashAt = async (path: string): Promise<string | null> => {
   const file = Bun.file(path);
   return (await file.exists()) ? hashText(await file.text()) : null;
 };
-
-/** What is really at `~/.claude/CLAUDE.md`; null is a machine that has none. */
-const memoryFileHash = (): Promise<string | null> => fileHashAt(MEMORY_PATH);
 
 export type MemoryPlan =
   "write" | "skip" | "drift" | "remove" | "unmanage" | "none";
@@ -1942,20 +1954,23 @@ const absentOrDrifted = (
     : { state: "failed", cause: "drifted", detail: DRIFTED };
 
 /**
- * Applies the plan and answers with the hash cawco now manages, or nothing
- * when it manages none. The file is only ever deleted when it is still exactly
- * what cawco wrote — an edited one outlives the fleet's row, unmanaged.
+ * Applies the plan to the harness's memory file at `path` (Claude Code's
+ * `~/.claude/CLAUDE.md`, another harness's own) and answers with the hash
+ * cawco now manages, or nothing when it manages none. The file is only ever
+ * deleted when it is still exactly what cawco wrote — an edited one outlives
+ * the fleet's row, unmanaged.
  */
-const syncMemory = async (
+export const syncMemory = async (
+  path: string,
   desired: FleetMemory | null | undefined,
   managed: string | undefined,
-  report: FleetSyncReport
+  report: { memory?: FleetItemState }
 ): Promise<string | undefined> => {
-  const plan = memoryPlan(desired, await memoryFileHash(), managed);
+  const plan = memoryPlan(desired, await fileHashAt(path), managed);
 
   if (!desired) {
     if (plan === "remove") {
-      await rm(MEMORY_PATH, { force: true });
+      await rm(path, { force: true });
       report.memory = { state: "removed" };
     } else if (plan === "unmanage") {
       report.memory = {
@@ -1976,7 +1991,7 @@ const syncMemory = async (
   }
 
   try {
-    await writeAtomic(MEMORY_PATH, desired.content);
+    await writeAtomic(path, desired.content);
     report.memory = { state: "applied" };
     return desired.hash;
   } catch (error) {
@@ -1989,34 +2004,6 @@ const syncMemory = async (
     };
     return managed;
   }
-};
-
-/**
- * Every document really under `~/.claude/memories/`, by the path the set keys
- * it under. Markdown only, and depth is whatever the set uses — `models/` is
- * the one this version writes, and a reader should still see the rest.
- */
-const memoryDocPaths = async (
-  root: string = MEMORIES_DIR,
-  prefix = ""
-): Promise<string[]> => {
-  const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
-  // Sibling directories are independent reads, and the result is sorted below
-  // regardless of what order they land in.
-  const nested = await Promise.all(
-    entries
-      .filter((entry) => entry.isDirectory())
-      .map((entry) =>
-        memoryDocPaths(join(root, entry.name), `${prefix}${entry.name}/`)
-      )
-  );
-  const paths = [
-    ...nested.flat(),
-    ...entries
-      .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
-      .map((entry) => `${prefix}${entry.name}`),
-  ];
-  return paths.sort();
 };
 
 /**
@@ -2226,20 +2213,9 @@ const placeMemoryDoc = async (
     report[key] = { state: "failed", cause: "unknown", detail: problem };
     return recorded;
   }
-  if (!(await dirExists(cwd))) {
-    report[key] = {
-      state: "failed",
-      cause: "no-checkout",
-      detail: `${cwd} is not on this machine`,
-    };
-    return recorded;
-  }
-  if (await deletedClone(cwd)) {
-    report[key] = {
-      state: "failed",
-      cause: "no-checkout",
-      detail: `${cwd} is a delegate workspace whose clone was deleted, so nothing is placed there; archiving the workspace takes the folder away`,
-    };
+  const refused = await unplaceable(cwd);
+  if (refused) {
+    report[key] = refused;
     return recorded;
   }
   const file = join(placedMemoryDir(cwd), doc.path);
@@ -2314,21 +2290,14 @@ const syncPlacedMemory = async (
       continue;
     }
     const disk = await fileHashAt(file);
-    if (disk !== null && disk !== record.hash) {
-      report[key] = { state: "removed", detail: "kept: edited in the folder" };
-      continue;
-    }
-    try {
+    const remove = async () => {
       await rm(file, { force: true });
       await pruneEmptyPlaced(record.cwd, record.name);
-      report[key] = { state: "removed" };
-    } catch (error) {
+    };
+    if (
+      await takeBackPlaced(key, disk !== null && disk !== record.hash, remove, report)
+    ) {
       placed[key] = record;
-      report[key] = {
-        state: "failed",
-        cause: "unwritable",
-        detail: said(error),
-      };
     }
   }
   return placed;
@@ -3066,6 +3035,7 @@ const converge = async (
   const mcpServers = await reportMcp(config, managed, report.mcp);
   const installed = await syncPlugins(config, managed, report);
   const skills = await syncSkillFiles(
+    SKILLS_DIR,
     config.skills,
     managed.skills,
     skillStates
@@ -3075,7 +3045,12 @@ const converge = async (
     managed.placedSkills,
     skillStates
   );
-  const memory = await syncMemory(config.memory, managed.memory, report);
+  const memory = await syncMemory(
+    MEMORY_PATH,
+    config.memory,
+    managed.memory,
+    report
+  );
   // A fleet that keeps no memory links no documents either: the machine
   // gives back the ones cawco wrote it.
   const memoryDocs = await syncMemoryDocs(
@@ -3339,7 +3314,7 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     skills[key] = state;
   }
   if (managed.memory !== undefined) {
-    const fileHash = await memoryFileHash();
+    const fileHash = await fileHashAt(MEMORY_PATH);
     report.memory =
       fileHash === managed.memory
         ? { state: "applied" }
@@ -3427,7 +3402,7 @@ export const readMemoryFile = async (): Promise<MachineMemorySet | null> => {
   const file = Bun.file(MEMORY_PATH);
   // Each document is read on its own, all at once, kept in the listing's order.
   const docs: MachineMemoryDoc[] = await Promise.all(
-    (await memoryDocPaths()).map(async (path) => {
+    (await markdownUnder(MEMORIES_DIR)).map(async (path) => {
       const content = await Bun.file(join(MEMORIES_DIR, path)).text();
       return { path, content, hash: hashText(content) };
     })
@@ -3657,12 +3632,12 @@ export const inspectConfig = async (
   const linked =
     (await readJson<Record<string, unknown>>(KNOWN_MARKETPLACES)) ?? {};
 
-  const memoryHash = await memoryFileHash();
+  const memoryHash = await fileHashAt(MEMORY_PATH);
   const memoryFile = Bun.file(MEMORY_PATH);
   // Each document is read on its own, all at once, kept in the listing's order.
   const docs: NonNullable<ConfigInspection["memory"]>["docs"] =
     await Promise.all(
-      (await memoryDocPaths()).map(async (path) => {
+      (await markdownUnder(MEMORIES_DIR)).map(async (path) => {
         const doc = Bun.file(join(MEMORIES_DIR, path));
         const hash = hashText(await doc.text());
         return {

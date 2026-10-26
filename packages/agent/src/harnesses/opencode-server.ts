@@ -21,10 +21,10 @@ import {
   signal as signalPid,
 } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
+import { readJson } from "../fleet";
 import { launchGateForm } from "../gate-form";
 import { OPENCODE_SERVER_PROC_ID } from "../proc-id";
 import type { SessiondClient } from "../sessiond-client";
-import { readJson } from "./fleet-common";
 
 const SERVER_CUTOVER_TIMEOUT_MS = 60_000;
 

@@ -1,5 +1,9 @@
 import { readFile, realpath, stat } from "node:fs/promises";
-import { CLAUDE_VERSION_FLOOR, olderThan } from "@cawco/core";
+import {
+  CLAUDE_VERSION_FLOOR,
+  type FleetItemState,
+  olderThan,
+} from "@cawco/core";
 import { writeJsonAtomic } from "@cawco/core/binary-installation";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
@@ -219,6 +223,15 @@ export class ClaudeRefused extends Error {
     super(message);
     this.name = "ClaudeRefused";
     this.reason = reason;
+  }
+
+  /** A fleet item that needed this Claude Code, failed for this refusal. */
+  get itemState(): FleetItemState {
+    return {
+      state: "failed",
+      cause: this.reason === "version" ? "cli-too-old" : "cli-missing",
+      detail: this.message,
+    };
   }
 }
 

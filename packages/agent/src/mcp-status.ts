@@ -1,7 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { type McpServerStatus, query } from "@anthropic-ai/claude-agent-sdk";
 import {
-  type FleetItemState,
   type FleetMcpConfig,
   type FleetSyncReport,
   mcpFleetState,
@@ -132,11 +131,7 @@ export const readMcpRuntime = async (
       throw error;
     }
     // Refused, it reads no server: each says why, and the rest of the sync goes on.
-    const refused: FleetItemState = {
-      state: "failed",
-      cause: error.reason === "version" ? "cli-too-old" : "cli-missing",
-      detail: error.message,
-    };
+    const refused = error.itemState;
     return Object.fromEntries(names.map((name) => [name, refused]));
   }
   const handle = query({
