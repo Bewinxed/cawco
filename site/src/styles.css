@@ -968,7 +968,7 @@ h1 {
   content: '';
 }
 
-/* The agent's glyph, as HarnessGlyph.svelte strokes it. */
+/* The agent's glyph, one of the symbols index.html defines (#hg-claude, #hg-opencode, #hg-pi). */
 .hg {
   flex: none;
   width: 1.2em;

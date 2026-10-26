@@ -16,7 +16,6 @@
     "@cawco/core": "workspace:*",
     "@cawco/hub": "workspace:*",
     "@cawco/sessiond": "workspace:*",
-    "bonjour-service": "^1.4.4",
     "zod": "4.6.5"
   },
   "devDependencies": {

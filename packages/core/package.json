@@ -238,7 +238,6 @@
   },
   "dependencies": {
     "@cawco/jsonl-parser": "workspace:*",
-    "@dagrejs/dagre": "^3.1.1",
     "@iconify-json/solar": "1.2.13",
     "@octokit/rest": "22.0.1",
     "@openuidev/lang-core": "1.0.1",
@@ -251,13 +250,10 @@
     "postcss": "8.5.30",
     "subset-font": "2.9.0",
     "svelte": "5.57.2",
-    "tailwindcss": "4.3.3",
     "tldts": "7.4.18",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "unplugin-icons": "24.0.0",
     "woff2-encoder": "2.0.0",
-    "yaml": "^2.9.1",
-    "yjs": "13.6.33",
     "zod": "4.6.5"
   },
   "devDependencies": {

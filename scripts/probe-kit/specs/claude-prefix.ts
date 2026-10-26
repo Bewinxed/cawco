@@ -66,7 +66,6 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import type { Subprocess } from "bun";
 import { readWithin } from "../../../packages/core/src/bounded";
@@ -236,12 +235,8 @@ const run = async (kit: Kit) => {
     await import("../../../packages/agent/src/mcp-gate");
   const { startMcpGateway } =
     await import("../../../packages/agent/src/mcp-oauth");
-  // The Agent SDK the agent itself runs Claude Code through: its dependency.
-  const { query } = (await import(
-    createRequire(join(ROOT, "packages", "agent", "package.json")).resolve(
-      "@anthropic-ai/claude-agent-sdk"
-    )
-  )) as typeof import("../../../packages/agent/node_modules/@anthropic-ai/claude-agent-sdk");
+  // The Agent SDK the agent itself runs Claude Code through, at the agent's version.
+  const { query } = await import("@anthropic-ai/claude-agent-sdk");
   const bun = Bun.which("bun") ?? process.execPath;
   const claude = Bun.which("claude");
   if (!claude) {

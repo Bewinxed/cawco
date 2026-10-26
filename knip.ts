@@ -249,21 +249,15 @@ export default {
         "string_decoder",
         // tsconfig.paths.json:30 (gaxios)
         "undici-types",
-        // tsconfig.paths.json:32 (playwright-core, jsrepo)
-        "zod",
-        // tsconfig.paths.json:35-37 (jsrepo)
-        "@clack/prompts",
-        "fast-glob",
-        "picocolors",
-        // tsconfig.paths.json:39 (mermaid)
+        // tsconfig.paths.json:35 (mermaid)
         "type-fest",
-        // tsconfig.paths.json:41 (remark-parse, remark-stringify)
+        // tsconfig.paths.json:37 (remark-parse, remark-stringify)
         "vfile",
-        // tsconfig.paths.json:43-49 (@earendil-works/pi-coding-agent)
+        // tsconfig.paths.json:39-45 (@earendil-works/pi-coding-agent)
         "@earendil-works/pi-agent-core",
         "@earendil-works/pi-codemode",
         "@earendil-works/pi-tui",
-        // tsconfig.paths.json:52 and bunfig.toml:1-3 (vaul-svelte, huntabyte/vaul-svelte#130)
+        // tsconfig.paths.json:48 and bunfig.toml:1-3 (vaul-svelte, huntabyte/vaul-svelte#130)
         "bits-ui",
       ],
       // Operating-system programs the probes run through Bun's `$`

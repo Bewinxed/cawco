@@ -44,7 +44,6 @@
  */
 import { readlinkSync } from "node:fs";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Boundary } from "../../../packages/agent/src/boundary";
@@ -58,7 +57,7 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
-import { type Kit, type KitFleet, ROOT, type Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../kit";
 import { legacyClaudeOptions } from "../legacy-claude";
 
 const MCP_VERSION = "1.11.0";
@@ -818,12 +817,8 @@ const legacyLeg = async (kit: Kit, fleet: KitFleet, claude: Delegate) => {
   const cli = Bun.which("claude");
   const configDir = join(fleet.sandbox, "legacy-claude");
   await mkdir(configDir, { recursive: true });
-  // The Agent SDK the agent itself runs Claude Code through: its dependency.
-  const { query } = (await import(
-    createRequire(join(ROOT, "packages", "agent", "package.json")).resolve(
-      "@anthropic-ai/claude-agent-sdk"
-    )
-  )) as typeof import("../../../packages/agent/node_modules/@anthropic-ai/claude-agent-sdk");
+  // The Agent SDK the agent itself runs Claude Code through, at the agent's version.
+  const { query } = await import("@anthropic-ai/claude-agent-sdk");
   const step = stepOf(
     shell("Bash", [
       "mkdir -p legacy && cd legacy && readlink /proc/self/ns/pid 2>/dev/null; printf 'ws=%s\\n' \"$CAWCO_WORKSPACE\"",

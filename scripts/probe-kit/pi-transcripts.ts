@@ -10,17 +10,9 @@
  * pi writes under `PI_CODING_AGENT_DIR`'s `sessions/`; a spec points that
  * at a folder of its own before it imports anything that reads it.
  */
-import { join } from "node:path";
+import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { BACKGROUND_SHELL } from "../../packages/agent/src/harnesses/pi-services";
 import { seeded } from "./claude-transcripts";
-
-/** pi's SessionManager, as the agent resolves it. */
-const { SessionManager } = (await import(
-  Bun.resolveSync(
-    "@earendil-works/pi-coding-agent",
-    join(import.meta.dir, "../../packages/agent")
-  )
-)) as typeof import("../../packages/agent/node_modules/@earendil-works/pi-coding-agent");
 
 type Manager = ReturnType<typeof SessionManager.create>;
 

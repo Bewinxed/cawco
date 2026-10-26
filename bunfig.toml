@@ -8,8 +8,7 @@
 # every project extends, maps each name to that copy, so it resolves there
 # from the global store as well: buffer, events, process, punycode and
 # string_decoder (@types/node, bun-types and others name the builtins bare),
-# undici-types (gaxios), zod (playwright-core, jsrepo), @clack/prompts,
-# fast-glob and picocolors (jsrepo), type-fest (mermaid), vfile (remark-parse,
+# undici-types (gaxios), zod (playwright-core), type-fest (mermaid), vfile (remark-parse,
 # remark-stringify), and bun and typescript, declared already. openai and
 # @anthropic-ai/sdk probe undici and node-fetch types in each of ten parent
 # folders by relative path, past any root; their patches drop the probes, and

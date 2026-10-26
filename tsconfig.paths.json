@@ -28,13 +28,9 @@
       "typescript": ["./node_modules/typescript"],
       // gaxios.
       "undici-types": ["./node_modules/undici-types"],
-      // playwright-core, jsrepo.
+      // playwright-core.
       "zod": ["./node_modules/zod"],
       "zod/*": ["./node_modules/zod/*"],
-      // jsrepo.
-      "@clack/prompts": ["./node_modules/@clack/prompts"],
-      "fast-glob": ["./node_modules/fast-glob"],
-      "picocolors": ["./node_modules/picocolors"],
       // mermaid.
       "type-fest": ["./node_modules/type-fest"],
       // remark-parse, remark-stringify.
