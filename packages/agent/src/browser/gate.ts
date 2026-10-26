@@ -64,7 +64,7 @@ import type { Server, ServerWebSocket } from "bun";
 import { browserDir } from "./state";
 
 /** What a refusal says, one sentence each. */
-export const GATE_WORDS = {
+const GATE_WORDS = {
   others: "This page belongs to another session of the project.",
   ownPages: "This browser's own pages are not for agents.",
   signIns:
@@ -84,7 +84,7 @@ export const GATE_WORDS = {
 } as const;
 
 /** The close code of a connection the shield cuts. */
-export const SHIELD_CLOSE = 4423;
+const SHIELD_CLOSE = 4423;
 /** The close code of a connection whose workspace's boundary ended. */
 const ENDED_CLOSE = 4410;
 

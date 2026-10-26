@@ -31,9 +31,9 @@
  *   connection's key; a machine with none, and a session, are refused; a
  *   machine's word of a refused `.lfsconfig` lands in the project's thread.
  *
- * On main the same steps run main's own code for them (A's `hostGitEnv()`,
- * B's and C's plain checkout, D's first commit, E's routes), so each leg
- * fails there.
+ * On a tree from before them, A, D and E run that tree's own code for
+ * those steps (A's `hostGitEnv()`, D's first commit, E's routes), so each
+ * fails there; B and C import `lfsCheckout`, which every tree has had since.
  *
  *   bun scripts/probe-kit/run.ts host-lfs
  */
@@ -42,6 +42,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { gitUntil, lfsCheckout } from "../../../packages/agent/src/workspace";
 import type { Kit, Spec } from "../kit";
 
 const FILTERS = [
@@ -219,11 +220,7 @@ const pushLeg = async (kit: Kit, root: string): Promise<void> => {
     // `gitDoorEnv`) is no part of it.
     const { GIT_CONFIG_PARAMETERS: _workspace, ...host } = process.env;
     const made = Bun.spawnSync(
-      [
-        "bun",
-        "-e",
-        `const { hostOriginGitEnv } = await import(${JSON.stringify(join(import.meta.dir, agent("hub-git")))}); console.log(JSON.stringify(await hostOriginGitEnv(process.env.PROBE_ORIGIN)));`,
-      ],
+      ["bun", join(import.meta.dir, "../host-origin-git-env-child.ts"), origin],
       {
         env: {
           ...host,
@@ -231,7 +228,6 @@ const pushLeg = async (kit: Kit, root: string): Promise<void> => {
           GIT_CONFIG_KEY_0: `credential.${lfs.origin}.helper`,
           GIT_CONFIG_VALUE_0:
             "!f() { test \"$1\" = get && printf 'username=probe\\npassword=probe\\n'; }; f",
-          PROBE_ORIGIN: origin,
         },
         stdout: "pipe",
         stderr: "pipe",
@@ -277,30 +273,22 @@ const pushLeg = async (kit: Kit, root: string): Promise<void> => {
   }
 };
 
-type Checkout = typeof import("../../../packages/agent/src/workspace");
-
-/** The git a creation checkout of `start` runs with: the cut's own (`lfsCheckout`), or main's plain git where it has none. */
-const checkoutGit = async (
-  workspace: Checkout,
-  options: {
-    declared?: { basic: string; endpoint: string };
-    path: string;
-    projectId: string;
-  }
-) => {
+/** The git a workspace's creation checkout of `start` runs with (workspace.ts `lfsCheckout`). */
+const checkoutGit = (options: {
+  declared?: { basic: string; endpoint: string };
+  path: string;
+  projectId: string;
+}) => {
   const deadline = Date.now() + 120_000;
-  const plain = workspace.gitUntil(deadline);
-  return "lfsCheckout" in workspace
-    ? await workspace.lfsCheckout({
-        deadline,
-        declared: options.declared,
-        hub: undefined,
-        path: options.path,
-        plain,
-        projectId: options.projectId,
-        start: "origin/main",
-      })
-    : plain;
+  return lfsCheckout({
+    deadline,
+    declared: options.declared,
+    hub: undefined,
+    path: options.path,
+    plain: gitUntil(deadline),
+    projectId: options.projectId,
+    start: "origin/main",
+  });
 };
 
 /** B: an undeclared third-party endpoint leaves pointers, asks nothing, and tells the hub. */
@@ -316,8 +304,7 @@ const undeclaredLeg = async (kit: Kit, root: string): Promise<void> => {
     lfs.keep("/third/party.git", bytes);
     const path = join(root, "b");
     unchecked(source, path, `${lfs.origin}/own/repo.git`);
-    const workspace = (await import(agent("workspace"))) as Checkout;
-    const checkout = await checkoutGit(workspace, {
+    const checkout = await checkoutGit({
       path,
       projectId: "probe-project",
     });
@@ -370,8 +357,7 @@ const declaredLeg = async (kit: Kit, root: string): Promise<void> => {
     lfs.keep("/decl/store.git", bytes);
     const path = join(root, "c");
     unchecked(source, path, `${lfs.origin}/own/repo.git`);
-    const workspace = (await import(agent("workspace"))) as Checkout;
-    const checkout = await checkoutGit(workspace, {
+    const checkout = await checkoutGit({
       path,
       projectId: "probe-project",
       declared: {

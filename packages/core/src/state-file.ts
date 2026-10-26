@@ -247,7 +247,7 @@ const textProblem = (text: string): string | undefined => {
 };
 
 /** `text`, a JSON record read from `file`, parsed; a {@link DamagedRecord} when it does not parse. */
-export const parseRecord = <T>(file: string, text: string): T => {
+const parseRecord = <T>(file: string, text: string): T => {
   const problem = textProblem(text);
   if (problem) {
     throw new DamagedRecord(file, problem);
@@ -265,7 +265,7 @@ export const parseRecord = <T>(file: string, text: string): T => {
 };
 
 /** `text`, a one-value text record (a pid, an id), checked whole. */
-export const checkTextRecord = (file: string, text: string): string => {
+const checkTextRecord = (file: string, text: string): string => {
   const problem = textProblem(text);
   if (problem) {
     throw new DamagedRecord(file, problem);

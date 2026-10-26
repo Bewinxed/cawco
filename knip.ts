@@ -201,6 +201,8 @@ export default {
         "scripts/probe-kit/store-reads-child.ts",
         // scripts/probe-kit/specs/atomic-writes.ts:26
         "scripts/probe-kit/atomic-writer.ts",
+        // scripts/probe-kit/specs/host-lfs.ts:223
+        "scripts/probe-kit/host-origin-git-env-child.ts",
         // scripts/probe-kit/specs/fsevents-scope.ts:52
         "scripts/probe-kit/fsevents-claude-args.ts",
         // A Bun.build entrypoint: scripts/probe-kit/decision-embeds.ts:77.

@@ -846,7 +846,7 @@ export const hostGitEnv = async (): Promise<Record<string, string>> => {
  * or a fetch's large files go nowhere else, and the host's credential goes
  * to no other server.
  */
-const hostOriginGitEnv = async (
+export const hostOriginGitEnv = async (
   origin: string,
   declared?: DeclaredLfs
 ): Promise<Record<string, string>> => {

@@ -948,7 +948,7 @@ interface MachineIdentity {
  * 30 s to answer `--version` and `auth status` kept a machine offline for
  * 31 s), follow on beats of their own: see {@link HeartbeatPayload}.
  */
-export interface RegisterPayload extends MachineIdentity {
+interface RegisterPayload extends MachineIdentity {
   /**
    * The machine agent's account stores: every id under `~/.cawco/accounts/`,
    * Claude dirs and provider credential stores alike. The hub's ack names
@@ -1029,7 +1029,7 @@ export interface RegisterPayload extends MachineIdentity {
   sessionAddresses: import("@cawco/core").SessionAddress[];
 }
 
-export class ConnectionLost extends Data.TaggedError("ConnectionLost")<{
+class ConnectionLost extends Data.TaggedError("ConnectionLost")<{
   readonly url: string;
   readonly reason: string;
 }> {}
@@ -1072,7 +1072,7 @@ const RESTART_WINDOW_MS = Duration.toMillis(RESTART_KNOCK) * RESTART_KNOCKS;
  * connection has actually been healthy, so the next outage steps a schedule
  * that starts again at the knock.
  */
-export const reconnect = Schedule.concat(
+const reconnect = Schedule.concat(
   Schedule.spaced(RESTART_KNOCK).pipe(Schedule.upTo({ times: RESTART_KNOCKS })),
   Schedule.min([
     Schedule.exponential(Duration.seconds(1)),
@@ -1114,7 +1114,7 @@ const HUB_PROBE = Duration.seconds(1);
  * the 3.x copies in node_modules belong to other packages), so the reset is the
  * loop in {@link reconnecting} rather than a schedule combinator.
  */
-export const HEALTHY_CONNECTION = Duration.seconds(60);
+const HEALTHY_CONNECTION = Duration.seconds(60);
 
 /**
  * How many consecutive failures against the pinned URL, and how much wall
@@ -1134,8 +1134,8 @@ export const HEALTHY_CONNECTION = Duration.seconds(60);
  * daemon concludes the URL itself is gone rather than the hub being briefly
  * unwell at it.
  */
-export const REDISCOVERY_FAILURE_COUNT = 5;
-export const REDISCOVERY_FAILURE_WINDOW = Duration.minutes(2);
+const REDISCOVERY_FAILURE_COUNT = 5;
+const REDISCOVERY_FAILURE_WINDOW = Duration.minutes(2);
 
 /**
  * Connect, and keep connecting — forever, and with a backoff that means it.
@@ -1167,7 +1167,7 @@ export const REDISCOVERY_FAILURE_WINDOW = Duration.minutes(2);
  * `series` value (and therefore a new closure) every time {@link
  * Effect.forever} re-enters it.
  */
-export const reconnecting = <E extends { readonly reason: string }, R>(
+const reconnecting = <E extends { readonly reason: string }, R>(
   session: (markLive: () => void) => Effect.Effect<never, E, R>,
   options?: {
     readonly healthyAfter?: Duration.Duration;
@@ -1554,9 +1554,7 @@ const closed = (socket: WebSocket, url: string) =>
  * has to clone a repository or cut a worktree first is not a session that
  * already exists to be adopted — both go straight to the supervisor.
  */
-export const adoptable = (
-  payload: SpawnPayload | undefined
-): payload is NamedSpawn =>
+const adoptable = (payload: SpawnPayload | undefined): payload is NamedSpawn =>
   payload !== undefined &&
   typeof payload.instanceId === "string" &&
   payload.instanceId.length > 0 &&
@@ -3342,7 +3340,7 @@ const careForLaunchdLogs = async (start: boolean): Promise<void> => {
  * then may a sustained reconnect failure re-run discovery and repin; a named
  * hub is retried with the usual backoff forever.
  */
-export const startDaemon = (rediscover = false) =>
+const startDaemon = (rediscover = false) =>
   Effect.gen(function* () {
     // Every record read once, before anything reads one: what a crash left
     // damaged is in the log and on the first beat now, not at the next spawn.
