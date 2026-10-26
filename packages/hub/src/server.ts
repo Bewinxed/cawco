@@ -21238,7 +21238,7 @@ export const createServer = (
    * A turn of the loop between two rows of a source check: each row's note
    * rewrites its row, files and all (megabytes for a plugin), so a pass
    * over the fleet's rows in one go held the hub 630 ms as it started
-   * (hub-restart-live-db, 2026-10-24).
+   * (measured on a copy of the live database, 2026-10-24).
    */
   const sourceTurn = (): Promise<void> =>
     new Promise<void>((resolve) => setImmediate(resolve));
@@ -34693,7 +34693,8 @@ export const createServer = (
               );
               // A turn between the settle and the restores: a register of a
               // machine holding thousands of rows held the hub's thread for
-              // 640 ms in one piece on the live database (hub-restart-live-db).
+              // 640 ms in one piece on a copy of the live database
+              // (2026-10-24).
               await new Promise<void>((resolve) => setImmediate(resolve));
               await readLaunchDirs(message.machineId);
               let restoreBatch = 0;

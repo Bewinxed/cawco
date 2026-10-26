@@ -4455,7 +4455,7 @@ const make = async (path: string): Promise<DbShape> => {
    * from its row only when that hash is new. The fleet's config is built for
    * every machine's welcome and delta, and it read and parsed every skill's
    * and plugin's files each time, 78 MB on the live hub, 267 ms a build
-   * (hub-restart-live-db, 2026-10-23). A row's hash is its files' (fleet
+   * (measured on a copy of the live database, 2026-10-23). A row's hash is its files' (fleet
    * `hashSkillFiles`), so a kept copy under the same hash is those files.
    */
   const filesKept = new Map<string, { files: SkillFile[]; hash: string }>();
@@ -4556,7 +4556,7 @@ const make = async (path: string): Promise<DbShape> => {
           // The transcript's mtime includes maintenance; it is not real
           // activity. Read here, a chunk's sessions at a time: all of a
           // machine's at once read 36,000 sends' bodies and held its
-          // register 130 ms (hub-restart-live-db, 2026-10-24).
+          // register 130 ms (a copy of the live database, 2026-10-24).
           const keptAlive = newestKeptAlive(chunk.map((row) => row.id));
           const dates = chunk.filter((row) => !keptAlive.has(row.id));
           if (dates.length > 0) {
@@ -4620,7 +4620,7 @@ const make = async (path: string): Promise<DbShape> => {
     // Each chunk's rows in one statement, each a turn of the loop after the
     // last, so the hub answers between them and the register that asked
     // waits on none: 4,277 rows whose times all moved held the thread 0.9 s
-    // in one go on the live database (hub-restart-live-db).
+    // in one go on a copy of the live database (2026-10-24).
     const chunks: (typeof moving)[] = [];
     for (let from = 0; from < moving.length; from += DATES_WRITTEN_AT_ONCE) {
       const chunk = moving
@@ -6951,7 +6951,8 @@ const make = async (path: string): Promise<DbShape> => {
     },
     // Its id and hostname alone: a machine named in a sentence read every
     // machine's row whole (its fleet, its harnesses, its tools), once per
-    // session an account wake named (hub-restart-live-db).
+    // session an account wake named, at each hub start on a copy of the
+    // live database.
     namedMachines: () =>
       db
         .select({ machineId: agents.machineId, hostname: agents.hostname })
@@ -6960,7 +6961,8 @@ const make = async (path: string): Promise<DbShape> => {
         .all(),
     // One row's source each: a pass over every skill and plugin asked the
     // whole catalog, and the whole fleet config, once per row (the update
-    // check's `watched`, at every hub start: hub-restart-live-db).
+    // check's `watched`, at every hub start on a copy of the live
+    // database).
     skillSource: (name) =>
       db
         .select({ source: skills.source })

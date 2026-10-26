@@ -1085,8 +1085,9 @@ export const reconnect = Schedule.concat(
  *
  * The backoff above spares a hub that is down or refusing this daemon; it
  * also kept a daemon away for up to 30 s after its hub came back from an
- * outage past the knock window (a hub down 65 s: registered 19–30 s after it
- * answered, binary-update-waits-for-hub, 2026-10-24). A `/health` that did
+ * outage past the knock window (measured 2026-10-24 on a scratch fleet, its
+ * hub down 65 s: the daemon registered 19–30 s after the hub answered). A
+ * `/health` that did
  * not answer during a wait and then answers ends that wait at once; one that
  * answered from the start (a hub up, refusing or dropping this daemon's
  * socket) never does, so a flap still pays the whole backoff. A down hub

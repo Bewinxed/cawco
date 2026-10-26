@@ -103,7 +103,8 @@ const hashed = new Map<string, { hash: string; key: string }>();
  * same object. A skill's or plugin's files are kept by their content hash
  * (db `keptFiles`), the same arrays build after build, so each welcome and
  * delta no longer hashes every file the fleet holds for every machine
- * (78 MB, the register's largest cost after its reads: hub-restart-live-db).
+ * (78 MB, the register's largest cost after its reads on a copy of the
+ * live database).
  */
 const hashOf = (id: string, value: unknown): string => {
   const key =
@@ -132,7 +133,7 @@ const hashOf = (id: string, value: unknown): string => {
  * Each of `items` hashed now, so the welcome that diffs them next takes
  * each hash kept: the hub's start does it for every machine it knows, before
  * it listens, rather than the first register paying for every file the fleet
- * holds (hub-restart-live-db, 2026-10-23).
+ * holds (measured on a copy of the live database, 2026-10-23).
  */
 export const warmHashes = (items: FleetItems): void => {
   for (const [id, value] of items) {
