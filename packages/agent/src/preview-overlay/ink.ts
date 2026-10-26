@@ -48,6 +48,7 @@ import {
 } from "@cawco/core/comments";
 import type { DocMap } from "@cawco/core/doc-maps";
 import { INK_LIMITS, type InkGroup, type InkPoint } from "@cawco/core/ink";
+import { boxOf } from "@cawco/core/shapes";
 import { getStroke } from "perfect-freehand";
 import { absences } from "./absent";
 import { artifact } from "./artifact";
@@ -155,17 +156,10 @@ const pageBox = (el: Element): Box => {
 const outward = (el: Element): Element | null =>
   el.parentElement ?? framesOf(el).at(-1) ?? null;
 
-const boxOf = (points: Point[]): Box => {
-  const xs = points.map((p) => p[0]);
-  const ys = points.map((p) => p[1]);
-  const x = Math.min(...xs);
-  const y = Math.min(...ys);
-  return {
-    x,
-    y,
-    w: Math.max(1, Math.max(...xs) - x),
-    h: Math.max(1, Math.max(...ys) - y),
-  };
+/** The box around a stroke's points, at least 1 px each way. */
+const strokeBox = (points: Point[]): Box => {
+  const { x, y, width, height } = boxOf(points);
+  return { x, y, w: Math.max(1, width), h: Math.max(1, height) };
 };
 
 const union = (a: Box, b: Box): Box => {
@@ -715,7 +709,7 @@ export function startInk(deps: InkDeps): Ink {
     boxed: (el: Element) => Box,
     into: { crossed: Set<Element>; enclosed: Set<Element> }
   ): Box => {
-    const box = boxOf(points);
+    const box = strokeBox(points);
     const loop = isLoop(points, box);
     const reach = pad(box, loop ? ENCLOSE_SLACK : LINE_REACH);
     const encloses = (el: Element) =>
@@ -765,7 +759,7 @@ export function startInk(deps: InkDeps): Ink {
         ? outermost([...enclosed])
         : innermost([...new Set([...crossed].map(blockOf))]);
     const reach =
-      reaches.length > 0 ? reaches.reduce(union) : boxOf(strokes.flat());
+      reaches.length > 0 ? reaches.reduce(union) : strokeBox(strokes.flat());
     if (over.length === 0) {
       const [centre] = deps.elementsAt([
         [reach.x + reach.w / 2 - scrollX, reach.y + reach.h / 2 - scrollY],
@@ -822,7 +816,7 @@ export function startInk(deps: InkDeps): Ink {
     at: string
   ): InkGroup => {
     const all = strokes.map((one) => one.points);
-    const groupBox = all.map(boxOf).reduce(union);
+    const groupBox = all.map(strokeBox).reduce(union);
     const { anchor, over } = marksOf(all);
     const ab = pageBox(anchor);
     const fraction = (p: Point): InkPoint => [
@@ -866,7 +860,7 @@ export function startInk(deps: InkDeps): Ink {
         : undefined;
     const recentBox = recent ? placed.get(recent.id)?.box : undefined;
     const open =
-      recent && recentBox && touches(recentBox, boxOf(points))
+      recent && recentBox && touches(recentBox, strokeBox(points))
         ? recent
         : undefined;
     const refused = refusal(points, open);
@@ -1026,7 +1020,7 @@ export function startInk(deps: InkDeps): Ink {
     }
     layer.append(g);
     placed.set(group.id, {
-      box: strokes.map((one) => boxOf(one.points)).reduce(union),
+      box: strokes.map((one) => strokeBox(one.points)).reduce(union),
       anchor: el,
     });
   }

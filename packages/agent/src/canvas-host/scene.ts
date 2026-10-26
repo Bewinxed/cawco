@@ -4,6 +4,7 @@ import {
   type CanvasAuthor,
   type CanvasRequestResult,
 } from "@cawco/core/canvas";
+import { toSegment } from "@cawco/core/shapes";
 /**
  * The canvas's scene on its doc (Projects spec §5.10, D23–D25): Excalidraw
  * bound to the artifact's doc by y-excalidraw, the agent's writes converted
@@ -745,25 +746,6 @@ const PRESS_PX = 8;
 const PRESS_MS = 500;
 /** How near a line or an arrow a press lands on it, in screen px. Our call: half the 44px touch target's slack. */
 const LINE_REACH = 10;
-
-/** The distance from `p` to the segment `a`–`b`. */
-const toSegment = (
-  p: [number, number],
-  a: readonly [number, number],
-  b: readonly [number, number]
-) => {
-  const dx = b[0] - a[0];
-  const dy = b[1] - a[1];
-  const length = dx * dx + dy * dy;
-  const t =
-    length === 0
-      ? 0
-      : Math.max(
-          0,
-          Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / length)
-        );
-  return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
-};
 
 /** Whether the scene point `at` lands on `el`: inside its box, or for a line or an arrow within reach of it. */
 const lands = (

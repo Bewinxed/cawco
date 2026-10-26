@@ -60,8 +60,11 @@ const T = SHAPE_THRESHOLDS;
 
 const dist = (a: Point, b: Point) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 
+/** A point of any stroke: x and y first, whatever follows (a pen's pressure). */
+type AnyPoint = readonly [number, number, ...number[]];
+
 /** The distance from `p` to the segment `a`–`b`. */
-const toSegment = (p: Point, a: Point, b: Point) => {
+export const toSegment = (p: AnyPoint, a: AnyPoint, b: AnyPoint): number => {
   const dx = b[0] - a[0];
   const dy = b[1] - a[1];
   const length = dx * dx + dy * dy;
@@ -107,7 +110,8 @@ const resample = (points: Point[], n: number): Point[] => {
   return out;
 };
 
-const boxOf = (points: Point[]) => {
+/** The smallest box around `points`. */
+export const boxOf = (points: readonly AnyPoint[]) => {
   const xs = points.map((p) => p[0]);
   const ys = points.map((p) => p[1]);
   const x = Math.min(...xs);
