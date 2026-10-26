@@ -12059,13 +12059,42 @@ export const createServer = (
     );
   };
 
-  /** Session `instanceId`'s frame of `target` (its open panel's, or an artifact's own tab's): what it shows, on the origin that serves it. */
-  const shownFrame = (instanceId: string, target: Shown) =>
+  /** The key of the origin a frame of `target` in session `instanceId`'s panel loads ({@link frameOrigin}'s). */
+  const frameKey = (instanceId: string, target: Shown): string => {
+    if (!("page" in target.source)) {
+      return embedKey(target.artifact.id);
+    }
+    const project = pageProject(target.artifact.id);
+    return project ? projectOrigin(project) : instanceId;
+  };
+
+  /**
+   * The address a frame told to every screen carries (the board, a panel's
+   * stream): its origin's, its listener started, while that origin holds a
+   * port (preview.ts `holds`: its session runs or a screen follows it, a
+   * frame of it is open, its project is kept); else the one its listener
+   * still stands on, or none. A screen that follows the session, or opens
+   * the artifact, takes one then ({@link frameAddress}).
+   */
+  const toldAddress = (instanceId: string, target: Shown) => {
+    const key = frameKey(instanceId, target);
+    return previewListeners.holds(key)
+      ? frameAddress(instanceId, target)
+      : previewListeners.bound(key);
+  };
+
+  /**
+   * Session `instanceId`'s frame of `target` (its open panel's, or an
+   * artifact's own tab's): what it shows, on the origin that serves it,
+   * opened for the tab that asks (`open`), else as told to every screen
+   * ({@link toldAddress}).
+   */
+  const shownFrame = (instanceId: string, target: Shown, open: boolean) =>
     previewFrame(
       instanceId,
       "open",
       target,
-      frameAddress(instanceId, target),
+      open ? frameAddress(instanceId, target) : toldAddress(instanceId, target),
       artifactIds(instanceId),
       artifacts.stageFor(target.artifact.id),
       pageProject(target.artifact.id)
@@ -12080,7 +12109,7 @@ export const createServer = (
       instanceId,
       state,
       target,
-      state === "open" ? frameAddress(instanceId, target) : null,
+      state === "open" ? toldAddress(instanceId, target) : null,
       artifactIds(instanceId),
       artifacts.stageFor(target.artifact.id),
       pageProject(target.artifact.id)
@@ -14605,6 +14634,25 @@ export const createServer = (
     sessionLive: (instanceId) => {
       const [row] = db.getInstancesByIds([instanceId]);
       return !!row && !ENDED_STATUSES.has(row.status);
+    },
+    sessionUsed: (instanceId) => {
+      const [row] = db.getInstancesByIds([instanceId]);
+      return (
+        !!row && (mayRun(row.status) || streams.followerCount(instanceId) > 0)
+      );
+    },
+    // Told again without their old address, once what let them go is done:
+    // a screen holding that port would load another origin there.
+    letGo: (keys) => {
+      const gone = new Set(keys);
+      queueMicrotask(() => {
+        for (const [instanceId, target] of previewTargets) {
+          if (gone.has(frameKey(instanceId, target))) {
+            publishPreview(instanceId, "open", target);
+          }
+        }
+        publishInstances("");
+      });
     },
     reach: reachPreview,
     stageAnswered: (artifactId) => artifacts.stageAnswered(artifactId),
@@ -19236,7 +19284,7 @@ export const createServer = (
                   (one) => one.key === key && one.machineId === row.machineId
                 ) ?? null)
             : null,
-        preview: target ? shownFrame(instanceId, target) : null,
+        preview: target ? shownFrame(instanceId, target, true) : null,
         session: row
           ? {
               id: row.id,
@@ -19267,7 +19315,9 @@ export const createServer = (
   /** Everything an `instances` frame carries besides the rows themselves. */
   const boardExtras = () => ({
     agents: withPresence(db.listAgents()),
-    previews: [...previewTargets].map(([id, target]) => shownFrame(id, target)),
+    previews: [...previewTargets].map(([id, target]) =>
+      shownFrame(id, target, false)
+    ),
     handoffs: Object.fromEntries(handoffs),
     // Carried on every publish, so a dashboard follows a continuation it
     // started over the socket rather than over the request that started it.
@@ -22439,6 +22489,16 @@ export const createServer = (
     lifetime,
     // A follower's plan whole (plans.ts), built below with the tasks it reads.
     planSnapshot: (instanceId, send) => plans.snapshotTo(instanceId, send),
+    // A screen that follows a session uses its panel's preview: one that
+    // stands on no port now (its session slept and gave it up) takes one,
+    // told on the session's stream and the board.
+    followed: (instanceId) => {
+      const target = previewTargets.get(instanceId);
+      if (target && !previewListeners.bound(frameKey(instanceId, target))) {
+        publishPreview(instanceId, "open", target);
+        publishInstances("");
+      }
+    },
     withdrawSend: async (machineId, instanceId, sendId) => {
       const row = db.sendRecord(sendId);
       const [instance] = db.getInstancesByIds([instanceId]);

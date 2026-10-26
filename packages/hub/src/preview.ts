@@ -404,6 +404,8 @@ export interface PreviewListenerDeps {
   keepShape: (request: Request, pageId: string) => Promise<Response>;
   /** An artifact's kind; undefined when there is none. */
   kindOf: (artifactId: string) => ArtifactKind | undefined;
+  /** Origins that let their port go to another: what each shows is told again, without its old address. */
+  letGo: (keys: string[]) => void;
   /**
    * The origin that serves an artifact, by its key: a project's page its
    * project's ({@link projectOrigin}), whichever session holds it or none;
@@ -442,6 +444,13 @@ export interface PreviewListenerDeps {
   servedOn: (artifactId: string, key: string) => boolean;
   /** Whether session `instanceId` still runs: a session's ticket enters host mode's names only while it does (preview-access.ts). */
   sessionLive: (instanceId: string) => boolean;
+  /**
+   * Whether session `instanceId` uses its preview origins now: its process
+   * may run (starting, running, or not yet reported since the hub started),
+   * or a screen follows its conversation. A sleeping, failed or ended one
+   * that no screen follows does not.
+   */
+  sessionUsed: (instanceId: string) => boolean;
   /** An artifact of the session's brought to the front of its panel from a page (`/show`: a decision page's Canvas, Open to draw). */
   showFrom: (
     request: Request,
@@ -473,7 +482,7 @@ const joinArtifact = (
   }
   if (!action) {
     const screen = new URL(request.url).searchParams.get("screen") === "1";
-    return server.upgrade(request, { data: { artifactId, screen } })
+    return server.upgrade(request, { data: { artifactId, at: key, screen } })
       ? undefined
       : new Response("WebSocket upgrade failed", { status: 400 });
   }
@@ -1140,9 +1149,32 @@ export function createPreviewListeners(
   tailnet: Pick<TailnetHttpsService, "beside" | "origin">
 ) {
   const proxy = previewWebSocket as unknown as WebSocketHandler<ListenerSocket>;
+  /**
+   * Each origin's open sockets, by its key: a frame that shows it holds one
+   * while it stands (its overlay's doc link, which keeps itself open: core
+   * doc-link.ts; a previewed app's own), so an origin a screen shows is in
+   * use, as a stage counts its viewers by its sockets (agent stage.ts).
+   */
+  const viewers = new Map<string, number>();
+  const viewed = (socket: ServerWebSocket<ListenerSocket>, by: 1 | -1) => {
+    const { data } = socket;
+    const key = "artifactId" in data ? data.at : data.instanceId;
+    if (key) {
+      const now = (viewers.get(key) ?? 0) + by;
+      if (now > 0) {
+        viewers.set(key, now);
+      } else {
+        viewers.delete(key);
+      }
+    }
+  };
   const websocket: WebSocketHandler<ListenerSocket> = {
-    open: (socket) =>
-      isArtifact(socket) ? deps.socket.open(socket) : proxy.open?.(socket),
+    open: (socket) => {
+      viewed(socket, 1);
+      return isArtifact(socket)
+        ? deps.socket.open(socket)
+        : proxy.open?.(socket);
+    },
     message: (socket, message) =>
       isArtifact(socket)
         ? deps.socket.message(socket, message)
@@ -1152,10 +1184,12 @@ export function createPreviewListeners(
         proxy.drain?.(socket);
       }
     },
-    close: (socket, code, reason) =>
-      isArtifact(socket)
+    close: (socket, code, reason) => {
+      viewed(socket, -1);
+      return isArtifact(socket)
         ? deps.socket.close(socket)
-        : proxy.close?.(socket, code, reason),
+        : proxy.close?.(socket, code, reason);
+    },
   };
   const error = (thrown: Error) => {
     const why = `the hub's preview listener failed serving it: ${causeOf(thrown)}`;
@@ -1432,51 +1466,71 @@ export function createPreviewListeners(
   };
 
   /**
-   * Whether origin `key`'s port is held now: its owner (the session, the
-   * project, the artifact) is a row, and its holder ({@link holderOf}) lives,
-   * a session until it ends, a project while the hub keeps it. The OS holds
-   * the port itself while a listener is bound (`unheld`); the stored port is
-   * only the one the origin comes back to, a claim that counts while its
-   * holder lives, as Portless keeps a route only while its process lives
-   * (github.com/vercel-labs/portless, routes.ts `loadRoutes`).
+   * Whether origin `key` holds its port now: its owner (the session, the
+   * project, the artifact) is a row, and something serves or uses it. A
+   * frame of it open on a screen ({@link viewers}); a project's, while the
+   * hub keeps the project; a session's, while the session is used
+   * (`sessionUsed`: its process may run, or a screen follows it); an
+   * artifact's, while the session that opened it is used or a used
+   * session's panel shows it. The OS holds the port itself while a listener
+   * is bound (`unheld`); the stored port is the one the origin comes back
+   * to, a claim that counts only while this holds, as Portless keeps a
+   * route only while its process is alive (github.com/vercel-labs/portless,
+   * routes.ts `loadRoutes`).
    */
   const holds = (key: string): boolean => {
-    const holder = holderOf(key);
-    if (!(holder && db.ownerHeld(key))) {
+    if (!db.ownerHeld(key)) {
       return false;
     }
-    return projectOfOrigin(holder) === null
-      ? deps.sessionLive(holder)
-      : db.ownerHeld(holder);
+    if (viewers.has(key) || projectOfOrigin(key) !== null) {
+      return true;
+    }
+    const artifactId = artifactOfOrigin(key);
+    if (artifactId === null) {
+      return deps.sessionUsed(key);
+    }
+    const opener = holderOf(key);
+    return (
+      (opener !== undefined &&
+        projectOfOrigin(opener) === null &&
+        deps.sessionUsed(opener)) ||
+      [...previewTargets].some(
+        ([instanceId, target]) =>
+          target.artifact.id === artifactId && deps.sessionUsed(instanceId)
+      )
+    );
   };
 
   /**
-   * Every origin whose holder ended lets its port go: its listener stops and
-   * its stored port is dropped. An ended session's page or canvas opened
-   * again (the Decisions tab, Files' thumbnails, an artifact's tab) is
-   * served on a port no live origin needs, and gives it up here once one
-   * does. How many went.
+   * Every origin that doesn't hold its port ({@link holds}) lets it go: its
+   * listener stops, its stored port is dropped, and what shows it is told
+   * again without that address. A sleeping session's preview, or an ended
+   * one's page opened again, is served on a port no origin in use needs,
+   * and gives it up here once one does. How many went.
    */
-  const letEndedGo = (): number => {
-    const ended = new Set(
-      [
+  const letUnusedGo = (): number => {
+    const unused = [
+      ...new Set([
         ...db.ports().map((row) => row.key),
         ...sessions.keys(),
         ...embeds.keys(),
-      ].filter((key) => !holds(key))
-    );
-    for (const key of ended) {
+      ]),
+    ].filter((key) => !holds(key));
+    for (const key of unused) {
       release(key);
     }
-    return ended.size;
+    if (unused.length > 0) {
+      deps.letGo(unused);
+    }
+    return unused.length;
   };
 
   /**
    * The one way a session gets its port, at the hub's start and on demand:
    * the port it keeps while that is still a preview port and `opens`; else
    * the lowest of the range that is not the fleet's own, not another
-   * origin's, and opens; else, once every origin whose holder ended let its
-   * port go, the lowest that opens then. A move is saved, so a collision
+   * origin's, and opens; else, once every origin that doesn't hold its
+   * port let it go ({@link letUnusedGo}), the lowest that opens then. A move is saved, so a collision
    * heals itself, and said in one line. Its listener opens on it (`bind`),
    * and host mode's `{port}` names it too.
    */
@@ -1500,7 +1554,7 @@ export function createPreviewListeners(
     }
     const port =
       firstOpen(new Set(held.map((row) => row.port)), opens) ??
-      (letEndedGo() > 0
+      (letUnusedGo() > 0
         ? firstOpen(new Set(db.ports().map((row) => row.port)), opens)
         : undefined);
     if (port === undefined) {
@@ -1542,7 +1596,9 @@ export function createPreviewListeners(
   const everyPortTaken = (): PreviewRefusal => {
     const { sessions: bySessions, projects, others } = portHolders();
     const held = [
-      bySessions ? `${bySessions} by running sessions` : "",
+      bySessions
+        ? `${bySessions} by sessions that run or are open on a screen`
+        : "",
       projects ? `${projects} by projects' pages` : "",
       others ? `${others} by other programs on the hub's machine` : "",
     ].filter(Boolean);
@@ -1560,7 +1616,7 @@ export function createPreviewListeners(
     );
   };
 
-  /** How many ports of the range, the barred left out, live sessions, projects and other programs hold. */
+  /** How many ports of the range, the barred left out, sessions in use, projects and other programs hold. */
   const portHolders = (): {
     others: number;
     projects: number;
@@ -1597,6 +1653,7 @@ export function createPreviewListeners(
     }
     sessions.delete(key);
     embeds.delete(key);
+    viewers.delete(key);
     db.dropPort(key);
   };
 
@@ -1745,13 +1802,13 @@ export function createPreviewListeners(
   };
 
   /**
-   * Each kept port is checked against its holder once ({@link holds}): one
-   * whose holder ended lets it go; each live session or project with no
+   * Each kept port is checked once ({@link holds}): one no origin holds
+   * now lets it go; each session or project that holds one and has no
    * listener yet gets one on it (`bind`). A machine artifact's opens as a
    * frame names it ({@link openEmbed}): only its page knows who may frame it.
    */
   const bindKept = (): void => {
-    letEndedGo();
+    letUnusedGo();
     for (const { key } of db.ports()) {
       if (!(sessions.has(key) || isEmbed(key))) {
         try {
@@ -1784,6 +1841,24 @@ export function createPreviewListeners(
     await Promise.all(stopping);
   };
 
+  /**
+   * Origin `key`'s address on `port`: the port, its tailnet origin while the
+   * hub serves HTTPS there, and once host mode stands its whole origin,
+   * named by its key or by that port.
+   */
+  const addressAt = (key: string, port: number): PreviewAddress => {
+    const secure = tailnet.origin(port);
+    const onTailnet = secure ? { tailnet: secure } : {};
+    if (hostPattern) {
+      const origin = originFor(
+        hostPattern,
+        hostPattern.key === "port" ? port : labelOf(key)
+      );
+      return { port, origin, ...onTailnet };
+    }
+    return { port, ...onTailnet };
+  };
+
   return {
     /**
      * Starts what the stored mode serves: host mode's listener, then each
@@ -1806,18 +1881,20 @@ export function createPreviewListeners(
      * by its id or by that port.
      */
     address(instanceId: string): PreviewAddress {
-      const port = portOf(instanceId);
-      const secure = tailnet.origin(port);
-      const onTailnet = secure ? { tailnet: secure } : {};
-      if (hostPattern) {
-        const origin = originFor(
-          hostPattern,
-          hostPattern.key === "port" ? port : labelOf(instanceId)
-        );
-        return { port, origin, ...onTailnet };
-      }
-      return { port, ...onTailnet };
+      return addressAt(instanceId, portOf(instanceId));
     },
+
+    /**
+     * Origin `key`'s address while its listener stands, none opened for it:
+     * what a frame no one uses names ({@link holds}); null when it has none.
+     */
+    bound(key: string): PreviewAddress | null {
+      const listener = sessions.get(key) ?? embeds.get(key)?.listener;
+      return listener ? addressAt(key, listener.port) : null;
+    },
+
+    /** Whether origin `key` holds its port now ({@link holds}): a frame of it takes one. */
+    holds,
 
     /**
      * Session `instanceId`'s origin as a process on the hub's own machine
@@ -1853,17 +1930,7 @@ export function createPreviewListeners(
       if (framer) {
         held.ancestors.add(framer);
       }
-      const { port } = held.listener;
-      const secure = tailnet.origin(port);
-      const onTailnet = secure ? { tailnet: secure } : {};
-      if (hostPattern) {
-        const origin = originFor(
-          hostPattern,
-          hostPattern.key === "port" ? port : labelOf(key)
-        );
-        return { port, origin, ...onTailnet };
-      }
-      return { port, ...onTailnet };
+      return addressAt(key, held.listener.port);
     },
 
     /** The artifacts' origins origin `owner` (a session, a project) opened end with it, each letting its port go: their keys, so their machines' listeners stop too. */

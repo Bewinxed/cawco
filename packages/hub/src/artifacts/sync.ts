@@ -107,6 +107,8 @@ const refusal = (why: string): Uint8Array => {
 /** What the listener keeps on an artifact's socket. */
 export interface ArtifactSocket {
   artifactId: string;
+  /** The preview origin it joined on, by its key (preview.ts): none for a dashboard pane's link. */
+  at?: string;
   /** The origin its updates are applied under, so they are not sent back to it. */
   origin?: { client: ArtifactClient };
   /**

@@ -112,6 +112,12 @@ export type ControlResultFrame = Extract<
  * reimplementing it — a command does exactly what the hub's relay does.
  */
 export interface StreamPorts {
+  /**
+   * A screen began following the session (a `stream.subscribe`), told once
+   * the subscribe is done: what the session shows is served to it from here
+   * on (hub server.ts, its preview's origin).
+   */
+  readonly followed: (sessionId: string) => void;
   /** Whether a daemon for this machine is connected right now. */
   readonly isMachineConnected: (machineId: string) => boolean;
   /** Runs the TTL sweep until the hub closes. */
@@ -406,6 +412,9 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
 
     // Its plan whole, after it is a follower: every delta after comes in turn.
     ports.planSnapshot(sessionId, (plan) => deliver(socket, plan));
+    // After this subscribe has run to its end, so nothing it starts is
+    // sequenced inside it.
+    queueMicrotask(() => ports.followed(sessionId));
 
     const ring = ringOf(sessionId);
     // A fresh join asks for nothing: history comes through the existing read
