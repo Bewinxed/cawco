@@ -582,11 +582,13 @@ export const corroborate = (
   key: string,
   note: FactNote
 ): string => {
-  const file = parseFactFile(path, content);
-  const fact =
-    findFact(file, key, ["current", "conflict"]) ??
-    failEdit(path, key, "corroborate");
-  const lines = linesOf(content);
+  const { fact, lines } = factToEdit(
+    path,
+    content,
+    key,
+    ["current", "conflict"],
+    "corroborate"
+  );
   put(lines, fact, {
     ...fact,
     from: [...fact.from, note.id],
@@ -595,8 +597,20 @@ export const corroborate = (
   return joined(lines);
 };
 
-const failEdit = (path: string, key: string, edit: string): never => {
-  throw new Error(`${path} holds no fact ${key} to ${edit}`);
+/** `key`'s fact in one of `sections`, with the file it is in and its lines to edit; thrown when there is none to `edit`. */
+const factToEdit = (
+  path: string,
+  content: string,
+  key: string,
+  sections: FactSection[],
+  edit: string
+): { file: FactFile; fact: FactLine; lines: string[] } => {
+  const file = parseFactFile(path, content);
+  const fact = findFact(file, key, sections);
+  if (!fact) {
+    throw new Error(`${path} holds no fact ${key} to ${edit}`);
+  }
+  return { file, fact, lines: linesOf(content) };
 };
 
 /**
@@ -611,10 +625,13 @@ export const change = (
   key: string,
   note: FactNote
 ): string => {
-  const file = parseFactFile(path, content);
-  const fact =
-    findFact(file, key, ["current"]) ?? failEdit(path, key, "change");
-  const lines = linesOf(content);
+  const { file, fact, lines } = factToEdit(
+    path,
+    content,
+    key,
+    ["current"],
+    "change"
+  );
   if (note.since >= fact.since) {
     put(lines, fact, {
       text: note.text,
@@ -681,10 +698,13 @@ export const conflict = (
   key: string,
   note: FactNote
 ): string => {
-  const file = parseFactFile(path, content);
-  const fact =
-    findFact(file, key, ["current"]) ?? failEdit(path, key, "set in conflict");
-  const lines = linesOf(content);
+  const { fact, lines } = factToEdit(
+    path,
+    content,
+    key,
+    ["current"],
+    "set in conflict"
+  );
   lines.splice(fact.line - 1, spanOf(fact));
   return joined(
     addToSection(

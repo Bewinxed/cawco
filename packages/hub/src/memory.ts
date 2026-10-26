@@ -2205,6 +2205,35 @@ export const createMemory = ({
   };
 
   /**
+   * A proposal the hub makes itself on the folder's head, with no notes:
+   * `files` changed for `why`.
+   */
+  const proposeAsHub = async (
+    project: ProjectRow,
+    files: ProposalFile[],
+    why: string,
+    kind?: Proposal["kind"]
+  ): Promise<void> => {
+    const [head] = (await folderHistory(project.id, "", 1)).commits;
+    const at = new Date();
+    await keep(
+      {
+        id: idAt("p", at),
+        projectId: project.id,
+        files,
+        base: head?.sha ?? "",
+        notes: [],
+        why,
+        by: HUB.name,
+        ...(kind ? { kind } : {}),
+        session: "",
+        time: at.toISOString(),
+      },
+      project
+    );
+  };
+
+  /**
    * Every prose fact file (written before fact lines) no open proposal
    * touches: one proposal each, made as the curator's run starts, that
    * rewrites it word for word as fact lines (memory-facts.ts
@@ -2229,28 +2258,17 @@ export const createMemory = ({
         dayOf(written.lines.get(line) ?? written.mtime)
       );
       const claims = parseFactFile(file.path, content).facts.length;
-      const [head] = (await folderHistory(project.id, "", 1)).commits;
-      const at = new Date();
-      await keep(
-        {
-          id: idAt("p", at),
-          projectId: project.id,
-          files: [
-            {
-              path: file.path,
-              before: file.content,
-              content: stampUses(project.id, file.path, content),
-            },
-          ],
-          base: head?.sha ?? "",
-          notes: [],
-          why: `${file.path} is prose from before fact lines: its ${claims} claim${claims === 1 ? "" : "s"} as fact lines, word for word`,
-          by: HUB.name,
-          kind: "rewrite",
-          session: "",
-          time: at.toISOString(),
-        },
-        project
+      await proposeAsHub(
+        project,
+        [
+          {
+            path: file.path,
+            before: file.content,
+            content: stampUses(project.id, file.path, content),
+          },
+        ],
+        `${file.path} is prose from before fact lines: its ${claims} claim${claims === 1 ? "" : "s"} as fact lines, word for word`,
+        "rewrite"
       );
       made += 1;
     }
@@ -2280,27 +2298,16 @@ export const createMemory = ({
       if (retired.length === 0) {
         continue;
       }
-      const [head] = (await folderHistory(project.id, "", 1)).commits;
-      const at = new Date();
-      await keep(
-        {
-          id: idAt("p", at),
-          projectId: project.id,
-          files: [
-            {
-              path: file.path,
-              before: file.content,
-              content: stampUses(project.id, file.path, content),
-            },
-          ],
-          base: head?.sha ?? "",
-          notes: [],
-          why: `${retired.length} line${retired.length === 1 ? "" : "s"} of ${file.path} reached ${retired.length === 1 ? "its" : "their"} \`until\` and move${retired.length === 1 ? "s" : ""} under Formerly`,
-          by: HUB.name,
-          session: "",
-          time: at.toISOString(),
-        },
-        project
+      await proposeAsHub(
+        project,
+        [
+          {
+            path: file.path,
+            before: file.content,
+            content: stampUses(project.id, file.path, content),
+          },
+        ],
+        `${retired.length} line${retired.length === 1 ? "" : "s"} of ${file.path} reached ${retired.length === 1 ? "its" : "their"} \`until\` and move${retired.length === 1 ? "s" : ""} under Formerly`
       );
       touched.add(file.path);
       made += 1;
@@ -2333,38 +2340,27 @@ export const createMemory = ({
       }
       const into = archivePath(file.path);
       const now = await fileOr(project.id, into);
-      const [head] = (await folderHistory(project.id, "", 1)).commits;
-      const at = new Date();
-      await keep(
-        {
-          id: idAt("p", at),
-          projectId: project.id,
-          files: [
-            {
-              path: file.path,
-              before: file.content,
-              content: withoutFacts(file.content, unused),
-            },
-            {
-              path: into,
-              before: now,
-              content: archivedLines(
-                file.path,
-                now,
-                unused.sort((a, b) => a.line - b.line).map((fact) => fact.raw),
-                `Archived ${today}: unused for ${MEMORY_ARCHIVE_DAYS} days`
-              ),
-            },
-          ],
-          base: head?.sha ?? "",
-          notes: [],
-          why: `${unused.length} line${unused.length === 1 ? "" : "s"} of ${file.path} unused for ${MEMORY_ARCHIVE_DAYS} days move to ${into}`,
-          by: HUB.name,
-          kind: "archive",
-          session: "",
-          time: at.toISOString(),
-        },
-        project
+      await proposeAsHub(
+        project,
+        [
+          {
+            path: file.path,
+            before: file.content,
+            content: withoutFacts(file.content, unused),
+          },
+          {
+            path: into,
+            before: now,
+            content: archivedLines(
+              file.path,
+              now,
+              unused.sort((a, b) => a.line - b.line).map((fact) => fact.raw),
+              `Archived ${today}: unused for ${MEMORY_ARCHIVE_DAYS} days`
+            ),
+          },
+        ],
+        `${unused.length} line${unused.length === 1 ? "" : "s"} of ${file.path} unused for ${MEMORY_ARCHIVE_DAYS} days move to ${into}`,
+        "archive"
       );
       made += 1;
     }
