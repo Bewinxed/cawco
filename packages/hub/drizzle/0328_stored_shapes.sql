@@ -78,4 +78,9 @@ WHERE `uuid` IN (
 				AND r.`created_at` > n.`created_at`
 		)
 );--> statement-breakpoint
-DELETE FROM `thread_messages` WHERE json_extract(`event`, '$.what') = 'not-woken';
+DELETE FROM `thread_messages` WHERE json_extract(`event`, '$.what') = 'not-woken';--> statement-breakpoint
+-- An account's at-limit rules from before a hold went stale on its own
+-- (903dc22e9) have no `staleAfterHours`: the default, a day, as a new
+-- provider's rules start with (core `DEFAULT_AT_LIMIT`).
+UPDATE `account_routing` SET `at_limit` = json_set(`at_limit`, '$.staleAfterHours', 24)
+WHERE json_type(`at_limit`, '$.staleAfterHours') IS NULL;
