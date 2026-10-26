@@ -42,66 +42,41 @@ export interface Policy {
   /** The user's home dir: what `~` names in a path a tool is handed. */
   readonly home: string;
   /**
-   * A place, a person's own folder (workspace-policy.ts
-   * `isPlace`): every path {@link protectedConfig} names is refused for
-   * writing whether it exists or not. Its boundary stands nothing in for one
-   * that is absent (never write into a person's own folder), so this judge,
-   * and the place's guard after each command, keep it.
+   * A place, a person's own folder (workspace-policy.ts `isPlace`): the
+   * config a host program loads from a folder, by path from the dir it is
+   * found in (clone-denies.ts `PROTECTED_CONFIG`), each refused for writing
+   * at any depth, whether it exists or not ({@link protectedConfig}). Its
+   * boundary stands nothing in for one that is absent (never write into a
+   * person's own folder), so this judge, and the place's guard after each
+   * command, keep it. Handed in the policy, as this judge imports nothing.
    */
-  readonly protectConfig?: boolean;
+  readonly protectConfig?: readonly string[];
   /** The workspace's scratch dir: where a refusal also says to write. */
   readonly scratch: string;
 }
 
 /**
- * Names a host harness, git or a host tool loads from a folder, outside any
- * boundary, wherever in the folder they lie: the harnesses' project config,
- * the editors' workspace settings, srt's own mandatory names. With
- * {@link PROTECTED_UNDER}, what a place's guard and judge protect.
+ * The protected entry a path relative to a place lies at or in, as a
+ * relative path: the first of its leading paths that ends in one of
+ * `protect` (the policy's `protectConfig`); none when it lies in none.
  */
-export const PROTECTED_NAMES: readonly string[] = [
-  ".mcp.json",
-  "opencode.json",
-  "opencode.jsonc",
-  ".opencode",
-  ".vscode",
-  ".idea",
-  ".gitconfig",
-  ".gitmodules",
-  ".bashrc",
-  ".bash_profile",
-  ".zshrc",
-  ".zprofile",
-  ".profile",
-  ".ripgreprc",
-];
-
-/** Names protected only inside a dir of the given name: Claude Code's project config, and git's config, hooks and submodule dirs. */
-export const PROTECTED_UNDER: Readonly<Record<string, readonly string[]>> = {
-  ".claude": [
-    "settings.json",
-    "settings.local.json",
-    "hooks",
-    "commands",
-    "agents",
-  ],
-  ".git": ["config", "hooks", "modules"],
-};
-
-/**
- * The protected entry a path relative to a place lies at or in
- * ({@link PROTECTED_NAMES}, {@link PROTECTED_UNDER}), as a relative path;
- * none when it lies in none.
- */
-export const protectedConfig = (relative: string): string | undefined => {
+export const protectedConfig = (
+  relative: string,
+  protect: readonly string[]
+): string | undefined => {
   const parts = relative.split("/").filter((part) => part && part !== ".");
-  for (const [index, part] of parts.entries()) {
-    const parent = index > 0 ? parts[index - 1] : undefined;
+  for (const index of parts.keys()) {
+    const lead = parts.slice(0, index + 1);
     if (
-      PROTECTED_NAMES.includes(part) ||
-      (parent !== undefined && PROTECTED_UNDER[parent]?.includes(part))
+      protect.some((path) => {
+        const names = path.split("/");
+        return (
+          names.length <= lead.length &&
+          lead.slice(lead.length - names.length).join("/") === path
+        );
+      })
     ) {
-      return parts.slice(0, index + 1).join("/");
+      return lead.join("/");
     }
   }
 };
@@ -148,6 +123,16 @@ export const readPolicy = (file: string): Policy => {
     if (typeof policy[key] !== "string") {
       throw new Error(`${file} names no ${key}`);
     }
+  }
+  const { protectConfig } = policy;
+  if (
+    protectConfig !== undefined &&
+    !(
+      Array.isArray(protectConfig) &&
+      protectConfig.every((path) => typeof path === "string")
+    )
+  ) {
+    throw new Error(`${file}'s protectConfig is no list of paths`);
   }
   return policy as Policy;
 };
@@ -271,7 +256,7 @@ export const judge = (
   }
   const config =
     policy.protectConfig && within(real, policy.clone)
-      ? protectedConfig(real.slice(policy.clone.length))
+      ? protectedConfig(real.slice(policy.clone.length), policy.protectConfig)
       : undefined;
   if (config !== undefined) {
     return refused(

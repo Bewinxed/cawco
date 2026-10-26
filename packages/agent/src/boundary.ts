@@ -108,6 +108,10 @@ import { atMost } from "@cawco/core/at-most";
 import { binaryRoot, readUpdateState } from "@cawco/core/binary-installation";
 import { nestedSeatbeltRefusal } from "@cawco/core/boundary-nesting";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import {
+  PROTECTED_CONFIG,
+  PROTECTED_FIND_TESTS,
+} from "@cawco/core/clone-denies";
 import { isGitDir, isGitDirSync } from "@cawco/core/git-dir";
 import {
   type HandoverCommand,
@@ -180,11 +184,7 @@ import {
   writeStateFile,
 } from "@cawco/core/state-file";
 import type { UpstreamRule, UpstreamRules } from "@cawco/core/upstream-guard";
-import {
-  type Policy,
-  PROTECTED_NAMES,
-  PROTECTED_UNDER,
-} from "@cawco/core/workspace-judge";
+import type { Policy } from "@cawco/core/workspace-judge";
 import {
   systemProgram,
   trustedPath,
@@ -3995,19 +3995,10 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
 const perlWords = (words: readonly string[]): string =>
   words.map((word) => `'${word}'`).join(", ");
 
-/** `find`'s tests for a protected entry ({@link PROTECTED_NAMES}, {@link PROTECTED_UNDER}), as the guard runs it. */
-const PROTECTED_TESTS = [
-  "(",
-  ...PROTECTED_NAMES.flatMap((name, at) => [
-    ...(at > 0 ? ["-o"] : []),
-    "-name",
-    name,
-  ]),
-  ...Object.entries(PROTECTED_UNDER).flatMap(([dir, names]) =>
-    names.flatMap((name) => ["-o", "-path", `*/${dir}/${name}`])
-  ),
-  ")",
-];
+/** The most names a {@link PROTECTED_CONFIG} path has: how far back from each name the guard looks for one. */
+const PROTECTED_DEPTH = Math.max(
+  ...PROTECTED_CONFIG.map((path) => path.split("/").length)
+);
 
 /**
  * A place's guard (`place-guard.pl before REQ PLACE` before
@@ -4018,7 +4009,7 @@ const PROTECTED_TESTS = [
  * judged here, by the place's real path, once the command and everything it
  * started is over (`LAUNCH`):
  *
- * - A protected entry ({@link PROTECTED_NAMES}, {@link PROTECTED_UNDER}) that
+ * - A protected entry ({@link PROTECTED_CONFIG}, at any depth) that
  *   is new, by any means (written, `mv`, `ln`, a link), or that changed while
  *   no bind held it, is moved to the place's scratch dir
  *   (`.cawco-moved/<stamp>/<path>`), never deleted, and the command fails
@@ -4043,13 +4034,9 @@ use File::Find ();
 use File::Path ();
 use JSON::PP ();
 
-my %NAMES = map { $_ => 1 } (${perlWords(PROTECTED_NAMES)});
-my %UNDER = (${Object.entries(PROTECTED_UNDER)
-  .map(
-    ([dir, names]) => `'${dir}' => { map { $_ => 1 } (${perlWords(names)}) }`
-  )
-  .join(", ")});
-my @TESTS = (${perlWords(PROTECTED_TESTS)});
+my %PROTECTED = map { $_ => 1 } (${perlWords(PROTECTED_CONFIG)});
+my $DEPTH = ${PROTECTED_DEPTH};
+my @TESTS = (${perlWords(PROTECTED_FIND_TESTS)});
 my %SAFE_GIT = map { $_ => 1 } qw(core.repositoryformatversion core.filemode core.bare core.logallrefupdates core.ignorecase core.precomposeunicode core.symlinks extensions.objectformat extensions.refstorage lfs.repositoryformatversion);
 
 my ($mode, $req, $given, $scratch, $policy, $home) = @ARGV;
@@ -4059,8 +4046,9 @@ defined $place or die "cawco: the place $given is gone\n";
 sub protected_rel {
   my @p = grep { length $_ && $_ ne "." } split m{/}, shift;
   for my $i (0 .. $#p) {
-    my $parent = $i > 0 ? $p[$i - 1] : "";
-    return join("/", @p[0 .. $i]) if $NAMES{$p[$i]} || ($UNDER{$parent} && $UNDER{$parent}{$p[$i]});
+    for my $n (1 .. ($i < $DEPTH ? $i + 1 : $DEPTH)) {
+      return join("/", @p[0 .. $i]) if $PROTECTED{join("/", @p[$i - $n + 1 .. $i])};
+    }
   }
   return undef;
 }

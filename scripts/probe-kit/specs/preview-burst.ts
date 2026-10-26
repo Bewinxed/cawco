@@ -57,6 +57,7 @@ import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import http2 from "node:http2";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import type { HopByHopHeader } from "../../../packages/core/src/hop-headers";
 import { PREVIEW_WHY_META } from "../../../packages/core/src/index";
 import {
   processArgs,
@@ -127,14 +128,14 @@ export default { title: "Probe/Forty", component: Forty, args: {} };
 export const All = { args: {} };
 `;
 
-/** Headers no HTTP/2 answer carries (RFC 9113 §8.2.2). */
-const CONNECTION_HEADERS = new Set([
+/** Of the hop-by-hop headers, those no HTTP/2 answer carries (RFC 9113 §8.2.2). */
+const CONNECTION_HEADERS: ReadonlySet<string> = new Set([
   "connection",
   "keep-alive",
   "proxy-connection",
   "transfer-encoding",
   "upgrade",
-]);
+] satisfies readonly HopByHopHeader[]);
 
 /** A port nothing holds now. */
 const freePort = async (): Promise<number> => {

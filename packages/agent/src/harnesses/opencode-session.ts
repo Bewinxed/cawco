@@ -71,6 +71,7 @@ import {
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
   SERVER_STOPPED_MID_TURN,
+  SPAWNING_TOOLS,
   usageByModel,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
@@ -321,17 +322,8 @@ const leadAsks: readonly OpencodeRule[] = LEAD_GATED_TOOLS.opencode.map(
 );
 const LEAD_ASKED: ReadonlySet<string> = new Set(LEAD_GATED_TOOLS.opencode);
 
-/** The CawCo tools that start or steer other sessions: off for a session that may not delegate. */
-const DELEGATION_TOOLS = [
-  "start_session",
-  "continue_session",
-  "delegate",
-  "stop_delegate",
-  "interrupt_delegate",
-  "answer_delegate",
-  "discard_workspace",
-  "machine_pause",
-].map((name) => `cawco_${name}`);
+/** The CawCo tools that start or steer other sessions, by OpenCode's names for them: off for a session that may not delegate. */
+const DELEGATION_TOOLS = [...SPAWNING_TOOLS].map((name) => `cawco_${name}`);
 
 /** What OpenCode makes of a server's name in its tools' ids. */
 const MCP_NAME_UNSAFE = /[^a-zA-Z0-9_-]/gu;

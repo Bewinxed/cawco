@@ -16,6 +16,13 @@
 import type { PreviewDown } from "./index";
 
 /**
+ * The frameworks a stage mounts a component with: what the daemon hands its
+ * host (agent stage.ts, `CAWCO_STAGE_FRAMEWORK`), each with its own adapter
+ * there (stage-host host.ts).
+ */
+export type StageFramework = "svelte" | "vue" | "react" | "solid" | "preact";
+
+/**
  * Where a stage serves a component canvas: `?file=<states file, from the
  * toolchain root>`, once per section, and `spec=<CanvasSpec JSON>`. Outside
  * the hub's own `/__cawco/`, after Vite's `/@vite/`.

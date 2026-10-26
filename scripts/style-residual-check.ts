@@ -42,10 +42,10 @@
  * `duration-*` is exempt: Tailwind v4 makes no duration utility from a theme
  * key, so a token duration is `duration-(--dur-*)`.
  */
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
+import { ROOT, repoFiles } from "./lib/repo-files";
 
-const ROOT = resolve(import.meta.dir, "..");
 const DASHBOARD = join(ROOT, "apps", "dashboard");
 const SOURCE = join(DASHBOARD, "src");
 /** The dashboard's own Svelte, the compiler its components are built with (it is not hoisted to the root). */
@@ -54,7 +54,6 @@ const { parse } = (await import(
 )) as {
   parse: (source: string, options: { modern: true }) => { css: unknown };
 };
-const SKIP_DIRS = new Set(["node_modules", ".svelte-kit", "dist", "build"]);
 const KINDS = [
   "keyframes",
   "foreign-dom",
@@ -456,6 +455,7 @@ const VALUE_CALL = /--value\(([^)]*)\)/gu;
 const VALUE_NAMESPACE = /--([\w-]+)-\*/gu;
 /** The files the token rule reads. */
 const CLASS_FILE = /\.(svelte|ts|js)$/u;
+const SVELTE_FILE = /\.svelte$/u;
 /** Every namespace a key can sit in, longest first, so `--font-weight-x` is `font-weight`, not `font`. */
 const NAMESPACES = [
   ...new Set([...Object.values(CORE_NAMESPACES).flat(), "duration"]),
@@ -554,38 +554,16 @@ function tokenArbitraries(
   return found;
 }
 
-/** The files whose classes the token rule reads: markup and recipes. */
-function classFiles(dir: string): string[] {
-  const out: string[] = [];
-  for (const entry of readdirSync(dir)) {
-    const path = join(dir, entry);
-    if (SKIP_DIRS.has(entry) || path === GENERATED) {
-      continue;
-    }
-    if (statSync(path).isDirectory()) {
-      out.push(...classFiles(path));
-    } else if (CLASS_FILE.test(entry)) {
-      out.push(path);
-    }
-  }
-  return out.sort();
-}
+/** The dashboard's source files whose name `keep` matches, sorted. */
+const sourceFiles = (keep: RegExp): string[] =>
+  repoFiles([relative(ROOT, SOURCE)])
+    .filter((file) => keep.test(file))
+    .sort()
+    .map((file) => join(ROOT, file));
 
-function svelteFiles(dir: string): string[] {
-  const out: string[] = [];
-  for (const entry of readdirSync(dir)) {
-    const path = join(dir, entry);
-    if (SKIP_DIRS.has(entry)) {
-      continue;
-    }
-    if (statSync(path).isDirectory()) {
-      out.push(...svelteFiles(path));
-    } else if (entry.endsWith(".svelte")) {
-      out.push(path);
-    }
-  }
-  return out.sort();
-}
+/** The files whose classes the token rule reads: markup and recipes, the generated tokens left out. */
+const classFiles = (): string[] =>
+  sourceFiles(CLASS_FILE).filter((path) => !path.startsWith(`${GENERATED}/`));
 
 const args = process.argv.slice(2);
 const noCap = args.includes("--no-cap");
@@ -593,7 +571,7 @@ const list = args.includes("--list");
 const named = args.filter((arg) => arg !== "--no-cap" && arg !== "--list");
 const whole = named.length === 0;
 const files = whole
-  ? svelteFiles(SOURCE)
+  ? sourceFiles(SVELTE_FILE)
   : named.map((arg) => {
       const here = resolve(arg);
       return existsSync(here) ? here : resolve(ROOT, arg);
@@ -643,7 +621,7 @@ for (const path of files) {
 const themeBehind = themeTokens();
 const utilityReads = { ...CORE_NAMESPACES, ...houseNamespaces() };
 const classed = whole
-  ? classFiles(SOURCE)
+  ? classFiles()
   : files.filter((path) => !path.startsWith(GENERATED));
 let arbitraries = 0;
 for (const path of classed) {

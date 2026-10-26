@@ -163,11 +163,52 @@ const HARNESS_CONFIG_EMPTY: Readonly<Record<string, CloneDenyEmpty>> = {
 export const HARNESS_CONFIG: readonly string[] =
   Object.keys(HARNESS_CONFIG_EMPTY);
 
+/** What host git runs or reads from a repository, by path from its work tree: its config, its hooks, its submodules' git dirs. */
+const GIT_EMPTY: Readonly<Record<string, CloneDenyEmpty>> = {
+  ".git/config": { kind: "none" },
+  ".git/hooks": DIR,
+  ".git/modules": DIR,
+};
+
+/**
+ * The config a host program loads from a folder outside any boundary, by its
+ * path from the dir it is found in: git's ({@link GIT_EMPTY}), the
+ * harnesses' ({@link HARNESS_CONFIG}) and srt's mandatory names: every clone
+ * deny but what the fleet places itself. A place (a person's own folder,
+ * workspace-policy.ts `isPlace`) protects each at any depth: its policy
+ * hands this list to its judge, which refuses writing one (workspace-judge.ts
+ * `protectedConfig`), its boundary binds each one the place has (`protectedIn`),
+ * and its guard moves aside one a command made (agent boundary.ts
+ * `placeGuard`).
+ */
+export const PROTECTED_CONFIG: readonly string[] = [
+  ...Object.keys(GIT_EMPTY),
+  ...HARNESS_CONFIG,
+  ...SRT_FILES,
+  ...SRT_DIRS,
+];
+
+/** `find`'s tests for an entry at one of {@link PROTECTED_CONFIG}'s paths, at any depth: a one-name path by its name, a longer one by its path's end. */
+export const PROTECTED_FIND_TESTS: readonly string[] = [
+  "(",
+  ...PROTECTED_CONFIG.flatMap((path, at) => [
+    ...(at > 0 ? ["-o"] : []),
+    ...(path.includes("/") ? ["-path", `*/${path}`] : ["-name", path]),
+  ]),
+  ")",
+];
+
+/** The dir names a {@link PROTECTED_CONFIG} path lies under (`.git`, `.claude`, `.agents`): a dir of one of these names holds protected config below it. */
+export const PROTECTED_PARENTS: ReadonlySet<string> = new Set(
+  PROTECTED_CONFIG.flatMap((path) => path.split("/").slice(0, -1))
+);
+
 /**
  * Every path in a clone the workspace's policy denies writing, and srt's own
  * mandatory names at its root ({@link SRT_FILES}, {@link SRT_DIRS}), each
- * with its stand-in. What host git runs or reads from a clone: its config, its
- * hooks, its submodules' git dirs. And the harness project config the host
+ * with its stand-in. What host git runs or reads from a clone
+ * ({@link GIT_EMPTY}): its config, its hooks, its submodules' git dirs. And
+ * the harness project config the host
  * loads at the workspace's next session, outside any boundary, at the clone's
  * root ({@link HARNESS_CONFIG_EMPTY}: Claude Code's, OpenCode's and pi's);
  * the project skills, where the fleet places a project's skills with the
@@ -191,9 +232,10 @@ export const HARNESS_CONFIG: readonly string[] =
  */
 export const cloneDenies = (clone: string): readonly CloneDeny[] => {
   const denies: CloneDeny[] = [
-    { path: join(clone, ".git", "config"), empty: { kind: "none" } },
-    { path: join(clone, ".git", "hooks"), empty: DIR },
-    { path: join(clone, ".git", "modules"), empty: DIR },
+    ...Object.entries(GIT_EMPTY).map(([name, empty]) => ({
+      path: join(clone, name),
+      empty,
+    })),
     ...Object.entries(HARNESS_CONFIG_EMPTY).map(([name, empty]) => ({
       path: join(clone, name),
       empty,

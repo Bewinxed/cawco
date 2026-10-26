@@ -11,26 +11,10 @@
  * stem: `~/.claude`, `/.claude/…`, `".claude"`, `.claude.json`. A word that
  * only contains it (`code.claude.com`, `.claude-plugin`) is not one.
  */
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import ts from "typescript";
-
-const ROOT = join(import.meta.dir, "..");
-
-/** Where the sources are. */
-const SOURCES = [
-  "apps/dashboard/src",
-  "packages/agent/src",
-  "packages/agent/bench",
-  "packages/auth/src",
-  "packages/cli/src",
-  "packages/core/src",
-  "packages/hub/src",
-  "packages/jsonl-parser/bench",
-  "packages/jsonl-parser/src",
-  "packages/sessiond/src",
-  "scripts",
-];
+import { CODE_ROOTS, ROOT, repoFiles } from "./lib/repo-files";
 
 /** Files that may name a Claude Code dir, each with why. */
 const ALLOWED: Record<string, string> = {
@@ -38,8 +22,6 @@ const ALLOWED: Record<string, string> = {
     "the owner's browser-safe half: the one place the dir name is spelled",
   "scripts/claude-paths-check.ts":
     "this check, whose own examples name the paths it looks for",
-  "packages/core/src/workspace-judge.ts":
-    "the boundary's judge, run as a plain script copied alone into a workspace's state dir, so it imports only node's built-ins; it names `.claude` as one of the folder names a project's protected config lies in (PROTECTED_UNDER), never as a path to build",
   "packages/jsonl-parser/bench/bench.ts":
     "a benchmark of a package that depends on nothing in the workspace (importing core drags it into that package's stricter compile); its default corpus is the operator's own ~/.claude/projects, and any other is its first argument",
   "scripts/probe-kit/specs/skill-escape.ts":
@@ -47,30 +29,9 @@ const ALLOWED: Record<string, string> = {
 };
 
 const EXTENSIONS = /\.(?:ts|tsx|mts|cts|js|mjs|cjs|svelte)$/u;
-const SKIP_DIRS = new Set(["node_modules", ".svelte-kit", "dist", "build"]);
 
 /** `.claude` as a path segment or a file stem, not as part of a longer word. */
 export const CLAUDE_PATH = /(?:^|[^\w.-])\.claude(?![\w-])/u;
-
-const walk = (dir: string, out: string[]): void => {
-  let names: string[];
-  try {
-    names = readdirSync(dir);
-  } catch {
-    return;
-  }
-  for (const name of names) {
-    const path = join(dir, name);
-    if (SKIP_DIRS.has(name)) {
-      continue;
-    }
-    if (statSync(path).isDirectory()) {
-      walk(path, out);
-    } else if (EXTENSIONS.test(name)) {
-      out.push(path);
-    }
-  }
-};
 
 interface Hit {
   file: string;
@@ -156,10 +117,9 @@ const hitsIn = (path: string): Hit[] => {
   return hits;
 };
 
-const files: string[] = [];
-for (const dir of SOURCES) {
-  walk(join(ROOT, dir), files);
-}
+const files = repoFiles(CODE_ROOTS)
+  .filter((file) => EXTENSIONS.test(file))
+  .map((file) => join(ROOT, file));
 const hits = files
   .filter((path) => !(relative(ROOT, path) in ALLOWED))
   .flatMap(hitsIn);

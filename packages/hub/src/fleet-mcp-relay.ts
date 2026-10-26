@@ -1,4 +1,5 @@
 import { readWithin } from "@cawco/core/bounded";
+import { HOP_BY_HOP_HEADERS } from "@cawco/core/hop-headers";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
 
@@ -80,14 +81,7 @@ const DROPPED = [
   "Content-Encoding",
   "Content-Length",
   "Mcp-Session-Id",
-  "Connection",
-  "Transfer-Encoding",
-  "Keep-Alive",
-  "TE",
-  "Trailer",
-  "Upgrade",
-  "Proxy-Authenticate",
-  "Proxy-Authorization",
+  ...HOP_BY_HOP_HEADERS,
 ];
 
 /** One upstream request, as the hub's sign-in sends it (`FleetMcp.#upstream`). */

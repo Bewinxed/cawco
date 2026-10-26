@@ -10,8 +10,9 @@
  * inspector. Every import already names its file (one spelling per module,
  * as Node's docs advise); this keeps it so, and says the fix.
  */
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
+import { repoFiles } from "../../../scripts/lib/repo-files";
 
 const DASHBOARD = join(dirname(new URL(import.meta.url).pathname), "..");
 const LIB = join(DASHBOARD, "src/lib");
@@ -46,29 +47,11 @@ function fixOf(rest: string): string | undefined {
   return form ? `#lib/${rest}${form[1]}` : undefined;
 }
 
-const listed = Bun.spawnSync(
-  [
-    "git",
-    "ls-files",
-    "-z",
-    "--cached",
-    "--others",
-    "--exclude-standard",
-    "--",
-    ".",
-  ],
-  { cwd: DASHBOARD }
-);
-if (listed.exitCode !== 0) {
-  process.stderr.write(listed.stderr.toString());
-  process.exit(1);
-}
-
 const wrong: string[] = [];
 let files = 0;
-for (const file of listed.stdout.toString().split("\0")) {
+for (const file of repoFiles([], DASHBOARD)) {
   const path = join(DASHBOARD, file);
-  if (!(file && SOURCE.test(file) && existsSync(path))) {
+  if (!SOURCE.test(file)) {
     continue;
   }
   files += 1;

@@ -4,6 +4,7 @@ import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 import { refuseSchemeLowering } from "./bundle-css-guard";
 import { bundled } from "./bundled";
 import { dataUrlBytes, deskCaptures } from "./captures";
+import { HOP_BY_HOP_HEADERS } from "./hop-headers";
 import {
   PREVIEW_DOWN_META,
   PREVIEW_WHY_META,
@@ -852,17 +853,6 @@ const ProxyWebSocket = WebSocket as typeof WebSocket & {
   new (url: string, options: Bun.WebSocketOptions): WebSocket;
 };
 
-const HOP_HEADERS = [
-  "connection",
-  "keep-alive",
-  "proxy-authenticate",
-  "proxy-authorization",
-  "te",
-  "trailer",
-  "transfer-encoding",
-  "upgrade",
-];
-
 export function proxyHeaders(input: Headers): Headers {
   const headers = new Headers(input);
   for (const name of (headers.get("connection") ?? "").split(",")) {
@@ -870,7 +860,7 @@ export function proxyHeaders(input: Headers): Headers {
       headers.delete(name.trim());
     }
   }
-  for (const name of HOP_HEADERS) {
+  for (const name of HOP_BY_HOP_HEADERS) {
     headers.delete(name);
   }
   return headers;

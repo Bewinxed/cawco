@@ -4,6 +4,7 @@ import {
   RESUMABLE_CAWCO_TOOLS,
   TOOL_CALL_KEY_HEADER,
 } from "@cawco/core/binary-updates";
+import { HOP_BY_HOP_HEADERS } from "@cawco/core/hop-headers";
 import { portHolder } from "@cawco/core/live-processes";
 import { HUB_AWAY_BOUND_MS, throughHubAway } from "./hub-away";
 import { PROOF_HEADER, proofHeaders } from "./hub-proof";
@@ -182,11 +183,11 @@ async function relayMcp(
     response = answer;
   }
   const outgoing = new Headers(response.headers);
+  // fetch hands the body on decoded, so its encoding and length go, with the connection's own headers.
   for (const name of [
     "Content-Encoding",
     "Content-Length",
-    "Connection",
-    "Transfer-Encoding",
+    ...HOP_BY_HOP_HEADERS,
   ]) {
     outgoing.delete(name);
   }

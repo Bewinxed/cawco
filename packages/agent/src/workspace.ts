@@ -54,6 +54,7 @@ import { readWithin } from "@cawco/core/bounded";
 import { lockBy, openDirLock, unlock } from "@cawco/core/flock";
 import { processesWithin } from "@cawco/core/live-processes";
 import { ownCommitsShell } from "@cawco/core/own-commits";
+import { PACKAGE_TREES } from "@cawco/core/package-trees";
 import {
   forgetWorkspaceTmp,
   isSecretFileName,
@@ -1336,18 +1337,6 @@ export const copyOwnSecrets = async (
     await chmod(to, info.mode);
   }
 };
-
-/** Trees that hold packages and builds: their secret-named files are not the repository's own. */
-export const PACKAGE_TREES = new Set([
-  "node_modules",
-  ".venv",
-  "site-packages",
-  ".next",
-  ".svelte-kit",
-  "dist",
-  "build",
-  "target",
-]);
 
 /** The largest bundle of a workspace's commits another machine takes. */
 const BUNDLE_LIMIT = 256 * 1024 * 1024;

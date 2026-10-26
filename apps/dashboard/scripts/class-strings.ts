@@ -135,8 +135,14 @@ const TEMPLATE = new Set([
   "TitleElement",
 ]);
 const SKIPPED_KEYS = new Set(["attributes", "metadata", "parent"]);
-/** Calls whose strings are classes; tv's object keys are variant names, the others' are classes. */
-const CLASS_CALLS = new Set(["cn", "clsx", "twMerge", "twJoin", "tv"]);
+/** The dashboard's class helpers: calls whose strings are classes; tv's object keys are variant names, the others' are classes. */
+export const CLASS_CALLS: ReadonlySet<string> = new Set([
+  "cn",
+  "clsx",
+  "twMerge",
+  "twJoin",
+  "tv",
+]);
 const CLASS_ATTRIBUTE = /^class$|Class(es|Name)?$/u;
 
 const isNode = (value: unknown): value is Node =>

@@ -94,7 +94,7 @@ export const RELAY_URL = `http://127.0.0.1:${RELAY_PORT}`;
  * RFC 1929 credential from the URL itself, and no client that drops it
  * reads them.
  */
-const HTTP_PROXY_VARS = [
+export const HTTP_PROXY_VARS = [
   "HTTP_PROXY",
   "HTTPS_PROXY",
   "http_proxy",
@@ -105,7 +105,8 @@ const HTTP_PROXY_VARS = [
   "grpc_proxy",
   "DOCKER_HTTP_PROXY",
   "DOCKER_HTTPS_PROXY",
-];
+] as const;
+export type HttpProxyVar = (typeof HTTP_PROXY_VARS)[number];
 
 /** {@link RELAY_PORT} as `/proc/net/tcp` spells a listener on 127.0.0.1: address and port in hex, state 0A (LISTEN). */
 const LISTENING = `0100007F:${RELAY_PORT.toString(16).toUpperCase().padStart(4, "0")} 00000000:0000 0A`;

@@ -21,6 +21,7 @@
  * what a compaction forgot about files is still there.
  */
 import type { NeutralContentBlock, SessionMessage } from "./harness";
+import { FILE_CHANGE_TOOLS, toolNamesOf } from "./tool-names";
 import { askedWords } from "./transcript-rules";
 
 /**
@@ -103,28 +104,15 @@ const TOOL_ARGUMENT_CHARS = 300;
 const FILES_CHANGED_SHOWN = 30;
 const FILES_READ_SHOWN = 30;
 const COMMANDS_SHOWN = 40;
-/**
- * Tool names by what they do, across harnesses (lowercased): claude
- * (`Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Read`, `Bash`), opencode
- * 2.0 (`write`, `edit`, `patch`, `read`, `shell`) and pi (`write`, `edit`,
- * `read`, `bash`).
- */
-const CHANGE_TOOLS = new Set([
-  "write",
-  "edit",
-  "multiedit",
-  "notebookedit",
-  "patch",
-  "apply_patch",
-]);
-const READ_TOOLS = new Set(["read"]);
+/** Read tools by every harness's name, lowercased, as the transcript reads them (tool-names.ts); {@link FILE_CHANGE_TOOLS} the ones that change files. */
+const READ_TOOLS = toolNamesOf("read");
 /**
  * Shell calls are listed as commands, never read for the files they wrote:
  * a command's text holds `>` in a comparison, a commit message or a heredoc
  * as often as in a redirect, and every such read named files that never
  * existed. The git section is what changed on disk.
  */
-const SHELL_TOOLS = new Set(["bash", "shell"]);
+const SHELL_TOOLS = toolNamesOf("bash");
 /** Where each harness's file tools put the path. */
 const PATH_ARGUMENTS = ["file_path", "filePath", "notebook_path", "path"];
 /** The input fields that name what a tool call acted on, most telling first. */
@@ -276,7 +264,7 @@ function noteArtifact(
   result: ToolResult | undefined
 ): void {
   const kind = call.name.toLowerCase();
-  if (CHANGE_TOOLS.has(kind)) {
+  if (FILE_CHANGE_TOOLS.has(kind)) {
     for (const path of changedPaths(call)) {
       touch(artifacts.changed, path);
     }

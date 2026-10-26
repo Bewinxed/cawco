@@ -51,6 +51,8 @@
     "./hub-previews": "./src/hub-previews.ts",
     "./install-script": "./src/install-script.ts",
     "./preview-proxy": "./src/preview-proxy.ts",
+    "./hop-headers": "./src/hop-headers.ts",
+    "./package-trees": "./src/package-trees.ts",
     "./captures": "./src/captures.ts",
     "./browser": "./src/browser.ts",
     "./browser-gate": "./src/browser-gate.ts",
@@ -112,6 +114,7 @@
     "./own-commits": "./src/own-commits.ts",
     "./permission-presentation": "./src/permission-presentation.ts",
     "./tool-presentation": "./src/tool-presentation.ts",
+    "./tool-names": "./src/tool-names.ts",
     "./session-env": "./src/session-env.ts",
     "./cawco-env": "./src/cawco-env.ts",
     ".": {

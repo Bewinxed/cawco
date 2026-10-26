@@ -71,6 +71,9 @@ import { machineId } from "@cawco/core/machine-id";
 import { verifyManifest } from "@cawco/core/release-manifest";
 import {
   type Answered,
+  type CUT_CODES,
+  type CutCode,
+  cutCode,
   type DownloadProgress,
   downloadResumably,
   fileMatches,
@@ -347,43 +350,24 @@ const logFailure = (error: unknown): void => {
 class HubUnreachable extends Error {}
 
 /**
- * The `code` Bun's fetch gives a connection the hub refused, dropped or could
- * not be routed to, before or during its answer (Bun 1.4.4: "ECONNREFUSED:
- * Unable to connect. Is the computer able to access the url?", "ECONNRESET:
- * The socket connection was closed unexpectedly", the latter also for a body
- * cut part-way; "ENETUNREACH" for no route; https://github.com/oven-sh/bun/pull/36370
- * quotes `code: "ECONNRESET"` on the same words). A hub mid-restart says
- * these: no answer at all.
+ * Of the cut codes ({@link CUT_CODES}), the ones that say no hub is there at
+ * all (a restart, or its name gone from the network), rather than a
+ * connection cut mid-answer: a download stops on them and waits for the hub,
+ * where a cut is gone on from at once.
  */
-const HUB_DROPPED = new Set([
-  "ECONNREFUSED",
-  "ECONNRESET",
-  "EPIPE",
-  "ENETUNREACH",
-  "ENETDOWN",
-  "EHOSTUNREACH",
-  "EHOSTDOWN",
-  "ETIMEDOUT",
-]);
-
-/** Of {@link HUB_DROPPED}, the codes that say no hub is there at all (a restart), rather than a connection cut mid-answer: a download stops on them and waits for the hub, where a cut is gone on from at once. */
-const HUB_GONE = new Set([
+const HUB_GONE: ReadonlySet<string> = new Set([
   "ECONNREFUSED",
   "ENETUNREACH",
   "ENETDOWN",
   "EHOSTUNREACH",
   "EHOSTDOWN",
-]);
-
-const droppedCode = (error: unknown): string | undefined => {
-  const { code } = (error ?? {}) as { code?: unknown };
-  return typeof code === "string" && HUB_DROPPED.has(code) ? code : undefined;
-};
+  "ENOTFOUND",
+] satisfies readonly CutCode[]);
 
 /**
  * `url` on the hub, its response read by `take`, all of it given `ms` to
  * answer. A hub that did not answer in time, or refused or dropped the
- * connection before its answer was whole ({@link HUB_DROPPED}), is
+ * connection before its answer was whole ({@link CUT_CODES}), is
  * {@link HubUnreachable} ("the hub did not answer <what> within N s"), never
  * an answer that refused.
  */
@@ -397,7 +381,7 @@ const askHub = async <T>(
   const read = await readWithin(ms, async (signal) =>
     take(await fetch(url, { ...init, signal }))
   ).catch((error: unknown) => {
-    const code = droppedCode(error);
+    const code = cutCode(error);
     if (code === undefined) {
       throw error;
     }
@@ -1666,7 +1650,7 @@ export class BinaryUpdater {
         fetch,
         log: (line) => console.info(`[update] ${line}`),
         onProgress: (download) => say({ download, hubFetch: undefined }),
-        ends: (error) => HUB_GONE.has(droppedCode(error) ?? ""),
+        ends: (error) => HUB_GONE.has(cutCode(error) ?? ""),
         answered: (response) =>
           hubAnswered(response, (hubFetch) => {
             saidAt = 0;
@@ -1674,7 +1658,7 @@ export class BinaryUpdater {
           }),
       });
     } catch (error) {
-      const code = droppedCode(error);
+      const code = cutCode(error);
       if (code) {
         throw new HubUnreachable(
           updatesWords.hubDropped(new URL(hub).origin, code, `with ${what}`),

@@ -63,6 +63,7 @@ import {
   type PermissionResult,
   type ThreadNote,
 } from "@cawco/core";
+import { GIT_VALUED_OPTIONS } from "@cawco/core/safe-git";
 import type { DbShape, LeadCallRow } from "./db";
 import type { CawEdits } from "./gate-file";
 import type { WebContext } from "./web-reads";
@@ -574,17 +575,7 @@ const commandsOf = (command: string, depth = 0): Commands => {
 // --- git -------------------------------------------------------------------
 
 /** git's global options that take the next word as their value. */
-const GIT_VALUED: ReadonlySet<string> = new Set([
-  "-C",
-  "-c",
-  "--git-dir",
-  "--work-tree",
-  "--namespace",
-  "--exec-path",
-  "--config-env",
-  "--super-prefix",
-  "--list-cmds",
-]);
+const GIT_VALUED: ReadonlySet<string> = new Set(GIT_VALUED_OPTIONS);
 /** git's global options that can make it run a command or read another repository. */
 const GIT_RISKY_GLOBAL =
   /^(?:-c|--config-env|--exec-path|--git-dir|--work-tree|-C)(?:=|$)/u;

@@ -53,6 +53,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { chromium } from "playwright-core";
 import {
+  type HttpProxyVar,
   RELAY_SOCKET_ENV,
   RELAY_SOCKET_NAME,
   RELAY_STEP,
@@ -659,6 +660,15 @@ const deniedLeg = async (kit: Kit, env: Env, srtUrl: URL | undefined) => {
   );
 };
 
+/** The proxy variables every client the legs run reads, each of which must name the relay. */
+const NAMED_PROXY = [
+  "HTTPS_PROXY",
+  "HTTP_PROXY",
+  "ALL_PROXY",
+  "https_proxy",
+  "all_proxy",
+] satisfies readonly HttpProxyVar[];
+
 const run = async (kit: Kit) => {
   // A workspace's boundary on another platform has no srt proxy to read.
   if (!(process.platform === "linux" && process.env.SANDBOX_RUNTIME === "1")) {
@@ -673,24 +683,11 @@ const run = async (kit: Kit) => {
   try {
     kit.check(
       "the boundary's proxy URLs name the relay with no credential",
-      [
-        "HTTPS_PROXY",
-        "HTTP_PROXY",
-        "ALL_PROXY",
-        "https_proxy",
-        "all_proxy",
-      ].every((name) => env[name] === "http://127.0.0.1:3129") &&
+      NAMED_PROXY.every((name) => env[name] === "http://127.0.0.1:3129") &&
         !existsSync(env[RELAY_SOCKET_ENV] ?? "/nonexistent"),
       JSON.stringify(
         Object.fromEntries(
-          [
-            "HTTPS_PROXY",
-            "HTTP_PROXY",
-            "ALL_PROXY",
-            "https_proxy",
-            "all_proxy",
-            RELAY_SOCKET_ENV,
-          ].map((name) => [name, env[name]])
+          [...NAMED_PROXY, RELAY_SOCKET_ENV].map((name) => [name, env[name]])
         )
       )
     );

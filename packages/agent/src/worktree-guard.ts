@@ -18,6 +18,7 @@ import { realpath } from "node:fs/promises";
 import { relative } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
 import { HARNESS_CONFIG } from "@cawco/core/clone-denies";
+import { GIT_VALUED_OPTIONS } from "@cawco/core/safe-git";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { workspaceDenies } from "@cawco/core/workspace-policy";
 
@@ -175,19 +176,6 @@ const STILL = [
   "sparse-checkout",
 ];
 
-/** The global options of git that take the next word as their value. */
-const VALUED = [
-  "-C",
-  "-c",
-  "--git-dir",
-  "--work-tree",
-  "--namespace",
-  "--exec-path",
-  "--config-env",
-  "--super-prefix",
-  "--list-cmds",
-];
-
 /**
  * The options of {@link MOVES_TO} whose next word is no target: a branch
  * made (`checkout -b`/`-B`, `switch -c`/`-C`, `--orphan`), a message or
@@ -294,7 +282,7 @@ skip=
 for arg in "$@"; do
   if [ -n "$skip" ]; then skip=; continue; fi
   case $arg in
-    ${VALUED.join(" | ")}) skip=1 ;;
+    ${GIT_VALUED_OPTIONS.join(" | ")}) skip=1 ;;
     -*) ;;
     ${STILL.join(" | ")}) exec "$real" "$@" ;;
     *) exec ${word(systemProgram("bash"))} "$self/${GIT_MOVE}" "$real" "$@" ;;
@@ -310,7 +298,7 @@ globals=()
 sub=
 while [ $# -gt 0 ]; do
   case $1 in
-    ${VALUED.join(" | ")}) globals+=("$1" "$2"); shift 2 ;;
+    ${GIT_VALUED_OPTIONS.join(" | ")}) globals+=("$1" "$2"); shift 2 ;;
     -*) globals+=("$1"); shift ;;
     *) sub=$1; shift; break ;;
   esac

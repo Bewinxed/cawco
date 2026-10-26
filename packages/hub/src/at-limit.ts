@@ -263,13 +263,13 @@ export interface StopReason {
 }
 
 /**
- * Why it waits: a fork, the policy off, its own reset near (`soon`), its
- * cache outlasting that reset (`free`), no account fits (`full`), the account
- * a person moved it to is full (`hand`), or, at a forecast, a warm cache that
- * moves at its limit instead (`warm`).
+ * Why it waits: a wait's reason as its line keeps it ({@link WaitReason}: a
+ * fork, the policy off, its own reset near (`soon`), its cache outlasting
+ * that reset (`free`), no account fits (`full`)), but the two kept only as
+ * history; or the account a person moved it to is full (`hand`), or, at a
+ * forecast, a warm cache that moves at its limit instead (`warm`).
  */
-export type StopWhy =
-  "fork" | "off" | "soon" | "free" | "full" | "hand" | "warm";
+export type StopWhy = Exclude<WaitReason, "room" | "work"> | "hand" | "warm";
 
 interface Priced {
   /** Every other account and why it didn't take the session, or that it could. */

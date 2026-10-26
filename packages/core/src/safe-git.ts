@@ -100,6 +100,23 @@ export const SAFE_GIT_SHELL = `git() { ${[
   ...SAFE_GIT_FLAGS.map(quote),
 ].join(" ")} "$@"; }; `;
 
+/**
+ * git's global options that take the next word as their value (`git -C dir
+ * status`): what a reader of a git command line steps over to find its
+ * subcommand.
+ */
+export const GIT_VALUED_OPTIONS: readonly string[] = [
+  "-C",
+  "-c",
+  "--git-dir",
+  "--work-tree",
+  "--namespace",
+  "--exec-path",
+  "--config-env",
+  "--super-prefix",
+  "--list-cmds",
+];
+
 /** `git` and its arguments as an argv, for a spawn: pair it with {@link SAFE_GIT_ENV}. */
 export const safeGitArgv = (args: readonly string[]): string[] => [
   "git",

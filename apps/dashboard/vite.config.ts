@@ -542,16 +542,15 @@ export default defineConfig(({ command }) => {
       // The brand marks (`@cawco/icons/marks`) are a module of their own, loaded by what draws one.
       include: ["@cawco/icons", "@cawco/icons/marks"],
       rolldownOptions: { plugins: [IconsBundled({ compiler: "svelte" })] },
-      // svelte-streamdown, svelte-sonner and vaul-svelte are compiled like the
-      // app's own components, so their stylesheets pass through
-      // streamdownOverlayOwn and vendorComponentSheets in dev as in the build:
-      // prebundled, their styles are injected from the bundle's JS instead.
-      exclude: [
-        "@xyflow/svelte",
-        "svelte-streamdown",
-        "svelte-sonner",
-        "vaul-svelte",
-      ],
+      // The libraries with component sheets are compiled like the app's own
+      // components, so their stylesheets pass through streamdownOverlayOwn
+      // and vendorComponentSheets in dev as in the build: prebundled, their
+      // styles are injected from the bundle's JS instead. bits-ui stays
+      // prebundled, for its couple of hundred components: its two viewport
+      // sheets (select, scroll-area) go unlayered in dev only.
+      exclude: VENDOR_COMPONENT_SHEETS.filter(
+        (library) => library !== "bits-ui"
+      ),
     },
     ssr: {
       // Both ship raw .svelte sources; dev SSR must compile them, not require them.

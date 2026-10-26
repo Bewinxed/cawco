@@ -65,6 +65,7 @@ import {
   type TriageDecision,
 } from "@cawco/core";
 import { Gone, readWithin } from "@cawco/core/bounded";
+import { FILE_CHANGE_TOOLS } from "@cawco/core/tool-names";
 import { z } from "zod";
 import type { CawEvent } from "./caw";
 import type { DbShape } from "./db";
@@ -95,16 +96,6 @@ const ERROR_KEY_LIMIT = 300;
 const BRIEF_LIMIT = 4000;
 /** The origin of what fleet watch sends: never a person's word. */
 const ORIGIN = { kind: "system", name: "fleet-watch" } as const;
-
-/** Tools that change files, by harness name, lowercased: Claude's, OpenCode's, pi's. */
-const FILE_TOOLS: ReadonlySet<string> = new Set([
-  "edit",
-  "write",
-  "multiedit",
-  "notebookedit",
-  "patch",
-  "apply_patch",
-]);
 
 const DIGITS = /\d+/gu;
 const HEX = /\b[0-9a-f]{8,}\b/gu;
@@ -881,7 +872,7 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
         continue;
       }
       note(watch, clip(`→ ${block.name} ${stable(block.input)}`, ENTRY_LIMIT));
-      if (FILE_TOOLS.has(block.name.toLowerCase())) {
+      if (FILE_CHANGE_TOOLS.has(block.name.toLowerCase())) {
         watch.changedThisTurn = true;
         watch.quietTurns = 0;
         closeSignals(id, watch, ["error", "repeat", "quiet"]);

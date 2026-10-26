@@ -51,6 +51,7 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { stripVTControlCharacters } from "node:util";
 import { parse } from "@babel/parser";
+import { PACKAGE_TREES } from "@cawco/core/package-trees";
 import { hostEnvironment } from "@cawco/core/session-env";
 import {
   AS_PAGE,
@@ -93,6 +94,7 @@ import {
   STORIES_PATH,
   STORY_FILE,
   type StageError,
+  type StageFramework,
   type StageToolchain,
   sectionName,
   THUMB_FRAMES,
@@ -113,8 +115,6 @@ import {
   writeArgs,
   writeStoryOp,
 } from "./story-file";
-
-type Framework = "svelte" | "vue" | "react" | "solid" | "preact";
 
 /** What the stage uses of a module node in Vite's graph. */
 interface ModuleNode {
@@ -262,7 +262,7 @@ const DIALKIT_CSS = __DIALKIT_CSS__;
 const CANVAS_FACES = __CANVAS_FACES__;
 const root = process.cwd();
 const port = Number(process.env.CAWCO_STAGE_PORT);
-const framework = process.env.CAWCO_STAGE_FRAMEWORK as Framework;
+const framework = process.env.CAWCO_STAGE_FRAMEWORK as StageFramework;
 const kit = process.env.CAWCO_STAGE_KIT === "1";
 const toolchain = process.env.CAWCO_STAGE_TOOLCHAIN as StageToolchain;
 /**
@@ -687,7 +687,7 @@ function globalStyles(): string[] {
  * as its docs pass reactive props to `mount`; React's and Preact's render
  * again on the same root; Vue's and Solid's are their own reactive objects.
  */
-const ADAPTERS: Record<Framework, string> = {
+const ADAPTERS: Record<StageFramework, string> = {
   svelte: `import { createRawSnippet, flushSync, getAllContexts, mount, unmount } from "svelte";
 import { reactive } from "${VIRTUAL_STAGE}svelte-props.js";
 export function mountStory(target, s) {
@@ -1980,16 +1980,12 @@ async function formatted(
   );
 }
 
-/** Folders whose components are a framework's routes, never a component a sheet shows (spec §6). */
-const ROUTE_DIRS = new Set([
+/** Folders whose components are a framework's routes, never a component a sheet shows (spec §6), and package and build trees; a dot-dir (`.cawco`) is passed over too. */
+const ROUTE_DIRS: ReadonlySet<string> = new Set([
   "routes",
   "pages",
   "app",
-  "node_modules",
-  ".svelte-kit",
-  ".cawco",
-  "dist",
-  "build",
+  ...PACKAGE_TREES,
 ]);
 const COMPONENT_FILE = /\.(?:svelte|vue|[jt]sx)$/u;
 /** A `.tsx`/`.jsx` file worth asking react-docgen about: one that exports a capitalised name. Our prefilter. */

@@ -45,22 +45,13 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import ts from "typescript";
+import { PRODUCT_SOURCES, ROOT } from "./lib/repo-files";
 
-const ROOT = join(import.meta.dir, "..");
 const WORDS = join(ROOT, "packages/core/src/words");
 const KIT = join(ROOT, "scripts/probe-kit");
 const DASHBOARD = join(ROOT, "apps/dashboard");
 /** Where the product's own words are spelled: what renders, logs or answers. */
-const PRODUCT = [
-  "apps/dashboard/src",
-  "apps/cawrier/src",
-  "packages/agent/src",
-  "packages/auth/src",
-  "packages/cli/src",
-  "packages/core/src",
-  "packages/hub/src",
-  "packages/sessiond/src",
-].map((dir) => join(ROOT, dir));
+const PRODUCT = PRODUCT_SOURCES.map((dir) => join(ROOT, dir));
 /** Folders that hold no probe or product code: pictures, fixtures, and core's words (rule 1's). */
 const SKIP = new Set(["baselines", "fixtures", "node_modules", WORDS]);
 /** States files draw a component for review; the product never renders their text. */

@@ -52,13 +52,12 @@
  *
  *   bun apps/dashboard/scripts/mark-line-check.ts [file…]   (no files: every .svelte under src/)
  */
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { parse } from "svelte/compiler";
+import { repoFiles } from "../../../scripts/lib/repo-files";
 
 const ROOT = join(import.meta.dir, "..");
-const SOURCE = join(ROOT, "src");
-const SKIP_DIRS = new Set(["node_modules", ".svelte-kit", "dist", "build"]);
 const SVELTE_FILE = /\.svelte$/u;
 const ALLOW = /^\s*mark-line:\s*\S/u;
 const SPLIT = /[^\w-]+/u;
@@ -171,20 +170,6 @@ export interface Hit {
   tag: string;
   what: string;
 }
-
-const walkFiles = (dir: string, out: string[]): void => {
-  for (const name of readdirSync(dir)) {
-    const path = join(dir, name);
-    if (SKIP_DIRS.has(name)) {
-      continue;
-    }
-    if (statSync(path).isDirectory()) {
-      walkFiles(path, out);
-    } else if (SVELTE_FILE.test(name)) {
-      out.push(path);
-    }
-  }
-};
 
 /** The node's children as the DOM will hold them: blocks flattened. */
 function children(nodes: Node[] | undefined): Node[] {
@@ -609,11 +594,9 @@ if (import.meta.main) {
   const files =
     named.length > 0
       ? named.map((one) => join(process.cwd(), one))
-      : (() => {
-          const out: string[] = [];
-          walkFiles(SOURCE, out);
-          return out;
-        })();
+      : repoFiles(["src"], ROOT)
+          .filter((file) => SVELTE_FILE.test(file))
+          .map((file) => join(ROOT, file));
   const hits = files
     .filter((file) => file.endsWith(".svelte"))
     .flatMap((file) =>

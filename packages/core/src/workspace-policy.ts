@@ -46,7 +46,13 @@ import {
   resolve,
 } from "node:path";
 import { binaryRoot } from "./binary-installation";
-import { type CloneDeny, cloneDenies } from "./clone-denies";
+import {
+  type CloneDeny,
+  cloneDenies,
+  PROTECTED_CONFIG,
+  PROTECTED_FIND_TESTS,
+  PROTECTED_PARENTS,
+} from "./clone-denies";
 import type { WorkspaceRef } from "./harness";
 import {
   accountConfigDir,
@@ -76,13 +82,7 @@ import {
 import { SAFE_GIT_ENV, safeGitArgv } from "./safe-git";
 import { hostEnvironment } from "./session-env";
 import { DamagedRecord, readRecord } from "./state-file";
-import {
-  type Policy,
-  PROTECTED_NAMES,
-  PROTECTED_UNDER,
-  resolveDenied,
-  resolveReal,
-} from "./workspace-judge";
+import { type Policy, resolveDenied, resolveReal } from "./workspace-judge";
 import { findProgram, startedPath } from "./workspace-needs";
 
 /**
@@ -256,8 +256,8 @@ const gitIn = (
  * untracked dir every one of whose entries the project's own ignore rules
  * (`.gitignore`, `.git/info/exclude`, the user's `core.excludesFile`) leave
  * out, `git ls-files --others --ignored --exclude-standard --directory`,
- * never one of {@link PROTECTED_UNDER}'s dirs, whose protected entries lie
- * below it. None for a folder that is no git work tree: it declares no
+ * never a dir of a name protected config lies under
+ * ({@link PROTECTED_PARENTS}), whose protected entries lie below it. None for a folder that is no git work tree: it declares no
  * ignores. Any other failure refuses the boundary, in git's words.
  */
 const ignoredDirs = async (root: string): Promise<string[]> => {
@@ -282,7 +282,7 @@ const ignoredDirs = async (root: string): Promise<string[]> => {
     .filter(
       (entry) =>
         entry.endsWith("/") &&
-        !Object.hasOwn(PROTECTED_UNDER, basename(entry.slice(0, -1)))
+        !PROTECTED_PARENTS.has(basename(entry.slice(0, -1)))
     )
     .map((entry) => join(root, entry.slice(0, -1)));
 };
@@ -308,8 +308,7 @@ const anyPath = (paths: readonly string[]): string[] =>
 const DIR_OR_FILE = ["(", "-type", "d", "-o", "-type", "f", ")"];
 
 /**
- * The protected config a place has now ({@link PROTECTED_NAMES},
- * {@link PROTECTED_UNDER}), anywhere in it but below the dirs its project
+ * The protected config a place has now ({@link PROTECTED_CONFIG}), anywhere in it but below the dirs its project
  * ignores ({@link ignoredDirs}; an ignored dir that is protected config
  * itself is found): each a dir
  * or file of its own, which srt binds onto itself and so leaves nothing on
@@ -326,16 +325,7 @@ const protectedIn = async (root: string): Promise<string[]> =>
   findIn(
     root,
     [
-      "(",
-      ...PROTECTED_NAMES.flatMap((name, at) => [
-        ...(at > 0 ? ["-o"] : []),
-        "-name",
-        name,
-      ]),
-      ...Object.entries(PROTECTED_UNDER).flatMap(([dir, names]) =>
-        names.flatMap((name) => ["-o", "-path", `*/${dir}/${name}`])
-      ),
-      ")",
+      ...PROTECTED_FIND_TESTS,
       ...DIR_OR_FILE,
       "-print0",
       "-prune",
@@ -1130,7 +1120,7 @@ export const workspacePolicy = async (
     home,
     clone,
     scratch,
-    ...(lead ? { protectConfig: true } : {}),
+    ...(lead ? { protectConfig: PROTECTED_CONFIG } : {}),
     denyRead,
     // An entry that is a deny entry itself would re-allow it whole (srt:
     // `allowRead` wins a tie; the judge: a tie denies), so it is left out, and

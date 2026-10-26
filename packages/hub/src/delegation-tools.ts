@@ -4,6 +4,7 @@ import {
   type LandsMode,
   REFERENCE_GUIDANCE,
   SESSION_CHOSEN_MODES,
+  SPAWNING_TOOLS,
 } from "@cawco/core";
 import { type HandedInput, handedInputSchema } from "@cawco/core/handed-input";
 import type { DesignMap } from "@cawco/core/stage";
@@ -39,7 +40,6 @@ import {
   type HandoffDeps,
   handoffActions,
   type ItemEnd,
-  SPAWNING_TOOLS,
 } from "./delegation-actions";
 import { sentence, tool } from "./mcp-tool";
 import {

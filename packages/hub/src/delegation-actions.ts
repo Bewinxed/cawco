@@ -615,25 +615,6 @@ function resolve(peers: Peer[], target: string): Peer {
 }
 
 /**
- * The tools a leaf delegate (`canDelegate === false`) never gets: everything
- * that spawns, steers a spawn or reads its spawns. One set for the claude and pi toolsets (the
- * opencode plugin refuses at call time instead, having no per-session
- * toolset). Fixed for the session's life, so the prompt cache is unaffected.
- */
-export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
-  "start_session",
-  "continue_session",
-  "delegate",
-  "delegate_list",
-  "stop_delegate",
-  "interrupt_delegate",
-  "answer_delegate",
-  "discard_workspace",
-  // It stops every turn on a machine: an orchestrator's, never a leaf's.
-  "machine_pause",
-]);
-
-/**
  * Why the hub keeps a send queued instead of handing it to its session now
  * (server.ts `deliverSend`): its machine is installing an update, so the
  * session's start waits for it (`update`); its machine runs a build older

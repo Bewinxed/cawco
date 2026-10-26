@@ -51,6 +51,7 @@
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import ts from "typescript";
+import { CLASS_CALLS } from "../../apps/dashboard/scripts/class-strings";
 
 const ROOT = resolve(import.meta.dir, "../..");
 const KIT = import.meta.dir;
@@ -388,7 +389,10 @@ interface Found {
 const and = (a: string | null, b: string): string =>
   a === null ? b : `(${a}) && (${b})`;
 const not = (a: string): string => `!(${a})`;
-const CLASS_HELPERS = new Set(["cn", "clsx", "cx", "twMerge", "twJoin"]);
+/** The dashboard's class helpers but tv, whose object keys are variant names, where this sweep reads an object's keys as classes. */
+const CLASS_HELPERS: ReadonlySet<string> = new Set(
+  [...CLASS_CALLS].filter((name) => name !== "tv")
+);
 
 const words = (text: string): string[] =>
   text.split(WHITESPACE).filter((w) => w.length > 0);

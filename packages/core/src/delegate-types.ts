@@ -236,6 +236,27 @@ export const LEAD_SHELL_TOOLS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * The CawCo tools a leaf delegate (`canDelegate === false`) never gets:
+ * everything that spawns, steers a spawn or reads its spawns. The hub leaves
+ * them out of a claude or pi session's toolset (hub delegation-tools.ts); an
+ * OpenCode session's permission rules deny them by their `cawco_` names
+ * (agent opencode-session.ts). Fixed for the session's life, so the prompt
+ * cache is unaffected.
+ */
+export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
+  "start_session",
+  "continue_session",
+  "delegate",
+  "delegate_list",
+  "stop_delegate",
+  "interrupt_delegate",
+  "answer_delegate",
+  "discard_workspace",
+  // It stops every turn on a machine: an orchestrator's, never a leaf's.
+  "machine_pause",
+]);
+
+/**
  * What a session on the board alone may never call: no edit, shell or
  * subagent tools. A fleet-watch triage run (`overseer`) decides one thing and
  * exits; it is {@link CAW_DENIED_TOOLS} and Caw's gated tools together.

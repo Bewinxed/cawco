@@ -40,10 +40,10 @@
  *
  *   bun scripts/css-scope-check.ts [file…]   (no files: every .svelte under apps/)
  */
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { ROOT, repoFiles } from "./lib/repo-files";
 
-const ROOT = join(import.meta.dir, "..");
 const SOURCES = ["apps/dashboard/src"];
 /**
  * The Tailwind variants generated from the components' own attribute
@@ -53,7 +53,6 @@ const SOURCES = ["apps/dashboard/src"];
  * the attribute, and that file is counted.
  */
 const NAMED_VARIANTS = "apps/dashboard/src/lib/tokens/variants.css";
-const SKIP_DIRS = new Set(["node_modules", ".svelte-kit", "dist", "build"]);
 const ALLOW = /^\/\*\s*css-scope:\s*\S/u;
 /** `/* css-scope .a .b: why *\/`: names this component owns though another file uses them. */
 const DECLARE = /\/\*\s*css-scope\s+((?:[.#][\w-]+\s*)+):\s*\S/gu;
@@ -78,19 +77,11 @@ const WORD = /-?[_a-zA-Z][\w-]*/gu;
 /** Module specifiers: `from "…"`, `import "…"`, `import("…")`. */
 const IMPORTED = /\b(?:from|import)\s*\(?\s*(["'])[^"'\n]*\1/gu;
 
-const walk = (dir: string, out: string[], keep: RegExp): void => {
-  for (const name of readdirSync(dir)) {
-    const path = join(dir, name);
-    if (SKIP_DIRS.has(name)) {
-      continue;
-    }
-    if (statSync(path).isDirectory()) {
-      walk(path, out, keep);
-    } else if (keep.test(name)) {
-      out.push(path);
-    }
-  }
-};
+/** The dashboard's files whose path `keep` matches. */
+const sourceFiles = (keep: RegExp): string[] =>
+  repoFiles(SOURCES)
+    .filter((file) => keep.test(file))
+    .map((file) => join(ROOT, file));
 
 /** Splits at top-level occurrences of `sep` (outside parentheses and brackets). */
 function split(text: string, at: (ch: string) => boolean): string[] {
@@ -330,10 +321,7 @@ export function check(
 
 /** Every word in every dashboard source file: the files each name appears in. */
 function wordIndex(): Map<string, Set<string>> {
-  const files: string[] = [];
-  for (const dir of SOURCES) {
-    walk(join(ROOT, dir), files, SOURCE_FILE);
-  }
+  const files = sourceFiles(SOURCE_FILE);
   const index = new Map<string, Set<string>>();
   for (const file of files) {
     const at = relative(ROOT, file);
@@ -359,11 +347,7 @@ if (import.meta.main) {
   const files =
     named.length > 0
       ? named.map((one) => join(process.cwd(), one))
-      : SOURCES.flatMap((dir) => {
-          const out: string[] = [];
-          walk(join(ROOT, dir), out, SVELTE_FILE);
-          return out;
-        });
+      : sourceFiles(SVELTE_FILE);
   const index = wordIndex();
   const hits = files
     .filter((file) => file.endsWith(".svelte"))

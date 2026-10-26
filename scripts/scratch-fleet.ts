@@ -36,6 +36,7 @@ import {
 import { homedir, platform } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { parseProcId } from "../packages/agent/src/proc-id";
+import { HTTP_PROXY_VARS } from "../packages/agent/src/proxy-relay";
 import { removeTree, removeTreeSync } from "../packages/agent/src/remove-tree";
 import { SessiondClient } from "../packages/agent/src/sessiond-client";
 import { readWithin } from "../packages/core/src/bounded";
@@ -1024,15 +1025,8 @@ async function fleetRoots(): Promise<{
  */
 const OWNER_FILE = ".scratch-fleet.lock";
 
-/** The proxy settings a workspace reaches public hosts by, passed to the fleet when set. */
-const PROXY_ENV = [
-  "HTTPS_PROXY",
-  "https_proxy",
-  "HTTP_PROXY",
-  "http_proxy",
-  "NO_PROXY",
-  "no_proxy",
-];
+/** The proxy settings a workspace reaches public hosts by ({@link HTTP_PROXY_VARS}, and the hosts it reaches directly), passed to the fleet when set. */
+const PROXY_ENV = [...HTTP_PROXY_VARS, "NO_PROXY", "no_proxy"];
 
 /**
  * git's own setting for a proxy that carries its credentials in its URL, as a

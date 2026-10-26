@@ -21,8 +21,7 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-
-const ROOT = join(import.meta.dir, "..");
+import { ROOT, repoFiles } from "./lib/repo-files";
 
 /** The wall itself (its sending half, which signal.ts re-exports), and this check, which names what it looks for. */
 const OWN = new Set([
@@ -58,31 +57,12 @@ const RAW: [string, RegExp][] = [
 ];
 const FORGED = /\bas\s+Pid\b|(?<![\w$])<Pid>|\bis\s+Pid\b/u;
 
-const listed = Bun.spawnSync(
-  ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
-  { cwd: ROOT, stdout: "pipe", stderr: "pipe" }
-);
-if (listed.exitCode !== 0) {
-  console.error(
-    `signal:check could not list the repository's files: ${listed.stderr.toString().trim()}`
-  );
-  process.exit(1);
-}
-const files = listed.stdout
-  .toString()
-  .split("\0")
-  .filter((file) => CODE.test(file) && !OWN.has(file));
+const files = repoFiles().filter((file) => CODE.test(file) && !OWN.has(file));
 
 const hits: string[] = [];
 const known = new Map<string, number>();
 for (const file of files) {
-  let text: string;
-  try {
-    text = readFileSync(join(ROOT, file), "utf8");
-  } catch {
-    // Listed, and deleted in the working tree since.
-    continue;
-  }
+  const text = readFileSync(join(ROOT, file), "utf8");
   for (const [index, line] of text.split("\n").entries()) {
     const at = `${file}:${index + 1}: ${line.trim()}`;
     const raw = RAW.find(([, pattern]) => pattern.test(line));

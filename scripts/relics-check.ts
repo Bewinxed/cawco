@@ -25,12 +25,11 @@
  * Prints the count of each kind, then, with `--list`, each relic. Exits 1
  * when any kind is above 0.
  */
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
+import { ROOT, repoFiles } from "./lib/repo-files";
 
-const ROOT = resolve(import.meta.dir, "..");
-const SOURCE = join(ROOT, "apps", "dashboard", "src");
-const SKIP_DIRS = new Set(["node_modules", ".svelte-kit", "dist", "build"]);
+const SOURCE = "apps/dashboard/src";
 const KINDS = [
   "literal",
   "style-var",
@@ -105,25 +104,13 @@ const args = process.argv.slice(2);
 const list = args.includes("--list");
 const named = args.filter((arg) => !arg.startsWith("--"));
 
-function walk(dir: string, out: string[]): string[] {
-  for (const name of readdirSync(dir)) {
-    if (SKIP_DIRS.has(name)) {
-      continue;
-    }
-    const path = join(dir, name);
-    if (statSync(path).isDirectory()) {
-      walk(path, out);
-    } else if (READ.test(name) && !name.endsWith(".d.ts")) {
-      out.push(path);
-    }
-  }
-  return out;
-}
-
 const files =
   named.length > 0
     ? named.map((file) => resolve(ROOT, file))
-    : walk(SOURCE, []).sort();
+    : repoFiles([SOURCE])
+        .filter((file) => READ.test(file) && !file.endsWith(".d.ts"))
+        .sort()
+        .map((file) => join(ROOT, file));
 const counts = new Map<Kind, number>(KINDS.map((kind) => [kind, 0]));
 const found: string[] = [];
 const note = (file: string, line: number, kind: Kind, text: string) => {

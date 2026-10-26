@@ -7,23 +7,9 @@
  * (absolute, `~` resolved against its machine's home, normalised), and a
  * cast would let a raw string past them.
  */
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
-
-const ROOT = join(import.meta.dir, "..");
-
-/** Where the sources are. */
-const SOURCES = [
-  "apps/dashboard/src",
-  "packages/agent/src",
-  "packages/auth/src",
-  "packages/cli/src",
-  "packages/core/src",
-  "packages/hub/src",
-  "packages/hub/scripts",
-  "packages/sessiond/src",
-  "scripts",
-];
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { CODE_ROOTS, ROOT, repoFiles } from "./lib/repo-files";
 
 /** The brand's own module, the one place that may make it, and this check. */
 const ALLOWED = new Set([
@@ -32,7 +18,6 @@ const ALLOWED = new Set([
 ]);
 
 const EXTENSIONS = /\.(?:ts|tsx|mts|cts|svelte)$/u;
-const SKIP_DIRS = new Set(["node_modules", ".svelte-kit", "dist", "build"]);
 
 /**
  * A cast to the brand (`as MachinePath`, an old-style `<MachinePath>value`,
@@ -42,38 +27,14 @@ const SKIP_DIRS = new Set(["node_modules", ".svelte-kit", "dist", "build"]);
 const MINTS =
   /\bas\s+MachinePath\b|(?<![\w$])<MachinePath>|\bis\s+MachinePath\b/u;
 
-const walk = (dir: string, out: string[]): void => {
-  let names: string[];
-  try {
-    names = readdirSync(dir);
-  } catch {
-    return;
-  }
-  for (const name of names) {
-    const path = join(dir, name);
-    if (SKIP_DIRS.has(name)) {
-      continue;
-    }
-    if (statSync(path).isDirectory()) {
-      walk(path, out);
-    } else if (EXTENSIONS.test(name)) {
-      out.push(path);
-    }
-  }
-};
-
-const files: string[] = [];
-for (const source of SOURCES) {
-  walk(join(ROOT, source), files);
-}
+const files = repoFiles(CODE_ROOTS).filter((file) => EXTENSIONS.test(file));
 
 const hits: string[] = [];
-for (const file of files) {
-  const rel = relative(ROOT, file);
+for (const rel of files) {
   if (ALLOWED.has(rel)) {
     continue;
   }
-  const lines = readFileSync(file, "utf8").split("\n");
+  const lines = readFileSync(join(ROOT, rel), "utf8").split("\n");
   for (const [index, line] of lines.entries()) {
     if (MINTS.test(line)) {
       hits.push(`${rel}:${index + 1}: ${line.trim()}`);

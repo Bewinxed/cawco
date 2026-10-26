@@ -56,8 +56,16 @@ const GIVE_UP_AFTER = 5;
 const backoffMs = (fruitless: number): number =>
   1000 * 2 ** Math.max(0, fruitless - 1);
 
-/** The codes Bun's fetch gives a connection refused, dropped or unroutable (Bun 1.4.4: "ECONNRESET: The socket connection was closed unexpectedly", for a body cut part-way too). */
-const CUT_CODES = new Set([
+/**
+ * The `code` Bun's fetch gives a connection refused, dropped, cut or
+ * unroutable, before or during its answer, a name that did not resolve
+ * included (Bun 1.4.4: "ECONNREFUSED: Unable to connect. Is the computer able
+ * to access the url?", "ECONNRESET: The socket connection was closed
+ * unexpectedly", the latter also for a body cut part-way; "ENETUNREACH" for
+ * no route; https://github.com/oven-sh/bun/pull/36370 quotes `code:
+ * "ECONNRESET"` on the same words): no answer at all.
+ */
+export const CUT_CODES = [
   "ECONNREFUSED",
   "ECONNRESET",
   "EPIPE",
@@ -68,12 +76,13 @@ const CUT_CODES = new Set([
   "ETIMEDOUT",
   "ENOTFOUND",
   "ECONNABORTED",
-]);
+] as const;
+export type CutCode = (typeof CUT_CODES)[number];
 
 /** The connection code of a fetch error, when it is one. */
-export const cutCode = (error: unknown): string | undefined => {
+export const cutCode = (error: unknown): CutCode | undefined => {
   const { code } = (error ?? {}) as { code?: unknown };
-  return typeof code === "string" && CUT_CODES.has(code) ? code : undefined;
+  return CUT_CODES.find((cut) => cut === code);
 };
 
 export interface DownloadProgress {
