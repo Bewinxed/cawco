@@ -56,9 +56,9 @@ export const hostGh = (): Promise<string | undefined> => hostProgram("gh");
 /**
  * What the host's gh prints for `args`, when it exits 0; none when gh is not
  * here or refuses. gh runs with the host's environment as it is now (core
- * `hostEnvironment`), as the GitHub adapter runs it (forges/github.ts).
+ * `hostEnvironment`).
  */
-const ghSays = async (args: string[]): Promise<string | undefined> => {
+export const ghSays = async (args: string[]): Promise<string | undefined> => {
   const gh = await hostGh();
   if (!gh) {
     return;

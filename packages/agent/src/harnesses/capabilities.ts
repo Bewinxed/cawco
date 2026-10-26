@@ -1,0 +1,33 @@
+import { type HarnessCapabilities, PERMISSION_MODES } from "@cawco/core";
+
+/** Everything a harness can be asked to do, every permission mode: Claude Code's, and the base the others take away from. */
+export const FULL_CAPABILITIES: HarnessCapabilities = {
+  interrupt: true,
+  permissionModes: [...PERMISSION_MODES],
+  setModel: true,
+  effort: true,
+  contextUsage: true,
+  supportedModels: true,
+  supportedCommands: true,
+  reloadSkills: true,
+  mcpStatus: true,
+  mcpControl: true,
+  listSessions: true,
+  getSessionMessages: true,
+  renameSession: true,
+  deleteSession: true,
+  fork: true,
+  rewind: true,
+  tagSession: true,
+  skills: true,
+  subagents: true,
+  tasks: true,
+  compaction: true,
+  costUsd: true,
+  thinking: true,
+  images: true,
+  handoff: true,
+  hooks: true,
+  plugins: true,
+  fleet: true,
+};

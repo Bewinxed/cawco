@@ -112,7 +112,7 @@ import { prepareClone } from "./clone";
 import { firstSessionOf, firstSpill } from "./first-session";
 import { placedAsMade } from "./fleet";
 import { expandHome } from "./fs";
-import { useHubCredentialHelper } from "./git-credential";
+import { configEnv, useHubCredentialHelper } from "./git-credential";
 import { hostGit } from "./host-git";
 import {
   declaredLfs,
@@ -149,7 +149,6 @@ import {
   viewPath,
 } from "./layer";
 import {
-  configEnv,
   type DeclaredLfs,
   declaredPins,
   hubGitEnv,

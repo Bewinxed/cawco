@@ -231,6 +231,17 @@ export const sessionGitEnv = (
       [`lfs.${origin}/git/.locksverify`, "false"],
     ]
   );
+  return configEnv(pairs, base);
+};
+
+/**
+ * Config git and git-lfs read from the environment alone, appended after any
+ * `base` (the environment the command starts from) already carries.
+ */
+export const configEnv = (
+  pairs: [string, string][],
+  base: Record<string, string | undefined> = process.env
+): Record<string, string> => {
   const first = Number.parseInt(base.GIT_CONFIG_COUNT ?? "0", 10) || 0;
   const env: Record<string, string> = {
     GIT_CONFIG_COUNT: String(first + pairs.length),

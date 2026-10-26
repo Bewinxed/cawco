@@ -258,6 +258,24 @@ export interface CutNode {
   ids?: readonly string[];
 }
 
+/** Each id the nodes name, by the first and last node that names it. */
+export const idSpans = (
+  nodes: readonly CutNode[]
+): Map<string, { first: number; last: number }> => {
+  const spans = new Map<string, { first: number; last: number }>();
+  nodes.forEach((node, i) => {
+    for (const id of node.ids ?? []) {
+      const known = spans.get(id);
+      if (known) {
+        known.last = i;
+      } else {
+        spans.set(id, { first: i, last: i });
+      }
+    }
+  });
+  return spans;
+};
+
 /**
  * Where a window of `nodes` (a conversation as it was said, in order) may
  * start, rising, 0 always: a node `opens` allows (the start of a turn),
@@ -271,18 +289,7 @@ export function windowCuts(
   opens: (at: number) => boolean
 ): number[] {
   const blocked = new Int32Array(nodes.length + 1);
-  const seen = new Map<string, { first: number; last: number }>();
-  nodes.forEach((node, i) => {
-    for (const id of node.ids ?? []) {
-      const known = seen.get(id);
-      if (known) {
-        known.last = i;
-      } else {
-        seen.set(id, { first: i, last: i });
-      }
-    }
-  });
-  for (const { first, last } of seen.values()) {
+  for (const { first, last } of idSpans(nodes).values()) {
     if (first < last) {
       blocked[first + 1] += 1;
       blocked[last + 1] -= 1;

@@ -265,6 +265,23 @@ const startUnanswered = (what: string, after: number, whose: string): Error =>
     `${whose} did not answer ${what} within ${Math.round(after / 1000)} s. Its next start is tried at the next OpenCode session or message.`
   );
 
+/** The server a start launched, or {@link startUnanswered} when it did not answer in time. */
+const startedServer = (
+  launched: Bounded<ServerIdentity>,
+  whose: string
+): ServerIdentity => {
+  switch (launched.kind) {
+    case "answered":
+      return launched.value;
+    case "unanswered":
+      throw startUnanswered("its start", launched.after, whose);
+    default: {
+      const unhandled: never = launched;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+};
+
 interface ServerRecord {
   active: ServerIdentity | null;
   retired: ServerIdentity[];
@@ -428,6 +445,18 @@ const strayServer = async (
   };
 };
 
+/** This keeper's server records in `~/.cawco` that `pattern` matches: its stem first, then what names the server. */
+const recordsLike = async (pattern: RegExp): Promise<RegExpMatchArray[]> => {
+  const stem = recordStem();
+  const files = await readdir(join(homedir(), ".cawco")).catch(
+    () => [] as string[]
+  );
+  return files.flatMap((file) => {
+    const match = file.match(pattern);
+    return match?.[1] === stem && match[2] ? [match] : [];
+  });
+};
+
 /**
  * The only launcher/adopter of one OpenCode server: the machine's own
  * (`account` undefined), one account's, or one a workspace's Linux view runs
@@ -439,28 +468,15 @@ export class OpencodeServerOwner {
   static async recordedViews(): Promise<
     { account: string | undefined; workspace: string }[]
   > {
-    const stem = recordStem();
-    const files = await readdir(join(homedir(), ".cawco")).catch(
-      () => [] as string[]
-    );
-    return files.flatMap((file) => {
-      const match = file.match(VIEW_RECORD);
-      return match?.[1] === stem && match[2]
-        ? [{ workspace: match[2], account: match[3] }]
-        : [];
-    });
+    return (await recordsLike(VIEW_RECORD)).map((match) => ({
+      workspace: match[2],
+      account: match[3],
+    }));
   }
 
   /** The accounts whose servers this keeper has a record of, for an agent that starts up. */
   static async recordedAccounts(): Promise<string[]> {
-    const stem = recordStem();
-    const files = await readdir(join(homedir(), ".cawco")).catch(
-      () => [] as string[]
-    );
-    return files.flatMap((file) => {
-      const match = file.match(ACCOUNT_RECORD);
-      return match?.[1] === stem && match[2] ? [match[2]] : [];
-    });
+    return (await recordsLike(ACCOUNT_RECORD)).map((match) => match[2]);
   }
 
   /** The account whose server this owner keeps; undefined for the machine's own. */
@@ -821,18 +837,7 @@ export class OpencodeServerOwner {
         };
         throw this.#refused.error;
       }
-      let identity: ServerIdentity;
-      switch (launched.kind) {
-        case "answered":
-          identity = launched.value;
-          break;
-        case "unanswered":
-          throw startUnanswered("its start", launched.after, this.#words.whose);
-        default: {
-          const unhandled: never = launched;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
-      }
+      const identity = startedServer(launched, this.#words.whose);
       this.#refused = null;
       const current = await this.#load();
       this.#record = {
@@ -876,18 +881,7 @@ export class OpencodeServerOwner {
       const launched = await readWithin(left(), (signal) =>
         this.#launch(launch, signal)
       );
-      let candidate: ServerIdentity;
-      switch (launched.kind) {
-        case "answered":
-          candidate = launched.value;
-          break;
-        case "unanswered":
-          throw startUnanswered("its start", launched.after, this.#words.whose);
-        default: {
-          const unhandled: never = launched;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
-      }
+      const candidate = startedServer(launched, this.#words.whose);
       this.#candidateProcId = candidate.procId;
       try {
         // An unselected candidate is durable cleanup work if the agent crashes.

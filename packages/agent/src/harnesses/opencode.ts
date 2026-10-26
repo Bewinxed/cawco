@@ -61,7 +61,6 @@ import {
   mcpFleetState,
   offeredMode,
   opencodeSignInFaultWords,
-  PERMISSION_MODES,
 } from "@cawco/core";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
@@ -97,7 +96,7 @@ import {
   opencodeDenyRules,
   sessionFleetDenials,
 } from "../denied-tools";
-import { hashText, readJson, syncMemory } from "../fleet";
+import { memoryState, readJson, syncMemory } from "../fleet";
 import {
   hookStatesInSet,
   hookStatesOn,
@@ -138,7 +137,7 @@ import {
   readHeld,
   setOpencodeAccountsHost,
 } from "../provider-accounts";
-import { readAccountSoon } from "../provider-usage";
+import { withAccountReads } from "../provider-usage";
 import { fenced } from "../restart";
 import type { SessiondClient } from "../sessiond-client";
 import { listStandIns } from "../stand-ins";
@@ -146,6 +145,7 @@ import { storeRead, storeWork } from "../stores/client";
 import type { SessionQuery, StoredSession } from "../stores/opencode-reads";
 import { onToolsMoved, toolGate } from "../tools";
 import { workspaceRefs } from "../workspace-records";
+import { FULL_CAPABILITIES } from "./capabilities";
 import { readSidecar, writeJson } from "./fleet-common";
 import { type ActivitySnapshot, OpencodeActivity } from "./opencode-activity";
 import {
@@ -259,25 +259,6 @@ const STATIC_POLICY = {
     { action: "websearch", resource: "*", effect: "deny" },
   ],
 } as const;
-
-/** A session on an account: each turn's end reads the account's windows shortly after. */
-const withAccountReads = (
-  spec: SpawnPayload,
-  ctx: HarnessContext
-): HarnessContext => {
-  const account = spec.accountDir?.accountId;
-  return account
-    ? {
-        ...ctx,
-        busy: (active) => {
-          ctx.busy(active);
-          if (!active) {
-            readAccountSoon(account);
-          }
-        },
-      }
-    : ctx;
-};
 
 /** The launch flag naming the plugin version a server loads. */
 const PLUGIN_FLAG = "CAWCO_PLUGIN";
@@ -1190,34 +1171,8 @@ export const removeCawcoSessionConfigs = async (): Promise<void> => {
 };
 
 export const OPENCODE_CAPABILITIES: HarnessCapabilities = {
-  interrupt: true,
-  permissionModes: [...PERMISSION_MODES],
-  setModel: true,
-  effort: true,
-  contextUsage: true,
-  supportedModels: true,
-  supportedCommands: true,
-  reloadSkills: true,
-  mcpStatus: true,
-  mcpControl: true,
-  listSessions: true,
-  getSessionMessages: true,
-  renameSession: true,
-  deleteSession: true,
-  fork: true,
-  rewind: true,
-  tagSession: true,
-  skills: true,
-  subagents: true,
+  ...FULL_CAPABILITIES,
   tasks: false,
-  compaction: true,
-  costUsd: true,
-  thinking: true,
-  images: true,
-  handoff: true,
-  hooks: true,
-  plugins: true,
-  fleet: true,
 };
 
 /** The scratch tag sidecar — OpenCode sessions have no tag, so CawCo keeps its own. */
@@ -2840,6 +2795,50 @@ export class OpencodeHarness implements Harness {
    * server on it leaves the first one's running turn to finish, observed on
    * 2.0.28).
    */
+  /**
+   * An account's or a view's server for `launch`: the one its owner keeps
+   * when it runs that launch, adopted and given its credential, verified on
+   * the machine's binary while the machine's config converges (else the
+   * watcher's to replace at rest); otherwise a new one in its place.
+   */
+  async #adoptOrReplace(
+    slot: ServerSlot,
+    launch: ServerLaunch,
+    revision: string,
+    attempt: boolean
+  ): Promise<void> {
+    const identity = await slot.owner.ensure(launch, {
+      inputs: await startInputs(launch),
+      attempt,
+    });
+    if (identity.launch !== launchOf(launch)) {
+      await this.#replaceAccount(slot, launch, revision);
+      return;
+    }
+    const adopted = this.#adopt(slot, identity);
+    answerOf(
+      await askOpencode((options) => adopted.server.info(options)),
+      "its server info"
+    );
+    if (this.#converging) {
+      try {
+        await this.#verifyApply(
+          adopted,
+          identity,
+          this.#desiredVersion,
+          undefined,
+          launch
+        );
+        slot.applied = revision;
+      } catch (error) {
+        console.info(
+          `[opencode] ${slotName(slot)} server is on another binary; the watcher replaces it at rest (${errorText(error)})`
+        );
+      }
+    }
+    await putSlotCredential(slot, adopted);
+  }
+
   async #replaceAccount(
     slot: ServerSlot,
     launch: ServerLaunch,
@@ -4193,41 +4192,10 @@ export class OpencodeHarness implements Harness {
       // As in #ensure: a session's start tries once the read in flight answers.
       return slot.ready.catch(() => this.#ensureAccount(account, true));
     }
-    slot.ready ??= (async () => {
-      slot.starting = true;
-      await this.#prepareStart();
+    return this.#startSlot(slot, async () => {
       const { revision, launch } = await this.#accountRevision(account);
       await prepareAccountServer(account);
-      const identity = await slot.owner.ensure(launch, {
-        inputs: await startInputs(launch),
-        attempt,
-      });
-      if (identity.launch === launchOf(launch)) {
-        const adopted = this.#adopt(slot, identity);
-        answerOf(
-          await askOpencode((options) => adopted.server.info(options)),
-          "its server info"
-        );
-        if (this.#converging) {
-          try {
-            await this.#verifyApply(
-              adopted,
-              identity,
-              this.#desiredVersion,
-              undefined,
-              launch
-            );
-            slot.applied = revision;
-          } catch (error) {
-            console.info(
-              `[opencode] account ${account}: its server is on another binary; the watcher replaces it at rest (${errorText(error)})`
-            );
-          }
-        }
-        await putCredential(account, adopted);
-      } else {
-        await this.#replaceAccount(slot, launch, revision);
-      }
+      await this.#adoptOrReplace(slot, launch, revision, attempt);
       const { client } = slot;
       if (!client) {
         throw new Error(`Account ${account}'s OpenCode server went away.`);
@@ -4240,15 +4208,7 @@ export class OpencodeHarness implements Harness {
         "readAccountCatalogSoon"
       );
       return client;
-    })()
-      .catch((error: unknown) => {
-        slot.ready = null;
-        throw error;
-      })
-      .finally(() => {
-        slot.starting = false;
-      });
-    return slot.ready;
+    });
   }
 
   /**
@@ -4307,43 +4267,10 @@ export class OpencodeHarness implements Harness {
     if (attempt && slot.ready && slot.owner.refusal) {
       return slot.ready.catch(() => this.#ensureView(view, account, true));
     }
-    slot.ready ??= (async () => {
-      slot.starting = true;
-      await this.#prepareStart();
+    return this.#startSlot(slot, async () => {
       const { revision, launch } = await this.#slotRevision(slot);
       await prepareHome(opencodeViewHome(view, account), false);
-      const identity = await slot.owner.ensure(launch, {
-        inputs: await startInputs(launch),
-        attempt,
-      });
-      if (identity.launch === launchOf(launch)) {
-        const adopted = this.#adopt(slot, identity);
-        answerOf(
-          await askOpencode((options) => adopted.server.info(options)),
-          "its server info"
-        );
-        // As an account's (#ensureAccount): verified on the machine's binary
-        // while the machine's config converges, else the watcher's to replace.
-        if (this.#converging) {
-          try {
-            await this.#verifyApply(
-              adopted,
-              identity,
-              this.#desiredVersion,
-              undefined,
-              launch
-            );
-            slot.applied = revision;
-          } catch (error) {
-            console.info(
-              `[opencode] ${slotName(slot)} server is on another binary; the watcher replaces it at rest (${errorText(error)})`
-            );
-          }
-        }
-        await putSlotCredential(slot, adopted);
-      } else {
-        await this.#replaceAccount(slot, launch, revision);
-      }
+      await this.#adoptOrReplace(slot, launch, revision, attempt);
       const { client } = slot;
       if (!client) {
         throw new Error(
@@ -4354,6 +4281,22 @@ export class OpencodeHarness implements Harness {
         `[opencode] ${slotName(slot)} server is ${slot.owner.active?.procId}/${slot.owner.active?.pid}, ${slot.owner.active && inView(view, slot.owner.active.pid) ? "in its view" : "on the host, its view not running"}`
       );
       return client;
+    });
+  }
+
+  /**
+   * `slot`'s start, once: what every start needs first ({@link
+   * #prepareStart}), then `start`. A failed one is forgotten, so the next
+   * ask starts again.
+   */
+  #startSlot(
+    slot: ServerSlot,
+    start: () => Promise<OpencodeClient>
+  ): Promise<OpencodeClient> {
+    slot.ready ??= (async () => {
+      slot.starting = true;
+      await this.#prepareStart();
+      return await start();
     })()
       .catch((error: unknown) => {
         slot.ready = null;
@@ -4541,21 +4484,8 @@ export class OpencodeHarness implements Harness {
    * session of this agent runs in, on the server it runs in.
    */
   async hubRestarted(): Promise<void> {
-    const places = new Map<
-      string,
-      { client: OpencodeClient; directory: string }
-    >();
-    for (const session of this.#sessions.values()) {
-      const owner = this.#sessionOwners.get(session.instanceId);
-      if (owner) {
-        places.set(`${owner.procId}\n${session.directory}`, {
-          client: this.#clientForGeneration(owner),
-          directory: session.directory,
-        });
-      }
-    }
     await Promise.all(
-      [...places.values()].map(async ({ client, directory }) => {
+      [...this.#livePlaces().values()].map(async ({ client, directory }) => {
         try {
           answerOf(
             await askOpencode((options) =>
@@ -6418,23 +6348,7 @@ export class OpencodeHarness implements Harness {
       at: Date.now(),
     };
     if (sidecar.memory !== undefined) {
-      const file = Bun.file(OPENCODE_MEMORY);
-      const hash = (await file.exists()) ? hashText(await file.text()) : null;
-      if (hash === sidecar.memory) {
-        report.memory = { state: "applied" };
-      } else if (hash === null) {
-        report.memory = {
-          state: "failed",
-          cause: "absent",
-          detail: "not on disk",
-        };
-      } else {
-        report.memory = {
-          state: "failed",
-          cause: "drifted",
-          detail: "edited on this machine",
-        };
-      }
+      report.memory = await memoryState(OPENCODE_MEMORY, sidecar.memory);
     }
     return report;
   }

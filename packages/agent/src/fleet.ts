@@ -1953,6 +1953,17 @@ const absentOrDrifted = (
     ? { state: "failed", cause: "absent", detail: gone }
     : { state: "failed", cause: "drifted", detail: DRIFTED };
 
+/** A harness's memory file as a status read finds it: still the `managed` hash cawco wrote, gone, or edited. */
+export const memoryState = async (
+  path: string,
+  managed: string
+): Promise<FleetItemState> => {
+  const fileHash = await fileHashAt(path);
+  return fileHash === managed
+    ? { state: "applied" }
+    : absentOrDrifted(fileHash, "not on disk");
+};
+
 /**
  * Applies the plan to the harness's memory file at `path` (Claude Code's
  * `~/.claude/CLAUDE.md`, another harness's own) and answers with the hash
@@ -3314,11 +3325,7 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     skills[key] = state;
   }
   if (managed.memory !== undefined) {
-    const fileHash = await fileHashAt(MEMORY_PATH);
-    report.memory =
-      fileHash === managed.memory
-        ? { state: "applied" }
-        : absentOrDrifted(fileHash, "not on disk");
+    report.memory = await memoryState(MEMORY_PATH, managed.memory);
   }
   const docStates = await Promise.all([
     ...Object.entries(managed.memoryDocs).map(

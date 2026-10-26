@@ -11,10 +11,15 @@
  * A read that fails keeps the last good windows, with their time, and says
  * why ({@link ProviderAccountReading.error}); the hub keeps that reading.
  */
-import type { LimitWindow, ProviderAccountReading } from "@cawco/core";
+import type {
+  LimitWindow,
+  ProviderAccountReading,
+  SpawnPayload,
+} from "@cawco/core";
 import { credentialAccountIds } from "@cawco/core/paths";
 import { chatgptClaims, readChatgptUsage } from "@cawco/core/usage/chatgpt";
 import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
+import type { HarnessContext } from "./harness";
 import { freshen, readHeld } from "./provider-accounts";
 
 /** How often a signed-in account's windows are read with nothing running on it. */
@@ -163,4 +168,23 @@ export const machineGoKey = (): string | null => {
     }
   }
   return null;
+};
+
+/** A session on an account: each turn's end reads the account's windows shortly after. */
+export const withAccountReads = (
+  spec: SpawnPayload,
+  ctx: HarnessContext
+): HarnessContext => {
+  const account = spec.accountDir?.accountId;
+  return account
+    ? {
+        ...ctx,
+        busy: (active) => {
+          ctx.busy(active);
+          if (!active) {
+            readAccountSoon(account);
+          }
+        },
+      }
+    : ctx;
 };

@@ -10,9 +10,8 @@
  * socket.
  */
 import { join } from "node:path";
-import { hostEnvironment } from "@cawco/core/session-env";
 import { Octokit } from "@octokit/rest";
-import { hostGh } from "../host-gh";
+import { ghSays, hostGh } from "../host-gh";
 import { configHome, readYamlConfig, sameHost } from "./cli-config";
 import type { ForgeAdapter, ForgeSignIn } from "./forge";
 
@@ -40,8 +39,7 @@ export const githubForge: ForgeAdapter = {
   forge: "github",
 
   async signIn(asked) {
-    const gh = await hostGh();
-    if (!gh) {
+    if (!(await hostGh())) {
       return;
     }
     // gh lists every host it signs in to in hosts.yml, its token there or
@@ -50,20 +48,10 @@ export const githubForge: ForgeAdapter = {
       Record<string, unknown> | undefined;
     const host =
       Object.keys(hosts ?? {}).find((each) => sameHost(each, asked)) ?? asked;
-    // Not spawnSync: gh reads its token from the login keychain, and a
-    // spawnSync would wait on the keychain on the agent's JS thread.
-    const read = Bun.spawn([gh, "auth", "token", "--hostname", host], {
-      env: hostEnvironment(),
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "ignore",
-    });
-    const [out] = await Promise.all([
-      new Response(read.stdout).text(),
-      read.exited,
-    ]);
-    const token = out.trim();
-    if (read.exitCode !== 0 || !token) {
+    const token = (
+      await ghSays(["auth", "token", "--hostname", host])
+    )?.trim();
+    if (!token) {
       return;
     }
     const socket = await ghSocket();

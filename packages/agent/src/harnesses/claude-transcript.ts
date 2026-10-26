@@ -30,6 +30,7 @@ import {
 import type { LocatedRecord } from "@cawco/jsonl-parser";
 import { ReverseReader, readSpans, typeFilter } from "@cawco/jsonl-parser";
 import {
+  idSpans,
   type LineIndex,
   LineIndexes,
   unlessGone,
@@ -951,7 +952,7 @@ function hookFailure(r: RawRecord): SDKSessionMessage | null {
   ) {
     return null;
   }
-  const frame: NeutralSystemMessage = {
+  return systemMessage(r, {
     type: "system",
     subtype: "hook_response",
     uuid: r.uuid,
@@ -960,7 +961,14 @@ function hookFailure(r: RawRecord): SDKSessionMessage | null {
     exit_code: typeof hook.exitCode === "number" ? hook.exitCode : undefined,
     stdout: typeof hook.stdout === "string" ? hook.stdout : "",
     stderr: bareStderr(hook),
-  };
+  });
+}
+
+/** A system frame read back from record `r`, as the SDK's session message carries it. */
+function systemMessage(
+  r: RawRecord,
+  frame: NeutralSystemMessage
+): SDKSessionMessage {
   return {
     message: frame,
     parent_agent_id: null,
@@ -1007,7 +1015,7 @@ function compactBoundary(r: RawRecord): SDKSessionMessage | null {
   if (r.subtype !== "compact_boundary" || r.isSidechain) {
     return null;
   }
-  const frame: NeutralSystemMessage = {
+  return systemMessage(r, {
     type: "system",
     subtype: "compact_boundary",
     uuid: r.uuid,
@@ -1016,16 +1024,7 @@ function compactBoundary(r: RawRecord): SDKSessionMessage | null {
       trigger: r.compactMetadata?.trigger,
       pre_tokens: r.compactMetadata?.preTokens,
     },
-  };
-  return {
-    message: frame,
-    parent_agent_id: null,
-    parent_tool_use_id: null,
-    session_id: r.sessionId ?? "",
-    timestamp: typeof r.timestamp === "string" ? r.timestamp : "",
-    type: "system",
-    uuid: r.uuid,
-  };
+  });
 }
 
 /** Map a chain-walked record to the SDK's output shape. */
@@ -1525,22 +1524,8 @@ function localCut(
   limit: number
 ): number | undefined {
   const blocked = new Int32Array(nodes.length + 1);
-  const seen = new Map<
-    string,
-    { first: number; last: number; opened: boolean }
-  >();
-  nodes.forEach((node, i) => {
-    for (const id of node.ids ?? []) {
-      const known = seen.get(id);
-      if (known) {
-        known.last = i;
-      } else {
-        seen.set(id, { first: i, last: i, opened: opensId(node, id) });
-      }
-    }
-  });
-  for (const { first, last, opened } of seen.values()) {
-    const from = opened ? first + 1 : 0;
+  for (const [id, { first, last }] of idSpans(nodes)) {
+    const from = opensId(nodes[first], id) ? first + 1 : 0;
     if (from <= last) {
       blocked[from] += 1;
       blocked[last + 1] -= 1;

@@ -701,6 +701,25 @@ export interface OpencodeSessionOptions {
   view: string | undefined;
 }
 
+/** A tool's live end (`session.tool.success` or `.failed`) as its result block. */
+const endedToolResult = (
+  event: Extract<
+    V2Event,
+    { type: "session.tool.success" | "session.tool.failed" }
+  >,
+  tool: string,
+  input: unknown
+): ReturnType<typeof toolResultOf> =>
+  toolResultOf(
+    event.data.id,
+    tool,
+    input,
+    event.type === "session.tool.success"
+      ? { content: event.data.content, metadata: event.data.metadata }
+      : { error: event.data.error },
+    event.type === "session.tool.failed"
+  );
+
 export class OpencodeSession implements HarnessSession {
   attached?: () => void;
   readonly harness = "opencode" as const;
@@ -1349,18 +1368,7 @@ export class OpencodeSession implements HarnessSession {
           message: {
             role: "user",
             content: [
-              toolResultOf(
-                id,
-                name,
-                this.#toolInputs.get(id),
-                event.type === "session.tool.success"
-                  ? {
-                      content: event.data.content,
-                      metadata: event.data.metadata,
-                    }
-                  : { error: event.data.error },
-                event.type === "session.tool.failed"
-              ),
+              endedToolResult(event, name, this.#toolInputs.get(id)),
             ],
           },
         });
@@ -2386,17 +2394,10 @@ export class OpencodeSession implements HarnessSession {
           message: {
             role: "user",
             content: [
-              toolResultOf(
-                id,
+              endedToolResult(
+                event,
                 state.toolNames.get(id) ?? "",
-                state.toolInputs.get(id),
-                event.type === "session.tool.success"
-                  ? {
-                      content: event.data.content,
-                      metadata: event.data.metadata,
-                    }
-                  : { error: event.data.error },
-                event.type === "session.tool.failed"
+                state.toolInputs.get(id)
               ),
             ],
           },

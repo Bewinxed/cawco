@@ -5,30 +5,11 @@ import { sessionFleetDenials } from "../denied-tools";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
 import type { KeeperReading } from "../keepers";
 import { parseProcId, procIdFor } from "../proc-id";
-import { readAccountSoon } from "../provider-usage";
+import { withAccountReads } from "../provider-usage";
 import { procEpoch } from "../sessiond-client";
 import { toolGate } from "../tools";
 import { PI_SPEC, PiProfile } from "./pi-services";
 import { adoptPi, piKeepers, piSnapshot, spawnPi } from "./pi-sessiond";
-
-/** A session on an account: each turn's end reads the account's windows shortly after. */
-const withAccountReads = (
-  spec: SpawnPayload,
-  ctx: HarnessContext
-): HarnessContext => {
-  const account = spec.accountDir?.accountId;
-  return account
-    ? {
-        ...ctx,
-        busy: (active) => {
-          ctx.busy(active);
-          if (!active) {
-            readAccountSoon(account);
-          }
-        },
-      }
-    : ctx;
-};
 
 export class PiHarness extends PiProfile implements Harness {
   /**

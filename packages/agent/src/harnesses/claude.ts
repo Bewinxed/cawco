@@ -50,7 +50,6 @@ import type {
   EffortLevel,
   EndedTask,
   FleetMcpChange,
-  HarnessCapabilities,
   MachineHarnessReport,
   ModelInfo,
   MoveEnded,
@@ -107,7 +106,6 @@ import {
   mcpGatewayPort,
   type OfferedMode,
   offeredMode,
-  PERMISSION_MODES,
   type PermissionMode,
   RATE_LIMIT_READ,
   READ_HOOK_SCRIPT,
@@ -248,6 +246,7 @@ import {
   type Wakeups,
   writtenAt,
 } from "../wakeups";
+import { FULL_CAPABILITIES } from "./capabilities";
 import {
   hookFailureId,
   readSaidWindow,
@@ -902,36 +901,7 @@ const requireSessionFile = async (
 const missing = (error: unknown): boolean =>
   (error as { code?: string } | null)?.code === "ENOENT";
 
-const CLAUDE_CAPABILITIES: HarnessCapabilities = {
-  interrupt: true,
-  permissionModes: [...PERMISSION_MODES],
-  setModel: true,
-  effort: true,
-  contextUsage: true,
-  supportedModels: true,
-  supportedCommands: true,
-  reloadSkills: true,
-  mcpStatus: true,
-  mcpControl: true,
-  listSessions: true,
-  getSessionMessages: true,
-  renameSession: true,
-  deleteSession: true,
-  fork: true,
-  rewind: true,
-  tagSession: true,
-  skills: true,
-  subagents: true,
-  tasks: true,
-  compaction: true,
-  costUsd: true,
-  thinking: true,
-  images: true,
-  handoff: true,
-  hooks: true,
-  plugins: true,
-  fleet: true,
-};
+const CLAUDE_CAPABILITIES = FULL_CAPABILITIES;
 
 /** The blocks a user turn is made of, taken from the SDK rather than re-modelled. */
 type ContentBlock = Extract<

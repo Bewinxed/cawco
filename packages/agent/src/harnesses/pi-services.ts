@@ -44,7 +44,7 @@ import {
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import { hashText, heldSkills, skillDrift, skillRecords, syncMemory, syncSkillFiles } from "../fleet";
+import { heldSkills, memoryState, skillDrift, skillRecords, syncMemory, syncSkillFiles } from "../fleet";
 import {
   hookStatesInSet,
   hookStatesOn,
@@ -1191,23 +1191,7 @@ export class PiProfile {
       (report.skills as NonNullable<FleetSyncReport["skills"]>)[name] = state;
     }
     if (sidecar.memory !== undefined) {
-      const file = Bun.file(PI_MEMORY);
-      const hash = (await file.exists()) ? hashText(await file.text()) : null;
-      if (hash === sidecar.memory) {
-        report.memory = { state: "applied" };
-      } else if (hash === null) {
-        report.memory = {
-          state: "failed",
-          cause: "absent",
-          detail: "not on disk",
-        };
-      } else {
-        report.memory = {
-          state: "failed",
-          cause: "drifted",
-          detail: "edited on this machine",
-        };
-      }
+      report.memory = await memoryState(PI_MEMORY, sidecar.memory);
     }
     return report;
   }

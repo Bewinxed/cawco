@@ -43,7 +43,8 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import { refuseShortOfWorkspace } from "@cawco/core/workspace-needs";
 import type { Subprocess } from "bun";
-import { configEnv, LFS_FILTERS } from "./move";
+import { configEnv } from "./git-credential";
+import { LFS_FILTERS } from "./move";
 
 /** Who the first commit is by: CawCo, at an address that takes no mail. */
 const AUTHOR = [

@@ -48,7 +48,11 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import { HOUR_MS } from "@cawco/core/time";
 import type { Subprocess } from "bun";
-import { hubOriginOf, useHubCredentialHelper } from "./git-credential";
+import {
+  configEnv,
+  hubOriginOf,
+  useHubCredentialHelper,
+} from "./git-credential";
 import { notAProject, placeSettled, placeTurn } from "./place-repo";
 
 // ── The hub's git remote ───────────────────────────────────────────────────
@@ -216,24 +220,10 @@ export const withoutCredential = (text: string): string => {
 };
 
 /**
- * Config git and git-lfs read from the environment alone, appended after any
- * the daemon already carries. Large-file filters are named so a snapshot's
- * clean filter runs in a repository whose LFS hooks were never installed.
+ * Large-file filters named in env-only config ({@link configEnv}), so a
+ * snapshot's clean filter runs in a repository whose LFS hooks were never
+ * installed.
  */
-export const configEnv = (
-  pairs: [string, string][]
-): Record<string, string> => {
-  const first = Number.parseInt(process.env.GIT_CONFIG_COUNT ?? "0", 10) || 0;
-  const env: Record<string, string> = {
-    GIT_CONFIG_COUNT: String(first + pairs.length),
-  };
-  pairs.forEach(([key, value], index) => {
-    env[`GIT_CONFIG_KEY_${first + index}`] = key;
-    env[`GIT_CONFIG_VALUE_${first + index}`] = value;
-  });
-  return env;
-};
-
 export const LFS_FILTERS: [string, string][] = [
   ["filter.lfs.clean", "git-lfs clean -- %f"],
   ["filter.lfs.smudge", "git-lfs smudge -- %f"],
