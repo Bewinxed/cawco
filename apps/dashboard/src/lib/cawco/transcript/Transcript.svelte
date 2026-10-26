@@ -993,8 +993,24 @@
   /**
    * Where each sliding row's list item stood, in the list, when its slide
    * last took its place: what a later placing of the row is measured from.
+   * With it, the row that was first in the list then (`first`) and where
+   * virtua had it (`front`): rows virtua puts in front since move every row
+   * down the list by their height, and its own `shift` scroll moves the view
+   * with them, so nothing moves on screen. Counted as a move, a page landing
+   * in front carried a sliding row up over the rows above it by the page's
+   * height (165px, the turn's indicator over a quick call's row, for the
+   * rest of its slide).
    */
-  const slidFrom = new WeakMap<HTMLElement, number>();
+  const slidFrom = new WeakMap<
+    HTMLElement,
+    { first: string; front: number; top: number }
+  >();
+
+  /** Where virtua has the row `key` in the list, by its sizes; null when it is not in the list. */
+  function offsetOf(key: string): number | null {
+    const index = renderedRows.findIndex((row) => row.key === key);
+    return index < 0 || !list ? null : list.getItemOffset(index);
+  }
 
   /**
    * How many slide animations are running. The list is re-placed on every
@@ -1040,7 +1056,10 @@
     if (Math.abs(delta) <= 0.5) {
       return;
     }
-    slidFrom.set(node, top);
+    const first = renderedRows[0]?.key;
+    if (first !== undefined) {
+      slidFrom.set(node, { first, front: offsetOf(first) ?? 0, top });
+    }
     // A row that gained a speaker line starts with it above where the row
     // began — over the row above. It is cut off there and opens as the row
     // travels. The sides and bottom stay open as far as a well bleeds past
@@ -1075,7 +1094,8 @@
 
   /**
    * The transcript moved its rows under a slide: virtua placed them again
-   * (it measured some), or the pin scrolled the list by `scrolled`. A slide
+   * (it measured some), or the pin scrolled the list by `scrolled`; rows
+   * put in front since (`slidFrom`'s `front`) moved nothing on screen. A slide
    * is a path on the screen like a flight, so every row still sliding whose
    * place on screen moved is put back where it was drawn and taken to its new
    * place over the rest of its slide, on the slide's own curve. The reader's
@@ -1097,11 +1117,12 @@
         continue;
       }
       const top = item.getBoundingClientRect().top - origin;
-      const moved = top - was - scrolled;
+      const front = offsetOf(was.first) ?? was.front;
+      const moved = top - was.top - (front - was.front) - scrolled;
       if (Math.abs(moved) <= 0.5) {
         continue;
       }
-      slidFrom.set(node, top);
+      slidFrom.set(node, { first: was.first, front, top });
       const timing = slides[0].effect?.getComputedTiming();
       const remaining = Math.max(
         ...slides.map(
@@ -1340,14 +1361,29 @@
     );
   }
 
+  /** The build the rows were last drawn from (`presentation`). */
+  let drawnFrom: Built | null = null;
   // What it reads of the rows' messages (a send's state, a call's id) is the
   // build's to depend on (`session.rev`): untracked, it is invalidated by a
   // new build and a fold ending alone, not by every row it reads.
+  //
+  // `shifted` is virtua's `shift` for this drawing: the build's own word on
+  // the change it made, said once, in the drawing that build makes. virtua
+  // keeps its sizes by index and reads `shift` whenever the list's length
+  // changes. Held on for as long as the build stood, a fold that ended after
+  // a page landed in front took its row out with `shift` still set: virtua
+  // dropped the FIRST size, every row above the fold was left holding the
+  // size of the row under it, and none of them was measured again (their
+  // indexes had not moved), so the turn's rows stood over one another until
+  // a reload (the owner's "good morning", nightly 0.1.12-nightly.5855).
   const presentation = $derived.by(() => {
     // biome-ignore lint/complexity/noVoid: a row finishing its fold re-draws the list without it.
     void leftTick;
-    const { rows: next, ended, settled } = built;
-    return untrack(() => withLeaving(next, settled, ended));
+    const from = built;
+    const shifted = from.shifted && from !== drawnFrom;
+    drawnFrom = from;
+    const { rows: next, ended, settled } = from;
+    return untrack(() => ({ ...withLeaving(next, settled, ended), shifted }));
   });
 
   /**
@@ -2826,9 +2862,9 @@
     step();
   }
   $effect(() => {
-    const { shifted } = built;
-    // biome-ignore lint/complexity/noVoid: the rows drawn are what moves the place
-    void renderedRows;
+    // The rows drawn are what moves the place, and whether this drawing
+    // shifted them is said with them.
+    const { shifted } = presentation;
     // A change only in front is virtua's own `shift`, unless a landing's
     // place is still held: then it is put back after that change too.
     if (!shifted || performance.now() < holdUntil) {
@@ -4777,7 +4813,7 @@
       {onresize}
       {onscrollend}
       scrollRef={scroller}
-      shift={built.shifted}
+      shift={presentation.shifted}
       startMargin={olderRoom + spare}
       bind:this={
         () => list,

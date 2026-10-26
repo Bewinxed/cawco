@@ -277,6 +277,25 @@
         landed = false;
         generation += 1;
       },
+      /**
+       * A page of `count` older blocks put in front of what is held, as a
+       * read back lands (the store's own page in front): a new array.
+       */
+      front: (count: number) => {
+        const older: Message[] = [];
+        for (let i = 0; i < count; i += 1) {
+          n += 1;
+          older.push({
+            id: `older-${n}`,
+            instanceId: INSTANCE,
+            type: "assistant",
+            content: `An older turn, read back (${i + 1} of ${count}).`,
+            timestamp: now(),
+          } as Message);
+        }
+        session.messages = [...older, ...session.messages];
+        session.rev += 1;
+      },
       landed: () => landed,
       /**
        * The rows a transcript mounted now draws for these messages — what a
@@ -296,6 +315,37 @@
           (message) => message.id !== id
         );
         session.rev += 1;
+      },
+      /**
+       * A call starting: its glance in flight under the id its message lands
+       * by (`finish`), as a real call's glance and its record share one.
+       */
+      start: (name: string, glanceText: string): string => {
+        n += 1;
+        const id = `call-${n}`;
+        session.currentTool = { name, glance: glanceText, toolId: id };
+        session.busy = true;
+        return id;
+      },
+      /** The call `start` began lands: its record in and its glance gone, in one update. */
+      finish: (id: string, name: string, command: string, said: string) => {
+        push({
+          id: `tool-${id}`,
+          toolCallId: id,
+          type: "tool.use",
+          content: "",
+          timestamp: now(),
+          metadata: {
+            toolName: name,
+            toolId: id,
+            toolInput: { command, description: said },
+            toolResult: "ok",
+            toolStatus: "success",
+          },
+        });
+        if (session.currentTool?.toolId === id) {
+          session.currentTool = null;
+        }
       },
       user: (content: string) => {
         n += 1;
