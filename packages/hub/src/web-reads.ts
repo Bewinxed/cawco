@@ -200,7 +200,7 @@ const localV4 = (address: string): boolean => {
 };
 
 /** Whether a host is inside the fleet (the module header's list); `fleet` holds its machines' hostnames and ids, lower case. */
-export const localHost = (raw: string, fleet: ReadonlySet<string>): boolean => {
+const localHost = (raw: string, fleet: ReadonlySet<string>): boolean => {
   const host = raw
     .toLowerCase()
     .replace(TRAILING_DOT, "")
@@ -334,7 +334,7 @@ const targetsOf = (
 };
 
 /** Whether a shell command fetches from outside the fleet (module header). */
-export const commandReadsWeb = (
+const commandReadsWeb = (
   command: string,
   fleet: ReadonlySet<string>
 ): boolean => {

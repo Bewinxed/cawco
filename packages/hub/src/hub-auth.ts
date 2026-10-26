@@ -1171,5 +1171,3 @@ export const createHubAuth = ({
     },
   };
 };
-
-export type HubAuth = ReturnType<typeof createHubAuth>;

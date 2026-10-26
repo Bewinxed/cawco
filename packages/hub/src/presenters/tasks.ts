@@ -56,7 +56,7 @@ export interface LinkScope {
 const NO_LINKS: LinkScope = { project: null, session: null };
 
 /** Tasks' titles by id, what an answer names other tasks by (task-tools.ts reads them with the answer). */
-export type TaskTitles = Readonly<Record<string, string>>;
+type TaskTitles = Readonly<Record<string, string>>;
 
 /** Words cut at `max` characters, a link's label. */
 const cut = (text: string, max: number): string => {
@@ -196,7 +196,7 @@ const taskLine = (task: TaskLine, now: number, links: LinkScope): string => {
 };
 
 /** `task_read` without an id: the stages, then the board. */
-export const taskListWords = (
+const taskListWords = (
   board: {
     list: TaskList;
     stages: StagesView;
@@ -398,10 +398,7 @@ const taskBody = (task: TaskAnswer, links: LinkScope): string => {
 };
 
 /** One task whole, led by its link. */
-export const taskWords = (
-  task: TaskAnswer,
-  links: LinkScope = NO_LINKS
-): string => {
+const taskWords = (task: TaskAnswer, links: LinkScope = NO_LINKS): string => {
   const scope = scopeOf(task, links);
   return lines(
     `${taskName(scope, task.id, task.title, 200)} · ${standsWords(task)}`,

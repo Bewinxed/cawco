@@ -73,7 +73,7 @@ export const viaSshForward = (value: string | null | undefined): boolean => {
  * The host an SSH target names, as the person typed it: `user@host` without
  * the user, a `Host` from `~/.ssh/config` as it is.
  */
-export const targetHost = (target: string): string =>
+const targetHost = (target: string): string =>
   target.slice(target.lastIndexOf("@") + 1);
 
 /** What the hub answers a request it could not carry on. */

@@ -77,5 +77,3 @@ export const createArtifactLane = (deps: ArtifactLaneDeps) => {
     },
   };
 };
-
-export type ArtifactLane = ReturnType<typeof createArtifactLane>;

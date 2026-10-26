@@ -70,9 +70,7 @@ const fetch = selfFetch;
  * own types (the `delegates/` files in its folder) shadowing fleet types of
  * the same name (project-delegate-types.ts).
  */
-export async function fetchDelegateTypes(
-  projectId?: string
-): Promise<DelegateType[]> {
+async function fetchDelegateTypes(projectId?: string): Promise<DelegateType[]> {
   const path = projectId
     ? `/api/projects/${encodeURIComponent(projectId)}/delegate-types`
     : "/api/delegate-types";
@@ -166,7 +164,7 @@ const ageOf = (at: InstanceRow["updatedAt"]): string => {
 };
 
 /** A machine of the fleet as the hub's registry has it (`GET /api/agents`). */
-export interface Machine {
+interface Machine {
   hostname: string;
   machineId: string;
   /** Paused by the owner until this time, epoch ms (machine-pause.ts); null or absent when not. */
@@ -1239,7 +1237,7 @@ function repeatOfRefused(
  * handoff cutting it again. A read that failed says so, and that a hold is
  * told as it comes (work-items.ts `heldNotice`).
  */
-export function stoppedHoldWords(
+function stoppedHoldWords(
   workspaceId: string,
   unlanded: Unlanded | { error: string } | null
 ): string {
@@ -1262,7 +1260,7 @@ export function stoppedHoldWords(
 }
 
 /** The refusal for a cold session whose clean workspace holds commits on no remote: `from` reaches them for a brief's price. */
-export function fromRefusalText(row: KeepAliveRow, unlanded: Unlanded): string {
+function fromRefusalText(row: KeepAliveRow, unlanded: Unlanded): string {
   const title = row.title ?? row.derivedTitle ?? sessionLabel(row).dir;
   const commits = `${unlanded.ahead} commit${unlanded.ahead === 1 ? "" : "s"}`;
   const stop = unlanded.live ? "stop its item with stop_delegate, then " : "";
@@ -1420,7 +1418,7 @@ async function readFollowupState(
   return read.value;
 }
 
-export function coldRefusalText(
+function coldRefusalText(
   row: KeepAliveRow,
   lastTurnAt: string,
   activityBound: boolean,

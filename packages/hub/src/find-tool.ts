@@ -112,7 +112,7 @@ const STALE_MS = 5 * 60_000;
  * character, well under Claude Code's 25,000-token cap on a tool's answer
  * (designing-skills-and-tools: "Target a 25,000-token response budget").
  */
-export const ANSWER_MAX_CHARS = 60_000;
+const ANSWER_MAX_CHARS = 60_000;
 
 const BY = ["person", "agent", "report", "caw"] as const;
 type By = (typeof BY)[number];
@@ -155,7 +155,7 @@ const centreOf = (part: string): { at?: number; docId: string } => {
 
 const EXAMPLE = '{"query": "caching the bun install"}';
 /** A listing that works, as a refusal gives it. */
-export const LISTING_EXAMPLE = '{"by": "person", "since": "2026-10-20"}';
+const LISTING_EXAMPLE = '{"by": "person", "since": "2026-10-20"}';
 
 /** Where a listing's next page starts: the last thing said that it showed. */
 interface ListedAt {
@@ -211,8 +211,6 @@ const INPUT = {
     .optional()
     .describe("A hit's ref or id: its neighbouring turns, not a search."),
 };
-/** `find`'s input; `response_format` is the tool's (mcp-tool.ts), its detailed form adding every moment, neighbouring turns and state. */
-export const FIND_INPUT = INPUT;
 const SCHEMA = z.object(INPUT);
 export type FindInput = z.infer<typeof SCHEMA> & {
   response_format?: "concise" | "detailed";
@@ -222,7 +220,7 @@ const DESCRIPTION =
   "Find anything said or made across the fleet, and what tools returned in any session, best first, each hit dated with an excerpt. Use it before reading transcripts, files or the database for what was said or made. A delegate searches its own project unless project says otherwise.";
 
 /** A refusal: what was wrong, and one call that works. */
-export class FindToolRefusal extends Error {}
+class FindToolRefusal extends Error {}
 
 export interface FindToolDeps {
   find: Find;

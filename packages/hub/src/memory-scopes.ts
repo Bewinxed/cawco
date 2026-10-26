@@ -42,7 +42,7 @@ const inside = (cwd: string, folder: string): boolean =>
  * The checkouts on a session's machine that hold its folder, the deepest
  * first, where places nest.
  */
-export const placesHolding = (
+const placesHolding = (
   session: Launching,
   places: readonly PlacementPlace[]
 ): PlacementPlace[] =>
@@ -59,7 +59,7 @@ export const placesHolding = (
  * The project a session works in: the one it was started from, else the one
  * whose checkout holds its folder.
  */
-export const sessionProject = (
+const sessionProject = (
   session: Launching,
   places: readonly PlacementPlace[]
 ): string | undefined =>

@@ -11,7 +11,7 @@
 import { workspaceArea } from "@cawco/core/workspace-judge";
 
 /** A work item as this check reads it: the session it runs and the session that delegated it. */
-export interface ShownItem {
+interface ShownItem {
   readonly instanceId: string;
   readonly parentInstanceId: string | null;
 }

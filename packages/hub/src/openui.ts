@@ -36,7 +36,7 @@ process.env.OPENUI_TELEMETRY_DISABLED = "1";
 process.env.DO_NOT_TRACK = "1";
 
 /** The longest program a view may be. */
-export const VIEW_SOURCE_MAX = 64 * 1024;
+const VIEW_SOURCE_MAX = 64 * 1024;
 /** The soonest a Query may refresh itself, in seconds: a view polls the hub no faster. */
 const REFRESH_MIN_S = 30;
 const MAX_PROBLEMS = 8;

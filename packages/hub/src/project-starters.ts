@@ -78,9 +78,9 @@ import type { TaskEvent, TaskSummary, Tasks } from "./tasks";
 import { STARTERS_GAP_MS, STARTERS_QUIET_MS } from "./upstreams";
 
 /** Quiet before a project's starters are written: 60 s with no other ask. */
-export const QUIET_MS = STARTERS_QUIET_MS;
+const QUIET_MS = STARTERS_QUIET_MS;
 /** The least time between two of one project's asks of Jev: 10 min. */
-export const GAP_MS = STARTERS_GAP_MS;
+const GAP_MS = STARTERS_GAP_MS;
 /** The latest commits of the landed branch Jev reads (landed.ts). */
 const COMMITS_READ = 5;
 /** The newest events read for "an event source with no routine". Our own call: a fortnight's polls of a busy repository. */

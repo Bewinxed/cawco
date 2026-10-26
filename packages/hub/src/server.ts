@@ -2178,7 +2178,7 @@ const peekParent = (
  * it. `rowOf` reads one listed row by its key; `parentInstanceId` is the
  * spawn's immediate parent.
  */
-export const resolveDelegatePermissionMode = (
+const resolveDelegatePermissionMode = (
   rowOf: (id: string) => InstanceRow | undefined,
   parentInstanceId: string
 ): string | undefined => {
@@ -2207,7 +2207,7 @@ export const resolveDelegatePermissionMode = (
  * the flag is per-row, granted (or withheld) by the immediate parent when it
  * delegated. An unknown parent is refused; null or true allows.
  */
-export const resolveCanDelegate = (parent: InstanceRow | undefined): boolean =>
+const resolveCanDelegate = (parent: InstanceRow | undefined): boolean =>
   !!parent && parent.canDelegate !== false;
 
 /** The report beat's word on what each harness adapter on the machine can do. */
@@ -2468,7 +2468,7 @@ const custodyReason = (hours: string): string =>
  * Union, de-duplicated, order preserved: `reported` covers the sessions the
  * daemon named live, `restored` covers the ones this hub just told it to restore.
  */
-export const reattachable = (
+const reattachable = (
   reported: readonly string[],
   restored: readonly string[]
 ): string[] => [...new Set([...reported, ...restored])];
@@ -3120,7 +3120,7 @@ const isQuerySend = (payload: unknown): boolean => {
  * rather than forwarded to hang. The one outcome no longer possible is the
  * one that was happening.
  */
-export const normalizeRelayMessage = (body: unknown): string | undefined => {
+const normalizeRelayMessage = (body: unknown): string | undefined => {
   const needsEnvelope =
     "relay send needs a message: either plain text, or a {type:'user',message:{role:'user',content:…}} envelope";
   if (typeof body !== "object" || body === null) {

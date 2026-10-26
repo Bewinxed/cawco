@@ -58,7 +58,7 @@ import type { Caller } from "./hub-auth";
 import type { RelayCall } from "./stream-relay";
 
 /** How long a viewer's stream relay credential lasts (Projects spec item 4). */
-export const VIEWER_RELAY_TTL_MS = 12 * HOUR_MS;
+const VIEWER_RELAY_TTL_MS = 12 * HOUR_MS;
 
 /** How long a viewer's session may take: its browser may be woken, its image built first. */
 const VIEWER_MS = 15 * 60_000;
@@ -149,10 +149,7 @@ const reasonOf = (why: string): string => {
 };
 
 /** A neko frame with `signal/provide`'s ICE servers replaced by `servers`; any other frame as it came. */
-export const withIceServers = (
-  text: string,
-  servers: RTCIceServer[]
-): string => {
+const withIceServers = (text: string, servers: RTCIceServer[]): string => {
   if (!text.includes('"signal/provide"')) {
     return text;
   }

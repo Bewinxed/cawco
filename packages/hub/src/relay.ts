@@ -82,7 +82,7 @@ import {
 } from "./presenters/project";
 
 /** The most a delivery's body holds: 1 MiB. */
-export const RELAY_BODY_MAX = 1024 * 1024;
+const RELAY_BODY_MAX = 1024 * 1024;
 /** Deliveries one relay takes a minute: the token bucket's size and its refill. */
 const PER_MINUTE = 60;
 /** A signed timestamp's window either way: Stripe's own tolerance, 5 minutes. */
@@ -116,7 +116,7 @@ const SHA256_PREFIX = "sha256=";
 const wantedPort = (): number => Number(readEnv(CAWCO_ENV.relayPort)) || 0;
 
 /** What a route answers and a tool says when the relay refuses. */
-export class RelayRefusal extends Error {
+class RelayRefusal extends Error {
   readonly status: 400 | 403 | 404 | 409;
   constructor(code: 400 | 403 | 404 | 409, message: string) {
     super(message);
@@ -208,7 +208,7 @@ const fresh = (seconds: number, now: number) =>
  * Why a delivery's signature does not hold, or nothing when it does.
  * Every comparison is constant-time; the reason is for the hub log only.
  */
-export const signatureProblem = (
+const signatureProblem = (
   row: SignedBy,
   headers: Headers,
   body: Uint8Array,

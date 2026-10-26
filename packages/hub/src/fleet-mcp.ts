@@ -54,7 +54,7 @@ const READ_SCOPE = /(?:^|[.:_/-])(?:read(?:[._-]?only)?|ro|view)$/iu;
  * (its read scopes) and read and write (all of them) when it names both
  * kinds; else the one set it has, or none when it names no scopes.
  */
-export const accessOffers = (scopes: readonly string[]): ConnectAccessSet[] => {
+const accessOffers = (scopes: readonly string[]): ConnectAccessSet[] => {
   const all = [...new Set(scopes)];
   const read = all.filter((scope) => READ_SCOPE.test(scope));
   if (all.length === 0) {
@@ -164,7 +164,7 @@ class SignedOut extends Error {}
 class NotNow extends Error {}
 
 /** A sign-in that ended without the person: when, which server, and why. */
-export interface SignInEnded {
+interface SignInEnded {
   at: Date;
   name: string;
   why: string;

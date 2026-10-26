@@ -32,7 +32,7 @@ const MAX_DEPTH = 4;
  * Strings in the agent that name a path on something other than its hub,
  * by file and pattern: none of them is a hub route a hub must keep.
  */
-export const NOT_HUB: { file: string; pattern: string; why: string }[] = [
+const NOT_HUB: { file: string; pattern: string; why: string }[] = [
   {
     file: "packages/agent/src/harnesses/opencode-server.ts",
     pattern: "/api/session/active",

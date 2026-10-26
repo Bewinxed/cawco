@@ -87,7 +87,7 @@ const PROPOSERS: ReadonlySet<SessionRole> = new Set(["worker", "lead"]);
 const WAITING: readonly ActionState[] = ["proposed", "failed", "unknown"];
 
 /** A refusal, with the status a route answers and the words a tool returns. */
-export class ActionRefusal extends Error {
+class ActionRefusal extends Error {
   readonly status: 400 | 403 | 404 | 409;
   constructor(code: 400 | 403 | 404 | 409, message: string) {
     super(message);

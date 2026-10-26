@@ -135,7 +135,7 @@ const answerBlock = (
  * the tasks and files it names; a note is an event line with what it carries
  * to act on; your answer to his question is the settled call that asked it.
  */
-export const threadBlockOf = (
+const threadBlockOf = (
   row: ThreadMessageRow,
   viewId: string
 ): TranscriptBlock => {
@@ -280,5 +280,3 @@ export const createThreadTranscripts = (
     },
   };
 };
-
-export type ThreadTranscripts = ThreadTranscriptsShape;

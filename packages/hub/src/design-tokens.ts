@@ -78,7 +78,7 @@ export const cssLeafName = (token: TransformedToken): string =>
 type Json = Record<string, unknown>;
 
 /** A token's recipe: the CSS it keeps in `$extensions`. */
-export const recipeOf = (node: Json): string | undefined => {
+const recipeOf = (node: Json): string | undefined => {
   const css = (
     (node.$extensions as Json | undefined)?.[TOKENS_EXTENSION] as
       Json | undefined
@@ -114,7 +114,7 @@ async function parsed(tree: DesignTokens): Promise<TransformedToken[]> {
 }
 
 /** The CSS view of a system: Style Dictionary over the base, each context's overrides over it. */
-export async function tokenView(system: TokenSystem): Promise<TokenView> {
+async function tokenView(system: TokenSystem): Promise<TokenView> {
   const tokens: ViewToken[] = (await parsed(system.base)).map((original) => {
     const path = original.path.join(".");
     const type = String(original.$type ?? original.original.$type ?? "");
@@ -194,7 +194,7 @@ function computed(type: string, value: unknown, before: unknown): unknown {
  * where the base recipe comes to something else. An override that only
  * repeated the base is taken out. Answers the files it changed.
  */
-export function settle(system: TokenSystem, view: TokenView): Set<string> {
+function settle(system: TokenSystem, view: TokenView): Set<string> {
   const ev = evaluatorOf(view);
   const changed = new Set<string>();
   const write = (owned: Owned, value: unknown) => {
@@ -339,7 +339,7 @@ function variantBlock(
 }
 
 /** The stylesheet a token view makes. */
-export function tokensCss(view: TokenView, options: TokensCssOptions): string {
+function tokensCss(view: TokenView, options: TokensCssOptions): string {
   const tokens = view.tokens.filter((token) =>
     options.include ? options.include(token.original) : true
   );
@@ -428,7 +428,7 @@ const TYPE_MEMBERS: Record<TokenType, (token: ViewToken) => boolean> = {
  * inspector offers that prop the system's names (the owner, 2026-10-16); no
  * other prop is offered any. A type with no tokens is `never`.
  */
-export function tokenTypes(
+function tokenTypes(
   view: TokenView,
   options: Pick<
     TokensCssOptions,
@@ -505,7 +505,7 @@ export interface TailwindThemeOptions {
 }
 
 /** One key of the theme and the token it reads. */
-export interface ThemeKey {
+interface ThemeKey {
   key: string;
   token: ViewToken;
 }

@@ -16,16 +16,16 @@ const SUGGEST_TIMEOUT_MS = 10_000;
  */
 
 /** A noul at or above this is shown as a chip. Our own call, to be tuned. */
-export const SUGGEST_THRESHOLD = 0.6;
+const SUGGEST_THRESHOLD = 0.6;
 /** The most chips shown at once. Our own call, to be tuned. */
-export const SUGGEST_MAX = 4;
+const SUGGEST_MAX = 4;
 /** The most candidates Jev is asked about, ranked by the operator's usage. */
-export const SUGGEST_CANDIDATE_LIMIT = 50;
+const SUGGEST_CANDIDATE_LIMIT = 50;
 /** A skill installed this recently is always asked about, so it can earn usage. */
 const NEW_SKILL_DAYS = 7;
 
 /** Tools every session has and never needs pointing at. */
-export const NEVER_SUGGEST_TOOLS = new Set([
+const NEVER_SUGGEST_TOOLS = new Set([
   "Read",
   "Edit",
   "Write",
@@ -63,7 +63,7 @@ function usageName(candidate: SuggestCandidate): string {
  * kind's total lets a skill that is 20% of skill use compete fairly with a
  * tool that is 20% of tool use.
  */
-export function rankCandidates(
+function rankCandidates(
   db: DbShape,
   candidates: SuggestCandidate[]
 ): SuggestCandidate[] {

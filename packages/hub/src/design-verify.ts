@@ -80,7 +80,7 @@ import {
 /** What the builder's chip says while a verifier works. */
 const CHECKING = "being checked against the design system";
 /** What a verifier's brief opens with: what the probe kit keys its turns by. */
-export const VERIFIER_BRIEF = "You are the design system verifier";
+const VERIFIER_BRIEF = "You are the design system verifier";
 /** A chat round's key in `design_checks.item_id`: the artifact it judges. */
 const ARTIFACT_KEY = "artifact:";
 /** Whether the clone holds a design system to judge against: one line, `system`, when it does. */
@@ -792,5 +792,3 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
     },
   };
 };
-
-export type DesignVerify = ReturnType<typeof createDesignVerify>;

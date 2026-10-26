@@ -1568,5 +1568,3 @@ export const createMoves = (deps: MovesDeps) => {
     table,
   };
 };
-
-export type Moves = ReturnType<typeof createMoves>;

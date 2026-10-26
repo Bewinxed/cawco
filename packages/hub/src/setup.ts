@@ -36,7 +36,7 @@ import { templateTypes } from "./template-types";
  * (its stages run them, or its skills file tasks with them): those are
  * written with the template (template-types.ts), never picked.
  */
-export const TEMPLATE_DELEGATES: Record<StagesTemplate, readonly string[]> = {
+const TEMPLATE_DELEGATES: Record<StagesTemplate, readonly string[]> = {
   code: ["implementer", "reviewer"],
   launch: [],
   seo: [],
@@ -47,7 +47,7 @@ export const TEMPLATE_DELEGATES: Record<StagesTemplate, readonly string[]> = {
 };
 
 /** The decision page's name, and its folder in the project's. */
-export const SETUP_PAGE = "setup";
+const SETUP_PAGE = "setup";
 
 /** What a sent setup page changes beyond the project's files, which Caw writes. */
 export interface SetupApply {

@@ -259,7 +259,7 @@ export type Parent = Pick<
 const ROUTINE_PARENT = "routine:";
 
 /** The parent id a routine's runs carry, on their item and their session's row. */
-export const routineParentId = (routineId: string): string =>
+const routineParentId = (routineId: string): string =>
   `${ROUTINE_PARENT}${routineId}`;
 
 /** Whether a parent id is a routine's: its runs report to no session (routines.ts reads their end). */
@@ -408,7 +408,7 @@ export const excludedNamed = (excluded: readonly string[] = []): string =>
  * archives it anyway, its unlanded commits, changes, stashes and excluded
  * files saved to a carry first.
  */
-export class WorkspaceHoldsWork extends WorkItemRefusal {
+class WorkspaceHoldsWork extends WorkItemRefusal {
   readonly held: HeldWork;
   constructor(held: HeldWork) {
     const named = excludedNamed(held.excluded);
@@ -440,7 +440,7 @@ export class OwnsOverlap extends WorkItemRefusal {
  * (machine-pause.ts), `words` saying which and until when: `delegate`
  * queues it, and it starts once the pause ends; anything else is refused.
  */
-export class MachinePaused extends WorkItemRefusal {
+class MachinePaused extends WorkItemRefusal {
   readonly words: string;
   constructor(words: string) {
     super(
@@ -491,7 +491,7 @@ export const ownsProblem = (owns: string[]): string | undefined => {
  * other — `src/*.ts` and `src/ui/a.css` overlap though no file matches both,
  * which errs towards waiting, never towards two writers.
  */
-export const globsOverlap = (
+const globsOverlap = (
   a: readonly string[],
   b: readonly string[]
 ): string | undefined => {
@@ -561,7 +561,7 @@ export interface BudgetUse {
  * nothing while it is within it. Every caller — a turn's end, the sweep,
  * and later a routine's run (P3) — comes here.
  */
-export const overBudget = (
+const overBudget = (
   budget: WorkBudget | null,
   used: BudgetUse
 ): string | undefined => {
@@ -585,7 +585,7 @@ const counted = (count: number, one: string): string =>
   `${count} ${one}${count === 1 ? "" : "s"}`;
 
 /** A budget's fields, each from the first that sets it; null when none does. */
-export const budgetFrom = (
+const budgetFrom = (
   ...budgets: (WorkBudget | null | undefined)[]
 ): WorkBudget | null => {
   const merged: WorkBudget = {};
@@ -1644,11 +1644,11 @@ const landingKey = (item: Pick<WorkItemRow, "id" | "taskId">): string =>
 export const outputsFolder = (item: Pick<WorkItemRow, "id" | "taskId">) =>
   `assets/${landingKey(item)}`;
 
-export const landingBranch = (item: Pick<WorkItemRow, "id" | "taskId">) =>
+const landingBranch = (item: Pick<WorkItemRow, "id" | "taskId">) =>
   `cawco/${landingKey(item)}`;
 
 /** What a build held for the person's picks says it waits for: its chip's words and its report's first line (`holdForPicks`). */
-export const HELD_FOR_PICKS = "held for your picks";
+const HELD_FOR_PICKS = "held for your picks";
 
 /** How an item lands, as its session is told. */
 const landingOf = (item: WorkItemRow): WorkspaceLanding => ({

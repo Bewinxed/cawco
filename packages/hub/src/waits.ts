@@ -48,7 +48,7 @@ const routineAlone = (stages: Stages, from: string, to: string): boolean =>
   );
 
 /** Where the routine takes a task held in `stage`, or why nowhere. */
-export const wakeTo = (
+const wakeTo = (
   stages: Stages,
   stage: string
 ): { to: string } | { problem: string } => {

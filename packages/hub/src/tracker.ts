@@ -167,7 +167,7 @@ export interface TrackersDeps {
 }
 
 /** A refusal for a route: a 400 in words. */
-export class TrackerProblem extends Error {}
+class TrackerProblem extends Error {}
 
 /** What a project binds to, as a person gives it. */
 export interface BindInput {

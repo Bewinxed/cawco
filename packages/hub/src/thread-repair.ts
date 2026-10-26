@@ -21,9 +21,9 @@ import type { DbShape, SessionSendRow } from "./db";
 import { isSessionSend } from "./db";
 import type { HistoryRead } from "./transcripts";
 
-export const REPAIRED_THREAD = "ad5f8277-a861-4110-9089-b8d423699beb";
+const REPAIRED_THREAD = "ad5f8277-a861-4110-9089-b8d423699beb";
 /** The note that marks the repair done. */
-export const REPAIR_NOTE = "Hub · thread repaired";
+const REPAIR_NOTE = "Hub · thread repaired";
 const THREAD_REPLY = /(^|__)thread_reply$/u;
 
 export interface ThreadRepairDeps {

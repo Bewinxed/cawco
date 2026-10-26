@@ -44,7 +44,7 @@ import { githubRefusal } from "./tracker-github";
 /** One request. Our choice, as tracker-github.ts's. */
 const REQUEST_MS = 30_000;
 /** The field whose options are the stages: GitHub's own default single-select (its docs' example answer: "Status" with "Todo", "In Progress", "Done"). */
-export const STATUS_FIELD = "Status";
+const STATUS_FIELD = "Status";
 const PER_PAGE = 100;
 /** Pages of a Project's items one sync reads at most. Our choice: 2,000 items. */
 const MAX_PAGES = 20;

@@ -107,7 +107,7 @@ export const TASK_FIELDS = [
 export type TaskField = (typeof TASK_FIELDS)[number];
 
 /** The keys a task file carried before task links were one blocking edge: tasks.ts `migrateLinks` takes them out. */
-export const LEGACY_LINK_KEYS = ["after", "parent", "related"] as const;
+const LEGACY_LINK_KEYS = ["after", "parent", "related"] as const;
 
 export interface TaskFields {
   /** The accounts its attempts may run on (account ids); empty: every account. */
@@ -155,7 +155,7 @@ export interface TaskFields {
 export type Todo = TaskTodo;
 
 /** A section of the body other than the two a task file owns. */
-export interface TaskSection {
+interface TaskSection {
   heading: string;
   text: string;
 }
@@ -257,7 +257,7 @@ export const fileTaskNumber = (path: string): number | undefined => {
 };
 
 /** A title as a file name's slug: lowercase words joined by `-`, cut at a word. */
-export const slugOf = (title: string): string => {
+const slugOf = (title: string): string => {
   const slug = title
     .toLowerCase()
     .normalize("NFKD")
@@ -868,7 +868,7 @@ const todosOf = (lines: string[], section: BodySection | undefined) => {
 };
 
 /** The most acceptance criteria one task is judged on (jev-placement.ts `jevJudged`). */
-export const CRITERIA_MAX = 20;
+const CRITERIA_MAX = 20;
 
 /** A task's acceptance criteria, one each: its list items, else the whole text as one. */
 export const criteriaOf = (acceptance: string): string[] => {

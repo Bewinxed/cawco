@@ -67,7 +67,7 @@ const WHY = /^\s+Why:\s*(.*\S)\s*$/u;
 const SPACES = /\s+/gu;
 const FIELD_SPLIT = /\s*,\s*/u;
 
-export type FactSection = "current" | "conflict" | "formerly";
+type FactSection = "current" | "conflict" | "formerly";
 
 /** One fact line as its file says it. */
 export interface FactLine {
@@ -498,18 +498,6 @@ const sectionEnd = (lines: string[], heading: number): number => {
   return end;
 };
 
-/** The index past the current facts: before `## Conflict` or `## Formerly`, past the last line with words. */
-const currentEnd = (lines: string[]): number => {
-  const sections = [headingAt(lines, "conflict"), headingAt(lines, "formerly")]
-    .filter((at) => at >= 0)
-    .sort((a, b) => a - b);
-  let end = sections[0] ?? lines.length;
-  while (end > 0 && (lines[end - 1] ?? "").trim() === "") {
-    end -= 1;
-  }
-  return end;
-};
-
 /** A rendered fact line's `since`. */
 const sinceIn = (path: string, raw: string): string =>
   parseFactFile(path, `x\n${raw}`).facts[0]?.since ?? "";
@@ -716,14 +704,6 @@ export const conflict = (
   );
 };
 
-/** A new current fact line at the end of the file's current facts. */
-export const addFact = (content: string, raw: string): string => {
-  const lines = linesOf(content);
-  const at = currentEnd(lines);
-  lines.splice(at, 0, raw);
-  return joined(lines);
-};
-
 /**
  * The file without `noteId` as a source: a line resting on it alone leaves
  * (returned, for the archive), a line with other sources keeps them.
@@ -833,7 +813,7 @@ export const archived = (
  * A fact's last use: the later of its `used` and the hub's record, else its
  * `since`.
  */
-export const lastUse = (fact: FactLine, recorded: Date | undefined): string => {
+const lastUse = (fact: FactLine, recorded: Date | undefined): string => {
   const record = recorded ? dayOf(recorded) : null;
   const written = fact.used;
   if (record && written) {

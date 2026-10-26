@@ -57,7 +57,7 @@ const TYPE_ROLES = SESSION_ROLES.filter((role) => role !== "lead");
 const BUDGET_PERIODS = ["attempt", "task", "day", "week", "month"] as const;
 
 /** A type's spending limit: any of cost, turns and time, per a period. */
-export interface DelegateBudget {
+interface DelegateBudget {
   minutes?: number;
   per?: (typeof BUDGET_PERIODS)[number];
   turns?: number;
@@ -65,7 +65,7 @@ export interface DelegateBudget {
 }
 
 /** One entry of a catalog, saying where it comes from. */
-export type CatalogType = DelegateType & {
+type CatalogType = DelegateType & {
   budget?: DelegateBudget;
   /** The type's brief: the file's body. */
   brief?: string;
@@ -78,7 +78,7 @@ export type CatalogType = DelegateType & {
 };
 
 /** A file under `delegates/` that did not make a type, or a field one ignored. */
-export interface TypeFileProblem {
+interface TypeFileProblem {
   path: string;
   problem: string;
 }
@@ -303,7 +303,7 @@ export const typeFileProblem = (
  * folder, has none. Links and anything over the folder's file limit are
  * refused: the folder's files are read whole, and only its own.
  */
-export const readProjectTypes = (projectId: string): DelegateCatalog => {
+const readProjectTypes = (projectId: string): DelegateCatalog => {
   const types: CatalogType[] = [];
   const problems: TypeFileProblem[] = [];
   let dir: string;

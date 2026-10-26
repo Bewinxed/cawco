@@ -306,7 +306,7 @@ const sessionState = (
  * reader of a wait (tasks.ts readiness, dispatch, the board, the task tools,
  * a plan step) asks it here.
  */
-export const settled = (target: WaitTarget, world: WaitWorld): WaitState => {
+const settled = (target: WaitTarget, world: WaitWorld): WaitState => {
   switch (target.kind) {
     case "task":
       return taskState(target.id, world);

@@ -183,7 +183,7 @@ import { isRoutineParent } from "./work-items";
 
 export const AGENTS_FILE = "AGENTS.md";
 const MEMORY_DIR = "memory";
-export const INBOX_DIR = "memory/inbox";
+const INBOX_DIR = "memory/inbox";
 const ARCHIVE_DIR = "memory/archive";
 const PROPOSALS_DIR = "memory/proposals";
 
@@ -197,7 +197,7 @@ const WAITING =
 /** Where a project's delegate types are, one file each (project-delegate-types.ts). */
 const DELEGATES_DIR = "delegates/";
 /** Candidates past this many run the curator now, not at its next slot (routines.ts rests it an hour between). */
-export const INBOX_MARK = 20;
+const INBOX_MARK = 20;
 /** Notes one curator run reads, oldest first; the rest wait for the next. */
 const RUN_NOTES = 60;
 /** What one brief carries of all its context together; each file's share is the file budget (config.ts). */
@@ -211,7 +211,7 @@ const JEV_KNOWN = 20_000;
  * uncertain", and "Low confidence: Do not act. Route to a human"
  * (https://docs.typesafe.ai/confidence). The person approves either way.
  */
-export const CLEAR = 0.5;
+const CLEAR = 0.5;
 /** The fact lines grep offers per note to sort against: the most words in common first. */
 const PAIR_LINES = 3;
 /** The most (note, line) pairs one Jev request asks about; the rest go to the curator. */
@@ -232,7 +232,7 @@ const BEARS = 0.5;
  * to split a file whose facts fall under two descriptions. Below
  * {@link RESHAPE_BELOW} a reshape never merges files ({@link checkReshapeFloor}).
  */
-export const RESHAPE_ABOVE = 25;
+const RESHAPE_ABOVE = 25;
 const RESHAPE_BELOW = 15;
 const RESHAPE_TOWARD = "15 to 25";
 /** How far up its delegation chain a session's routine run is looked for. */
@@ -261,7 +261,7 @@ const NOT_LASTING = [
 const VERDICTS: readonly Verdict[] = ["lasting", ...NOT_LASTING];
 
 /** A refusal with the status a route answers and the words a tool returns. */
-export class MemoryRefusal extends Error {
+class MemoryRefusal extends Error {
   readonly status: 400 | 403 | 404 | 409;
   constructor(code: 400 | 403 | 404 | 409, message: string) {
     super(message);
@@ -567,7 +567,7 @@ export const createTurnWatch = (store: TaintStore) => {
   };
 };
 
-export type TurnWatch = ReturnType<typeof createTurnWatch>;
+type TurnWatch = ReturnType<typeof createTurnWatch>;
 
 // --- notes ----------------------------------------------------------------------
 

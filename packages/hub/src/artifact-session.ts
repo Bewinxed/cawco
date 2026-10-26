@@ -21,7 +21,7 @@ import {
 import { type HubSocket, sendFrame } from "./wire-socket";
 
 /** A tab's socket, which the hub closes once its artifact is gone. */
-export type ArtifactTabSocket = HubSocket & {
+type ArtifactTabSocket = HubSocket & {
   close: (code?: number, reason?: string) => void;
 };
 

@@ -65,7 +65,7 @@ export interface FleetChoices {
 }
 
 /** What the fleet's choices are stored as. */
-export interface StoredChoices {
+interface StoredChoices {
   /** When a PUT last set them; null while nobody has. */
   choicesSetAt: Date | null;
   /** The baseline. */
@@ -78,7 +78,7 @@ export interface StoredChoices {
  * A change to the baseline (`fleet_denied_tools`): the names removed and
  * added; every other name stays where it was.
  */
-export interface DeniedToolsChange {
+interface DeniedToolsChange {
   add: readonly string[];
   remove: readonly string[];
 }
@@ -91,7 +91,7 @@ const delegatesChange = (on: boolean): DeniedToolsChange => {
     : { add: [], remove: [...names.claude, ...names.opencode] };
 };
 
-export const readChoices = ({
+const readChoices = ({
   deniedTools,
   choicesSetAt,
   upstreamPosts,
@@ -158,7 +158,7 @@ export const fleetChoicesRoutes = (store: FleetChoicesStore) =>
     );
 
 /** The relay card's id and its two options. */
-export const RELAY_CARD = {
+const RELAY_CARD = {
   id: "fleet-relay",
   setUp: "set-up",
   later: "later",

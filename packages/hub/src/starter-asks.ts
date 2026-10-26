@@ -62,7 +62,7 @@ export const STARTER_BOUNDS = {
 } as const;
 
 /** A task untouched this long in a stage of kind active reads as stuck. Our own call. */
-export const STARTER_STALE_DAYS = 3;
+const STARTER_STALE_DAYS = 3;
 /** How far back "filed often" and "events that reached no routine" look. Our own call. */
 export const STARTER_RECENT_DAYS = 14;
 /** A task kind filed at least this often in {@link STARTER_RECENT_DAYS} is a routine's work. Our own call. */
@@ -215,7 +215,7 @@ const text = (make: (q: string) => string, quoted: string) =>
  * A reason's word cap. The owner's call ("at most ~14 words"): a line read
  * at a glance under the starter's own words.
  */
-export const REASON_WORDS = 14;
+const REASON_WORDS = 14;
 
 /**
  * How every reason below is written, the rules {@link reasonRefusal} holds
@@ -283,7 +283,7 @@ export const reasonRefusal = (reason: string): string | null => {
 };
 
 /** One ask Jev may choose for a thing in the project: what it means to Jev, and the starter it becomes. */
-export interface Ask {
+interface Ask {
   about: string;
   glyph: StarterGlyph;
   reason: string;

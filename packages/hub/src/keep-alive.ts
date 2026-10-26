@@ -21,7 +21,7 @@ export const isKeepAlive = (
 ): boolean =>
   message?.origin?.kind === "system" && message.origin.name === "keepalive";
 
-export const keepAliveCap = (row: KeepAliveRow): number => {
+const keepAliveCap = (row: KeepAliveRow): number => {
   // A ratio of two rates of one moment: the provider's clock cancels out.
   const rates = row.model ? resolveRates(row.model, Date.now()) : null;
   if (!rates || rates.cacheRead <= 0) {
@@ -195,7 +195,7 @@ interface KeepAlivePorts {
   send: (envelope: Envelope<SendPayload>) => unknown;
 }
 
-export const tickKeepAlive = async (
+const tickKeepAlive = async (
   ports: KeepAlivePorts,
   now = Date.now()
 ): Promise<void> => {

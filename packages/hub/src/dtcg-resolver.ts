@@ -38,7 +38,7 @@ const VERSION = "2025.10";
 const ORDER_REF = /^#\/(sets|modifiers)\/(.+)$/u;
 
 /** Where a context's tokens go in the stylesheet. */
-export type ContextCondition =
+type ContextCondition =
   { scheme: "dark"; selector?: string } | { media: string };
 
 export interface TokenContext {

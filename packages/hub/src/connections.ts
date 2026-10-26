@@ -124,23 +124,23 @@ import {
 } from "./upstreams";
 
 /** Where an OAuth sign-in's redirect lands: on the hub, never a session. */
-export const CONNECTION_CALLBACK_PATH = "/api/connections/oauth/callback";
+const CONNECTION_CALLBACK_PATH = "/api/connections/oauth/callback";
 
 /** Sign in to GitHub's own routes: a machine's gh, and a GitHub App's manifest, creation and installation. */
 const GITHUB_SIGN_IN = "/api/github-sign-in";
 /** The page that posts a GitHub App's manifest to GitHub, in the person's browser. */
-export const GITHUB_MANIFEST_PATH = `${GITHUB_SIGN_IN}/app`;
+const GITHUB_MANIFEST_PATH = `${GITHUB_SIGN_IN}/app`;
 /** GitHub's `redirect_url` once the app is made: the code to exchange. */
-export const GITHUB_CREATED_PATH = `${GITHUB_SIGN_IN}/app/created`;
+const GITHUB_CREATED_PATH = `${GITHUB_SIGN_IN}/app/created`;
 /** GitHub's `setup_url` once the app is installed: the installation. */
-export const GITHUB_INSTALLED_PATH = `${GITHUB_SIGN_IN}/app/installed`;
+const GITHUB_INSTALLED_PATH = `${GITHUB_SIGN_IN}/app/installed`;
 
 /**
  * What a GitHub App the hub registers may read: what a project's poller reads
  * (issues, pull requests, discussions) and the metadata every app has
  * ("Permissions required for GitHub Apps", docs.github.com).
  */
-export const GITHUB_APP_PERMISSIONS = {
+const GITHUB_APP_PERMISSIONS = {
   issues: "read",
   pull_requests: "read",
   discussions: "read",
@@ -173,7 +173,7 @@ const TRAILING_HYPHENS = /-+$/u;
  * and which takes in `issues:create` and `comments:create`
  * (linear.app/developers/oauth-2-0-authentication).
  */
-export const LINEAR_APP_SCOPE = "read,write";
+const LINEAR_APP_SCOPE = "read,write";
 
 /**
  * Linear's OAuth server, as the MCP SDK's token helpers read one: the

@@ -190,7 +190,7 @@ export const movedOn = (
  * reasons, rules 1, 2 and 6 applied, then its pins asking (only a reply or a
  * resolve answers those); none when nothing is asked of them.
  */
-export const reasonsOf = (
+const reasonsOf = (
   row: ArtifactRow,
   facts: ArtifactFacts,
   steps: readonly PlanStep[]
@@ -216,11 +216,11 @@ export const reasonsOf = (
 };
 
 /** When it became pending: its publish, or the agent's newest reply that asks; ms epoch. */
-export const raisedAtOf = (row: ArtifactRow, facts: ArtifactFacts): number =>
+const raisedAtOf = (row: ArtifactRow, facts: ArtifactFacts): number =>
   Math.max(ms(facts.revisedAt) || row.createdAt.getTime(), ms(facts.askingAt));
 
 /** Where its panel opens it: at its strongest reason's first stop. */
-export const stopOf = (
+const stopOf = (
   reason: ArtifactReason | undefined,
   facts: ArtifactFacts
 ): ArtifactStop => {

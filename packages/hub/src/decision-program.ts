@@ -425,7 +425,7 @@ const unclosedIn = (text: string): Unclosed | null => {
  * lang-core's parse closes them for a streaming reply and only flags
  * `meta.incomplete`: a kept page is no stream, so it is refused instead.
  */
-export const unclosedProblem = (text: string): string | null => {
+const unclosedProblem = (text: string): string | null => {
   const left = unclosedIn(text);
   if (!left) {
     return null;
@@ -606,7 +606,7 @@ const escaped = (value: string): string =>
   value.replaceAll(/[&<>"]/gu, (char) => ESCAPES[char] ?? char);
 
 /** A file an Image names, as the page keeps it: its address beside the page, and its bytes. */
-export interface ProgramFile {
+interface ProgramFile {
   bytes: Uint8Array;
   /** `files/<n>-<name>`, from the page's folder. */
   path: string;

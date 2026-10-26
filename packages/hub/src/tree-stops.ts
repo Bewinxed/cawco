@@ -21,7 +21,7 @@
  * stop that is not confirmed holds the item (its held stops, 156e913bb). A
  * machine that is away keeps its rows waiting; its stops are stored and sent
  * when it is back. The rows are the stop's whole state, so a hub that starts
- * mid-stop carries it on ({@link TreeStops.resume}).
+ * mid-stop carries it on (its `resume`).
  *
  * The root's report lists how each delegate under it ended, nested as the
  * tree was; it goes to the root's parent as any report does.
@@ -302,5 +302,3 @@ export const createTreeStops = ({ db, end, workItems }: TreeStopDeps) => {
     },
   };
 };
-
-export type TreeStops = ReturnType<typeof createTreeStops>;

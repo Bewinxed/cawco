@@ -63,7 +63,7 @@ interface Frame {
  * their callers, binary name and offset (what `atos` and xcsym resolve),
  * with the address, the image's UUID and how many samples saw it.
  */
-export function stackText(diagnostic: Record<string, unknown>): string {
+function stackText(diagnostic: Record<string, unknown>): string {
   const tree = diagnostic.callStackTree as
     | {
         callStacks?: {

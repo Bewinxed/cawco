@@ -22,7 +22,7 @@ import { hubDbPath } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
 
 /** The file beside the hub's database that holds {@link HubEvent}s. */
-export const HUB_RECORD_FILE = "hub-record.json";
+const HUB_RECORD_FILE = "hub-record.json";
 
 /** How many of the latest events the record keeps. Ours: a run's worth of refusals, a beat's every 15 s for an hour. */
 const EVENTS_KEPT = 512;

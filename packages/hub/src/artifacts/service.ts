@@ -420,7 +420,7 @@ const previewProblem = (input: ArtifactInput): string | null => {
 };
 
 /** Why an ask can't head the panel (checks 1 and 2): words the person never uses, or a file or path; null when it can. */
-export const askProblem = (ask: string): string | null => {
+const askProblem = (ask: string): string | null => {
   if (ASK_BANNED.test(ask)) {
     return 'The ask reaches the person: say what they do (pick, pin, try, draw) and to what, without "tap" or "poke".';
   }
@@ -759,7 +759,7 @@ export interface Browsed {
 export const SHOWN_WAIT_MS = 10_000;
 
 /** No view of the session said it showed the artifact in time. WORDS.md's error formula. */
-export const NO_VIEW =
+const NO_VIEW =
   "No open dashboard is showing this session. The artifact is in the session's panel and opens when one is.";
 
 /** Why a `to: "parent"` create opened nothing: the parent opens it. */
@@ -846,7 +846,7 @@ const ENTITIES: Record<string, string> = {
 const PAGE_SPACES = /\s+/gu;
 
 /** The words a page's reader sees: its HTML less scripts, styles and tags, its common entities read. */
-export const pageText = (html: string): string =>
+const pageText = (html: string): string =>
   html
     .replace(PAGE_HIDDEN, " ")
     .replace(PAGE_TAG, " ")
@@ -855,9 +855,7 @@ export const pageText = (html: string): string =>
     .trim();
 
 /** A PNG's pixels, from its header's IHDR chunk; null when it is too short to say. */
-export const pngSize = (
-  png: Uint8Array
-): { width: number; height: number } | null => {
+const pngSize = (png: Uint8Array): { width: number; height: number } | null => {
   if (png.length < 24) {
     return null;
   }
@@ -869,7 +867,7 @@ export const pngSize = (
 export const THUMBNAIL_BYTES = 3 * 1024 * 1024;
 
 /** A promote from a session outside a project. WORDS.md's error formula. */
-export const NO_PROJECT =
+const NO_PROJECT =
   "This session belongs to no project, so there is nowhere to promote to.";
 
 /**
@@ -1264,7 +1262,7 @@ function carryOne(
  * apart, so 10 s of nothing reads as the burst done without leaving the
  * session waiting long for it. Our call.
  */
-export const MARKS_QUIET_MS = 10_000;
+const MARKS_QUIET_MS = 10_000;
 
 /**
  * How long the person's comments, replies, resolves and ink stay quiet
@@ -1274,13 +1272,13 @@ export const MARKS_QUIET_MS = 10_000;
  * page.ts `PICTURES_AFTER_MS`, 1.5 s), so the delivery carries them. 3 s,
  * our call.
  */
-export const COMMENTS_QUIET_MS = 3000;
+const COMMENTS_QUIET_MS = 3000;
 
 /**
  * The longest a burst waits from its first mark: someone pinning steadily
  * for a minute is not held back past it. Our call.
  */
-export const MARKS_LONGEST_MS = 60_000;
+const MARKS_LONGEST_MS = 60_000;
 
 /** What a delivery of the person's marks carries: the words, the pictures, and the texts and files their comments attach. */
 export interface MarksDelivery {

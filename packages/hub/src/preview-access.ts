@@ -94,7 +94,7 @@ import type { PreviewPassesDb, PreviewPassRow } from "./db/preview-passes";
 import { hubSecrets } from "./secret-box";
 
 /** How long a ticket stands: a client spends it at once, in the load it was asked for. */
-export const TICKET_MS = 60_000;
+const TICKET_MS = 60_000;
 /**
  * How long a pass stands from its entry, however it is used: 30 days,
  * absolute (the orchestrator's call on the advisor's model, from OWASP's
@@ -107,7 +107,7 @@ const PASS_MS = 30 * DAY_MS;
  * used: 15 minutes, absolute (the orchestrator's call; a session mints
  * another whenever it needs one).
  */
-export const SESSION_PASS_MS = 15 * 60_000;
+const SESSION_PASS_MS = 15 * 60_000;
 /** How often a pass's last use is written, at most (hub-auth.ts writes a device's the same way). */
 const TOUCH_EVERY_MS = 60_000;
 const KEY_LABEL = "cawco preview access v1";

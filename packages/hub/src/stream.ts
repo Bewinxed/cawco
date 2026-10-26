@@ -39,8 +39,6 @@ import {
   type PlanDelta,
   type PlanSnapshot,
   RESOLVE_PERMISSION,
-  // biome-ignore lint/style/noExportedImports: `export … from` here trips noBarrelFile instead; re-exporting the import is the lesser of the two diagnostics for this one re-exported constant.
-  RING_SIZE,
   type SendPayload,
   SessionRing,
   type SessionStreamEvent,
@@ -54,8 +52,6 @@ import {
 import type { HubLifetimeShape } from "./lifetime";
 import { refusalFrame } from "./registry";
 import { type HubSocket, sendFrame } from "./wire-socket";
-
-export { RING_SIZE };
 
 /**
  * A control whose `control_result` never came stops being an ack anybody is
@@ -101,10 +97,7 @@ const COMMAND_KINDS = new Set<string>([
  * The `control_result` shape a settled command reads: exactly the frame the
  * daemon already sends back for every control it runs.
  */
-export type ControlResultFrame = Extract<
-  FramePayload,
-  { kind: "control_result" }
->;
+type ControlResultFrame = Extract<FramePayload, { kind: "control_result" }>;
 
 /**
  * What this module needs from the hub it lives in. Narrow on purpose: the

@@ -39,7 +39,7 @@ import type { ToolCallKeysDb } from "./db/tool-call-keys";
 import { INTERRUPTED_CALL } from "./tool-call-keys";
 
 /** The tools a key makes run once: each starts work or sends words that a second run would double. */
-export const KEYED_TOOLS: ReadonlySet<string> = new Set([
+const KEYED_TOOLS: ReadonlySet<string> = new Set([
   "delegate",
   "handoff",
   "artifact_create",
@@ -48,7 +48,7 @@ export const KEYED_TOOLS: ReadonlySet<string> = new Set([
 /** Where Claude Code names a call's tool use in `tools/call`'s `_meta`. */
 export const CLAUDE_CALL_META = "claudecode/toolUseId";
 /** Where OpenCode names the calling session in `tools/call`'s `_meta`. */
-export const OPENCODE_SESSION_META = "ai.opencode/sessionID";
+const OPENCODE_SESSION_META = "ai.opencode/sessionID";
 
 /**
  * The key a `tools/call`'s `_meta` gives the call: Claude Code's tool use,

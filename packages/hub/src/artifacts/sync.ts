@@ -304,7 +304,7 @@ const stateProblem = (doc: Doc, trial: Doc): string | null => {
 };
 
 /** Why `update` from a person's client may not be applied to `doc`, or null. */
-export const updateProblem = (doc: Doc, update: Uint8Array): string | null => {
+const updateProblem = (doc: Doc, update: Uint8Array): string | null => {
   const trial = new Doc();
   try {
     applyUpdate(trial, encodeStateAsUpdate(doc));

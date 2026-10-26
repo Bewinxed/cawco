@@ -71,9 +71,9 @@ import type { WebContext } from "./web-reads";
 import { readsWeb } from "./web-reads";
 
 /** The most shell or edit calls Caw makes in one wake. */
-export const CALLS_PER_WAKE = 20;
+const CALLS_PER_WAKE = 20;
 /** The most files his edits touch in one wake. */
-export const FILES_PER_WAKE = 5;
+const FILES_PER_WAKE = 5;
 /** The wakes kept for their sends to be read ({@link createLeadGate}'s `woke`). */
 const SENDS_KEPT = 2000;
 
@@ -1473,7 +1473,7 @@ const readJudge: Judge = (argv, name) =>
  * Why a shell line does not only read, in words ({@link readOnly}); none
  * when it does.
  */
-export const readBlocker = (command: string): string | undefined =>
+const readBlocker = (command: string): string | undefined =>
   blockerOf(command, readJudge);
 
 /**
@@ -1486,7 +1486,7 @@ export const readBlocker = (command: string): string | undefined =>
  * the place's tree, publishes, or reaches a host the project does not name,
  * and Caw's own Read and Grep tools, which no gate holds, read as much.
  */
-export const readOnly = (command: string): boolean =>
+const readOnly = (command: string): boolean =>
   readBlocker(command) === undefined;
 
 /**
@@ -1494,13 +1494,13 @@ export const readOnly = (command: string): boolean =>
  * {@link readOnly}, or, in a place no one else uses, `git init`,
  * `git add <paths>` or `git commit` among its reading commands.
  */
-export const allowlisted = (command: string, shared: boolean): boolean =>
+const allowlisted = (command: string, shared: boolean): boolean =>
   blockerOf(command, (argv, name) =>
     name === "git" && gitTidy(argv, shared) ? undefined : readJudge(argv, name)
   ) === undefined;
 
 /** What in a shell line is refused in a shared checkout, in words; none when nothing is. */
-export const sharedRefusal = (command: string): string | undefined =>
+const sharedRefusal = (command: string): string | undefined =>
   sharedDenial(commandsOf(command).argvs);
 
 /** The programs whose path arguments are files a shell line changes. */
@@ -1582,10 +1582,7 @@ const globOf = (pattern: string): Bun.Glob => {
  * matches it. Never anything under `.git`, nothing outside the place, and
  * no absolute path.
  */
-export const inCawEdits = (
-  relative: string,
-  globs: readonly string[]
-): boolean => {
+const inCawEdits = (relative: string, globs: readonly string[]): boolean => {
   if (
     relative.startsWith("../") ||
     relative === ".." ||
@@ -2305,8 +2302,6 @@ export const createLeadGate = ({
     },
   };
 };
-
-export type LeadGate = ReturnType<typeof createLeadGate>;
 
 /**
  * Review independence (Projects spec §5.9: "the lead reviews, never the

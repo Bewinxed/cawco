@@ -158,7 +158,7 @@ export interface CarryWindow {
  * was not there for (all of it in a window not open yet; none for one there
  * since the window opened).
  */
-export const arrivingBurn = (
+const arrivingBurn = (
   arrivals: readonly Arrival[],
   accountId: string,
   window: Pick<CarryWindow, "kind" | "resetsAt">,
@@ -188,7 +188,7 @@ export const arrivingBurn = (
  * has a fresh one. The one test placement's carry test and rebalance's
  * moves both run.
  */
-export const runsOutWith = (
+const runsOutWith = (
   windows: readonly CarryWindow[],
   added: (window: CarryWindow) => number,
   now: number

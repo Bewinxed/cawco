@@ -312,7 +312,7 @@ import type { Tasks } from "./tasks";
  * already list were cut (worker 27,743, delegate 10,102, lead 18,558
  * measured; `--tools <role>` lists them per tool).
  */
-export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
+const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 27_805,
   delegate: 10_224,
   lead: 18_580,

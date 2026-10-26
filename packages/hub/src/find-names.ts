@@ -177,7 +177,7 @@ const purposeOf = (
 };
 
 /** When a session last moved: its activity, or a change of its status (db `touchInstanceActivity`). */
-export const lastActivityOf = (row: FindInstanceRow): number =>
+const lastActivityOf = (row: FindInstanceRow): number =>
   row.updatedAt.getTime();
 
 /** Points for parentage: his own sessions, and today's delegates of them. */
@@ -195,9 +195,7 @@ const kinOf = (
 };
 
 /** A project as a result carries it. */
-export type ProjectOf = (
-  id: string | null
-) => { id: string; name: string } | null;
+type ProjectOf = (id: string | null) => { id: string; name: string } | null;
 
 /** What the conversations' entries are built from. */
 export interface ConversationSources {

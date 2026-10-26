@@ -24,13 +24,13 @@ import { MAX_REQUEST_BYTES } from "./config";
 import { FILE_LIMIT_BYTES } from "./media";
 
 /** Bodies outside git and attachments: the model API's own request limit. */
-export const JSON_BODY_LIMIT_BYTES = 32 * 1024 * 1024;
+const JSON_BODY_LIMIT_BYTES = 32 * 1024 * 1024;
 
 const GIT_PATH = "/git/";
 const FILES_PATH = "/api/files";
 
 /** The cap a route's body is held to. */
-export const bodyLimitOf = (path: string): number => {
+const bodyLimitOf = (path: string): number => {
   if (path.startsWith(GIT_PATH)) {
     return MAX_REQUEST_BYTES;
   }

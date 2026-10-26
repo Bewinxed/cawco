@@ -27,7 +27,7 @@ import { isLive } from "./work-items";
  * How long a work item may sit in its provider's retry: our call, the half
  * hour run d1ee813a sat in OpenCode's before its attempt timed out.
  */
-export const PROVIDER_RETRY_DEADLINE_MS = 30 * 60_000;
+const PROVIDER_RETRY_DEADLINE_MS = 30 * 60_000;
 
 /** What a provider's retry says: its words, and when the harness tries again (ms epoch) if it said. */
 export interface ProviderRetry {
@@ -140,5 +140,3 @@ export const createProviderRetries = ({
     },
   };
 };
-
-export type ProviderRetries = ReturnType<typeof createProviderRetries>;

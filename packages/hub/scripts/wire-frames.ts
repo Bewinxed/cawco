@@ -230,7 +230,7 @@ class Reader {
 }
 
 /** Each frame by the schema the app reads it with: a stream message by its `type`, an envelope's frames by `FramePayload`. */
-export const frameProblems = (
+const frameProblems = (
   document: Schema,
   open: Set<string>,
   frames: unknown[]

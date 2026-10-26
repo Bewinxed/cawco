@@ -366,7 +366,7 @@ const named = (row: InstanceRow): string =>
  * or as the session starting it), or undefined when it can: it must be a
  * session you started, in that project.
  */
-export const parentProblem = (
+const parentProblem = (
   row: InstanceRow | undefined,
   projectId: string,
   id = ""
@@ -453,7 +453,7 @@ const AT_FINISH: Record<LandsMode, string> = {
 };
 
 /** What a retry's brief adds: how the last attempt ended, and the to-dos done so far. */
-export interface RetryContext {
+interface RetryContext {
   /** What the hub reported of it: its error, or its report. */
   failure: string;
   /** Its state: failed or cancelled. */

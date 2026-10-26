@@ -20,7 +20,7 @@ import { is } from "drizzle-orm";
 import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
 
 /** One column's failing rows: how many, and the first by its primary key, with what zod said of it. */
-export interface StoredFailure {
+interface StoredFailure {
   column: string;
   count: number;
   issue: string;

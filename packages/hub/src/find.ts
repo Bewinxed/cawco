@@ -92,7 +92,7 @@ import { boardTitle, leafOf } from "./labels";
  * holding every other machine's moments back (the 1.5 s the jump palette's
  * search had, `SEARCH_ANSWER_MS`).
  */
-export const TRANSCRIPT_ANSWER_MS = 1500;
+const TRANSCRIPT_ANSWER_MS = 1500;
 
 /**
  * How stale the names part may be, ms: what it reads besides the sessions
@@ -152,7 +152,7 @@ const newestOf = (result: FindResult): number =>
  * the window. Artifacts are Needs you's, whatever their age: they leave by
  * its rules (artifacts/needs.ts).
  */
-export const WAITING_DAYS = 14;
+const WAITING_DAYS = 14;
 
 /**
  * What a find narrows to, beside its words and kinds: what an agent's `find`
@@ -224,7 +224,7 @@ export interface FindRequest {
 export type HeldMoment = FindMoment & { context?: string };
 
 /** A purged session's key in {@link FindDeps.purged}: its machine and harness session id. */
-export const purgedKey = (machineId: string, sessionId: string): string =>
+const purgedKey = (machineId: string, sessionId: string): string =>
   `${machineId}:${sessionId}`;
 
 /** Whether `at` (ms epoch, null for no time) falls in `where`'s window. */
@@ -1789,7 +1789,7 @@ export const FIND_QUERY = t.Object({
 });
 
 /** `kinds=conversation,task` read into kinds, or the refusal naming the unknown one. */
-export const kindsOf = (raw: string | undefined): FindKind[] | undefined => {
+const kindsOf = (raw: string | undefined): FindKind[] | undefined => {
   if (!raw?.trim()) {
     return;
   }

@@ -52,7 +52,7 @@ const ACTION_EXPIRES_S = 3600;
 const STDERR_KEPT = 4000;
 
 /** The project id a repository segment names, or undefined. */
-export const repoProject = (segment: string): string | undefined =>
+const repoProject = (segment: string): string | undefined =>
   REPO.exec(segment)?.[1];
 
 /** The bare repository of `projectId` under `root`. */
@@ -60,7 +60,7 @@ export const bareRepoPath = (root: string, projectId: string): string =>
   join(root, `${projectId}.git`);
 
 /** A large file's place in the store. */
-export const lfsObjectPath = (lfsRoot: string, oid: string): string =>
+const lfsObjectPath = (lfsRoot: string, oid: string): string =>
   join(lfsRoot, "objects", oid.slice(0, 2), oid.slice(2, 4), oid);
 
 /** The hub's environment, git speaking {@link GIT_LOCALE}. */

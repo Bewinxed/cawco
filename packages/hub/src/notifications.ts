@@ -345,7 +345,7 @@ const newestOf = (devices: readonly DeviceFacts[]): DeviceFacts | null =>
  *    than that client's moves them off its chat. A beat with no new input
  *    never moves the chat.
  */
-export const rollup = (
+const rollup = (
   devices: readonly DeviceFacts[],
   manualAt: number | null,
   awayAfterMs: number,

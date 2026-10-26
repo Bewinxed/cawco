@@ -19,13 +19,13 @@ import type { DbShape } from "./db";
  *   use of `x` when `x` is a known skill.
  */
 
-export interface CapabilityUse {
+interface CapabilityUse {
   kind: CapabilityKind;
   name: string;
 }
 
 /** A use's weight halves every this many days. Our own call, to be tuned. */
-export const USAGE_HALF_LIFE_DAYS = 14;
+const USAGE_HALF_LIFE_DAYS = 14;
 /** How far back the one-time backfill reads. */
 const BACKFILL_DAYS = 30;
 /** Rows older than this weigh under 0.3% at a 14-day half-life, so they are not read. */
@@ -34,10 +34,10 @@ const SCORE_WINDOW_DAYS = 120;
 const COMMAND_NAME = /<command-name>\/?([^<\s]+)<\/command-name>/u;
 
 /** Local calendar date, `YYYY-MM-DD`. */
-export const dayOf = (at: Date): string => at.toLocaleDateString("en-CA");
+const dayOf = (at: Date): string => at.toLocaleDateString("en-CA");
 
 /** The uses in one assistant message's content blocks. */
-export function usesInBlocks(blocks: unknown): CapabilityUse[] {
+function usesInBlocks(blocks: unknown): CapabilityUse[] {
   if (!Array.isArray(blocks)) {
     return [];
   }

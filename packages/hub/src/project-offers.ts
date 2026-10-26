@@ -42,9 +42,9 @@ import { FolderRefusal, refused } from "./project-folder";
 import type { TaskActor, Tasks } from "./tasks";
 
 /** Open plan items at a turn's end that make a plan worth a project. */
-export const PLAN_ITEMS = 5;
+const PLAN_ITEMS = 5;
 /** The label a task filed from a session's plan carries until someone takes it up. */
-export const PROPOSED_LABEL = "proposed";
+const PROPOSED_LABEL = "proposed";
 /** Task titles are one line of at most 200 characters (tasks.ts). */
 const TITLE_MAX = 200;
 /** A git read is local; past this the machine is not going to answer it. */

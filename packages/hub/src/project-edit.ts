@@ -23,7 +23,7 @@ import type { UpstreamPosts } from "@cawco/core/upstream-guard";
 import type { DbShape, ProjectRow } from "./db";
 
 /** As long as a name `POST /api/projects` takes. */
-export const PROJECT_NAME_LIMIT = 200;
+const PROJECT_NAME_LIMIT = 200;
 // biome-ignore lint/suspicious/noControlCharactersInRegex: a name is one line of text, so control characters are what it refuses
 const CONTROL = /[\u0000-\u001f\u007f]/u;
 
@@ -79,7 +79,7 @@ const TRAILING_SLASH = /\/+$/u;
  * (`<url>.git/info/lfs`, lfsapi/endpoint_finder.go
  * `NewEndpointFromCloneURL`).
  */
-export const lfsEndpoint = (raw: string): string => {
+const lfsEndpoint = (raw: string): string => {
   if (!URL.canParse(raw.trim())) {
     throw new ProjectEditRefusal(
       400,
@@ -230,5 +230,3 @@ export const createProjectEdits = ({
     return db.project(projectId) ?? project;
   },
 });
-
-export type ProjectEdits = ReturnType<typeof createProjectEdits>;

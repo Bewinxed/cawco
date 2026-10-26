@@ -186,10 +186,10 @@ const modelAfter = (
 };
 
 /** The harnesses Caw runs on, in the order a picker offers them. */
-export const CAW_HARNESSES = Object.keys(CAW_DENIED_TOOLS) as HarnessKind[];
+const CAW_HARNESSES = Object.keys(CAW_DENIED_TOOLS) as HarnessKind[];
 
 /** Caw's denied tools on `harness`; refused on a harness whose shell and edit calls the hub's gate cannot decide. */
-export const cawDenied = (harness: string): readonly string[] => {
+const cawDenied = (harness: string): readonly string[] => {
   if (!(harness in CAW_DENIED_TOOLS)) {
     throw new Error(
       `Caw does not run on ${harness}: it cannot put each of Caw's shell and edit calls to the hub first.`
@@ -526,7 +526,7 @@ const lineOf = (message: ThreadMessageRow): ThreadLine => {
 };
 
 /** A refusal a route answers with its status. */
-export class CawRefusal extends Error {
+class CawRefusal extends Error {
   readonly status: 400 | 403 | 404 | 409;
   constructor(code: 400 | 403 | 404 | 409, message: string) {
     super(message);

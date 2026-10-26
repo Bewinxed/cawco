@@ -107,5 +107,3 @@ export const createWorkspaceRetire = (deps: WorkspaceRetireDeps) => {
 
   return { sweep };
 };
-
-export type WorkspaceRetire = ReturnType<typeof createWorkspaceRetire>;

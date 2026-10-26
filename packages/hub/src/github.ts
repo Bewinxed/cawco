@@ -66,7 +66,7 @@ export type GitHubKind =
   | "discussion_comment";
 
 /** The resources a repository is polled for, in order. */
-export const GITHUB_RESOURCES: readonly GitHubResource[] = [
+const GITHUB_RESOURCES: readonly GitHubResource[] = [
   "pulls",
   "issues",
   "comments",

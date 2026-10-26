@@ -20,7 +20,7 @@ import { place } from "./placement";
  */
 
 /** How far the carry sequence looks ahead: one 5-hour window. */
-export const HORIZON_MS = 5 * HOUR_MS;
+const HORIZON_MS = 5 * HOUR_MS;
 
 /** One point of a window's history: its use and when it was read. */
 export interface HistoryPoint {
@@ -102,7 +102,7 @@ const windowForecast = (
  * before its reset, the one that resets latest. A window with no known reset
  * resets latest of all. Null when there are no windows.
  */
-export const bindingWindow = (windows: WindowForecast[]): WindowRef | null => {
+const bindingWindow = (windows: WindowForecast[]): WindowRef | null => {
   const ref = (window: WindowForecast | undefined): WindowRef | null =>
     window ? { kind: window.kind, scopeLabel: window.scopeLabel } : null;
   const runningOut = windows.filter(
@@ -193,7 +193,7 @@ const MIN_PCT_MEASURED = 3;
  * priced high. Null until the window has moved {@link MIN_PCT_MEASURED}
  * percent across spans with turns recorded.
  */
-export const tokensPerPercent = (
+const tokensPerPercent = (
   window: { kind: string; scopeLabel: string | null },
   history: HistoryPoint[],
   turns: TurnTokens[],

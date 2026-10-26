@@ -83,7 +83,7 @@ export interface Refusal {
  * `CommandStopped`: the stop cancelled it on its machine): nothing went
  * anywhere.
  */
-export interface Stopped {
+interface Stopped {
   kind: "stopped";
 }
 
@@ -197,7 +197,7 @@ export type LandingQueue = <T>(
  * What a landing waiting its turn says: the branch, the landing running now,
  * and how many more are ahead of it.
  */
-export const turnWords = (branch: string, ahead: LandingTurn[]): string =>
+const turnWords = (branch: string, ahead: LandingTurn[]): string =>
   `queued to land on ${branch} behind ${ahead[0]?.who ?? "another landing"}${ahead.length > 1 ? ` and ${ahead.length - 1} more` : ""}`;
 
 /**
@@ -520,7 +520,7 @@ interface Moved {
  * landing rebased onto): then `moved`. `onto` unset (a push that replaces
  * its branch, run `--force` as the real one is leased) is never `moved`.
  */
-export async function pushCheck(
+async function pushCheck(
   run: LandingDeps<unknown>["run"],
   ref: string,
   onto?: string

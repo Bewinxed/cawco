@@ -157,7 +157,7 @@ interface OpenOption {
  * the kit's label, and a `.dp-tag` saying Recommended. A choice group outside an
  * article is named by its `aria-label`.
  */
-export const readPage = async (html: string): Promise<ReadPage> => {
+const readPage = async (html: string): Promise<ReadPage> => {
   let title = "";
   let docTitle = "";
   const cards: DecisionCard[] = [];

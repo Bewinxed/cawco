@@ -243,7 +243,7 @@ export interface Stress {
  * it resets, less `waitMs` (a reset that near is waited for, as at the
  * limit). The window that runs out first; null when none does.
  */
-export const stressOf = (
+const stressOf = (
   forecast: AccountForecast | undefined,
   waitMs: number,
   now: number
@@ -285,7 +285,7 @@ export interface SessionShare {
  * (`turn_usage` not written yet), nothing tells its sessions apart, and each
  * counts an even part, which its `why` says.
  */
-export const sessionShares = (
+const sessionShares = (
   sessions: readonly { id: string }[],
   turns: readonly TurnUsageRow[],
   stress: Stress,
@@ -341,7 +341,7 @@ export const sessionShares = (
  * (forecast.ts `tokensPerPercent`); undefined when it is not, or the
  * context was never reported.
  */
-export const reReadCost = (
+const reReadCost = (
   forecast: ForecastRead,
   row: Pick<LimitRow, "cacheTtl" | "contextTokens">,
   target: Account

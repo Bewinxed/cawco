@@ -72,7 +72,7 @@ const STOP_MS = 30_000;
 const RENEW_CALL_MS = 240_000;
 
 /** One TURN REST API password: base64 of HMAC-SHA1 over the username, keyed by the shared secret. */
-export const turnCredential = (secret: string, username: string): string =>
+const turnCredential = (secret: string, username: string): string =>
   createHmac("sha1", secret).update(username).digest("base64");
 
 /**
@@ -82,7 +82,7 @@ export const turnCredential = (secret: string, username: string): string =>
  * and its own LAN and tailnet addresses, which a browser of the fleet
  * composes its URLs from (agent relay-urls.ts).
  */
-export const mintCredential = (
+const mintCredential = (
   relay: {
     secret: string;
     address: string;
@@ -213,7 +213,7 @@ const bind = (url: string): Promise<{ up: boolean; error?: string }> =>
   });
 
 /** The relay's listeners asked once each, all at once: UDP and TCP 3478, and TLS on 5349 with a name. */
-export const probeRelay = (
+const probeRelay = (
   address: string,
   tlsName: string | null
 ): Promise<RelayPortHealth[]> => {
@@ -268,7 +268,7 @@ const answered = <T>(
 };
 
 /** What the journey hands a start: the machine, where it is reached, its name. */
-export interface RelaySetup {
+interface RelaySetup {
   address: string;
   hostname: string | null;
   machineId: string;

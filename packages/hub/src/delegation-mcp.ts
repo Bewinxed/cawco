@@ -99,7 +99,7 @@ const LIST_DEBOUNCE_MS = 500;
 const LIST_SWEEP_MS = 30_000;
 
 /** What a session credential a call names reads as once it is replaced. */
-export const REDACTED_CREDENTIAL = "[cawco credential]";
+const REDACTED_CREDENTIAL = "[cawco credential]";
 
 /**
  * A token with a session credential's shape (32 random bytes, base64url:

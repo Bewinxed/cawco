@@ -101,7 +101,7 @@ export const receiverOfKey = (key: string): PlanReceiver => {
 };
 
 /** A change as the plan carries it. */
-export const changeOf = (row: PlanChangeRow): PlanChange => ({
+const changeOf = (row: PlanChangeRow): PlanChange => ({
   id: row.id,
   kind: row.kind,
   step: row.step,

@@ -40,7 +40,7 @@ const FULL_SEND: PermissionMode = "fullSend";
  * `reason`, which the person reads first on the approval. Undefined when it
  * may ask.
  */
-export const askRefusal = (
+const askRefusal = (
   name: string,
   input: Record<string, unknown>
 ): string | undefined => {
@@ -280,5 +280,3 @@ export const createAdminAsks = ({
     },
   };
 };
-
-export type AdminAsks = ReturnType<typeof createAdminAsks>;

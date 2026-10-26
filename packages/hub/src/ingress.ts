@@ -128,7 +128,7 @@ const INBOX_SHOWN = 30;
 const EVENTS_SHOWN = 50;
 
 /** What a route answers and a tool says when ingress refuses. */
-export class IngressRefusal extends Error {
+class IngressRefusal extends Error {
   readonly status: 400 | 403 | 404 | 409;
   constructor(code: 400 | 403 | 404 | 409, message: string) {
     super(message);
@@ -160,7 +160,7 @@ const cutTo = (text: string, max: number): string => {
  * the body is cut first, with a marker; a connector item over it is kept as
  * the head of its JSON, marked.
  */
-export const storedPayload = (event: InboundEvent): string => {
+const storedPayload = (event: InboundEvent): string => {
   const full = JSON.stringify(event);
   if (bytes(full) <= PAYLOAD_MAX) {
     return full;
@@ -390,7 +390,7 @@ export interface ConnectorPollView {
   versionPath: string;
 }
 
-export interface InboundEventView {
+interface InboundEventView {
   event: unknown;
   handledAt: number | null;
   id: string;

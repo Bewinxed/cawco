@@ -50,7 +50,7 @@ import { Elysia, status, t } from "elysia";
  * Where every project's folder lives: `projects/` beside the database, by
  * core's one rule, which the agent's workspace policy reads them by too.
  */
-export const PROJECTS_DIR = hubProjectsDir();
+const PROJECTS_DIR = hubProjectsDir();
 /** A deleted project's folder, kept rather than erased. */
 const TRASH_DIR = join(PROJECTS_DIR, ".trash");
 
@@ -94,7 +94,7 @@ export const folderContent = (
 const LIST_LIMIT = 2000;
 /** Commits one history answers by default, and at most. */
 const HISTORY_DEFAULT = 50;
-export const HISTORY_LIMIT = 200;
+const HISTORY_LIMIT = 200;
 const MESSAGE_LIMIT = 2000;
 const PATH_LIMIT = 1024;
 const GIT_TIMEOUT_MS = 30_000;
@@ -112,7 +112,7 @@ export interface FolderAuthor {
 /** The operator: every write the dashboard makes. */
 export const YOU: FolderAuthor = { name: "you" };
 
-export interface FolderEntry {
+interface FolderEntry {
   kind: "file" | "folder" | "link";
   /** From the folder's root, `/` between parts. */
   path: string;
@@ -143,7 +143,7 @@ export interface FolderCommit {
   sha: string;
 }
 
-export interface FolderChange {
+interface FolderChange {
   author: string;
   /** ISO 8601, the author's time. */
   date: string;
@@ -1427,7 +1427,7 @@ export const folderFileNames = async (
 };
 
 /** One commit as the folder's log pass reads it: shared by every path it touched. */
-export interface FolderLogCommit {
+interface FolderLogCommit {
   /** When it was made, ms epoch, by commit time. */
   at: number;
   /** Its author's name. */

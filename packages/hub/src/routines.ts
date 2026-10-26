@@ -108,9 +108,9 @@ import {
 } from "./work-items";
 
 /** What a delegate's headline says to stay silent. */
-export const NO_REPLY = "NO_REPLY";
+const NO_REPLY = "NO_REPLY";
 /** What a delegate's headline says to fail the run. */
-export const AUTOMATION_FAILED = "AUTOMATION_FAILED";
+const AUTOMATION_FAILED = "AUTOMATION_FAILED";
 
 /**
  * A run an inbound event started (ingress.ts): its slot is `event:<event
@@ -165,7 +165,7 @@ A dated question needs no tool: what was true on a day is the lines whose \`sinc
 Nothing you propose changes a file until the person approves it. Finish with finish_item, its headline ${NO_REPLY} when you proposed nothing, else one line naming what you proposed.`;
 
 /** A refusal, with the status a route answers and the words a tool returns. */
-export class RoutineRefusal extends Error {
+class RoutineRefusal extends Error {
   readonly status: 400 | 403 | 404 | 409;
   constructor(code: 400 | 403 | 404 | 409, message: string) {
     super(message);
@@ -205,7 +205,7 @@ export interface RoutineRunView {
  * Where a routine was made: the session whose `routine_create` call made
  * it, how its notice names that session, and the Caw thread its turn was in.
  */
-export interface RoutineMadeIn {
+interface RoutineMadeIn {
   by: RoutineMadeEvent["by"];
   instanceId: string;
   threadId: string | null;
@@ -456,7 +456,7 @@ const scheduleWords = (cron: string, timeZone: string): string =>
  * is on. Verbose only at fixed times of day ("At 03:00, every day"): an
  * interval's verbose words repeat themselves ("every hour, every day").
  */
-export const scheduleOf = (
+const scheduleOf = (
   routine: Pick<RoutineRow, "cron" | "enabled" | "nextSlot" | "timeZone">
 ): RoutineSchedule => ({
   cron: routine.cron,
@@ -476,10 +476,7 @@ export interface SchedulePreview {
  * dashboard's routine form): parsed as `create` parses it (`cronOf`, refused
  * in the same words), its runs ahead as `nextRunsOf` tells them.
  */
-export const schedulePreview = (
-  cron: string,
-  timeZone: string
-): SchedulePreview => {
+const schedulePreview = (cron: string, timeZone: string): SchedulePreview => {
   const [expression, zone] = [cron.trim(), timeZone.trim()];
   return {
     nextRuns: nextRunsOf(expression, zone, Date.now()),

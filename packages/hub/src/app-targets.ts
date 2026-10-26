@@ -23,7 +23,7 @@ import { covers, TARGETS_PLACE } from "./gate-file";
 import type { GateStep } from "./landing";
 
 /** One Swift target the app builds, as the map records it. */
-export interface MapTarget {
+interface MapTarget {
   /** Every target it depends on directly, each earlier in the map. */
   dependencies: string[];
   /** `package`: a CawCoKit target; `app`: one project.yml declares. */
@@ -45,7 +45,7 @@ export interface TargetMap {
 }
 
 /** What a change makes the app build. */
-export interface Affected {
+interface Affected {
   /** The touched files the app compiles, for the words of a wait. */
   reads: string[];
   /** The targets to build, deps first; empty when nothing the app compiles changed. */
@@ -126,7 +126,7 @@ const foldersOf = (target: MapTarget): string[] => [
  * else the targets whose folders hold a changed file, plus every target that
  * depends on one of them, deps first; none when it changes neither.
  */
-export const affectedTargets = (
+const affectedTargets = (
   map: TargetMap,
   touched: readonly string[]
 ): Affected => {
@@ -169,7 +169,7 @@ export const affectedTargets = (
  * its pass by these paths' trees, so a pass holds over a rebase that left
  * them alone and not over one that changed a target they build against.
  */
-export const compiledInputs = (
+const compiledInputs = (
   map: TargetMap,
   targets: readonly string[]
 ): string[] => {
@@ -203,7 +203,7 @@ export const compiledInputs = (
 };
 
 /** The line of a `targets:` step whose item changes nothing its map's targets compile. */
-export const NO_APP_BUILD = "no app build: nothing the app compiles changed";
+const NO_APP_BUILD = "no app build: nothing the app compiles changed";
 
 /**
  * What a declared step runs for an item whose diff is `touched`, before its

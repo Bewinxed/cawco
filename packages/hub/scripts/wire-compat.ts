@@ -827,7 +827,7 @@ export const openEnumNames = (config: string): Set<string> =>
  * the breaks, and whether WIRE_PROTOCOL allows them (the hub's is above the
  * app's, so the hub speaks the app's older wire to it).
  */
-export const commitBreaks = (
+const commitBreaks = (
   show: (commit: string, path: string) => string,
   app: string,
   hub: string

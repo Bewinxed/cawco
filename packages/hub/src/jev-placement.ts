@@ -41,18 +41,16 @@ import {
 } from "./starter-asks";
 
 /** The table's rows, by the words a log line uses. */
-export const ROWS = {
+const ROWS = {
   attach: "Attach or fresh",
   ready: "Ready to dispatch",
   triage: "Triage",
   duplicates: "Duplicates",
   routing: "Event routing",
   type: "Delegate type",
-  recaps: "Grounded recaps",
   judged: "Judged checks",
   phone: "Phone requests",
   order: "Dispatch order",
-  voice: "Voice check",
   // Asked in memory.ts: the curator's inbox, how its lasting notes bear on
   // the fact lines, and an attempt's brief.
   inbox: "Memory inbox",
@@ -146,7 +144,7 @@ const picked = <Option extends string>(answer: JevChoiceAnswer<Option>) =>
 // --- Attach or fresh (yes/no) ---------------------------------------------------
 
 /** A noul at or above this continues the last session. Our own call: the likelier of two. */
-export const ATTACH_THRESHOLD = 0.5;
+const ATTACH_THRESHOLD = 0.5;
 
 /**
  * Whether a new message continues the session that last worked on it
@@ -337,7 +335,7 @@ export async function jevDispatch(
 }
 
 /** The field the lead scores readiness in when Jev is off: `ready: yes`. */
-export const READY_FIELD = "ready";
+const READY_FIELD = "ready";
 
 /**
  * Ready to dispatch with Jev off: the lead's score from when it planned
@@ -357,7 +355,7 @@ export const readyByRule = (
 export const TRIAGE_FIELD = "triage";
 
 /** Triage's states (§5.4's `triage` skill), as Jev's criteria. */
-export const TRIAGE = {
+const TRIAGE = {
   "needs-info":
     "It cannot be worked on until someone says more about what is wanted.",
   "ready-for-agent":
@@ -370,7 +368,7 @@ export const TRIAGE = {
 export type TriageState = keyof typeof TRIAGE;
 
 /** The most open tasks one triage batch lists to the lead. */
-export const TRIAGE_BATCH_MAX = 30;
+const TRIAGE_BATCH_MAX = 30;
 
 /** Triage with Jev on: one choice over the four states, about one task. */
 export async function jevTriage(
@@ -427,7 +425,7 @@ export const triageBatch = (
 // --- Duplicates (yes/no) ---------------------------------------------------------
 
 /** A noul at or above this marks a duplicate. Our own call: dropping a task needs confidence. */
-export const DUPLICATE_THRESHOLD = 0.8;
+const DUPLICATE_THRESHOLD = 0.8;
 /** The most open tasks a new one is compared with: the newest changed. */
 export const DUPLICATE_CANDIDATES_MAX = 30;
 
@@ -592,55 +590,10 @@ export async function jevType(
   return picked(result.answers.type);
 }
 
-// --- Grounded recaps (yes/no) --------------------------------------------------------
-
-/** A noul at or above this keeps a recap's sentence. Our own call. */
-export const GROUNDED_THRESHOLD = 0.8;
-
-/**
- * Grounded recaps with Jev on: whether each sentence of a recap is borne
- * out by the events it recaps. Unwired: nothing writes a recap yet.
- */
-export async function jevGroundedRecap(
-  access: JevAccess,
-  projectId: string,
-  sentences: string[],
-  events: string[]
-): Promise<{ grounded: boolean; noul: number; sentence: string }[]> {
-  const asked = sentences.slice(0, 40);
-  const result = await askRow(
-    "recaps",
-    projectId,
-    access,
-    { events: events.slice(-200).map((event) => head(event, 300)) },
-    Object.fromEntries(
-      asked.map((sentence, index) => [
-        `s${index}`,
-        {
-          type: "noul" as const,
-          instructions: {
-            sentence: head(sentence, 400),
-            question: "Is `sentence` borne out by `events`?",
-          },
-        },
-      ])
-    )
-  );
-  const answers = result.answers as Record<string, { noul: number }>;
-  return asked.map((sentence, index) => {
-    const noul = answers[`s${index}`]?.noul ?? 0;
-    return { sentence, noul, grounded: noul >= GROUNDED_THRESHOLD };
-  });
-}
-
-/** Grounded recaps with Jev off: a recap lists the events only (the lead can't check its own recap). */
-export const eventsRecap = (events: string[]): string =>
-  events.map((event) => `- ${event}`).join("\n");
-
 // --- Judged checks (yes/no ×N) ------------------------------------------------------
 
 /** A noul at or above this meets a criterion. Our own call, as a meaning rule fires. */
-export const JUDGED_THRESHOLD = 0.8;
+const JUDGED_THRESHOLD = 0.8;
 /** Judged checks with Jev on: one yes/no per criterion (task-file.ts `criteriaOf`), over the attempt's report. */
 export async function jevJudged(
   access: JevAccess,
@@ -685,7 +638,7 @@ export async function jevJudged(
 // --- Phone requests (choice + fill) ------------------------------------------------
 
 /** What a sentence from the phone can be: the action, and what it fills. */
-export const PHONE_ACTIONS = {
+const PHONE_ACTIONS = {
   start: "Start work on the task: an agent should begin it now.",
   retry: "Try the task again: its last attempt failed or was stopped.",
   move: "Move the task to another stage (done, review, dropped, back to do).",
@@ -696,7 +649,7 @@ export const PHONE_ACTIONS = {
 export type PhoneAction = keyof typeof PHONE_ACTIONS;
 
 /** The most open tasks a phone request picks from when it names none. */
-export const PHONE_TASKS_MAX = 50;
+const PHONE_TASKS_MAX = 50;
 
 /**
  * Phone requests with Jev on: the action (choice) and what it fills (the
@@ -768,65 +721,6 @@ export async function jevPhone(
   };
 }
 
-// --- Voice check (yes/no ×N) ---------------------------------------------------------
-
-/** A noul at or above this holds a voice rule. Our own call. */
-export const VOICE_THRESHOLD = 0.8;
-
-/**
- * Voice check with Jev on: whether a draft holds to each rule of the brand
- * voice. Unwired: there is no writer and reviewer flow to put it in yet.
- */
-export async function jevVoice(
-  access: JevAccess,
-  projectId: string,
-  draft: string,
-  rules: string[]
-): Promise<{ holds: boolean; noul: number; rule: string }[]> {
-  const asked = rules.slice(0, 30);
-  const result = await askRow(
-    "voice",
-    projectId,
-    access,
-    { draft: head(draft, 6000) },
-    Object.fromEntries(
-      asked.map((rule, index) => [
-        `r${index}`,
-        {
-          type: "noul" as const,
-          instructions: {
-            rule: head(rule, 400),
-            question: "Does `draft` hold to `rule`?",
-          },
-        },
-      ])
-    )
-  );
-  const answers = result.answers as Record<string, { noul: number }>;
-  return asked.map((rule, index) => {
-    const noul = answers[`r${index}`]?.noul ?? 0;
-    return { rule, noul, holds: noul >= VOICE_THRESHOLD };
-  });
-}
-
-/** Voice check with Jev off and no lead or reviewer: lint-style rules, banned words and a length. */
-export const lintVoice = (
-  draft: string,
-  rules: { banned: string[]; maxChars?: number }
-): string[] => {
-  const lower = draft.toLowerCase();
-  return [
-    ...rules.banned
-      .filter(
-        (word) => word.trim() && lower.includes(word.trim().toLowerCase())
-      )
-      .map((word) => `uses “${word.trim()}”`),
-    ...(rules.maxChars !== undefined && draft.length > rules.maxChars
-      ? [`is ${draft.length} characters; the limit is ${rules.maxChars}`]
-      : []),
-  ];
-};
-
 // --- Starters (choice ×N) ---------------------------------------------------------
 
 /**
@@ -834,7 +728,7 @@ export const lintVoice = (
  * likelier half, as pi-prompt-suggester's "Confidence gate low-quality
  * guesses" asks; fewer starters, or none, is a correct answer.
  */
-export const STARTER_THRESHOLD = 0.5;
+const STARTER_THRESHOLD = 0.5;
 
 const NONE =
   "Nothing about it is worth offering now: it is fine as it is, or another starter covers it.";

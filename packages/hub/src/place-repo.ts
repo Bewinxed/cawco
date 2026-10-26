@@ -31,7 +31,7 @@ import {
   type PlaceRepo,
   type ThreadNote,
 } from "@cawco/core";
-import type { DbShape, PlaceRow } from "./db";
+import type { DbShape } from "./db";
 
 /** What {@link createPlaceRepos} needs of the hub. */
 export interface PlaceRepoDeps {
@@ -83,21 +83,6 @@ const leftOutLines = (leftOut: readonly PlaceLeftOut[]): string => {
       : "";
   return `Left out, ${leftOut.length} ${leftOut.length === 1 ? "path" : "paths"}, each named in its .gitignore:\n${lines.join("\n")}${more}`;
 };
-
-/** The project's place on `machineId` that holds `cwd`: the deepest, when one place lies in another. */
-export const placeHolding = (
-  places: readonly PlaceRow[],
-  machineId: string,
-  cwd: string
-): PlaceRow | undefined =>
-  places
-    .filter(
-      (place) =>
-        place.machineId === machineId &&
-        place.kind === "checkout" &&
-        (cwd === place.path || cwd.startsWith(`${place.path}/`))
-    )
-    .sort((a, b) => b.path.length - a.path.length)[0];
 
 export const createPlaceRepos = ({ call, db, notice }: PlaceRepoDeps) => {
   const machineName = (machineId: string): string =>

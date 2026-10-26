@@ -80,7 +80,7 @@ import {
 } from "./project-folder";
 import { isLive } from "./work-items";
 
-export const DESIGN_DIR = "design";
+const DESIGN_DIR = "design";
 /** The most files one `design_write` takes. */
 export const DESIGN_WRITE_FILES = 40;
 const MANIFEST = "manifest.json";
@@ -91,7 +91,7 @@ const TYPES = "tokens.ts";
 const THEMES = "themes";
 
 /** The files every finished system holds, relative to `design/`. */
-export const DESIGN_PARTS = [
+const DESIGN_PARTS = [
   "DESIGN.md",
   RESOLVER,
   TOKENS,
@@ -125,7 +125,7 @@ const HEADER = [
 ].join("\n");
 
 /** A project's token system built: the dashboard's generator, in a `tokens` layer, the schemes it has declared. */
-export const buildDesignTokens = (
+const buildDesignTokens = (
   read: (path: string) => Promise<unknown>
 ): Promise<BuiltTokens> =>
   buildTokens(RESOLVER, read, {
@@ -143,10 +143,10 @@ const isTokenFile = (path: string): boolean =>
   path === TOKENS || path === RESOLVER || path.startsWith(`${THEMES}/`);
 
 /** What CawCo records of a file it wrote: its bytes' SHA-256. */
-export const fingerprint = (bytes: Uint8Array): string =>
+const fingerprint = (bytes: Uint8Array): string =>
   `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 
-export interface DesignManifest {
+interface DesignManifest {
   /** Each file CawCo wrote, relative to `design/`, to its fingerprint. */
   files: Record<string, string>;
   /** Each token's path (`color.ink`) to where its value came from. */
@@ -161,9 +161,7 @@ const DESIGN_PREFIX = /^\.?\/?design\//u;
  * `design/` is dropped): one of the contract's top files, or a file inside
  * one of its folders. Undefined with the reason otherwise.
  */
-export const designPath = (
-  raw: string
-): { path: string } | { problem: string } => {
+const designPath = (raw: string): { path: string } | { problem: string } => {
   const trimmed = raw.trim().replaceAll("\\", "/");
   const rel = posix.normalize(trimmed.replace(DESIGN_PREFIX, ""));
   if (trimmed.startsWith("/") || rel.startsWith("..") || rel === ".") {
@@ -539,7 +537,7 @@ const planDesign = async (
 };
 
 /** Writes `files` into a system ({@link planDesign}), and says what it wrote and kept. */
-export const writeDesign = async (
+const writeDesign = async (
   store: DesignStore,
   files: DesignFile[]
 ): Promise<DesignWritten> => {
@@ -590,7 +588,7 @@ const drawn = (bytes: Uint8Array | null): string => {
  * writes, before and after, the hub's ledger (manifest.json) left out when
  * only its fingerprints change. Refused as the write would be.
  */
-export const previewDesign = async (
+const previewDesign = async (
   store: DesignStore,
   files: DesignFile[]
 ): Promise<DesignProposalFile[]> => {
@@ -634,14 +632,14 @@ export type Run = (
  * host would write the clone under the boundary's read-only binds, and its
  * guard stops the boundary, the session in it with it.
  */
-export interface RepositoryAt {
+interface RepositoryAt {
   machineId: string;
   root: string;
   workspace?: WorkspaceRef;
 }
 
 /** A command in a repository, where it must run ({@link RepositoryAt}). */
-export const runIn =
+const runIn =
   (run: Run, at: RepositoryAt) =>
   (cmd: string, timeoutMs = COMMAND_MS): Promise<CommandResult> =>
     run(at.machineId, at.root, cmd, timeoutMs, at.workspace);
@@ -936,7 +934,7 @@ const uncommittedLine = (
 };
 
 /** The ref a workspace's base branch is on origin as: what the project has, apart from the workspace's own commits. */
-export const baseRef = (base: string): string => `refs/remotes/origin/${base}`;
+const baseRef = (base: string): string => `refs/remotes/origin/${base}`;
 
 /**
  * Whether the workspace clone at `root` on `machineId` holds a design
@@ -1454,5 +1452,3 @@ export const createDesignSystem = (deps: {
     },
   };
 };
-
-export type DesignSystem = ReturnType<typeof createDesignSystem>;

@@ -179,7 +179,7 @@ noteParent(readEnv(CAWCO_ENV.dashboardUrl));
 noteParent(`http://localhost:${LOCAL_DASHBOARD_PORT}`);
 
 /** Every origin that may frame a preview now. */
-export const previewParents = (): string[] => [...parents];
+const previewParents = (): string[] => [...parents];
 
 /**
  * What every answer on a preview origin carries: who may frame it, and its

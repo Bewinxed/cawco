@@ -39,8 +39,7 @@ const HTTP_URL_PREFIX = /^https?:\/\//u;
 const LEADING_SLASHES = /^\/+/u;
 const DOT_GIT_SUFFIX = /\.git$/u;
 
-/** A plugin id is `name@marketplace`; the name is what the manifest lists. */
-export const pluginName = (id: string): string => id.split("@")[0] ?? id;
+/** A plugin id is `name@marketplace`: the marketplace after the `@`. */
 export const pluginMarketplace = (id: string): string => id.split("@")[1] ?? "";
 
 /**

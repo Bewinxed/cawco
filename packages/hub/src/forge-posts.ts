@@ -19,7 +19,7 @@ import type {
 import type { UpstreamAsks } from "./upstream-asks";
 
 /** What a machine's forge call came to: its verdict, or why there is none. */
-export type ForgeCall =
+type ForgeCall =
   { kind: "answered"; verdict: ForgeVerdict } | { kind: "failed"; why: string };
 
 export interface ForgePostsDeps {
@@ -91,5 +91,3 @@ export const createForgePosts = (deps: ForgePostsDeps) => ({
     }
   },
 });
-
-export type ForgePosts = ReturnType<typeof createForgePosts>;

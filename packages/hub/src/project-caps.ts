@@ -27,7 +27,7 @@ import { Elysia, status, t } from "elysia";
 import type { DbShape, ProjectRow } from "./db";
 
 /** The period `at` falls in, in the hub's zone: when it began and when the next one begins. */
-export const periodOf = (
+const periodOf = (
   period: CapPeriod,
   at: Date
 ): { start: number; end: number } => {

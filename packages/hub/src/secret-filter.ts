@@ -51,7 +51,7 @@ const UPPER = /[A-Z]/u;
 const DIGIT_OR_SYMBOL = /[^A-Za-z]/u;
 
 /** Eight characters or more, upper and lower case, and a digit or a symbol. */
-export const passwordShaped = (word: string): boolean =>
+const passwordShaped = (word: string): boolean =>
   word.length >= PASSWORD_MIN &&
   LOWER.test(word) &&
   UPPER.test(word) &&

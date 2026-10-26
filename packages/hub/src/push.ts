@@ -216,7 +216,7 @@ const OPEN_ONLY_TOOLS = new Set([
 ]);
 
 /** What the app reads to find the item, under the payload's `cawco` key. */
-export type PushData =
+type PushData =
   | {
       kind: "ask";
       instanceId: string;

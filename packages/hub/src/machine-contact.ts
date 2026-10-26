@@ -119,5 +119,3 @@ export const createMachineContact = (deps: MachineContactDeps) => {
     },
   };
 };
-
-export type MachineContact = ReturnType<typeof createMachineContact>;

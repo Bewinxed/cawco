@@ -204,7 +204,7 @@ const SESSION = /^\d+ [A-Za-z0-9: ]+$/u;
 const KEEP_KEY = `umask 077 && d="\${XDG_CONFIG_HOME:-$HOME/.config}/cawco" && mkdir -p "$d" && cat > "$d/machine-key.part" && mv -f "$d/machine-key.part" "$d/machine-key"`;
 
 /** What a machine would not do, which ends an add, or a held connection. */
-export type TunnelRefusal =
+type TunnelRefusal =
   /** Its sshd forwards no port to the hub (AllowTcpForwarding). */
   | { kind: "forwarding" }
   /** Something there other than this hub's own connection holds the machine's port. */
@@ -433,7 +433,7 @@ const onLoopback = (address: string): boolean =>
   LOOPBACK_HOST.test(address.slice(0, address.lastIndexOf(":")));
 
 /** Words a person reads for what a machine would not do. */
-export const refusalWords = (refusal: TunnelRefusal): string => {
+const refusalWords = (refusal: TunnelRefusal): string => {
   switch (refusal.kind) {
     case "forwarding":
       return "its sshd forwards no port (AllowTcpForwarding)";

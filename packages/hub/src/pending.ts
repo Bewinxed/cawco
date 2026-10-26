@@ -50,7 +50,7 @@ export interface PendingShape {
 }
 
 /** What the hub can say of how an ask ended, beyond answered or cancelled. */
-export interface Settlement {
+interface Settlement {
   /** An answered ask: what won and where it came from. */
   answer?: AskAnswer;
   /**
@@ -61,14 +61,14 @@ export interface Settlement {
 }
 
 /** Hears every parked ask that leaves, with what the hub could say of it. */
-export type SettledListener = (
+type SettledListener = (
   envelope: Envelope,
   outcome: "answered" | "cancelled",
   said?: Settlement
 ) => void;
 
 /** Stamps a parked ask's presentation onto its payload. */
-export type Presenter = (envelope: Envelope) => void;
+type Presenter = (envelope: Envelope) => void;
 
 /**
  * Whether an ask stays when its session's process ends: a post held for the

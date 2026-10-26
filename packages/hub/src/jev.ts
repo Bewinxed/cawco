@@ -30,7 +30,7 @@ import type {
 import type { DbShape } from "./db";
 import { TYPESAFE_URL } from "./upstreams";
 
-export type JevRoute = "typesafe" | "openrouter";
+type JevRoute = "typesafe" | "openrouter";
 
 /** The route Jev takes and the key it takes it with. */
 export interface JevAccess {
@@ -39,7 +39,7 @@ export interface JevAccess {
 }
 
 /** Each route's own name, as its failures are reported. */
-export const ROUTE_NAME: Record<JevRoute, string> = {
+const ROUTE_NAME: Record<JevRoute, string> = {
   typesafe: "TypeSafe",
   openrouter: "OpenRouter",
 };

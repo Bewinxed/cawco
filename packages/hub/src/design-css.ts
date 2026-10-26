@@ -163,7 +163,7 @@ function unit(n: number, u: string, where: string): number {
 }
 
 /** + - * / and parentheses over numbers with units and named channels. */
-export function arith(
+function arith(
   expr: string,
   where: string,
   ident: (id: string) => number = (id) => {

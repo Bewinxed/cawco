@@ -225,7 +225,7 @@ export function openingMessage(
 }
 
 /** The heading each message it was asked goes under in {@link asksOpening}. */
-export const askHeading = (at: number): string => `## Message ${at + 1}`;
+const askHeading = (at: number): string => `## Message ${at + 1}`;
 
 /**
  * The new session's first message when it restarts from its asks: every

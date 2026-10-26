@@ -44,7 +44,7 @@ const ZERO = /^0$/u;
 const DIRECTION_ANGLE = /^-?\d*\.?\d+(deg|grad|rad|turn)$/u;
 
 /** A DTCG colour value (Color Module 2025.10 §4.1). */
-export interface DtcgColour {
+interface DtcgColour {
   alpha?: number;
   colorSpace: string;
   components: (number | "none")[];
@@ -76,7 +76,7 @@ const SPACES: Record<string, string> = {
 };
 
 /** A number as JSON and CSS write it: no float noise. */
-export const num = (x: number): number => Number(x.toPrecision(12));
+const num = (x: number): number => Number(x.toPrecision(12));
 const fixed = (x: number): number => Number(x.toFixed(6));
 
 const isRef = (value: unknown): value is string =>
@@ -193,7 +193,7 @@ export function toCss(type: string, value: unknown): string | undefined {
 // MARK: - A value from CSS
 
 /** A colour as the Color Module writes it, from colorjs.io's reading. */
-export function dtcgColour(colour: Color): DtcgColour {
+function dtcgColour(colour: Color): DtcgColour {
   const space = SPACES[colour.space.id];
   if (!space) {
     throw new Error(

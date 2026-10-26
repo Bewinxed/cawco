@@ -362,7 +362,7 @@ export interface TaskFlags {
 }
 
 /** Its waits that are not settled: what it still waits on. */
-export const unsettledWaits = (task: Pick<TaskFlags, "waits">): TaskWait[] =>
+const unsettledWaits = (task: Pick<TaskFlags, "waits">): TaskWait[] =>
   task.waits.filter((wait) => !wait.settled);
 
 /**
@@ -1524,10 +1524,7 @@ const moverOf = (author: string): Mover => {
  * or its `by: action` says only an approved action moves a task there (the
  * hub's dispatcher is not one).
  */
-export const hubProblem = (
-  stages: Stages,
-  stage: string
-): string | undefined => {
+const hubProblem = (stages: Stages, stage: string): string | undefined => {
   const to = stageNamed(stages, stage);
   if (!to) {
     return `${stage} is not a stage of this project.`;

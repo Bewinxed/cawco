@@ -227,7 +227,7 @@ const issueOf = (raw: RawIssue): Issue => ({
 });
 
 /** Linear's refusal of `what` on `team`, in its words. */
-export const linearRefusal = (
+const linearRefusal = (
   error: unknown,
   what: string,
   team: string

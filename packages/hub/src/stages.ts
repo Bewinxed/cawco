@@ -55,7 +55,7 @@ import {
 } from "@cawco/core";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 
-export interface StageHooks {
+interface StageHooks {
   /** `after:` as written, like `48h`. */
   after?: string;
   /** `after:` in milliseconds. */
@@ -127,13 +127,13 @@ const isMover = (word: string): word is Mover =>
   (MOVERS as readonly string[]).includes(word);
 
 /** `a, b or c`. */
-export const listed = (words: string[], joiner = "or"): string =>
+const listed = (words: string[], joiner = "or"): string =>
   words.length < 2
     ? (words[0] ?? "")
     : `${words.slice(0, -1).join(", ")} ${joiner} ${words.at(-1)}`;
 
 /** Who a sentence names: “you”, “the project lead”, “an approved action”. */
-export const moverPhrase = (who: Mover): string =>
+const moverPhrase = (who: Mover): string =>
   ({
     you: "you",
     lead: "the project lead",

@@ -41,9 +41,9 @@ import { z } from "zod";
 import { firstLine, type Heard, type Ran, runTailscale } from "./tailscale-cli";
 
 /** The Funnel port the relay owns: one of the three Funnel allows, and nothing else of the hub's. */
-export const FUNNEL_PORT = 10_000;
+const FUNNEL_PORT = 10_000;
 /** The one public mount. */
-export const FUNNEL_MOUNT = "/hooks/";
+const FUNNEL_MOUNT = "/hooks/";
 /** How long one `tailscale` call may take: the first apply waits on the owner's approval page. Our choice. */
 const CALL_MS = 20_000;
 const URL_IN_OUTPUT = /https:\/\/\S+/u;
@@ -74,7 +74,7 @@ const ServeConfigSchema = z.object({
 type ServeConfig = z.infer<typeof ServeConfigSchema>;
 
 /** What a state says, in a sentence. */
-export const wordsOf = (state: FunnelState): string => {
+const wordsOf = (state: FunnelState): string => {
   switch (state.state) {
     case "live":
       return `Funnel is live at ${state.base}`;

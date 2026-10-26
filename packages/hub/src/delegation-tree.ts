@@ -15,7 +15,7 @@ import { roleOf } from "./roles";
 import { type HeldWork, isHubParent, type QueuedDelegate } from "./work-items";
 
 /** `live`: items not dismissed that are not ended or ended in the last hour; `all`: every one. */
-export type DelegateListInclude = "live" | "all";
+type DelegateListInclude = "live" | "all";
 
 /**
  * One `delegate_list` read. With `since` or `before`, only what that window
@@ -410,5 +410,3 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
 
   return { read };
 };
-
-export type DelegationTree = ReturnType<typeof createDelegationTree>;

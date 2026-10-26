@@ -62,7 +62,7 @@ export const COMPACT_FOCUS =
   "Keep, word for word where short: what the person asked, decided, ruled out or set as a constraint, with their reasons; what was tried and why it was set aside; where the work stands; the names, numbers, paths, commands, ids and links in play. Open questions, promises and next steps are listed again after this from the session's records.";
 
 /** The heading every Open items section opens with. */
-export const OPEN_ITEMS_HEADING =
+const OPEN_ITEMS_HEADING =
   "## Open items (this session's records, word for word)";
 
 /** What the reader gathered: each source's rows, as stored. */
@@ -115,7 +115,7 @@ const under = (text: string): string[] =>
  * heading, its rows as stored; a source with nothing open says nothing. With
  * nothing open anywhere it says so, so a reader knows the records were read.
  */
-export function openItemsSection(rows: OpenItemRows): string {
+function openItemsSection(rows: OpenItemRows): string {
   const parts: string[] = [];
   const steps = (rows.plan?.steps ?? []).filter(
     (step) => step.status !== "completed"
@@ -266,5 +266,3 @@ export const createOpenItems = (deps: OpenItemsDeps) => {
       openItemsSection(await rows(instanceId)),
   };
 };
-
-export type OpenItems = ReturnType<typeof createOpenItems>;

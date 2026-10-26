@@ -95,7 +95,7 @@ export type Listed<T> =
   { cursor: ListCursor; items: T[]; kind: "read" } | { kind: "unchanged" };
 
 /** An issue as a write names it: its key for the tracker, its ref for sentences. */
-export type IssueRef = Pick<Issue, "key" | "ref">;
+type IssueRef = Pick<Issue, "key" | "ref">;
 
 export interface TrackerAdapter {
   /** The target's issues changed since the cursor, pull requests left out. */

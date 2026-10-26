@@ -540,5 +540,3 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
 
   return { resolve };
 };
-
-export type HandedInputs = ReturnType<typeof createHandedInputs>;

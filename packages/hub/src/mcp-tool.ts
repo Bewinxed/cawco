@@ -42,7 +42,7 @@ export const sentence: Presenter<string, unknown> = (text) => text;
 /** The answer whole, as the hub keeps it. */
 const asJson = (answer: unknown): Presented => JSON.stringify(answer);
 
-export const RESPONSE_FORMATS = ["concise", "detailed"] as const;
+const RESPONSE_FORMATS = ["concise", "detailed"] as const;
 export type ResponseFormat = (typeof RESPONSE_FORMATS)[number];
 
 /**

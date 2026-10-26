@@ -21,7 +21,7 @@ import { dirname, join } from "node:path";
 import { writeStateFile } from "@cawco/core/state-file";
 import { DB_PATH } from "./config";
 
-export const MEDIA_DIR = join(dirname(DB_PATH), "media");
+const MEDIA_DIR = join(dirname(DB_PATH), "media");
 
 const EXTENSIONS: Record<string, string> = {
   "image/png": "png",
@@ -145,17 +145,6 @@ export function externalizeImages<T>(value: T): T {
     }
   }
   return value;
-}
-
-/**
- * One picture into the store, as {@link externalizeImages} keeps each: its
- * address, or undefined for a type the store does not keep.
- */
-export function storeImage(
-  mediaType: string,
-  data: string
-): string | undefined {
-  return mediaType in EXTENSIONS ? store(mediaType, data) : undefined;
 }
 
 /** The file behind a media name, or undefined for any name this store never minted. */

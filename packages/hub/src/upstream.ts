@@ -18,7 +18,7 @@ import type {
 import type { DbShape, ProjectRow } from "./db";
 
 /** Whether a project's sessions may post to other repositories: its own answer, else the fleet's, else on. */
-export const upstreamPostsOf = (
+const upstreamPostsOf = (
   project: Pick<ProjectRow, "upstreamPosts">,
   fleet: UpstreamPosts | null
 ): UpstreamPosts => project.upstreamPosts ?? fleet ?? "on";

@@ -188,7 +188,7 @@ export interface Kept {
  * what its process holds for later; a driven one waits while waiting costs
  * nothing.
  */
-export type Presence = "watched" | "driven" | "nobody";
+type Presence = "watched" | "driven" | "nobody";
 
 /**
  * What stopped it: its account's limit refused a turn (`limit`), Claude Code
@@ -201,12 +201,12 @@ export type StopCause =
   "limit" | "refused-credential" | "extra-usage" | "forecast";
 
 /** Another account of the session's provider as the decision reads it: placement's row, the ledger's figures, and whether a turn on the session's machine proved its sign-in lately. */
-export interface StopAccount extends AccountRow, Ledger {
+interface StopAccount extends AccountRow, Ledger {
   proven: boolean;
 }
 
 /** The stopped session as the decision reads it. */
-export interface StopSession {
+interface StopSession {
   /** Its expected burn, weighted tokens an hour (rebalance.ts `sessionBurn`); null when unmeasured. */
   burn: number | null;
   /** When its prompt cache lapses on its account, as measured; null when it is cold. */
@@ -228,7 +228,7 @@ export interface StopSession {
 }
 
 /** The kind's strategy (core `StrategyChoice`): its pin, and the delegate type's preferred account. */
-export interface StopStrategy {
+interface StopStrategy {
   kind: PlacementStrategy;
   pinned: string | null;
   prefers: string | null;
@@ -274,7 +274,7 @@ export interface StopTarget {
 }
 
 /** Why one other account didn't take the session, or that it could (core `HeldReason`). */
-export interface StopReason {
+interface StopReason {
   accountId: string;
   backAt?: number;
   reason: HeldReason;
@@ -287,7 +287,7 @@ export interface StopReason {
  * history; or the account a person moved it to is full (`hand`), or, at a
  * forecast, a warm cache that moves at its limit instead (`warm`).
  */
-export type StopWhy = Exclude<WaitReason, "room" | "work"> | "hand" | "warm";
+type StopWhy = Exclude<WaitReason, "room" | "work"> | "hand" | "warm";
 
 interface Priced {
   /** Every other account and why it didn't take the session, or that it could. */
@@ -338,7 +338,7 @@ const oneOrganization = (a: string | null, b: string | null): boolean =>
   !!a && a === b;
 
 /** Two accounts of one organization share its prompt cache and its thinking. */
-export const sameOrganization = (a: Account, b: Account): boolean =>
+const sameOrganization = (a: Account, b: Account): boolean =>
   oneOrganization(
     a.identity?.organization || null,
     b.identity?.organization || null
@@ -851,7 +851,7 @@ export interface AccountsRead {
 }
 
 /** What a carry that went did: what it ended of its process's work held for later (core `MoveEnded`), when anything. */
-export interface Carried {
+interface Carried {
   ended?: MoveEnded;
 }
 
@@ -1067,7 +1067,7 @@ const liveWorkOf = (db: DbShape, row: LimitRow): boolean => {
 };
 
 /** Who waits on `row` ({@link Presence}). */
-export const presenceOf = (
+const presenceOf = (
   db: DbShape,
   ports: Pick<AtLimitPorts, "startedBy" | "waitedOn">,
   row: LimitRow

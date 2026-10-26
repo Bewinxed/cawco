@@ -74,7 +74,7 @@ const HANDED_BACK_BY: Record<BrowserHandedBackFrame["why"], string> = {
 };
 
 /** What a browser artifact is called in a panel. */
-export const BROWSER_ARTIFACT_NAME = "browser";
+const BROWSER_ARTIFACT_NAME = "browser";
 
 /** How long a take-over, a start or a stop has on its machine: a start may build the image first. */
 const CALL_MS = 15 * 60_000;
@@ -125,7 +125,7 @@ export interface BrowsersDeps {
 }
 
 /** The browser `instance` uses: its project's, else its machine's. */
-export const browserKeyOf = (instance: InstanceRow): BrowserKey =>
+const browserKeyOf = (instance: InstanceRow): BrowserKey =>
   instance.projectId
     ? `project:${instance.projectId}`
     : `machine:${instance.machineId}`;

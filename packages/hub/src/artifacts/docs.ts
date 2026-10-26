@@ -44,7 +44,7 @@ export const MAPS = [
 ] as const;
 
 /** The doc's one top-level array: a canvas's scene, as y-excalidraw lays it out. */
-export const ELEMENTS = "elements";
+const ELEMENTS = "elements";
 
 /** A canvas's elements: each a `Y.Map` of `el`, `pos`, `by` and `at`. */
 export const elementsOf = (doc: Doc): YArray<YMap<unknown>> =>
@@ -57,7 +57,7 @@ const COMPACT_EVERY = 100;
 const IDLE_MS = 5 * 60_000;
 
 /** Who made a change: a person through a joined client, or the hub (an agent's tool, a build). */
-export type ChangeOrigin = { client: ArtifactClient } | "agent" | "hub";
+type ChangeOrigin = { client: ArtifactClient } | "agent" | "hub";
 
 /** A joined client: the hub sends it every update another made. */
 export interface ArtifactClient {
