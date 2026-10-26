@@ -116,11 +116,9 @@ export interface HarnessContext {
    */
   readonly browserDoor?: () => Promise<import("./browser/door").BrowserDoor>;
   /** Whether a turn is in flight — the supervisor's busy set and drain read this. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  busy(active: boolean): void;
+  busy: (active: boolean) => void;
   /** The session's event loop ended; the supervisor drops its routing entry. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  closed?(): void;
+  closed?: () => void;
   /**
    * What its environment names the machine's container runtimes by: its own
    * doors to them (session-containers.ts `openContainerDoors`), as
@@ -136,17 +134,13 @@ export interface HarnessContext {
    * so): a death of the process, not of the session's work. The supervisor
    * decides whether that is one it starts again or a failure.
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  died?(signal: string, error: unknown, cut?: CutCommand[]): void;
+  died?: (signal: string, error: unknown, cut?: CutCommand[]) => void;
   /** Put an envelope the harness built itself on the daemon's hub socket. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  emit(envelope: Envelope): void;
+  emit: (envelope: Envelope) => void;
   /** The session itself died of something the reader should see. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  failed(error: unknown): void;
+  failed: (error: unknown) => void;
   /** Ship one neutral frame toward the hub. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  frame(message: NeutralMessage): void;
+  frame: (message: NeutralMessage) => void;
   readonly ingested?: import("@cawco/core").IngestMark;
   readonly instanceId: string;
   /**
@@ -154,8 +148,7 @@ export interface HarnessContext {
    * ({@link KeeperRefused}): said, the session failed with it, and the sends
    * it was handed kept for its next start.
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: matches the context callbacks
-  keeperRefused(error: KeeperRefused): void;
+  keeperRefused: (error: KeeperRefused) => void;
   /**
    * The gate a workspace session reaches every fleet MCP server with a
    * command through (mcp-gate.ts): its {@link workspace}'s, on the agent's
@@ -164,8 +157,7 @@ export interface HarnessContext {
    */
   readonly mcpGate?: import("./mcp-gate").McpGate;
   /** Park a permission request; the supervisor forwards it and tracks the reply. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  permission(request: {
+  permission: (request: {
     requestId: string;
     toolName: string;
     input: Record<string, unknown>;
@@ -173,38 +165,33 @@ export interface HarnessContext {
     requestKind?: "tool" | "question";
     /** The tool call the ask gates: its `tool_use` id, which names its transcript row. */
     toolUseId?: string;
-  }): void;
+  }) => void;
   /**
    * A gate was answered elsewhere, or by the adapter's own policy; or, with
    * `cancelled`, withdrawn by the harness before anyone answered it (an
    * interrupt mid-ask).
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: matches the context callbacks
-  permissionResolved?(
+  permissionResolved?: (
     requestId: string,
     outcome?: "answered" | "cancelled"
-  ): void;
+  ) => void;
   /** Server-session work waits for durable hub storage of its address. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: matches context callbacks
-  recordSessionAddress?(sessionId: string): Promise<void>;
+  recordSessionAddress?: (sessionId: string) => Promise<void>;
   /**
    * The session's process was stopped because it can no longer be trusted
    * to run ({@link HeldProcessRefused}): its row and work item fail with the
    * reason, which the parent hears, even for a session this agent attached
    * to.
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: matches the context callbacks
-  refused?(error: HeldProcessRefused): void;
+  refused?: (error: HeldProcessRefused) => void;
   /**
    * The harness refused one send, `uuid`: that send failed, with the
    * harness's own words. The session goes on — this is never a session
    * failure ({@link failed}).
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: matches the context callbacks
-  rejected(uuid: string, error: unknown): void;
+  rejected: (uuid: string, error: unknown) => void;
   /** The harness's own session id, once the runtime names it. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  session(sessionId: string): void;
+  session: (sessionId: string) => void;
   /** Delivered by the hub, held only by this session's MCP configuration/closures. */
   readonly sessionCredential?: string;
   /**
@@ -218,21 +205,17 @@ export interface HarnessContext {
 /** One live session, owned by a harness. */
 export interface HarnessSession {
   /** Called only after the supervisor has installed this handle. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: matches the session methods
-  attached?(): void;
+  attached?: () => void;
   /** A neutral control ({@link CONTROL_INTERRUPT}, …), mapped to the runtime. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  control(method: string, args: unknown[]): Promise<unknown>;
+  control: (method: string, args: unknown[]) => Promise<unknown>;
   /** Hard teardown, used on drain/shutdown. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  dispose(): Promise<void>;
+  dispose: () => Promise<void>;
   /**
    * What a move's stop is about to end with this process ({@link heldForLater}),
    * read before it ends: each background task with the last of its output,
    * and the one-time wake-ups, for the session to hear on the new account.
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: matches the session methods
-  endedForMove?(): Promise<MoveEnded>;
+  endedForMove?: () => Promise<MoveEnded>;
   readonly harness: HarnessKind;
   /**
    * For a move's stop: the work this process holds for later that a resume
@@ -242,15 +225,13 @@ export interface HarnessSession {
    * the restart bound (core `RESTART_WAIT_CAP_MS`), then ends it with the
    * process ({@link endedForMove}). Empty when it holds none.
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: matches the session methods
-  heldForLater?(): RestartHold[];
+  heldForLater?: () => RestartHold[];
   /**
    * Since when what {@link heldForLater} counts has run, epoch ms: its oldest
    * background command's start as this daemon first heard of it. Undefined
    * when it holds none, or none whose start is known.
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: matches the session methods
-  heldSince?(): number | undefined;
+  heldSince?: () => number | undefined;
   /**
    * What stopping this session's processes now would lose, in words, beyond
    * what the supervisor sees for itself (a running turn, a parked ask): work
@@ -260,11 +241,9 @@ export interface HarnessSession {
    * that resume brings back is not counted, and what it holds for later is
    * {@link heldForLater}'s to say.
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: matches the session methods
-  holding?(forMove?: boolean): string | undefined;
+  holding?: (forMove?: boolean) => string | undefined;
   /** Interrupt the current turn. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  interrupt(): Promise<void>;
+  interrupt: () => Promise<void>;
   /**
    * The supervisor stopped this session for failing the same way again and
    * again ({@link import("@cawco/core").REPEATED_FAILURE}), in `words`: kept
@@ -272,8 +251,7 @@ export interface HarnessSession {
    * live one did. A runtime that starts no turn of its own between sends
    * cannot loop that way, and has none.
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: matches the session methods
-  noteStopped?(words: string): Promise<void>;
+  noteStopped?: (words: string) => Promise<void>;
   /**
    * This process runs a version of its harness other than the machine's
    * (Claude: its initialize reply's `claude_code_version` against the
@@ -283,40 +261,33 @@ export interface HarnessSession {
    * while either version is not read yet, or while the machine's is below the
    * floor no session starts on (a sleep would leave it nothing to wake on).
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: matches the session methods
-  outdated?(): Promise<{ uuid: string; words: string } | undefined>;
+  outdated?: () => Promise<{ uuid: string; words: string } | undefined>;
   /**
    * The process the session's commands run under: its CLI's (Claude Code,
    * pi's host) or its server's (OpenCode). Undefined while there is none
    * (agent left-running.ts).
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: matches the session methods
-  processId?(): Promise<number | undefined>;
+  processId?: () => Promise<number | undefined>;
   /** Settle a parked permission by its `requestId`. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  resolvePermission(requestId: string, result: PermissionResult): void;
+  resolvePermission: (requestId: string, result: PermissionResult) => void;
   /** Push one user turn into the session's prompt stream. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  send(message: SentMessage, extras: TurnExtras): void;
+  send: (message: SentMessage, extras: TurnExtras) => void;
   /** The runtime's own session id, once known. */
   sessionId: string | null;
   /** End the session gracefully: unblock, interrupt, let the turn settle, close. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  stop(): Promise<void>;
+  stop: () => Promise<void>;
   /**
    * The entry count of each table this session keeps for its own life, by
    * name: summed across live sessions into the agent's memory line
    * ({@link import("./memory").memoryLine}).
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: matches the session methods
-  tables?(): Record<string, number>;
+  tables?: () => Record<string, number>;
   /**
    * Take back a parked permission nobody could be shown (WITHDRAW_PERMISSION):
    * denied with `message`, and recorded as withdrawn, never as the reader's
    * dismissal.
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style like resolvePermission, for the same contravariant parameter checking
-  withdrawPermission(requestId: string, message: string): void;
+  withdrawPermission: (requestId: string, message: string) => void;
 }
 
 /**
@@ -336,15 +307,13 @@ export type TranscriptSpan = "chain" | "whole";
 /** One harness adapter. Implemented per runtime; registered in `./harnesses`. */
 export interface Harness {
   /** Abort a server-held turn without adopting or waking its session. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: matches the other adapter methods
-  abortSession?(sessionKey: string, dir: string): Promise<boolean>;
+  abortSession?: (sessionKey: string, dir: string) => Promise<boolean>;
   /**
    * The machine's provider accounts changed (one signed in, keyed, moved in
    * or forgotten): the harness takes the change into what it runs. Absent
    * from a harness that reads the accounts afresh on its own.
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: matches the other adapter methods
-  accountsChanged?(): Promise<void>;
+  accountsChanged?: () => Promise<void>;
   /** What `register` reports as this harness's auth, cached from {@link detect}. */
   auth: AuthState;
   /**
@@ -354,8 +323,7 @@ export interface Harness {
    */
   readonly authReason?: string;
   /** Authoritative server activity, when the runtime owns turns outside this daemon. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: matches the other adapter methods
-  busyInstances?(): Promise<string[]>;
+  busyInstances?: () => Promise<string[]>;
   readonly capabilities: HarnessCapabilities;
   /**
    * `true` when {@link listSessions} reads the harness's servers' databases
@@ -364,61 +332,50 @@ export interface Harness {
    * follows on a beat, so no register waits on that read.
    */
   readonly catalogFromServer?: true;
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  deleteSession(sessionKey: string, dir?: string): Promise<void>;
+  deleteSession: (sessionKey: string, dir?: string) => Promise<void>;
   /** What this machine can do with the harness — install, version, auth. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  detect(): Promise<MachineHarnessReport>;
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  dispose?(): Promise<void>;
+  detect: () => Promise<MachineHarnessReport>;
+  dispose?: () => Promise<void>;
   /**
    * Confirm a server session's turn and resources ended without adopting it.
    * `forget`: nothing will reattach it (a stop's `forget`), so
    * what the harness kept to reattach it goes too.
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: matches adapter methods
-  endSession?(
+  endSession?: (
     sessionKey: string,
     dir: string,
     instanceId?: string,
     claimed?: readonly string[],
     forget?: boolean
-  ): Promise<void>;
+  ) => Promise<void>;
   /**
    * The fleet content this harness's own copy holds on disk now, hashed as the
    * hub hashes it. Absent from a harness that converges no content.
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers keep contravariant parameter checking, like the other adapter methods
-  fleetHoldings?(): Promise<import("@cawco/core").FleetHoldings>;
+  fleetHoldings?: () => Promise<import("@cawco/core").FleetHoldings>;
   /** What the harness has of what cawco last put on it, without changing it. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  fleetStatus?(): Promise<FleetSyncReport>;
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  getSessionInfo(
+  fleetStatus?: () => Promise<FleetSyncReport>;
+  getSessionInfo: (
     sessionKey: string,
     dir?: string
-  ): Promise<NeutralSessionInfo | undefined>;
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  getSessionMessages(
+  ) => Promise<NeutralSessionInfo | undefined>;
+  getSessionMessages: (
     sessionKey: string,
     dir?: string,
     tail?: number,
     span?: TranscriptSpan
-  ): Promise<SessionMessage[]>;
+  ) => Promise<SessionMessage[]>;
   /**
    * The hub restarted since this harness's live sessions connected to it:
    * whatever connection to the hub they hold that does not come back by
    * itself is made again. Absent for a harness whose connections do.
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: matches the other adapter methods
-  hubRestarted?(): Promise<void>;
+  hubRestarted?: () => Promise<void>;
   readonly kind: HarnessKind;
   /** The stored sessions this harness can resume. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  listSessions(dir?: string): Promise<NeutralSessionInfo[]>;
+  listSessions: (dir?: string) => Promise<NeutralSessionInfo[]>;
   /** A machine-scoped control this harness owns; `undefined` when it is not its word. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  machine?(method: string, args: unknown[]): Promise<unknown> | undefined;
+  machine?: (method: string, args: unknown[]) => Promise<unknown> | undefined;
   /**
    * A project's MCP servers placed at the one folder `cwd` as a workspace's
    * clone is cut there (fleet-place.ts `place`), into this harness's own
@@ -426,18 +383,16 @@ export interface Harness {
    * under `<name>@<place id>`. Absent for a harness that reads the fleet MCP
    * set itself (fleet-mcp-set.ts).
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers keep contravariant parameter checking
-  placeFleet?(
+  placeFleet?: (
     cwd: string,
     mcp: FleetMcpServer[]
-  ): Promise<Record<string, FleetItemState>>;
+  ) => Promise<Record<string, FleetItemState>>;
   /**
    * Every provider the harness's own catalog names, by id and name: the
    * providers an account can be for through it. Absent from a harness with
    * no catalog of providers of its own.
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: matches the other adapter methods
-  providerList?(): Promise<{ id: string; name: string }[]>;
+  providerList?: () => Promise<{ id: string; name: string }[]>;
   /**
    * The session's messages, oldest first, over the {@link TranscriptSpan}
    * asked for (`chain` when none). `tail` keeps only the newest.
@@ -448,38 +403,36 @@ export interface Harness {
    * where it happened, no branch the conversation left. Reading one costs
    * the window, never the whole stored conversation (core `WindowAsk`).
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  readTranscriptWindow(
+  readTranscriptWindow: (
     sessionKey: string,
     dir: string | undefined,
     ask: WindowAsk
-  ): Promise<TranscriptWindow>;
+  ) => Promise<TranscriptWindow>;
   /** Reopen surviving custody, or leave the instance sleeping if it is gone. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: matches the other adapter methods
-  reattach?(
+  reattach?: (
     spec: SpawnPayload,
     ctx: HarnessContext
-  ): Promise<HarnessSession | undefined>;
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  renameSession(sessionKey: string, title: string, dir?: string): Promise<void>;
+  ) => Promise<HarnessSession | undefined>;
+  renameSession: (
+    sessionKey: string,
+    title: string,
+    dir?: string
+  ) => Promise<void>;
   /**
    * What an agent restart would cut of this adapter's own work, now: the work
    * it runs in the agent's process, never its runtime's turns. Absent for an
    * adapter whose runtime holds all of it under the keeper.
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: matches the other adapter methods
-  restartHolds?(): import("@cawco/core/binary-updates").RestartHold[];
+  restartHolds?: () => import("@cawco/core/binary-updates").RestartHold[];
   /**
    * Whether a server this adapter's sessions run in still runs, held by a
    * keeper or not (OpenCode's): its sessions, and any turn in them, outlived
    * the agent. Absent for an adapter whose sessions each run in a process of
    * their own, which the keeper lists.
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: matches adapter methods
-  serversRunning?(): Promise<boolean>;
+  serversRunning?: () => Promise<boolean>;
   /** Exact addresses retained by this adapter, never reconstructed by guessing. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: matches adapter methods
-  sessionAddresses?(): import("@cawco/core").SessionAddress[];
+  sessionAddresses?: () => import("@cawco/core").SessionAddress[];
   readonly sessionPresent?: (
     sessionKey: string,
     dir: string
@@ -490,15 +443,13 @@ export interface Harness {
    * that server holds now. Absent for an adapter that runs each session in a
    * process of its own, whose procId names it.
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: matches adapter methods
-  sessionsOn?(procId: string): string[];
+  sessionsOn?: (procId: string) => string[];
   /** Lifecycle guards read the supervisor's one machine recovery barrier. */
   readonly setCustodyReadiness?: (read: () => boolean) => void;
   /** The machine's own sign-ins their providers last refused, cached beside {@link auth} (OpenCode's, {@link HarnessReport.signInFaults}). */
   readonly signInFaults?: SignInFault[];
   /** Start a session; resolves once the runtime handle is in place. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  spawn(spec: SpawnPayload, ctx: HarnessContext): Promise<HarnessSession>;
+  spawn: (spec: SpawnPayload, ctx: HarnessContext) => Promise<HarnessSession>;
   /**
    * A launch in workspace `workspace`, with `cwd` its directory: the folder
    * where the harness saves a tool result too large to hand the model, which
@@ -506,25 +457,21 @@ export interface Harness {
    * `boundaryFor`), and the spawn as it is launched to keep its results
    * there. Absent for a harness that saves none.
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: matches adapter methods
-  spill?(
+  spill?: (
     spec: SpawnPayload,
     cwd: string,
     workspace: string
-  ): Promise<{ dir: string; spec: SpawnPayload }>;
+  ) => Promise<{ dir: string; spec: SpawnPayload }>;
   /** Applies the hub's fleet config to this harness's own files; reports per entry. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  syncFleet?(config: PlacedFleetConfig): Promise<FleetSyncReport>;
-  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  tagSession(
+  syncFleet?: (config: PlacedFleetConfig) => Promise<FleetSyncReport>;
+  tagSession: (
     sessionKey: string,
     tag: string | null,
     dir?: string
-  ): Promise<void>;
+  ) => Promise<void>;
   /** Complete post-stop reading; unknown server runners must remain untouched. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: matches adapter methods
-  unclaimedRunners?(
+  unclaimedRunners?: (
     directory: string,
     claimed: readonly string[]
-  ): Promise<{ count: number; readStartedAt: number }>;
+  ) => Promise<{ count: number; readStartedAt: number }>;
 }

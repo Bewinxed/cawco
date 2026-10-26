@@ -167,12 +167,10 @@ export interface StreamHost {
    * THE CHOKEPOINT. Apply one relay frame to the session it belongs to,
    * given the unwrapped frame. The stream orders; it does not reshape.
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; client.svelte.ts's streamHost object literal implements this port and a switch could reject that assignment.
-  applyFrame(sessionId: string, frame: unknown): void;
+  applyFrame: (sessionId: string, frame: unknown) => void;
   clearTimer?: (handle: number) => void;
   /** Whether the dashboard follows this session's stream: a tab, the peek, a watched delegate. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; client.svelte.ts's streamHost object literal implements this port and a switch could reject that assignment.
-  follows(sessionId: string): boolean;
+  follows: (sessionId: string) => boolean;
   /**
    * Called once, the moment any command record settles at `failed`, whatever
    * killed it — a refusing ack, a dispatch that could not leave the tab, the
@@ -190,22 +188,19 @@ export interface StreamHost {
    * which need announcing — this file only guarantees the call.
    */
   noteFailure?: (record: CommandRecord) => void;
-  // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; client.svelte.ts's streamHost object literal implements this port and a switch could reject that assignment.
-  now(): number;
+  now: () => number;
   /**
    * Read this session's newest transcript page; the read ends in
    * {@link adoptPage}, which resumes the stream from the page's `seq`.
    * `cause` is which of the two ledger rules asked: the hub's reset, or a
    * gap the ring replayed broken {@link MAX_RESYNC_ATTEMPTS} times.
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; client.svelte.ts's streamHost object literal implements this port and a switch could reject that assignment.
-  rereadHistory(
+  rereadHistory: (
     sessionId: string,
     cause: "streamReset" | "backlogBroken"
-  ): void;
+  ) => void;
   /** Put a client message on the dashboard socket; false when it is not open. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; client.svelte.ts's streamHost object literal implements this port and a switch could reject that assignment.
-  sendToHub(message: StreamClientMessage): boolean;
+  sendToHub: (message: StreamClientMessage) => boolean;
   /**
    * Run `run` after `delayMs` and hand back a handle {@link clearTimer} can
    * cancel — `setTimeout`, in the one place this file is allowed to know that.
@@ -219,8 +214,7 @@ export interface StreamHost {
    * unset to drive the clock by hand; the client passes one.
    */
   setTimer?: (delayMs: number, run: () => void) => number;
-  // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; client.svelte.ts's streamHost object literal implements this port and a switch could reject that assignment.
-  warn(message: string, detail?: unknown): void;
+  warn: (message: string, detail?: unknown) => void;
 }
 
 export function createStreamState(): StreamState {

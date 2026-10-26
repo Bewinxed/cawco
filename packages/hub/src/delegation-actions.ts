@@ -838,13 +838,12 @@ export interface HandoffActions {
    * text, each value the chosen option label; `deny` refuses it. Neither means
    * "allow with no changes" — the tool ask's own input stands.
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
-  answerDelegate(
+  answerDelegate: (
     target: string,
     requestId: string,
     answers?: Record<string, string>,
     deny?: boolean
-  ): string;
+  ) => string;
   /**
    * One of the session's artifact routes (artifacts/routes.ts), at `path`
    * under its `/artifacts`: the hub's JSON answer, or its refusal thrown.
@@ -873,8 +872,7 @@ export interface HandoffActions {
    * in an existing one, on the session that workspace's last item ran. The
    * hub decides and files everything; this is its request.
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
-  delegate(
+  delegate: (
     prompt: string,
     opts: {
       /** What the caller named the work: the item's and its session's title. */
@@ -922,7 +920,7 @@ export interface HandoffActions {
       /** The decision pages it builds from, as written (`<page>` or `<page>#<card>`); the hub resolves them. */
       buildsFrom?: string[];
     }
-  ): Promise<DelegateResult>;
+  ) => Promise<DelegateResult>;
   /**
    * This session's delegation tree: its delegates, theirs nested; the
    * delegates still queued; and the tree's held workspaces, whose items
@@ -957,13 +955,14 @@ export interface HandoffActions {
    * are written first into the `$TMPDIR/inputs/` of the target's work item,
    * one this session delegated or leads.
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
-  handoff(target: string, message: string, inputs?: unknown[]): Promise<string>;
-  // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
-  interruptDelegate(target: string): string;
+  handoff: (
+    target: string,
+    message: string,
+    inputs?: unknown[]
+  ) => Promise<string>;
+  interruptDelegate: (target: string) => string;
   readonly listDelegateTypes: () => Promise<{ types: DelegateType[] }>;
-  // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
-  listSessions(): string;
+  listSessions: () => string;
   /**
    * Pauses the machine `machine` names for `minutes` (machine-pause.ts), or
    * ends its pause (`resume`). Answers what the hub did, in a sentence.
@@ -985,14 +984,12 @@ export interface HandoffActions {
   /** This session's Open items section, built by the hub from its records (open-items.ts). */
   readonly openItems: () => Promise<string>;
   /** Shows the person a note in the transcript and pushes it to their devices — no peer, no ask. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
-  sendToUser(message: string, attachments?: string[]): Promise<string>;
+  sendToUser: (message: string, attachments?: string[]) => Promise<string>;
   /** Names this session; refused, in the hub's words, once the owner has named it. */
   readonly setTitle: (title: string) => Promise<string>;
   /** `show_image`: what the transcript says it shows; throws when the session may not show it (shown-files.ts). */
   readonly showImage: (path: string) => string;
-  // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
-  startSession(
+  startSession: (
     cwd: string,
     prompt: string,
     title: string,
@@ -1009,9 +1006,8 @@ export interface HandoffActions {
       /** The machine it runs on, by hostname or machineId; the caller's by default. */
       machine?: string;
     }
-  ): Promise<HandoffResult>;
-  // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
-  stopDelegate(target: string): Promise<string>;
+  ) => Promise<HandoffResult>;
+  stopDelegate: (target: string) => Promise<string>;
   readonly waitItem: (minutes: number, reason: string) => Promise<string>;
 }
 

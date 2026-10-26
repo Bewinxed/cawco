@@ -269,8 +269,7 @@ export interface SessiondAdoption {
    * runs under every option it launched with (its mode, a lead's gate, a
    * fence, its denials, its account).
    */
-  // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
-  adopt(
+  adopt: (
     spec: SpawnPayload,
     ctx: HarnessContext,
     options: {
@@ -281,9 +280,8 @@ export interface SessiondAdoption {
       /** {@link turnRunning}'s answer for this child. */
       turnRunning: boolean;
     }
-  ): Promise<HarnessSession>;
-  // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
-  custodyCandidates(): Promise<{
+  ) => Promise<HarnessSession>;
+  custodyCandidates: () => Promise<{
     /**
      * What every keeper holds, the current keeper's first. `cwd` is what lets
      * a survivor the hub never named be adopted at all; `epoch` is its
@@ -300,14 +298,11 @@ export interface SessiondAdoption {
     }[];
   }>;
   /** The keepers there for custody to read, the current one first. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
-  custodyKeepers(): Promise<string[]>;
+  custodyKeepers: () => Promise<string[]>;
   /** One keeper's word on this harness's children ({@link KeeperPool.read}): its listing of them, its end, or why it could not be read. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
-  custodyReading(keeper: string): Promise<KeeperReading>;
+  custodyReading: (keeper: string) => Promise<KeeperReading>;
   /** Whether the child is mid-turn as its ring stands up to `head`. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
-  turnRunning(instanceId: string, head: number): Promise<boolean>;
+  turnRunning: (instanceId: string, head: number) => Promise<boolean>;
 }
 
 /** The controls that change a session's setting: each names it as its one argument. */
@@ -373,8 +368,7 @@ interface Claimed {
  * lands on that frame and no other.
  */
 export interface SessiondAwareContext extends HarnessContext {
-  // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
-  line(srcEpoch: string, srcSeq: number): void;
+  line: (srcEpoch: string, srcSeq: number) => void;
 }
 
 /**
