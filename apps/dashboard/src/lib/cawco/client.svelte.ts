@@ -2481,8 +2481,22 @@ export function openSession(instanceId: string): void {
   syncSubscriptions();
 }
 
-/** Views whose delegates' traffic has been read back — it is read once. */
+/** Views whose delegates' traffic has been read back — it is read once per connection. */
 const delegatesRead = new Set<string>();
+
+/**
+ * A reconnect: the delegate events broadcast while the socket was away are
+ * lost, so every parent read so far is read again. Folding a row it already
+ * holds is a no-op (`foldDelegateEvent` skips a known id).
+ */
+function rereadDelegateEvents(): void {
+  const read = [...delegatesRead];
+  delegatesRead.clear();
+  for (const instanceId of read) {
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the cards fill in when the read lands
+    void loadDelegateEvents(instanceId);
+  }
+}
 
 /**
  * What this session's delegates asked it, and what it answered, before the tab
@@ -5676,6 +5690,7 @@ function hubReached(): void {
   rereadFollowed();
   if (connections > 1) {
     rereadTrays();
+    rereadDelegateEvents();
   }
   lastPlanFollowKey = "";
   syncPlanFollows();
