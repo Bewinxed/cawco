@@ -30,7 +30,11 @@
   const hooks = $derived(store.hooks.value ?? []);
   const machines = $derived(orderMachines(cawco.machines));
   const acts = new RowActs<FleetHook>("/config/hooks", {
-    toggle: (row, enabled) => saveHook(row.id, { ...draftOf(row), enabled }),
+    key: (row) => row.id,
+    toggle: async (row, enabled) => {
+      await saveHook(row.id, { ...draftOf(row), enabled });
+      row.enabled = enabled;
+    },
     remove: (row) => deleteHook(store, row),
   });
 </script>

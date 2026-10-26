@@ -6,8 +6,10 @@
   } from "@cawco/core";
   import { detach } from "@cawco/core/detach";
   import { cawco, didntAnswer } from "#lib/cawco/client.svelte.js";
-  import { deleteAgent, notDeleted } from "#lib/cawco/config/deletes.js";
+  import DeleteFault from "#lib/cawco/config/DeleteFault.svelte";
+  import { deleteAgent } from "#lib/cawco/config/deletes.js";
   import RowList from "#lib/cawco/config/RowList.svelte";
+  import { RowActs } from "#lib/cawco/config/row-acts.svelte.js";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
@@ -22,7 +24,6 @@
   import OsMark from "#lib/cawco/OsMark.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
-  import { refusals } from "#lib/cawco/refusals.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
@@ -32,7 +33,6 @@
     IconLaptop,
     IconPlus,
     IconSubagent,
-    IconTrash,
   } from "#lib/icons.js";
 
   /**
@@ -52,9 +52,6 @@
 
   let pushing = $state(false);
   let pushFailed = $state(false);
-  let busy = $state<Record<string, boolean>>({});
-  /** Where a delete the hub refused is said: under its row, kept through a reload (refusals.svelte.ts). */
-  const deleteKey = (id: string) => `delete:/config/subagents:${id}`;
   /** Why an adopt was refused, by machine and name: said under its row. */
   let adoptFailed = $state<Record<string, string>>({});
   /** Why the last push was refused: said under Push to machines. */
@@ -120,23 +117,14 @@
   }
 
   /** Remove: at once, with Undo in the toast (deletes.ts). */
-  async function forget(row: FleetAgent) {
-    busy[row.name] = true;
-    refusals.delete(deleteKey(row.name));
-    try {
-      await deleteAgent(store, row.name);
-    } catch (error) {
-      refusals.set(deleteKey(row.name), {
-        reason: notDeleted(row.name, error),
-      });
-    } finally {
-      delete busy[row.name];
-    }
-  }
+  const acts = new RowActs<FleetAgent>("/config/subagents", {
+    key: (row) => row.name,
+    remove: (row) => deleteAgent(store, row.name),
+  });
 
   async function adopt(machineId: string, row: DiscoveredAgent) {
     const key = `${machineId}:${row.name}`;
-    busy[key] = true;
+    acts.busy[key] = true;
     delete adoptFailed[key];
     try {
       // The fleet's row, marked, and this one turning "in sync" are the result.
@@ -149,7 +137,7 @@
     } catch (caught) {
       adoptFailed[key] = message(caught);
     } finally {
-      delete busy[key];
+      delete acts.busy[key];
     }
   }
 
@@ -221,15 +209,7 @@
     <RowList label="Fleet subagents">
       {#each agents as row (row.name)}
         <SectionRow
-          actions={[
-            {
-              label: "Remove from the fleet",
-              icon: IconTrash,
-              destructive: true,
-              disabled: busy[row.name] === true,
-              onselect: () => forget(row),
-            },
-          ]}
+          actions={[acts.deleteAction(row, "Remove from the fleet")]}
           flash={store.flash === row.name}
           href="/config/subagents/{row.name}"
           hue={HUE}
@@ -239,11 +219,7 @@
           name={row.name}
         >
           {#snippet below()}
-            <RowFault
-              again={() => forget(row)}
-              data-delete-refusal={row.name}
-              reason={refusals.reason(deleteKey(row.name))}
-            />
+            <DeleteFault {acts} {row} />
           {/snippet}
         </SectionRow>
       {/each}
@@ -319,7 +295,7 @@
                   icon={IconDownload}
                   label={stored ? "Adopt this copy" : "Adopt"}
                   onclick={() => adopt(machine.machineId, row)}
-                  pending={busy[key] === true}
+                  pending={acts.busy[key] === true}
                   pendingLabel="Adopting…"
                   size="sm"
                   variant="outline"

@@ -1,23 +1,18 @@
 <script lang="ts">
   import { type FleetMcpServer, mcpWords as words } from "@cawco/core";
   import { cawco } from "#lib/cawco/client.svelte.js";
-  import { deleteMcpServer, notDeleted } from "#lib/cawco/config/deletes.js";
+  import { deleteMcpServer } from "#lib/cawco/config/deletes.js";
+  import FleetEmpty from "#lib/cawco/config/FleetEmpty.svelte";
   import McpSignIn from "#lib/cawco/config/McpSignIn.svelte";
   import RolloutChip from "#lib/cawco/config/RolloutChip.svelte";
+  import RowActFaults from "#lib/cawco/config/RowActFaults.svelte";
   import RowFaults from "#lib/cawco/config/RowFaults.svelte";
   import RowList from "#lib/cawco/config/RowList.svelte";
+  import { RowActs } from "#lib/cawco/config/row-acts.svelte.js";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore, upsert } from "#lib/cawco/config/store.svelte.js";
-  import EmptyAsk from "#lib/cawco/EmptyAsk.svelte";
-  import {
-    askLabel,
-    askNewSession,
-    FLEET_ASKS,
-    NO_SESSION_CAN_START,
-    sessionCanStart,
-  } from "#lib/cawco/empty-asks.js";
   import {
     describeMcp,
     isRemoteMcp,
@@ -28,17 +23,14 @@
   import MachineInventory from "#lib/cawco/MachineInventory.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
-  import { refusals } from "#lib/cawco/refusals.svelte.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { EmptyState } from "#lib/components/ui/empty/index.js";
   import {
     IconCheck,
     IconGlobe,
     IconPlus,
     IconRefresh,
     IconToolMcp,
-    IconTrash,
   } from "#lib/icons.js";
 
   /**
@@ -51,7 +43,6 @@
 
   const servers = $derived(store.fleet.value?.config.mcp ?? []);
   const machines = $derived(orderMachines(cawco.machines));
-  let busy = $state<Record<string, boolean>>({});
   let syncing = $state(false);
   let syncFailed = $state(false);
 
@@ -62,17 +53,17 @@
     }
   }
 
-  /** Why a server's switch did not take, by server: said under its row. */
-  let toggleFailed = $state<Record<string, string>>({});
-  /** Where a delete the hub refused is said: under its row, kept through a reload (refusals.svelte.ts). */
-  const deleteKey = (id: string) => `delete:/config/mcp:${id}`;
   /** Why Sync all was refused: said under it. */
   let syncProblem = $state<string | null>(null);
 
-  async function toggle(row: FleetMcpServer, enabled: boolean) {
-    busy[row.name] = true;
-    delete toggleFailed[row.name];
-    try {
+  /**
+   * Remove: at once, from every machine, with Undo in the toast for as long
+   * as the hub holds it, sign-in and all (deletes.ts).
+   */
+  const acts = new RowActs<FleetMcpServer>("/config/mcp", {
+    key: (row) => row.name,
+    remove: (row) => deleteMcpServer(store, row.name),
+    toggle: async (row, enabled) => {
       landed(
         await saveMcpServer(
           row.name,
@@ -81,30 +72,8 @@
           row.projectId ?? null
         )
       );
-    } catch (caught) {
-      toggleFailed[row.name] = message(caught);
-    } finally {
-      delete busy[row.name];
-    }
-  }
-
-  /**
-   * Remove: at once, from every machine, with Undo in the toast for as long
-   * as the hub holds it, sign-in and all (deletes.ts).
-   */
-  async function remove(row: FleetMcpServer) {
-    busy[row.name] = true;
-    refusals.delete(deleteKey(row.name));
-    try {
-      await deleteMcpServer(store, row.name);
-    } catch (error) {
-      refusals.set(deleteKey(row.name), {
-        reason: notDeleted(row.name, error),
-      });
-    } finally {
-      delete busy[row.name];
-    }
-  }
+    },
+  });
 
   async function syncAll() {
     syncing = true;
@@ -153,43 +122,18 @@
   {/snippet}
 
   {#if servers.length === 0}
-    <!-- Its one action asks a new session for a server (The Empty Starts
-         Work Rule); with no machine online, why, and Add server by hand. -->
-    <EmptyState
+    <FleetEmpty
+      add={{ href: "/config/mcp/new", label: words.add }}
+      ask="mcp"
       icon={section.icon}
       line={words.emptyLine}
       title={words.emptyTitle}
-    >
-      {#snippet action()}
-        <EmptyAsk
-          canStart={sessionCanStart()}
-          label={askLabel(FLEET_ASKS.mcp.what)}
-          onask={(anchor) => askNewSession(FLEET_ASKS.mcp.words, anchor)}
-          reason={NO_SESSION_CAN_START}
-        >
-          {#snippet byHand()}
-            <Button
-              href="/config/mcp/new"
-              label={words.add}
-              variant="outline"
-            />
-          {/snippet}
-        </EmptyAsk>
-      {/snippet}
-    </EmptyState>
+    />
   {:else}
     <RowList label={words.list}>
       {#each servers as row (row.name)}
         <SectionRow
-          actions={[
-            {
-              label: words.remove,
-              icon: IconTrash,
-              destructive: true,
-              disabled: busy[row.name] === true,
-              onselect: () => remove(row),
-            },
-          ]}
+          actions={[acts.deleteAction(row, words.remove)]}
           enabled={row.enabled}
           flash={store.flash === row.name}
           href="/config/mcp/{encodeURIComponent(row.name)}"
@@ -202,8 +146,8 @@
               )
             : describeMcp(row.config)}
           name={row.name}
-          ontoggle={(next) => toggle(row, next)}
-          toggling={busy[row.name] === true}
+          ontoggle={(next) => acts.toggle(row, next)}
+          toggling={acts.busy[row.name] === true}
         >
           {#snippet badge()}
             {#if row.auth?.mode === "oauth" && row.auth.state === "signed-in"}
@@ -236,15 +180,7 @@
             <McpSignIn server={row} />
           {/snippet}
           {#snippet below()}
-            <RowFault
-              again={() => toggle(row, !row.enabled)}
-              reason={toggleFailed[row.name]}
-            />
-            <RowFault
-              again={() => remove(row)}
-              data-delete-refusal={row.name}
-              reason={refusals.reason(deleteKey(row.name))}
-            />
+            <RowActFaults {acts} {row} />
             <RowFaults
               hub={row.auth?.state === "failed"
                 ? [

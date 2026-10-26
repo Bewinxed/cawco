@@ -303,7 +303,34 @@
     }
     detach(readWatch(), "readWatch");
   });
+  /** A status line's swap: each line blurs in over the panel tier and out over the exit's. */
+  const lineBlur = (tier: "--dur-panel" | "--dur-exit") => ({
+    duration: dur(tier),
+    easing: easeOut,
+    amount: 2,
+  });
 </script>
+
+<!-- A status line's done mark: the check drawn on its done disc. -->
+{#snippet doneCheck()}
+  <svg
+    aria-hidden="true"
+    class="size-icon-md flex-none self-center fill-none"
+    data-slot="check"
+    viewBox="0 0 20 20"
+  >
+    <circle cx="10" cy="10" r="10" class="fill-status-done-bg stroke-none"
+    ></circle>
+    <path
+      d="M6.2 10.4l2.5 2.5 5.1-5.6"
+      class="stroke-status-done-glyph motion-safe:animate-check-draw motion-safe:dash-unit"
+      pathLength="1"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      stroke-width="1.8"
+    ></path>
+  </svg>
+{/snippet}
 
 <SectionFrame
   problem={ready ? null : (openrouterError ?? jevError ?? watchError)}
@@ -352,42 +379,14 @@
             aria-live="polite"
             class="num mark-line group type-body col-start-1 row-start-1 flex items-center gap-space-2 text-ink-muted tone-ok:text-ink-strong"
             data-tone={phase === "connected" ? "ok" : "off"}
-            in:blur={{
-              duration: dur("--dur-panel"),
-              easing: easeOut,
-              amount: 2,
-            }}
-            out:blur={{
-              duration: dur("--dur-exit"),
-              easing: easeOut,
-              amount: 2,
-            }}
+            in:blur={lineBlur("--dur-panel")}
+            out:blur={lineBlur("--dur-exit")}
           >
             {#if phase === "exchanging"}
               <LiveDot data-pulse data-slot="dot" size="row" tone="muted" />
               <span>Finishing the connection with OpenRouter…</span>
             {:else if phase === "connected" && openrouter?.connectedAt}
-              <svg
-                aria-hidden="true"
-                class="size-icon-md flex-none self-center fill-none"
-                data-slot="check"
-                viewBox="0 0 20 20"
-              >
-                <circle
-                  cx="10"
-                  cy="10"
-                  r="10"
-                  class="fill-status-done-bg stroke-none"
-                ></circle>
-                <path
-                  d="M6.2 10.4l2.5 2.5 5.1-5.6"
-                  class="stroke-status-done-glyph motion-safe:animate-check-draw motion-safe:dash-unit"
-                  pathLength="1"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="1.8"
-                ></path>
-              </svg>
+              {@render doneCheck()}
               <span
                 >Connected {formatDistanceToNow(
                   new Date(openrouter.connectedAt)
@@ -491,39 +490,11 @@
             class="num mark-line group type-body col-start-1 row-start-1 flex items-center gap-space-2 text-ink-muted tone-ok:text-ink-strong"
             data-testid="typesafe-key-state"
             data-tone={keyPhase === "held" ? "ok" : "off"}
-            in:blur={{
-              duration: dur("--dur-panel"),
-              easing: easeOut,
-              amount: 2,
-            }}
-            out:blur={{
-              duration: dur("--dur-exit"),
-              easing: easeOut,
-              amount: 2,
-            }}
+            in:blur={lineBlur("--dur-panel")}
+            out:blur={lineBlur("--dur-exit")}
           >
             {#if jev?.typesafe}
-              <svg
-                aria-hidden="true"
-                class="size-icon-md flex-none self-center fill-none"
-                data-slot="check"
-                viewBox="0 0 20 20"
-              >
-                <circle
-                  cx="10"
-                  cy="10"
-                  r="10"
-                  class="fill-status-done-bg stroke-none"
-                ></circle>
-                <path
-                  d="M6.2 10.4l2.5 2.5 5.1-5.6"
-                  class="stroke-status-done-glyph motion-safe:animate-check-draw motion-safe:dash-unit"
-                  pathLength="1"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="1.8"
-                ></path>
-              </svg>
+              {@render doneCheck()}
               <span>Held, ends …{jev.typesafe.ends}</span>
             {:else}
               <span

@@ -1,29 +1,22 @@
 <script lang="ts">
   import { delegateTypesWords as words } from "@cawco/core";
-  import { deleteDelegateType, notDeleted } from "#lib/cawco/config/deletes.js";
+  import DeleteFault from "#lib/cawco/config/DeleteFault.svelte";
+  import { deleteDelegateType } from "#lib/cawco/config/deletes.js";
+  import FleetEmpty from "#lib/cawco/config/FleetEmpty.svelte";
   import RowList from "#lib/cawco/config/RowList.svelte";
+  import { RowActs } from "#lib/cawco/config/row-acts.svelte.js";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore } from "#lib/cawco/config/store.svelte.js";
   import type { DelegateType } from "#lib/cawco/delegate-types.js";
-  import EmptyAsk from "#lib/cawco/EmptyAsk.svelte";
-  import {
-    askLabel,
-    askNewSession,
-    FLEET_ASKS,
-    NO_SESSION_CAN_START,
-    sessionCanStart,
-  } from "#lib/cawco/empty-asks.js";
   import HarnessLogo from "#lib/cawco/HarnessLogo.svelte";
   import { folderFileHref } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
-  import { refusals } from "#lib/cawco/refusals.svelte.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
-  import { IconFolder, IconPlus, IconTrash } from "#lib/icons.js";
+  import { IconFolder, IconPlus } from "#lib/icons.js";
 
   /**
    * The presets a session's `delegate` call routes against. A calling agent
@@ -40,9 +33,6 @@
   const section = sectionOf("delegate-types");
   const types = $derived(store.types.value ?? []);
   const projects = $derived(store.projectTypes.value ?? []);
-  let busy = $state<Record<string, boolean>>({});
-  /** Where a delete the hub refused is said: under its row, kept through a reload (refusals.svelte.ts). */
-  const deleteKey = (id: string) => `delete:/config/delegate-types:${id}`;
 
   /** Harness, model, effort, and every narrowing, as one short line. */
   function runsOn(row: DelegateType): string {
@@ -63,19 +53,10 @@
   }
 
   /** Delete: at once, with Undo in the toast (deletes.ts). */
-  async function remove(row: DelegateType) {
-    busy[row.name] = true;
-    refusals.delete(deleteKey(row.name));
-    try {
-      await deleteDelegateType(store, row.name);
-    } catch (error) {
-      refusals.set(deleteKey(row.name), {
-        reason: notDeleted(row.name, error),
-      });
-    } finally {
-      delete busy[row.name];
-    }
-  }
+  const acts = new RowActs<DelegateType>("/config/delegate-types", {
+    key: (row) => row.name,
+    remove: (row) => deleteDelegateType(store, row.name),
+  });
 </script>
 
 <SectionFrame
@@ -99,45 +80,18 @@
   <div data-slot="group" class="flex flex-col gap-space-2">
     <SectionHeader hue={section.hue} icon={section.icon} label={words.fleet} />
     {#if types.length === 0}
-      <!-- Its one action asks a new session for the fleet's types (The
-           Empty Starts Work Rule); with no machine online, why, and New
-           delegate type by hand. -->
-      <EmptyState
+      <FleetEmpty
+        add={{ href: "/config/delegate-types/new", label: words.add }}
+        ask="delegateTypes"
         icon={section.icon}
         line={words.emptyLine}
         title={words.emptyTitle}
-      >
-        {#snippet action()}
-          <EmptyAsk
-            canStart={sessionCanStart()}
-            label={askLabel(FLEET_ASKS.delegateTypes.what)}
-            onask={(anchor) =>
-              askNewSession(FLEET_ASKS.delegateTypes.words, anchor)}
-            reason={NO_SESSION_CAN_START}
-          >
-            {#snippet byHand()}
-              <Button
-                href="/config/delegate-types/new"
-                label={words.add}
-                variant="outline"
-              />
-            {/snippet}
-          </EmptyAsk>
-        {/snippet}
-      </EmptyState>
+      />
     {:else}
       <RowList label={words.list}>
         {#each types as row (row.name)}
           <SectionRow
-            actions={[
-              {
-                label: words.remove,
-                icon: IconTrash,
-                destructive: true,
-                disabled: busy[row.name] === true,
-                onselect: () => remove(row),
-              },
-            ]}
+            actions={[acts.deleteAction(row, words.remove)]}
             flash={store.flash === row.name}
             href="/config/delegate-types/{row.name}"
             meta="{row.description} · {runsOn(row)}"
@@ -148,11 +102,7 @@
               <HarnessLogo harness={row.harness} />
             {/snippet}
             {#snippet below()}
-              <RowFault
-                again={() => remove(row)}
-                data-delete-refusal={row.name}
-                reason={refusals.reason(deleteKey(row.name))}
-              />
+              <DeleteFault {acts} {row} />
             {/snippet}
           </SectionRow>
         {/each}

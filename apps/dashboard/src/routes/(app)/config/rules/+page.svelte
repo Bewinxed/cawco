@@ -54,7 +54,11 @@
   );
 
   const acts = new RowActs<RuleRow>("/config/rules", {
-    toggle: (row, enabled) => saveRule(row.id, { ...draftOf(row), enabled }),
+    key: (row) => row.id,
+    toggle: async (row, enabled) => {
+      await saveRule(row.id, { ...draftOf(row), enabled });
+      row.enabled = enabled;
+    },
     remove: (row) => deleteRule(store, row),
   });
 
