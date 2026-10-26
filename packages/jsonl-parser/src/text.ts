@@ -142,7 +142,7 @@ const INJECTED = [
  * over them, quadratic in their ~7,800 matches each, was 5.6 s of its 5.9 s
  * (2026-10-25). Never indexed.
  */
-export const COPIED = "Below is the transcript of a coding-agent session, up to its last few turns.";
+const COPIED = "Below is the transcript of a coding-agent session, up to its last few turns.";
 
 /**
  * The version of the rules {@link userAuthor} reads by: raised whenever

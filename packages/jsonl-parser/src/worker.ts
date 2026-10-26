@@ -67,7 +67,7 @@ declare function postMessage(message: unknown): void;
  * second (agent-loop probe, 2026-10-24). Our own call: a few milliseconds
  * of taking in each.
  */
-export const PART_ITEMS = 1000;
+const PART_ITEMS = 1000;
 
 /** What a worker sends: a part of a file's documents or records, a file's end, or the task's. */
 export type WorkerMessage =
