@@ -6,7 +6,8 @@
  * own dispatch starts none of its parts, though it starts other ready work;
  * and the coordinator starts a part itself with task_start, as that part's
  * parent. Run it where a workspace boundary can start (not inside another
- * one): every attempt cuts a workspace.
+ * one): every attempt cuts a workspace. Every session holds itself live
+ * with wait_item, so the attempts stay live while they are read.
  *
  * a. You start an attempt at whole P (parts C and D): it is a coordinator,
  *    its session may delegate.
@@ -20,10 +21,51 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { toolWords } from "../../lib/tool-call";
-import { MACHINE, type Reply, until } from "../../scratch-fleet";
+import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
-const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
+const WAIT = "mcp__cawco__wait_item";
+const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
+
+/** Sessions that declared their wait, by the opening of what they were asked. */
+const waited = new Set<string>();
+
+/**
+ * Every session holds itself live with one wait_item (found through
+ * ToolSearch first), then answers ok: an attempt that ends three turns
+ * without finish_item fails (work-items.ts), and this spec reads live ones.
+ * A session with no wait_item (Caw) says ok.
+ */
+const respond = (request: Seen): Reply => {
+  if (!request.tools) {
+    return text("Probe title");
+  }
+  const key = request.all.slice(0, 400);
+  if (waited.has(key)) {
+    return text("ok");
+  }
+  if (request.toolNames.includes(WAIT)) {
+    waited.add(key);
+    return {
+      everyMs: 5,
+      words: [],
+      tool: { name: WAIT, input: { minutes: 60, reason: "held by the probe" } },
+    };
+  }
+  return request.toolNames.includes("ToolSearch") && !request.afterTool
+    ? {
+        everyMs: 5,
+        words: [],
+        tool: {
+          name: "ToolSearch",
+          input: { query: `select:${WAIT}`, max_results: 1 },
+        },
+      }
+    : text("ok");
+};
+
+/** An attempt's work item while it is live. */
+const LIVE: ReadonlySet<string> = new Set(["starting", "running"]);
 
 interface Item {
   instance_id: string;
@@ -78,8 +120,8 @@ const run = async (kit: Kit) => {
   const d = await file("Tray counts", p);
   await fleet.api(`/api/projects/${project.id}/tasks/${p}/attempts`, {});
   const coordinator = (await until(
-    "a: the coordinator's item",
-    () => itemsOf(p).find((item) => item.state === "running"),
+    "a: the coordinator's item, live",
+    () => itemsOf(p).find((item) => LIVE.has(item.state)),
     Boolean,
     180_000
   )) as Item;
