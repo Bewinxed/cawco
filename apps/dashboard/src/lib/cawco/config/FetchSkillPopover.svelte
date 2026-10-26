@@ -1,19 +1,13 @@
 <script lang="ts" module>
   import { z } from "zod";
-  import { TabDraft } from "../tab-draft.svelte";
+  import { ParkedPopover } from "./parked-popover.svelte";
 
   /**
-   * Where the popover was opened from: the section's header ("head"), or an
-   * empty group's action, named by its group.
+   * The popover's held state: open or not, what was typed and picked, and
+   * the skill whose fetch it started. The fetch itself is the hub's row;
+   * this only names it.
    */
-  type Where = string;
-
-  /**
-   * The popover's held state (DESIGN.md, The Work Outlives Its Surface
-   * Rule): open or not, what was typed and picked, and the skill whose fetch
-   * it started. The fetch itself is the hub's row; this only names it.
-   */
-  const draft = new TabDraft(
+  const parked = new ParkedPopover(
     "cawco:fetch-skill",
     z.object({
       open: z.boolean(),
@@ -22,9 +16,7 @@
       skillName: z.string(),
       named: z.boolean(),
       projectId: z.string(),
-      /** The skill this popover asked the hub for, until it lands. */
       asked: z.string().nullable(),
-      /** Why the hub refused the ask itself (no row to carry it). */
       refused: z.string().nullable(),
     }),
     () => ({
@@ -38,11 +30,7 @@
       refused: null,
     })
   );
-
-  /** The popovers mounted on the page, by where: one put away opens in the header's when its own is gone. */
-  const mounted = $state<Record<Where, number>>({});
-  /** The row it is reopened from, which it opens beside and closes into. */
-  let fromRow = $state<HTMLElement | null>(null);
+  const { draft } = parked;
 
   /** The skill whose fetch the popover is following, parked on its row while it is put away. */
   export const fetchParkedOn = (): string | null =>
@@ -50,8 +38,7 @@
 
   /** One press on the parked row: the popover again, where it was, beside that row. */
   export function reopenFetch(row: HTMLElement | null): void {
-    fromRow = row;
-    draft.value.open = true;
+    parked.reopen(row);
   }
 </script>
 
@@ -73,12 +60,9 @@
     skillsWords as words,
   } from "@cawco/core";
   import { detach } from "@cawco/core/detach";
-  import { onMount } from "svelte";
   import Coded from "#lib/cawco/Coded.svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
-  import { closeInto } from "#lib/cawco/motion/share.svelte.js";
-  import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
@@ -92,7 +76,10 @@
     suggestSkillName,
   } from "../fleet";
   import Field from "./Field.svelte";
+  import HubAskFoot from "./HubAskFoot.svelte";
   import PickerChip from "./PickerChip.svelte";
+  import { PopoverSeat, rowOf } from "./parked-popover.svelte";
+  import WriteTrigger from "./WriteTrigger.svelte";
 
   let {
     skills,
@@ -106,29 +93,19 @@
     /** Why the hub cannot take a write, or null: the trigger and the submit
         are disabled on it and say it as their title. */
     down: string | null;
-    where?: Where;
+    /** Where it stands: the section's header ("head"), or an empty group's action, named by its group. */
+    where?: string;
     /** A fetch of `name` is about to be asked for. */
     onasking: (name: string) => void;
     /** The row the hub answered with, and the row once its fetch landed. */
     onsaved: (row: FleetSkillMeta) => void;
   } = $props();
 
-  onMount(() => {
-    mounted[where] = (mounted[where] ?? 0) + 1;
-    return () => {
-      mounted[where] = (mounted[where] ?? 1) - 1;
-    };
-  });
-
+  const seat = new PopoverSeat(parked, () => where);
   const held = draft.value;
-  const open = $derived(
-    held.open &&
-      (held.at === where || (where === "head" && (mounted[held.at] ?? 0) === 0))
-  );
 
   /** The ask is on its way to the hub. */
   let sending = $state(false);
-  let surface = $state<HTMLElement | null>(null);
 
   const project = $derived(
     cawco.projects.find((each) => each.id === held.projectId)
@@ -159,36 +136,6 @@
   );
   const ready = $derived(source !== "" && nameProblem === undefined);
 
-  const rowOf = (name: string) =>
-    document.querySelector<HTMLElement>(
-      `[data-row-name="${CSS.escape(name)}"]`
-    );
-
-  /** The closed surface's flight into its row, while bits-ui still draws it. */
-  let flight: Animation | undefined;
-
-  /**
-   * Closes at once, and the surface travels into `row` as it goes (The One
-   * Object Rule): bits-ui keeps a closed surface drawn until its animations
-   * end, the flight among them. The close never waits on the flight, so a
-   * reload or a press made during it finds the popover already shut.
-   */
-  function closeOnto(row: HTMLElement | null) {
-    flight?.cancel();
-    flight = surface && row ? closeInto(surface, row) : undefined;
-    held.open = false;
-    fromRow = null;
-  }
-
-  // Opened again while its flight still runs (its trigger, or the row's
-  // Open): it turns back, whole, before it is drawn.
-  $effect.pre(() => {
-    if (open) {
-      flight?.cancel();
-      flight = undefined;
-    }
-  });
-
   // The fetch landed with its files: the popover closes into the row it
   // made, and the row says the rest (its rollout chip, machine by machine).
   // Put away meanwhile, it simply lets go of the fetch.
@@ -204,8 +151,8 @@
       return;
     }
     onsaved(row);
-    if (open) {
-      closeOnto(rowOf(row.name));
+    if (seat.open) {
+      seat.closeOnto(rowOf(row.name));
     }
     draft.clear();
   });
@@ -241,37 +188,17 @@
     held.typed = pickSkill(source, choice);
     detach(fetchIt(held.typed), "fetchIt");
   }
-
-  /**
-   * ×, Esc or a press outside: the popover goes, the fetch stays. With a
-   * fetch to follow it travels into that row; with none, into its trigger.
-   */
-  function setOpen(next: boolean) {
-    if (next) {
-      held.at = where;
-      held.open = true;
-      return;
-    }
-    closeOnto(held.asked === null ? null : rowOf(held.asked));
-  }
 </script>
 
-<Popover.Root bind:open={() => open, setOpen}>
-  <Popover.Trigger disabled={down !== null}>
-    {#snippet child({ props })}
-      <Button {...props} disabled={down !== null} title={down ?? undefined}>
-        <IconPlus />
-        <span>{words.fetchSkill}</span>
-      </Button>
-    {/snippet}
-  </Popover.Trigger>
+<Popover.Root bind:open={() => seat.open, seat.setOpen}>
+  <WriteTrigger {down} icon={IconPlus} label={words.fetchSkill} />
   <Popover.Content
     align="end"
     class="w-c-panel-w max-w-(--bits-popover-content-available-width)"
-    customAnchor={fromRow}
+    customAnchor={parked.fromRow}
     gap="form"
     pad="form"
-    bind:ref={surface}
+    bind:ref={seat.surface}
   >
     <form
       data-fetch-skill
@@ -376,25 +303,13 @@
           {/each}
         </div>
       {/if}
-      {#if failed}
-        <p
-          data-slot="refused"
-          class="type-meta wrap-anywhere text-status-fail-ink"
-          role="alert"
-          transition:unfold
-        >
-          {failed}
-        </p>
-      {/if}
-      <Button
-        class="self-end"
-        disabled={down !== null || !ready}
-        failed={failed !== null}
+      <HubAskFoot
+        {down}
+        {failed}
         label={words.fetchSkill}
         pending={busy}
         pendingLabel={words.fetching}
-        title={down ?? undefined}
-        type="submit"
+        {ready}
       />
     </form>
   </Popover.Content>

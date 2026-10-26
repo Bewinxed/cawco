@@ -20,6 +20,7 @@
   import { type FleetMemoryDocRow, saveMemoryDoc } from "../fleet";
   import Field from "./Field.svelte";
   import { fileHref } from "./memory";
+  import WriteTrigger from "./WriteTrigger.svelte";
 
   let {
     taken,
@@ -89,14 +90,7 @@
   }}
   bind:open={expanded}
 >
-  <Popover.Trigger disabled={down !== null}>
-    {#snippet child({ props })}
-      <Button {...props} disabled={down !== null} title={down ?? undefined}>
-        <IconPlus />
-        <span>{words.newDocument}</span>
-      </Button>
-    {/snippet}
-  </Popover.Trigger>
+  <WriteTrigger {down} icon={IconPlus} label={words.newDocument} />
   <Popover.Content
     align="end"
     class="max-w-(--bits-popover-content-available-width)"

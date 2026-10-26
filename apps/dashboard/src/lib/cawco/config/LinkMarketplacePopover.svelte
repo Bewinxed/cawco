@@ -1,28 +1,20 @@
 <script lang="ts" module>
   import { z } from "zod";
-  import { TabDraft } from "../tab-draft.svelte";
+  import { ParkedPopover } from "./parked-popover.svelte";
 
   /**
-   * Where the popover was opened from: the section's header ("head"), or an
-   * empty group's action, named by its group.
+   * The popover's held state: open or not, what was typed, and the source
+   * whose link it asked for. The link itself is the hub's (the snapshot's
+   * `links`, then its row).
    */
-  type Where = string;
-
-  /**
-   * The popover's held state (DESIGN.md, The Work Outlives Its Surface
-   * Rule): open or not, what was typed, and the source whose link it asked
-   * for. The link itself is the hub's (the snapshot's `links`, then its row).
-   */
-  const draft = new TabDraft(
+  const parked = new ParkedPopover(
     "cawco:link-marketplace",
     z.object({
       open: z.boolean(),
       at: z.string(),
       name: z.string(),
       source: z.string(),
-      /** The source this popover asked the hub to link, until it lands. */
       asked: z.string().nullable(),
-      /** Why the hub refused the ask itself. */
       refused: z.string().nullable(),
     }),
     () => ({
@@ -34,11 +26,7 @@
       refused: null,
     })
   );
-
-  /** The popovers mounted on the page, by where: one put away opens in the header's when its own is gone. */
-  const mounted = $state<Record<Where, number>>({});
-  /** The pending row it is reopened from, which it opens beside and closes into. */
-  let fromRow = $state<HTMLElement | null>(null);
+  const { draft } = parked;
 
   /** One press on a link's row: the popover again, on that link, beside the row. */
   export function reopenLink(source: string, row: HTMLElement | null): void {
@@ -48,8 +36,7 @@
       draft.value.refused = null;
       draft.value.asked = source;
     }
-    fromRow = row;
-    draft.value.open = true;
+    parked.reopen(row);
   }
 </script>
 
@@ -70,18 +57,17 @@
     type MarketplaceLink,
     skillsWords as words,
   } from "@cawco/core";
-  import { onMount } from "svelte";
   import Coded from "#lib/cawco/Coded.svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
-  import { closeInto } from "#lib/cawco/motion/share.svelte.js";
-  import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { IconShop } from "#lib/icons.js";
   import { linkMarketplace, readMarketplaceName } from "../fleet";
   import Field from "./Field.svelte";
+  import HubAskFoot from "./HubAskFoot.svelte";
+  import { PopoverSeat, rowOf } from "./parked-popover.svelte";
+  import WriteTrigger from "./WriteTrigger.svelte";
 
   /** How long typing rests before the source is read. */
   const READ_AFTER_MS = 400;
@@ -100,26 +86,16 @@
     /** Why the hub cannot take a write, or null: the trigger and the submit
         are disabled on it and say it as their title. */
     down: string | null;
-    where?: Where;
+    /** Where it stands: the section's header ("head"), or an empty group's action, named by its group. */
+    where?: string;
     /** The hub's answer to the ask: the link under way. */
     onlinked: (link: MarketplaceLink) => void;
   } = $props();
 
-  onMount(() => {
-    mounted[where] = (mounted[where] ?? 0) + 1;
-    return () => {
-      mounted[where] = (mounted[where] ?? 1) - 1;
-    };
-  });
-
+  const seat = new PopoverSeat(parked, () => where);
   const held = draft.value;
-  const open = $derived(
-    held.open &&
-      (held.at === where || (where === "head" && (mounted[held.at] ?? 0) === 0))
-  );
 
   let sending = $state(false);
-  let surface = $state<HTMLElement | null>(null);
 
   /** What the source's marketplace.json calls it, for the source it was read from. */
   let read = $state<{ source: string; name?: string; problem?: string } | null>(
@@ -182,34 +158,6 @@
     return () => clearTimeout(timer);
   });
 
-  const rowOf = (key: string) =>
-    document.querySelector<HTMLElement>(`[data-row-name="${CSS.escape(key)}"]`);
-
-  /** The closed surface's flight into its row, while bits-ui still draws it. */
-  let flight: Animation | undefined;
-
-  /**
-   * Closes at once, and the surface travels into `row` as it goes (The One
-   * Object Rule): bits-ui keeps a closed surface drawn until its animations
-   * end, the flight among them. The close never waits on the flight, so a
-   * reload or a press made during it finds the popover already shut.
-   */
-  function closeOnto(row: HTMLElement | null) {
-    flight?.cancel();
-    flight = surface && row ? closeInto(surface, row) : undefined;
-    held.open = false;
-    fromRow = null;
-  }
-
-  // Opened again while its flight still runs (its trigger, or the row's
-  // Open): it turns back, whole, before it is drawn.
-  $effect.pre(() => {
-    if (open) {
-      flight?.cancel();
-      flight = undefined;
-    }
-  });
-
   // Linked: the popover closes into the row it made. Put away meanwhile, it
   // lets go of the link, and the row says the rest.
   $effect(() => {
@@ -217,8 +165,8 @@
     if (!row || sending) {
       return;
     }
-    if (open) {
-      closeOnto(rowOf(row.name));
+    if (seat.open) {
+      seat.closeOnto(rowOf(row.name));
     }
     draft.clear();
   });
@@ -254,44 +202,27 @@
       sending = false;
     }
   }
-
-  /** ×, Esc or a press outside: the popover goes, the link stays, on its row. */
-  function setOpen(next: boolean) {
-    if (next) {
-      held.at = where;
-      held.open = true;
-      return;
-    }
-    closeOnto(held.asked === null ? null : rowOf(held.asked));
-  }
 </script>
 
 {#snippet callsItself()}
   <Coded text={words.callsItself(own ?? "")} />
 {/snippet}
 
-<Popover.Root bind:open={() => open, setOpen}>
-  <Popover.Trigger disabled={down !== null}>
-    {#snippet child({ props })}
-      <Button
-        {...props}
-        disabled={down !== null}
-        size="sm"
-        title={down ?? undefined}
-        variant="outline"
-      >
-        <IconShop />
-        <span>{words.linkMarketplace}</span>
-      </Button>
-    {/snippet}
-  </Popover.Trigger>
+<Popover.Root bind:open={() => seat.open, seat.setOpen}>
+  <WriteTrigger
+    {down}
+    icon={IconShop}
+    label={words.linkMarketplace}
+    size="sm"
+    variant="outline"
+  />
   <Popover.Content
     align="start"
     class="w-c-panel-w max-w-(--bits-popover-content-available-width)"
-    customAnchor={fromRow}
+    customAnchor={parked.fromRow}
     gap="form"
     pad="form"
-    bind:ref={surface}
+    bind:ref={seat.surface}
   >
     <form
       data-link-marketplace
@@ -334,25 +265,13 @@
           bind:value={held.name}
         />
       </Field>
-      {#if failed}
-        <p
-          data-slot="refused"
-          class="type-meta wrap-anywhere text-status-fail-ink"
-          role="alert"
-          transition:unfold
-        >
-          {failed}
-        </p>
-      {/if}
-      <Button
-        class="self-end"
-        disabled={down !== null || !ready}
-        failed={failed !== null}
+      <HubAskFoot
+        {down}
+        {failed}
         label={words.link}
         pending={busy}
         pendingLabel={words.linking}
-        title={down ?? undefined}
-        type="submit"
+        {ready}
       />
     </form>
   </Popover.Content>

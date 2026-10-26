@@ -11,8 +11,6 @@
   import { detach } from "@cawco/core/detach";
   import { untrack } from "svelte";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
-  import MachineAway from "#lib/cawco/MachineAway.svelte";
-  import { MachineWait } from "#lib/cawco/machine-wait.svelte.js";
   import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
@@ -21,11 +19,6 @@
   import DiffView from "#lib/components/features/DiffView.svelte";
   import MarkdownEditor from "#lib/components/features/MarkdownEditor.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
-  import {
-    MachineRow,
-    machineHue,
-    machineIcon,
-  } from "#lib/components/ui/machine-row/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconDocument, IconHistory, IconLaptop } from "#lib/icons.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
@@ -51,6 +44,8 @@
   import { drafts, keepDraft } from "../drafts.svelte";
   import EditorFrame from "../EditorFrame.svelte";
   import EditorSection from "../EditorSection.svelte";
+  import MachineCopyRow from "../MachineCopyRow.svelte";
+  import { MachineCopies } from "../machine-copies.svelte";
   import {
     byteLength,
     docLabel,
@@ -355,16 +350,7 @@
   }
 
   // ── per machine ──────────────────────────────────────────────────────
-  let comparing = $state<string | null>(null);
-  let copies = $state<Record<string, string | null>>({});
-  let peeking = $state<Record<string, boolean>>({});
-  let unread = $state<Record<string, string>>({});
-  /** Per machine, the settle whose request is out. */
-  let settling = $state<Record<string, "adopt" | "push">>({});
-  /** Per machine, why its last settle was refused: said under its row. */
-  let settleFailed = $state<Record<string, string>>({});
-  /** Compares and settles whose machine went away: said in place, asked again once it is back. */
-  const waits = new MachineWait();
+  const copies = new MachineCopies();
 
   const applied = $derived(
     machines.filter((row) => memoryStateOf(row, path)?.state === "applied")
@@ -372,70 +358,39 @@
   const asleep = $derived(applied.filter((row) => row.status !== "online"));
 
   async function compare(machine: Machine) {
-    if (comparing === machine.machineId) {
-      comparing = null;
-      return;
-    }
-    comparing = machine.machineId;
-    if (
-      Object.hasOwn(copies, machine.machineId) ||
-      peeking[machine.machineId]
-    ) {
-      return;
-    }
-    peeking[machine.machineId] = true;
-    delete unread[machine.machineId];
-    try {
-      const set = await waits.run(`peek:${machine.machineId}`, () =>
-        peekMemory(machine.machineId)
-      );
-      copies[machine.machineId] = main
+    await copies.compare(machine, async () => {
+      const set = await peekMemory(machine.machineId);
+      return main
         ? (set?.content ?? null)
         : (set?.docs.find((doc) => doc.path === path)?.content ?? null);
-    } catch (caught) {
-      unread[machine.machineId] = message(caught);
-    } finally {
-      delete peeking[machine.machineId];
-    }
+    });
   }
 
   async function adopt(machine: Machine) {
-    settling[machine.machineId] = "adopt";
-    delete settleFailed[machine.machineId];
-    try {
-      const landed = await waits.run(`settle:${machine.machineId}`, () =>
+    await copies.settle(
+      machine,
+      "adopt",
+      () =>
         main
           ? adoptMemory(machine.machineId)
-          : adoptMemoryDoc(machine.machineId, path)
-      );
-      // Its row turns "In sync" on the machine's next report.
-      stored(landed);
-      text = landed.content;
-      comparing = null;
-      delete copies[machine.machineId];
-      await loadHistory();
-    } catch (caught) {
-      settleFailed[machine.machineId] = message(caught);
-    } finally {
-      delete settling[machine.machineId];
-    }
+          : adoptMemoryDoc(machine.machineId, path),
+      (landed) => {
+        // Its row turns "In sync" on the machine's next report.
+        stored(landed);
+        text = landed.content;
+        return loadHistory();
+      }
+    );
   }
 
   async function overwrite(machine: Machine) {
-    settling[machine.machineId] = "push";
-    delete settleFailed[machine.machineId];
-    try {
-      // Its row turns "In sync" on the machine's next report.
-      await waits.run(`settle:${machine.machineId}`, () =>
-        pushMemory(machine.machineId, main ? undefined : path)
-      );
-      comparing = null;
-      delete copies[machine.machineId];
-    } catch (caught) {
-      settleFailed[machine.machineId] = message(caught);
-    } finally {
-      delete settling[machine.machineId];
-    }
+    // Its row turns "In sync" on the machine's next report.
+    await copies.settle(
+      machine,
+      "push",
+      () => pushMemory(machine.machineId, main ? undefined : path),
+      () => undefined
+    );
   }
 
   const SAID: Record<string, string> = {
@@ -751,133 +706,29 @@
             {@const item = memoryStateOf(machine, path)}
             {@const online = machine.status === "online"}
             {@const drifted = item?.state === "failed"}
-            {@const comparingThis = comparing === machine.machineId}
-            <li
-              data-slot="entry"
-              class="flex flex-col gap-space-2 py-space-2 not-first:border-t not-first:border-t-border-hairline"
-            >
-              <div
-                class="relative flex flex-wrap items-center gap-x-space-3 gap-y-space-2"
-              >
-                <MachineRow
-                  hue={machineHue(index, online)}
-                  icon={machineIcon(machine.os)}
-                  meta="{SAID[item?.state ?? ''] ??
-                    words.notReported} · {machineOs(machine.os).label}{online
-                    ? ''
-                    : words.offlineWhenBack}"
-                  name={machineLabel(machine.hostname)}
-                  presence={online ? "online" : "off"}
-                />
-                {#if drifted || !saved}
-                  {@const settle = settling[machine.machineId]}
-                  <span
-                    data-slot="acts"
-                    class="flex flex-wrap gap-space-2"
-                    in:crossIn
-                    out:crossOut
-                  >
-                    {#if drifted}
-                      <Button
-                        disabled={!online}
-                        onclick={() => compare(machine)}
-                        size="sm"
-                        variant={comparingThis ? "secondary" : "outline"}
-                      >
-                        {comparingThis ? words.hide : words.compare}
-                      </Button>
-                    {/if}
-                    <Button
-                      disabled={!online || settle === "push"}
-                      failed={machine.machineId in settleFailed}
-                      label={words.adoptCopy}
-                      onclick={() => adopt(machine)}
-                      pending={settle === "adopt"}
-                      pendingLabel={words.adopting}
-                      size="sm"
-                      variant="outline"
-                    />
-                    {#if drifted}
-                      <Button
-                        disabled={!online || settle === "adopt"}
-                        failed={machine.machineId in settleFailed}
-                        label={words.sendOurs}
-                        onclick={() => overwrite(machine)}
-                        pending={settle === "push"}
-                        pendingLabel={words.sending}
-                        size="sm"
-                        variant="outline"
-                      />
-                    {/if}
-                  </span>
-                {/if}
-              </div>
-              <RowFault reason={settleFailed[machine.machineId]} />
-              <MachineAway away={waits.away(`settle:${machine.machineId}`)} />
-              {#if drifted && item?.detail}
-                <pre
-                  class="max-h-c-detail-max overflow-auto rounded-sm bg-surface-raised px-space-2 py-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap"
-                  in:unfold
-                  out:unfold>{item.detail}</pre>
-              {/if}
-              {#if comparingThis}
-                <!-- The machine's copy folds open under its row; reading
-                   cross-fades to what was read as the box follows. -->
-                <div class="flex flex-col gap-space-2" in:unfold out:unfold>
-                  <div
-                    data-slot="swap"
-                    class="relative flex flex-col"
-                    {@attach morph()}
-                  >
-                    {#if waits.away(`peek:${machine.machineId}`)}
-                      <MachineAway
-                        away={waits.away(`peek:${machine.machineId}`)}
-                      />
-                    {:else if peeking[machine.machineId]}
-                      <p
-                        data-slot="note"
-                        class="mark-line flex items-center gap-space-2 type-meta max-w-c-measure text-ink-muted"
-                        role="status"
-                        in:crossIn
-                        out:crossOut
-                      >
-                        <Spinner class="shrink-0" /><span
-                          >{words.readingCopy}</span
-                        >
-                      </p>
-                    {:else if unread[machine.machineId]}
-                      <p
-                        class="type-meta text-status-attn-ink"
-                        role="alert"
-                        in:crossIn
-                        out:crossOut
-                      >
-                        {unread[machine.machineId]}
-                      </p>
-                    {:else if copies[machine.machineId] === null}
-                      <p
-                        data-slot="note"
-                        class="type-meta max-w-c-measure text-ink-muted"
-                        in:crossIn
-                        out:crossOut
-                      >
-                        {words.noCopy}
-                      </p>
-                    {:else if copies[machine.machineId] !== undefined}
-                      <div in:crossIn out:crossOut>
-                        {#key `${machine.machineId}:${saved?.hash ?? ""}`}
-                          <DiffView
-                            filePath={path}
-                            newContent={copies[machine.machineId] ?? ""}
-                            oldContent={saved?.content ?? ""}
-                          />
-                        {/key}
-                      </div>
-                    {/if}
-                  </div>
-                </div>
-              {/if}
-            </li>
+            <MachineCopyRow
+              acts={drifted || !saved}
+              {copies}
+              detail={drifted ? item?.detail : undefined}
+              diff={{
+                filePath: path,
+                oldContent: saved?.content ?? "",
+                hash: saved?.hash ?? "",
+              }}
+              {drifted}
+              {index}
+              {machine}
+              meta="{SAID[item?.state ?? ''] ?? words.notReported} · {machineOs(
+                machine.os
+              ).label}{online ? '' : words.offlineWhenBack}"
+              noCopy={words.noCopy}
+              onadopt={() => adopt(machine)}
+              oncompare={() => compare(machine)}
+              onsend={() => overwrite(machine)}
+              reading={words.readingCopy}
+              slot="entry"
+              swapSlot="swap"
+            />
           {/each}
         </ul>
       {/if}
