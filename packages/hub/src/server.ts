@@ -714,7 +714,7 @@ import { FleetMcpChanges, type RidingChanges } from "./fleet-mcp-changes";
 import { FleetSync, warmHashes } from "./fleet-sync";
 import { refreshOf, skillVersion } from "./fleet-versions";
 import { createFleetWatch, type FleetWatch } from "./fleet-watch";
-import { accountForecasts, carrySequence } from "./forecast";
+import { accountForecasts, carrySequence, historyPoints } from "./forecast";
 import { createForgePosts } from "./forge-posts";
 import { gateRoutes, projectCawEdits } from "./gate-file";
 import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
@@ -33960,16 +33960,7 @@ export const createServer = (
             .filter((account) => account.provider === query.provider);
           const readings = db.accounts.readings();
           const history = accounts.flatMap((account) =>
-            db.accounts
-              .history({ accountId: account.id, since: now - 7 * DAY_MS })
-              .map((row) => ({
-                accountId: row.accountId,
-                kind: row.kind,
-                scopeLabel: row.scopeLabel,
-                percent: row.percent,
-                resetsAt: row.resetsAt,
-                fetchedAt: row.fetchedAt.getTime(),
-              }))
+            historyPoints(db, account.id, now - 7 * DAY_MS)
           );
           const running = new Set(
             db

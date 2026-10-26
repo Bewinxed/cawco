@@ -1,15 +1,17 @@
-import type {
-  Account,
-  AccountBench,
-  AccountForecast,
-  AccountReading,
-  CarrySpan,
-  LimitWindow,
-  ProviderRouting,
-  WindowForecast,
-  WindowRef,
+import {
+  type Account,
+  type AccountBench,
+  type AccountForecast,
+  type AccountReading,
+  pushCarry,
+  type CarrySpan,
+  type LimitWindow,
+  type ProviderRouting,
+  type WindowForecast,
+  type WindowRef,
 } from "@cawco/core";
 import { HOUR_MS } from "@cawco/core/time";
+import type { DbShape } from "./db";
 import { place } from "./placement";
 
 /**
@@ -31,6 +33,21 @@ export interface HistoryPoint {
   resetsAt: string | null;
   scopeLabel: string | null;
 }
+
+/** `accountId`'s usage readings since `since`, as a forecast reads them. */
+export const historyPoints = (
+  db: DbShape,
+  accountId: string,
+  since: number
+): HistoryPoint[] =>
+  db.accounts.history({ accountId, since }).map((row) => ({
+    accountId: row.accountId,
+    kind: row.kind,
+    scopeLabel: row.scopeLabel,
+    percent: row.percent,
+    resetsAt: row.resetsAt,
+    fetchedAt: row.fetchedAt.getTime(),
+  }));
 
 const resetMs = (window: Pick<LimitWindow, "resetsAt">): number | null =>
   window.resetsAt ? Date.parse(window.resetsAt) : null;
@@ -186,98 +203,79 @@ export type AccountPaces = ReadonlyMap<string, WindowPace[]>;
 const MIN_PCT_MEASURED = 3;
 
 /**
- * What one percent of an account's window costs in weighted tokens, from the
- * readings it moved across (the history) laid beside the turns CawCo saw on
- * it in the same spans. Use CawCo never saw (another client on the account)
+ * What one percent of an account's window costs, by `measure` of each turn:
+ * the readings it moved across (the history), grouped by the window's
+ * reset, laid beside the turns CawCo saw on it in the same spans. Null until
+ * the window has moved {@link MIN_PCT_MEASURED} percent across spans whose
+ * turns measured anything.
+ */
+const perPercent = <T extends { at: Date }>(
+  window: { kind: string; scopeLabel: string | null },
+  history: HistoryPoint[],
+  turns: readonly T[],
+  accountId: string,
+  measure: (turn: T) => number
+): number | null => {
+  const series = new Map<string, HistoryPoint[]>();
+  for (const point of history) {
+    if (
+      point.accountId === accountId &&
+      point.kind === window.kind &&
+      point.scopeLabel === window.scopeLabel
+    ) {
+      const key = point.resetsAt ?? "";
+      series.set(key, [...(series.get(key) ?? []), point]);
+    }
+  }
+  let pct = 0;
+  let measured = 0;
+  for (const points of series.values()) {
+    points.sort((a, b) => a.fetchedAt - b.fetchedAt);
+    const [first] = points;
+    const last = points.at(-1);
+    if (!(first && last) || last.percent <= first.percent) {
+      continue;
+    }
+    const spent = turns
+      .filter((turn) => {
+        const at = turn.at.getTime();
+        return at > first.fetchedAt && at <= last.fetchedAt;
+      })
+      .reduce((sum, turn) => sum + measure(turn), 0);
+    if (spent > 0) {
+      pct += last.percent - first.percent;
+      measured += spent;
+    }
+  }
+  return pct >= MIN_PCT_MEASURED ? measured / pct : null;
+};
+
+/**
+ * What one percent of an account's window costs in weighted tokens
+ * ({@link perPercent}). Use CawCo never saw (another client on the account)
  * makes a percent look cheaper than it is, so re-reads priced from it are
- * priced high. Null until the window has moved {@link MIN_PCT_MEASURED}
- * percent across spans with turns recorded.
+ * priced high.
  */
 const tokensPerPercent = (
   window: { kind: string; scopeLabel: string | null },
   history: HistoryPoint[],
   turns: TurnTokens[],
   accountId: string
-): number | null => {
-  const series = new Map<string, HistoryPoint[]>();
-  for (const point of history) {
-    if (
-      point.accountId === accountId &&
-      point.kind === window.kind &&
-      point.scopeLabel === window.scopeLabel
-    ) {
-      const key = point.resetsAt ?? "";
-      series.set(key, [...(series.get(key) ?? []), point]);
-    }
-  }
-  let pct = 0;
-  let tokens = 0;
-  for (const points of series.values()) {
-    points.sort((a, b) => a.fetchedAt - b.fetchedAt);
-    const [first] = points;
-    const last = points.at(-1);
-    if (!(first && last) || last.percent <= first.percent) {
-      continue;
-    }
-    const spent = turns
-      .filter((turn) => {
-        const at = turn.at.getTime();
-        return at > first.fetchedAt && at <= last.fetchedAt;
-      })
-      .reduce((sum, turn) => sum + weightedTokens(turn), 0);
-    if (spent > 0) {
-      pct += last.percent - first.percent;
-      tokens += spent;
-    }
-  }
-  return pct >= MIN_PCT_MEASURED ? tokens / pct : null;
-};
+): number | null =>
+  perPercent(window, history, turns, accountId, weightedTokens);
 
 /**
- * What one percent of an account's window costs in dollars: the same spans
- * as {@link tokensPerPercent}, its readings' percent deltas laid beside the
- * `turn_usage` cost (Claude Code's own `costUSD`) of the turns in them. Null
- * until it has moved {@link MIN_PCT_MEASURED} percent across priced spans.
+ * What one percent of an account's window costs in dollars
+ * ({@link perPercent}): the `turn_usage` cost (Claude Code's own `costUSD`)
+ * of the turns in its spans.
  */
 export const usdPerPercent = (
   window: { kind: string; scopeLabel: string | null },
   history: HistoryPoint[],
   turns: readonly { at: Date; costUsd: number | null }[],
   accountId: string
-): number | null => {
-  const series = new Map<string, HistoryPoint[]>();
-  for (const point of history) {
-    if (
-      point.accountId === accountId &&
-      point.kind === window.kind &&
-      point.scopeLabel === window.scopeLabel
-    ) {
-      const key = point.resetsAt ?? "";
-      series.set(key, [...(series.get(key) ?? []), point]);
-    }
-  }
-  let pct = 0;
-  let usd = 0;
-  for (const points of series.values()) {
-    points.sort((a, b) => a.fetchedAt - b.fetchedAt);
-    const [first] = points;
-    const last = points.at(-1);
-    if (!(first && last) || last.percent <= first.percent) {
-      continue;
-    }
-    const spent = turns
-      .filter((turn) => {
-        const at = turn.at.getTime();
-        return at > first.fetchedAt && at <= last.fetchedAt;
-      })
-      .reduce((sum, turn) => sum + (turn.costUsd ?? 0), 0);
-    if (spent > 0) {
-      pct += last.percent - first.percent;
-      usd += spent;
-    }
-  }
-  return pct >= MIN_PCT_MEASURED ? usd / pct : null;
-};
+): number | null =>
+  perPercent(window, history, turns, accountId, (turn) => turn.costUsd ?? 0);
 
 /**
  * Each account's windows as placement and rebalancing read them: the pace
@@ -461,14 +459,6 @@ export const carrySequence = (input: CarryInput): CarrySpan[] => {
   );
   const walk = new Walk(input);
   const spans: CarrySpan[] = [];
-  const push = (accountId: string | null, from: number, to: number) => {
-    const last = spans.at(-1);
-    if (last && last.accountId === accountId && last.to === from) {
-      last.to = to;
-    } else if (to > from) {
-      spans.push({ accountId, from, to });
-    }
-  };
 
   let t = input.now;
   // A bound on steps: each one ends at a run-out or a reset, of which a
@@ -479,7 +469,7 @@ export const carrySequence = (input: CarryInput): CarrySpan[] => {
     if (!carrier) {
       // Nothing can carry: until the first account comes back.
       const until = Math.min(horizon, walk.nextBack(t));
-      push(null, t, until);
+      pushCarry(spans, null, t, until);
       t = until;
       continue;
     }
@@ -487,7 +477,7 @@ export const carrySequence = (input: CarryInput): CarrySpan[] => {
     const runsOut =
       burn > 0 ? t + ((100 - use) / burn) * HOUR_MS : Number.POSITIVE_INFINITY;
     const until = Math.min(horizon, runsOut, walk.nextBack(t));
-    push(carrier, t, until);
+    pushCarry(spans, carrier, t, until);
     walk.use.set(carrier, use + (burn * (until - t)) / HOUR_MS);
     if (until === runsOut && runsOut < horizon) {
       walk.bench.push({

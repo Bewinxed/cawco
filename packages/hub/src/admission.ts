@@ -2,7 +2,7 @@ import { accountNameAmong, costForUsage, OVER_STATUSES } from "@cawco/core";
 import { DAY_MS } from "@cawco/core/time";
 import type { LimitRow } from "./at-limit";
 import type { DbShape } from "./db";
-import { usdPerPercent } from "./forecast";
+import { historyPoints, usdPerPercent } from "./forecast";
 import { SESSION_WINDOW_MS } from "./placement";
 
 /**
@@ -189,14 +189,7 @@ export const createAdmission = (db: DbShape) => {
       return known.value;
     }
     const since = now - LOOKBACK_MS;
-    const history = db.accounts.history({ accountId, since }).map((row) => ({
-      accountId: row.accountId,
-      kind: row.kind,
-      scopeLabel: row.scopeLabel,
-      percent: row.percent,
-      resetsAt: row.resetsAt,
-      fetchedAt: row.fetchedAt.getTime(),
-    }));
+    const history = historyPoints(db, accountId, since);
     const value = usdPerPercent(
       { kind: "session", scopeLabel: null },
       history,

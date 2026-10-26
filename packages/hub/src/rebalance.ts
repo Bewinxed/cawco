@@ -36,6 +36,7 @@ import {
   accountForecasts,
   accountPaces,
   type HistoryPoint,
+  historyPoints,
   reReadWeight,
   weightedTokens,
 } from "./forecast";
@@ -95,14 +96,7 @@ export const readForecast = (
     .filter((account) => account.provider === provider);
   const since = now - LOOKBACK_MS;
   const history = accounts.flatMap((account) =>
-    db.accounts.history({ accountId: account.id, since }).map((row) => ({
-      accountId: row.accountId,
-      kind: row.kind,
-      scopeLabel: row.scopeLabel,
-      percent: row.percent,
-      resetsAt: row.resetsAt,
-      fetchedAt: row.fetchedAt.getTime(),
-    }))
+    historyPoints(db, account.id, since)
   );
   const turns = new Map(
     accounts.map((account) => [
