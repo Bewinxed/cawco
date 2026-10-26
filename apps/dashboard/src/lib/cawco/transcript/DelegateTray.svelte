@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { WorkItemState } from "@cawco/core";
   import { detach } from "@cawco/core/detach";
   /**
    * The delegate tray: one compact chip per child this session has working
@@ -31,7 +32,6 @@
    * a work item's: a started session that failed runs none, so its chip
    * stays in the work zone, says "failed", and leaves as a finished one does.
    */
-  import type { WorkItemState } from "@cawco/core";
   import { tick, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { SvelteMap } from "svelte/reactivity";
