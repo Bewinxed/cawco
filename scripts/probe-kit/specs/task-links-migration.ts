@@ -1,5 +1,5 @@
 /**
- * The task links cutover on a copy of the live hub (drizzle 0323 and tasks.ts
+ * The task links cutover on a copy of the live hub (drizzle 0324 and tasks.ts
  * `migrateLinks`): the live database copied by `VACUUM INTO`, every project
  * folder cloned beside it, and this checkout's hub opened on the copy
  * (hub scripts/task-links-migration-hub.ts), its boot work rewriting the folders. The
@@ -33,7 +33,7 @@ interface Counts {
   board: Record<Key, number>;
   /** Edges in every task file, by key. */
   files: Record<Key, number>;
-  /** Index edges by kind, and tasks with a whole (`part_of`, or `parent` before 0323). */
+  /** Index edges by kind, and tasks with a whole (`part_of`, or `parent` before 0324). */
   index: Partial<Record<string, number>>;
   /** Tasks whose file names related links (before), See also comments (after). */
   related: number;

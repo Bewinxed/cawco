@@ -1,6 +1,6 @@
 /**
  * The task-links-migration spec's hub (scripts/probe-kit/specs): this checkout's hub opened on a copy
- * of the live database (its migrations run, drizzle 0323 among them), its
+ * of the live database (its migrations run, drizzle 0324 among them), its
  * boot work run as a serving hub's is, so `tasks.syncAll` rewrites every
  * project folder the copy holds (tasks.ts `migrateLinks`). Once each
  * folder named on the command line has its links commit (two minutes at
