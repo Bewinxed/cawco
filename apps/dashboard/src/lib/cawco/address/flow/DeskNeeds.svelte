@@ -9,43 +9,27 @@
    * work stands. An unsupported network raises no row: Settings is its way
    * in.
    */
-  import { HOUR_MS } from "@cawco/core/time";
-  import { untrack } from "svelte";
-  import NeedsMeta from "#lib/cawco/home/NeedsMeta.svelte";
-  import NeedsRow from "#lib/cawco/home/NeedsRow.svelte";
-  import { capLine } from "#lib/cawco/usage.js";
-  import { IconDollar } from "#lib/icons.js";
-  import { closeTo, openFrom, type Source } from "../motion";
+  import type { Source } from "../motion";
   import AddressRow from "../preview/AddressRow.svelte";
+  import BudgetRow from "../preview/BudgetRow.svelte";
+  import { DeskTray } from "./desk-tray.svelte";
   import FlowTray from "./FlowTray.svelte";
   import type { AddressFlow } from "./flow.svelte";
   import { rowLine } from "./flow-words";
 
   let { flow }: { flow: AddressFlow } = $props();
 
-  /** A project past its budget, as Needs you lists it today, under the address's row. */
-  const budget = {
-    key: "cap:address-flow-preview",
-    cap: {
-      inherited: false,
-      onCap: "quiet",
-      period: "day",
-      reached: true,
-      resetsAt: Date.now() + 6 * HOUR_MS,
-      spentUsd: 12.4,
-      startsAt: Date.now() - 18 * HOUR_MS,
-      usd: 10,
-    },
-    title: "cockpit",
-    href: "/usage?project=address-flow-preview",
-  } as const;
-
-  let frameEl = $state<HTMLElement | null>(null);
-  let trayEl = $state<HTMLElement | null>(null);
   let rowEl = $state<HTMLElement | null>(null);
   /** The row's height as last drawn: the box the tray closes back into. */
   let rowHeight = 0;
-  let opening: Source | null = null;
+  const desk = new DeskTray(
+    () => flow,
+    "needs",
+    (box): Source => ({
+      kind: "row",
+      rect: new DOMRect(box.x, box.y, box.width, rowHeight || box.height),
+    })
+  );
 
   /** Stopped, the work has no row; every other state, an unsupported network's too, stands here. */
   const shown = $derived(!flow.stopped);
@@ -53,56 +37,21 @@
   function openTray(): void {
     if (rowEl) {
       rowHeight = rowEl.offsetHeight;
-      opening = { kind: "row", rect: rowEl.getBoundingClientRect() };
     }
-    flow.show("needs");
-  }
-
-  $effect(() => {
-    if (flow.open.needs && trayEl) {
-      const el = trayEl;
-      untrack(() => {
-        if (opening) {
-          openFrom(el, opening);
-        }
-        opening = null;
-      });
-    }
-  });
-
-  export function park(): void {
-    const el = trayEl;
-    if (!(el && flow.open.needs)) {
-      return;
-    }
-    const box = el.getBoundingClientRect();
-    closeTo(
-      el,
-      {
-        kind: "row",
-        rect: new DOMRect(box.x, box.y, box.width, rowHeight || box.height),
-      },
-      () => flow.park("needs")
+    desk.show(
+      rowEl ? { kind: "row", rect: rowEl.getBoundingClientRect() } : null
     );
   }
 
-  function onpointerdown(event: PointerEvent): void {
-    const target = event.target as Node;
-    if (
-      flow.open.needs &&
-      trayEl &&
-      frameEl?.contains(target) &&
-      !trayEl.contains(target)
-    ) {
-      park();
-    }
+  export function park(): void {
+    desk.park();
   }
 </script>
 
-<svelte:document {onpointerdown} />
+<svelte:document onpointerdown={desk.onpointerdown} />
 
 <section
-  bind:this={frameEl}
+  bind:this={desk.frame}
   aria-labelledby="flow-needs-head"
   class="grid w-c-panel-w max-w-full content-start gap-space-2"
   data-frame="needs"
@@ -118,35 +67,19 @@
         data-slot="address-slot"
       >
         {#if flow.open.needs}
-          <FlowTray bind:ref={trayEl} form="desk" onpark={park} {flow} />
+          <FlowTray bind:ref={desk.tray} form="desk" onpark={park} {flow} />
         {:else}
           <AddressRow
             bind:ref={rowEl}
+            domain={flow.facts.domain}
             done={flow.step === "done"}
             line={rowLine(flow)}
-            meta="Onboarding · {flow.facts.domain}"
+            name={flow.name}
             onopen={openTray}
-            title={flow.step === "done"
-              ? `${flow.name} is live`
-              : "Open CawCo by one word"}
           />
         {/if}
       </div>
     {/if}
-    <NeedsRow
-      href={budget.href}
-      kind="cap"
-      onchoose={() => undefined}
-      share="pane:{budget.key}"
-      title={budget.title}
-      want={capLine(budget.cap)}
-    >
-      {#snippet lead()}
-        <IconDollar aria-hidden="true" class="size-icon-md" />
-      {/snippet}
-      {#snippet below()}
-        <NeedsMeta text="Budget" />
-      {/snippet}
-    </NeedsRow>
+    <BudgetRow key="address-flow-preview" project="address-flow-preview" />
   </div>
 </section>

@@ -8,36 +8,16 @@
    * leaves over --dur-exit (motion.ts `sheetIn`, `sheetOut`); a drag down
    * is its × (dragToDismiss), as a press on the scrim is.
    */
-  import { HOUR_MS } from "@cawco/core/time";
   import { untrack } from "svelte";
-  import NeedsMeta from "#lib/cawco/home/NeedsMeta.svelte";
-  import NeedsRow from "#lib/cawco/home/NeedsRow.svelte";
-  import { dragToDismiss } from "#lib/cawco/motion/drag.svelte.js";
-  import { capLine } from "#lib/cawco/usage.js";
-  import { IconDollar } from "#lib/icons.js";
   import { sheetIn, sheetOut } from "../motion";
   import AddressRow from "../preview/AddressRow.svelte";
+  import BudgetRow from "../preview/BudgetRow.svelte";
+  import SheetOver from "../preview/SheetOver.svelte";
   import FlowTray from "./FlowTray.svelte";
   import type { AddressFlow } from "./flow.svelte";
   import { rowLine } from "./flow-words";
 
   let { flow }: { flow: AddressFlow } = $props();
-
-  const budget = {
-    key: "cap:address-flow-preview-phone",
-    cap: {
-      inherited: false,
-      onCap: "quiet",
-      period: "day",
-      reached: true,
-      resetsAt: Date.now() + 6 * HOUR_MS,
-      spentUsd: 12.4,
-      startsAt: Date.now() - 18 * HOUR_MS,
-      usd: 10,
-    },
-    title: "cockpit",
-    href: "/usage?project=address-flow-preview",
-  } as const;
 
   /** The sheet stands at most 85% of the screen. */
   const SHEET_ROOM = "calc(var(--c-bench-phone-h) * 0.85)";
@@ -85,54 +65,28 @@
     <div class="grid gap-space-1">
       {#if shown}
         <AddressRow
+          domain={flow.facts.domain}
           done={flow.step === "done"}
           line={rowLine(flow)}
-          meta="Onboarding · {flow.facts.domain}"
+          name={flow.name}
           onopen={openTray}
-          title={flow.step === "done"
-            ? `${flow.name} is live`
-            : "Open CawCo by one word"}
         />
       {/if}
-      <NeedsRow
-        href={budget.href}
-        kind="cap"
-        onchoose={() => undefined}
-        share="pane:{budget.key}"
-        title={budget.title}
-        want={capLine(budget.cap)}
-      >
-        {#snippet lead()}
-          <IconDollar aria-hidden="true" class="size-icon-md" />
-        {/snippet}
-        {#snippet below()}
-          <NeedsMeta text="Budget" />
-        {/snippet}
-      </NeedsRow>
+      <BudgetRow
+        key="address-flow-preview-phone"
+        project="address-flow-preview"
+      />
     </div>
   </div>
   {#if flow.open.phone && shown}
-    <button
-      bind:this={scrimEl}
-      aria-label="Close"
-      class="absolute inset-0 bg-scrim"
-      data-slot="scrim"
-      onclick={park}
-      tabindex="-1"
-      type="button"
-    ></button>
-    <div
-      bind:this={sheetEl}
-      class="absolute inset-x-0 bottom-0"
-      data-slot="sheet"
-      style:--sheet-room={SHEET_ROOM}
-      {@attach dragToDismiss({
-        edge: "bottom",
-        dismiss: () => flow.park("phone"),
-        fade: () => scrimEl,
-      })}
+    <SheetOver
+      bind:scrim={scrimEl}
+      bind:sheet={sheetEl}
+      dismiss={() => flow.park("phone")}
+      onpark={park}
+      room={SHEET_ROOM}
     >
       <FlowTray form="phone" onpark={park} {flow} />
-    </div>
+    </SheetOver>
   {/if}
 </div>

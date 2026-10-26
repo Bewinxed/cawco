@@ -7,21 +7,23 @@
    * the button's box (motion.ts `openFrom`); the page keeps room under it.
    * The only way in on a network that can't carry the word.
    */
-  import { untrack } from "svelte";
   import { frameSize } from "#lib/cawco/frame-observer.js";
-  import { closeTo, openFrom, type Source } from "../motion";
+  import type { Source } from "../motion";
+  import DevicesList from "../preview/DevicesList.svelte";
   import SettingsRow from "../preview/SettingsRow.svelte";
+  import { DeskTray } from "./desk-tray.svelte";
   import FlowTray from "./FlowTray.svelte";
   import type { AddressFlow } from "./flow.svelte";
   import { rowLine } from "./flow-words";
 
   let { flow }: { flow: AddressFlow } = $props();
 
-  let frameEl = $state<HTMLElement | null>(null);
-  let trayEl = $state<HTMLElement | null>(null);
   let buttonEl = $state<HTMLElement | null>(null);
   let floatHeight = $state(0);
-  let opening: Source | null = null;
+  /** Where the tray floats from and goes back into: the button's box. */
+  const fromButton = (): Source | null =>
+    buttonEl ? { kind: "float", rect: buttonEl.getBoundingClientRect() } : null;
+  const desk = new DeskTray(() => flow, "settings", fromButton);
 
   const line = $derived.by(() => {
     if (flow.step === "failed" && flow.cause === "unsupported") {
@@ -36,55 +38,18 @@
   });
 
   function openTray(): void {
-    if (buttonEl) {
-      opening = { kind: "float", rect: buttonEl.getBoundingClientRect() };
-    }
-    flow.show("settings");
+    desk.show(fromButton());
   }
-
-  $effect(() => {
-    if (flow.open.settings && trayEl) {
-      const el = trayEl;
-      untrack(() => {
-        if (opening) {
-          openFrom(el, opening);
-        }
-        opening = null;
-      });
-    }
-  });
 
   export function park(): void {
-    const el = trayEl;
-    if (!(el && flow.open.settings)) {
-      return;
-    }
-    closeTo(
-      el,
-      buttonEl
-        ? { kind: "float", rect: buttonEl.getBoundingClientRect() }
-        : null,
-      () => flow.park("settings")
-    );
-  }
-
-  function onpointerdown(event: PointerEvent): void {
-    const target = event.target as Node;
-    if (
-      flow.open.settings &&
-      trayEl &&
-      frameEl?.contains(target) &&
-      !trayEl.contains(target)
-    ) {
-      park();
-    }
+    desk.park();
   }
 </script>
 
-<svelte:document {onpointerdown} />
+<svelte:document onpointerdown={desk.onpointerdown} />
 
 <section
-  bind:this={frameEl}
+  bind:this={desk.frame}
   aria-labelledby="flow-settings-head"
   class="grid w-full max-w-c-measure min-w-0 content-start gap-space-2 pb-(--float-room)"
   data-frame="settings"
@@ -96,17 +61,7 @@
   >
     Devices
   </h2>
-  <div class="grid divide-y divide-border-hairline">
-    <div
-      class="flex flex-wrap items-center justify-between gap-space-3 py-space-3"
-    >
-      <span class="grid gap-space-row">
-        <span class="type-label text-ink-strong">Paired devices</span>
-        <span class="type-meta text-ink-muted"
-          >3 devices can open this dashboard</span
-        >
-      </span>
-    </div>
+  <DevicesList>
     <div class="relative">
       <SettingsRow
         bind:button={buttonEl}
@@ -123,19 +78,9 @@
           class="absolute end-0 top-0 z-1 w-c-panel-w max-w-full"
           data-slot="address-float"
         >
-          <FlowTray bind:ref={trayEl} form="desk" onpark={park} {flow} />
+          <FlowTray bind:ref={desk.tray} form="desk" onpark={park} {flow} />
         </div>
       {/if}
     </div>
-    <div
-      class="flex flex-wrap items-center justify-between gap-space-3 py-space-3"
-    >
-      <span class="grid gap-space-row">
-        <span class="type-label text-ink-strong">Require paired devices</span>
-        <span class="type-meta text-ink-muted"
-          >Off: anyone on your network can open this dashboard</span
-        >
-      </span>
-    </div>
-  </div>
+  </DevicesList>
 </section>

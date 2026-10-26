@@ -82,6 +82,26 @@ export interface NetworkFacts {
   name: string;
 }
 
+/** The device's name on `network`: the word, or the network's own next one once the word is taken. */
+function deviceName(network: Network, taken: boolean): string {
+  if (!taken) {
+    return "cawco";
+  }
+  return network === "netbird" ? "cawco-12-7" : "cawco-1";
+}
+
+/**
+ * The failures whose way out redoes a step the network asked for: the
+ * sign-in, for a link or login that went stale or the wrong tailnet; the
+ * admin's approval, for a refusal. Every drawing of the set-up has them.
+ */
+const REDO = {
+  "stale-link": "signin",
+  "wrong-tailnet": "signin",
+  expired: "signin",
+  refused: "admin",
+} as const;
+
 /** The three networks as this drawing's person has them. */
 export const NETWORKS: Record<Network, NetworkFacts> = {
   tailscale: {
@@ -210,20 +230,49 @@ export interface Fact {
 }
 
 /**
+ * A device joining a network: the network's facts, what it offers the
+ * device, and the name the device was given. Each drawing of the set-up
+ * extends it, with its own steps.
+ */
+export abstract class NetworkDevice {
+  network = $state<Network>("tailscale");
+  /** The network gave another name than cawco. */
+  nameTaken = $state(false);
+
+  readonly facts = $derived(NETWORKS[this.network]);
+  /** Only Tailscale issues certificates for its names (see `viewsOn`). */
+  readonly issuesCerts = $derived(this.network === "tailscale");
+  /** Only Tailscale's device carries an expiry the flow asks about; Headscale's is its server's, NetBird's none. */
+  readonly expires = $derived(this.network === "tailscale");
+  /** The name the device was given: what every later state shows and types. */
+  readonly name = $derived(deviceName(this.network, this.nameTaken));
+  /** The long name, under the network's suffix. */
+  readonly long = $derived(`${this.name}.${this.facts.domain}`);
+
+  abstract go(step: (typeof REDO)[keyof typeof REDO]): void;
+
+  /** A failure's way out, where it redoes a step the network asked for (REDO): true when it went. */
+  protected redo(cause: string): cause is keyof typeof REDO {
+    if (!Object.hasOwn(REDO, cause)) {
+      return false;
+    }
+    this.go(REDO[cause as keyof typeof REDO]);
+    return true;
+  }
+}
+
+/**
  * The live set-up: where it stands, on which network, and what the person
  * has done. Its methods are the presses the tray offers, each moving it as
  * the hub would.
  */
-export class AddressTray {
-  network = $state<Network>("tailscale");
+export class AddressTray extends NetworkDevice {
   step = $state<Step>("finding");
   cause = $state<Cause>("stale-link");
   /** Where it was opened from: Settings is the only way to an unsupported network. */
   source = $state<Source>("needs");
   /** The tray stands open; closed, its work goes on and its row says where it stands. */
   open = $state(false);
-  /** The network gave another name than cawco. */
-  nameTaken = $state(false);
   /** This dashboard runs on https (or localhost): Copy works. */
   overHttps = $state(true);
   /** The tailnet issues certificates. */
@@ -265,24 +314,10 @@ export class AddressTray {
 
   #timer: ReturnType<typeof setTimeout> | undefined;
 
-  readonly facts = $derived(NETWORKS[this.network]);
-  /** Only Tailscale issues certificates for its names (see `viewsOn`). */
-  readonly issuesCerts = $derived(this.network === "tailscale");
-  /** Only Tailscale's device carries an expiry the flow asks about; Headscale's is its server's, NetBird's none. */
-  readonly expires = $derived(this.network === "tailscale");
-  /** The name the device was given: what every later state shows and types. */
-  readonly name = $derived.by(() => {
-    if (!this.nameTaken) {
-      return "cawco";
-    }
-    return this.network === "netbird" ? "cawco-12-7" : "cawco-1";
-  });
   /** The word a browser navigates on, slash and all. */
   readonly typed = $derived(`${this.name}/`);
   /** The short address: plain http, the bare word. */
   readonly short = $derived(`http://${this.name}/`);
-  /** The long name, under the network's suffix. */
-  readonly long = $derived(`${this.name}.${this.facts.domain}`);
   /** The long address: https once the tailnet issues certificates; NetBird's stays http. */
   readonly longAddress = $derived(
     this.issuesCerts && this.certs
@@ -375,6 +410,7 @@ export class AddressTray {
   );
 
   constructor(init: Partial<Pick<AddressTray, "network" | "source">> = {}) {
+    super();
     if (init.network) {
       this.network = init.network;
     }
@@ -408,12 +444,8 @@ export class AddressTray {
     this.stopping = false;
     this.back = from;
     this.step = step;
-    if (step === "live" && !this.celebrated) {
-      this.celebrated = true;
-      this.firstLive = true;
-    } else {
-      this.firstLive = false;
-    }
+    this.firstLive = step === "live" && !this.celebrated;
+    this.celebrated ||= this.firstLive;
     this.#arrive();
   }
 
@@ -637,15 +669,11 @@ export class AddressTray {
 
   /** The failed state's way out, as its button says it. */
   wayOut(): void {
-    switch (this.cause) {
-      case "stale-link":
-      case "wrong-tailnet":
-      case "expired":
-        this.go("signin");
-        return;
-      case "refused":
-        this.go("admin");
-        return;
+    const { cause } = this;
+    if (this.redo(cause)) {
+      return;
+    }
+    switch (cause) {
       case "key-refused":
         this.go("key");
         return;

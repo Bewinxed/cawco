@@ -1,6 +1,5 @@
 <script lang="ts">
   import { Button } from "#lib/components/ui/button/index.js";
-  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   /**
    * The word address in Configure › Devices (beside Require paired
    * devices and the paired devices: how your devices reach the dashboard,
@@ -10,7 +9,7 @@
    * the word, and where it is seen later once live. Its caller says where
    * the work stands, so the kept tray and the flow both stand it.
    */
-  import Words from "../Words.svelte";
+  import RowLine from "../RowLine.svelte";
 
   let {
     line,
@@ -36,14 +35,7 @@
 >
   <div class="grid min-w-0 flex-1 gap-space-row">
     <span class="type-label text-ink-strong">Word address</span>
-    <span
-      class="mark-line flex min-w-0 items-start gap-space-2 type-meta text-ink-muted"
-    >
-      {#if line.live}
-        <span class="mark-cell"><LiveDot /></span>
-      {/if}
-      <span class="mark-text min-w-0"><Words text={line.text} /></span>
-    </span>
+    <RowLine class="type-meta text-ink-muted" {line} />
   </div>
   <span class={["flex-none", hidden && "invisible"]}>
     <Button

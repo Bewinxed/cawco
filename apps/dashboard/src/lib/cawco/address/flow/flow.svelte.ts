@@ -16,7 +16,7 @@
  * Phone, HTTPS (Tailscale, when certificates are off), Done.
  */
 import { store, stored } from "#lib/cawco/storage.js";
-import { NETWORKS, type Network } from "../tray.svelte";
+import { type Network, NetworkDevice } from "../tray.svelte";
 
 /** One state of the tray, in the order the flow runs. */
 export type Step =
@@ -159,16 +159,13 @@ interface Kept {
 
 const STORE = "cawco:address-preview";
 
-export class AddressFlow {
-  network = $state<Network>("tailscale");
+export class AddressFlow extends NetworkDevice {
   /** The fork: certificates were already on when cawco joined (HTTPS is then skipped). */
   certsAtJoin = $state(false);
   step = $state<Step>("start");
   cause = $state<Cause>("stale-link");
   /** The tailnet issues certificates now. */
   certs = $state(false);
-  /** Tailscale named the device cawco-1 (NetBird cawco-12-7), and the person kept it. */
-  nameTaken = $state(false);
   /** Who opened the address first: a peer the hub named, or this phone itself. */
   phoneOpened = $state<"peer" | "here" | null>(null);
   /** Key expiry is switched off for cawco's device. */
@@ -205,20 +202,8 @@ export class AddressFlow {
   #timer: ReturnType<typeof setTimeout> | undefined;
   #next: (() => void) | undefined;
 
-  readonly facts = $derived(NETWORKS[this.network]);
-  /** Only Tailscale issues certificates for its names. */
-  readonly issuesCerts = $derived(this.network === "tailscale");
-  /** Only Tailscale's device carries an expiry the person can switch off. */
-  readonly expires = $derived(this.network === "tailscale");
-  readonly name = $derived.by(() => {
-    if (!this.nameTaken) {
-      return "cawco";
-    }
-    return this.network === "netbird" ? "cawco-12-7" : "cawco-1";
-  });
   /** NetBird resolves only its long name until an admin adds the search domain. */
   readonly bareWordWorks = $derived(this.network !== "netbird");
-  readonly long = $derived(`${this.name}.${this.facts.domain}`);
   /** The address that opens CawCo: the word where it resolves, else the long name. */
   readonly address = $derived(
     this.bareWordWorks ? `http://${this.name}/` : `http://${this.long}/`
@@ -334,12 +319,8 @@ export class AddressFlow {
     this.back = from;
     this.step = step;
     this.started = true;
-    if (step === "done" && !this.celebrated) {
-      this.celebrated = true;
-      this.firstLive = true;
-    } else {
-      this.firstLive = false;
-    }
+    this.firstLive = step === "done" && !this.celebrated;
+    this.celebrated ||= this.firstLive;
     this.#arrive();
   }
 
@@ -456,15 +437,11 @@ export class AddressFlow {
 
   /** A failure's way out, as its button says it. */
   wayOut(): void {
-    switch (this.cause) {
-      case "stale-link":
-      case "wrong-tailnet":
-      case "expired":
-        this.go("signin");
-        return;
-      case "refused":
-        this.go("admin");
-        return;
+    const { cause } = this;
+    if (this.redo(cause)) {
+      return;
+    }
+    switch (cause) {
       case "key-refused":
         this.go("start");
         return;

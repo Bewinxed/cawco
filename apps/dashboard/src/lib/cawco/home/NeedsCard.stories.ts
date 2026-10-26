@@ -11,7 +11,6 @@ import {
   type PermissionPresentation,
   presentPermission,
 } from "@cawco/core/permission-presentation";
-import { HOUR_MS } from "@cawco/core/time";
 import {
   describePost,
   UPSTREAM_POST_TOOL,
@@ -20,6 +19,7 @@ import {
 import { askNaming } from "./ask-naming";
 import type { NeedsItem } from "./home-state.svelte";
 import NeedsCardSheet from "./NeedsCardSheet.svelte";
+import { reachedCap } from "./reached-cap";
 
 const ASKER = "Fix the tokenizer's unicode escapes";
 
@@ -161,16 +161,7 @@ export const Budget = {
     item: {
       kind: "cap",
       key: "cap:probe-project",
-      cap: {
-        inherited: false,
-        onCap: "quiet",
-        period: "day",
-        reached: true,
-        resetsAt: Date.now() + 6 * HOUR_MS,
-        spentUsd: 12.4,
-        startsAt: Date.now() - 18 * HOUR_MS,
-        usd: 10,
-      },
+      cap: reachedCap(),
       title: "cockpit",
       place: "Budget reached",
       href: "/usage?project=probe-project",

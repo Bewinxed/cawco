@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { IconLink, IconSuccess } from "#lib/icons.js";
   /**
    * The address's onboarding row in Needs you, in NeedsCard's own recipe
@@ -7,29 +6,33 @@
    * where), the way the tailnet row stands today. Its want line is where
    * the set-up stands while the tray is closed ("Waiting for your sign-in…",
    * with the live dot), so the work it parked is seen here. The whole row
-   * opens the tray where the set-up stands. Its caller says what it says
+   * opens the tray where the set-up stands; once the address is live it
+   * says so by the machine's `name`. Its caller says where the work stands
    * (the kept tray's `rowLine`, the flow's own), so either drawing stands it.
    */
-  import Words from "../Words.svelte";
+  import RowLine from "../RowLine.svelte";
 
   let {
-    title,
+    name,
+    domain,
     line,
-    meta,
     done = false,
     ref = $bindable(null),
     onopen,
   }: {
-    title: string;
+    /** The machine the address names, once it is live. */
+    name: string;
+    /** The network's domain, where it stands: "heron-pike.ts.net". */
+    domain: string;
     /** Where the work stands, and whether it waits on something live. */
     line: { text: string; live: boolean };
-    /** Its kind and where: "Onboarding · heron-pike.ts.net". */
-    meta: string;
     /** The address is live: the row's mark ticks. */
     done?: boolean;
     ref?: HTMLElement | null;
     onopen: () => void;
   } = $props();
+
+  const title = $derived(done ? `${name} is live` : "Open CawCo by one word");
 </script>
 
 <div
@@ -69,18 +72,14 @@
     class="mark-text pointer-events-none relative col-3 row-1 self-center type-meta num text-ink-muted"
     data-slot="wait">2 min</span
   >
-  <span
+  <RowLine
     data-box
-    class="mark-line pointer-events-none relative col-start-2 col-end-4 row-2 flex min-w-0 items-start gap-space-2 type-body text-ink-strong"
+    class="pointer-events-none relative col-start-2 col-end-4 row-2 type-body text-ink-strong"
     data-slot="want"
-  >
-    {#if line.live}
-      <span class="mark-cell"><LiveDot /></span>
-    {/if}
-    <span class="mark-text min-w-0"><Words text={line.text} /></span>
-  </span>
+    {line}
+  />
   <span
     class="pointer-events-none relative col-start-2 col-end-4 row-3 overflow-clip type-meta text-ellipsis whitespace-nowrap text-ink-muted"
-    data-slot="meta">{meta}</span
+    data-slot="meta">Onboarding · {domain}</span
   >
 </div>

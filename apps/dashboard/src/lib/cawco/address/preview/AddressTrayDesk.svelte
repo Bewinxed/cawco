@@ -9,56 +9,24 @@
    * press outside put it back where it came from; its work goes on, and the
    * row says where it stands.
    */
-  import { HOUR_MS } from "@cawco/core/time";
-  import { onDestroy, untrack } from "svelte";
+  import { untrack } from "svelte";
   import { frameSize } from "#lib/cawco/frame-observer.js";
-  import NeedsMeta from "#lib/cawco/home/NeedsMeta.svelte";
-  import NeedsRow from "#lib/cawco/home/NeedsRow.svelte";
-  import { capLine } from "#lib/cawco/usage.js";
-  import { IconDollar } from "#lib/icons.js";
   import { closeTo, openFrom, type Source } from "../motion";
-  import { AddressTray, type Network } from "../tray.svelte";
   import { rowLine } from "../words";
   import AddressRow from "./AddressRow.svelte";
+  import BudgetRow from "./BudgetRow.svelte";
+  import DevicesList from "./DevicesList.svelte";
   import JumpControl from "./JumpControl.svelte";
   import SettingsRow from "./SettingsRow.svelte";
-  import TrayView, { type Direction } from "./TrayView.svelte";
+  import { storyTray, type TrayStory } from "./story-tray";
+  import TrayView from "./TrayView.svelte";
 
-  let {
-    direction,
-    network = "tailscale",
-  }: { direction: Direction; network?: Network } = $props();
+  let { direction, network }: TrayStory = $props();
 
-  // The story's starting network, once.
-  const tray = new AddressTray({ network: untrack(() => network) });
-  onDestroy(() => tray.dispose());
-  // The picture opens on the tray at the first step the person acts on
-  // (Found it: Join), held still by the story's own jump, the row already
-  // grown into it. The probe before it is the control's S0a, or Start
-  // again and the row's press.
-  tray.jump("found");
+  // The row already grown into the tray at the story's first step.
+  const tray = storyTray(() => network);
   /** The tray stood open as the story began: its first draw is still, no entrance. */
   let entered = false;
-
-  /**
-   * A project past its budget, as Needs you lists it today, under the
-   * address's row: NeedsCard's own row (NeedsRow), as it draws a budget.
-   */
-  const budget = {
-    key: "cap:address-tray-story",
-    cap: {
-      inherited: false,
-      onCap: "quiet",
-      period: "day",
-      reached: true,
-      resetsAt: Date.now() + 6 * HOUR_MS,
-      spentUsd: 12.4,
-      startsAt: Date.now() - 18 * HOUR_MS,
-      usd: 10,
-    },
-    title: "cockpit",
-    href: "/usage?project=address-tray-story",
-  } as const;
 
   let trayEl = $state<HTMLElement | null>(null);
   let rowEl = $state<HTMLElement | null>(null);
@@ -191,32 +159,16 @@
               {:else}
                 <AddressRow
                   bind:ref={rowEl}
+                  domain={tray.facts.domain}
                   done={tray.step === "live"}
                   line={rowLine(tray)}
-                  meta="Onboarding · {tray.facts.domain}"
+                  name={tray.name}
                   onopen={openTray}
-                  title={tray.step === "live"
-                    ? `${tray.name} is live`
-                    : "Open CawCo by one word"}
                 />
               {/if}
             </div>
           {/if}
-          <NeedsRow
-            href={budget.href}
-            kind="cap"
-            onchoose={() => undefined}
-            share="pane:{budget.key}"
-            title={budget.title}
-            want={capLine(budget.cap)}
-          >
-            {#snippet lead()}
-              <IconDollar aria-hidden="true" class="size-icon-md" />
-            {/snippet}
-            {#snippet below()}
-              <NeedsMeta text="Budget" />
-            {/snippet}
-          </NeedsRow>
+          <BudgetRow key="address-tray-story" project="address-tray-story" />
         </div>
       </section>
     {:else}
@@ -227,17 +179,7 @@
         >
           Devices
         </h2>
-        <div class="grid divide-y divide-border-hairline">
-          <div
-            class="flex flex-wrap items-center justify-between gap-space-3 py-space-3"
-          >
-            <span class="grid gap-space-row">
-              <span class="type-label text-ink-strong">Paired devices</span>
-              <span class="type-meta text-ink-muted"
-                >3 devices can open this dashboard</span
-              >
-            </span>
-          </div>
+        <DevicesList>
           <div class="relative">
             <SettingsRow
               bind:button={buttonEl}
@@ -263,19 +205,7 @@
               </div>
             {/if}
           </div>
-          <div
-            class="flex flex-wrap items-center justify-between gap-space-3 py-space-3"
-          >
-            <span class="grid gap-space-row">
-              <span class="type-label text-ink-strong"
-                >Require paired devices</span
-              >
-              <span class="type-meta text-ink-muted"
-                >Off: anyone on your network can open this dashboard</span
-              >
-            </span>
-          </div>
-        </div>
+        </DevicesList>
       </section>
     {/if}
   </main>

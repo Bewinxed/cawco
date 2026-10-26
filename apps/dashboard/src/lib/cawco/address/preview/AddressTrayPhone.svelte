@@ -9,52 +9,23 @@
    * (dragToDismiss), as × and a press on the scrim do. The story's control
    * stands folded under the screen.
    */
-  import { HOUR_MS } from "@cawco/core/time";
-  import { onDestroy, untrack } from "svelte";
-  import NeedsMeta from "#lib/cawco/home/NeedsMeta.svelte";
-  import NeedsRow from "#lib/cawco/home/NeedsRow.svelte";
-  import { dragToDismiss } from "#lib/cawco/motion/drag.svelte.js";
-  import { capLine } from "#lib/cawco/usage.js";
-  import { IconDollar } from "#lib/icons.js";
+  import { untrack } from "svelte";
   import { sheetIn, sheetOut } from "../motion";
-  import { AddressTray, type Network } from "../tray.svelte";
   import { rowLine } from "../words";
   import AddressRow from "./AddressRow.svelte";
+  import BudgetRow from "./BudgetRow.svelte";
   import JumpControl from "./JumpControl.svelte";
   import SettingsRow from "./SettingsRow.svelte";
-  import TrayView, { type Direction } from "./TrayView.svelte";
+  import SheetOver from "./SheetOver.svelte";
+  import { storyTray, type TrayStory } from "./story-tray";
+  import TrayView from "./TrayView.svelte";
 
-  let {
-    direction,
-    network = "tailscale",
-  }: { direction: Direction; network?: Network } = $props();
+  let { direction, network }: TrayStory = $props();
 
-  // The story's starting network, once.
-  const tray = new AddressTray({ network: untrack(() => network) });
-  onDestroy(() => tray.dispose());
-  // The picture opens on the sheet up at the first step the person acts on
-  // (Found it: Join), held still by the story's own jump. The probe before
-  // it is the control's S0a, or Start again and the row's press.
-  tray.jump("found");
+  // The sheet already up at the story's first step.
+  const tray = storyTray(() => network);
   /** The sheet stood up as the story began: its first draw is still, no rise. */
   let entered = false;
-
-  /** A project past its budget, drawn by NeedsCard's own row (NeedsRow) as it draws a budget. */
-  const budget = {
-    key: "cap:address-tray-story-phone",
-    cap: {
-      inherited: false,
-      onCap: "quiet",
-      period: "day",
-      reached: true,
-      resetsAt: Date.now() + 6 * HOUR_MS,
-      spentUsd: 12.4,
-      startsAt: Date.now() - 18 * HOUR_MS,
-      usd: 10,
-    },
-    title: "cockpit",
-    href: "/usage?project=address-tray-story",
-  } as const;
 
   /** The sheet stands at most 85% of the screen, Caw's room over its edge included. */
   const SHEET_ROOM = "calc(var(--c-address-phone-h) * 0.85 - var(--space-8))";
@@ -113,30 +84,17 @@
         <div class="grid gap-space-1">
           {#if !tray.stopped}
             <AddressRow
+              domain={tray.facts.domain}
               done={tray.step === "live"}
               line={rowLine(tray)}
-              meta="Onboarding · {tray.facts.domain}"
+              name={tray.name}
               onopen={openTray}
-              title={tray.step === "live"
-                ? `${tray.name} is live`
-                : "Open CawCo by one word"}
             />
           {/if}
-          <NeedsRow
-            href={budget.href}
-            kind="cap"
-            onchoose={() => undefined}
-            share="pane:{budget.key}"
-            title={budget.title}
-            want={capLine(budget.cap)}
-          >
-            {#snippet lead()}
-              <IconDollar aria-hidden="true" class="size-icon-md" />
-            {/snippet}
-            {#snippet below()}
-              <NeedsMeta text="Budget" />
-            {/snippet}
-          </NeedsRow>
+          <BudgetRow
+            key="address-tray-story-phone"
+            project="address-tray-story"
+          />
         </div>
       {:else}
         <h2 class="m-0 px-space-3 type-title tracking-title text-ink-strong">
@@ -157,28 +115,15 @@
       {/if}
     </div>
     {#if tray.open}
-      <button
-        bind:this={scrimEl}
-        aria-label="Close"
-        class="absolute inset-0 bg-scrim"
-        data-slot="scrim"
-        onclick={() => tray.park()}
-        tabindex="-1"
-        type="button"
-      ></button>
-      <div
-        bind:this={sheetEl}
-        class="absolute inset-x-0 bottom-0"
-        data-slot="sheet"
-        style:--sheet-room={SHEET_ROOM}
-        {@attach dragToDismiss({
-          edge: "bottom",
-          dismiss: () => tray.parkNow(),
-          fade: () => scrimEl,
-        })}
+      <SheetOver
+        bind:scrim={scrimEl}
+        bind:sheet={sheetEl}
+        dismiss={() => tray.parkNow()}
+        onpark={() => tray.park()}
+        room={SHEET_ROOM}
       >
         <TrayView {direction} form="phone" {tray} />
-      </div>
+      </SheetOver>
     {/if}
   </div>
   <!-- The story's control stands under the screen, folded until pressed. -->
