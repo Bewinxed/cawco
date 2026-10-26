@@ -54,7 +54,17 @@ import type {
   MediaPath as MediaPathType,
   WorkspaceTool as WorkspaceToolType,
 } from "./capabilities";
+import type {
+  ConnectionApp as ConnectionAppType,
+  ConnectionAuth as ConnectionAuthType,
+  ConnectionState as ConnectionStateType,
+  ConnectionTransport as ConnectionTransportType,
+  ConnectionView as ConnectionViewType,
+} from "./connections";
+import { CONNECTION_AUTHS, CONNECTION_TRANSPORTS } from "./connections";
 import type { Extracted as ExtractedType } from "./continuation-read";
+import type { SessionRole as SessionRoleType } from "./delegate-types";
+import { SESSION_ROLES } from "./delegate-types";
 import type {
   AttemptResult as AttemptResultType,
   ResultArtifact as ResultArtifactType,
@@ -73,6 +83,7 @@ import type {
   FleetToolchain as FleetToolchainType,
   McpPlatform as McpPlatformType,
   PlacedSection as PlacedSectionType,
+  SessionInstruction as SessionInstructionType,
   SkillFile as SkillFileType,
 } from "./fleet";
 import { MCP_PLATFORMS, PLACED_SECTIONS } from "./fleet";
@@ -109,6 +120,7 @@ import type {
   WorkspaceCut as WorkspaceCutType,
   WorkspaceHolding as WorkspaceHoldingType,
   WorkspaceKind as WorkspaceKindType,
+  WorkspaceRef as WorkspaceRefType,
 } from "./harness";
 import type { HarnessConfigKind as HarnessConfigKindType } from "./harness-config";
 import { HARNESS_CONFIG_KINDS } from "./harness-config";
@@ -123,6 +135,7 @@ import type {
   HookPromptHandler as HookPromptHandlerType,
 } from "./hooks";
 import type {
+  AgentRow as AgentRowType,
   BuildInfo as BuildInfoType,
   DelegateAskStatus as DelegateAskStatusType,
   DelegateEventPayload as DelegateEventPayloadType,
@@ -132,7 +145,9 @@ import type {
   ScratchWorktree as ScratchWorktreeType,
   SendPayload as SendPayloadType,
   SessionCommands as SessionCommandsType,
+  SessionCustody as SessionCustodyType,
   SessionTooling as SessionToolingType,
+  SpawnPayload as SpawnPayloadType,
   StoppedCommands as StoppedCommandsType,
   Verb as VerbType,
 } from "./index";
@@ -164,6 +179,7 @@ import type {
   MoveStep as MoveStepType,
   NamedMoveRequest as NamedMoveRequestType,
 } from "./move";
+import type { PairingOffAnswer as PairingOffAnswerType } from "./paths";
 import type {
   PlanComment as PlanCommentType,
   PlanStepPriority as PlanStepPriorityType,
@@ -172,7 +188,19 @@ import type {
   PlanWait as PlanWaitType,
 } from "./plan";
 import { PLAN_STEP_PRIORITIES, PLAN_STEP_STATUSES } from "./plan";
+import type {
+  RelayProvider as RelayProviderType,
+  RelayState as RelayStateType,
+  RelayView as RelayViewType,
+} from "./relays";
+import { RELAY_PROVIDERS, RELAY_STATES } from "./relays";
 import type { ReleaseManifest as ReleaseManifestType } from "./release-manifest";
+import type {
+  CanvasDial as CanvasDialType,
+  CanvasEdge as CanvasEdgeType,
+  CanvasSpec as CanvasSpecType,
+} from "./stage";
+import type { IngestMark as IngestMarkType } from "./stream";
 import type {
   RelayPortHealth as RelayPortHealthType,
   RelayPortName as RelayPortNameType,
@@ -191,6 +219,10 @@ import type {
   ThreadImage as ThreadImageType,
   ThreadQuestion as ThreadQuestionType,
 } from "./threads";
+import type {
+  ToolState as ToolStateType,
+  ToolStatus as ToolStatusType,
+} from "./tools";
 import type {
   GithubProject as GithubProjectType,
   StatusOption as StatusOptionType,
@@ -398,6 +430,34 @@ export const WorkspaceCutSchema = z.object({
 
 export const WorkspaceKindSchema = z.enum(["repo", "folder"]);
 
+export const ReleaseManifestSchema = z.object({
+  artifacts: z.array(
+    z.object({
+      target: z.string(),
+      archive: z.string(),
+      sha256: z.string(),
+      size: z.number(),
+      binarySha256: z.string(),
+      binarySize: z.number(),
+    })
+  ),
+  channel: z.enum(["stable", "nightly"]),
+  commit: z.string(),
+  notes: z.string(),
+  protocol: z.object({ min: z.number(), max: z.number() }),
+  schemaVersion: z.number(),
+  sequence: z.number(),
+  sessiondProtocol: z.string(),
+  testSigned: z.boolean(),
+  version: z.string(),
+});
+
+export const AuthStateSchema = z.enum([
+  "authenticated",
+  "unauthenticated",
+  "unreadable-credentials",
+]);
+
 export const BinaryUpdatePolicySchema = z.object({
   autoUpdate: z.boolean(),
   channel: z.enum(["stable", "nightly"]),
@@ -487,26 +547,451 @@ export const BinaryUpdateStateSchema = z.object({
   waitingSince: z.number().optional(),
 });
 
-export const ReleaseManifestSchema = z.object({
-  artifacts: z.array(
-    z.object({
-      target: z.string(),
-      archive: z.string(),
-      sha256: z.string(),
-      size: z.number(),
-      binarySha256: z.string(),
-      binarySize: z.number(),
-    })
-  ),
-  channel: z.enum(["stable", "nightly"]),
-  commit: z.string(),
-  notes: z.string(),
-  protocol: z.object({ min: z.number(), max: z.number() }),
-  schemaVersion: z.number(),
-  sequence: z.number(),
-  sessiondProtocol: z.string(),
-  testSigned: z.boolean(),
+export const BuildInfoSchema = z.object({
+  commit: z.string().optional(),
+  dirty: z.boolean().optional(),
+  protocol: z.object({ min: z.number(), max: z.number() }).optional(),
+  startedAt: z.number(),
   version: z.string(),
+});
+
+export const HarnessKindSchema = z.enum(["claude", "opencode", "pi"]);
+
+export const PermissionModeSchema = z.enum([
+  "default",
+  "acceptEdits",
+  "bypassPermissions",
+  "plan",
+  "dontAsk",
+  "auto",
+  "fullSend",
+]);
+
+export const SessionCustodySchema = z.union([
+  z.object({
+    state: z.literal("available"),
+    instances: z.array(z.string()),
+    opencode: z.boolean(),
+    readStartedAt: z.number().optional(),
+    stopSequence: z.number().optional(),
+    pending: z.array(z.string()).optional(),
+  }),
+  z.object({ state: z.literal("unavailable"), error: z.string() }),
+]);
+
+export const FleetFaultCauseSchema = z.enum([
+  "cli-too-old",
+  "cli-missing",
+  "marketplace-unlinked",
+  "hub-only",
+  "drifted",
+  "absent",
+  "unparsable",
+  "unwritable",
+  "timed-out",
+  "no-checkout",
+  "missing-bytes",
+  "unsafe-path",
+  "unknown",
+]);
+
+export const FleetItemStateSchema = z.union([
+  z.object({
+    cause: FleetFaultCauseSchema,
+    detail: z.string().optional(),
+    state: z.literal("failed"),
+  }),
+  z.object({
+    cause: z.never().optional(),
+    detail: z.string().optional(),
+    state: z.enum([
+      "applied",
+      "removed",
+      "needs-auth",
+      "disabled",
+      "unsupported",
+      "pending",
+    ]),
+  }),
+]);
+
+export const PlacedSectionSchema = z.enum(PLACED_SECTIONS);
+
+export const FleetPlacedStatesSchema = z.partialRecord(
+  PlacedSectionSchema,
+  z.record(z.string(), z.record(z.string(), FleetItemStateSchema))
+);
+
+export const CliInstallSchema = z.object({
+  path: z.string(),
+  used: z.boolean().optional(),
+  version: z.string().optional(),
+});
+
+export const FleetToolchainSchema = z.object({
+  claude: z.array(CliInstallSchema).optional(),
+});
+
+export const FleetSyncReportSchema = z.object({
+  at: z.number(),
+  harnessConfig: z.record(z.string(), FleetItemStateSchema).optional(),
+  have: z
+    .object({
+      skills: z.record(z.string(), z.string()).optional(),
+      plugins: z.record(z.string(), z.string()).optional(),
+    })
+    .optional(),
+  hooks: z.record(z.string(), FleetItemStateSchema).optional(),
+  marketplaces: z.record(z.string(), FleetItemStateSchema),
+  mcp: z.record(z.string(), FleetItemStateSchema),
+  mcpByHarness: z
+    .partialRecord(
+      HarnessKindSchema,
+      z.record(z.string(), FleetItemStateSchema)
+    )
+    .optional(),
+  memory: FleetItemStateSchema.optional(),
+  memoryDocs: z.record(z.string(), FleetItemStateSchema).optional(),
+  memoryHook: FleetItemStateSchema.optional(),
+  placed: FleetPlacedStatesSchema.optional(),
+  plugins: z.record(z.string(), FleetItemStateSchema),
+  skills: z.record(z.string(), FleetItemStateSchema).optional(),
+  toolchain: FleetToolchainSchema.optional(),
+});
+
+export const FleetConvergeStateSchema = z.enum([
+  "pending",
+  "running",
+  "ok",
+  "failed",
+]);
+
+export const FleetItemStatusSchema = z.object({
+  error: z.string().optional(),
+  hash: z.string(),
+  id: z.string(),
+  ms: z.number().optional(),
+  state: FleetConvergeStateSchema,
+});
+
+export const FleetSyncOutcomeSchema = z.union([
+  z.object({
+    state: z.literal("sent"),
+    rev: z.number(),
+    sentAt: z.number(),
+    why: z.string(),
+  }),
+  z.object({
+    state: z.literal("acked"),
+    rev: z.number(),
+    sentAt: z.number(),
+    at: z.number(),
+  }),
+  z.object({
+    state: z.literal("nacked"),
+    rev: z.number(),
+    sentAt: z.number(),
+    at: z.number(),
+    error: z.string(),
+  }),
+  z.object({
+    state: z.literal("unacked"),
+    rev: z.number(),
+    sentAt: z.number(),
+    at: z.number(),
+  }),
+]);
+
+export const AccountIdentitySchema = z.object({
+  email: z.string(),
+  organization: z.string(),
+  orgId: z.string().nullable(),
+});
+
+export const AccountKindSchema = z.enum([
+  "subscription",
+  "console",
+  "oauth",
+  "api_key",
+]);
+
+export const AccountProviderSchema = z.string();
+
+export const AccountReportSchema = z.object({
+  account: z.string(),
+  identity: AccountIdentitySchema.optional(),
+  kind: AccountKindSchema.optional(),
+  loggedIn: z.boolean(),
+  provider: AccountProviderSchema.optional(),
+});
+
+export const HarnessCapabilitiesSchema = z.object({
+  compaction: z.boolean(),
+  contextUsage: z.boolean(),
+  costUsd: z.boolean(),
+  deleteSession: z.boolean(),
+  effort: z.boolean(),
+  fleet: z.boolean(),
+  fork: z.boolean(),
+  getSessionMessages: z.boolean(),
+  handoff: z.boolean(),
+  hooks: z.boolean(),
+  images: z.boolean(),
+  interrupt: z.boolean(),
+  listSessions: z.boolean(),
+  mcpControl: z.boolean(),
+  mcpStatus: z.boolean(),
+  permissionModes: z.array(PermissionModeSchema),
+  plugins: z.boolean(),
+  reloadSkills: z.boolean(),
+  renameSession: z.boolean(),
+  rewind: z.boolean(),
+  setModel: z.boolean(),
+  skills: z.boolean(),
+  subagents: z.boolean(),
+  supportedCommands: z.boolean(),
+  supportedModels: z.boolean(),
+  tagSession: z.boolean(),
+  tasks: z.boolean(),
+  thinking: z.boolean(),
+});
+
+export const EffortLevelSchema = z.enum([
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+]);
+
+export const ModelInfoSchema = z.object({
+  contextWindow: z.number().optional(),
+  defaultEffort: EffortLevelSchema.nullable().optional(),
+  description: z.string().optional(),
+  displayName: z.string(),
+  released: z.string().optional(),
+  resolvedModel: z.string().optional(),
+  supportedEffortLevels: z.array(EffortLevelSchema).optional(),
+  supportsAdaptiveThinking: z.boolean().optional(),
+  supportsAutoMode: z.boolean().optional(),
+  supportsEffort: z.boolean().optional(),
+  supportsFastMode: z.boolean().optional(),
+  value: z.string(),
+});
+
+export const SignInFaultSchema = z.object({
+  at: z.number(),
+  provider: z.string(),
+  words: z.string(),
+});
+
+export const HarnessReportSchema = z.object({
+  accounts: z.array(AccountReportSchema).optional(),
+  auth: AuthStateSchema,
+  authReason: z.string().optional(),
+  capabilities: HarnessCapabilitiesSchema,
+  harness: HarnessKindSchema,
+  installed: z.boolean(),
+  modelNames: z.record(z.string(), z.string()).optional(),
+  models: z.array(ModelInfoSchema).optional(),
+  modelsUnread: z.string().optional(),
+  refused: z.enum(["not-installed", "version"]).optional(),
+  signInFaults: z.array(SignInFaultSchema).optional(),
+  unreadAccounts: z.array(z.string()).optional(),
+  version: z.string().optional(),
+});
+
+export const WorkspaceToolSchema = z.object({
+  command: z.string(),
+  lookedIn: z.string(),
+  need: z.enum(["walls", "checkout"]),
+  package: z.string(),
+});
+
+export const MachineCapabilitySchema = z.object({
+  addresses: z.array(z.string()).optional(),
+  available: z.boolean(),
+  id: z.enum([
+    "git",
+    "claude",
+    "opencode",
+    "pi",
+    "node",
+    "browser",
+    "container-runtime",
+    "public-address",
+    "service-manager",
+    "workspace",
+  ]),
+  installCommand: z.string(),
+  media: MediaPathSchema.optional(),
+  missing: z.array(WorkspaceToolSchema).optional(),
+  nat: z.object({ address: z.string(), lan: z.string() }).optional(),
+  path: z.string().optional(),
+  reason: z.string().optional(),
+  version: z.string().optional(),
+});
+
+export const MachineCapabilitiesSchema = z.object({
+  at: z.number(),
+  items: z.array(MachineCapabilitySchema),
+  platform: z.string(),
+});
+
+export const ToolStateSchema = z.enum([
+  "installed",
+  "missing",
+  "installing",
+  "failed",
+  "unsupported",
+]);
+
+export const ToolStatusSchema = z.object({
+  at: z.number(),
+  detail: z.string().optional(),
+  id: z.string(),
+  method: z.string().optional(),
+  state: ToolStateSchema,
+  version: z.string().optional(),
+});
+
+export const AgentRowSchema = z.object({
+  auth: z.union([AuthStateSchema, z.literal("unknown")]),
+  binaryUpdate: BinaryUpdateStateSchema.optional(),
+  build: BuildInfoSchema.optional(),
+  chosenModes: z
+    .partialRecord(HarnessKindSchema, PermissionModeSchema)
+    .optional(),
+  custody: SessionCustodySchema.optional(),
+  fleet: FleetSyncReportSchema.optional(),
+  fleetItems: z.record(z.string(), FleetItemStatusSchema).optional(),
+  fleetSync: FleetSyncOutcomeSchema.optional(),
+  harnesses: z.array(HarnessReportSchema).optional(),
+  home: z.string().optional(),
+  hostname: z.string(),
+  hostsHub: z.boolean().optional(),
+  lastSeenAt: z.union([z.string(), z.number(), z.coerce.date()]).nullable(),
+  lostAt: z.number().nullable().optional(),
+  machineCapabilities: MachineCapabilitiesSchema.optional(),
+  machineId: z.string(),
+  os: z.string(),
+  pausedUntil: z.number().nullable(),
+  pauseStopped: z.string().nullable(),
+  reconnectingUntil: z.number().nullable().optional(),
+  status: z.string(),
+  tools: z.record(z.string(), ToolStatusSchema).optional(),
+});
+
+export const ConnectionAppSchema = z.union([
+  z.object({
+    appId: z.string(),
+    installationId: z.string(),
+    service: z.literal("github"),
+    slug: z.string().optional(),
+  }),
+  z.object({ clientId: z.string(), service: z.literal("linear") }),
+]);
+
+export const ConnectionAuthSchema = z.enum(CONNECTION_AUTHS);
+
+export const ConnectionStateSchema = z.enum([
+  "signed-in",
+  "needs-sign-in",
+  "error",
+]);
+
+export const ConnectionTransportSchema = z.enum(CONNECTION_TRANSPORTS);
+
+export const ConnectionViewSchema = z.object({
+  account: z.string(),
+  app: ConnectionAppSchema.optional(),
+  args: z.array(z.string()).optional(),
+  auth: ConnectionAuthSchema,
+  command: z.string().optional(),
+  createdAt: z.number(),
+  device: z
+    .object({
+      expiresAt: z.number(),
+      userCode: z.string(),
+      verificationUri: z.string(),
+    })
+    .optional(),
+  gh: z
+    .object({
+      host: z.string(),
+      login: z.string(),
+      machine: z.string(),
+      machineId: z.string(),
+    })
+    .optional(),
+  hasSecret: z.boolean(),
+  header: z.string().optional(),
+  id: z.string(),
+  name: z.string(),
+  projects: z.array(z.string()),
+  reason: z.string().optional(),
+  service: z.string(),
+  signIn: z.object({ expiresAt: z.number(), url: z.string() }).optional(),
+  state: ConnectionStateSchema,
+  tools: z.array(z.string()).optional(),
+  transport: ConnectionTransportSchema,
+  updatedAt: z.number(),
+  url: z.string().optional(),
+});
+
+export const PairingOffAnswerSchema = z.union([
+  z.object({ ok: z.literal(true) }),
+  z.object({ error: z.string() }),
+]);
+
+export const RelayProviderSchema = z.enum(RELAY_PROVIDERS);
+
+export const RelayStateSchema = z.enum(RELAY_STATES);
+
+export const RelayViewSchema = z.object({
+  connection: z.string().nullable(),
+  createdAt: z.number(),
+  createdBy: z.string(),
+  hasSecret: z.boolean(),
+  host: z.string(),
+  id: z.string(),
+  inbound: z.string(),
+  lastDeliveryAt: z.number().nullable(),
+  projectId: z.string(),
+  provider: RelayProviderSchema,
+  publicUrl: z.string().nullable(),
+  reason: z.string().nullable(),
+  registered: z.boolean(),
+  state: RelayStateSchema,
+  testedAt: z.number().nullable(),
+});
+
+export const CanvasDialSchema = z.object({
+  kind: z.enum(["number", "color", "select", "toggle"]),
+  label: z.string().optional(),
+  max: z.number().optional(),
+  min: z.number().optional(),
+  name: z.string(),
+  options: z.array(z.string()).optional(),
+  step: z.number().optional(),
+  target: z.union([
+    z.object({ cssVar: z.string() }),
+    z.object({ arg: z.string() }),
+  ]),
+  unit: z.string().optional(),
+});
+
+export const CanvasEdgeSchema = z.object({
+  from: z.string(),
+  label: z.string().optional(),
+  to: z.string(),
+});
+
+export const CanvasSpecSchema = z.object({
+  dials: z.array(CanvasDialSchema).optional(),
+  edges: z.array(CanvasEdgeSchema).optional(),
+  group: z.record(z.string(), z.string()).optional(),
+  name: z.string().optional(),
 });
 
 export const CompactStageSchema = z.enum([
@@ -684,14 +1169,6 @@ export const AttemptResultSchema = z.object({
   summary: z.string(),
 });
 
-export const BuildInfoSchema = z.object({
-  commit: z.string().optional(),
-  dirty: z.boolean().optional(),
-  protocol: z.object({ min: z.number(), max: z.number() }).optional(),
-  startedAt: z.number(),
-  version: z.string(),
-});
-
 export const CarryRestoredSchema = z.union([
   z.object({ refused: z.string(), why: z.string() }),
   z.object({ applied: z.string() }),
@@ -792,21 +1269,6 @@ export const EnvelopeSchema = z.object({
   verb: VerbSchema,
 });
 
-export const FleetConvergeStateSchema = z.enum([
-  "pending",
-  "running",
-  "ok",
-  "failed",
-]);
-
-export const FleetItemStatusSchema = z.object({
-  error: z.string().optional(),
-  hash: z.string(),
-  id: z.string(),
-  ms: z.number().optional(),
-  state: FleetConvergeStateSchema,
-});
-
 export const FleetRefreshSchema = z.object({
   at: z.number(),
   error: z.string().optional(),
@@ -815,116 +1277,6 @@ export const FleetRefreshSchema = z.object({
   outcome: z.enum(["updated", "unchanged", "failed"]),
   toHash: z.string().optional(),
   toVersion: z.string().optional(),
-});
-
-export const FleetSyncOutcomeSchema = z.union([
-  z.object({
-    state: z.literal("sent"),
-    rev: z.number(),
-    sentAt: z.number(),
-    why: z.string(),
-  }),
-  z.object({
-    state: z.literal("acked"),
-    rev: z.number(),
-    sentAt: z.number(),
-    at: z.number(),
-  }),
-  z.object({
-    state: z.literal("nacked"),
-    rev: z.number(),
-    sentAt: z.number(),
-    at: z.number(),
-    error: z.string(),
-  }),
-  z.object({
-    state: z.literal("unacked"),
-    rev: z.number(),
-    sentAt: z.number(),
-    at: z.number(),
-  }),
-]);
-
-export const FleetFaultCauseSchema = z.enum([
-  "cli-too-old",
-  "cli-missing",
-  "marketplace-unlinked",
-  "hub-only",
-  "drifted",
-  "absent",
-  "unparsable",
-  "unwritable",
-  "timed-out",
-  "no-checkout",
-  "missing-bytes",
-  "unsafe-path",
-  "unknown",
-]);
-
-export const FleetItemStateSchema = z.union([
-  z.object({
-    cause: FleetFaultCauseSchema,
-    detail: z.string().optional(),
-    state: z.literal("failed"),
-  }),
-  z.object({
-    cause: z.never().optional(),
-    detail: z.string().optional(),
-    state: z.enum([
-      "applied",
-      "removed",
-      "needs-auth",
-      "disabled",
-      "unsupported",
-      "pending",
-    ]),
-  }),
-]);
-
-export const HarnessKindSchema = z.enum(["claude", "opencode", "pi"]);
-
-export const PlacedSectionSchema = z.enum(PLACED_SECTIONS);
-
-export const FleetPlacedStatesSchema = z.partialRecord(
-  PlacedSectionSchema,
-  z.record(z.string(), z.record(z.string(), FleetItemStateSchema))
-);
-
-export const CliInstallSchema = z.object({
-  path: z.string(),
-  used: z.boolean().optional(),
-  version: z.string().optional(),
-});
-
-export const FleetToolchainSchema = z.object({
-  claude: z.array(CliInstallSchema).optional(),
-});
-
-export const FleetSyncReportSchema = z.object({
-  at: z.number(),
-  harnessConfig: z.record(z.string(), FleetItemStateSchema).optional(),
-  have: z
-    .object({
-      skills: z.record(z.string(), z.string()).optional(),
-      plugins: z.record(z.string(), z.string()).optional(),
-    })
-    .optional(),
-  hooks: z.record(z.string(), FleetItemStateSchema).optional(),
-  marketplaces: z.record(z.string(), FleetItemStateSchema),
-  mcp: z.record(z.string(), FleetItemStateSchema),
-  mcpByHarness: z
-    .partialRecord(
-      HarnessKindSchema,
-      z.record(z.string(), FleetItemStateSchema)
-    )
-    .optional(),
-  memory: FleetItemStateSchema.optional(),
-  memoryDocs: z.record(z.string(), FleetItemStateSchema).optional(),
-  memoryHook: FleetItemStateSchema.optional(),
-  placed: FleetPlacedStatesSchema.optional(),
-  plugins: z.record(z.string(), FleetItemStateSchema),
-  skills: z.record(z.string(), FleetItemStateSchema).optional(),
-  toolchain: FleetToolchainSchema.optional(),
 });
 
 export const StatusOptionSchema = z.object({
@@ -940,158 +1292,6 @@ export const GithubProjectSchema = z.object({
   options: z.array(StatusOptionSchema),
   title: z.string(),
   url: z.string(),
-});
-
-export const AccountIdentitySchema = z.object({
-  email: z.string(),
-  organization: z.string(),
-  orgId: z.string().nullable(),
-});
-
-export const AccountKindSchema = z.enum([
-  "subscription",
-  "console",
-  "oauth",
-  "api_key",
-]);
-
-export const AccountProviderSchema = z.string();
-
-export const AccountReportSchema = z.object({
-  account: z.string(),
-  identity: AccountIdentitySchema.optional(),
-  kind: AccountKindSchema.optional(),
-  loggedIn: z.boolean(),
-  provider: AccountProviderSchema.optional(),
-});
-
-export const AuthStateSchema = z.enum([
-  "authenticated",
-  "unauthenticated",
-  "unreadable-credentials",
-]);
-
-export const PermissionModeSchema = z.enum([
-  "default",
-  "acceptEdits",
-  "bypassPermissions",
-  "plan",
-  "dontAsk",
-  "auto",
-  "fullSend",
-]);
-
-export const HarnessCapabilitiesSchema = z.object({
-  compaction: z.boolean(),
-  contextUsage: z.boolean(),
-  costUsd: z.boolean(),
-  deleteSession: z.boolean(),
-  effort: z.boolean(),
-  fleet: z.boolean(),
-  fork: z.boolean(),
-  getSessionMessages: z.boolean(),
-  handoff: z.boolean(),
-  hooks: z.boolean(),
-  images: z.boolean(),
-  interrupt: z.boolean(),
-  listSessions: z.boolean(),
-  mcpControl: z.boolean(),
-  mcpStatus: z.boolean(),
-  permissionModes: z.array(PermissionModeSchema),
-  plugins: z.boolean(),
-  reloadSkills: z.boolean(),
-  renameSession: z.boolean(),
-  rewind: z.boolean(),
-  setModel: z.boolean(),
-  skills: z.boolean(),
-  subagents: z.boolean(),
-  supportedCommands: z.boolean(),
-  supportedModels: z.boolean(),
-  tagSession: z.boolean(),
-  tasks: z.boolean(),
-  thinking: z.boolean(),
-});
-
-export const EffortLevelSchema = z.enum([
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-]);
-
-export const ModelInfoSchema = z.object({
-  contextWindow: z.number().optional(),
-  defaultEffort: EffortLevelSchema.nullable().optional(),
-  description: z.string().optional(),
-  displayName: z.string(),
-  released: z.string().optional(),
-  resolvedModel: z.string().optional(),
-  supportedEffortLevels: z.array(EffortLevelSchema).optional(),
-  supportsAdaptiveThinking: z.boolean().optional(),
-  supportsAutoMode: z.boolean().optional(),
-  supportsEffort: z.boolean().optional(),
-  supportsFastMode: z.boolean().optional(),
-  value: z.string(),
-});
-
-export const SignInFaultSchema = z.object({
-  at: z.number(),
-  provider: z.string(),
-  words: z.string(),
-});
-
-export const HarnessReportSchema = z.object({
-  accounts: z.array(AccountReportSchema).optional(),
-  auth: AuthStateSchema,
-  authReason: z.string().optional(),
-  capabilities: HarnessCapabilitiesSchema,
-  harness: HarnessKindSchema,
-  installed: z.boolean(),
-  modelNames: z.record(z.string(), z.string()).optional(),
-  models: z.array(ModelInfoSchema).optional(),
-  modelsUnread: z.string().optional(),
-  refused: z.enum(["not-installed", "version"]).optional(),
-  signInFaults: z.array(SignInFaultSchema).optional(),
-  unreadAccounts: z.array(z.string()).optional(),
-  version: z.string().optional(),
-});
-
-export const WorkspaceToolSchema = z.object({
-  command: z.string(),
-  lookedIn: z.string(),
-  need: z.enum(["walls", "checkout"]),
-  package: z.string(),
-});
-
-export const MachineCapabilitySchema = z.object({
-  addresses: z.array(z.string()).optional(),
-  available: z.boolean(),
-  id: z.enum([
-    "git",
-    "claude",
-    "opencode",
-    "pi",
-    "node",
-    "browser",
-    "container-runtime",
-    "public-address",
-    "service-manager",
-    "workspace",
-  ]),
-  installCommand: z.string(),
-  media: MediaPathSchema.optional(),
-  missing: z.array(WorkspaceToolSchema).optional(),
-  nat: z.object({ address: z.string(), lan: z.string() }).optional(),
-  path: z.string().optional(),
-  reason: z.string().optional(),
-  version: z.string().optional(),
-});
-
-export const MachineCapabilitiesSchema = z.object({
-  at: z.number(),
-  items: z.array(MachineCapabilitySchema),
-  platform: z.string(),
 });
 
 export const McpPlatformSchema = z.enum(MCP_PLATFORMS);
@@ -1678,6 +1878,77 @@ export const ModeAskSchema = z.object({
   refused: PermissionModeSchema.optional(),
 });
 
+export const IngestMarkSchema = z.object({
+  epoch: z.string(),
+  srcSeq: z.number(),
+});
+
+export const SessionInstructionSchema = z.object({
+  content: z.string(),
+  path: z.string(),
+});
+
+export const SessionRoleSchema = z.enum(SESSION_ROLES);
+
+export const WorkspaceRefSchema = z.object({
+  id: z.string(),
+  path: z.string(),
+});
+
+export const SpawnPayloadSchema = z.object({
+  account: z.string().optional(),
+  accountDir: z.object({ accountId: z.string() }).optional(),
+  bootstrap: z.object({ repo: z.string(), baseDir: z.string() }).optional(),
+  canDelegate: z.boolean().optional(),
+  cwd: z.string(),
+  delegateType: z
+    .object({ name: z.string(), projectId: z.string().optional() })
+    .optional(),
+  denyTools: z.array(z.string()).optional(),
+  effort: EffortLevelSchema.optional(),
+  fence: z.literal(true).optional(),
+  harness: HarnessKindSchema.optional(),
+  homeLoginMove: z.object({ accountId: z.string() }).optional(),
+  ingested: IngestMarkSchema.optional(),
+  instanceId: z.string(),
+  instructions: z.array(SessionInstructionSchema).optional(),
+  keepAliveTurn: z.string().optional(),
+  lead: z.literal(true).optional(),
+  model: z.string().optional(),
+  options: z.unknown().optional(),
+  parent: z
+    .object({ instanceId: z.string(), toolUseId: z.string().optional() })
+    .optional(),
+  permissionMode: PermissionModeSchema.optional(),
+  persistSession: z.boolean().optional(),
+  processGeneration: z.string().optional(),
+  projectId: z.string().optional(),
+  reattachOnly: z
+    .union([z.boolean(), z.literal("busy"), z.literal("inspect")])
+    .optional(),
+  relaunch: z.literal(true).optional(),
+  requestId: z.string().optional(),
+  resume: z
+    .object({
+      sessionKey: z.string(),
+      fork: z.boolean().optional(),
+      atMessage: z.string().optional(),
+    })
+    .optional(),
+  role: SessionRoleSchema.optional(),
+  scratch: z
+    .object({
+      worktree: z.boolean().optional(),
+      baseCwd: z.string().optional(),
+    })
+    .optional(),
+  scratchWorktree: ScratchWorktreeSchema.optional(),
+  skills: z.array(z.string()).optional(),
+  spawnedBy: z.object({ instanceId: z.string() }).optional(),
+  title: z.string().optional(),
+  workspace: WorkspaceRefSchema.optional(),
+});
+
 export const InstallRouteSchema = z.enum(["ssh", "command"]);
 
 export const InstallSignInSchema = z.enum(["key", "password", "by-hand"]);
@@ -1806,6 +2077,8 @@ export const proved: [
   Same<z.output<typeof FleetMcpConfigSchema>, FleetMcpConfigType>,
   Same<z.output<typeof WorkspaceCutSchema>, WorkspaceCutType>,
   Same<z.output<typeof WorkspaceKindSchema>, WorkspaceKindType>,
+  Same<z.output<typeof ReleaseManifestSchema>, ReleaseManifestType>,
+  Same<z.output<typeof AuthStateSchema>, AuthStateType>,
   Same<z.output<typeof BinaryUpdatePolicySchema>, BinaryUpdatePolicyType>,
   Same<z.output<typeof RestartHoldReasonSchema>, RestartHoldReasonType>,
   Same<z.output<typeof RestartHoldSchema>, RestartHoldType>,
@@ -1816,7 +2089,47 @@ export const proved: [
   Same<z.output<typeof KeptProcessSchema>, KeptProcessType>,
   Same<z.output<typeof RetiringKeeperSchema>, RetiringKeeperType>,
   Same<z.output<typeof BinaryUpdateStateSchema>, BinaryUpdateStateType>,
-  Same<z.output<typeof ReleaseManifestSchema>, ReleaseManifestType>,
+  Same<z.output<typeof BuildInfoSchema>, BuildInfoType>,
+  Same<z.output<typeof HarnessKindSchema>, HarnessKindType>,
+  Same<z.output<typeof PermissionModeSchema>, PermissionModeType>,
+  Same<z.output<typeof SessionCustodySchema>, SessionCustodyType>,
+  Same<z.output<typeof FleetFaultCauseSchema>, FleetFaultCauseType>,
+  Same<z.output<typeof FleetItemStateSchema>, FleetItemStateType>,
+  Same<z.output<typeof PlacedSectionSchema>, PlacedSectionType>,
+  Same<z.output<typeof FleetPlacedStatesSchema>, FleetPlacedStatesType>,
+  Same<z.output<typeof CliInstallSchema>, CliInstallType>,
+  Same<z.output<typeof FleetToolchainSchema>, FleetToolchainType>,
+  Same<z.output<typeof FleetSyncReportSchema>, FleetSyncReportType>,
+  Same<z.output<typeof FleetConvergeStateSchema>, FleetConvergeStateType>,
+  Same<z.output<typeof FleetItemStatusSchema>, FleetItemStatusType>,
+  Same<z.output<typeof FleetSyncOutcomeSchema>, FleetSyncOutcomeType>,
+  Same<z.output<typeof AccountIdentitySchema>, AccountIdentityType>,
+  Same<z.output<typeof AccountKindSchema>, AccountKindType>,
+  Same<z.output<typeof AccountProviderSchema>, AccountProviderType>,
+  Same<z.output<typeof AccountReportSchema>, AccountReportType>,
+  Same<z.output<typeof HarnessCapabilitiesSchema>, HarnessCapabilitiesType>,
+  Same<z.output<typeof EffortLevelSchema>, EffortLevelType>,
+  Same<z.output<typeof ModelInfoSchema>, ModelInfoType>,
+  Same<z.output<typeof SignInFaultSchema>, SignInFaultType>,
+  Same<z.output<typeof HarnessReportSchema>, HarnessReportType>,
+  Same<z.output<typeof WorkspaceToolSchema>, WorkspaceToolType>,
+  Same<z.output<typeof MachineCapabilitySchema>, MachineCapabilityType>,
+  Same<z.output<typeof MachineCapabilitiesSchema>, MachineCapabilitiesType>,
+  Same<z.output<typeof ToolStateSchema>, ToolStateType>,
+  Same<z.output<typeof ToolStatusSchema>, ToolStatusType>,
+  Same<z.output<typeof AgentRowSchema>, AgentRowType>,
+  Same<z.output<typeof ConnectionAppSchema>, ConnectionAppType>,
+  Same<z.output<typeof ConnectionAuthSchema>, ConnectionAuthType>,
+  Same<z.output<typeof ConnectionStateSchema>, ConnectionStateType>,
+  Same<z.output<typeof ConnectionTransportSchema>, ConnectionTransportType>,
+  Same<z.output<typeof ConnectionViewSchema>, ConnectionViewType>,
+  Same<z.output<typeof PairingOffAnswerSchema>, PairingOffAnswerType>,
+  Same<z.output<typeof RelayProviderSchema>, RelayProviderType>,
+  Same<z.output<typeof RelayStateSchema>, RelayStateType>,
+  Same<z.output<typeof RelayViewSchema>, RelayViewType>,
+  Same<z.output<typeof CanvasDialSchema>, CanvasDialType>,
+  Same<z.output<typeof CanvasEdgeSchema>, CanvasEdgeType>,
+  Same<z.output<typeof CanvasSpecSchema>, CanvasSpecType>,
   Same<z.output<typeof CompactStageSchema>, CompactStageType>,
   Same<z.output<typeof AccountHueSchema>, AccountHueType>,
   Same<z.output<typeof NamedAccountSchema>, NamedAccountType>,
@@ -1830,7 +2143,6 @@ export const proved: [
   Same<z.output<typeof AtLimitSchema>, AtLimitType>,
   Same<z.output<typeof ResultArtifactSchema>, ResultArtifactType>,
   Same<z.output<typeof AttemptResultSchema>, AttemptResultType>,
-  Same<z.output<typeof BuildInfoSchema>, BuildInfoType>,
   Same<z.output<typeof CarryRestoredSchema>, CarryRestoredType>,
   Same<z.output<typeof CheckoutMoveSchema>, CheckoutMoveType>,
   Same<z.output<typeof ClaudeModelUsageSchema>, ClaudeModelUsageType>,
@@ -1840,34 +2152,9 @@ export const proved: [
   Same<z.output<typeof DelegateEventPayloadSchema>, DelegateEventPayloadType>,
   Same<z.output<typeof VerbSchema>, VerbType>,
   Same<z.output<typeof EnvelopeSchema>, EnvelopeType>,
-  Same<z.output<typeof FleetConvergeStateSchema>, FleetConvergeStateType>,
-  Same<z.output<typeof FleetItemStatusSchema>, FleetItemStatusType>,
   Same<z.output<typeof FleetRefreshSchema>, FleetRefreshType>,
-  Same<z.output<typeof FleetSyncOutcomeSchema>, FleetSyncOutcomeType>,
-  Same<z.output<typeof FleetFaultCauseSchema>, FleetFaultCauseType>,
-  Same<z.output<typeof FleetItemStateSchema>, FleetItemStateType>,
-  Same<z.output<typeof HarnessKindSchema>, HarnessKindType>,
-  Same<z.output<typeof PlacedSectionSchema>, PlacedSectionType>,
-  Same<z.output<typeof FleetPlacedStatesSchema>, FleetPlacedStatesType>,
-  Same<z.output<typeof CliInstallSchema>, CliInstallType>,
-  Same<z.output<typeof FleetToolchainSchema>, FleetToolchainType>,
-  Same<z.output<typeof FleetSyncReportSchema>, FleetSyncReportType>,
   Same<z.output<typeof StatusOptionSchema>, StatusOptionType>,
   Same<z.output<typeof GithubProjectSchema>, GithubProjectType>,
-  Same<z.output<typeof AccountIdentitySchema>, AccountIdentityType>,
-  Same<z.output<typeof AccountKindSchema>, AccountKindType>,
-  Same<z.output<typeof AccountProviderSchema>, AccountProviderType>,
-  Same<z.output<typeof AccountReportSchema>, AccountReportType>,
-  Same<z.output<typeof AuthStateSchema>, AuthStateType>,
-  Same<z.output<typeof PermissionModeSchema>, PermissionModeType>,
-  Same<z.output<typeof HarnessCapabilitiesSchema>, HarnessCapabilitiesType>,
-  Same<z.output<typeof EffortLevelSchema>, EffortLevelType>,
-  Same<z.output<typeof ModelInfoSchema>, ModelInfoType>,
-  Same<z.output<typeof SignInFaultSchema>, SignInFaultType>,
-  Same<z.output<typeof HarnessReportSchema>, HarnessReportType>,
-  Same<z.output<typeof WorkspaceToolSchema>, WorkspaceToolType>,
-  Same<z.output<typeof MachineCapabilitySchema>, MachineCapabilityType>,
-  Same<z.output<typeof MachineCapabilitiesSchema>, MachineCapabilitiesType>,
   Same<z.output<typeof McpPlatformSchema>, McpPlatformType>,
   Same<z.output<typeof EndedTaskSchema>, EndedTaskType>,
   Same<z.output<typeof MoveEndedSchema>, MoveEndedType>,
@@ -1935,6 +2222,11 @@ export const proved: [
   Same<z.output<typeof ExtractedSchema>, ExtractedType>,
   Same<z.output<typeof SendRefusalSchema>, SendRefusalType>,
   Same<z.output<typeof ModeAskSchema>, ModeAskType>,
+  Same<z.output<typeof IngestMarkSchema>, IngestMarkType>,
+  Same<z.output<typeof SessionInstructionSchema>, SessionInstructionType>,
+  Same<z.output<typeof SessionRoleSchema>, SessionRoleType>,
+  Same<z.output<typeof WorkspaceRefSchema>, WorkspaceRefType>,
+  Same<z.output<typeof SpawnPayloadSchema>, SpawnPayloadType>,
   Same<z.output<typeof InstallRouteSchema>, InstallRouteType>,
   Same<z.output<typeof InstallSignInSchema>, InstallSignInType>,
   Same<z.output<typeof InstallDraftSchema>, InstallDraftType>,
@@ -1945,6 +2237,27 @@ export const proved: [
   Same<z.output<typeof InstallMarkSchema>, InstallMarkType>,
   Same<z.output<typeof InstallSchema>, InstallType>,
 ] = [
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
   true,
   true,
   true,

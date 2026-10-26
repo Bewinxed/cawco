@@ -18,6 +18,8 @@ import { CAWCO_ENV, type RelayView, readEnv } from "@cawco/core";
 import { ConnectionKeyError, pipedKey, typedKey } from "./connections";
 import { ownerAsk } from "./owner";
 import { callTool, toolDoor } from "./tools";
+import { z } from "zod";
+import { RelayViewSchema } from "@cawco/core/stored-shapes";
 
 class RelayError extends Error {}
 
@@ -35,14 +37,15 @@ export interface RelayArgs {
   yes: boolean;
 }
 
-interface Created {
-  relay: RelayView;
-  suggestedRoutes: {
-    note: string;
-    routines: { id: string; name: string }[];
-    source: string;
-  };
-}
+const CreatedSchema = z.object({
+  relay: RelayViewSchema,
+  suggestedRoutes: z.object({
+    note: z.string(),
+    routines: z.array(z.object({ id: z.string(), name: z.string() })),
+    source: z.string(),
+  }),
+});
+type Created = z.infer<typeof CreatedSchema>;
 
 /** The session this terminal is, when it is one. */
 const sessionOf = (flag: string | undefined): string | undefined =>
@@ -169,7 +172,7 @@ const on = async (args: RelayArgs): Promise<string[]> => {
       }),
       "record"
     );
-    return createdLines(JSON.parse(said) as Created);
+    return createdLines(CreatedSchema.parse(JSON.parse(said)));
   }
   const id = await projectId(args.hub, args.rest[0]);
   const { public: shown } = (await call(
@@ -238,15 +241,17 @@ export const runRelay = async (args: RelayArgs): Promise<string[]> => {
         throw new RelayError("off needs the relay's id");
       }
       const said = session
-        ? (JSON.parse(
-            await callTool(
-              args.hub,
-              session,
-              "relay_remove",
-              JSON.stringify({ id }),
-              "record"
+        ? z.object({ github: z.string(), relay: RelayViewSchema }).parse(
+            JSON.parse(
+              await callTool(
+                args.hub,
+                session,
+                "relay_remove",
+                JSON.stringify({ id }),
+                "record"
+              )
             )
-          ) as { github: string; relay: RelayView })
+          )
         : ((await call(args.hub, "DELETE", `/api/relays/${id}`)) as {
             github: string;
             relay: RelayView;
@@ -255,9 +260,13 @@ export const runRelay = async (args: RelayArgs): Promise<string[]> => {
     }
     case "list": {
       const views = session
-        ? (JSON.parse(
-            await callTool(args.hub, session, "relay_list", "{}", "record")
-          ) as RelayView[])
+        ? z
+            .array(RelayViewSchema)
+            .parse(
+              JSON.parse(
+                await callTool(args.hub, session, "relay_list", "{}", "record")
+              )
+            )
         : ((await call(
             args.hub,
             "GET",

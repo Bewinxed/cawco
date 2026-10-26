@@ -18,6 +18,7 @@ import {
   writeStateFile,
   writeStateFileSync,
 } from "./state-file";
+import { z } from "zod";
 
 /** Where a machine keeps its key. */
 export const machineKeyPath = (): string =>
@@ -52,11 +53,11 @@ export const refusalSince = (
   if (!text) {
     return;
   }
-  const said = JSON.parse(text) as { at?: unknown; message?: unknown };
-  return typeof said.at === "number" &&
-    said.at >= since &&
-    typeof said.message === "string"
-    ? said.message
+  const said = z
+    .object({ at: z.number(), message: z.string() })
+    .safeParse(JSON.parse(text));
+  return said.success && said.data.at >= since
+    ? said.data.message
     : undefined;
 };
 

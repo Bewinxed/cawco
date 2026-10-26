@@ -34,6 +34,7 @@ import {
   pairingOffAnswerPath,
   pairingOffRequestPath,
 } from "@cawco/core/paths";
+import { PairingOffAnswerSchema } from "@cawco/core/stored-shapes";
 
 /** Thrown when there is no hub here to change: a sentence for the person. */
 class PairingError extends Error {}
@@ -85,7 +86,7 @@ const askHub = async (path: string, pid: number | undefined) => {
       const said = await readFile(answer, "utf8").catch(() => undefined);
       if (said !== undefined) {
         await rm(answer, { force: true });
-        const answered = JSON.parse(said) as PairingOffAnswer;
+        const answered = PairingOffAnswerSchema.parse(JSON.parse(said));
         if ("error" in answered) {
           throw new PairingError(
             `the hub in process ${pid} could not turn paired devices off: ${answered.error}`

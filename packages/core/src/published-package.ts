@@ -12,14 +12,15 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { runtimeTree } from "./runtime";
+import { z } from "zod";
 
 const requireFromDisk = createRequire(import.meta.url);
 
 /** The package published as runtime tree `tree`, loaded from its `main` file (or `index.js`). */
 export function publishedPackage(tree: string): unknown {
   const root = runtimeTree(tree);
-  const { main = "index.js" } = JSON.parse(
-    readFileSync(join(root, "package.json"), "utf8")
-  ) as { main?: string };
+  const { main = "index.js" } = z
+    .object({ main: z.string().optional() })
+    .parse(JSON.parse(readFileSync(join(root, "package.json"), "utf8")));
   return requireFromDisk(join(root, main));
 }

@@ -1,5 +1,6 @@
 import { readWithin } from "../bounded";
 import type { LimitWindow } from "./types";
+import { z } from "zod";
 
 /**
  * A ChatGPT subscription's live windows, as ChatGPT's own usage endpoint
@@ -177,12 +178,16 @@ export const chatgptClaims = (accessToken: string): ChatgptClaims => {
   let payload: Record<string, unknown> = {};
   try {
     const part = accessToken.split(".")[1] ?? "";
-    payload = JSON.parse(
-      Buffer.from(
-        part.replaceAll("-", "+").replaceAll("_", "/"),
-        "base64"
-      ).toString("utf8")
-    ) as Record<string, unknown>;
+    payload = z
+      .record(z.string(), z.unknown())
+      .parse(
+        JSON.parse(
+          Buffer.from(
+            part.replaceAll("-", "+").replaceAll("_", "/"),
+            "base64"
+          ).toString("utf8")
+        )
+      );
   } catch {
     payload = {};
   }

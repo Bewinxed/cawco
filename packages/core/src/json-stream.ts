@@ -570,6 +570,8 @@ interface OpenString {
 
 const decodeInto = (open: OpenString, raw: string): void => {
   if (raw) {
-    open.decoded += JSON.parse(`"${raw}"`) as string;
+    // A JSON string literal's escapes, read by the JSON parser: a string.
+    const decoded: unknown = JSON.parse(`"${raw}"`);
+    open.decoded += typeof decoded === "string" ? decoded : "";
   }
 };

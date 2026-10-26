@@ -41,6 +41,7 @@ import type {
   RuleState,
   RuleStats,
   RunKind,
+  SendPayload,
   SessionCommands,
   SessionEffort,
   SessionEndIntent,
@@ -48,6 +49,7 @@ import type {
   SessionOrigin,
   SessionTooling,
   SkillFile,
+  SpawnPayload,
   StoppedCommands,
   ToolPolicy,
   ToolStatus,
@@ -1087,7 +1089,7 @@ export interface DbShape {
    * A pending send no process took, owed again whole (`envelope`) until the
    * session's next start; false when it is no longer pending.
    */
-  readonly holdSend: (uuid: string, envelope: string) => boolean;
+  readonly holdSend: (uuid: string, envelope: Envelope<SendPayload>) => boolean;
   /** Who may call the hub: the pairing setting, the person's devices, the machines' keys (hub-auth.ts). */
   readonly hubAuth: HubAuthDb;
   /** Inbound events, their routes and the pollers that bring them in (ingress.ts). */
@@ -1123,7 +1125,7 @@ export interface DbShape {
   /** The listed sessions whose keep-alive is on: the only ones it schedules. */
   readonly keepAliveInstances: () => PublicInstanceRow[];
   /** Keeps a pending send whole, as its machine was handed it. */
-  readonly keepEnvelope: (uuid: string, envelope: string) => void;
+  readonly keepEnvelope: (uuid: string, envelope: Envelope<SendPayload>) => void;
   /** A skill about to be deleted: its files kept in its history first, as a hook's are. */
   readonly keepSkillVersion: (name: string) => void;
   /** The items whose landing's gate passed on `tree` (WorkLanding `gate`). */
@@ -1577,7 +1579,7 @@ export interface DbShape {
   /** What a machine is owed, in the order it was asked for. */
   readonly owedSpawns: (
     machineId: string
-  ) => { envelope: string; id: string }[];
+  ) => { envelope: Envelope<SpawnPayload>; id: string }[];
   /**
    * The returning daemon's word on its machine: `liveIds` are the sessions it
    * still carries, `resumable` the SDK sessions it could pick back up. A daemon
@@ -1594,7 +1596,11 @@ export interface DbShape {
    * rather than when this bookkeeping ran.
    */
   /** Keeps a start the machine could not be sent yet, on the row already written for it. */
-  readonly oweSpawn: (id: string, envelope: string, at: number) => void;
+  readonly oweSpawn: (
+    id: string,
+    envelope: Envelope<SpawnPayload>,
+    at: number
+  ) => void;
   /** Whether the session's start is still owed to its machine ({@link oweSpawn}). */
   readonly owesSpawn: (id: string) => boolean;
   /** `machineId`'s rows among `ids`, hidden and discarded ones too. */
@@ -2363,7 +2369,7 @@ export interface DbShape {
     state: string
   ) => typeof fleetMcpOauth.$inferSelect | undefined;
   /** Takes a send's owed envelope, once: the envelope, or undefined when another took it first. */
-  readonly takeOwedSend: (uuid: string) => string | undefined;
+  readonly takeOwedSend: (uuid: string) => Envelope<SendPayload> | undefined;
   /** Takes one owed start off the books; true for exactly one caller. */
   readonly takeOwedSpawn: (id: string) => boolean;
   /** The task a comment written under the id its device chose went on (`task_comment_ids`). */

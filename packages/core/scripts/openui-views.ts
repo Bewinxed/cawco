@@ -19,6 +19,7 @@
  */
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { z } from "zod";
 
 // lang-core's runtime telemetry is opt-in and these turn it off outright,
 // before the prompt is generated (shared.ts `isTelemetryDisabled`).
@@ -64,9 +65,9 @@ const manifests = (): string[] => [
 ];
 
 const trusting = manifests().flatMap((path) => {
-  const { trustedDependencies = [] } = JSON.parse(
-    readFileSync(path, "utf8")
-  ) as { trustedDependencies?: string[] };
+  const { trustedDependencies = [] } = z
+    .object({ trustedDependencies: z.array(z.string()).optional() })
+    .parse(JSON.parse(readFileSync(path, "utf8")));
   return trustedDependencies
     .filter((name) => name.startsWith("@openuidev/"))
     .map((name) => `${path.slice(ROOT.length + 1)} trusts ${name}`);

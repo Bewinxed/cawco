@@ -100,6 +100,9 @@ import { recordApply } from "./apply-record";
 import { binaryLayout } from "./binary-install";
 import { service, stopService } from "./service";
 import { ProcessMarkerSchema } from "@cawco/core/process-identity";
+import { z } from "zod";
+import { ReleaseManifestSchema } from "@cawco/core/stored-shapes";
+import { parseRecord } from "@cawco/core/state-file";
 
 /** How long a keeper handed over to gets to answer at its own endpoint. */
 const HEALTH_MS = 45_000;
@@ -227,12 +230,18 @@ async function migrationRunning(db: string | undefined): Promise<boolean> {
 
 async function readStaged(version: string): Promise<ReleaseManifest> {
   const directory = versionDirectory(version);
-  const manifest = JSON.parse(
-    await readFile(join(directory, "release.json"), "utf8")
-  ) as ReleaseManifest;
-  const { signature } = JSON.parse(
-    await readFile(join(directory, "release.signature.json"), "utf8")
-  ) as { signature: string };
+  const manifestFile = join(directory, "release.json");
+  const manifest = parseRecord(
+    manifestFile,
+    await readFile(manifestFile, "utf8"),
+    ReleaseManifestSchema
+  );
+  const signatureFile = join(directory, "release.signature.json");
+  const { signature } = parseRecord(
+    signatureFile,
+    await readFile(signatureFile, "utf8"),
+    z.object({ signature: z.string() })
+  );
   verifyManifest(manifest, signature);
   return manifest;
 }

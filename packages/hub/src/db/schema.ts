@@ -143,6 +143,7 @@ import {
   WorkLandingSchema,
   WorkspaceFromSchema,
 } from "./stored-shapes";
+import { SendPayloadSchema, SpawnPayloadSchema } from "@cawco/core/stored-shapes";
 
 const timestamp = (column: string) => integer(column, { mode: "timestamp_ms" });
 
@@ -166,6 +167,13 @@ const sealedJson = <S extends z.ZodType>(schema: S) =>
     close: (json) => hubSecrets().seal(json),
     open: (raw) => openOrNull(raw),
   });
+
+/** A send as its machine is handed it (`Envelope<SendPayload>`). */
+const SendEnvelopeSchema = EnvelopeSchema.extend({ payload: SendPayloadSchema });
+/** A session's start as its machine is handed it (`Envelope<SpawnPayload>`). */
+const SpawnEnvelopeSchema = EnvelopeSchema.extend({
+  payload: SpawnPayloadSchema,
+});
 
 /**
  * One harness conversation a session had before the one it runs now
@@ -802,7 +810,7 @@ export const instances = sqliteTable("instances", {
    * installing an update: the envelope to send, kept until the machine can take
    * it. The row stays `starting` meanwhile, which is how the person sees it.
    */
-  owedSpawn: text("owed_spawn"),
+  owedSpawn: storedJson(SpawnEnvelopeSchema)("owed_spawn"),
   /** When it was asked for, so what a machine is owed goes out in order. */
   owedAt: integer("owed_at"),
   /**
@@ -1880,7 +1888,7 @@ export const sentMessages = sqliteTable(
      * queued; the envelope goes once the hold ends, in the order accepted.
      * Null for every send its machine has.
      */
-    owed: text("owed"),
+    owed: storedJson(SendEnvelopeSchema)("owed"),
     /**
      * Why an owed send waits (delegation-actions.ts `SendHold`), written as
      * it is kept and again at each look that keeps it; each hold's words
@@ -1894,7 +1902,7 @@ export const sentMessages = sqliteTable(
      * send is no longer pending, and on a keep-alive ping, which nothing
      * hands on.
      */
-    envelope: text("envelope"),
+    envelope: storedJson(SendEnvelopeSchema)("envelope"),
     /**
      * Its current hand-off to its machine (`SendPayload.delivery`). A machine
      * handing a send back names the hand-off it was given; one that is not

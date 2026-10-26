@@ -109,23 +109,29 @@ const ALLOWED: Verdict = { ok: true };
 
 /** Reads the policy the agent wrote; throws when it is not there or not one. */
 export const readPolicy = (file: string): Policy => {
-  const policy = JSON.parse(readFileSync(file, "utf8")) as Partial<Policy>;
-  for (const key of [
-    "allowRead",
-    "allowWrite",
-    "denyRead",
-    "denyWrite",
-  ] as const) {
-    if (!Array.isArray(policy[key])) {
+  // A plain Bun script beside the policy (agent boundary.ts `JUDGE_SCRIPT`):
+  // node's built-ins alone, so the record is narrowed here, not by a schema.
+  const policy: unknown = JSON.parse(readFileSync(file, "utf8"));
+  if (typeof policy !== "object" || policy === null) {
+    throw new Error(`${file} is not a policy`);
+  }
+  const lists = (key: string): readonly string[] => {
+    const list: unknown = Reflect.get(policy, key);
+    if (
+      !(Array.isArray(list) && list.every((one) => typeof one === "string"))
+    ) {
       throw new Error(`${file} has no ${key} list`);
     }
-  }
-  for (const key of ["clone", "home", "scratch"] as const) {
-    if (typeof policy[key] !== "string") {
+    return list;
+  };
+  const named = (key: string): string => {
+    const value: unknown = Reflect.get(policy, key);
+    if (typeof value !== "string") {
       throw new Error(`${file} names no ${key}`);
     }
-  }
-  const { protectConfig } = policy;
+    return value;
+  };
+  const protectConfig: unknown = Reflect.get(policy, "protectConfig");
   if (
     protectConfig !== undefined &&
     !(
@@ -135,7 +141,16 @@ export const readPolicy = (file: string): Policy => {
   ) {
     throw new Error(`${file}'s protectConfig is no list of paths`);
   }
-  return policy as Policy;
+  return {
+    allowRead: lists("allowRead"),
+    allowWrite: lists("allowWrite"),
+    clone: named("clone"),
+    denyRead: lists("denyRead"),
+    denyWrite: lists("denyWrite"),
+    home: named("home"),
+    ...(protectConfig === undefined ? {} : { protectConfig }),
+    scratch: named("scratch"),
+  };
 };
 
 /**

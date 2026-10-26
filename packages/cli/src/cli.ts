@@ -30,6 +30,8 @@ import {
   service,
 } from "./service";
 import { callTool, listTools, sessionOf, toolDoor } from "./tools";
+import { z } from "zod";
+import { AgentRowSchema } from "@cawco/core/stored-shapes";
 
 /** Reported by `--version`; keep in sync with package.json. */
 /**
@@ -446,7 +448,7 @@ const status = async (args: Args): Promise<number> => {
         );
         return 1;
       }
-      printFleet(JSON.parse(asked.value.said) as AgentRow[]);
+      printFleet(z.array(AgentRowSchema).parse(JSON.parse(asked.value.said)));
       return 0;
     default: {
       const unhandled: never = asked;

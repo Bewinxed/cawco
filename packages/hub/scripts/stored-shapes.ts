@@ -524,6 +524,9 @@ const referenceOf = (
       }
       return `${schemaOf(inner, scope)}.partial()`;
     }
+    // JSON carries a date as its ISO text: read back as a Date.
+    case "Date":
+      return "z.coerce.date()";
     case "Omit":
     case "Pick":
       return `${schemaOf(arg(0), scope)}.${name.toLowerCase()}({ ${literalKeys(

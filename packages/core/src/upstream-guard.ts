@@ -1,3 +1,4 @@
+import { z } from "zod";
 /**
  * The upstream guard: whether a session may write to a repository that is
  * not its project's own (owner, 2026-10-15: "Don't submit on my behalf",
@@ -203,10 +204,13 @@ const takeJson = (body: GraphqlBody, text: string | undefined): void => {
     return;
   }
   try {
-    const parsed = JSON.parse(text) as {
-      query?: unknown;
-      variables?: Record<string, unknown>;
-    };
+    const parsed = z
+      .object({
+        query: z.unknown(),
+        variables: z.record(z.string(), z.unknown()).optional(),
+      })
+      .catch({ query: undefined })
+      .parse(JSON.parse(text));
     if (typeof parsed.query === "string") {
       body.query = parsed.query;
     }

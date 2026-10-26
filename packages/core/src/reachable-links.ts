@@ -1,3 +1,4 @@
+import { z } from "zod";
 /**
  * The network links another device can reach this machine on: the only ones
  * whose addresses this machine offers anyone. The hub's Connect a machine
@@ -75,17 +76,22 @@ const reachable = (
     .filter((link) => isReachable(link, links, leavesMachine))
     .map(({ name, flags }) => ({ name, flags }));
 
-interface IpLink {
-  flags: string[];
-  ifname: string;
-  linkinfo?: { info_kind?: string; info_slave_kind?: string };
-  master?: string;
-}
+const IpLinkSchema = z.object({
+  flags: z.array(z.string()),
+  ifname: z.string(),
+  linkinfo: z
+    .object({
+      info_kind: z.string().optional(),
+      info_slave_kind: z.string().optional(),
+    })
+    .optional(),
+  master: z.string().optional(),
+});
 
 /** Linux: iproute2's own report of every link in this network namespace. */
 const linuxLinks = async (): Promise<ReachableLink[]> => {
   const report = (await Bun.$`ip -details -json link show`.quiet()).stdout;
-  const links: Link[] = (JSON.parse(report.toString()) as IpLink[]).map(
+  const links: Link[] = z.array(IpLinkSchema).parse(JSON.parse(report.toString())).map(
     (link) => ({
       name: link.ifname,
       flags: link.flags,

@@ -18,6 +18,8 @@ import {
   readEnv,
 } from "@cawco/core";
 import { ownerAsk } from "./owner";
+import { z } from "zod";
+import { ConnectionViewSchema } from "@cawco/core/stored-shapes";
 
 export class ConnectionKeyError extends Error {}
 
@@ -139,7 +141,7 @@ export const setConnectionKey = async (
       `${hub} refused the key for ${name} (${response.status}): ${said.slice(0, 300)}`
     );
   }
-  const view = JSON.parse(said) as ConnectionView;
+  const view = ConnectionViewSchema.parse(JSON.parse(said));
   return {
     lines: [
       `Key set for ${name} (${key.length} characters)`,

@@ -1,3 +1,4 @@
+import { z } from "zod";
 /**
  * A post to another person's repository held for the person's answer, under
  * the upstream choice's `ask` (upstream-guard.ts): exactly what CawCo makes
@@ -202,6 +203,8 @@ const GRAPHQL_KINDS: Readonly<Record<string, string>> = {
   createRef: "branch",
 };
 
+/** A JSON object, by its keys. */
+const RECORD = z.record(z.string(), z.unknown());
 const MUTATION_FIELD = /mutation\b[^{]*\{\s*(?:\w+\s*:\s*)?(\w+)/u;
 const TRAILING_SLASHES = /\/+$/u;
 /** A branch's ref prefix, left off where a push names its branches. */
@@ -276,7 +279,7 @@ const titled = (
     return {};
   }
   try {
-    const parsed = JSON.parse(text) as Record<string, unknown>;
+    const parsed = RECORD.catch({}).parse(JSON.parse(text));
     const variables = (parsed.variables ?? {}) as Record<string, unknown>;
     const input = (variables.input ?? {}) as Record<string, unknown>;
     const pick = (key: string): string | undefined =>
@@ -297,7 +300,10 @@ const titled = (
 /** A GraphQL request's mutation, by its first field's name. */
 const mutationOf = (text: string | undefined): string | undefined => {
   try {
-    const { query } = JSON.parse(text ?? "{}") as { query?: unknown };
+    const { query } = z
+      .object({ query: z.unknown() })
+      .catch({ query: undefined })
+      .parse(JSON.parse(text ?? "{}"));
     return typeof query === "string"
       ? MUTATION_FIELD.exec(query)?.[1]
       : undefined;

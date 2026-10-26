@@ -14,6 +14,7 @@
  */
 
 import type { PreviewDown } from "./index";
+import { CanvasSpecSchema } from "./stored-shapes";
 
 /**
  * The frameworks a stage mounts a component with: what the daemon hands its
@@ -412,7 +413,7 @@ export function canvasOf(path: string): { files: string[]; spec: CanvasSpec } {
   const query = new URL(path, "http://stage").searchParams;
   let spec: CanvasSpec = {};
   try {
-    spec = JSON.parse(query.get("spec") ?? "{}") as CanvasSpec;
+    spec = CanvasSpecSchema.parse(JSON.parse(query.get("spec") ?? "{}"));
   } catch {
     spec = {};
   }

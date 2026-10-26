@@ -1,0 +1,25 @@
+language js
+
+// Stored data is never read back as a type it was not checked against.
+// A JSON column is `storedJson(schema)` (packages/core/src/stored-json.ts),
+// whose read and write parse with the column's zod schema; Drizzle's
+// `$type<T>()` on a `mode: "json"` column only labels what `JSON.parse`
+// returns. A JSON record is read with `parseRecord(file, text, schema)` or
+// `readRecord(file, schema)` (packages/core/src/state-file.ts), and any other
+// JSON is parsed by its schema (`Schema.parse(JSON.parse(text))`) or read as
+// `unknown` and narrowed: `JSON.parse(...) as T` is a cast of whatever the
+// text held.
+or {
+  `$receiver.$method<$_>()` as $hit where {
+    $method <: r"\$type",
+    $receiver <: contains `mode: "json"`,
+    register_diagnostic(span=$hit, message="A JSON column is storedJson(schema) from @cawco/core/stored-json, checked against its schema on every read and write; $type<T>() only labels what JSON.parse returns.")
+  },
+  `JSON.parse($_) as $type` as $hit where {
+    $filename <: or { includes "packages/", includes "apps/" },
+    $filename <: not includes "packages/core/src/stored-json.ts",
+    $filename <: not includes "packages/core/src/state-file.ts",
+    $type <: not `unknown`,
+    register_diagnostic(span=$hit, message="JSON.parse(...) as T casts whatever the text held. Parse it with its zod schema (readRecord(file, schema) for a record on disk, Schema.parse(JSON.parse(text)) for anything else), or read it as unknown and narrow.")
+  }
+}

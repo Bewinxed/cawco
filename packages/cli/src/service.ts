@@ -30,6 +30,7 @@ import { runtimeVersion, standalone } from "@cawco/core/runtime";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { sessiondEndpointPath } from "@cawco/core/sessiond";
 import { writeStateFile } from "@cawco/core/state-file";
+import { z } from "zod";
 
 /**
  * The machine's keeper endpoint, as this machine derives it
@@ -215,8 +216,9 @@ const isCheckout = (dir: string): boolean => {
   return (
     existsSync(manifest) &&
     Boolean(
-      (JSON.parse(readFileSync(manifest, "utf8")) as { workspaces?: unknown })
-        .workspaces
+      z
+        .object({ workspaces: z.unknown() })
+        .parse(JSON.parse(readFileSync(manifest, "utf8"))).workspaces
     )
   );
 };

@@ -27,13 +27,18 @@
 import { link, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { markerIsLive, ownIdentity } from "./process-identity";
+import { z } from "zod";
+import { parseRecord } from "./state-file";
 
-interface Holder {
-  readonly bootId?: string;
-  readonly pid?: number;
-  readonly procStart?: string;
-  readonly startedAt?: number;
-}
+const HolderSchema = z
+  .object({
+    bootId: z.string().optional(),
+    pid: z.number().optional(),
+    procStart: z.string().optional(),
+    startedAt: z.number().optional(),
+  })
+  .readonly();
+type Holder = z.infer<typeof HolderSchema>;
 
 /** How often a takeover that lost a race to another starting hub looks again. */
 const TRIES = 5;
@@ -44,7 +49,7 @@ const absent = (error: unknown): boolean =>
 /** The lock's holder as written; an empty object for one half written or gone (stale). */
 const readHolder = async (file: string): Promise<Holder> => {
   try {
-    return JSON.parse(await readFile(file, "utf8")) as Holder;
+    return parseRecord(file, await readFile(file, "utf8"), HolderSchema);
   } catch {
     return {};
   }

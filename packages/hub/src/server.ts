@@ -1349,7 +1349,7 @@ const keepPendingWhole = (db: DbShape): void => {
     const [row] = db.getInstancesByIds([send.instanceId]);
     const envelope = row && envelopeOf(send, row.machineId);
     if (envelope) {
-      db.keepEnvelope(send.uuid, JSON.stringify(envelope));
+      db.keepEnvelope(send.uuid, envelope);
       keptWhole += 1;
     } else {
       console.warn(
@@ -4273,7 +4273,7 @@ export const createServer = (
     paced = false
   ): Envelope | undefined => {
     if (holdingStarts(machineId) && envelope.instanceId) {
-      db.oweSpawn(envelope.instanceId, JSON.stringify(envelope), Date.now());
+      db.oweSpawn(envelope.instanceId, envelope, Date.now());
       return;
     }
     // No link and no hold: the caller found the machine offline first.
@@ -4281,7 +4281,7 @@ export const createServer = (
       return;
     }
     if (paced && envelope.instanceId && paceSpawn(machineId)) {
-      db.oweSpawn(envelope.instanceId, JSON.stringify(envelope), Date.now());
+      db.oweSpawn(envelope.instanceId, envelope, Date.now());
       queueStart(machineId, envelope.instanceId);
       return;
     }
@@ -4395,7 +4395,7 @@ export const createServer = (
     ) {
       return;
     }
-    const asked = JSON.parse(owed.envelope) as Envelope<SpawnPayload>;
+    const asked = owed.envelope;
     const launch = boundOwed(machineId, owed.id, asked.payload);
     if (!launch) {
       return;
@@ -4689,11 +4689,7 @@ export const createServer = (
     db
       .owedSends({ instanceId: row.id })
       .some((send) =>
-        startsTurnIn(
-          row,
-          (JSON.parse(send.owed ?? "{}") as Envelope<SendPayload>).payload
-            .message
-        )
+        send.owed !== null && startsTurnIn(row, send.owed.payload.message)
       );
   /**
    * Whether `row` has no process and what is owed to it is only what may not
@@ -6715,7 +6711,7 @@ export const createServer = (
       readSend(now, false);
       return Number.POSITIVE_INFINITY;
     }
-    db.holdSend(uuid, JSON.stringify(one));
+    db.holdSend(uuid, one);
     console.log(
       `[hub] send ${uuid} to ${instanceId} came back: no process took it; owed to the session's next process`
     );
@@ -9328,8 +9324,7 @@ export const createServer = (
     if (owed === undefined) {
       return;
     }
-    const envelope = JSON.parse(owed) as Envelope<SendPayload>;
-    const moved = toContinuation(envelope, "carried");
+    const moved = toContinuation(owed, "carried");
     if (!moved) {
       changeSend(send, { state: "cancelled" });
       return;
@@ -9781,7 +9776,8 @@ export const createServer = (
     // Built after the send has gone: the machine is handed the image bytes,
     // the record a reference to them.
     const mode = sendMode(envelope.payload);
-    const whole = JSON.stringify(envelope);
+    // The record as it stands now: the envelope is changed as it goes on.
+    const whole = structuredClone(envelope);
     const outcome = accepted
       ? {
           state: "pending" as const,
@@ -10207,7 +10203,10 @@ export const createServer = (
     ) {
       return false;
     }
-    const envelope = JSON.parse(send.owed ?? "{}") as Envelope<SendPayload>;
+    const envelope = send.owed;
+    if (!envelope) {
+      return false;
+    }
     // Kept while its account is at its limit: it goes once that is over.
     // Kept while its machine is paused, or an interrupt holds its item
     // against this sender: it goes once the pause ends, or one who may wake
@@ -10268,7 +10267,7 @@ export const createServer = (
     changeSend(send, {
       acceptedAt: new Date(),
       delivery,
-      envelope: JSON.stringify(envelope),
+      envelope,
     });
     sendFrame(agent, presenced(envelope));
   };
@@ -10612,7 +10611,7 @@ export const createServer = (
         if (send.owed || send.held || !(send.delivery && send.envelope)) {
           continue;
         }
-        const envelope = JSON.parse(send.envelope) as Envelope;
+        const { envelope } = send;
         sendFrame(
           agent,
           envelope.verb === "send"
@@ -13498,12 +13497,9 @@ export const createServer = (
   };
   /** The base64 pictures a held send's envelope carries, in order. */
   const picturesOf = (
-    whole: string | null
+    whole: Envelope<SendPayload> | null
   ): { data: string; mediaType: string }[] => {
-    const content = whole
-      ? (JSON.parse(whole) as Envelope<SendPayload>).payload.message.message
-          .content
-      : "";
+    const content = whole ? whole.payload.message.message.content : "";
     return typeof content === "string"
       ? []
       : content.flatMap((block) =>
@@ -13513,10 +13509,8 @@ export const createServer = (
         );
   };
   /** The texts and files a stored send carried (`SendPayload.attachments`). */
-  const attachmentsOf = (whole: string | null): SendAttachment[] =>
-    whole
-      ? ((JSON.parse(whole) as Envelope<SendPayload>).payload.attachments ?? [])
-      : [];
+  const attachmentsOf = (whole: Envelope<SendPayload> | null): SendAttachment[] =>
+    whole?.payload.attachments ?? [];
   /**
    * Withdraws each of the session's unread artifact events `same` names
    * (by its words), in order: the words, pictures, texts and files of each
@@ -28901,11 +28895,7 @@ export const createServer = (
       releaseOwed({ instanceId });
       return;
     }
-    db.oweSpawn(
-      instanceId,
-      JSON.stringify({ ...message, payload }),
-      Date.now()
-    );
+    db.oweSpawn(instanceId, { ...message, payload }, Date.now());
     console.info(
       `[hub] start of ${instanceId} kept for ${machineName(message.machineId)}: ${startHold(message.machineId)?.words}`
     );

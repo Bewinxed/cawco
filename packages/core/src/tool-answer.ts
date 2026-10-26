@@ -35,11 +35,11 @@ export const envelopeText = (envelope: ToolEnvelope): string =>
 export class NotARecord extends Error {}
 
 /** The record `name` answered as `text`, when asked for it; throws {@link NotARecord} on words. */
-export const recordOf = <T>(name: string, text: string): T => {
+export const recordOf = (name: string, text: string): unknown => {
   const trimmed = text.trim();
   if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
     try {
-      return JSON.parse(trimmed) as T;
+      return JSON.parse(trimmed);
     } catch {
       // Words that open with a brace: said below.
     }

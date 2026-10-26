@@ -64,6 +64,8 @@ import { join } from "node:path";
 import { openLockFile, tryLock, unlock } from "./flock";
 import { workspaceCacheDir } from "./paths";
 import { HOUR_MS } from "./time";
+import { z } from "zod";
+import { parseRecord } from "./state-file";
 
 /** Where the machine's heavy-work slots and their queue are kept. */
 const HEAVY_SLOTS_DIR = join(workspaceCacheDir(), "heavy-slots");
@@ -217,13 +219,14 @@ export interface SlotOptions {
 export class SlotWaitStopped extends Error {}
 
 /** Who holds a slot, as its holder wrote it. */
-interface Holder {
+const HolderSchema = z.object({
   /** The pid namespace its pid is in (Linux), so a pid is only matched in its own. */
-  ns?: string;
-  pid: number;
-  since: number;
-  who: string;
-}
+  ns: z.string().optional(),
+  pid: z.number(),
+  since: z.number(),
+  who: z.string(),
+});
+type Holder = z.infer<typeof HolderSchema>;
 
 /** This process's pid namespace on Linux (`pid:[4026531836]`); none elsewhere, where pids are the machine's. */
 const pidNamespace = (): string | undefined => {
@@ -303,7 +306,7 @@ const minutes = (ms: number): string => {
 
 const readHolder = (path: string): Holder | null => {
   try {
-    return JSON.parse(readFileSync(path, "utf8")) as Holder;
+    return parseRecord(path, readFileSync(path, "utf8"), HolderSchema);
   } catch {
     return null;
   }

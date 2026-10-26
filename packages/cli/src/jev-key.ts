@@ -11,13 +11,15 @@
 import { CAWCO_ENV, readEnv } from "@cawco/core";
 import { ConnectionKeyError, pipedKey, typedKey } from "./connections";
 import { ownerAsk } from "./owner";
+import { z } from "zod";
 
 /** What `GET /api/jev` answers with. */
-interface JevView {
-  route: "typesafe" | "openrouter" | null;
-  suggestWhileTyping: boolean;
-  typesafe: { ends: string; setAt: number | null } | null;
-}
+const JevViewSchema = z.object({
+  route: z.enum(["typesafe", "openrouter"]).nullable(),
+  suggestWhileTyping: z.boolean(),
+  typesafe: z.object({ ends: z.string(), setAt: z.number().nullable() }).nullable(),
+});
+type JevView = z.infer<typeof JevViewSchema>;
 
 const ROUTE_LINE: Record<NonNullable<JevView["route"]> | "off", string> = {
   typesafe: "Jev goes to TypeSafe directly with this key.",
@@ -48,7 +50,7 @@ const callHub = async (
       `${hub} ${refused} (${status}): ${said.slice(0, 300)}`
     );
   }
-  return JSON.parse(said) as JevView;
+  return JevViewSchema.parse(JSON.parse(said));
 };
 
 /** Reads the key and has the hub at `hub` (its http base) hold it. Answers the lines to print. */
