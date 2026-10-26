@@ -800,7 +800,7 @@ final class AccountMachineRow: UIStackView {
                      menu == nil ? nil : "[⋯]", refused.isHidden ? nil : "refused: \(refused.text ?? "")"]
         var panel = ""
         if let current {
-            let labels = AccountsProbe.texts(in: current)
+            let labels = ViewTexts.texts(in: current)
             panel = " | panel: " + labels.joined(separator: " / ")
         }
         return words.compactMap(\.self).joined(separator: " · ") + panel

@@ -2329,7 +2329,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         "expand=\(expandButton.accessibilityLabel ?? "?")@\(PreviewProbe.centre(expandButton)) close=\(PreviewProbe.centre(closeButton))"
     }
 
-    // MARK: The parity probe's head (ParityProbe.swift)
+    // MARK: The probe's reads of the head
 
     /// Every message `deliver` hands the page, as it hands it.
     var probeDelivered: (([String: Any]) -> Void)?

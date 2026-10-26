@@ -611,36 +611,16 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
                 MainActor.assumeIsolated { self?.probeShell() }
             }
         }
-        if ActsProbe.on, !actsProbed {
-            actsProbed = true
-            ActsProbe.start(shell: self, home: home, continuations: newSession)
-        }
         if AskProbe.on, !askProbed {
             askProbed = true
             AskProbe.start(shell: self, home: home)
-        }
-        if ParityProbe.on, !parityProbed {
-            parityProbed = true
-            ParityProbe.start(shell: self, home: home)
-        }
-        if AccountsProbe.on, !accountsProbed {
-            accountsProbed = true
-            AccountsProbe.start(shell: self)
-        }
-        if ConfigProbe.on, !configProbed {
-            configProbed = true
-            ConfigProbe.start(shell: self)
         }
         #endif
     }
 
     #if DEBUG
     private var shellProbe: Timer?
-    private var actsProbed = false
     private var askProbed = false
-    private var parityProbed = false
-    private var accountsProbed = false
-    private var configProbed = false
 
     /// The split's rail and the panes' screens.
     var probeRail: SidebarViewController { rail }

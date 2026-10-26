@@ -122,7 +122,7 @@ final class AccountsSectionController: ConfigSectionController {
     func probeRouting(_ provider: String) { openRouting(provider) }
     func probeSetup() { openSetup() }
     /// Every group's head and row as drawn now.
-    var probeLines: [String] { AccountsProbe.texts(in: groups) }
+    var probeLines: [String] { ViewTexts.texts(in: groups) }
     /// Where the groups' parts stand: a group's head, then its rows one under
     /// another with no room between them (the hairline is the only rule),
     /// the groups `space6` apart. Each place that isn't so, or "none".

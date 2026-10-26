@@ -163,7 +163,7 @@ final class DelegateTypesSectionController: ConfigSectionController {
 
     /// Each project's group as it reads: its header, each row's name, meta and badge, its files that made no type.
     func probeProjects() -> String {
-        projectGroups.arrangedSubviews.map { AccountsProbe.texts(in: $0).joined(separator: " | ") }.joined(separator: " || ")
+        projectGroups.arrangedSubviews.map { ViewTexts.texts(in: $0).joined(separator: " | ") }.joined(separator: " || ")
     }
 
     /// A project type's row tapped: its file opens.

@@ -279,7 +279,7 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
         startAdding(service)
         form.probePick(label)
         form.layoutIfNeeded()
-        return AccountsProbe.texts(in: form).joined(separator: " | ")
+        return ViewTexts.texts(in: form).joined(separator: " | ")
     }
 
     func probeCloseForm() { form.close() }

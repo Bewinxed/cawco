@@ -714,11 +714,6 @@ final class SessionRowView: UIView, HoverSessionRow {
             drawnId = content.id
         }
         accessibilityIdentifier = "session-row-\(content.id)"
-        #if DEBUG
-        if ActsProbe.on {
-            ActsProbe.log.notice("row drawn \(content.id, privacy: .public): '\(content.title, privacy: .public)' line '\(content.line, privacy: .public)' \(content.lineFails ? "FAULT" : "plain", privacy: .public)")
-        }
-        #endif
         line.ink = content.lineFails ? Palette.statusFailInk : Palette.inkMuted
         line.numberOfLines = content.lineFails ? 0 : 1
         hoverSessionId = content.hover

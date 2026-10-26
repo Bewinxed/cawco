@@ -42,7 +42,6 @@ public final class RootViewController: ObservedViewController {
         #if DEBUG
         board.land(Self.probing(landing))
         if let task = Self.probedTask { board.open(task) }
-        PairingProbe.run(hub)
         #else
         board.land(landing)
         #endif

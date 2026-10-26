@@ -301,7 +301,7 @@ final class FolderFileController: UIViewController {
     private let path: String
     private let column = UIStackView()
     #if DEBUG
-    /// The words it read, or why it could not, once drawn (ConfigProbe).
+    /// The words it read, or why it could not, once drawn.
     private(set) var probeShown: String?
     #endif
 

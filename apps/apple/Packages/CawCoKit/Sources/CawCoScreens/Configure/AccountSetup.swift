@@ -856,13 +856,13 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
             + (refused.map { " refused: \($0)" } ?? "")
     }
 
-    var probeContent: [String] { AccountsProbe.texts(in: content) }
+    var probeContent: [String] { ViewTexts.texts(in: content) }
     /// The picker as drawn: each group's name, then its rows' names, in order
     /// (AccountSetup.svelte `pickGroups`). A row's name alone: a row no
     /// machine can use says why under it, and that is not its name.
     var probePicker: [String] {
         (searchRows?.arrangedSubviews ?? []).compactMap { part in
-            (part as? ProviderChoiceRow)?.accessibilityLabel ?? AccountsProbe.texts(in: part).first
+            (part as? ProviderChoiceRow)?.accessibilityLabel ?? ViewTexts.texts(in: part).first
         }
     }
 
@@ -872,7 +872,7 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
         let read = steps.arrangedSubviews.compactMap { item in
             item.accessibilityLabel.map { [$0, item.accessibilityValue].compactMap(\.self).joined(separator: " — ") }
         }
-        let drawn = AccountsProbe.texts(in: steps)
+        let drawn = ViewTexts.texts(in: steps)
         return "\(wide == true ? "list" : "row of marks"): \(read.joined(separator: " / ")) | drawn: \(drawn.joined(separator: " / "))"
             + " | cancel \(cancelButton.window == nil ? "not drawn" : "in the card")"
     }
@@ -1158,7 +1158,7 @@ final class SetupMachineRow: UIStackView {
     }
 
     #if DEBUG
-    var probeState: String { "\(name): " + AccountsProbe.texts(in: self).joined(separator: " / ") }
+    var probeState: String { "\(name): " + ViewTexts.texts(in: self).joined(separator: " / ") }
     func probePress() { signIn?.sendActions(for: .primaryActionTriggered) }
     #endif
 }

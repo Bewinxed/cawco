@@ -287,10 +287,6 @@ final class SignInBrowser: NSObject, ASWebAuthenticationPresentationContextProvi
         close()
         #if DEBUG
         lastOpened = url
-        if AccountsProbe.on {
-            AccountsProbe.log.notice("sign-in page opens \(url.absoluteString, privacy: .public)")
-            return
-        }
         #endif
         let provider = SignInBrowser(window: view.window)
         let session = ASWebAuthenticationSession(url: url, callback: .customScheme("cawco-signin")) { _, _ in

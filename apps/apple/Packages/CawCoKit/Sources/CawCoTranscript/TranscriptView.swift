@@ -162,7 +162,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private var behindOverLatest: NSLayoutConstraint?
     private let signposter = OSSignposter(subsystem: "dev.cawco.app", category: "Transcript")
     #if DEBUG
-    private let probe = DisclosureProbe()
     /// The rows a blank was said for (`probeBlanks`), each said once.
     private var blankSaid = Set<String>()
     /// What each row's `probe bounds` line was last said for: its print and its cell's size.
@@ -1373,7 +1372,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         askOlder()
         var warming = inSight && warm(since: now, frame: link.targetTimestamp - link.timestamp)
         #if DEBUG
-        probe.sample(collection) { id in self.rows.path(of: id).flatMap { self.collection.cellForItem(at: $0) } }
         // Exact heights are checked against their views while the list rests,
         // never in a frame it scrolls in (probe-kit spec `ios-scroll-up`).
         if Pace.probing, !collection.isDragging, !collection.isDecelerating, store.verify(until: CACurrentMediaTime() + 0.004) {
@@ -1812,9 +1810,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
                 Self.probeLog.notice("transcript landed rows=\(count) frame=\(Double(box.minX)),\(Double(box.minY)),\(Double(box.width)),\(Double(box.height))")
                 #endif
             }
-            #if DEBUG
-            if landed { probeGlyphs() }
-            #endif
             guard follow else { return }
             if grew {
                 // The rows above make room on the place's clock rather than jumping.
@@ -2131,13 +2126,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     /// time (Reveal, `stepReveals`); what fades with it fades on the same
     /// curve and clock. At once under Reduce Motion.
     private func animate(_ row: Disclosing, open: Bool) {
-        #if DEBUG
-        if let cell = Self.cell(of: row), let index = collection.indexPath(for: cell), let id = rows.id(at: index) {
-            probe.begin(collection, row: id, open: open, ids: rows.all) { id in
-                self.rows.path(of: id).flatMap { self.collection.cellForItem(at: $0) }
-            }
-        }
-        #endif
         // Main-actor closures from a main-actor view, run on the main actor by the animator.
         nonisolated(unsafe) let (fade, shown) = row.toggled(open: open)
         // The body's elements joined or left the row: VoiceOver reads the
@@ -2635,20 +2623,6 @@ extension TranscriptView: RevealDriver {
 /// What a simulator pass reads of the list's own screen (probe-kit spec
 /// `ios-scroll-up`, the app launched with `-probe-pace`).
 extension TranscriptView {
-    /// Glyphs drawn from their bitmaps against their templates, once a launch (GlyphProbe).
-    private static var glyphsCompared = false
-
-    fileprivate func probeGlyphs() {
-        guard Pace.probing, !Self.glyphsCompared, window != nil else { return }
-        Self.glyphsCompared = true
-        // In a turn of its own: the screen is drawn for it, not inside the list's update.
-        DispatchQueue.main.async { [weak self] in
-            guard let window = self?.window else { return }
-            let found = GlyphProbe.compare(in: window)
-            Self.dockLog.notice("probe glyphs: \(found.compared) compared, \(found.pixels) pixels, the largest channel difference \(found.worst), \(found.differing) pixels differing by more than 1")
-        }
-    }
-
     /// Where the list came to rest: at the conversation's top or not,
     /// whether a page before the first row is left to read, the rows it holds.
     fileprivate func sayRest() {

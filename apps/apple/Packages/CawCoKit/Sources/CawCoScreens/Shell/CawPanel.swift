@@ -330,7 +330,7 @@ private final class SectionRule: UIView {
     }
 
     #if DEBUG
-    /// The rule's fill as each scheme resolves it, beside `brand-solid`'s (ParityProbe).
+    /// The rule's fill as each scheme resolves it, beside `brand-solid`'s.
     static func probe(_ style: UIUserInterfaceStyle) -> String {
         let traits = UITraitCollection(userInterfaceStyle: style)
         let hex = { (color: UIColor?) -> String in
@@ -345,12 +345,6 @@ private final class SectionRule: UIView {
     #endif
 }
 
-#if DEBUG
-/// Caw's panel's section rule, as ParityProbe reads it.
-enum CawPanelProbe {
-    static func sectionRule(_ style: UIUserInterfaceStyle) -> String { SectionRule.probe(style) }
-}
-#endif
 
 /// The hairline between two notices: 1pt of `border-hairline` across the rows' width.
 private final class NoticeRule: UIView {

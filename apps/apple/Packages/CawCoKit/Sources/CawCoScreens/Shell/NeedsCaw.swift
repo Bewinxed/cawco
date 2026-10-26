@@ -236,7 +236,7 @@ final class NeedsCawButton: UIControl {
     }
 
     #if DEBUG
-    /// The rim as laid out (ParityProbe): its closed ring's path bounds in
+    /// The rim as laid out: its closed ring's path bounds in
     /// the button (the circle, or the standing glass's outline), its half
     /// width (the circle's radius) and half height on the path, and at the
     /// stroke's outer edge; the path's inset from the glass's edge and the
