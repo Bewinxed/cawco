@@ -327,19 +327,16 @@ const TRAILING_SLASH = /\/$/;
  * as does one the owner's global excludes file covers (an absolute source,
  * outside every clone: no clone's config may name one, safe-git.ts
  * `repositoryConfigProblem`). What CawCo wrote there ({@link cloneWritten})
- * is CawCo's, and goes too; and what `person` names (the person's own
- * untracked files the copy started with, {@link personUntrackedIn}) is the
- * person's, never the workspace's. Each is work no remote has: it holds the
+ * is CawCo's, and goes too. Each is work no remote has: it holds the
  * workspace (agent workspace.ts `holding`), and finish_item names it (hub
  * work-items.ts `leftoversIn`).
  */
 export const excludedPaths = (
   clone: string,
   tracked: string,
-  rules: string,
-  person: readonly string[] = []
+  rules: string
 ): string[] => {
-  const own = [...cloneWritten(clone), ...person];
+  const own = cloneWritten(clone);
   const committed = new Set(tracked.split("\0").filter(Boolean));
   const fields = rules.split("\0");
   const excluded: string[] = [];
@@ -356,80 +353,6 @@ export const excludedPaths = (
     }
   }
   return excluded;
-};
-
-/** Where CawCo's block of the person's own untracked files begins and ends in a copy's `info/exclude` (agent workspace.ts `excludeStart`). */
-export const PERSON_UNTRACKED_START =
-  "# cawco: the folder's own untracked files as the workspace started";
-export const PERSON_UNTRACKED_END = "# cawco: end of the folder's own";
-
-/** What gitignore(5) reads as a pattern's special characters, each matched as itself once a backslash is before it. */
-const PATTERN_SPECIAL = /[\\*?[\]]|\s$/g;
-const ESCAPED = /\\(.)/g;
-
-/**
- * `path` as a line of an `info/exclude` that names exactly it, from the
- * repository's root (gitignore(5): a leading slash anchors it; a backslash
- * makes `*`, `?`, `[`, a backslash or a trailing space match itself).
- */
-export const excludeLine = (path: string): string =>
-  `/${path.replace(PATTERN_SPECIAL, (special) => `\\${special}`)}`;
-
-/**
- * The paths CawCo's block of a copy's `info/exclude` text names as the
- * person's own untracked files ({@link excludeLine}): they came along with
- * the folder (agent layer.ts), or the person made them there since (a Linux
- * view shows the folder live), and are no work of the workspace's.
- */
-export const personUntrackedIn = (exclude: string): string[] => {
-  const named: string[] = [];
-  let inside = false;
-  for (const line of exclude.split("\n")) {
-    if (line === PERSON_UNTRACKED_START) {
-      inside = true;
-    } else if (line === PERSON_UNTRACKED_END) {
-      inside = false;
-    } else if (inside && line.startsWith("/")) {
-      named.push(line.slice(1).replace(ESCAPED, "$1"));
-    }
-  }
-  return named;
-};
-
-/**
- * `exclude` (a copy's `info/exclude` text) with CawCo's block of the
- * person's own untracked files naming `paths` in place of what it named
- * ({@link personUntrackedIn}), its other lines as they were; added at the
- * end when it has none, and none when `paths` is empty.
- */
-export const withPersonUntracked = (
-  exclude: string,
-  paths: readonly string[]
-): string => {
-  const kept: string[] = [];
-  let inside = false;
-  for (const line of exclude.split("\n")) {
-    if (line === PERSON_UNTRACKED_START) {
-      inside = true;
-    } else if (line === PERSON_UNTRACKED_END) {
-      inside = false;
-    } else if (!inside) {
-      kept.push(line);
-    }
-  }
-  while (kept.length > 0 && kept.at(-1) === "") {
-    kept.pop();
-  }
-  const block =
-    paths.length > 0
-      ? [
-          PERSON_UNTRACKED_START,
-          ...paths.map(excludeLine),
-          PERSON_UNTRACKED_END,
-        ]
-      : [];
-  const lines = [...kept, ...block];
-  return lines.length > 0 ? `${lines.join("\n")}\n` : "";
 };
 
 /**
@@ -823,13 +746,9 @@ const unique = (paths: string[]): string[] => [...new Set(paths)];
  * alternates too, so a clone of a clone needs the whole chain. A relative
  * entry is relative to the objects dir that names it (gitrepository-layout).
  */
-const alternatesOf = (clone: string): Promise<string[]> =>
-  borrowedBy(join(clone, ".git", "objects"));
-
-/** The objects dirs `objects` borrows from, the whole chain ({@link alternatesOf}). */
-const borrowedBy = async (start: string): Promise<string[]> => {
+const alternatesOf = async (clone: string): Promise<string[]> => {
   const found: string[] = [];
-  const pending = [start];
+  const pending = [join(clone, ".git", "objects")];
   for (let objects = pending.shift(); objects; objects = pending.shift()) {
     // biome-ignore lint/performance/noAwaitInLoops: a chain of one or two borrowed dirs, each named by the one before
     const listed = await readFile(
@@ -1246,28 +1165,6 @@ const linkedModules = async (id: string): Promise<string[]> => {
   return found?.isDirectory() ? [resolveReal(modules)] : [];
 };
 
-/**
- * The objects a linked worktree's copy borrows (agent workspace.ts
- * `ownRepository`): its common git dir's `objects`, as the agent's
- * `layer.json` names that dir (agent layer.ts `LinkedGit`), and every dir
- * those borrow from in turn, read only. A copy's `.git` is read on the host
- * by {@link alternatesOf}, where a Linux view's is not its own.
- */
-const linkedObjects = async (id: string): Promise<string[]> => {
-  const layer = await readRecord<{ linked?: { common?: unknown } }>(
-    join(workspacesDir(), id, "layer.json")
-  ).catch(() => undefined);
-  const common = layer?.linked?.common;
-  if (!(typeof common === "string" && common)) {
-    return [];
-  }
-  const objects = join(common, "objects");
-  const found = await stat(objects).catch(() => undefined);
-  return found?.isDirectory()
-    ? [resolveReal(objects), ...(await borrowedBy(objects)).map(resolveReal)]
-    : [];
-};
-
 const spillDirs = async (id: string): Promise<string[]> =>
   (await workspaceSpills(id)).map(resolveReal);
 
@@ -1393,7 +1290,6 @@ export const workspacePolicy = async (
     ...(await projectFolder(workspace.id)),
     ...(await spillDirs(workspace.id)),
     ...(await linkedModules(workspace.id)),
-    ...(await linkedObjects(workspace.id)),
   ]);
   // A place: what only its owner may read in it is hidden from the
   // shell and file tools in it, for reading and writing (`ownerOnlyIn`).

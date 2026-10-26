@@ -1,12 +1,14 @@
 /**
  * A scratch fleet's workspace copy as a probe on the host reads and writes
- * it (agent layer.ts). On the Mac, and for a clone cut before layers, the
- * copy is a folder of its own at the workspace's path. On Linux the path is
- * the person's folder itself, seen through the workspace's view: what the
- * delegate wrote is in the view's upper dir under the workspace's state dir,
- * and only a process in the view's mount namespace reads the folder as the
- * delegate does. So no probe reads `workspace.path` on the host for the
- * delegate's work there; every such read goes through here.
+ * it (agent layer.ts). A git repository's workspace is a clone of its own at
+ * `~/.worktrees/<repo>-<id8>`, and a folder's copy on the Mac is a folder of
+ * its own at the workspace's path: either is read where it is. A folder's
+ * workspace on Linux has the person's folder itself as its path, seen
+ * through the workspace's view: what the delegate wrote is in the view's
+ * upper dir under the workspace's state dir, and only a process in the
+ * view's mount namespace reads the folder as the delegate does. So no probe
+ * reads `workspace.path` on the host for the delegate's work there; every
+ * such read goes through here.
  *
  * - {@link copyPath}: where one path of the copy is on the host: the upper's
  *   entry when the delegate (or the copy's making) wrote it, the folder's
@@ -18,7 +20,7 @@
  *   while it runs (layer.ts `viewArgv`), as the agent's own git there runs.
  */
 import { existsSync, lstatSync, readFileSync, readlinkSync } from "node:fs";
-import { join, relative } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import { viewArgv } from "../../packages/agent/src/layer";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "../../packages/core/src/safe-git";
 
@@ -61,11 +63,23 @@ const layerOf = (fleet: CopyFleet, id: string): LayerRecord | undefined => {
   }
 };
 
+/**
+ * Whether workspace `ws` is a repository's clone: at the path agent
+ * layer.ts `clonePath` names, `~/.worktrees/<repo>-<id8>` in the fleet's
+ * HOME, a folder of its own with no layer record.
+ */
+export const isClone = (fleet: CopyFleet, ws: CopyRef): boolean =>
+  dirname(ws.path) === join(fleet.home, ".worktrees") &&
+  basename(ws.path).endsWith(`-${ws.id.slice(0, 8)}`);
+
 /** Whether workspace `ws` is a Linux view of its folder. */
 export const isView = (fleet: CopyFleet, ws: CopyRef): boolean => {
+  if (isClone(fleet, ws)) {
+    return false;
+  }
   const layer = layerOf(fleet, ws.id);
-  // Gone with its workspace: every workspace a fleet makes on Linux is a
-  // view (agent layer.ts `makeLayer`), elsewhere a copy of its own.
+  // Gone with its workspace: every folder workspace a fleet makes on Linux
+  // is a view (agent layer.ts `makeLayer`), elsewhere a copy of its own.
   return layer ? layer.form === "overlay" : process.platform === "linux";
 };
 
@@ -226,7 +240,7 @@ export const realpathsInCopy = async (
  */
 export const copyGone = (fleet: CopyFleet, ws: CopyRef): boolean => {
   const state = stateDirOf(fleet, ws.id);
-  if (process.platform === "linux") {
+  if (process.platform === "linux" && !isClone(fleet, ws)) {
     return !(
       existsSync(join(state, "layer.json")) || existsSync(join(state, "layer"))
     );

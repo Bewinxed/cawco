@@ -1,6 +1,8 @@
 /**
- * A delegate gets its own private copy of any folder, a repository or not,
- * and its work lands there (agent layer.ts, workspace.ts; hub work-items.ts
+ * A delegate gets its own private copy of any folder, of one of two kinds
+ * (agent workspace.ts `kindAt`): a git repository's is a clone of its own at
+ * `~/.worktrees/<repo>-<id8>`, which lands by git; any other folder's is its
+ * layer (agent layer.ts), which lands by its change set (hub work-items.ts
  * `landFolder`). On a scratch fleet (real hub, agent and sessiond; Claude
  * Code, OpenCode and pi against the mock model). This spec delegates, so its
  * fleet makes workspaces: it runs on the host, outside every boundary.
@@ -19,21 +21,23 @@
  *   versions; nothing is written, the item still runs (its delegate holds
  *   its turn after the answer, so no quiet turn ends it meanwhile).
  * - c. A repository whose checkout lags origin's main (a first delegate's
- *   commit landed there): the next delegate starts from origin's main (it
- *   sees that commit's file, which the checkout lacks), lands through the
- *   merge checks, and its commit is on the hub's main; the person's
- *   checkout is untouched: its HEAD, refs, index, config and working tree.
- * - d. The checkout's untracked `.env` is read in the delegate's copy, and
- *   its write there stays in the copy: the checkout's `.env` is as it was.
+ *   commit landed there): the next delegate's clone starts from origin's
+ *   main (it sees that commit's file, which the checkout lacks), lands
+ *   through the merge checks, and its commit is on the hub's main; the
+ *   person's checkout is untouched: its HEAD, refs, index, config and
+ *   working tree.
+ * - d. The checkout's untracked `.env` is read in the delegate's clone (agent
+ *   workspace.ts `copyOwnSecrets`), and its write there stays in the clone:
+ *   the checkout's `.env` is as it was.
  * - e. A file the person makes in the checkout while a delegate works there
  *   is theirs: the delegate's finish is not refused for it, the work lands,
  *   the workspace retires rather than being held for it, and the file
  *   stands.
  * - f. A linked worktree of that repository (`git worktree add`, its `.git`
- *   a file): its delegate's copy has a `.git` folder of its own (agent
- *   workspace.ts `ownRepository`), its commit lands on the hub's main
- *   through the merge checks, and the person's repository (refs, config)
- *   and the worktree (its HEAD, index and working tree) are untouched.
+ *   a file): its delegate's clone has a `.git` folder of its own, its commit
+ *   lands on the hub's main through the merge checks, and the person's
+ *   repository (refs, config) and the worktree (its HEAD, index and working
+ *   tree) are untouched.
  * - g. An OpenCode delegate in a folder works in a server of its
  *   workspace's own entered into the view: its file tool's write is read by
  *   its shell at the folder's path while the folder lacks it, and it lands;
@@ -45,9 +49,10 @@
  *   folder lacks it, and it lands through the folder's checks, the file in
  *   the folder.
  *
- * Every delegate's commands name its folder where it works on it: the
- * folder's own path on Linux, its copy's on macOS ({@link copyAt}); what the
- * person's folder holds is always read at the folder's own path.
+ * Every delegate's commands name its folder where it works on it: a
+ * repository's clone, a folder's own path on Linux, its copy's on macOS
+ * ({@link copyAt}); what the person's folder holds is always read at the
+ * folder's own path.
  *
  *   bun scripts/probe-kit/run.ts workspace-any-folder
  */
@@ -102,15 +107,13 @@ const folders: Partial<Record<Tag, string>> = {};
 let fleetOf: KitFleet | undefined;
 
 /**
- * Where `tag`'s delegate works on its folder: on Linux the folder itself,
- * its view at the folder's real path (agent layer.ts); on macOS its copy's
- * own path, read off the workspace of its item (`Folder <tag>`, the latest).
+ * Where `tag`'s delegate works on its folder, read off the workspace of its
+ * item (`Folder <tag>`, the latest): a repository's clone; a folder itself on
+ * Linux, its view at the folder's real path (agent layer.ts); a folder's
+ * copy on macOS.
  */
 const copyAt = (tag: Tag): string => {
   const folder = folders[tag] as string;
-  if (linux) {
-    return folder;
-  }
   const [row] =
     fleetOf?.query<{ path: string }>(
       "SELECT w.path FROM work_items i JOIN workspaces w ON w.id = i.workspace_id WHERE i.title = ? ORDER BY i.rowid DESC LIMIT 1",
@@ -897,7 +900,7 @@ const repoLegs = async (
     fleet.seen.find((one) => one.afterTool && one.all.includes("DONE-C2"))
       ?.all ?? "";
   check(
-    "c: the next delegate starts from origin's main, which holds the first one's file the checkout lacks",
+    "c: the next delegate's clone starts from origin's main, which holds the first one's file the checkout lacks",
     c2Said.includes("HAS-ONE") &&
       !(await Bun.file(join(repo, "one.txt")).exists()),
     c2Said.slice(-600)
@@ -917,7 +920,7 @@ const repoLegs = async (
     `${JSON.stringify(before)}\n${JSON.stringify(after)}`
   );
   check(
-    "d: the checkout's untracked .env is read in the copy, and its write stays in the copy",
+    "d: the checkout's untracked .env is read in the clone, and its write stays in the clone",
     c2Said.includes("SECRET=1\nSECRET=2") && after.env === "SECRET=1\n",
     `${c2Said.slice(-300)} | checkout: ${after.env}`
   );
@@ -1015,7 +1018,7 @@ const worktreeLeg = async (
     .trim()
     .split("\n");
   check(
-    "f: a linked worktree's delegate works in a repository of its own in its copy, and its commit lands on the hub's main",
+    "f: a linked worktree's delegate works in a clone of its own, and its commit lands on the hub's main",
     workspace?.kind === "repo" &&
       workspace.repo_root === wt &&
       said.includes("DOTGIT-DIR") &&

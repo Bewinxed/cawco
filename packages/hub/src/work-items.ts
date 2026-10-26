@@ -136,7 +136,6 @@ import {
 import {
   excludedPaths,
   IGNORED_STATUS,
-  personUntrackedIn,
   stageCloneId,
 } from "@cawco/core/workspace-policy";
 import { gateStepFor, readTargetMap, type TargetMap } from "./app-targets";
@@ -4950,6 +4949,27 @@ export const createWorkItems = ({
     return path;
   };
 
+  /**
+   * The folder a repository workspace's delegation was asked from (`raw`, on
+   * its machine), when it is one inside the repository the workspace cloned:
+   * its brief names it ({@link withWorkspaceLine}, core injected.ts
+   * `WorkspacePlace.asked`), since the clone is cut at the repository's top
+   * level and its session starts there.
+   */
+  const askedIn = (
+    workspace: WorkspaceRow,
+    raw: string
+  ): { asked: string } | Record<string, never> => {
+    if (workspace.kind !== "repo") {
+      return {};
+    }
+    const path = db.machinePathOn(workspace.machineId, raw);
+    return !(path instanceof MachinePathRefused) &&
+      path.startsWith(`${workspace.repoRoot}/`)
+      ? { asked: path }
+      : {};
+  };
+
   /** A path the machine reported about a clone it cut: absolute, or its refusal thrown. */
   const cutPath = (machineId: string, raw: string): MachinePath => {
     const path = db.machinePathOn(machineId, raw);
@@ -6345,7 +6365,10 @@ export const createWorkItems = ({
               )
             : withWorkspaceLine(
                 content,
-                workspace,
+                {
+                  ...workspace,
+                  ...askedIn(workspace, request.cwd ?? parent.cwd),
+                },
                 workspace.base,
                 landingOf(item)
               )
@@ -7171,14 +7194,7 @@ export const createWorkItems = ({
             "its tracked .gitignore files",
             "git ls-files -z -- ':(glob)**/.gitignore'"
           ),
-          rules,
-          // The person's own untracked files its copy started with: theirs.
-          personUntrackedIn(
-            await read(
-              "its own excludes",
-              'cat "$(git rev-parse --git-path info/exclude)" 2>/dev/null; true'
-            )
-          )
+          rules
         )
       : [];
     if (!(status || stashes || excluded.length > 0)) {

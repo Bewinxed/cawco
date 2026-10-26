@@ -25,11 +25,10 @@
  *   in the copy until it lands.
  * - v8. Removing the layer ends every process of the view and leaves the
  *   folder as landed.
- * - v9 (timings, said, with a sanity check): the layer's start; the
- *   old mechanism's start for the same repository (`git clone
- *   --dissociate`, then its checkout), on a clone of this checkout made in
- *   the scratch HOME; a 100,000-file walk in the copy
- *   against the same walk natively.
+ * - v9 (timings, said, with a sanity check): a 100,000-file folder's layer
+ *   start, and a walk of it in the copy against the same walk natively. A
+ *   git repository's workspace is a clone of its own, never a layer (agent
+ *   workspace.ts `kindAt`).
  *
  *   bun scripts/probe-kit/run.ts layer-view
  */
@@ -49,7 +48,6 @@ import {
   viewArgv,
 } from "../../../packages/agent/src/layer";
 import type { Kit, Spec } from "../kit";
-import { ROOT } from "../kit";
 
 const linux = process.platform === "linux";
 
@@ -222,39 +220,7 @@ const run = async (kit: Kit) => {
     `left: ${left.join(", ")}`
   );
 
-  // v9: timings, on a repository of its own: the person's checkout, made
-  // from this one (which a host run checks out as a worktree).
-  const repo = join(home, "repo");
-  await rm(repo, { recursive: true, force: true });
-  await Bun.$`git clone -q ${ROOT} ${repo}`.quiet();
-  const repoLayerId = crypto.randomUUID();
-  const repoPath = linux
-    ? repo
-    : join(home, ".worktrees", `repo-${repoLayerId.slice(0, 8)}`);
-  const layerAt = performance.now();
-  const repoLayer = await makeLayer(repoLayerId, repo, repoPath);
-  const statusAt = performance.now();
-  const status = await inCopy(
-    repoLayerId,
-    repoLayer,
-    `git -C ${repoPath} checkout -q -B probe-view HEAD && git -C ${repoPath} status --porcelain | wc -l`
-  );
-  const layerStart = ms(layerAt);
-  note(
-    `v9: layer start of a clone of ${ROOT}: ${Math.round(statusAt - layerAt)} ms to the copy, ${layerStart} ms with its branch checked out (${status.out.trim()} status lines)`
-  );
-  const clone = join(home, "old-clone");
-  await rm(clone, { recursive: true, force: true });
-  const cloneAt = performance.now();
-  await Bun.$`git clone -q --dissociate --no-checkout ${repo} ${clone} && git -C ${clone} checkout -q HEAD`.quiet();
-  const cloneMs = ms(cloneAt);
-  note(
-    `v9: the old mechanism's start of the same repository (git clone --dissociate, its checkout): ${cloneMs} ms`
-  );
-  await removeLayer(repoLayerId, repoLayer);
-  await rm(clone, { recursive: true, force: true });
-  await rm(repo, { recursive: true, force: true });
-
+  // v9: timings, on a folder of 100,000 files.
   const tree = join(home, "walk");
   await rm(tree, { recursive: true, force: true });
   await mkdir(tree, { recursive: true });
