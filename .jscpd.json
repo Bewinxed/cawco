@@ -1,0 +1,17 @@
+{
+  "path": ["packages", "apps/dashboard"],
+  "format": ["typescript", "javascript", "tsx", "svelte"],
+  "ignore": [
+    "**/node_modules/**",
+    "**/.svelte-kit/**",
+    "**/build/**",
+    "**/dist/**",
+    "**/fixtures/**",
+    "apps/dashboard/src/lib/tokens/tokens.ts",
+    "packages/hub/skills/decision-page/kit/vendor/**"
+  ],
+  "minTokens": 50,
+  "threshold": 0,
+  "reporters": ["console"],
+  "gitignore": true
+}

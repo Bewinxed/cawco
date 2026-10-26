@@ -1,0 +1,257 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
+  "workspaces": {
+    ".": {
+      "entry": [
+        // golar's CLI reads golar.config.ts from its cwd (node_modules/golar/dist/cli.js:15), run at scripts/check.ts:427 and scripts/lint/golar-lint.ts:66.
+        "golar.config.ts",
+        // scripts/check.ts:459
+        "scripts/lint/golar-lint.ts",
+        // scripts/check.ts:534
+        "scripts/case-clash-check.ts",
+        // scripts/check.ts:539
+        "scripts/runtime-bundles-check.ts",
+        // scripts/check.ts:556
+        "scripts/style-residual-check.ts",
+        // scripts/check.ts:557
+        "scripts/relics-check.ts",
+        // scripts/check.ts:558
+        "scripts/style-greps.ts",
+        // scripts/check.ts:559
+        "scripts/tool-answer-check.ts",
+        // scripts/check.ts:560
+        "scripts/icon-imports-check.ts",
+        // scripts/check.ts:561
+        "scripts/docker-client-check.ts",
+        // scripts/check.ts:562
+        "scripts/border-width-check.ts",
+        // scripts/check.ts:575
+        "scripts/page-imports-check.ts",
+        // scripts/check.ts:576
+        "scripts/preview-switcher-check.ts",
+        // scripts/check.ts:580
+        "scripts/probe-words-check.ts",
+        // scripts/check.ts:586
+        "scripts/probe-waits-check.ts",
+        // scripts/check.ts:592
+        "scripts/probe-groups-check.ts",
+        // scripts/check.ts:626
+        "scripts/resolution-check.ts",
+        // scripts/ship.sh:86
+        "scripts/release.ts",
+        // scripts/ship.sh:36
+        "scripts/release-quota.ts",
+        // scripts/release-setup.sh:27
+        "scripts/release-setup.ts",
+        // scripts/release.ts:471
+        "scripts/build-binary.ts",
+        // scripts/release.ts:897
+        "scripts/binary/build-stage2.ts",
+        // The standalone binary's entry and its worker threads, each a Bun.build entrypoint: scripts/build-binary.ts:376-390.
+        "scripts/binary/{entry,proof-entry,transcript-worker,process-table-worker,loop-watch-worker,stores-worker}.ts",
+        // Put in place of the `socket-activation` package by the binary build: scripts/build-binary.ts:518.
+        "scripts/binary/socket-activation.ts",
+        // Loaded in place of core clock.ts by the stage 2 proof build: scripts/build-binary.ts:527.
+        "scripts/binary/proof-clock.ts",
+        // Loaded in place of sessiond list-pace.ts by the stage 2 proof build: scripts/build-binary.ts:538.
+        "scripts/binary/proof-list-pace.ts",
+        // Loaded in place of agent harnesses/index.ts by the proof builds: scripts/build-binary.ts:560.
+        "scripts/binary/proof-harnesses.ts",
+        // Each bundled by `bun build` and run on the rig's machines: scripts/binary/prove-stage2.sh:289-290.
+        "scripts/binary/stage2-{start-session,stop-session,send,sends,signin,during-install,hook-calls,preview-port}.ts",
+        // scripts/binary/prove-stage2.sh:255
+        "scripts/binary/stage2-fixture.ts",
+        // scripts/binary/prove-stage1.sh:170
+        "scripts/binary/proof-browser.ts",
+        // A Claude Code hook a person installs: scripts/hooks/README.md:30.
+        "scripts/hooks/delegate-nudge.ts",
+        // `--preload`ed into every scratch fleet service: scripts/scratch-fleet.ts:1647 and :1649.
+        "scripts/scratch-fleet-leash.ts",
+        "scripts/stand-ins/preload.ts",
+        // Loaded by path in place of product modules: scripts/stand-ins/preload.ts:14-15.
+        "scripts/stand-ins/{hub-upstreams,canvas-host-plugins}.ts",
+        // Loaded by path in place of agent canvas-host/bound.ts: scripts/stand-ins/canvas-host-plugins.ts:16.
+        "scripts/stand-ins/canvas-bound.ts",
+        // Spawned by the spec that proves the hub's one writer: scripts/probe-kit/specs/hub-one-writer.ts:34.
+        "scripts/repair-account-history.ts",
+        // The probe kit's runner: scripts/probe-kit/README.md:10.
+        "scripts/probe-kit/run.ts",
+        // Each spec imported by its name: scripts/probe-kit/run.ts:109 and :128.
+        "scripts/probe-kit/specs/*.ts",
+        // Each web spec imported by its name: scripts/probe-kit/run.ts:113 and :128.
+        "scripts/probe-kit/specs/web/*.ts",
+        // scripts/probe-kit/specs/browser-cap.ts:28
+        "scripts/probe-kit/browser-cap-child.ts",
+        // scripts/probe-kit/specs/fsevents-scope.ts:47-50
+        "scripts/probe-kit/fsevents-browsers-child.ts",
+        // scripts/probe-kit/specs/heavy-slots.ts:64 and specs/probe-slots.ts:41
+        "scripts/probe-kit/slot-child.ts",
+        // scripts/probe-kit/specs/signal-wall.ts:28
+        "scripts/probe-kit/signal-wall-child.ts",
+        // scripts/probe-kit/specs/sleep-listener.ts:33
+        "scripts/probe-kit/sleep-listener-child.ts",
+        // scripts/probe-kit/specs/store-reads-loop.ts:308
+        "scripts/probe-kit/store-reads-child.ts",
+        // scripts/probe-kit/specs/atomic-writes.ts:26
+        "scripts/probe-kit/atomic-writer.ts",
+        // scripts/probe-kit/specs/fsevents-scope.ts:52
+        "scripts/probe-kit/fsevents-claude-args.ts",
+        // A Bun.build entrypoint: scripts/probe-kit/decision-embeds.ts:77.
+        "scripts/probe-kit/decision-pick-wiring.ts",
+        // Each journey found by its file name and imported: scripts/probe-kit/journeys/run.ts:13, :20 and :43.
+        "scripts/probe-kit/journeys/j*-*.ts",
+      ],
+      // The root workspace's code is scripts/ (golar.config.ts joins as an
+      // entry). Left out: the design previews, mocks, artifacts, assets and
+      // .design-foundations (outside the owner's scope; nothing in packages or
+      // apps imports them), apps/apple (Swift, on hold), and the fixtures
+      // (inputs the checks read, not code run). `.svelte` is listed because
+      // the root's svelte devDependency enables Knip's Svelte compiler here,
+      // and a project without its extension draws a configuration hint.
+      "project": [
+        "scripts/**/*.{js,mjs,cjs,ts,mts,cts,svelte}",
+        "!scripts/**/fixtures/**",
+      ],
+      // The types TypeScript reads for golar.config.ts:81's import of the
+      // sibling index.mjs. Knip resolves that import to the .mjs itself
+      // (node_modules/knip/dist/util/resolve.js:8 tries .mjs first), so it
+      // never sees the declaration read; no entry or plugin names it.
+      "ignoreFiles": ["scripts/lint/design/index.d.mts"],
+      // Declared at the root only so the type declarations of installed
+      // packages that import them undeclared resolve to the checkout's copy,
+      // each mapped by name in tsconfig.paths.json (bunfig.toml:1-17 and
+      // tsconfig.paths.json:1-16 say why; scripts/resolution-check.ts holds
+      // it). No source imports them and Knip reads no `paths` as a use, so
+      // only these exact names are ignored.
+      "ignoreDependencies": [
+        // tsconfig.paths.json:20-24: Node's builtins as @types/node and bun-types name them bare.
+        "buffer",
+        "events",
+        "process",
+        "punycode",
+        "string_decoder",
+        // tsconfig.paths.json:30 (gaxios)
+        "undici-types",
+        // tsconfig.paths.json:32 (playwright-core, jsrepo)
+        "zod",
+        // tsconfig.paths.json:35-37 (jsrepo)
+        "@clack/prompts",
+        "fast-glob",
+        "picocolors",
+        // tsconfig.paths.json:39 (mermaid)
+        "type-fest",
+        // tsconfig.paths.json:41 (remark-parse, remark-stringify)
+        "vfile",
+        // tsconfig.paths.json:43-49 (@earendil-works/pi-coding-agent)
+        "@earendil-works/pi-agent-core",
+        "@earendil-works/pi-codemode",
+        "@earendil-works/pi-tui",
+        // tsconfig.paths.json:52 and bunfig.toml:1-3 (vaul-svelte, huntabyte/vaul-svelte#130)
+        "bits-ui",
+      ],
+      // Operating-system programs the probes run through Bun's `$`
+      // (scripts/probe-kit/cloudflare-front.ts:221, specs/hub-loopback.ts,
+      // specs/preview-socket.ts): no npm package provides them, and Knip's
+      // default global list (ignoreGlobalBinaries) does not name these two.
+      "ignoreBinaries": ["openssl", "ss"],
+    },
+    "apps/dashboard": {
+      "entry": [
+        // Every states file under src/, found by its name by the component canvas's stage host: packages/agent/src/stage-host/host.ts:2358 (core stage.ts:568 STORY_FILE).
+        "src/**/*.stories.{ts,js,tsx,jsx}",
+        // The decision host page's Bun.build entrypoint: packages/core/src/decision-host.ts:263.
+        "src/lib/cawco/decisions/host/host.ts",
+        // The decision host's sheet, compiled by Tailwind from its path: packages/core/src/decision-host.ts:44.
+        "src/lib/cawco/decisions/host/host.css",
+        // `$app/env` in the address preview build, an alias Knip does not follow: scripts/address-preview.vite.ts:42-43.
+        "src/lib/cawco/address/flow/kit-env.ts",
+        // scripts/check.ts:545
+        "scripts/specificity-trap.ts",
+        // scripts/check.ts:546
+        "scripts/lib-import-check.ts",
+        // scripts/check.ts:547
+        "scripts/svelte-unused-css.ts",
+        // scripts/check.ts:548
+        "scripts/spacing-ratchet.ts",
+      ],
+      "project": [
+        // Knip's default, with the extensions its Svelte and Tailwind compilers add here.
+        "**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts,svelte,css}",
+        // Written by `bun run tokens` (scripts/build-tokens.ts:87-102) and `bun run variants` (scripts/build-variants.ts:32).
+        "!src/lib/tokens/{tokens.css,tokens.ts,theme.css,selection.css,variants.css}",
+        // Written by scripts/house-faces.ts:40.
+        "!src/house-faces/**",
+      ],
+      // The types TypeScript reads for the sibling .js modules that
+      // src/lib/cawco/own-origin.ts:2, vite.config.ts:26 and
+      // scripts/binary/proof-relay.ts:9 import. Knip resolves each import to
+      // the .js itself (node_modules/knip/dist/util/resolve.js:6 tries .js
+      // first), so it never sees the declaration read; no entry or plugin
+      // names it.
+      "ignoreFiles": ["public-origin.d.ts", "inherited-relay.d.ts"],
+      "vite": {
+        // The app's own config, and the address flow's design preview build: scripts/address-preview.vite.ts:8 and src/lib/cawco/address/flow/public/README.md:27 tell a person to build it.
+        "config": ["vite.config.ts", "scripts/address-preview.vite.ts"],
+      },
+    },
+    "packages/agent": {
+      "entry": [
+        // Spawned as plain Bun by the boundary: src/boundary.ts:3612; bundled for Linux at scripts/build-binary.ts:182.
+        "src/boundary-host.ts",
+        // Run as plain Bun as each workspace's judge: src/boundary.ts:684.
+        "src/boundary-judge.ts",
+        // Run as plain Bun by a macOS workspace's `log` shim: src/boundary.ts:1552.
+        "src/boundary-log.ts",
+        // A Worker started from its path: src/loop-watch.ts:134.
+        "src/loop-watch-worker.ts",
+        // A Worker started from its path: src/stores/client.ts:29.
+        "src/stores/worker.ts",
+        // Resolved for `cawco:pi-runtime` by the binary build: scripts/build-binary.ts:490.
+        "src/standalone-setup.ts",
+        // The canvas host page's Bun.build entrypoint: packages/core/src/canvas-host.ts:91.
+        "src/canvas-host/host.tsx",
+      ],
+      // Read by Bun.resolveSync (src/preview-overlay/glyphs.ts:21), which
+      // Knip does not follow (it follows require.resolve and
+      // import.meta.resolve: knip.dev/explanations/entry-files).
+      "ignoreDependencies": ["@iconify-json/solar"],
+    },
+    "apps/cawrier": {
+      // `cloudflare:workers` (src/pairing.ts:11, src/seats.ts:13) is a workerd
+      // built-in module, not the `cloudflare` package. Knip 6.43.0 strips it
+      // to `cloudflare` and reports it unlisted; the change that skips
+      // `cloudflare:` specifiers (webpro-nl/knip#2106) was closed unmerged.
+      "ignoreDependencies": ["cloudflare"],
+    },
+    "packages/hub": {
+      "entry": [
+        // Spawned by the release: scripts/release.ts:836.
+        "scripts/wire-frames.ts",
+        // Inlined into every decision page as its script: src/decision-page.ts:123.
+        "skills/decision-page/kit/page.js",
+        // Served to a decision page with Dials: packages/core/src/decision-host.ts:308.
+        "skills/decision-page/kit/dials.js",
+        // The decision-page skill tells the agent to run it: skills/decision-page/SKILL.md:74.
+        "skills/decision-page/scripts/preview.mjs",
+      ],
+      "project": [
+        // Knip's default.
+        "**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}",
+        // DialKit, vendored unchanged from its npm package (skills/decision-page/kit/vendor/dialkit/VERSION): a dependency's code, not ours.
+        "!skills/decision-page/kit/vendor/**",
+      ],
+    },
+    "site": {
+      "entry": [
+        // site/DEPLOY.md:75
+        "scripts/import-caw.mjs",
+        // site/DEPLOY.md:82
+        "scripts/lift-devices.mjs",
+        // site/DEPLOY.md:85
+        "scripts/og.mjs",
+        // The hairline figure the hairline skill's look.mjs loads: site/DEPLOY.md:79-80.
+        "art/fleet.js",
+      ],
+    },
+  },
+}
