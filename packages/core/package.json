@@ -107,6 +107,7 @@
     "./no-huge-pages": "./src/no-huge-pages.ts",
     "./state-file": "./src/state-file.ts",
     "./stored-json": "./src/stored-json.ts",
+    "./stored-shapes": "./src/stored-shapes.ts",
     "./workspace-policy": "./src/workspace-policy.ts",
     "./fleet-items": "./src/fleet-items.ts",
     "./workspace-judge": "./src/workspace-judge.ts",

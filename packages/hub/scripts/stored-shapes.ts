@@ -1,8 +1,10 @@
 /**
- * `bun run stored-shapes` in packages/hub: the zod schema of every type a
- * stored JSON column holds, written to src/db/stored-shapes.ts from the
- * TypeScript declarations themselves. `--check`: write nothing, fail when
- * that file is not what this would write.
+ * `bun run stored-shapes` in packages/hub: the zod schema of every type
+ * CawCo stores as JSON, made from the TypeScript declarations themselves:
+ * core's types to packages/core/src/stored-shapes.ts (`@cawco/core/
+ * stored-shapes`, which the agent and the CLI read too), the hub's own to
+ * packages/hub/src/db/stored-shapes.ts. `--check`: write nothing, fail when
+ * either file is not what this would write.
  *
  * The TypeScript types stay the one hand-written source: the OpenAPI
  * document the Swift client is built from reads their declared names
@@ -11,9 +13,9 @@
  * proves at compile time that each schema's output is exactly its type
  * ({@link PROOF}): a type changed without running this fails the build.
  *
- * What it makes schemas for: the names src/db/schema.ts imports from
- * ./stored-shapes (`PlanStepSchema` for `PlanStep`), and every type those
- * reach. A type that is a zod schema's `z.infer` already (the MCP SDK's) is
+ * What it makes schemas for: every `XSchema` a file in packages/ imports
+ * from either file (`PlanStepSchema` for the exported type `PlanStep`), and
+ * every type those reach. A type that is a zod schema's `z.infer` already (the MCP SDK's) is
  * that schema. A union of object shapes with no literal key telling them
  * apart is ordered most-required-keys first: z.union keeps the first option
  * that parses, and an object schema strips the keys it does not name.
@@ -26,7 +28,9 @@ import { z } from "zod";
 const HUB = resolve(import.meta.dir, "..");
 const ROOT = resolve(HUB, "../..");
 const SCHEMA = join(HUB, "src/db/schema.ts");
-const OUT = join(HUB, "src/db/stored-shapes.ts");
+const HUB_OUT = join(HUB, "src/db/stored-shapes.ts");
+const CORE_OUT = join(ROOT, "packages/core/src/stored-shapes.ts");
+const HUB_SRC = join(HUB, "src/");
 const CORE_SRC = join(ROOT, "packages/core/src/");
 const SDK =
   /node_modules\/@modelcontextprotocol\/sdk\/dist\/esm\/(.+)\.d\.ts$/u;
@@ -34,6 +38,10 @@ const check = process.argv.includes("--check");
 const JS = /\.js$/u;
 const TS_FILE = /\.ts$/u;
 const SCHEMA_SUFFIX = /Schema$/u;
+const SCHEMA_NAME = /\b\w+Schema\b/gu;
+const SHAPES_IMPORT =
+  /import\s*\{([^}]*)\}\s*from\s*"(?:@cawco\/core|\.{1,2}(?:\/[\w.-]+)*)\/stored-shapes"/gu;
+const TEST_FILE = /\.test\.ts$/u;
 const ZOD_OUTPUT = /^z\.(?:infer|output)$/u;
 
 /** Types whose schema is written here, not made from the type: a brand only a predicate can check. */
@@ -42,7 +50,7 @@ const WRITTEN: Record<string, { schema: string; values: [string, string][] }> =
     MachinePath: {
       schema:
         'z.custom<MachinePathType>((value) => typeof value === "string" && isMachinePath(value), "an absolute, normalised path")',
-      values: [["isMachinePath", "@cawco/core/machine-path"]],
+      values: [["isMachinePath", join(CORE_SRC, "machine-path.ts")]],
     },
     // The SDK's union lists the client information alone first; a full
     // registration parsed as that would lose every field but the id's.
@@ -75,33 +83,37 @@ if (!config) {
 const SDK_TYPES = ["shared/auth.js", "client/auth.js"].map((path) =>
   Bun.resolveSync(`@modelcontextprotocol/sdk/${path}`, HUB).replace(JS, ".d.ts")
 );
-const program = ts.createProgram([SCHEMA, ...SDK_TYPES], {
+
+/* ---------------------------------------------------------- the roots */
+
+const listed = Bun.spawnSync(["git", "ls-files", "packages"], { cwd: ROOT })
+  .stdout.toString()
+  .split("\n")
+  .filter((path) => path.endsWith(".ts") && !TEST_FILE.test(path))
+  .map((path) => join(ROOT, path))
+  .filter((path) => path !== HUB_OUT && path !== CORE_OUT);
+const roots = new Set<string>();
+const coreFiles: string[] = [];
+for (const file of listed) {
+  if (file.startsWith(CORE_SRC)) {
+    coreFiles.push(file);
+  }
+  for (const match of readFileSync(file, "utf8").matchAll(SHAPES_IMPORT)) {
+    for (const named of (match[1] ?? "").split(",")) {
+      const [imported = ""] = named.trim().split(" as ");
+      if (SCHEMA_SUFFIX.test(imported)) {
+        roots.add(imported.replace(SCHEMA_SUFFIX, ""));
+      }
+    }
+  }
+}
+
+const program = ts.createProgram([SCHEMA, ...coreFiles, ...SDK_TYPES], {
   ...config.options,
   composite: false,
   noEmit: true,
 });
 const checker = program.getTypeChecker();
-
-/* ---------------------------------------------------------- the roots */
-
-const schemaFile = program.getSourceFile(SCHEMA);
-if (!schemaFile) {
-  throw new Error("stored-shapes: src/db/schema.ts is not in the program");
-}
-const roots: string[] = [];
-for (const statement of schemaFile.statements) {
-  if (
-    ts.isImportDeclaration(statement) &&
-    ts.isStringLiteral(statement.moduleSpecifier) &&
-    statement.moduleSpecifier.text === "./stored-shapes" &&
-    statement.importClause?.namedBindings &&
-    ts.isNamedImports(statement.importClause.namedBindings)
-  ) {
-    for (const element of statement.importClause.namedBindings.elements) {
-      roots.push(element.name.text.replace(SCHEMA_SUFFIX, ""));
-    }
-  }
-}
 
 /** Every exported type declaration in the program's packages, by name; a name declared twice is refused when asked for. */
 const exported = new Map<string, Declaration[]>();
@@ -241,14 +253,31 @@ for (const root of roots) {
 
 /* ---------------------------------------------------------- the schemas */
 
-/** Runtime values the schemas read, by the module that exports them. */
-const values = new Map<string, Set<string>>();
-/** The types each schema is proved against, by module. */
-const types = new Map<string, Set<string>>();
-const add = (into: Map<string, Set<string>>, from: string, name: string) => {
-  const set = into.get(from) ?? new Set<string>();
+/** Which file a declaration's schema is written to: the hub's own types, and the MCP SDK's it alone depends on, to the hub's. */
+const outOf = (declaration: ts.Node): string => {
+  const file = declaration.getSourceFile().fileName;
+  return file.startsWith(HUB_SRC) || SDK.test(file) ? HUB_OUT : CORE_OUT;
+};
+
+/** What one generated file imports: values its schemas read, and the types it proves them against, by declaring file. */
+interface Needs {
+  types: Map<string, Set<string>>;
+  values: Map<string, Set<string>>;
+}
+const needs = new Map<string, Needs>([
+  [CORE_OUT, { types: new Map(), values: new Map() }],
+  [HUB_OUT, { types: new Map(), values: new Map() }],
+]);
+/** The file whose schemas are being made. */
+let target = CORE_OUT;
+const add = (kind: keyof Needs, file: string, name: string): void => {
+  const into = needs.get(target)?.[kind];
+  if (!into) {
+    throw new Error(`stored-shapes: no file ${target}`);
+  }
+  const set = into.get(file) ?? new Set<string>();
   set.add(name);
-  into.set(from, set);
+  into.set(file, set);
 };
 
 const coreExports = Object.keys(
@@ -258,19 +287,19 @@ const coreExports = Object.keys(
       JSON.parse(readFileSync(join(ROOT, "packages/core/package.json"), "utf8"))
     ).exports
 );
-/** How the generated file imports what `file` exports. */
-const specifierOf = (file: string): string => {
+/** How the generated file `out` imports what `file` exports: core by its package from the hub, by path within itself. */
+const specifierOf = (file: string, out: string): string => {
   const sdk = SDK.exec(file);
   if (sdk) {
     return `@modelcontextprotocol/sdk/${sdk[1]}.js`;
   }
-  if (file.startsWith(CORE_SRC)) {
+  if (file.startsWith(CORE_SRC) && out === HUB_OUT) {
     const sub = `./${file.slice(CORE_SRC.length).replace(TS_FILE, "")}`;
     return coreExports.includes(sub)
       ? `@cawco/core/${sub.slice(2)}`
       : "@cawco/core";
   }
-  const path = relative(dirname(OUT), file).replace(TS_FILE, "");
+  const path = relative(dirname(out), file).replace(TS_FILE, "");
   return path.startsWith(".") ? path : `./${path}`;
 };
 
@@ -281,8 +310,11 @@ const importedValue = (name: ts.EntityName, local?: string): string => {
   if (!(symbol && declaration)) {
     throw new Error(`stored-shapes: ${name.getText()} names no value`);
   }
-  const from = specifierOf(declaration.getSourceFile().fileName);
-  add(values, from, local ? `${symbol.name} as ${local}` : symbol.name);
+  add(
+    "values",
+    declaration.getSourceFile().fileName,
+    local ? `${symbol.name} as ${local}` : symbol.name
+  );
   return local ?? symbol.name;
 };
 
@@ -607,7 +639,7 @@ const declarationSchema = (declaration: Declaration): string => {
   const written = WRITTEN[name];
   if (written) {
     for (const [value, from] of written.values) {
-      add(values, from, value);
+      add("values", from, value);
     }
     return written.schema;
   }
@@ -643,13 +675,35 @@ const declarationSchema = (declaration: Declaration): string => {
   return `${first}${rest.map((base) => `.extend(${base}.shape)`).join("")}.extend(${fields})`;
 };
 
-const lines = order.map((declaration) => {
+/** Each file's schemas, in order, and the core schemas the hub's read. */
+const made = new Map<string, string[]>([
+  [CORE_OUT, []],
+  [HUB_OUT, []],
+]);
+const proved = new Map<string, string[]>([
+  [CORE_OUT, []],
+  [HUB_OUT, []],
+]);
+const coreNames = new Set(
+  order.filter((d) => outOf(d) === CORE_OUT).map((d) => `${d.name.text}Schema`)
+);
+for (const declaration of order) {
   const name = declaration.name.text;
-  if (isExported(declaration) || roots.includes(name)) {
-    add(types, specifierOf(declaration.getSourceFile().fileName), name);
+  target = outOf(declaration);
+  if (isExported(declaration) || roots.has(name)) {
+    add("types", declaration.getSourceFile().fileName, name);
+    proved.get(target)?.push(name);
   }
-  return `export const ${name}Schema = ${declarationSchema(declaration)};`;
-});
+  const schema = declarationSchema(declaration);
+  if (target === HUB_OUT) {
+    for (const [used] of schema.matchAll(SCHEMA_NAME)) {
+      if (coreNames.has(used)) {
+        add("values", CORE_OUT, used);
+      }
+    }
+  }
+  made.get(target)?.push(`export const ${name}Schema = ${schema};`);
+}
 
 /* ---------------------------------------------------------- the file */
 
@@ -671,9 +725,6 @@ type Same<A, B> =
     ? true
     : false;`;
 
-const proved = order
-  .map((d) => d.name.text)
-  .filter((name) => [...types.values()].some((set) => set.has(name)));
 const alias = (name: string) => `${name}Type`;
 /** Biome's import order: packages, then `../`, then `./`; a module's types before its values. */
 const rank = (from: string): number => {
@@ -682,82 +733,109 @@ const rank = (from: string): number => {
   }
   return from.startsWith("../") ? 1 : 0;
 };
-const imports = [...new Set(["zod", ...values.keys(), ...types.keys()])]
-  .toSorted((a, b) => rank(a) - rank(b) || (a < b ? -1 : Number(a > b)))
-  .flatMap((from) => {
-    const named =
-      from === "zod"
-        ? ["z"]
-        : [...(values.get(from) ?? [])].toSorted((a, b) => {
-            const [x = a, y = b] = [a.split(" as ")[1], b.split(" as ")[1]];
-            return x < y ? -1 : Number(x > y);
-          });
-    // Biome sorts a renamed import by the name it is given here.
-    const typed = [...(types.get(from) ?? [])]
-      .map(alias)
-      .toSorted()
-      .map((local) => `${local.slice(0, -"Type".length)} as ${local}`);
-    // A module only types come from is imported as types alone, so loading
-    // this file never loads it (schema.ts and moves.ts read this file).
-    return [
+const byLocalName = (a: string, b: string): number => {
+  const [x = a, y = b] = [a.split(" as ")[1], b.split(" as ")[1]];
+  return x < y ? -1 : Number(x > y);
+};
+
+/** `out`'s import lines: zod, then each module's types and values. */
+const importsOf = (out: string, { types, values }: Needs): string[] => {
+  const bySpecifier = new Map<string, { named: string[]; typed: string[] }>([
+    ["zod", { named: ["z"], typed: [] }],
+  ]);
+  const at = (file: string) => {
+    const from = specifierOf(file, out);
+    const entry = bySpecifier.get(from) ?? { named: [], typed: [] };
+    bySpecifier.set(from, entry);
+    return entry;
+  };
+  for (const [file, names] of values) {
+    at(file).named.push(...names);
+  }
+  for (const [file, names] of types) {
+    at(file).typed.push(...[...names].map((name) => `${name} as ${alias(name)}`));
+  }
+  return [...bySpecifier]
+    .toSorted(([a], [b]) => rank(a) - rank(b) || (a < b ? -1 : Number(a > b)))
+    .flatMap(([from, { named, typed }]) => [
+      // A module only types come from is imported as types alone, so loading
+      // a generated file never loads it (schema.ts and moves.ts read these).
+      // Biome sorts a renamed import by the name it is given here.
       ...(typed.length > 0
-        ? [`import type { ${typed.join(", ")} } from "${from}";`]
+        ? [`import type { ${typed.toSorted(byLocalName).join(", ")} } from "${from}";`]
         : []),
       ...(named.length > 0
-        ? [`import { ${named.join(", ")} } from "${from}";`]
+        ? [`import { ${[...new Set(named)].toSorted(byLocalName).join(", ")} } from "${from}";`]
         : []),
-    ];
-  });
+    ]);
+};
 
-const text = `/**
+const textOf = (out: string): string => {
+  const own = needs.get(out) ?? { types: new Map(), values: new Map() };
+  const names = proved.get(out) ?? [];
+  return `/**
  * Generated by \`bun run stored-shapes\` (packages/hub/scripts/stored-shapes.ts)
- * from the types src/db/schema.ts stores: never edited by hand. Each
- * schema's output is proved below to be its type exactly.
+ * from the types CawCo stores as JSON: never edited by hand. Each schema's
+ * output is proved below to be its type exactly.
  */
-${imports.join("\n")}
+${importsOf(out, own).join("\n")}
 
-${lines.join("\n\n")}
+${(made.get(out) ?? []).join("\n\n")}
 
 ${PROOF}
 
-/** Every schema, proved against the type it is made from. */
-export const proved: [${proved.map((name) => `Same<z.output<typeof ${name}Schema>, ${alias(name)}>`).join(", ")}] = [${proved.map(() => "true").join(", ")}];
+/** Every schema of an exported type, proved against that type. */
+export const proved: [${names.map((name) => `Same<z.output<typeof ${name}Schema>, ${alias(name)}>`).join(", ")}] = [${names.map(() => "true").join(", ")}];
 `;
+};
 
 // The repository's formatter (scripts/fmt.ts), outside this package's
 // project, so loaded by its path at run time.
 const fmt: unknown = await import(join(ROOT, "scripts/fmt.ts"));
-if (!(
-  typeof fmt === "object" &&
-  fmt !== null &&
-  "formatText" in fmt &&
-  typeof fmt.formatText === "function"
-)) {
+if (
+  !(
+    typeof fmt === "object" &&
+    fmt !== null &&
+    "formatText" in fmt &&
+    typeof fmt.formatText === "function"
+  )
+) {
   throw new Error("stored-shapes: scripts/fmt.ts has no formatText");
 }
-const formatted: unknown = await fmt.formatText(OUT, text);
-if (typeof formatted !== "string") {
-  throw new Error("stored-shapes: formatText answered no text");
-}
-let current = "";
-try {
-  current = readFileSync(OUT, "utf8");
-} catch {
-  // Not written yet.
-}
-if (check) {
-  if (current !== formatted) {
-    console.error(
-      "stored-shapes: src/db/stored-shapes.ts is not what the stored types make; run `bun run stored-shapes` in packages/hub"
-    );
-    process.exit(1);
+const { formatText } = fmt;
+const outputs = await Promise.all(
+  [CORE_OUT, HUB_OUT].map(async (out) => {
+    const formatted: unknown = await formatText(out, textOf(out));
+    if (typeof formatted !== "string") {
+      throw new Error("stored-shapes: formatText answered no text");
+    }
+    return { out, formatted };
+  })
+);
+let stale = false;
+for (const { out, formatted } of outputs) {
+  let current = "";
+  try {
+    current = readFileSync(out, "utf8");
+  } catch {
+    // Not written yet.
   }
-  console.log(
-    `stored-shapes: ${order.length} schemas from ${roots.length} stored types, as written`
-  );
-} else {
-  writeFileSync(OUT, formatted);
-  console.log(
-    `stored-shapes: wrote ${order.length} schemas from ${roots.length} stored types`
-  );
+  if (current === formatted) {
+    continue;
+  }
+  if (check) {
+    stale = true;
+    console.error(
+      `stored-shapes: ${relative(ROOT, out)} is not what the stored types make; run \`bun run stored-shapes\` in packages/hub`
+    );
+  } else {
+    writeFileSync(out, formatted);
+    console.log(`stored-shapes: wrote ${relative(ROOT, out)}`);
+  }
 }
+if (stale) {
+  process.exit(1);
+}
+console.log(
+  `stored-shapes: ${order.length} schemas from ${roots.size} stored types${check ? ", as written" : ""}`
+);
