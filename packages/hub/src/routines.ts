@@ -76,7 +76,7 @@ import { standalone } from "@cawco/core/runtime";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import cronstrue from "cronstrue";
 import { Cron, DateTime, Option, Result } from "effect";
-import { Elysia, status, t } from "elysia";
+import { Elysia, t } from "elysia";
 import { z } from "zod";
 import type { Caw } from "./caw";
 import { HUB_DEBUG } from "./config";
@@ -97,6 +97,7 @@ import {
   routineWords,
 } from "./presenters/project";
 import type { Push } from "./push";
+import { refusalAnswer, refuser, StatusRefusal } from "./refusal";
 import { BUDGET, LANDS } from "./tasks";
 import {
   budgetProblem,
@@ -165,17 +166,9 @@ A dated question needs no tool: what was true on a day is the lines whose \`sinc
 Nothing you propose changes a file until the person approves it. Finish with finish_item, its headline ${NO_REPLY} when you proposed nothing, else one line naming what you proposed.`;
 
 /** A refusal, with the status a route answers and the words a tool returns. */
-class RoutineRefusal extends Error {
-  readonly status: 400 | 403 | 404 | 409;
-  constructor(code: 400 | 403 | 404 | 409, message: string) {
-    super(message);
-    this.status = code;
-  }
-}
+class RoutineRefusal extends StatusRefusal {}
 
-const refuse = (code: 400 | 403 | 404 | 409, message: string): never => {
-  throw new RoutineRefusal(code, message);
-};
+const refuse = refuser(RoutineRefusal);
 
 /**
  * One run, as the routes and tools answer it (times in ms), with what
@@ -2530,12 +2523,7 @@ export type RoutineTool = (typeof ROUTINE_TOOL_NAMES)[number];
 export const ROUTINE_TOOLS: ReadonlySet<string> = new Set(ROUTINE_TOOL_NAMES);
 
 /** A refusal as the route's answer. */
-const answer = (error: unknown) => {
-  if (error instanceof RoutineRefusal) {
-    return status(error.status, error.message);
-  }
-  throw error;
-};
+const answer = refusalAnswer(RoutineRefusal);
 
 const TARGET = t.Union([
   t.Literal("delegate"),

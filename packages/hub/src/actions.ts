@@ -44,7 +44,7 @@ import { detach } from "@cawco/core/detach";
 import { DAY_MS } from "@cawco/core/time";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import Ajv2020 from "ajv/dist/2020";
-import { Elysia, status, t } from "elysia";
+import { Elysia, t } from "elysia";
 import { z } from "zod";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
@@ -59,6 +59,7 @@ import {
   actionWords,
 } from "./presenters/project";
 import type { Push } from "./push";
+import { refusalAttempt, refuser, StatusRefusal } from "./refusal";
 import { roleOf } from "./roles";
 import { stageNamed } from "./stages";
 import { actionActor, sessionActor, type Tasks } from "./tasks";
@@ -87,17 +88,9 @@ const PROPOSERS: ReadonlySet<SessionRole> = new Set(["worker", "lead"]);
 const WAITING: readonly ActionState[] = ["proposed", "failed", "unknown"];
 
 /** A refusal, with the status a route answers and the words a tool returns. */
-class ActionRefusal extends Error {
-  readonly status: 400 | 403 | 404 | 409;
-  constructor(code: 400 | 403 | 404 | 409, message: string) {
-    super(message);
-    this.status = code;
-  }
-}
+class ActionRefusal extends StatusRefusal {}
 
-const refuse = (code: 400 | 403 | 404 | 409, message: string): never => {
-  throw new ActionRefusal(code, message);
-};
+const refuse = refuser(ActionRefusal);
 
 const sha256 = (text: string): string =>
   createHash("sha256").update(text, "utf8").digest("hex");
@@ -948,20 +941,7 @@ export const ACTION_TOOLS: ReadonlySet<string> = new Set([
   "action_cancel",
 ]);
 
-const answer = (error: unknown) => {
-  if (error instanceof ActionRefusal) {
-    return status(error.status, error.message);
-  }
-  throw error;
-};
-
-const attempt = <T>(work: () => T) => {
-  try {
-    return work();
-  } catch (error) {
-    return answer(error);
-  }
-};
+const attempt = refusalAttempt(ActionRefusal);
 
 const STATE = t.Union([
   t.Literal("proposed"),

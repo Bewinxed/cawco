@@ -64,7 +64,7 @@ import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { machineId } from "@cawco/core/machine-id";
 import { octokitAnswer } from "@cawco/core/octokit-answer";
-import { Elysia, status, t } from "elysia";
+import { Elysia, t } from "elysia";
 import { z } from "zod";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
@@ -80,6 +80,7 @@ import {
   relayListWords,
   relayRemovedWords,
 } from "./presenters/project";
+import { refusalAttempt, refuser, StatusRefusal } from "./refusal";
 
 /** The most a delivery's body holds: 1 MiB. */
 const RELAY_BODY_MAX = 1024 * 1024;
@@ -116,17 +117,9 @@ const SHA256_PREFIX = "sha256=";
 const wantedPort = (): number => Number(readEnv(CAWCO_ENV.relayPort)) || 0;
 
 /** What a route answers and a tool says when the relay refuses. */
-class RelayRefusal extends Error {
-  readonly status: 400 | 403 | 404 | 409;
-  constructor(code: 400 | 403 | 404 | 409, message: string) {
-    super(message);
-    this.status = code;
-  }
-}
+class RelayRefusal extends StatusRefusal {}
 
-const refuse = (code: 400 | 403 | 404 | 409, message: string): never => {
-  throw new RelayRefusal(code, message);
-};
+const refuse = refuser(RelayRefusal);
 
 const wordsOf = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
@@ -1294,20 +1287,7 @@ export const RELAY_TOOLS: ReadonlySet<string> = new Set([
   "relay_remove",
 ]);
 
-const answer = (error: unknown) => {
-  if (error instanceof RelayRefusal) {
-    return status(error.status, error.message);
-  }
-  throw error;
-};
-
-const attempt = async <T>(work: () => T | Promise<T>) => {
-  try {
-    return await work();
-  } catch (error) {
-    return answer(error);
-  }
-};
+const attempt = refusalAttempt(RelayRefusal);
 
 /**
  * The owner's routes for relays, on the hub API (never the receiver). Making

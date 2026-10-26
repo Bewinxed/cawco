@@ -110,7 +110,7 @@ import {
 import type { JevChoiceAnswer, JevQuestion } from "@cawco/core/jev";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { parseRecord, writeStateFile } from "@cawco/core/state-file";
-import { Elysia, status, t } from "elysia";
+import { Elysia, t } from "elysia";
 import { z } from "zod";
 import { MEMORY_ARCHIVE_DAYS, MEMORY_FILE_CHARS } from "./config";
 import type { DbShape, ProjectRow, SessionTaintRow } from "./db";
@@ -175,6 +175,7 @@ import {
   writeFolderFile,
   YOU,
 } from "./project-folder";
+import { refusalAnswer, refuser, StatusRefusal } from "./refusal";
 import { roleOf } from "./roles";
 import { redactSecrets } from "./secret-filter";
 import { listOf, scalarOf } from "./task-file";
@@ -261,17 +262,9 @@ const NOT_LASTING = [
 const VERDICTS: readonly Verdict[] = ["lasting", ...NOT_LASTING];
 
 /** A refusal with the status a route answers and the words a tool returns. */
-class MemoryRefusal extends Error {
-  readonly status: 400 | 403 | 404 | 409;
-  constructor(code: 400 | 403 | 404 | 409, message: string) {
-    super(message);
-    this.status = code;
-  }
-}
+class MemoryRefusal extends StatusRefusal {}
 
-const refuse = (code: 400 | 403 | 404 | 409, message: string): never => {
-  throw new MemoryRefusal(code, message);
-};
+const refuse = refuser(MemoryRefusal);
 
 /** Your answer to a proposal for `paths`, as its note in Caw's thread: `sha` is your commit, null when you declined; it links the first file. */
 const answeredNote = (
@@ -3730,12 +3723,7 @@ export const MEMORY_TOOLS: ReadonlySet<string> = new Set([
 ]);
 
 /** A refusal as the route's answer. */
-const refusalAnswer = (error: unknown) => {
-  if (error instanceof MemoryRefusal) {
-    return status(error.status, error.message);
-  }
-  return refused(error);
-};
+const memoryAnswer = refusalAnswer(MemoryRefusal, refused);
 
 /**
  * The person's own memory acts outside a Caw thread: "Make a note" straight
@@ -3754,7 +3742,7 @@ export const memoryRoutes = (memory: Memory) =>
         try {
           return await memory.makeNote(params.id, body.text);
         } catch (error) {
-          return refusalAnswer(error);
+          return memoryAnswer(error);
         }
       }
     )
@@ -3765,7 +3753,7 @@ export const memoryRoutes = (memory: Memory) =>
         try {
           return await memory.withdraw(params.id, params.note);
         } catch (error) {
-          return refusalAnswer(error);
+          return memoryAnswer(error);
         }
       }
     );

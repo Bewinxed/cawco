@@ -58,7 +58,7 @@ import {
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { HOUR_MS } from "@cawco/core/time";
-import { Elysia, status, t } from "elysia";
+import { Elysia, t } from "elysia";
 import { RE2JS } from "re2js";
 import { z } from "zod";
 import { readsOnly } from "./connection-writes";
@@ -85,6 +85,7 @@ import {
   pollWords,
   routeWords,
 } from "./presenters/project";
+import { refusalAttempt, refuser, StatusRefusal } from "./refusal";
 import type { Routines } from "./routines";
 import type { GitHubWaitState } from "./task-waits";
 
@@ -128,17 +129,9 @@ const INBOX_SHOWN = 30;
 const EVENTS_SHOWN = 50;
 
 /** What a route answers and a tool says when ingress refuses. */
-class IngressRefusal extends Error {
-  readonly status: 400 | 403 | 404 | 409;
-  constructor(code: 400 | 403 | 404 | 409, message: string) {
-    super(message);
-    this.status = code;
-  }
-}
+class IngressRefusal extends StatusRefusal {}
 
-const refuse = (code: 400 | 403 | 404 | 409, message: string): never => {
-  throw new IngressRefusal(code, message);
-};
+const refuse = refuser(IngressRefusal);
 
 const bytes = (text: string) => Buffer.byteLength(text, "utf8");
 /** What a character cut in half decodes to, at the end of a cut. */
@@ -1644,21 +1637,7 @@ export const INGRESS_TOOLS: ReadonlySet<string> = new Set([
   "connector_poll_delete",
 ]);
 
-/** A refusal as the route's answer. */
-const answer = (error: unknown) => {
-  if (error instanceof IngressRefusal) {
-    return status(error.status, error.message);
-  }
-  throw error;
-};
-
-const attempt = async <T>(work: () => T | Promise<T>) => {
-  try {
-    return await work();
-  } catch (error) {
-    return answer(error);
-  }
-};
+const attempt = refusalAttempt(IngressRefusal);
 
 const ROUTE_FIELDS = {
   source: t.String(),

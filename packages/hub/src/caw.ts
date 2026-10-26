@@ -141,6 +141,7 @@ import {
   readFolderFile,
   writeFolderFile,
 } from "./project-folder";
+import { refusalAnswer, refuser, StatusRefusal } from "./refusal";
 import { roleOf } from "./roles";
 import {
   type RelayOffer,
@@ -521,17 +522,9 @@ const lineOf = (message: ThreadMessageRow): ThreadLine => {
 };
 
 /** A refusal a route answers with its status. */
-class CawRefusal extends Error {
-  readonly status: 400 | 403 | 404 | 409;
-  constructor(code: 400 | 403 | 404 | 409, message: string) {
-    super(message);
-    this.status = code;
-  }
-}
+class CawRefusal extends StatusRefusal {}
 
-const refuse = (code: 400 | 403 | 404 | 409, message: string): never => {
-  throw new CawRefusal(code, message);
-};
+const refuse = refuser(CawRefusal);
 
 /** What Caw reads first, before the event that started it. */
 const briefOf = (projectName: string): string =>
@@ -3362,12 +3355,9 @@ export const createCaw = ({
 
 export type Caw = ReturnType<typeof createCaw>;
 
-const answer = (error: unknown) => {
-  if (error instanceof CawRefusal) {
-    return status(error.status, error.message);
-  }
-  return status(502, error instanceof Error ? error.message : String(error));
-};
+const answer = refusalAnswer(CawRefusal, (error) =>
+  status(502, error instanceof Error ? error.message : String(error))
+);
 
 const HARNESS = t.Union(CAW_HARNESSES.map((harness) => t.Literal(harness)));
 const BLOCK_PAGE = t.Union(BLOCK_PAGES.map((page) => t.Literal(page)));
