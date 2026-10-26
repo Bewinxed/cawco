@@ -11,6 +11,7 @@ import type {
   FleetHeld,
   HeartbeatAckPayload,
   HeartbeatPayload,
+  HomeCredential,
   LaunchAsk,
   LaunchGrant,
   LentAccess,
@@ -884,7 +885,7 @@ const registerProviderAccounts = (supervisor: SessionSupervisor): void => {
       changing(() =>
         moveHomeCredential(
           id as string,
-          store as "pi" | "opencode",
+          store as HomeCredential["store"],
           storeProvider as string,
           expected as AccountIdentity
         )
@@ -901,7 +902,7 @@ const registerProviderAccounts = (supervisor: SessionSupervisor): void => {
           id as string,
           lender as string,
           lent as LentAccess,
-          store as "pi" | "opencode",
+          store as HomeCredential["store"],
           storeProvider as string,
           expected as AccountIdentity
         )

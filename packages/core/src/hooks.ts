@@ -16,6 +16,7 @@
 
 import { USER_LAYER_SHELL, userLayerLabel } from "./claude-dirs";
 import type { FleetPlacement } from "./fleet";
+import type { HarnessKind } from "./harness";
 
 /** Every lifecycle point a hook can attach to. */
 export type HookEvent =
@@ -412,7 +413,7 @@ export function hookMatches(
  * fleet-harness-set.ts): CawCo's OpenCode plugin and its inline pi
  * extension. Claude Code runs them itself.
  */
-export type HookHarness = "opencode" | "pi";
+export type HookHarness = Exclude<HarnessKind, "claude">;
 
 /**
  * The events each harness runs a command hook on, by the point it raises:

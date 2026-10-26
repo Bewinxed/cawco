@@ -15,6 +15,7 @@
     "./at-most": "./src/at-most.ts",
     "./bounded": "./src/bounded.ts",
     "./time": "./src/time.ts",
+    "./every-of": "./src/every-of.ts",
     "./jev": "./src/jev.ts",
     "./preview-reach": "./src/preview-reach.ts",
     "./machine-path": "./src/machine-path.ts",

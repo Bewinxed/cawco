@@ -21,6 +21,7 @@
  */
 
 import { CLAUDE_PROVIDER } from "./accounts";
+import { everyOf } from "./every-of";
 import { HOUR_MS } from "./time";
 import { harnessWords } from "./words/harness";
 
@@ -196,13 +197,13 @@ export const offeredMode = (
 export type EffortLevel = "low" | "medium" | "high" | "xhigh" | "max";
 
 /** Every {@link EffortLevel}, low to max: the one runtime list validators and pickers read. */
-export const EFFORT_LEVELS = [
+export const EFFORT_LEVELS = everyOf<EffortLevel>()([
   "low",
   "medium",
   "high",
   "xhigh",
   "max",
-] as const satisfies readonly EffortLevel[];
+]);
 
 /**
  * The effort a session actually sends, as its instance row records it: a level,

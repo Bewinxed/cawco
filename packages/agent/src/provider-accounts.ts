@@ -1207,7 +1207,7 @@ const opencodeEntry = async (
 
 /** One entry of pi's or OpenCode's own store, read now. */
 const readStoreEntry = async (
-  store: "pi" | "opencode",
+  store: HomeCredential["store"],
   storeProvider: string
 ): Promise<StoreEntry | undefined> => {
   if (store === "opencode") {
@@ -1223,7 +1223,7 @@ const readStoreEntry = async (
 
 /** The account provider an entry in a store is for. */
 const providerOfEntry = (
-  store: "pi" | "opencode",
+  store: HomeCredential["store"],
   storeProvider: string,
   credential: Credential
 ): string =>
@@ -1376,7 +1376,7 @@ const answers = async (accountId: string): Promise<string | undefined> => {
  */
 export const moveHomeCredential = async (
   accountId: string,
-  store: "pi" | "opencode",
+  store: HomeCredential["store"],
   storeProvider: string,
   expected: AccountIdentity
 ): Promise<HomeLoginMoved> => {
@@ -1471,7 +1471,7 @@ export const borrowAccount = async (
   accountId: string,
   lender: string,
   lent: LentAccess,
-  store: "pi" | "opencode",
+  store: HomeCredential["store"],
   storeProvider: string,
   expected: AccountIdentity
 ): Promise<HomeLoginMoved> => {

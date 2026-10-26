@@ -20,6 +20,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { HookHarness } from "@cawco/core/hooks";
 import { embeddedFile, standalone } from "@cawco/core/runtime";
 
 /** The judge's source as this build runs it: from the checkout, or as the binary embedded it (scripts/build-binary.ts). */
@@ -35,7 +36,7 @@ const judgeSource = (): string =>
  * The gate form a host of `harness` started by this build runs. For OpenCode,
  * `plugin` is the bridge plugin's source this agent writes.
  */
-export const gateForm = (harness: "opencode" | "pi", plugin = ""): string =>
+export const gateForm = (harness: HookHarness, plugin = ""): string =>
   createHash("sha256")
     .update([harness, judgeSource(), plugin].join("\0"))
     .digest("hex")
