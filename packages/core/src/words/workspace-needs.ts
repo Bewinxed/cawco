@@ -31,6 +31,9 @@ export const workspaceNeedsWords = {
   /** A program CawCo runs that this machine lacks: what it is, what needs it, and where it was looked for. */
   programMissing: (program: string, needs: string, dirs: string) =>
     `${WORKSPACE_NEEDS_LEAD} ${program}, needed by ${needs}: it is in none of the folders of CawCo's PATH (${dirs}).`,
+  /** The same for a program the sandbox runs, which counts only as a copy no one but the system can change. */
+  trustedMissing: (program: string, needs: string, dirs: string) =>
+    `${WORKSPACE_NEEDS_LEAD} a system-owned ${program}, needed by ${needs}: CawCo runs only a copy this user cannot change, and none of the folders of CawCo's PATH (${dirs}) holds one.`,
   /** One line of Show details: the folders a tool was looked for in. */
   lookedFor: (command: string, dirs: string) =>
     `${command}: not found in ${dirs}`,
@@ -87,13 +90,20 @@ export const workspaceNeedsDetails = (
     )
     .join("\n");
 
-/** Why `program`, needed by `needs`, cannot run: no folder of CawCo's PATH, each in `dirs`, holds it. */
+/**
+ * Why `program`, needed by `needs`, cannot run: no folder of CawCo's PATH,
+ * each in `dirs`, holds it, or, when it is `trusted`, a copy this user
+ * cannot change.
+ */
 export const systemProgramMissing = (
   program: string,
   needs: string,
-  dirs: readonly string[]
+  dirs: readonly string[],
+  trusted: boolean
 ): string =>
-  workspaceNeedsWords.programMissing(
+  (trusted
+    ? workspaceNeedsWords.trustedMissing
+    : workspaceNeedsWords.programMissing)(
     program,
     needs,
     dirs.join(", ") || "it has none"

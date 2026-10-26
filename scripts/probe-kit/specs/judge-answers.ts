@@ -37,6 +37,7 @@ import { chmod, copyFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { listedPid } from "../../../packages/core/src/signal";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import type { Kit, Spec } from "../kit";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
@@ -267,7 +268,7 @@ const run = async (kit: Kit) => {
       async (n) => {
         const stalls: string[] = [];
         const ran = await callOnce(
-          ["/usr/bin/perl", "-T", parts.hookAt],
+          [systemProgram("perl"), "-T", parts.hookAt],
           callJson(clone, n),
           env,
           judge.pid,
@@ -295,7 +296,7 @@ const run = async (kit: Kit) => {
       async (n) => {
         const stalls: string[] = [];
         const ran = await callOnce(
-          ["/usr/bin/perl", stepped, socket, parts.prefixAt],
+          [systemProgram("perl"), stepped, socket, parts.prefixAt],
           callJson(clone, n),
           env,
           judge.pid,

@@ -101,6 +101,7 @@ import { listedPid, signal } from "../../../packages/core/src/signal";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { connectWords } from "../../../packages/core/src/words/connect";
 import { sidebarWords } from "../../../packages/core/src/words/sidebar";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { MACHINE, until } from "../../scratch-fleet";
 import { Clock } from "../anim";
 import {
@@ -399,7 +400,7 @@ async function run(kit: Kit): Promise<void> {
   );
   writeFileSync(
     join(bin, "ssh"),
-    `#!/bin/sh\nexec /usr/bin/ssh -F ${join(dir, "ssh_config")} "$@"\n`
+    `#!${systemProgram("sh")}\nexec ${systemProgram("ssh")} -F ${join(dir, "ssh_config")} "$@"\n`
   );
   chmodSync(join(bin, "ssh"), 0o755);
   const authorized = join(home, ".ssh", "authorized_keys");

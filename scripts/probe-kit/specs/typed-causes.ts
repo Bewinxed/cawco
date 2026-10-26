@@ -65,14 +65,15 @@ import {
 import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import type { SshJoinJob } from "../../../packages/core/src/join";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 /** The German words a translated git says for what these legs make it say. */
-const GERMAN_GIT = String.raw`#!/bin/sh
+const GERMAN_GIT = String.raw`#!${systemProgram("sh")}
 # git, its stderr in German: a stand-in for a git with its German catalog.
 err=$(mktemp)
-/usr/bin/git "$@" 2>"$err"
+${systemProgram("git")} "$@" 2>"$err"
 code=$?
 sed -e 's/not a git repository (or any parent up to mount point \(.*\))/Kein Git-Repository (oder irgendein Elternverzeichnis bis zum Mountpoint \1)/' \
   -e 's/not a git repository (or any of the parent directories)/Kein Git-Repository (oder irgendeines der Elternverzeichnisse)/' \
@@ -539,9 +540,9 @@ const trailerless = async (kit: Kit, scratch: string): Promise<void> => {
  * catalog (OpenSSH has none) under a hub user whose known_hosts and key are
  * the probe's (OpenSSH reads `~` from the password database, never $HOME).
  */
-const GERMAN_SSH = String.raw`#!/bin/sh
+const GERMAN_SSH = String.raw`#!${systemProgram("sh")}
 err=$(mktemp)
-/usr/bin/ssh -o UserKnownHostsFile="$PROBE_KNOWN_HOSTS" -o GlobalKnownHostsFile=/dev/null -o IdentityFile="$PROBE_IDENTITY" -o IdentitiesOnly=yes "$@" 2>"$err"
+${systemProgram("ssh")} -o UserKnownHostsFile="$PROBE_KNOWN_HOSTS" -o GlobalKnownHostsFile=/dev/null -o IdentityFile="$PROBE_IDENTITY" -o IdentitiesOnly=yes "$@" 2>"$err"
 code=$?
 sed -e 's/Connection refused/Verbindung abgelehnt/' \
   -e 's/Could not resolve hostname/Hostname konnte nicht aufgelöst werden/' \
@@ -637,7 +638,7 @@ const sshJoin = async (kit: Kit, scratch: string): Promise<void> => {
   );
   const sshdLog = join(dir, "sshd.log");
   const server = Bun.spawn(
-    ["/usr/sbin/sshd", "-D", "-e", "-f", join(dir, "sshd_config")],
+    [systemProgram("sshd"), "-D", "-e", "-f", join(dir, "sshd_config")],
     { stdout: "ignore", stderr: Bun.file(sshdLog) }
   );
   /** sshd's state and its last words, for a check that fails. */
@@ -775,7 +776,7 @@ const penalties = async (
   );
   const log = join(at.dir, "sshd-held.log");
   const server = Bun.spawn(
-    ["/usr/sbin/sshd", "-D", "-e", "-f", join(at.dir, "sshd_held_config")],
+    [systemProgram("sshd"), "-D", "-e", "-f", join(at.dir, "sshd_held_config")],
     { stdout: "ignore", stderr: Bun.file(log) }
   );
   const heard = () =>
@@ -1124,9 +1125,9 @@ const serverStopped = async (kit: Kit): Promise<void> => {
  * curl, its stderr in German and without its `curl: (N)` code: a stand-in
  * for a curl whose words CawCo did not make.
  */
-const GERMAN_CURL = String.raw`#!/bin/sh
+const GERMAN_CURL = String.raw`#!${systemProgram("sh")}
 err=$(mktemp)
-/usr/bin/curl "$@" 2>"$err"
+${systemProgram("curl")} "$@" 2>"$err"
 code=$?
 sed -e 's/^curl: ([0-9]*) Failed to connect to \([^ ]*\).*/curl: Verbindung zu \1 fehlgeschlagen/' "$err" >&2
 rm -f "$err"

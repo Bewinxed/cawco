@@ -43,6 +43,7 @@ import {
   OWN_LIST_DENIED,
 } from "../../../packages/core/src/index";
 import { projectClaudeDir } from "../../../packages/core/src/paths";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { FleetSync } from "../../../packages/hub/src/fleet-sync";
 import type { HubLifetimeShape } from "../../../packages/hub/src/lifetime";
 import {
@@ -282,7 +283,7 @@ console.log(JSON.stringify({ syncError, refused, waitedMs: Math.round(performanc
     const log = join(cloning, "claude.log");
     await writeFile(
       join(bin, "claude"),
-      `#!/bin/sh
+      `#!${systemProgram("sh")}
 if [ "$1" = "--version" ]; then echo "2.1.400 (Claude Code)"; exit 0; fi
 echo "$* GIT_CONFIG_COUNT=\${GIT_CONFIG_COUNT:-}" >> ${JSON.stringify(log)}
 echo "git@github.com: Permission denied (publickey)." >&2

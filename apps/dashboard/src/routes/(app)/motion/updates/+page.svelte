@@ -75,6 +75,7 @@
     {
       pid: 1_234_567,
       command:
+        // biome-ignore lint/plugin/no-system-path: display text, a kept process's command line as ps shows it; nothing runs it.
         "/usr/bin/conmon --api-version 1 -c 4f2a91c03b1e8b1e4f2a91c03b1e8b1e -u 4f2a91c03b1e8b1e4f2a91c03b1e8b1e -r /usr/bin/crun -b /home/cawco/.local/share/containers/storage/overlay-containers/4f2a91c0/userdata",
     },
   ];

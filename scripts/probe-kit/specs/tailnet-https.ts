@@ -47,6 +47,7 @@ import { join } from "node:path";
 import { connect } from "node:tls";
 import { chromium, type Page } from "playwright-core";
 import { tailnetWords } from "../../../packages/core/src/words/tailnet";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { leasePortRange, until } from "../../scratch-fleet";
 import { capped } from "../browser-cap";
 import { launchEnv } from "../browser-leftovers";
@@ -94,7 +95,11 @@ type StubState =
  * the environment: a Bun process spawns with the environment it started
  * with, whatever this one sets later.
  */
-const stubOf = (state: string, cert: string, key: string) => `#!/bin/sh
+const stubOf = (
+  state: string,
+  cert: string,
+  key: string
+) => `#!${systemProgram("sh")}
 state=$(cat "${state}")
 self='"BackendState":"Running","TUN":true,"Self":{"DNSName":"${NAME}.","TailscaleIPs":["::1"]}'
 case "$1" in

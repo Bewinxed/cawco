@@ -16,6 +16,7 @@
  */
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { systemProgram } from "../../packages/core/src/workspace-needs";
 
 const [, , state, clone, stop] = Bun.argv;
 if (!(state && clone && stop)) {
@@ -43,7 +44,7 @@ const oneLine = (text: string): string => text.trim().replaceAll("\n", " | ");
 const counts = { calls: 0, ran: 0, refused: 0, failed: 0 };
 
 const once = async (): Promise<string> => {
-  const asked = Bun.spawn(["/usr/bin/perl", "-T", hook], {
+  const asked = Bun.spawn([systemProgram("perl"), "-T", hook], {
     stdin: new TextEncoder().encode(call),
     env: { ...process.env, CLAUDE_CODE_SHELL_PREFIX: prefix },
     stdout: "pipe",

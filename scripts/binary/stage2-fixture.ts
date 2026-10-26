@@ -14,6 +14,7 @@ import {
 } from "../../packages/core/src/release-manifest";
 import { protocolRange } from "../../packages/core/src/runtime";
 import { SESSIOND_V1 } from "../../packages/core/src/sessiond";
+import { systemProgram } from "../../packages/core/src/workspace-needs";
 
 const TARGET = "linux-x64";
 
@@ -155,14 +156,14 @@ fi
   await writeFile(
     outFile,
     mode === "migrates"
-      ? `#!/bin/sh
+      ? `#!${systemProgram("sh")}
 ${buildInfo}if [ "$1" = hub ]; then
   db="\${CAWCO_DB_PATH:-$HOME/.local/share/cawco/cawco.db}"
   printf 'migrated-and-broken' >> "$db"
 fi
 exit 1
 `
-      : `#!/bin/sh\n${buildInfo}exit 1\n`,
+      : `#!${systemProgram("sh")}\n${buildInfo}exit 1\n`,
     { mode: 0o755 }
   );
 } else {

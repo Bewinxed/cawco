@@ -70,6 +70,7 @@ import {
 } from "../../../packages/agent/src/sessiond-client";
 import { readRing } from "../../../packages/agent/src/sessiond-custody";
 import { readWithin } from "../../../packages/core/src/bounded";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
@@ -214,7 +215,7 @@ const twoFollowers = async (
 ): Promise<SessiondClient> => {
   const shared = `claude-probe-${crypto.randomUUID()}`;
   await now.spawnProc(shared, {
-    command: "/bin/sh",
+    command: systemProgram("sh"),
     args: ["-c", "echo one; echo two; read line; exit 5"],
     cwd: dir,
     env: {},
@@ -231,7 +232,7 @@ const twoFollowers = async (
     sessiondBridge(
       now,
       shared,
-      { command: "/bin/sh", args: [], env: {} },
+      { command: systemProgram("sh"), args: [], env: {} },
       { attach: { afterSeq: head, head, prelude: [] }, seqs: new Map() },
       () => undefined,
       resolve
@@ -280,7 +281,7 @@ const concurrentReads = async (
 ): Promise<SessiondClient> => {
   const procId = `claude-probe-${crypto.randomUUID()}`;
   await now.spawnProc(procId, {
-    command: "/bin/sh",
+    command: systemProgram("sh"),
     args: ["-c", "echo one; echo two; read line; exit 6"],
     cwd: dir,
     env: {},
@@ -352,7 +353,7 @@ const spec: Spec = {
       );
       const procId = `opencode-server-account-probe-${crypto.randomUUID()}`;
       await old.spawnProc(procId, {
-        command: "/bin/sleep",
+        command: systemProgram("sleep"),
         args: ["600"],
         cwd: dir,
         env: {},
@@ -406,7 +407,11 @@ const spec: Spec = {
         sessiondBridge(
           now,
           followed,
-          { command: "/bin/sh", args: ["-c", "echo said; exit 3"], env: {} },
+          {
+            command: systemProgram("sh"),
+            args: ["-c", "echo said; exit 3"],
+            env: {},
+          },
           { seqs: new Map() },
           () => undefined,
           resolve
@@ -427,7 +432,7 @@ const spec: Spec = {
       // (f) A child that died while no agent followed it.
       const unfollowed = `claude-probe-${crypto.randomUUID()}`;
       await now.spawnProc(unfollowed, {
-        command: "/bin/sh",
+        command: systemProgram("sh"),
         args: ["-c", "echo said; exit 4"],
         cwd: dir,
         env: {},
@@ -446,7 +451,7 @@ const spec: Spec = {
           sessiondBridge(
             attaching,
             unfollowed,
-            { command: "/bin/sh", args: [], env: {} },
+            { command: systemProgram("sh"), args: [], env: {} },
             { attach: { afterSeq: 0, head, prelude: [] }, seqs: new Map() },
             () => undefined,
             resolve
@@ -472,7 +477,7 @@ const spec: Spec = {
       // (g) and (h): OpenCode servers on the current keeper, each launched
       // as a harness launches one, its announcement read by `attach`.
       const sleeper = {
-        command: "/bin/sleep",
+        command: systemProgram("sleep"),
         args: ["600"],
         cwd: dir,
         env: {},

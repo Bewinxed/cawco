@@ -55,6 +55,7 @@ import {
   previewEnterUrl,
 } from "../../../packages/core/src/frames";
 import { RELAY_HEADER } from "../../../packages/core/src/preview-proxy";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { cloudflareTo, scratchCertificate } from "../cloudflare-front";
 import { type Kit, ROOT, type Spec } from "../kit";
@@ -179,7 +180,10 @@ export default { plugins: [{ name: "probe", configureServer(server) {
 } }] };\n`
   );
   const editor = join(dir, "editor.sh");
-  await Bun.write(editor, `#!/bin/sh\necho "editor $*" >> ${marks}\n`);
+  await Bun.write(
+    editor,
+    `#!${systemProgram("sh")}\necho "editor $*" >> ${marks}\n`
+  );
   await chmod(editor, 0o755);
   const proc = Bun.spawn(
     [

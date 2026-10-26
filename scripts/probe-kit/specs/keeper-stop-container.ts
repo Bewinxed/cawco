@@ -120,6 +120,7 @@ const makeRootfs = async (dir: string): Promise<void> => {
   );
   await writeFile(
     join(dir, "etc", "passwd"),
+    // biome-ignore lint/plugin/no-system-path: the container's own root shell, in its own /etc/passwd: the rootfs links bin to the host's /usr/bin, bound read-only.
     "root:x:0:0:root:/root:/bin/sh\n"
   );
   await writeFile(join(dir, "etc", "group"), "root:x:0:\n");
@@ -147,6 +148,7 @@ const compose = async (
 ): Promise<Composed | string> => {
   const script = [
     `echo "PC|inv=\${INVOCATION_ID:-none}|end"`,
+    // biome-ignore lint/plugin/no-system-path: the shell inside the container, whose /bin is a link to the host's /usr bound at /usr.
     `${podman.map(quoted).join(" ")} run -d --name ${quoted(name)} --network none -v /usr:/usr:ro --rootfs ${quoted(rootfs)} /bin/sh -c ${quoted(PID1)} >/dev/null 2>"$HOME/podman-run.err"`,
     `echo "PC|run=$?|end"`,
     "exec sleep 600",

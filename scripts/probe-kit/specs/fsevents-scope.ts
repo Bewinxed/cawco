@@ -34,6 +34,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import {
   fseventsEnv,
   fseventsInterposer,
@@ -280,10 +281,10 @@ const standInClaude = async (root: string, hook: string): Promise<string> => {
   const bin = join(root, "claude-bin");
   await mkdir(bin, { recursive: true });
   await mkdir(join(hook, ".."), { recursive: true });
-  await writeFile(hook, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  await writeFile(hook, `#!${systemProgram("sh")}\nexit 0\n`, { mode: 0o755 });
   await writeFile(
     join(bin, "claude"),
-    `#!/bin/zsh\nexec '${claude}' "\${(@0)$('${process.execPath}' '${CLAUDE_ARGS}' '${hook}' "$@")}"\n`,
+    `#!${systemProgram("zsh")}\nexec '${claude}' "\${(@0)$('${process.execPath}' '${CLAUDE_ARGS}' '${hook}' "$@")}"\n`,
     { mode: 0o755 }
   );
   return bin;

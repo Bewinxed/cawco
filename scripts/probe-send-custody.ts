@@ -74,6 +74,7 @@ import { join } from "node:path";
 import type { Socket, SocketHandler } from "bun";
 import { processStart } from "../packages/core/src/process-identity";
 import { signal } from "../packages/core/src/signal";
+import { startedPath } from "../packages/core/src/workspace-needs";
 import { ensureDeps } from "./lib/deps";
 import type { Harness } from "./scratch-fleet";
 
@@ -829,7 +830,7 @@ setInterval(() => undefined, 1 << 30);
       command: process.execPath,
       args: [script, String(port)],
       cwd: fleet.sandbox,
-      env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: fleet.home },
+      env: { PATH: startedPath(), HOME: fleet.home },
     });
     await until(
       "the stand-in answering 500",

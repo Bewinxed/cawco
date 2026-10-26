@@ -59,6 +59,7 @@ import {
 } from "../../../packages/core/src/frames";
 import { PAIRING_REQUIRED } from "../../../packages/core/src/hub-auth";
 import { spawnWords } from "../../../packages/core/src/words/spawn";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import {
   MACHINE,
   MODEL,
@@ -831,7 +832,10 @@ const run = async (kit: Kit) => {
   // OpenCode by (core tools.ts), first on the agent's PATH.
   const bin = join(fleet.home, "probe-bin");
   const fake = join(bin, "opencode2");
-  await Bun.write(fake, `#!/bin/sh\necho "${OPENCODE_REFUSES}" >&2\nexit 1\n`);
+  await Bun.write(
+    fake,
+    `#!${systemProgram("sh")}\necho "${OPENCODE_REFUSES}" >&2\nexit 1\n`
+  );
   await $`chmod +x ${fake}`.quiet();
   fleet.launch("agent", [], {
     PATH: `${bin}:${fleet.env.PATH ?? process.env.PATH ?? ""}`,
@@ -872,7 +876,7 @@ const claudeModels = async (kit: Kit) => {
   const wrapper = join(bin, "claude");
   await Bun.write(
     wrapper,
-    `#!/bin/sh\ncase "$1" in\n  auth|--version|-v) exec "${real}" "$@" ;;\nesac\necho "${CLAUDE_REFUSES}" >&2\nexit 1\n`
+    `#!${systemProgram("sh")}\ncase "$1" in\n  auth|--version|-v) exec "${real}" "$@" ;;\nesac\necho "${CLAUDE_REFUSES}" >&2\nexit 1\n`
   );
   await $`chmod +x ${wrapper}`.quiet();
   fleet.launch("agent", [], { PATH: `${bin}:${path}` });

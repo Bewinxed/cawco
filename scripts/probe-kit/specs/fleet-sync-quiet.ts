@@ -39,6 +39,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { BoundaryDecision } from "../../../packages/agent/src/boundary";
 import { readWithin } from "../../../packages/core/src/bounded";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { decisionsOf } from "../agent-records";
 import type { Kit, Spec } from "../kit";
@@ -324,7 +325,7 @@ const run = async (kit: Kit) => {
       projectId: project.id,
       name,
       event: "Notification",
-      script: "#!/bin/bash\nexit 0",
+      script: `#!${systemProgram("bash")}\nexit 0`,
     });
   const quiet = await synced(fleet, () => hook("quiet probe hook"));
   const afterQuiet = await heldOf(home, id);

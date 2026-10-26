@@ -56,6 +56,7 @@
  */
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { APPLE_GATE, declareGate, MAC_ONLINE, NO_MAC } from "../gate";
 import type { Kit, KitFleet, Spec } from "../kit";
@@ -82,7 +83,7 @@ const FILES = { C: "apps/apple/Checker.swift", D: "apps/apple/Long.swift" };
  * p7's item (its tree holds Long.swift) the first run marks the clone and
  * sleeps; the run after the pause finds the mark and ends.
  */
-const STUB = `#!/usr/bin/env bash
+const STUB = `#!${systemProgram("bash")}
 if [ -e ${FILES.D} ] && [ ! -e .p7-ran ]; then touch .p7-ran; sleep 600; fi
 echo ran-on-b
 `;

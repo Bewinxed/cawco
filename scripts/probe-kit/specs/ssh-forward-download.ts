@@ -44,6 +44,7 @@ import {
 import { join } from "node:path";
 import type { AuthContext } from "ssh2";
 import type { SshJoinJob } from "../../../packages/core/src/join";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { until } from "../../scratch-fleet";
 import { heldProxy } from "../held-proxy";
 import { type Kit, ROOT, type Spec } from "../kit";
@@ -107,7 +108,7 @@ async function run(kit: Kit): Promise<void> {
   // hub's key and known_hosts are named for it.
   writeFileSync(
     join(bin, "ssh"),
-    `#!/bin/sh\nexec /usr/bin/ssh -F ${join(dir, "ssh_config")} "$@"\n`
+    `#!${systemProgram("sh")}\nexec ${systemProgram("ssh")} -F ${join(dir, "ssh_config")} "$@"\n`
   );
   chmodSync(join(bin, "ssh"), 0o755);
   const { port, server } = await serveTarget({

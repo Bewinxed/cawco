@@ -46,6 +46,7 @@ import {
   launchdStartPath,
 } from "../../packages/core/src/launchd";
 import { isAlive, listedPid, signal } from "../../packages/core/src/signal";
+import { systemProgram } from "../../packages/core/src/workspace-needs";
 import { welcomed } from "../lib/keeper-dial";
 
 const VERSION = "0.0.0-probe.2";
@@ -334,7 +335,7 @@ try {
 <plist version="1.0"><dict>
 <key>Label</key><string>${QUIET_LABEL}</string>
 <key>ProgramArguments</key><array>${launchdProgram(QUIET_LABEL, [
-      "/usr/bin/true",
+      systemProgram("true"),
     ])
       .map(
         (argument) =>

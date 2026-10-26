@@ -84,7 +84,7 @@ import { commandLine } from "@cawco/core/process-identity";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { listedPid, signal as signalPid } from "@cawco/core/signal";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
-import { startedPath, systemProgram } from "@cawco/core/workspace-needs";
+import { systemProgram, trustedPath } from "@cawco/core/workspace-needs";
 import { removeTree } from "./remove-tree";
 
 /**
@@ -573,7 +573,7 @@ const startView = async (id: string, layer: Layer): Promise<number> => {
   }
   await makeStandIns(layer);
   await rm(viewFile(id), { force: true });
-  const env = { ...hostEnvironment(), PATH: startedPath() };
+  const env = { ...hostEnvironment(), PATH: trustedPath() };
   const holder = Bun.spawn(
     [
       bwrap,

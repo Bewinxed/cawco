@@ -131,6 +131,10 @@ import {
 import type { RelayAnswer } from "../../../packages/core/src/stream-relay";
 import { connectWords } from "../../../packages/core/src/words/connect";
 import { spawnWords } from "../../../packages/core/src/words/spawn";
+import {
+  startedPath,
+  systemProgram,
+} from "../../../packages/core/src/workspace-needs";
 import { ACCOUNT, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 import { machineBin } from "../ssh-target";
@@ -241,18 +245,18 @@ const standIn = (
   keep: string
 ): string => {
   const agent = join(root, "packages/agent/src/cli.ts");
-  return `#!/bin/sh
+  return `#!${systemProgram("sh")}
 set -u
 [ "\${1:-}" = binary-rejoin ] && [ "\${2:-}" = --hub ] || { echo "cawco (ssh-reach stand-in): only binary-rejoin --hub <url>" >&2; exit 2; }
 hub=$3
 binary="$HOME/.local/share/cawco/binary"
-version=$(/usr/bin/sed -n 's/.*"installedVersion":"\\([^"]*\\)".*/\\1/p' "$binary/installation.json")
+version=$(${systemProgram("sed")} -n 's/.*"installedVersion":"\\([^"]*\\)".*/\\1/p' "$binary/installation.json")
 printf '{"role":"agent","hubUrl":"%s","installedVersion":"%s"}\\n' "$hub" "$version" > "$binary/installation.json"
-old=$(/usr/bin/cat "$binary/agent.pid" 2>/dev/null || :)
+old=$(${systemProgram("cat")} "$binary/agent.pid" 2>/dev/null || :)
 running=0
 case "$old" in
   ''|*[!0-9]*) ;;
-  *) if [ "$old" -gt 1 ] && /usr/bin/grep -qa ${quoted(agent)} "/proc/$old/cmdline" 2>/dev/null; then running=1; fi ;;
+  *) if [ "$old" -gt 1 ] && ${systemProgram("grep")} -qa ${quoted(agent)} "/proc/$old/cmdline" 2>/dev/null; then running=1; fi ;;
 esac
 . ${quoted(agentEnv)}
 cd ${quoted(root)} || exit 1
@@ -262,15 +266,15 @@ ${quoted(process.execPath)} ${quoted(keep)} "$hub" || exit 1
 if [ "$running" = 1 ] && [ -e "$binary/keep-running" ]; then
   echo "cawco (ssh-reach stand-in): the running agent $old is left running" >&2
 else
-  [ "$running" = 1 ] && /usr/bin/kill "$old"
+  [ "$running" = 1 ] && ${systemProgram("kill")} "$old"
   config="$XDG_CONFIG_HOME"
   [ -e "$binary/keyless" ] && config="$binary/keyless-config"
-  XDG_CONFIG_HOME="$config" CAWCO_HUB_URL="ws://\${hub#http://}/ws" /usr/bin/setsid ${quoted(process.execPath)} ${quoted(agent)} </dev/null >>"$binary/agent.log" 2>&1 &
+  XDG_CONFIG_HOME="$config" CAWCO_HUB_URL="ws://\${hub#http://}/ws" ${systemProgram("setsid")} ${quoted(process.execPath)} ${quoted(agent)} </dev/null >>"$binary/agent.log" 2>&1 &
   echo $! > "$binary/agent.pid"
 fi
 ${quoted(process.execPath)} ${quoted(wait)} "$hub" && { echo "cawco-install: joined as ${BOX}"; exit 0; }
 echo "cawco (ssh-reach stand-in): the agent did not come online at $hub; its last lines:" >&2
-/usr/bin/tail -n 40 "$binary/agent.log" >&2
+${systemProgram("tail")} -n 40 "$binary/agent.log" >&2
 exit 1
 `;
 };
@@ -349,11 +353,11 @@ async function furnish(fleet: KitFleet, offered: string): Promise<Box> {
   const sshConfig = join(dir, "ssh_config");
   writeFileSync(
     sshConfig,
-    `UserKnownHostsFile ${join(dir, "known_hosts")}\nIdentityFile ${hubKey}\nIdentitiesOnly yes\nStrictHostKeyChecking accept-new\nProxyCommand /usr/bin/socat - UNIX-CONNECT:${join(dir, "ssh-%p.sock")}\n`
+    `UserKnownHostsFile ${join(dir, "known_hosts")}\nIdentityFile ${hubKey}\nIdentitiesOnly yes\nStrictHostKeyChecking accept-new\nProxyCommand ${systemProgram("socat")} - UNIX-CONNECT:${join(dir, "ssh-%p.sock")}\n`
   );
   writeFileSync(
     join(bin, "ssh"),
-    `#!/bin/sh\nexec /usr/bin/ssh -F ${sshConfig} "$@"\n`
+    `#!${systemProgram("sh")}\nexec ${systemProgram("ssh")} -F ${sshConfig} "$@"\n`
   );
   chmodSync(join(bin, "ssh"), 0o755);
 
@@ -475,18 +479,18 @@ socket.addEventListener("close", (event) => {
   const boxScript = join(dir, "box.sh");
   writeFileSync(
     boxScript,
-    `#!/bin/sh
+    `#!${systemProgram("sh")}
 D=${quoted(dir)}
-{ /usr/bin/curl -sS -m 5 http://127.0.0.1:${hubPort}/health; echo " exit $?"; } > "$D/reach-hub.txt" 2>&1
-{ /usr/bin/curl -sS -m 5 -o /dev/null https://github.com/; echo " exit $?"; } > "$D/reach-github.txt" 2>&1
+{ ${systemProgram("curl")} -sS -m 5 http://127.0.0.1:${hubPort}/health; echo " exit $?"; } > "$D/reach-hub.txt" 2>&1
+{ ${systemProgram("curl")} -sS -m 5 -o /dev/null https://github.com/; echo " exit $?"; } > "$D/reach-github.txt" 2>&1
 for port in ${OPEN} ${CLOSED} ${GATEWAY}; do
-  /usr/sbin/sshd -D -f "$D/sshd-$port.conf" -E "$D/sshd-$port.log" &
+  ${systemProgram("sshd")} -D -f "$D/sshd-$port.conf" -E "$D/sshd-$port.log" &
 done
-${quoted(process.execPath)} ${quoted(join(root, "scripts/probe-kit/ssh-target.ts"))} "$(/usr/bin/cat "$D/target.json")" > "$D/target.log" 2>&1 &
+${quoted(process.execPath)} ${quoted(join(root, "scripts/probe-kit/ssh-target.ts"))} "$(${systemProgram("cat")} "$D/target.json")" > "$D/target.log" 2>&1 &
 for port in ${OPEN} ${CLOSED} ${GATEWAY} ${PASSWORD_PORT}; do
-  /usr/bin/socat UNIX-LISTEN:"$D/ssh-$port.sock",fork,unlink-early TCP:127.0.0.1:$port &
+  ${systemProgram("socat")} UNIX-LISTEN:"$D/ssh-$port.sock",fork,unlink-early TCP:127.0.0.1:$port &
 done
-/usr/bin/socat TCP-LISTEN:${mockPort},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:"$D/${MOCK_SOCKET}" &
+${systemProgram("socat")} TCP-LISTEN:${mockPort},bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:"$D/${MOCK_SOCKET}" &
 ( . ${quoted(agentEnv)}; cd "$D" && TMPDIR=${quoted(keeperTmp)} exec ${quoted(process.execPath)} ${quoted(join(root, SESSIOND_ENTRY))} ) > "$D/sessiond.log" 2> "$D/sessiond.err" &
 echo $! > "$D/sessiond.pid"
 echo up > "$D/box-up"
@@ -497,7 +501,7 @@ wait
   const enter = async (port: number, command: string) => {
     const child = Bun.spawn(
       [
-        "/usr/bin/ssh",
+        systemProgram("ssh"),
         "-F",
         sshConfig,
         "-o",
@@ -584,7 +588,7 @@ async function standUp(
   // the box's dir, so `sweep` ends it with the rest.
   Bun.spawn(
     [
-      "/usr/bin/socat",
+      systemProgram("socat"),
       `UNIX-LISTEN:${join(box.dir, MOCK_SOCKET)},fork,unlink-early`,
       `TCP:127.0.0.1:${box.mockPort}`,
     ],
@@ -603,7 +607,7 @@ async function standUp(
       box.boxScript,
     ],
     {
-      env: { PATH: "/usr/bin:/bin:/usr/sbin:/sbin", HOME: box.home },
+      env: { PATH: startedPath(), HOME: box.home },
       stdout: Bun.file(join(box.dir, "box.log")),
       stderr: Bun.file(join(box.dir, "box.err")),
       detached: true,
@@ -1418,7 +1422,7 @@ async function foreignHeld(
   );
   const started = await box.enter(
     OPEN,
-    `/usr/sbin/sshd -f ${quoted(conf)} -E ${quoted(join(box.dir, "foreign-sshd.log"))}`
+    `${systemProgram("sshd")} -f ${quoted(conf)} -E ${quoted(join(box.dir, "foreign-sshd.log"))}`
   );
   const foreign = await until(
     "the person's sshd listening",

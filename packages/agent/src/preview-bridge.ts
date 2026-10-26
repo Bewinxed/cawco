@@ -30,7 +30,7 @@ import { join } from "node:path";
 import { socketPathProblem } from "@cawco/core/paths";
 import { DOWN_WORDS } from "@cawco/core/preview-proxy";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
-import { startedPath, systemProgram } from "@cawco/core/workspace-needs";
+import { systemProgram, trustedPath } from "@cawco/core/workspace-needs";
 import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import type { Subprocess } from "bun";
 import {
@@ -372,7 +372,7 @@ const open = async (instanceId: string, reach: Reach): Promise<string> => {
       ...relay.command,
     ],
     {
-      env: { PATH: startedPath(), ...relay.env },
+      env: { PATH: trustedPath(), ...relay.env },
       stdin: "ignore",
       stdout: "ignore",
       stderr: "pipe",

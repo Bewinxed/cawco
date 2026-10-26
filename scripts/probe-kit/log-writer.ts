@@ -8,6 +8,7 @@
  */
 import { readFile, stat } from "node:fs/promises";
 import { LAUNCHD_LOG_CAP_BYTES } from "../../packages/core/src/launchd";
+import { systemProgram } from "../../packages/core/src/workspace-needs";
 import { until } from "../scratch-fleet";
 import type { Kit } from "./kit";
 
@@ -16,7 +17,7 @@ import type { Kit } from "./kit";
  * can until past the cap (60,000 lines, 11.5 MB), then 100 a second.
  */
 export const WRITER = [
-  "/usr/bin/perl",
+  systemProgram("perl"),
   "-e",
   '$| = 1; my $pad = "x" x 180; for (my $i = 1; ; $i++) { print "line $i $pad\\n"; select(undef, undef, undef, 0.01) if $i > 60000; }',
 ];

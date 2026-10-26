@@ -80,7 +80,7 @@ import { mountedAnywhere, mountPointsOf } from "@cawco/core/mount-table";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { srtRefusedLine } from "@cawco/core/srt-refusal";
 import { writeStateFileSync } from "@cawco/core/state-file";
-import { startedPath, systemProgram } from "@cawco/core/workspace-needs";
+import { systemProgram, trustedPath } from "@cawco/core/workspace-needs";
 import type { Subprocess } from "bun";
 import {
   RELAY_SOCKET_ENV,
@@ -625,9 +625,9 @@ const inherited = [
   "CAWCO_PLACE",
 ];
 const runnerEnv = {
-  // This host's PATH as it started: the agent's own, which it was handed
-  // (boundary.ts `planFor`), where srt finds socat and bash too.
-  PATH: startedPath(),
+  // The dirs of the agent's PATH no session can change, which this host was
+  // handed (boundary.ts `planFor`), where srt finds socat and bash too.
+  PATH: trustedPath(),
   // The relay's socket, which the runner bridges into the sandbox (proxy-relay.ts `RELAY_STEP`).
   [RELAY_SOCKET_ENV]: relaySocket,
   ...Object.fromEntries(

@@ -47,6 +47,7 @@ import {
   SAFE_GIT_ENV,
   SAFE_GIT_FLAGS,
 } from "../../../packages/core/src/safe-git";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { welcomed } from "../../lib/keeper-dial";
 import { toolRecord, toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
@@ -266,7 +267,7 @@ const strayIn = async (fleet: KitFleet, clone: string): Promise<string> => {
   );
   try {
     await keeper.spawnProc(stray, {
-      command: "/bin/sh",
+      command: systemProgram("sh"),
       args: ["-c", "exec sleep 3600"],
       cwd: clone,
     });

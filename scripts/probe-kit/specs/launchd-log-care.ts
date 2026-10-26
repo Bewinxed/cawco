@@ -25,6 +25,7 @@ import {
   launchdLogsDir,
   sweepLaunchdLogs,
 } from "../../../packages/core/src/launchd";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { type Kit, OWN_HOME_ENV, type Spec } from "../kit";
 import { checkRotation, pastCap, WRITER } from "../log-writer";
 
@@ -89,7 +90,7 @@ const spec: Spec = {
     // The cap.
     const log = launchdLog("agent");
     const writer = Bun.spawn([
-      "/bin/sh",
+      systemProgram("sh"),
       "-c",
       'exec "$@" >> "$0" 2>&1',
       log,

@@ -45,6 +45,7 @@ import {
   listedPid,
   signal,
 } from "../../../packages/core/src/signal-wall";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -68,7 +69,7 @@ const standIn = async (): Promise<{
   outer: ReturnType<typeof Bun.spawn>;
   inner: number;
 }> => {
-  const outer = Bun.spawn(["/bin/sh", "-c", "sleep 600 & wait"], {
+  const outer = Bun.spawn([systemProgram("sh"), "-c", "sleep 600 & wait"], {
     stdio: ["ignore", "ignore", "ignore"],
   });
   const inner = await until(

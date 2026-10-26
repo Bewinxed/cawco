@@ -61,6 +61,10 @@ import { join, resolve } from "node:path";
 import { machinePath } from "../packages/core/src/machine-path";
 import { processStart } from "../packages/core/src/process-identity";
 import { identifiedPid, type Pid, signal } from "../packages/core/src/signal";
+import {
+  startedPath,
+  systemProgram,
+} from "../packages/core/src/workspace-needs";
 import { toolWords } from "./lib/tool-call";
 
 /** A stand-in session's child, as its pid file names it: its pid and its start, so a kill reaches it only while it is still that process. */
@@ -75,7 +79,7 @@ const [role, scratch, portText] = process.argv
   .slice(2)
   .filter((one) => one !== "--hold");
 const machine = "in-place-proof";
-const pathEnv = { PATH: process.env.PATH ?? "/usr/bin:/bin" };
+const pathEnv = { PATH: startedPath() };
 const hubRequire = createRequire(join(root, "packages/hub/package.json"));
 
 const delay = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
@@ -990,7 +994,7 @@ if (role === "sessiond") {
         spec.resume?.sessionKey ??
         `conversation-${ctx.instanceId.slice(0, 8)}-${crypto.randomUUID().slice(0, 4)}`;
       await client.spawnProc(ctx.instanceId, {
-        command: "/bin/sleep",
+        command: systemProgram("sleep"),
         args: ["600"],
         cwd: ctx.cwd,
         env: pathEnv,
@@ -1073,7 +1077,7 @@ if (role === "sessiond") {
   const launch = (name: string) => {
     const child = Bun.spawn(
       [
-        "/usr/bin/env",
+        systemProgram("env"),
         `HOME=${join(dir, "home")}`,
         `XDG_CONFIG_HOME=${join(dir, "home", ".config")}`,
         `XDG_DATA_HOME=${join(dir, "home", ".local", "share")}`,

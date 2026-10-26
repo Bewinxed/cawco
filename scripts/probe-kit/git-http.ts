@@ -18,6 +18,7 @@
  */
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { startedPath } from "../../packages/core/src/workspace-needs";
 
 /** A CGI answer's head and body, split at its blank line. */
 const CGI_HEAD_END = /\r?\n\r?\n/u;
@@ -202,7 +203,7 @@ export const serveGitHttp = (
       }
       const child = Bun.spawn(["git", "http-backend"], {
         env: {
-          PATH: process.env.PATH ?? "/usr/bin:/bin",
+          PATH: startedPath(),
           GIT_PROJECT_ROOT: root,
           GIT_HTTP_EXPORT_ALL: "1",
           PATH_INFO: url.pathname,

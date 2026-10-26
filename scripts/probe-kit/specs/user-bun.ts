@@ -64,6 +64,7 @@ import {
 import { delimiter, dirname, join } from "node:path";
 import { sheetWords } from "../../../packages/core/src/words/sheet";
 import { workWords } from "../../../packages/core/src/words/work";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import {
   type Harness,
   MODEL,
@@ -311,7 +312,7 @@ const run = async (kit: Kit) => {
   await writeFile(
     standIn,
     [
-      "#!/bin/sh",
+      `#!${systemProgram("sh")}`,
       `printf '%s\\t%s\\n' "$PWD" "$*" >> ${quote(log)}`,
       `[ "$1" = --revision ] && { echo ${quote(STAND_IN_REVISION)}; exit 0; }`,
       `exec ${quote(real)} "$@"`,

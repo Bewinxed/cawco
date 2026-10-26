@@ -87,6 +87,7 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { serveGitHttp } from "../git-http";
 import type { Spec } from "../kit";
 import { workspaceGhLeg } from "../workspace-gh";
@@ -721,7 +722,7 @@ const spec: Spec = {
       const silentHelper = join(scratch, "silent-helper");
       await writeFile(
         silentHelper,
-        `#!/bin/sh\nexec perl -e 'sleep 86400' ${marker}\n`,
+        `#!${systemProgram("sh")}\nexec perl -e 'sleep 86400' ${marker}\n`,
         { mode: 0o755 }
       );
       const gitconfig = join(process.env.HOME, ".gitconfig");

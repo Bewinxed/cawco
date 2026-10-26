@@ -113,6 +113,7 @@ import {
 } from "../../../packages/core/src/upstream-guard";
 import { UPSTREAM_POST_TOOL } from "../../../packages/core/src/upstream-post";
 import { commonWords } from "../../../packages/core/src/words/common";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { serveGitHttp } from "../git-http";
 import { type Kit, open, type Spec, settle } from "../kit";
@@ -122,9 +123,9 @@ const OWN = "probe-owner/probe-repo";
 const NAME = "Upstream guard";
 
 /** The real gh on this host, found before the fake goes first on PATH: what posts through the GitHub door. */
-const REAL_GH = Bun.which("gh") ?? "/usr/bin/gh";
+const REAL_GH = Bun.which("gh") ?? "gh";
 /** The real curl, by its path: what step Z sends by hand. */
-const REAL_CURL = Bun.which("curl") ?? "/usr/bin/curl";
+const REAL_CURL = systemProgram("curl");
 /** The GitHub door's refusal of `what` writing to `repo` (github-door.ts `judged`, upstream-guard.ts `writeRefusal`). */
 const DOOR_REFUSED = (what: string, repo: string) =>
   `cawco: \`${what}\` did not run: it writes to ${repo}`;
@@ -289,7 +290,7 @@ const said = (from: StepId, id: StepId): string => {
   return start >= 0 && end > start ? text.slice(start, end) : "";
 };
 
-const FAKE_GH = `#!/bin/sh
+const FAKE_GH = `#!${systemProgram("sh")}
 # The probe's stand-in for gh: the host's token for github.com (none for any
 # other --hostname, as the real gh answers), or the call recorded with the
 # token it ran with in the workspace's TMPDIR, where the probe reads it. On

@@ -27,6 +27,7 @@
  */
 import { SessiondClient } from "../../../packages/agent/src/sessiond-client";
 import { readWithin } from "../../../packages/core/src/bounded";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -83,7 +84,7 @@ const childReads = async (
       });
     });
     await client.spawnProc(procId, {
-      command: "/bin/sh",
+      command: systemProgram("sh"),
       args: ["-c", echo(inherit)],
       inherit,
     });

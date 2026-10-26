@@ -103,6 +103,7 @@ const HOME_WRITE = `const fs = require("node:fs"); const path = require("node:pa
  * under Node), one imports `bun:sqlite` and says a query's answer, or the
  * import's error code. The markers are spelled apart in the files too.
  */
+// biome-ignore lint/plugin/no-system-path: the npm bin convention this checks, `#!/usr/bin/env node`, as every published package writes it.
 const BUNX = `mkdir -p "$TMPDIR/bunx-probe/node_modules/.bin" && cd "$TMPDIR/bunx-probe" && echo '{"name":"bunx-probe","private":true}' > package.json
 cat > node_modules/.bin/probe-runtime <<'BIN'
 #!/usr/bin/env node
@@ -491,7 +492,7 @@ const run = async (kit: Kit) => {
   checkBackgroundRead(kit, said, home, started.workspaceId);
   const runtime = after(said, "BUNX-RUNTIME:");
   kit.check(
-    "bunx --bun runs a #!/usr/bin/env node bin under Bun, which reads process.versions.bun",
+    "bunx --bun runs an env node bin under Bun, which reads process.versions.bun",
     runtime !== undefined && BUN_VERSION.test(runtime),
     `process.versions.bun: ${runtime ?? "unread"}`
   );

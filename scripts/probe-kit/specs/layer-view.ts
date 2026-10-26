@@ -47,6 +47,7 @@ import {
   removeLayer,
   viewArgv,
 } from "../../../packages/agent/src/layer";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import type { Kit, Spec } from "../kit";
 
 const linux = process.platform === "linux";
@@ -59,11 +60,11 @@ const inCopy = async (
 ): Promise<{ code: number; out: string }> => {
   const argv = linux
     ? viewArgv(await ensureView(id, layer), layer.path, [
-        "/bin/sh",
+        systemProgram("sh"),
         "-c",
         command,
       ])
-    : ["/bin/sh", "-c", command];
+    : [systemProgram("sh"), "-c", command];
   const ran = Bun.spawnSync(argv, {
     cwd: linux ? "/" : layer.path,
     stdout: "pipe",
@@ -225,7 +226,7 @@ const run = async (kit: Kit) => {
   await rm(tree, { recursive: true, force: true });
   await mkdir(tree, { recursive: true });
   const made = Bun.spawnSync([
-    "/bin/sh",
+    systemProgram("sh"),
     "-c",
     'for d in $(seq 1 100); do mkdir -p "$1/$d" && (cd "$1/$d" && seq 1 1000 | xargs touch) || exit 1; done',
     "make-tree",
@@ -238,7 +239,7 @@ const run = async (kit: Kit) => {
   }
   const nativeAt = performance.now();
   const native = Bun.spawnSync([
-    "/bin/sh",
+    systemProgram("sh"),
     "-c",
     `find ${tree} -type f | wc -l`,
   ]);

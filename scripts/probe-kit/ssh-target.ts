@@ -37,6 +37,10 @@ import {
   utils,
 } from "ssh2";
 import { signalGroup, spawnedPid } from "../../packages/core/src/signal";
+import {
+  startedPath,
+  systemProgram,
+} from "../../packages/core/src/workspace-needs";
 
 /** What a held install step on the machine runs: a `sleep` no other process here runs. */
 export const HELD = ["sleep", "3017"];
@@ -80,19 +84,14 @@ export const machineBin = (dir: string): string => {
     // A clone and push through the hub's remote (ssh-reach (i)).
     "git",
   ]) {
-    const at = [
-      `/usr/bin/${tool}`,
-      `/bin/${tool}`,
-      `/usr/sbin/${tool}`,
-      `/sbin/${tool}`,
-    ].find((path) => existsSync(path));
+    const at = Bun.which(tool, { PATH: startedPath() });
     if (at) {
       symlinkSync(at, join(dir, tool));
     }
   }
   writeFileSync(
     join(dir, "uname"),
-    `#!/bin/sh\n[ -e "$HOME/.hold" ] && exec ${HELD.join(" ")}\nexec /usr/bin/uname "$@"\n`
+    `#!${systemProgram("sh")}\n[ -e "$HOME/.hold" ] && exec ${HELD.join(" ")}\nexec ${systemProgram("uname")} "$@"\n`
   );
   chmodSync(join(dir, "uname"), 0o755);
   return dir;

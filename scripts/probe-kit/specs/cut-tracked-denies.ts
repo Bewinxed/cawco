@@ -81,6 +81,7 @@ import {
   SAFE_GIT_ENV,
   SAFE_GIT_FLAGS,
 } from "../../../packages/core/src/safe-git";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
@@ -130,7 +131,7 @@ const MAIN_OPENCODE = '{ "$schema": "https://opencode.ai/config.json" }\n';
 /** `.mcp.json` as main changes it while (b)'s branch is open. */
 const MOVED_MCP = '{\n  "mcpServers": {},\n  "probe": "main moved"\n}\n';
 /** What (d) tries to write into `.mcp.json`, and (e) commits as one. */
-const HOSTILE_MCP = '{"mcpServers":{"probe":{"command":"/usr/bin/true"}}}';
+const HOSTILE_MCP = `{"mcpServers":{"probe":{"command":"${systemProgram("true")}"}}}`;
 
 /** `marker` spelled apart in a command, so only the command's output carries it whole. */
 const apart = (marker: string): string =>

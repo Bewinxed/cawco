@@ -73,6 +73,7 @@ import { readWithin } from "../../../packages/core/src/bounded";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
 import { projectClaudeDir } from "../../../packages/core/src/paths";
 import { isAlive, listedPid } from "../../../packages/core/src/signal";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 import { BEFORE_PREFIX, legacyClaudeOptions } from "../legacy-claude";
@@ -312,7 +313,7 @@ const run = async (kit: Kit) => {
   await mkdir(first.claudeTmp, { recursive: true, mode: 0o700 });
   await Bun.$`rm -f ${first.fifo} && mkfifo ${first.fifo}`.quiet();
   const runner = Bun.spawn(
-    ["/bin/bash", "-c", first.runner, "cawco", first.fifo],
+    [systemProgram("bash"), "-c", first.runner, "cawco", first.fifo],
     { stdout: "pipe", stderr: "inherit" }
   );
   const reader = runner.stdout.getReader();

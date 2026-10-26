@@ -69,6 +69,7 @@ import { SessiondClient } from "../../../packages/agent/src/sessiond-client";
 import { movedLine, restoredWords } from "../../../packages/core/src/injected";
 import { commandLines } from "../../../packages/core/src/process-identity";
 import { workWords } from "../../../packages/core/src/words/work";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { welcomed } from "../../lib/keeper-dial";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
@@ -535,11 +536,11 @@ const processesLeg = async (kit: Kit, scene: Scene): Promise<void> => {
   );
   try {
     const spawn = copyArgv(scene.fleet, wd, [
-      "/bin/sh",
+      systemProgram("sh"),
       "-c",
       `exec sleep ${HOST_SLEEP}`,
     ]);
-    const [command = "/bin/sh", ...args] = spawn.argv;
+    const [command = systemProgram("sh"), ...args] = spawn.argv;
     await keeper.spawnProc(crypto.randomUUID(), {
       command,
       args,
@@ -684,7 +685,7 @@ const viewOwnerLeg = async (
   // Its starter, the shell entered into the view, ends at once: the sleep is
   // an orphan in the view.
   await inCopy(scene.fleet, wo, [
-    "/bin/sh",
+    systemProgram("sh"),
     "-c",
     `nohup sleep ${VIEW_SLEEP} > /dev/null 2>&1 &`,
   ]);

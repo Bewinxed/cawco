@@ -49,6 +49,10 @@ import { basename, dirname, join } from "node:path";
 import type { Page } from "playwright-core";
 import { keychainLocked } from "../../../packages/agent/src/login-keychain";
 import { machineWords } from "../../../packages/core/src/words/machine";
+import {
+  startedPath,
+  systemProgram,
+} from "../../../packages/core/src/workspace-needs";
 import { ACCOUNT, MACHINE, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 import { open, settle } from "../kit";
@@ -161,9 +165,9 @@ async function inScratch(
 
 /** `security <args>` with HOME set to `home`: its exit and words. */
 async function securityAs(home: string, args: string[]): Promise<Said> {
-  const child = Bun.spawn(["/usr/bin/security", ...args], {
+  const child = Bun.spawn([systemProgram("security"), ...args], {
     env: {
-      PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
+      PATH: startedPath(),
       HOME: home,
       USER: process.env.USER ?? userInfo().username,
     },
@@ -231,7 +235,7 @@ async function ownerSecurity(args: readonly string[]): Promise<Said> {
       "Refusing: under the real HOME only the search list's read and its restore to the captured paths may run."
     );
   }
-  const child = Bun.spawn(["/usr/bin/security", ...args], {
+  const child = Bun.spawn([systemProgram("security"), ...args], {
     stdout: "pipe",
     stderr: "pipe",
   });

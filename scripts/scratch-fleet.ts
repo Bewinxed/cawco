@@ -59,6 +59,7 @@ import {
   signal as signalPid,
   spawnedPid,
 } from "../packages/core/src/signal";
+import { startedPath } from "../packages/core/src/workspace-needs";
 import { installDeps } from "./lib/deps";
 import { requireDiskRoom } from "./lib/disk-room";
 import { holdAwake } from "./lib/hold-awake";
@@ -2174,7 +2175,7 @@ async function standUp(
     return dir;
   };
   const env: Record<string, string> = {
-    PATH: process.env.PATH ?? "/usr/bin:/bin",
+    PATH: startedPath(),
     HOME: home,
     // What a spec runs itself with this environment; each service's own replaces it.
     TMPDIR: tmpFor("probe"),

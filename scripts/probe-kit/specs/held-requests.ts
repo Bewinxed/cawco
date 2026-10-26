@@ -34,6 +34,7 @@
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { signal, spawnedPid } from "../../../packages/core/src/signal";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { delay, MACHINE, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 import { relay } from "../relay";
@@ -111,7 +112,7 @@ const holdingGit = async (
   const script = join(dir, "git");
   await writeFile(
     script,
-    `#!/bin/sh
+    `#!${systemProgram("sh")}
 case " $* " in
   *" status "*)
     if [ -e '${hold}' ] && [ "$(pwd -P)" = "$(cd '${repo}' && pwd -P)" ]; then

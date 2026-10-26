@@ -23,6 +23,7 @@
  * (~/build/cawco-apple.noindex/<build>/apps/apple), so a probe compiles first.
  */
 import { basename, join, resolve } from "node:path";
+import { systemProgram } from "../../packages/core/src/workspace-needs";
 
 const root = resolve(import.meta.dir, "..", "..");
 const home = process.env.HOME ?? "";
@@ -83,7 +84,7 @@ async function resolveChoice(
   }
   const child = Bun.spawn(
     onMac(ssh, [
-      "/usr/bin/python3",
+      systemProgram("python3"),
       "-I",
       "-c",
       `

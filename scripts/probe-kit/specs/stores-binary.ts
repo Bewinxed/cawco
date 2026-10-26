@@ -21,6 +21,7 @@
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { startedPath } from "../../../packages/core/src/workspace-needs";
 import { FILES } from "../../binary/proof-stores";
 import { compileBinary, prepareAssets, TARGETS } from "../../build-binary";
 import { type Kit, ROOT, type Spec } from "../kit";
@@ -55,7 +56,7 @@ export default {
     await mkdir(home, { recursive: true });
     const child = Bun.spawn([binary, "proof-stores"], {
       cwd: home,
-      env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: home },
+      env: { PATH: startedPath(), HOME: home },
       stdout: "pipe",
       stderr: "pipe",
     });

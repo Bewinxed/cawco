@@ -36,6 +36,7 @@
 import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type Bounded, readWithin } from "../../../packages/core/src/bounded";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { unreportedHarnessRefusal } from "../../../packages/hub/src/placement";
 import { ACCOUNT, type Fleet, MACHINE } from "../../scratch-fleet";
 import type { Spec } from "../kit";
@@ -61,7 +62,7 @@ const standIn = (
   real: string,
   log: string,
   flag: string
-): string => `#!/bin/bash
+): string => `#!${systemProgram("bash")}
 stamp() { echo "\${EPOCHREALTIME/./} $1 $$ $ARGS" >> "${log}"; }
 ARGS="$*"
 case " $* " in

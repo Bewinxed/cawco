@@ -20,6 +20,10 @@ import { mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { SessiondClient } from "../../packages/agent/src/sessiond-client";
 import type { KeeperName } from "../../packages/core/src/keepers";
+import {
+  startedPath,
+  systemProgram,
+} from "../../packages/core/src/workspace-needs";
 import { until } from "../scratch-fleet";
 import { type Kit, ROOT } from "./kit";
 
@@ -143,7 +147,7 @@ export const startKeeperUnit = async (
     "-p",
     `WorkingDirectory=${kit.out}`,
     `--setenv=HOME=${keeper.home}`,
-    `--setenv=PATH=${process.env.PATH ?? "/usr/bin:/bin"}`,
+    `--setenv=PATH=${startedPath()}`,
     `--setenv=CAWCO_SESSIOND_ENDPOINT=${keeper.socket}`,
     "--",
     process.execPath,
@@ -219,7 +223,7 @@ export const startChild = async (
     });
   });
   await client.spawnProc(procId, {
-    command: "/bin/sh",
+    command: systemProgram("sh"),
     args: ["-c", script],
     cwd: kit.out,
     env,

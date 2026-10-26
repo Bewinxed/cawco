@@ -3,12 +3,12 @@ language js
 // A system program is found by the OS's own lookup, on the agent's PATH as
 // it started (packages/core/src/workspace-needs.ts `systemProgram`), never at
 // a path of our own: where an OS keeps a program is the OS's to say. A
-// string or template in CawCo's packages that names /bin, /sbin, /usr/bin or
+// string or template in CawCo's packages, scripts or dashboard that names /bin, /sbin, /usr/bin or
 // /usr/sbin, as a program's path or a PATH entry, is refused outside that
 // module. A path the OS itself guarantees is kept only with a comment saying
 // why: `// biome-ignore lint/plugin/no-system-path: <what guarantees it>`.
 or { JsStringLiteralExpression(), JsTemplateExpression(), JsxString() } as $literal where {
-  $filename <: includes "packages/",
+  $filename <: or { includes "packages/", includes "scripts/", includes "apps/dashboard/" },
   $filename <: not includes "packages/core/src/workspace-needs.ts",
   $literal <: r"(?s).*(?:^|[^\w.~}$/-])/(?:usr/)?s?bin(?:/|:|[\"'`]|$).*",
   register_diagnostic(span=$literal, message="A system program is found by the OS's own lookup (systemProgram from @cawco/core/workspace-needs, declared there with what needs it), never by a path under /bin, /sbin, /usr/bin or /usr/sbin. A path the OS itself guarantees carries a biome-ignore lint/plugin/no-system-path comment saying what guarantees it.")

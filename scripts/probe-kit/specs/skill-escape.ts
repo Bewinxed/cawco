@@ -69,6 +69,7 @@
 import { existsSync, readlinkSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import {
   MACHINE,
   MODEL,
@@ -158,7 +159,7 @@ const insideMarker = (paths: Paths, kind: "inject" | "hook"): string =>
  */
 const markSh = (paths: Paths): string =>
   [
-    "#!/bin/sh",
+    `#!${systemProgram("sh")}`,
     'kind="$1"',
     'info="$kind pid=$$ ppid=$PPID ns=$(readlink /proc/self/ns/pid 2>/dev/null) ws=$CAWCO_WORKSPACE cwd=$(pwd)"',
     `printf '%s\\n' "$info" > "${paths.clone}/cawco-skill-$kind-fired-${RUN}" 2>/dev/null || true`,

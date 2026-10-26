@@ -46,6 +46,7 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { listedPid, signal } from "../../../packages/core/src/signal";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import type { Kit, Spec } from "../kit";
 
 const ROOT = resolve(import.meta.dir, "..", "..", "..");
@@ -54,7 +55,7 @@ const POINT_MS = 240_000;
 /** How long a stopped release has to end: its groups' grace (release.ts STOP_GRACE_MS) and its clearing. */
 const STOP_MS = 300_000;
 
-const GH = `#!/bin/bash
+const GH = `#!${systemProgram("bash")}
 # gh stand-in: a release is $GH_STATE/releases/<tag>, holding a 'draft' file while it is one.
 state=\${GH_STATE:?}
 echo "$*" >> "$state/calls.log"
@@ -76,7 +77,7 @@ case $2 in
   *) echo "gh stand-in: release $2" >&2; exit 1 ;;
 esac
 `;
-const PODMAN = `#!/bin/bash
+const PODMAN = `#!${systemProgram("bash")}
 # podman stand-in: 'unshare' runs its command as this user; nothing else is reached before a stop.
 [[ \${1:-} == unshare ]] && { shift; exec "$@"; }
 echo "podman stand-in: $*" >&2
@@ -293,7 +294,7 @@ const runLeg = async (
   await mkdir(tools, { recursive: true });
   await writeFile(
     join(tools, `rcodesign-${RCODESIGN_VERSION}`),
-    `#!/bin/sh\necho "apple-codesign ${RCODESIGN_VERSION}"\n`
+    `#!${systemProgram("sh")}\necho "apple-codesign ${RCODESIGN_VERSION}"\n`
   );
   await chmod(join(tools, `rcodesign-${RCODESIGN_VERSION}`), 0o755);
   const junk = Buffer.from("not a key").toString("base64");

@@ -40,6 +40,7 @@ import {
 } from "../../../packages/core/src/words/workspace-needs";
 import {
   packageInstall,
+  systemProgram,
   type ToolPlaces,
   workspaceNeeds,
 } from "../../../packages/core/src/workspace-needs";
@@ -57,7 +58,7 @@ const standIns = async (dir: string, commands: string[]): Promise<string> => {
   for (const command of commands) {
     const path = join(dir, command);
     // biome-ignore lint/performance/noAwaitInLoops: a handful of files, in order
-    await writeFile(path, "#!/bin/sh\nexit 0\n");
+    await writeFile(path, `#!${systemProgram("sh")}\nexit 0\n`);
     await chmod(path, 0o755);
   }
   return dir;

@@ -46,6 +46,7 @@ import {
   recordInstall,
   versionDirectory,
 } from "../../../packages/core/src/binary-installation";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { createBinaryUpdates } from "../../../packages/hub/src/binary-updates";
 import type { Kit, Spec } from "../kit";
 
@@ -147,7 +148,7 @@ const spec: Spec = {
         // executable and the command line).
         await Bun.write(
           join(versionDirectory(version), "cawco"),
-          '#!/bin/sh\nsleep "$1"\ntrue\n'
+          `#!${systemProgram("sh")}\nsleep "$1"\ntrue\n`
         );
         await chmod(join(versionDirectory(version), "cawco"), 0o755);
         const link = `${currentDirectory()}.next`;

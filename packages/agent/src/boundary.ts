@@ -186,8 +186,8 @@ import {
   PROTECTED_UNDER,
 } from "@cawco/core/workspace-judge";
 import {
-  startedPath,
   systemProgram,
+  trustedPath,
   workspaceNeeds,
 } from "@cawco/core/workspace-needs";
 import {
@@ -842,7 +842,7 @@ const judgeFor = async (
         cwd: stateDir(id),
         env: {
           ...BUN_SCRIPT_ENV,
-          PATH: startedPath(),
+          PATH: trustedPath(),
         },
         workspace: true,
       });
@@ -3974,7 +3974,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
         // The hub's preview origins, which the relay dials from here
         // (proxy-relay.ts): a file of the agent's that no sandbox reads.
         [HUB_PREVIEWS_ENV]: hubPreviewsPath(),
-        PATH: startedPath(),
+        PATH: trustedPath(),
         // A place is a person's own folder: srt resolves its own
         // mandatory names against the host's working directory and makes a
         // mount point for each one absent, so the host starts srt in the
@@ -7321,8 +7321,9 @@ take() {
 /**
  * The executor: hands a command, the caller's directory and environment to
  * the workspace's runner over its FIFO, streams the output back and exits
- * with the command's status. It finds its own tools on the agent's PATH as
- * it started (core workspace-needs.ts `startedPath`), written into it;
+ * with the command's status. It finds its own tools on the dirs of the
+ * agent's PATH no session can change (core workspace-needs.ts
+ * `trustedPath`), written into it;
  * the command runs with its caller's PATH, behind the hub's git helper and,
  * on macOS, the toolchain shims.
  */
@@ -7416,7 +7417,7 @@ const execScript = (
 # (--session) shows the workspace's notice first, and FILE gets the directory
 # it ended in; --claude is a claude session's shell prefix's.
 caller_path=$PATH
-PATH=${shellQuote(startedPath())}
+PATH=${shellQuote(trustedPath())}
 export PATH
 # This command is this generation's from here until it exits: the agent keeps
 # the generation running while the mark names a live executor.

@@ -8,6 +8,7 @@
  */
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { systemProgram } from "../../packages/core/src/workspace-needs";
 import type { Kit } from "./kit";
 
 export interface StoodExecutor {
@@ -60,7 +61,7 @@ export const standExecutor = async (
   await mkdir(first.scratch, { recursive: true });
   await Bun.$`rm -f ${first.fifo} && mkfifo ${first.fifo}`.quiet();
   const runner = Bun.spawn(
-    ["/bin/bash", "-c", first.runner, "cawco", first.fifo],
+    [systemProgram("bash"), "-c", first.runner, "cawco", first.fifo],
     { stdout: "pipe", stderr: "inherit" }
   );
   // Ready once it says so.

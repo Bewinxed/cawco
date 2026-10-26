@@ -26,6 +26,7 @@ import {
 } from "../../packages/agent/src/helper-jobs";
 import { binaryRoot } from "../../packages/core/src/binary-installation";
 import { launchdJob, launchdStartPath } from "../../packages/core/src/launchd";
+import { systemProgram } from "../../packages/core/src/workspace-needs";
 
 if (process.platform !== "darwin") {
   throw new Error(
@@ -80,7 +81,7 @@ const pastStartWindow = (at: number): Promise<void> =>
  * runs `runs` seconds more and marks that it ended.
  */
 const standIn = (name: string, quiet: number, runs: number): string[] => [
-  "/bin/sh",
+  systemProgram("sh"),
   "-c",
   `sleep ${quiet}; touch "$0/${name}.took-over"; sleep ${runs}; touch "$0/${name}.ended"`,
   scratch,

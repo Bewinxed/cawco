@@ -67,6 +67,7 @@ import {
 } from "../../../packages/core/src/process-identity";
 import { listedPid, signal } from "../../../packages/core/src/signal";
 import { connectWords } from "../../../packages/core/src/words/connect";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
 import {
@@ -242,7 +243,14 @@ async function realSshd(
       `Port ${port}\nListenAddress 127.0.0.1\nHostKey ${join(dir, "sshd_host_key")}\nPidFile ${pidFile}\nAuthorizedKeysFile ${machine.authorized}\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nUsePAM no\nStrictModes no\nSetEnv HOME=${machine.home} PATH=${machine.bin} ${marker}\n${extra}`
     );
     const proc = Bun.spawn(
-      ["/usr/sbin/sshd", "-D", "-f", config, "-E", join(dir, `${name}.log`)],
+      [
+        systemProgram("sshd"),
+        "-D",
+        "-f",
+        config,
+        "-E",
+        join(dir, `${name}.log`),
+      ],
       { stdout: "ignore", stderr: "ignore" }
     );
     const listening = until(
@@ -425,7 +433,7 @@ async function run(kit: Kit): Promise<void> {
   );
   writeFileSync(
     join(bin, "ssh"),
-    `#!/bin/sh\nexec /usr/bin/ssh -F ${join(dir, "ssh_config")} "$@"\n`
+    `#!${systemProgram("sh")}\nexec ${systemProgram("ssh")} -F ${join(dir, "ssh_config")} "$@"\n`
   );
   chmodSync(join(bin, "ssh"), 0o755);
   const path = machineBin(join(dir, "machine-bin"));
@@ -606,7 +614,7 @@ async function run(kit: Kit): Promise<void> {
 
     // (g) Stopped while it signs in: the machine never answers the password.
     const held = await begin(SILENCED);
-    const sshArgv = ["/usr/bin/ssh", `${USER}@127.0.0.1`, String(port)];
+    const sshArgv = [systemProgram("ssh"), `${USER}@127.0.0.1`, String(port)];
     const pid = await until(
       "the add's ssh signing in",
       async () =>

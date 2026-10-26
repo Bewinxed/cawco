@@ -30,6 +30,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { GATE_PATH } from "../packages/agent/src/mcp-gate";
 import { readWithin } from "../packages/core/src/bounded";
+import { systemProgram } from "../packages/core/src/workspace-needs";
 
 const ROOT = join(import.meta.dir, "..");
 
@@ -732,9 +733,9 @@ const workspaceAt = async (id: string, dir: string) => {
   await Bun.write(
     exec,
     [
-      "#!/bin/sh",
+      `#!${systemProgram("sh")}`,
       'if [ "$1" = --session ]; then shift; fi',
-      `CAWCO_PROBE_BOUNDARY=${id} exec /bin/sh -c "$1"`,
+      `CAWCO_PROBE_BOUNDARY=${id} exec ${systemProgram("sh")} -c "$1"`,
       "",
     ].join("\n")
   );

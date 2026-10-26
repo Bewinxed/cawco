@@ -472,6 +472,11 @@
     failed: "Not applied",
     removed: "Taken off",
   };
+
+  /** The script field's placeholder, a hook script's first lines as core hooks.ts's templates write them. */
+  const SCRIPT_PLACEHOLDER =
+    // biome-ignore lint/plugin/no-system-path: display text; env is at /usr/bin/env on every OS, as core hooks.ts's templates say.
+    "#!/usr/bin/env bash\nset -euo pipefail\n\n# The event JSON arrives on stdin.";
 </script>
 
 <EditorFrame
@@ -641,7 +646,7 @@
               onblur={() => {
                 touched.script = true;
               }}
-              placeholder={"#!/usr/bin/env bash\nset -euo pipefail\n\n# The event JSON arrives on stdin."}
+              placeholder={SCRIPT_PLACEHOLDER}
               rows={10}
               spellcheck="false"
               bind:value={draft.script}

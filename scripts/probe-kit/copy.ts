@@ -23,6 +23,7 @@ import { existsSync, lstatSync, readFileSync, readlinkSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
 import { viewArgv } from "../../packages/agent/src/layer";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "../../packages/core/src/safe-git";
+import { systemProgram } from "../../packages/core/src/workspace-needs";
 
 /** A workspace as the probes read its row. */
 export interface CopyRef {
@@ -223,7 +224,7 @@ export const realpathsInCopy = async (
     return [];
   }
   const ran = await inCopy(fleet, ws, [
-    "/bin/sh",
+    systemProgram("sh"),
     "-c",
     'for p; do readlink -f -- "$p" || echo; done',
     "sh",

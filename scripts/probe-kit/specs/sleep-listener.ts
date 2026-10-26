@@ -28,6 +28,7 @@ import {
   processLineage,
 } from "../../../packages/core/src/process-identity";
 import { listedPid, signal } from "../../../packages/core/src/signal";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import type { Kit, Spec } from "../kit";
 
 const CHILD = join(import.meta.dir, "..", "sleep-listener-child.ts");
@@ -190,7 +191,7 @@ const spec: Spec = {
         one.args.split(" ")[0]?.endsWith("/gdbus")
       );
       const shell = first.under.find((one) =>
-        one.args.startsWith("/bin/sh -c")
+        one.args.startsWith(`${systemProgram("sh")} -c`)
       );
       check(
         "the listener stands under the agent: gdbus, its tether shell and the tether's cat",
@@ -218,7 +219,7 @@ const spec: Spec = {
       // 2b: the tether shell signalled ends gdbus with it.
       const signalled = await start();
       const tetherShell = signalled.under.find((one) =>
-        one.args.startsWith("/bin/sh -c")
+        one.args.startsWith(`${systemProgram("sh")} -c`)
       );
       if (
         check(

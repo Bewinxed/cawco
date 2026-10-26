@@ -29,6 +29,7 @@
  */
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { APPLE_GATE, declareGate, MAC_ONLINE, NO_MAC } from "../gate";
 import { callCount, callsInOrder, listedAs, say } from "../journeys/mock";
@@ -49,7 +50,7 @@ const WHILE_WAITING = "PROBE-WHILE-WAITING";
 /** The gate's iOS build step, as its lines name it (probe-kit gate.ts). */
 const GATE_CHECK = "iOS build compiles";
 /** The stub the gate runs on the Mac; the real one needs Xcode. */
-const STUB = `#!/usr/bin/env bash
+const STUB = `#!${systemProgram("bash")}
 echo "STUB-MAC-BUILD $*"
 `;
 const TURNS = 3;
