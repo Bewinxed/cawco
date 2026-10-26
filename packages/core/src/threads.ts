@@ -267,7 +267,13 @@ export type ThreadEvent =
       command?: string;
       kind: "caw";
       what:
-        "could-not-start" | "ran" | "edited" | "refused" | "denied" | "guard";
+        | "could-not-start"
+        | "ran"
+        | "edited"
+        | "refused"
+        | "denied"
+        | "cut"
+        | "guard";
     }
   | { kind: "view"; name: string }
   | { kind: "agents"; sha: string }

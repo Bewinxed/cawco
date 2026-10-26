@@ -1817,6 +1817,11 @@ const verdictOf = (row: LeadCallRow): GateVerdict => {
       return { kind: "deny", message: row.why ?? "Refused." };
     case "denied":
       return { kind: "deny", message: "The person denied this call." };
+    case "cut":
+      return {
+        kind: "deny",
+        message: `This call was cut: ${row.why ?? "its ask left unanswered"}.`,
+      };
     case "ran":
       return { kind: "allow" };
     case "asked":
@@ -1855,6 +1860,12 @@ const noteFor = (row: LeadCallRow): ThreadNote | undefined => {
       return {
         title: `Caw · you denied \`${what}\``,
         event: { kind: "caw", what: "denied", command: what },
+      };
+    case "cut":
+      return {
+        title: `Caw · cut \`${what}\``,
+        body: row.why ?? "",
+        event: { kind: "caw", what: "cut", command: what },
       };
     case "ran":
       return {
@@ -1982,14 +1993,20 @@ export const createLeadGate = ({
    * lead's tool from the person's own extensions) may do anything, so past
    * the budget it is put to you.
    */
-  /** Why a call is refused outright, by the budget, the shared checkout or the project's Caw edits; nothing for one that is not. */
+  /**
+   * Why a call is refused outright, by the budget, the shared checkout or
+   * the project's Caw edits; nothing for one that is not. `again`: a call
+   * on your card judged again, which was inside its wake's budget as it was
+   * asked, and spends none of it now.
+   */
   const refusalOf = (
     call: Call,
     wake: Wake,
     isShared: boolean,
-    edits: CawEdits
+    edits: CawEdits,
+    again: boolean
   ): string | undefined => {
-    const refused = overBudget(wake);
+    const refused = again ? undefined : overBudget(wake);
     if (refused || call.kind === "tool") {
       return refused;
     }
@@ -2001,12 +2018,15 @@ export const createLeadGate = ({
   const judge = (
     lead: InstanceRow,
     call: Call,
-    edits: CawEdits
+    edits: CawEdits,
+    again: boolean
   ): GateVerdict => {
     const wake = wakeOf(lead.id);
-    wake.calls += 1;
+    if (!again) {
+      wake.calls += 1;
+    }
     const isShared = shared(lead);
-    const refused = refusalOf(call, wake, isShared, edits);
+    const refused = refusalOf(call, wake, isShared, edits, again);
     if (refused) {
       return { kind: "deny", message: refused };
     }
@@ -2121,6 +2141,94 @@ export const createLeadGate = ({
     noteOf({ ...row, exit });
   };
 
+  /**
+   * What the project declares its Caw edits, read for an edit's verdict; or
+   * the ask withdrawn while it was read, which nothing waits on any more.
+   */
+  const editsFor = async (
+    projectId: string,
+    lead: InstanceRow,
+    envelope: Envelope,
+    call: Call
+  ): Promise<CawEdits | Extract<GateDecision, { kind: "withdrawn" }>> => {
+    const requestId = envelope.requestId ?? "";
+    reading.set(requestId, { instanceId: lead.id });
+    // The read never throws: a failure is what gate.md says now.
+    const edits = await cawEdits(projectId).catch(
+      (error: unknown): CawEdits => ({
+        kind: "unreadable",
+        problems: [error instanceof Error ? error.message : String(error)],
+      })
+    );
+    const over = reading.get(requestId)?.over ?? gone(envelope);
+    reading.delete(requestId);
+    if (over) {
+      console.log(
+        `[lead-gate] ${lead.id} ${call.tool} withdrawn while gate.md was read (${over}): not judged, not parked: ${shortly(call.command)}`
+      );
+      return { kind: "withdrawn", why: over };
+    }
+    return edits;
+  };
+
+  /**
+   * A verdict on its call's row: a new row for a call first judged; for one
+   * on your card judged again (`asked`), its row moved to the verdict
+   * today's gate gives. A refusal is noted in his thread.
+   */
+  const fileVerdict = (
+    lead: InstanceRow,
+    projectId: string,
+    ask: PermissionRequestFrame,
+    call: Call,
+    verdict: GateVerdict,
+    asked: LeadCallRow | undefined
+  ): void => {
+    const outcome = OUTCOME_OF[verdict.kind];
+    const why = whyOf(verdict);
+    if (asked) {
+      if (outcome === asked.outcome && why === asked.why) {
+        return;
+      }
+      db.leadCalls.set(asked.id, { outcome, why });
+      console.log(
+        `[lead-gate] ${lead.id} ${ask.toolName} still on your card, judged again by today's gate: ${verdict.kind}: ${shortly(call.command)}`
+      );
+      if (outcome === "refused") {
+        noteOf({ ...asked, outcome, why });
+      }
+      return;
+    }
+    const row: LeadCallRow = {
+      id: crypto.randomUUID(),
+      projectId,
+      instanceId: lead.id,
+      threadId: thread(lead) ?? null,
+      requestId: ask.requestId,
+      toolUseId: ask.toolUseId ?? null,
+      tool: ask.toolName,
+      command: call.command,
+      files: call.files,
+      writes: !(
+        call.kind === "shell" &&
+        call.readable &&
+        allowlisted(call.command, true)
+      ),
+      outcome,
+      approved: false,
+      why,
+      exit: null,
+      at: new Date(),
+    };
+    db.leadCalls.add(row);
+    console.log(
+      `[lead-gate] ${lead.id} ${ask.toolName} ${verdict.kind}: ${shortly(call.command)}`
+    );
+    if (outcome === "refused") {
+      noteOf(row);
+    }
+  };
+
   return {
     /**
      * Whether `requestId` is one of Caw's gated asks: only you answer those,
@@ -2132,8 +2240,13 @@ export const createLeadGate = ({
     /**
      * A permission ask from `lead`, before it is parked: the gate's verdict,
      * or none for an ask that is not one of a lead's gated calls
-     * ({@link isGated}; it parks as any ask). A replay of one already judged answers the same, and spends
-     * nothing again. An edit's verdict waits on the project's gate.md read.
+     * ({@link isGated}; it parks as any ask). A replay of one already
+     * settled answers the same, and spends nothing again. A replay of one
+     * still on your card is judged again by the gate as it stands now: its
+     * process still waits on it (a process sessiond holds outlives every
+     * agent and hub install), and a call today's gate lets run or refuses is
+     * the gate's to settle, not yours. An edit's verdict waits on the
+     * project's gate.md read.
      */
     async decide(
       lead: InstanceRow,
@@ -2150,63 +2263,24 @@ export const createLeadGate = ({
         return;
       }
       const known = db.leadCalls.ofRequest(requestId);
-      if (known) {
+      if (known && known.outcome !== "asked") {
         return verdictOf(known);
       }
       const call = describe(lead, ask);
-      let edits: CawEdits = { kind: "none" };
-      if (call.kind === "edit") {
-        reading.set(requestId, { instanceId: lead.id });
-        // The read never throws: a failure is what gate.md says now.
-        edits = await cawEdits(lead.projectId).catch(
-          (error: unknown): CawEdits => ({
-            kind: "unreadable",
-            problems: [error instanceof Error ? error.message : String(error)],
-          })
-        );
-        const over = reading.get(requestId)?.over ?? gone(envelope);
-        reading.delete(requestId);
-        if (over) {
-          console.log(
-            `[lead-gate] ${lead.id} ${ask.toolName} withdrawn while gate.md was read (${over}): not judged, not parked: ${shortly(call.command)}`
-          );
-          return { kind: "withdrawn", why: over };
-        }
+      const edits =
+        call.kind === "edit"
+          ? await editsFor(lead.projectId, lead, envelope, call)
+          : ({ kind: "none" } as const);
+      if (edits.kind === "withdrawn") {
+        return edits;
       }
       // A replay that came in while gate.md was read was judged by then.
       const judged = db.leadCalls.ofRequest(requestId);
-      if (judged) {
+      if (judged && judged.outcome !== "asked") {
         return verdictOf(judged);
       }
-      const verdict = judge(lead, call, edits);
-      const row: LeadCallRow = {
-        id: crypto.randomUUID(),
-        projectId: lead.projectId,
-        instanceId: lead.id,
-        threadId: thread(lead) ?? null,
-        requestId,
-        toolUseId: ask.toolUseId ?? null,
-        tool: ask.toolName,
-        command: call.command,
-        files: call.files,
-        writes: !(
-          call.kind === "shell" &&
-          call.readable &&
-          allowlisted(call.command, true)
-        ),
-        outcome: OUTCOME_OF[verdict.kind],
-        approved: false,
-        why: whyOf(verdict),
-        exit: null,
-        at: new Date(),
-      };
-      db.leadCalls.add(row);
-      console.log(
-        `[lead-gate] ${lead.id} ${ask.toolName} ${verdict.kind}: ${shortly(call.command)}`
-      );
-      if (row.outcome === "refused") {
-        noteOf(row);
-      }
+      const verdict = judge(lead, call, edits, judged !== undefined);
+      fileVerdict(lead, lead.projectId, ask, call, verdict, judged);
       return verdict;
     },
 
@@ -2222,6 +2296,20 @@ export const createLeadGate = ({
       }
       db.leadCalls.set(row.id, { outcome: "denied" });
       noteOf({ ...row, outcome: "denied" });
+    },
+
+    /**
+     * A call's ask left unanswered (pending.ts `onSettled`, cancelled): its
+     * process ended, relaunched or withdrew it, so it never runs. One still
+     * on your card is completed as cut, with `why`.
+     */
+    cut(requestId: string, why: string): void {
+      const row = db.leadCalls.ofRequest(requestId);
+      if (row?.outcome !== "asked") {
+        return;
+      }
+      db.leadCalls.set(row.id, { outcome: "cut", why });
+      noteOf({ ...row, outcome: "cut", why });
     },
 
     /** The hub woke a lead with a send (caw.ts `wake`): your words alone, or outside text with them. */

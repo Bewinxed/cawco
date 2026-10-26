@@ -2896,6 +2896,16 @@ const toSendRecord = (row: SentMessageRow, view?: string): SendRecord => ({
  * Why a send did not go, when the session never read it and no harness error
  * says more — what its row says beside "not sent".
  */
+/**
+ * Why an ask left unanswered, as its record says it (pending.ts
+ * `Settlement.cut`): its process went, or withdrew it.
+ */
+const ASK_CUT = {
+  restarted: "its session restarted before you answered",
+  ended: "its session ended before you answered",
+  withdrawn: "its session withdrew it before you answered",
+} as const;
+
 const UNREAD = {
   stopped: "The session was stopped before it read this.",
   ended: "The session ended before it read this.",
@@ -3964,6 +3974,11 @@ export const createServer = (
     notifications.clear([askCollapseId(parked.requestId)], "settled");
     // An admin write whose ask left unanswered (its session ended) is refused.
     if (outcome === "cancelled") {
+      // One of Caw's calls on your card never runs: its row says why.
+      leadGate.cut(
+        parked.requestId,
+        said?.cut ?? said?.why ?? ASK_CUT.withdrawn
+      );
       adminAsks.withdrawn(parked.requestId);
       browserAsks.withdrawn(parked.requestId);
       connectAsks.withdrawn(parked.requestId);
@@ -4001,7 +4016,7 @@ export const createServer = (
     // (upstream-asks.ts): the hub makes it.
     if (!(outlivesSession(parked) || (row && PARKS_ASKS.has(row.status)))) {
       droppedAtStart.push(parked);
-      pending.forget(parked.instanceId ?? "");
+      pending.forget(parked.instanceId ?? "", ASK_CUT.ended);
     }
   }
   if (swept) {
@@ -5622,7 +5637,10 @@ export const createServer = (
             )
         );
       }
-      pending.forget(instanceId);
+      pending.forget(
+        instanceId,
+        keep === "all" ? ASK_CUT.restarted : ASK_CUT.ended
+      );
     }
     // Nor is it doing anything any more: a pulse outliving its process is the
     // same stale-liveness lie in memory instead of in a column.
@@ -36299,6 +36317,9 @@ export const createServer = (
                       },
                     });
                   }
+                  // A replay of one parked on your card that today's gate
+                  // settles (lead-gate.ts `decide`) leaves your card.
+                  pending.resolve(message.requestId);
                   break;
                 }
                 // A replayed ask (the daemon re-announces unresolved asks after

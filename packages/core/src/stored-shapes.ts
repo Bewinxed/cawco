@@ -2136,6 +2136,7 @@ export const ThreadEventShape = z.union([
       "edited",
       "refused",
       "denied",
+      "cut",
       "guard",
     ]),
   }),
