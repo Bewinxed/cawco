@@ -22,7 +22,8 @@
  * asleep or ended, an artifact removed. This sweep is the look that catches
  * what no event reached (a hub restarted, a machine away at the time): every
  * {@link RETIRE_SWEEP_MS}, each active workspace on every online machine is
- * settled.
+ * settled, and each archived one whose clone its machine still has is closed
+ * again (work-items.ts `closeLeftClones`).
  */
 import type { HubLifetimeShape } from "./lifetime";
 import type { HeldWork, WorkItems } from "./work-items";

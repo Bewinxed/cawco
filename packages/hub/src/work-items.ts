@@ -92,6 +92,7 @@ import {
   CONTROL_WORKSPACE_BOUNDARY,
   CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CHANGES,
+  CONTROL_WORKSPACE_CLONES,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_OUTPUTS,
@@ -4270,6 +4271,93 @@ export const createWorkItems = ({
     return { kind: "retired", carry: closed.carry };
   };
 
+  /** Each archived workspace whose folder is being cleared ({@link closeLeftClones}), from its turn's start: a cut again of it waits for that ({@link recut}). */
+  const reclosing = new Map<string, Promise<void>>();
+
+  /** The last reason each machine's folders could not be listed ({@link closeLeftClones}): one line per change, not per sweep. */
+  const listFailures = new Map<string, string>();
+
+  /**
+   * Each archived workspace on `machineId` whose folder its machine still has
+   * ({@link CONTROL_WORKSPACE_CLONES}) cleared in its turn: its machine's
+   * archive again, unread (`unmade`), its row as it is. An archive deletes
+   * the clone whole (agent layer.ts `removeLayer`) and reads what it held
+   * first, so whatever stands at its path since was written after it and is
+   * none of its work: a probe or OpenCode's MCP pass writing `.probe`,
+   * `.context` or `.preview-probe` into an archived workspace's path made
+   * the folder again (9 such folders on the hub machine on 2026-10-26), and
+   * nothing looked at an archived row again. One being cut again is left to
+   * that cut.
+   */
+  const closeLeftClones = async (
+    machineId: string
+  ): Promise<{ outcome: Settled; workspace: WorkspaceRow }[]> => {
+    let folders: string[];
+    try {
+      folders = (await call(
+        machineId,
+        CONTROL_WORKSPACE_CLONES,
+        []
+      )) as string[];
+      listFailures.delete(machineId);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      if (listFailures.get(machineId) !== reason) {
+        listFailures.set(machineId, reason);
+        console.warn(
+          `[workspaces] ${machineName(machineId)} did not list its ~/.worktrees, so no archived workspace's clone there was looked for: ${reason}`
+        );
+      }
+      return [];
+    }
+    const done: { outcome: Settled; workspace: WorkspaceRow }[] = [];
+    const paths = folders.flatMap((folder) => {
+      const path = db.machinePathOn(machineId, folder);
+      return path instanceof MachinePathRefused ? [] : [path];
+    });
+    for (const left of db.archivedWorkspacesAt(machineId, paths)) {
+      if (workspaceTurns.has(left.id) || recutting.has(left.id)) {
+        continue;
+      }
+      const outcome = await inWorkspaceTurn(
+        left.id,
+        async (): Promise<Settled> => {
+          const [now] = db.workspacesNamed(left.id);
+          if (now?.state !== "archived" || recutting.has(now.id)) {
+            return { kind: "none" };
+          }
+          const { promise, resolve } = Promise.withResolvers<void>();
+          reclosing.set(now.id, promise);
+          try {
+            await call(now.machineId, CONTROL_WORKSPACE_ARCHIVE, [
+              {
+                ...refOf(now),
+                base: now.base,
+                unlanded: "unmade",
+                skip: [],
+              } satisfies WorkspaceArchive,
+            ]);
+            console.log(
+              `[workspaces] ${now.id} on ${machineName(now.machineId)}: archived, and a folder stood at ${now.path} again; it is gone`
+            );
+            return { kind: "retired", carry: null };
+          } finally {
+            reclosing.delete(now.id);
+            resolve();
+          }
+        }
+      ).catch((error: unknown): Settled => {
+        const reason = error instanceof Error ? error.message : String(error);
+        console.warn(
+          `[workspaces] ${left.id}: archived, a folder stands at ${left.path} again, and clearing it failed: ${reason}`
+        );
+        return { kind: "failed", reason };
+      });
+      done.push({ workspace: left, outcome });
+    }
+    return done;
+  };
+
   /** The ended items, each with its end, whose sessions' work each workspace's settle last ended ({@link endLeftWork}): once per set, not per sweep. */
   const workEndedFor = new Map<string, string>();
 
@@ -4804,6 +4892,8 @@ export const createWorkItems = ({
       );
     }
     const work = (async (): Promise<WorkspaceRow> => {
+      // A folder at its path being cleared: cut once that is done.
+      await reclosing.get(workspace.id);
       notPaused(workspace.machineId);
       const [latest] = db.workItemsIn(workspace.id);
       const [session] = latest ? db.getInstancesByIds([latest.instanceId]) : [];
@@ -10107,8 +10197,9 @@ export const createWorkItems = ({
 
     /**
      * {@link settle} for each active workspace on `machineId`, one after
-     * another: the sweep's look (workspace-retire.ts). Answers each one's
-     * outcome by id.
+     * another, then each archived one whose clone is still there closed
+     * again ({@link closeLeftClones}): the sweep's look (workspace-retire.ts).
+     * Answers each one's outcome by id.
      */
     async settleOn(
       machineId: string
@@ -10121,6 +10212,7 @@ export const createWorkItems = ({
         }
         done.push({ workspace, outcome: await settleNow(workspace.id) });
       }
+      done.push(...(await closeLeftClones(machineId)));
       return done;
     },
 

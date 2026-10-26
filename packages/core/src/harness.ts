@@ -2479,6 +2479,15 @@ export const CONTROL_WORKSPACE_DISCARD = "workspaceDiscard";
  */
 export const CONTROL_WORKSPACE_OUTPUTS = "workspaceOutputs";
 
+/**
+ * The folders directly under the machine's `~/.worktrees`, by absolute path:
+ * the hub's settling sweep closes again each archived workspace whose clone
+ * one of them still is (hub work-items.ts `closeLeftClones`), since an
+ * archived workspace has no clone. Args `[]`; answers `string[]`. Only the
+ * hub sends it.
+ */
+export const CONTROL_WORKSPACE_CLONES = "workspaceClones";
+
 /** What {@link CONTROL_WORKSPACE_OUTPUTS} answers: each regular file, by its path under `outputs/`, with base64 of its bytes. */
 export interface WorkspaceOutputs {
   files: { content: string; path: string }[];

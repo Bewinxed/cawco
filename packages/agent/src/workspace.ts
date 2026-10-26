@@ -2231,6 +2231,18 @@ export const workspaceOutputs = async (
   return { files };
 };
 
+/**
+ * {@link CONTROL_WORKSPACE_CLONES}: the folders directly under
+ * `~/.worktrees`, by absolute path; none when it is not there.
+ */
+export const worktreeFolders = async (): Promise<string[]> => {
+  const root = expandHome("~/.worktrees");
+  const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
+  return entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => join(root, entry.name));
+};
+
 /** How many times {@link endLeftInside} reads and kills: enough for a process forked between a reading and its kill. */
 const LEFT_INSIDE_PASSES = 5;
 

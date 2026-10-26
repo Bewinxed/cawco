@@ -144,6 +144,17 @@ const state = join(homedir(), ".cache", "cawco", "release-pipeline");
 /** Where a failed build's proof evidence outlives its staging; the newest few are kept. */
 const failedEvidence = join(homedir(), ".cache", "cawco-release");
 const KEPT_FAILURES = 5;
+/**
+ * How many promoted builds `--output` keeps, newest first ({@link pruneOutputs}).
+ * Nothing in CawCo reads them: a machine runs and rolls back from its own
+ * binary root's `versions/` (core binary-wrapper.ts), and the hub serves and
+ * offers each build from the release host (hub binary-updates.ts
+ * `assetBase`). They are for a person on this host: the build just made, and
+ * the one it replaced, to compare or upload again by hand when the newest has
+ * to be pulled. Unbounded, 75 nightlies of about 3 GB each filled the hub
+ * machine's disk on 2026-10-26.
+ */
+const KEPT_OUTPUTS = 2;
 /** Each proven verdict, by the inputs it stands on: `<inputs>/stage1`, and `<inputs>/stage2/<rig>` per stage 2 rig. */
 const proofVerdicts = join(
   homedir(),
@@ -1018,6 +1029,47 @@ const promote = async (
   if (publish) {
     await notStopped();
     await promoteRelease(releaseTag(manifest), published, manifest);
+  }
+  await pruneOutputs(current.output, published);
+};
+
+/**
+ * `--output` cut to its newest {@link KEPT_OUTPUTS} builds by time (each a
+ * folder holding its `release.json`; nothing else there is touched), `kept`
+ * (the one just promoted) always among them, and the release cache cleared of
+ * the `out-<sha>` folders an earlier ship.sh wrote, which nothing reads.
+ */
+const pruneOutputs = async (folder: string, kept: string): Promise<void> => {
+  const builds = await Promise.all(
+    (await readdir(folder, { withFileTypes: true }))
+      .filter(
+        (entry) =>
+          entry.isDirectory() &&
+          existsSync(join(folder, entry.name, "release.json"))
+      )
+      .map(async ({ name }) => {
+        const path = join(folder, name);
+        return { path, time: (await stat(path)).mtimeMs };
+      })
+  );
+  builds.sort(
+    (a, b) =>
+      Number(b.path === kept) - Number(a.path === kept) || b.time - a.time
+  );
+  const legacy = (await readdir(failedEvidence))
+    .filter((name) => name.startsWith("out-"))
+    .map((name) => join(failedEvidence, name));
+  const gone = [
+    ...builds.slice(KEPT_OUTPUTS).map(({ path }) => path),
+    ...legacy,
+  ];
+  await Promise.all(
+    gone.map((path) => rm(path, { recursive: true, force: true }))
+  );
+  if (gone.length > 0) {
+    console.log(
+      `Removed ${gone.length} older release folder(s), keeping the newest ${KEPT_OUTPUTS} in ${folder}`
+    );
   }
 };
 

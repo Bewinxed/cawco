@@ -67,6 +67,7 @@ import {
   CONTROL_WORKSPACE_BOUNDARY,
   CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CHANGES,
+  CONTROL_WORKSPACE_CLONES,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_OUTPUTS,
@@ -338,6 +339,7 @@ import {
   workspaceBundle,
   workspaceChanges,
   workspaceOutputs,
+  worktreeFolders,
 } from "./workspace";
 import { cloneHolding, workspaceRefs } from "./workspace-records";
 
@@ -3657,6 +3659,12 @@ const startDaemon = (rediscover = false) =>
     supervisor.registerDaemonFunction(
       CONTROL_WORKSPACE_OUTPUTS,
       workspaceOutputs
+    );
+    // The hub's sweep: which folders under ~/.worktrees stand, so an
+    // archived workspace whose clone is still there is closed again.
+    supervisor.registerDaemonFunction(
+      CONTROL_WORKSPACE_CLONES,
+      worktreeFolders
     );
     // An archive whose unlanded work a person let go: a carry first.
     supervisor.registerDaemonFunction(CONTROL_WORKSPACE_DISCARD, (ref) =>

@@ -721,6 +721,11 @@ export interface DbShape {
     answer: "accepted" | "dismissed",
     projectId?: string
   ) => void;
+  /** A machine's archived workspaces at any of `paths`: each one whose clone its machine still has. Never a host-scope row. */
+  readonly archivedWorkspacesAt: (
+    machineId: string,
+    paths: readonly MachinePath[]
+  ) => WorkspaceRow[];
   /**
    * Archives a thread (`at`) or brings it back (null); the thread as it
    * stands then, or undefined when there is none.
@@ -9998,6 +10003,21 @@ const make = async (path: string): Promise<DbShape> => {
           )
         )
         .all(),
+    archivedWorkspacesAt: (machineId, paths) =>
+      paths.length === 0
+        ? []
+        : db
+            .select()
+            .from(workspaces)
+            .where(
+              and(
+                eq(workspaces.machineId, machineId),
+                eq(workspaces.state, "archived"),
+                eq(workspaces.host, false),
+                inArray(workspaces.path, [...paths])
+              )
+            )
+            .all(),
     heldWorkspaces: () =>
       db
         .select()
