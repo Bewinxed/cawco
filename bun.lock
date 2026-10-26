@@ -227,6 +227,7 @@
         "@tailwindcss/postcss": "4.3.3",
         "browserslist": "4.29.3",
         "bun-plugin-svelte": "0.0.6",
+        "drizzle-orm": "^0.45.3",
         "fontkit": "2.0.4",
         "lightningcss": "1.33.0",
         "postcss": "8.5.30",

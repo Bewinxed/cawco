@@ -78,6 +78,7 @@ import {
 import { ownIdentity } from "@cawco/core/process-identity";
 import { runtimeTree, standalone } from "@cawco/core/runtime";
 import { writeStateFileSync } from "@cawco/core/state-file";
+import { nameStoredRowsFrom } from "@cawco/core/stored-json";
 import type { UpstreamPosts } from "@cawco/core/upstream-guard";
 import {
   and,
@@ -85,6 +86,7 @@ import {
   desc,
   eq,
   getTableColumns,
+  getTableName,
   gt,
   gte,
   inArray,
@@ -3058,6 +3060,20 @@ export const hashHookMaterial = (hook: {
 const make = async (path: string): Promise<DbShape> => {
   mkdirSync(dirname(path), { recursive: true });
   const db = drizzle(path);
+  // A stored JSON value that fails its schema names its row: the database
+  // says which row holds that column's text (core stored-json.ts).
+  nameStoredRowsFrom((table, keys, column, raw) => {
+    const quote = (name: string) => `"${name.replaceAll('"', '""')}"`;
+    const select = (keys.length > 0 ? keys.map((key) => key.name) : ["rowid"])
+      .map(quote)
+      .join(", ");
+    const [row] = db.$client
+      .query<unknown[], [string]>(
+        `SELECT ${select} FROM ${quote(getTableName(table))} WHERE ${quote(column.name)} = ? LIMIT 1`
+      )
+      .values(raw);
+    return row?.map(String).join("/");
+  });
   // EVERY WRITE WAITS ITS TURN. WAL lets reads run beside a write, but
   // "there can only be one writer at a time" (sqlite.org/wal.html 2.2):
   // another connection's write to this file (the CLI's `cawco pairing off`,

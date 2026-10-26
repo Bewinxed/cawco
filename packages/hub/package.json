@@ -15,6 +15,8 @@
     "openapi:check": "bun scripts/openapi.ts --check",
     "roles:check": "bun scripts/role-budgets.ts",
     "skills:check": "bun scripts/skills-check.ts",
+    "stored-shapes": "bun scripts/stored-shapes.ts",
+    "stored-shapes:check": "bun scripts/stored-shapes.ts --check",
     "start": "CAWCO_NO_MDNS=1 CAWCO_DB_PATH=${CAWCO_DB_PATH:-${XDG_DATA_HOME:-$HOME/.local/share}/cawco-dev/cawco.db} bun src/index.ts"
   },
   "dependencies": {

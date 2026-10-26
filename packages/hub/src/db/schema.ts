@@ -1,53 +1,31 @@
 import type {
   AccountHue,
   AccountKind,
-  AccountMove,
-  AccountOverage,
   AccountProvider,
   AccountSetupStep,
-  AtLimit,
   AtPlanLimit,
-  AttemptResult,
   AuthState,
   BlockPage,
   BlockWidth,
-  BuildInfo,
   CapPeriod,
-  CheckoutMove,
-  ClaudeModelUsage,
   ConnectAccess,
   ContinuationJob,
   DelegateAskStatus,
   DelegateEventKind,
-  DelegateEventPayload,
   EffortLevel,
-  EndedBy,
-  Envelope,
-  FleetItemStatus,
-  FleetMcpConfig,
-  FleetRefresh,
   FleetScope,
-  FleetSyncOutcome,
-  FleetSyncReport,
   HarnessConfigKind,
   HarnessKind,
   HarnessReport,
   HomeStore,
   HookEvent,
-  HookHandler,
   LandsMode,
   LimitWindow,
   MachineState,
-  McpPlatform,
   MemoryRole,
   ModeAsk,
-  ModelInfo,
-  MoveEnded,
   MoveStage,
-  NamedMoveRequest,
-  NeutralUserMessage,
   OnCap,
-  OpenCodeGoLimits,
   PermissionMode,
   PlanWait,
   PresenceClient,
@@ -56,46 +34,25 @@ import type {
   RuleScope,
   RuleTiming,
   RuleWatch,
-  SendAttachment,
   SendMode,
   SendRefusal,
   SendState,
-  SessionCommands,
   SessionEffort,
-  SessionTooling,
   SigninState,
-  SkillFile,
   StarterGlyph,
   StarterOutcome,
   StarterPlace,
   StarterSourceKind,
-  StoppedCommands,
   StrategyChoice,
-  ThreadAnswer,
-  ThreadEvent,
-  ThreadImage,
   ThreadMessage,
-  ThreadQuestion,
   ToolStatus,
-  WorkspaceCut,
-  WorkspaceHolding,
   WorkspaceKind,
 } from "@cawco/core";
-import type { MachineCapabilities } from "@cawco/core/capabilities";
 import type { MachinePath } from "@cawco/core/machine-path";
-import type {
-  RelayPortHealth,
-  RelayPorts,
-  RelayReach,
-  StreamRelayState,
-} from "@cawco/core/stream-relay";
+import { storedJson } from "@cawco/core/stored-json";
+import type { StreamRelayState } from "@cawco/core/stream-relay";
 import { UPSTREAM_POSTS } from "@cawco/core/upstream-guard";
-import type {
-  AuthorizationServerMetadata,
-  OAuthClientInformationFull,
-  OAuthProtectedResourceMetadata,
-  OAuthTokens,
-} from "@modelcontextprotocol/sdk/shared/auth.js";
+import type { OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { sql } from "drizzle-orm";
 import {
   type AnySQLiteColumn,
@@ -111,10 +68,79 @@ import {
   text,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
-import type { ContinueRequest, PreparedContinuation } from "../continuation";
+import { z } from "zod";
 import type { SendHold } from "../delegation-actions";
-import type { MoveState } from "../moves";
 import { hubSecrets, openOrNull } from "../secret-box";
+import {
+  AccountMoveSchema,
+  AccountOverageSchema,
+  AtLimitSchema,
+  AttemptResultSchema,
+  AuthorizationServerMetadataSchema,
+  BuildInfoSchema,
+  CheckoutMoveSchema,
+  ClaudeModelUsageSchema,
+  ConnectAccessSchema,
+  ConnectionSecretSchema,
+  ContinuationAskerSchema,
+  ContinueRequestSchema,
+  DelegateEventPayloadSchema,
+  DesignFindingSchema,
+  DesignPickSchema,
+  DesignProposalFileSchema,
+  EndedBySchema,
+  EnvelopeSchema,
+  FleetItemStatusSchema,
+  FleetMcpConfigSchema,
+  FleetRefreshSchema,
+  FleetSyncOutcomeSchema,
+  FleetSyncReportSchema,
+  GatePassSchema,
+  GithubProjectSchema,
+  HarnessReportSchema,
+  HookHandlerSchema,
+  ItemBlockSchema,
+  MachineCapabilitiesSchema,
+  McpPlatformSchema,
+  ModelInfoSchema,
+  MoveEndedSchema,
+  MoveStateSchema,
+  NamedMoveRequestSchema,
+  NeutralUserMessageSchema,
+  OAuthClientInformationFullSchema,
+  OAuthDiscoveryStateSchema,
+  OAuthProtectedResourceMetadataSchema,
+  OAuthTokensSchema,
+  OpenCodeGoLimitsSchema,
+  PlaceLfsRowSchema,
+  PlanStepSchema,
+  PlanWaitSchema,
+  PreparedContinuationSchema,
+  RelayPortHealthSchema,
+  RelayPortsSchema,
+  RelayReachSchema,
+  ScratchWorktreeSchema,
+  SendAttachmentSchema,
+  SessionCommandsSchema,
+  SessionToolingSchema,
+  SkillFileSchema,
+  StoppedCommandsSchema,
+  StoredSendRefusalSchema,
+  ThreadAnswerSchema,
+  ThreadEventSchema,
+  ThreadImageSchema,
+  ThreadQuestionSchema,
+  TrackerCursorSchema,
+  TrackerSyncedSchema,
+  TrashedRowsSchema,
+  WaitWitnessSchema,
+  WorkBudgetSchema,
+  WorkItemSubmissionSchema,
+  WorkLandingSchema,
+  WorkspaceCutSchema,
+  WorkspaceFromSchema,
+  WorkspaceHoldingSchema,
+} from "./stored-shapes";
 
 const timestamp = (column: string) => integer(column, { mode: "timestamp_ms" });
 
@@ -129,16 +155,15 @@ const sealedText = customType<{ data: string | null; driverData: string }>({
   fromDriver: (value) => openOrNull(value),
 });
 
-/** A secret JSON column: the value's JSON, sealed as {@link sealedText} is. */
-const sealedJson = <T>(column: string) =>
-  customType<{ data: T | null; driverData: string }>({
-    dataType: () => "text",
-    toDriver: (value) => hubSecrets().seal(JSON.stringify(value)),
-    fromDriver: (value) => {
-      const opened = openOrNull(value);
-      return opened === null ? null : (JSON.parse(opened) as T);
-    },
-  })(column);
+/**
+ * A secret JSON column: the value's JSON, sealed as {@link sealedText} is,
+ * and checked against its schema once it is opened (core stored-json.ts).
+ */
+const sealedJson = <S extends z.ZodType>(schema: S) =>
+  storedJson(schema, {
+    close: (json) => hubSecrets().seal(json),
+    open: (raw) => openOrNull(raw),
+  });
 
 /**
  * One harness conversation a session had before the one it runs now
@@ -159,9 +184,9 @@ export interface PriorConversation {
 
 /** Machines running an agent daemon, keyed by their stable hardware fingerprint. */
 export const agents = sqliteTable("agents", {
-  machineCapabilities: text("machine_capabilities", {
-    mode: "json",
-  }).$type<MachineCapabilities>(),
+  machineCapabilities: storedJson(MachineCapabilitiesSchema)(
+    "machine_capabilities"
+  ),
   machineId: text("machine_id").primaryKey(),
   hostname: text("hostname").notNull(),
   /**
@@ -184,26 +209,26 @@ export const agents = sqliteTable("agents", {
    * What the machine came to the last time it converged on the fleet's MCP
    * servers and plugins (NEW.md §11). Null until it has been asked once.
    */
-  fleet: text("fleet", { mode: "json" }).$type<FleetSyncReport>(),
+  fleet: storedJson(FleetSyncReportSchema)("fleet"),
   /**
    * What became of the last delta the hub sent it (core
    * `FleetSyncOutcome`), kept apart from {@link fleet}: a delta refused or
    * unanswered leaves the last report as it was. Null until the hub has
    * sent it one.
    */
-  fleetSync: text("fleet_sync", { mode: "json" }).$type<FleetSyncOutcome>(),
+  fleetSync: storedJson(FleetSyncOutcomeSchema)("fleet_sync"),
   /**
    * Each fleet item as the machine's harnesses converge it (core
    * `FleetItemStatus`), by item id. Null until the machine has said.
    */
-  fleetItems: text("fleet_items", { mode: "json" }).$type<
-    Record<string, FleetItemStatus>
-  >(),
+  fleetItems: storedJson(z.record(z.string(), FleetItemStatusSchema))(
+    "fleet_items"
+  ),
   /**
    * The cawco the daemon is running (NEW.md §12), as it reported at register.
    * Null until a daemon that says so has registered once.
    */
-  build: text("build", { mode: "json" }).$type<BuildInfo>(),
+  build: storedJson(BuildInfoSchema)("build"),
   /**
    * The owner paused the machine until this time (machine-pause.ts): the hub
    * starts nothing on it until then, its agent connected all the while. Null
@@ -215,9 +240,7 @@ export const agents = sqliteTable("agents", {
    * (machine-pause.ts): the machine's row says it. Null when it stopped
    * nothing; cleared with the pause.
    */
-  pauseStopped: text("pause_stopped", {
-    mode: "json",
-  }).$type<StoppedCommands>(),
+  pauseStopped: storedJson(StoppedCommandsSchema)("pause_stopped"),
   lastSeenAt: timestamp("last_seen_at"),
   createdAt: timestamp("created_at")
     .notNull()
@@ -259,7 +282,7 @@ export const agentHarnesses = sqliteTable(
       .notNull()
       .references(() => agents.machineId, { onDelete: "cascade" }),
     harness: text("harness").$type<HarnessReport["harness"]>().notNull(),
-    report: text("report", { mode: "json" }).$type<HarnessReport>().notNull(),
+    report: storedJson(HarnessReportSchema)("report").notNull(),
   },
   (table) => [primaryKey({ columns: [table.machineId, table.harness] })]
 );
@@ -412,7 +435,7 @@ export const projects = sqliteTable("projects", {
    * where neither its delegate call nor its task names one (work-items.ts
    * `overBudget`). Null: no default.
    */
-  budget: text("budget", { mode: "json" }).$type<WorkBudget>(),
+  budget: storedJson(WorkBudgetSchema)("budget"),
   /**
    * What the project may spend in a period (`cap_period`), in dollars: every
    * session of it, its Caw and its attempts (project-caps.ts). Null: no cap,
@@ -559,10 +582,7 @@ export const projectTasks = sqliteTable(
     duplicateOf: text("duplicate_of"),
     rank: text("rank"),
     /** The project folder files its work produces (`outputs:`): what the project's Made list draws, read whole. */
-    outputs: text("outputs", { mode: "json" })
-      .$type<string[]>()
-      .notNull()
-      .default([]),
+    outputs: storedJson(z.array(z.string()))("outputs").notNull().default([]),
     todosDone: integer("todos_done").notNull().default(0),
     todosTotal: integer("todos_total").notNull().default(0),
     /** What in the file could not be read, in a sentence; null when all of it could. */
@@ -766,9 +786,7 @@ export const instances = sqliteTable("instances", {
   machineRemoved: integer("machine_removed", { mode: "boolean" })
     .notNull()
     .default(false),
-  scratchWorktree: text("scratch_worktree", { mode: "json" }).$type<
-    import("@cawco/core").ScratchWorktree
-  >(),
+  scratchWorktree: storedJson(ScratchWorktreeSchema)("scratch_worktree"),
   endReason: text("end_reason"),
   endRetryAt: timestamp("end_retry_at"),
   endAttempts: integer("end_attempts").notNull().default(0),
@@ -811,16 +829,20 @@ export const instances = sqliteTable("instances", {
   lastRequestAt: timestamp("last_request_at"),
   contextTokens: integer("context_tokens"),
   contextReadAt: timestamp("context_read_at"),
-  cacheCold: text("cache_cold", { mode: "json" }).$type<{
-    reason: string;
-    at: number;
-  }>(),
-  lastPingUsage: text("last_ping_usage", { mode: "json" }).$type<{
-    input: number;
-    read: number;
-    write: number;
-    at: number;
-  }>(),
+  cacheCold: storedJson(
+    z.object({
+      reason: z.string(),
+      at: z.number(),
+    })
+  )("cache_cold"),
+  lastPingUsage: storedJson(
+    z.object({
+      input: z.number(),
+      read: z.number(),
+      write: z.number(),
+      at: z.number(),
+    })
+  )("last_ping_usage"),
   /** In-flight ping identity survives a hub or agent restart. */
   keepAliveTurn: text("keep_alive_turn"),
   /**
@@ -830,9 +852,9 @@ export const instances = sqliteTable("instances", {
    * conversation started fresh; null while unknown (a resumed or forked start
    * this hub has seen no result of), until a result sets it.
    */
-  modelUsageSeen: text("model_usage_seen", { mode: "json" }).$type<
-    Record<string, ClaudeModelUsage>
-  >(),
+  modelUsageSeen: storedJson(z.record(z.string(), ClaudeModelUsageSchema))(
+    "model_usage_seen"
+  ),
   /**
    * The thread with the project's Caw this session works for: an attempt at
    * a task, the thread that named the task; a session Caw started, the
@@ -924,7 +946,7 @@ export const instances = sqliteTable("instances", {
    * restart still knows what the session has. Null for a harness whose `init`
    * carries neither.
    */
-  tooling: text("tooling", { mode: "json" }).$type<SessionTooling>(),
+  tooling: storedJson(SessionToolingSchema)("tooling"),
   /**
    * The `/` menu the session's newest `init` listed (its names, and which of
    * them are skills), as JSON, overwritten as `tooling` is: a transcript the
@@ -933,7 +955,7 @@ export const instances = sqliteTable("instances", {
    * (transcripts.ts `sweep`) or restarted. Null for a harness whose `init`
    * lists none.
    */
-  commands: text("commands", { mode: "json" }).$type<SessionCommands>(),
+  commands: storedJson(SessionCommandsSchema)("commands"),
   /**
    * What the session called itself by what it was first asked to do: the first
    * user message, cleaned by core's `deriveTitleFromFirstMessage`. Written once,
@@ -1164,10 +1186,7 @@ export const workspaces = sqliteTable("workspaces", {
   boundaryPid: integer("boundary_pid"),
   state: text("state").$type<WorkspaceState>().notNull().default("active"),
   /** Ports the workspace's processes listen on, recorded when they start. */
-  ports: text("ports", { mode: "json" })
-    .$type<number[]>()
-    .notNull()
-    .default([]),
+  ports: storedJson(z.array(z.number()))("ports").notNull().default([]),
   /**
    * The workspace's scratch dir on its machine, its commands' `TMPDIR`, as
    * the machine named it when the workspace was cut. Null for a workspace
@@ -1205,7 +1224,7 @@ export const workspaces = sqliteTable("workspaces", {
    * its machine read it once its boundary was closed; null in any other
    * state.
    */
-  holding: text("holding", { mode: "json" }).$type<WorkspaceHolding>(),
+  holding: storedJson(WorkspaceHoldingSchema)("holding"),
   /** When {@link workspaces.holding} was read. */
   heldAt: timestamp("held_at"),
   /**
@@ -1218,7 +1237,7 @@ export const workspaces = sqliteTable("workspaces", {
    * HEAD built on the branch (agent workspace.ts `carriedFrom`). Null until
    * it retires.
    */
-  head: text("head", { mode: "json" }).$type<WorkspaceCut>(),
+  head: storedJson(WorkspaceCutSchema)("head"),
   /**
    * How CawCo moved its checkout (core injected.ts `CheckoutMove`: cut again,
    * work-items.ts `recut`; rebased as it landed, `landOnBase`) while no
@@ -1227,7 +1246,7 @@ export const workspaces = sqliteTable("workspaces", {
    * injected.ts `withMovedLine`), and clears it. Null otherwise. Kept on the
    * row, so a hub restart between the move and that message still says it.
    */
-  movedUntold: text("moved_untold", { mode: "json" }).$type<CheckoutMove>(),
+  movedUntold: storedJson(CheckoutMoveSchema)("moved_untold"),
   /**
    * The carry its machine wrote as it went: a discard's, its parent or the
    * person letting its unlanded work go, which is never cut again; or its
@@ -1240,7 +1259,7 @@ export const workspaces = sqliteTable("workspaces", {
    * commit its clone started at (work-items.ts `cutFrom`); null for one cut
    * from its repository.
    */
-  cutFrom: text("cut_from", { mode: "json" }).$type<WorkspaceFrom>(),
+  cutFrom: storedJson(WorkspaceFromSchema)("cut_from"),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -1423,7 +1442,7 @@ export const workItems = sqliteTable(
      * (`why`), or a signal from outside. Null for any other end, and for a
      * cancel whose stopper the hub did not hear.
      */
-    stoppedBy: text("stopped_by", { mode: "json" }).$type<EndedBy>(),
+    stoppedBy: storedJson(EndedBySchema)("stopped_by"),
     /**
      * Where its commits go once it passes the landing gate (landing.ts): onto the
      * workspace's base branch, to `cawco/<task or item>` on origin, to that
@@ -1435,7 +1454,7 @@ export const workItems = sqliteTable(
      * copies into its project's folder (`assets/<task or item>/`) when it
      * finishes; one missing sends it back to its session. Null: none.
      */
-    outputs: text("outputs", { mode: "json" }).$type<string[]>(),
+    outputs: storedJson(z.array(z.string()))("outputs"),
     /**
      * The decision pages it builds from (`delegate`'s and a task's
      * `buildsFrom`): each a page, or one card of it, as a plan step's wait
@@ -1444,7 +1463,7 @@ export const workItems = sqliteTable(
      * (work-items.ts `holdForPicks`). Null: none.
      * A follow-up in its workspace that names none takes its pages.
      */
-    buildsFrom: text("builds_from", { mode: "json" }).$type<PlanWait[]>(),
+    buildsFrom: storedJson(z.array(PlanWaitSchema))("builds_from"),
     /**
      * The commit the hub pushed to its own branch (`cawco/<task or item>`)
      * as it held its landing for the person's picks (work-items.ts
@@ -1452,23 +1471,25 @@ export const workItems = sqliteTable(
      * push there, its own or a later attempt's at its task, replaces it as
      * the hub's own. Null: never held.
      */
-    heldPush: text("held_push", { mode: "json" }).$type<{
-      at: number;
-      sha: string;
-    }>(),
+    heldPush: storedJson(
+      z.object({
+        at: z.number(),
+        sha: z.string(),
+      })
+    )("held_push"),
     /**
      * What an attempt at a task was dispatched on (dispatch.ts): each card
      * or pin its task waited on, its own or its parts' chain's, and the
      * value it settled with then (task-waits.ts `value`). A card answered
      * differently since is told by its value, not its time. Null: none.
      */
-    waitedOn: text("waited_on", { mode: "json" }).$type<WaitWitness[]>(),
+    waitedOn: storedJson(z.array(WaitWitnessSchema))("waited_on"),
     /**
      * What its session handed in on its task (`task_result`): its words,
      * what to check, and its artifacts. A later call replaces it. Null:
      * none yet, or the item is no task's attempt.
      */
-    taskResult: text("task_result", { mode: "json" }).$type<AttemptResult>(),
+    taskResult: storedJson(AttemptResultSchema)("task_result"),
     /**
      * The pull request its landing opened or found open, when it lands `pr`:
      * what a poller watches to move its task on when it merges.
@@ -1497,9 +1518,9 @@ export const workItems = sqliteTable(
      * of the paths a step declares), each kept as it passes: a step runs at
      * most once on one such key, a hub restart included. Null: none yet.
      */
-    gatePasses: text("gate_passes", { mode: "json" }).$type<
-      Record<string, GatePass[]>
-    >(),
+    gatePasses: storedJson(z.record(z.string(), z.array(GatePassSchema)))(
+      "gate_passes"
+    ),
     /**
      * When its session called `finish_item` (to land, or blocked) in the
      * turn still under way: that call is the turn's last step. While set, a
@@ -1515,7 +1536,7 @@ export const workItems = sqliteTable(
      * failed for it: what it is sent waits at the hub, and it shows in Needs
      * you until the missing thing is back. Null otherwise.
      */
-    blocked: text("blocked", { mode: "json" }).$type<ItemBlock>(),
+    blocked: storedJson(ItemBlockSchema)("blocked"),
     /** A declared wait on work the delegate started; the hub wakes it at this time. */
     waitUntil: timestamp("wait_until"),
     waitReason: text("wait_reason"),
@@ -1554,15 +1575,15 @@ export const workItems = sqliteTable(
       .notNull()
       .default(false),
     /** Routine waits since the last message handed to the parent. */
-    waitHistory: text("wait_history", { mode: "json" }).$type<{
-      count: number;
-      until: number;
-      reason: string;
-    }>(),
+    waitHistory: storedJson(
+      z.object({
+        count: z.number(),
+        until: z.number(),
+        reason: z.string(),
+      })
+    )("wait_history"),
     /** The `finish_item` the running landing answers, kept while it runs. */
-    submission: text("submission", {
-      mode: "json",
-    }).$type<WorkItemSubmission>(),
+    submission: storedJson(WorkItemSubmissionSchema)("submission"),
     /**
      * The final report: the session's summary, the landing gate's lines, the
      * landing, commits and findings, as the hub built them when it landed.
@@ -1587,7 +1608,7 @@ export const workItems = sqliteTable(
      * and a follow-up that ends without landing leaves it done (work-items.ts
      * `finish`). Null: nothing of it landed.
      */
-    landed: text("landed", { mode: "json" }).$type<WorkLanding>(),
+    landed: storedJson(WorkLandingSchema)("landed"),
     /**
      * Why it failed; on a done item, why the follow-up of its landed work
      * ended without landing (blocked, stopped, failed), what its task's
@@ -1630,7 +1651,7 @@ export const workItems = sqliteTable(
      */
     digest: text("digest"),
     /** What it may spend before the hub stops it; null: no limit. */
-    budget: text("budget", { mode: "json" }).$type<WorkBudget>(),
+    budget: storedJson(WorkBudgetSchema)("budget"),
     /** Turns its session has ended since it started. */
     turns: integer("turns").notNull().default(0),
     /**
@@ -1663,7 +1684,7 @@ export const treeStops = sqliteTable(
     /** The session above it in the walk, whose end waits on this one's; null for the root. */
     parentId: text("parent_id"),
     /** Who asked for the stop (core `EndedBy`). */
-    by: text("by", { mode: "json" }).$type<EndedBy>().notNull(),
+    by: storedJson(EndedBySchema)("by").notNull(),
     askedAt: timestamp("asked_at").notNull(),
     /** When its own end was asked of its machine: once every row under it was gone. */
     endedAt: timestamp("ended_at"),
@@ -1689,7 +1710,7 @@ export const queuedWorkItems = sqliteTable("queued_work_items", {
    * read whole; what the queue reads of it is its own columns: the task it
    * starts, the session id it stands under, the globs it owns.
    */
-  request: text("request", { mode: "json" }).$type<unknown>().notNull(),
+  request: storedJson(z.unknown())("request").notNull(),
   /** The project of the task it starts (`task.projectId`); null for no task. */
   projectId: text("project_id").references(() => projects.id, {
     onDelete: "cascade",
@@ -1754,9 +1775,7 @@ export const delegateEvents = sqliteTable(
      * What the kind carries, read whole: an ask's input, an answer, a
      * report's body; a report's turn identity is its own columns.
      */
-    payload: text("payload", { mode: "json" })
-      .$type<DelegateEventPayload>()
-      .notNull(),
+    payload: storedJson(DelegateEventPayloadSchema)("payload").notNull(),
     /** A report's harness result id: the turn it reports (`completed_turns`). */
     resultId: text("result_id"),
     /** A report's turn's completion time, ISO, when its harness said it. */
@@ -1825,7 +1844,7 @@ export const sentMessages = sqliteTable(
      */
     harnessId: text("harness_id"),
     /** What the sender submitted, pictures as media references. */
-    body: text("body", { mode: "json" }).$type<NeutralUserMessage>().notNull(),
+    body: storedJson(NeutralUserMessageSchema)("body").notNull(),
     /** Records from before modes were kept were all ordinary turns to the reader. */
     mode: text("mode").$type<SendMode>().notNull().default("turn"),
     /**
@@ -1836,7 +1855,7 @@ export const sentMessages = sqliteTable(
     /** Why it failed. */
     reason: text("reason"),
     /** What refused it, when the hub did (`StoredSendRefusal`): what its row offers to recover. */
-    refusal: text("refusal", { mode: "json" }).$type<StoredSendRefusal>(),
+    refusal: storedJson(StoredSendRefusalSchema)("refusal"),
     /** A failed send's place: the last thing the session said before it failed. */
     anchor: text("anchor"),
     /** The failed send this one retries. */
@@ -1918,7 +1937,7 @@ export const mcpServers = sqliteTable("mcp_servers", {
   /** The name sessions see, and the key the entry takes in `~/.claude.json`. */
   name: text("name").primaryKey(),
   /** Sealed: a server's headers and env carry its keys. Null when the hub's key does not open it. */
-  config: sealedJson<FleetMcpConfig>("config").notNull(),
+  config: sealedJson(FleetMcpConfigSchema)("config").notNull(),
   authMode: text("auth_mode")
     .$type<"direct" | "oauth">()
     .notNull()
@@ -1938,7 +1957,7 @@ export const mcpServers = sqliteTable("mcp_servers", {
    * The machine platforms it runs on (`FleetMcpServer.platforms`): a machine
    * of any other is never sent it. Null: every machine.
    */
-  platforms: text("platforms", { mode: "json" }).$type<McpPlatform[]>(),
+  platforms: storedJson(z.array(McpPlatformSchema))("platforms"),
   /**
    * One instance per machine for every session (`FleetMcpServer.shared`),
    * started at its first call, rather than one per session at its start.
@@ -1958,28 +1977,28 @@ export const fleetMcpOauth = sqliteTable("fleet_mcp_oauth", {
   name: text("name").primaryKey(),
   generation: text("generation").notNull(),
   upstream: text("upstream").notNull(),
-  resource: text("resource", { mode: "json" })
-    .$type<OAuthProtectedResourceMetadata>()
-    .notNull(),
+  resource: storedJson(OAuthProtectedResourceMetadataSchema)(
+    "resource"
+  ).notNull(),
   issuer: text("issuer").notNull(),
-  metadata: text("metadata", { mode: "json" })
-    .$type<AuthorizationServerMetadata>()
-    .notNull(),
-  client: sealedJson<OAuthClientInformationFull>("client"),
-  tokens: sealedJson<OAuthTokens>("tokens"),
+  metadata: storedJson(AuthorizationServerMetadataSchema)("metadata").notNull(),
+  client: sealedJson(OAuthClientInformationFullSchema)("client"),
+  tokens: sealedJson(OAuthTokensSchema)("tokens"),
   expiresAt: timestamp("expires_at"),
   /** The client the stored tokens were issued to; refreshing them must use that one. */
-  tokenClient: sealedJson<OAuthClientInformationFull>("token_client"),
-  pending: sealedJson<{
-    /** The client this sign-in started with, which is the one its code is exchanged by. */
-    client: OAuthClientInformationFull;
-    redirectUri: string;
-    verifier: string;
-    state: string;
-    expiresAt: number;
-    /** The access this sign-in asks for: what `access` keeps once it lands. */
-    access?: ConnectAccess | null;
-  }>("pending"),
+  tokenClient: sealedJson(OAuthClientInformationFullSchema)("token_client"),
+  pending: sealedJson(
+    z.object({
+      /** The client this sign-in started with, which is the one its code is exchanged by. */
+      client: OAuthClientInformationFullSchema,
+      redirectUri: z.string(),
+      verifier: z.string(),
+      state: z.string(),
+      expiresAt: z.number(),
+      /** The access this sign-in asks for: what `access` keeps once it lands. */
+      access: ConnectAccessSchema.nullable().optional(),
+    })
+  )("pending"),
   lastOpenedAt: timestamp("last_opened_at"),
   /**
    * When the sign-in ended without the person (fleet-mcp.ts `#end`): the
@@ -2013,9 +2032,7 @@ export const fleetMcpSessions = sqliteTable(
   {
     id: text("id").primaryKey(),
     server: text("server").notNull(),
-    init: text("init", { mode: "json" })
-      .$type<Record<string, unknown>>()
-      .notNull(),
+    init: storedJson(z.record(z.string(), z.unknown()))("init").notNull(),
     usedAt: timestamp("used_at").notNull(),
   },
   (table) => [index("fleet_mcp_sessions_used").on(table.usedAt)]
@@ -2048,14 +2065,14 @@ export const plugins = sqliteTable(
     bytes: integer("bytes"),
     /** Why the last resolve failed. Kept, so the dashboard can say so. */
     error: text("error"),
-    files: text("files", { mode: "json" }).$type<SkillFile[]>(),
+    files: storedJson(z.array(SkillFileSchema))("files"),
     /**
      * What the source held when last read (latest_*, checked_at) and why that
      * read failed (check_error), the version the stored files declare, and
      * what the last fetch of a row that had files came to (FleetVersioned).
      */
     version: text("version"),
-    lastRefresh: text("last_refresh", { mode: "json" }).$type<FleetRefresh>(),
+    lastRefresh: storedJson(FleetRefreshSchema)("last_refresh"),
     latestHash: text("latest_hash"),
     latestVersion: text("latest_version"),
     checkedAt: timestamp("checked_at"),
@@ -2105,14 +2122,14 @@ export const skills = sqliteTable(
     bytes: integer("bytes"),
     /** Why the last resolve failed. A failed row is kept so the dashboard can say so. */
     error: text("error"),
-    files: text("files", { mode: "json" }).$type<SkillFile[]>(),
+    files: storedJson(z.array(SkillFileSchema))("files"),
     /**
      * What the source held when last read (latest_*, checked_at) and why that
      * read failed (check_error), the version the stored files declare, and
      * what the last fetch of a row that had files came to (FleetVersioned).
      */
     version: text("version"),
-    lastRefresh: text("last_refresh", { mode: "json" }).$type<FleetRefresh>(),
+    lastRefresh: storedJson(FleetRefreshSchema)("last_refresh"),
     latestHash: text("latest_hash"),
     latestVersion: text("latest_version"),
     checkedAt: timestamp("checked_at"),
@@ -2353,7 +2370,7 @@ export const usageBuckets = sqliteTable(
 export const usageLimits = sqliteTable("usage_limits", {
   machineId: text("machine_id").primaryKey(),
   /** The OpenCode Go plan's windows; null on a machine with no Go key. */
-  openCodeGo: text("open_code_go", { mode: "json" }).$type<OpenCodeGoLimits>(),
+  openCodeGo: storedJson(OpenCodeGoLimitsSchema)("open_code_go"),
   fetchedAt: timestamp("fetched_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -2504,7 +2521,7 @@ export const accountRouting = sqliteTable("account_routing", {
   delegatesPinned: text("delegates_pinned").references(() => accounts.id, {
     onDelete: "set null",
   }),
-  atLimit: text("at_limit", { mode: "json" }).$type<AtLimit>().notNull(),
+  atLimit: storedJson(AtLimitSchema)("at_limit").notNull(),
 });
 
 /**
@@ -2516,7 +2533,7 @@ export const accountReadings = sqliteTable("account_readings", {
     .primaryKey()
     .references(() => accounts.id, { onDelete: "cascade" }),
   subscription: text("subscription"),
-  overage: text("overage", { mode: "json" }).$type<AccountOverage>(),
+  overage: storedJson(AccountOverageSchema)("overage"),
   lastSeenAt: timestamp("last_seen_at").notNull(),
 });
 
@@ -2557,7 +2574,7 @@ export const accountCatalogs = sqliteTable("account_catalogs", {
   accountId: text("account_id")
     .primaryKey()
     .references(() => accounts.id, { onDelete: "cascade" }),
-  models: text("models", { mode: "json" }).$type<ModelInfo[]>().notNull(),
+  models: storedJson(z.array(ModelInfoSchema))("models").notNull(),
   readAt: timestamp("read_at").notNull(),
 });
 
@@ -2619,7 +2636,7 @@ export const moveEndings = sqliteTable("move_endings", {
   instanceId: text("instance_id")
     .primaryKey()
     .references(() => instances.id, { onDelete: "cascade" }),
-  ended: text("ended", { mode: "json" }).$type<MoveEnded>().notNull(),
+  ended: storedJson(MoveEndedSchema)("ended").notNull(),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -2669,7 +2686,7 @@ export const owedMoves = sqliteTable("owed_moves", {
   /** A person asked for it: the at-limit controller only carries it out. */
   byHand: integer("by_hand", { mode: "boolean" }).notNull().default(false),
   /** The line written once it lands; null for none. */
-  move: text("move", { mode: "json" }).$type<AccountMove>(),
+  move: storedJson(AccountMoveSchema)("move"),
   waits: text("waits").$type<"turn" | "work" | "machine">().notNull(),
   createdAt: timestamp("created_at")
     .notNull()
@@ -2691,7 +2708,7 @@ export const limitCompactions = sqliteTable("limit_compactions", {
   /** The `limit_events` id of the move's line, said again as the compaction goes. */
   lineId: text("line_id").notNull(),
   /** The move's line as written, which each stage restates. */
-  move: text("move", { mode: "json" }).$type<AccountMove>().notNull(),
+  move: storedJson(AccountMoveSchema)("move").notNull(),
   /** Its carry-on's send, when its limit or sign-in stopped it: the first step. */
   carryUuid: text("carry_uuid"),
   filingUuid: text("filing_uuid").notNull(),
@@ -2722,7 +2739,7 @@ export const limitEvents = sqliteTable(
     id: text("id").primaryKey(),
     instanceId: text("instance_id").notNull(),
     at: timestamp("at").notNull(),
-    move: text("move", { mode: "json" }).$type<AccountMove>().notNull(),
+    move: storedJson(AccountMoveSchema)("move").notNull(),
   },
   (table) => [index("limit_events_instance_idx").on(table.instanceId)]
 );
@@ -2827,7 +2844,7 @@ export const toolCallKeys = sqliteTable(
       .notNull(),
     /** The answer's status, headers (as pairs) and body, once answered. */
     status: integer("status"),
-    headers: text("headers", { mode: "json" }).$type<[string, string][]>(),
+    headers: storedJson(z.array(z.tuple([z.string(), z.string()])))("headers"),
     body: blob("body", { mode: "buffer" }),
     /** When it was taken, then when it was answered. */
     at: timestamp("at").notNull(),
@@ -2853,7 +2870,7 @@ export const turnCuts = sqliteTable(
     /** Its cause as a line reads it: "your Stop", "obelisk's pause until 20:53". */
     cause: text("cause").notNull(),
     /** The calls running as it came, by their harness's id: a failed answer to one is the cut's. */
-    calls: text("calls", { mode: "json" }).$type<string[]>().notNull(),
+    calls: storedJson(z.array(z.string()))("calls").notNull(),
   },
   (table) => [index("turn_cuts_instance").on(table.instanceId, table.at)]
 );
@@ -3000,7 +3017,7 @@ export const configTrash = sqliteTable("config_trash", {
     onDelete: "cascade",
   }),
   /** The item's own table first, then what hangs off it, in insert order. */
-  rows: text("rows", { mode: "json" }).$type<TrashedRows[]>().notNull(),
+  rows: storedJson(z.array(TrashedRowsSchema))("rows").notNull(),
   deletedAt: timestamp("deleted_at").notNull(),
 });
 
@@ -3043,7 +3060,7 @@ export const fleetHooks = sqliteTable("fleet_hooks", {
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
   event: text("event").$type<HookEvent>().notNull(),
   matcher: text("matcher"),
-  handler: text("handler", { mode: "json" }).$type<HookHandler>().notNull(),
+  handler: storedJson(HookHandlerSchema)("handler").notNull(),
   /** A command hook's script body, written to every machine that gets this hook. */
   script: text("script"),
   /** sha256 hex of the material a machine compares before writing. */
@@ -3074,7 +3091,7 @@ export const fleetHarnessConfig = sqliteTable("fleet_harness_config", {
   /** A disabled row stays here and is placed nowhere. */
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
   /** Claude Code settings. Null for the other kinds, and when the hub's key does not open it. */
-  settings: sealedJson<Record<string, unknown>>("settings"),
+  settings: sealedJson(z.record(z.string(), z.unknown()))("settings"),
   /** An OpenCode plugin's or pi extension's source. */
   module: text("module"),
   /** An OpenCode plugin's or pi extension's npm package, `<name>@<version>`. */
@@ -3104,7 +3121,7 @@ export const fleetHookHistory = sqliteTable("fleet_hook_history", {
   enabled: integer("enabled", { mode: "boolean" }).notNull(),
   event: text("event").$type<HookEvent>().notNull(),
   matcher: text("matcher"),
-  handler: text("handler", { mode: "json" }).$type<HookHandler>().notNull(),
+  handler: storedJson(HookHandlerSchema)("handler").notNull(),
   script: text("script"),
   hash: text("hash").notNull(),
   scope: text("scope").$type<FleetScope>(),
@@ -3136,7 +3153,7 @@ export const fleetSkillHistory = sqliteTable("fleet_skill_history", {
   skillSource: text("skill_source").notNull(),
   hash: text("hash").notNull(),
   bytes: integer("bytes").notNull(),
-  files: text("files", { mode: "json" }).$type<SkillFile[]>().notNull(),
+  files: storedJson(z.array(SkillFileSchema))("files").notNull(),
   /** `fleet` for the hub's own row; `machine:<machineId>` for an edited copy an overwrite took off it. */
   source: text("source").notNull(),
   createdAt: timestamp("created_at")
@@ -3324,10 +3341,8 @@ export const continuations = sqliteTable("continuations", {
   id: text("id").primaryKey(),
   sourceInstanceId: text("source_instance_id").notNull(),
   /** The request as asked, and its inputs as read then (continuation.ts). */
-  request: text("request", { mode: "json" }).$type<ContinueRequest>().notNull(),
-  prepared: text("prepared", { mode: "json" })
-    .$type<PreparedContinuation>()
-    .notNull(),
+  request: storedJson(ContinueRequestSchema)("request").notNull(),
+  prepared: storedJson(PreparedContinuationSchema)("prepared").notNull(),
   /** The summariser answering now; a resumed job may have replaced it. */
   summariserInstanceId: text("summariser_instance_id"),
   /** Minted when the job is: the new session is started under this id. */
@@ -3345,8 +3360,7 @@ export const continuations = sqliteTable("continuations", {
    * anything else's continuation is folded into one session with its source
    * once its opening has gone (server.ts `foldContinued`).
    */
-  askedBy: text("asked_by", { mode: "json" })
-    .$type<ContinuationAsker>()
+  askedBy: storedJson(ContinuationAskerSchema)("asked_by")
     .notNull()
     .default({ kind: "person" }),
   /**
@@ -3355,11 +3369,13 @@ export const continuations = sqliteTable("continuations", {
    * when that has run (null when not known), and since when the job has
    * waited, the bound counting from then (server.ts `waitStep`).
    */
-  waiting: text("waiting", { mode: "json" }).$type<{
-    from: number;
-    since: number | null;
-    why: string;
-  }>(),
+  waiting: storedJson(
+    z.object({
+      from: z.number(),
+      since: z.number().nullable(),
+      why: z.string(),
+    })
+  )("waiting"),
   createdAt: timestamp("created_at").notNull(),
   updatedAt: timestamp("updated_at").notNull(),
 });
@@ -3440,7 +3456,7 @@ export const lineAnchors = sqliteTable(
     /** The line's block id: `limit-<event>`, a machine line's or a watch line's id, `fresh-start-<instance>`. */
     lineId: text("line_id").notNull(),
     /** The ids of the rows before it when first placed, the nearest first. */
-    after: text("after", { mode: "json" }).$type<string[]>().notNull(),
+    after: storedJson(z.array(z.string()))("after").notNull(),
   },
   (table) => [primaryKey({ columns: [table.instanceId, table.lineId] })]
 );
@@ -3530,11 +3546,13 @@ export const moves = sqliteTable(
      * Everything the job has learned and decided, as moves.ts keeps it, read
      * and written whole, but the machines it names, which are its columns.
      */
-    state: text("state", { mode: "json" })
-      .$type<
-        Omit<MoveState, "sourceMachineId" | "targetMachineId" | "stopOn">
-      >()
-      .notNull(),
+    state: storedJson(
+      MoveStateSchema.omit({
+        sourceMachineId: true,
+        targetMachineId: true,
+        stopOn: true,
+      })
+    )("state").notNull(),
     /** The machine the project moves from (`MoveState.sourceMachineId`). */
     sourceMachineId: text("source_machine_id").notNull(),
     /** The machine it moves to (`MoveState.targetMachineId`). */
@@ -3542,9 +3560,7 @@ export const moves = sqliteTable(
     /** A Cancel the machine running its step has not heard yet: told at its register. */
     stopOn: text("stop_on"),
     /** The request as asked: the target and the spawn New session sent, its harness named. */
-    request: text("request", { mode: "json" })
-      .$type<NamedMoveRequest>()
-      .notNull(),
+    request: storedJson(NamedMoveRequestSchema)("request").notNull(),
     createdAt: timestamp("created_at").notNull(),
     updatedAt: timestamp("updated_at").notNull(),
   },
@@ -3645,7 +3661,7 @@ export const previewPasses = sqliteTable(
       onDelete: "cascade",
     }),
     /** The preview origins (their keys) a session's pass opens; null for the person's, which opens every one. */
-    scope: text("scope", { mode: "json" }).$type<string[]>(),
+    scope: storedJson(z.array(z.string()))("scope"),
     createdAt: timestamp("created_at").notNull(),
     lastSeenAt: timestamp("last_seen_at").notNull(),
     /** Its absolute end, from its entry: never moved by use. */
@@ -3715,10 +3731,7 @@ export const presenceSettings = sqliteTable("presence_settings", {
   /** The person's away clock, ms; null keeps their pick (core `AWAY_AFTER_DEFAULT_MS`). */
   awayAfterMs: integer("away_after_ms"),
   /** The sessions already given that return's recap, by id. */
-  recapped: text("recapped", { mode: "json" })
-    .$type<string[]>()
-    .notNull()
-    .default([]),
+  recapped: storedJson(z.array(z.string()))("recapped").notNull().default([]),
 });
 
 /**
@@ -3834,9 +3847,7 @@ export const lfsOffers = sqliteTable("lfs_offers", {
   /** The thread the card went to. */
   threadId: text("thread_id").notNull(),
   /** What is offered, a row per pattern (core `PlaceLfsRow`). */
-  rows: text("rows", { mode: "json" })
-    .$type<import("@cawco/core").PlaceLfsRow[]>()
-    .notNull(),
+  rows: storedJson(z.array(PlaceLfsRowSchema))("rows").notNull(),
   offeredAt: timestamp("offered_at").notNull(),
   answer: text("answer").$type<"tracked" | "dismissed">(),
   answeredAt: timestamp("answered_at"),
@@ -3908,11 +3919,9 @@ export const designChecks = sqliteTable(
       .$type<"checking" | "passed" | "findings" | "failed">()
       .notNull(),
     /** The builder's `finish_item`, held while the verifier works; run again on a pass. */
-    submission: text("submission", {
-      mode: "json",
-    }).$type<WorkItemSubmission>(),
-    findings: text("findings", { mode: "json" }).$type<DesignFinding[]>(),
-    pick: text("pick", { mode: "json" }).$type<DesignPick>(),
+    submission: storedJson(WorkItemSubmissionSchema)("submission"),
+    findings: storedJson(z.array(DesignFindingSchema))("findings"),
+    pick: storedJson(DesignPickSchema)("pick"),
     createdAt: timestamp("created_at").notNull(),
     endedAt: timestamp("ended_at"),
   },
@@ -3942,13 +3951,17 @@ export const designProposals = sqliteTable("design_proposals", {
   root: text("root"),
   why: text("why").notNull(),
   /** The `design_write` call's files, written again whole on Approve. */
-  files: text("files", { mode: "json" })
-    .$type<{ content: string; encoding?: "utf8" | "base64"; path: string }[]>()
-    .notNull(),
+  files: storedJson(
+    z.array(
+      z.object({
+        content: z.string(),
+        encoding: z.enum(["utf8", "base64"]).optional(),
+        path: z.string(),
+      })
+    )
+  )("files").notNull(),
   /** What the write would change, as it stood when proposed: the card's diff. */
-  preview: text("preview", { mode: "json" })
-    .$type<DesignProposalFile[]>()
-    .notNull(),
+  preview: storedJson(z.array(DesignProposalFileSchema))("preview").notNull(),
   /** The `design_write` call that made it: where its card is drawn in the session. */
   toolUseId: text("tool_use_id"),
   createdAt: timestamp("created_at").notNull(),
@@ -4053,9 +4066,7 @@ export const starterOutcomes = sqliteTable(
  */
 export const sessionPlans = sqliteTable("session_plans", {
   instanceId: text("instance_id").primaryKey(),
-  steps: text("steps", { mode: "json" })
-    .$type<import("@cawco/core").PlanStep[]>()
-    .notNull(),
+  steps: storedJson(z.array(PlanStepSchema))("steps").notNull(),
   /** The session's spec, markdown; null until it writes one. */
   spec: text("spec"),
   specAt: timestamp("spec_at"),
@@ -4322,15 +4333,14 @@ export const streamRelay = sqliteTable("stream_relay", {
   wanted: integer("wanted", { mode: "boolean" }).notNull().default(true),
   state: text("state").$type<StreamRelayState>().notNull().default("starting"),
   /** What its machine has bound, as its last frame said. */
-  ports: text("ports", { mode: "json" }).$type<RelayPorts>(),
+  ports: storedJson(RelayPortsSchema)("ports"),
   /** Its machine's own LAN and tailnet addresses, as its last live frame said: every browser's mint carries them. */
-  reach: text("reach", { mode: "json" }).$type<RelayReach>(),
+  reach: storedJson(RelayReachSchema)("reach"),
   why: text("why"),
   /** The command `why` names as its fix, word for word inside it (shown as code). */
   whyCommand: text("why_command"),
   /** Each port's last STUN answer. */
-  health: text("health", { mode: "json" })
-    .$type<RelayPortHealth[]>()
+  health: storedJson(z.array(RelayPortHealthSchema))("health")
     .notNull()
     .default(sql`'[]'`),
   checkedAt: timestamp("checked_at"),
@@ -4440,8 +4450,7 @@ export const streamRelayProofs = sqliteTable("stream_relay_proofs", {
   /** Its public address differs from the relay's. */
   outside: integer("outside", { mode: "boolean" }).notNull(),
   /** The chips of the URLs that answered; empty when none did. */
-  ports: text("ports", { mode: "json" })
-    .$type<string[]>()
+  ports: storedJson(z.array(z.string()))("ports")
     .notNull()
     .default(sql`'[]'`),
   /** A URL refused its credential (a 401), not unreachable. */
@@ -4676,7 +4685,7 @@ export const leadCalls = sqliteTable(
     /** The shell command, or the file an edit names. */
     command: text("command").notNull(),
     /** The files it names that it changes. */
-    files: text("files", { mode: "json" }).$type<string[]>().notNull(),
+    files: storedJson(z.array(z.string()))("files").notNull(),
     /** Whether it changes anything: every edit, and every shell call but a read-only one. */
     writes: integer("writes", { mode: "boolean" }).notNull(),
     outcome: text("outcome").$type<LeadCallOutcome>().notNull(),
@@ -4767,18 +4776,16 @@ export const threadMessages = sqliteTable(
     /** An event's one line. */
     noteTitle: text("note_title"),
     /** What an event is, as typed data (`ThreadEvent`); null on notes stored before it was kept. */
-    event: text("event", { mode: "json" }).$type<ThreadEvent>(),
+    event: storedJson(ThreadEventSchema)("event"),
     /** The project folder's files Caw's message says he wrote (`stages.md`). */
-    files: text("files", { mode: "json" }).$type<string[]>(),
+    files: storedJson(z.array(z.string()))("files"),
     /** Your answer's question and answer, from the lead's AskUserQuestion. */
-    question: text("question", { mode: "json" }).$type<ThreadQuestion>(),
-    answer: text("answer", { mode: "json" }).$type<ThreadAnswer>(),
+    question: storedJson(ThreadQuestionSchema)("question"),
+    answer: storedJson(ThreadAnswerSchema)("answer"),
     /** The pictures your words carried, as the media store keeps them (media.ts), and its addresses for them. */
-    images: text("images", { mode: "json" }).$type<ThreadImage[]>(),
+    images: storedJson(z.array(ThreadImageSchema))("images"),
     /** The pastes and files your words carried, files by the hub's reference (`POST /api/files`). */
-    attachments: text("attachments", { mode: "json" }).$type<
-      SendAttachment[]
-    >(),
+    attachments: storedJson(z.array(SendAttachmentSchema))("attachments"),
     createdAt: timestamp("created_at").notNull(),
   },
   (table) => [index("thread_messages_thread").on(table.threadId)]
@@ -4843,7 +4850,7 @@ export const routines = sqliteTable(
     /** Where a `delegate` run's commits go: `none` unless the routine says. */
     lands: text("lands").$type<LandsMode>().notNull().default("none"),
     /** What each run's work item may spend. */
-    budget: text("budget", { mode: "json" }).$type<WorkBudget>(),
+    budget: storedJson(WorkBudgetSchema)("budget"),
     /** Dollars its runs may spend in a day of its time zone; null: no cap. */
     dailyCapUsd: real("daily_cap_usd"),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
@@ -5010,18 +5017,16 @@ export const connections = sqliteTable("connections", {
     .notNull(),
   url: text("url"),
   command: text("command"),
-  args: text("args", { mode: "json" }).$type<string[]>(),
+  args: storedJson(z.array(z.string()))("args"),
   auth: text("auth").$type<import("@cawco/core").ConnectionAuth>().notNull(),
   /** For `header` auth: the header (stdio: the environment variable) the key goes in. */
   header: text("header"),
   state: text("state").$type<import("@cawco/core").ConnectionState>().notNull(),
   reason: text("reason"),
   /** Its key, or its OAuth tokens, client and a sign-in's verifier: sealed. */
-  secret: sealedJson<ConnectionSecret>("sealed"),
+  secret: sealedJson(ConnectionSecretSchema)("sealed"),
   /** The OAuth discovery the SDK saved (resource and authorization server metadata): public documents. */
-  discovery: text("discovery", { mode: "json" }).$type<
-    import("@modelcontextprotocol/sdk/client/auth.js").OAuthDiscoveryState
-  >(),
+  discovery: storedJson(OAuthDiscoveryStateSchema)("discovery"),
   /** A sign-in under way: the `state` its redirect must bring back, and where to. */
   signInState: text("sign_in_state").unique(),
   signInRedirect: text("sign_in_redirect"),
@@ -5203,9 +5208,7 @@ export const connectorPolls = sqliteTable(
       .references(() => projects.id, { onDelete: "cascade" }),
     connection: text("connection").notNull(),
     tool: text("tool").notNull(),
-    args: text("args", { mode: "json" })
-      .$type<Record<string, unknown>>()
-      .notNull(),
+    args: storedJson(z.record(z.string(), z.unknown()))("args").notNull(),
     /** Seconds between calls, 60 or more. */
     intervalS: integer("interval_s").notNull(),
     /** A dot path to the array of items in the result; empty: the result is the array. */
@@ -5276,7 +5279,7 @@ export const trackerBindings = sqliteTable("tracker_bindings", {
   targetUrl: text("target_url").notNull(),
   /** Issues opened after it become tasks; nothing older is copied. */
   boundAt: timestamp("bound_at").notNull(),
-  cursor: text("cursor", { mode: "json" }).$type<TrackerCursor>().notNull(),
+  cursor: storedJson(TrackerCursorSchema)("cursor").notNull(),
   state: text("state")
     .$type<import("@cawco/core").TrackerSyncState>()
     .notNull(),
@@ -5286,9 +5289,7 @@ export const trackerBindings = sqliteTable("tracker_bindings", {
   /** The tracker's rate limit holds polls back until then. */
   resumeAt: timestamp("resume_at"),
   /** GitHub: the Project its stages show on through Status (tracker-github-project.ts); null when none. */
-  githubProject: text("github_project", {
-    mode: "json",
-  }).$type<import("@cawco/core").GithubProject>(),
+  githubProject: storedJson(GithubProjectSchema)("github_project"),
   /** GitHub: why stages do not show on a Project, in GitHub's words; set, that part of the sync does not run. */
   githubProjectReason: text("github_project_reason"),
 });
@@ -5334,7 +5335,7 @@ export const trackerLinks = sqliteTable(
     /** `#12`, `ENG-123`. */
     ref: text("ref").notNull(),
     url: text("url").notNull(),
-    synced: text("synced", { mode: "json" }).$type<TrackerSynced>().notNull(),
+    synced: storedJson(TrackerSyncedSchema)("synced").notNull(),
     /** The issue's `updated_at` when they last agreed, ms. */
     remoteUpdatedAt: integer("remote_updated_at").notNull(),
     /** Why the last sync of this task stopped short, in the tracker's words. */
@@ -5522,7 +5523,7 @@ export const parkedAsks = sqliteTable(
     instanceId: text("instance_id"),
     machineId: text("machine_id").notNull(),
     /** The `permission_request` envelope, `raisedAt` stamped on its payload. */
-    envelope: text("envelope", { mode: "json" }).$type<Envelope>().notNull(),
+    envelope: storedJson(EnvelopeSchema)("envelope").notNull(),
   },
   (table) => [index("parked_asks_instance").on(table.instanceId)]
 );

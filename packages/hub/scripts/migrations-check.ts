@@ -27,6 +27,7 @@ import { join, resolve } from "node:path";
 import { is } from "drizzle-orm";
 import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
 import { hubInProcess } from "./hub-in-process";
+import { storedRows, storedRowsReport } from "./stored-rows";
 
 const started = performance.now();
 const HUB = resolve(import.meta.dir, "..");
@@ -301,9 +302,26 @@ try {
       `A migration's foreign keys don't match the schema (drizzle-kit 0.31 drops an added column's ON DELETE and ON UPDATE, drizzle-orm#5619: write the clause into the migration by hand):\n${drift.join("\n")}`
     );
   }
+  // Every stored JSON row reads as its column's schema once migrated: a
+  // shape changed without a migration for its rows fails here.
+  const stored = new Database(dbPath, { readwrite: true });
+  const { hubSecrets } = await import("../src/secret-box");
+  const shapes = await storedRows(stored, (raw) => {
+    try {
+      return hubSecrets().open(raw);
+    } catch {
+      return null;
+    }
+  });
+  stored.close();
+  if (shapes.failures.length > 0) {
+    throw new Error(
+      `Stored JSON rows that are not their column's shape: a migration is missing.\n${storedRowsReport(shapes).join("\n")}`
+    );
+  }
   const seeded = [...before.rows.values()].reduce((sum, n) => sum + n, 0);
   console.log(
-    `migrations:check: ${after.migrations - before.migrations} migration${after.migrations - before.migrations === 1 ? "" : "s"} applied over ${seeded} ${GIVEN ? "rows of the given database" : "fixture rows"}; the hub answered ${answers.join(", ")}; ${((performance.now() - started) / 1000).toFixed(1)} s`
+    `migrations:check: ${after.migrations - before.migrations} migration${after.migrations - before.migrations === 1 ? "" : "s"} applied over ${seeded} ${GIVEN ? "rows of the given database" : "fixture rows"}; the hub answered ${answers.join(", ")}; ${shapes.checked} stored JSON rows are their shape; ${((performance.now() - started) / 1000).toFixed(1)} s`
   );
 } finally {
   rmSync(scratch, { recursive: true, force: true });
