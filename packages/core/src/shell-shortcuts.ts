@@ -30,7 +30,7 @@ export type ShellShortcut = (typeof SHELL_SHORTCUTS)[number]["name"];
  * wire.ts): V, C and D its modes, `C` (⇧C) its pins shown or hidden, J and K
  * a step, `/` the rail's search, Enter and Esc.
  */
-export const PANE_KEYS = [
+const PANE_KEYS = [
   "v",
   "c",
   "d",

@@ -162,7 +162,7 @@ const GITHUB_API_HOSTS: ReadonlySet<string> = new Set([
   "uploads.github.com",
 ]);
 /** The HTTP methods that write: what a guarded host is asked before, and what the hub's own write routes take. */
-export const WRITE_METHODS = ["POST", "PATCH", "PUT", "DELETE"] as const;
+const WRITE_METHODS = ["POST", "PATCH", "PUT", "DELETE"] as const;
 export type WriteMethod = (typeof WRITE_METHODS)[number];
 
 /** Whether `method`, upper case, is one of {@link WRITE_METHODS}. */

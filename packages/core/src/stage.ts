@@ -233,7 +233,7 @@ export interface Form {
  * phone's canvas shows one frame at a time), so it is neither drawn nor
  * empty: `empty` is a frame shown that drew nothing.
  */
-export type FrameState = "drawn" | "empty" | "failed" | "unseen" | "unshown";
+type FrameState = "drawn" | "empty" | "failed" | "unseen" | "unshown";
 
 /** Where a page's code threw, 1-based, the file from the toolchain root when it is the project's. */
 export interface PageError {
@@ -651,7 +651,7 @@ export interface Story {
 }
 
 /** What a story file's default export says every story shares: its args, and the component each mounts unless it names its own. */
-export interface SheetMeta {
+interface SheetMeta {
   args: Record<string, unknown>;
   code: Record<string, string>;
   /** The component, from the toolchain root; null when the meta names none the stage could resolve. */
@@ -910,13 +910,13 @@ interface StageStateOf {
 }
 
 /** A sheet's stage: the project's own dev toolchain on its toolchain root. */
-export interface SheetStageState extends StageStateOf {
+interface SheetStageState extends StageStateOf {
   runs: "sheet";
   toolchain: StageToolchain;
 }
 
 /** A workspace preview's server: the command its preview names (`serve`). */
-export interface ServerStageState extends StageStateOf {
+interface ServerStageState extends StageStateOf {
   runs: "serve";
 }
 
