@@ -67,7 +67,6 @@
       flow.done();
     }}
   >
-    <!-- svelte-ignore a11y_autofocus -->
     <Input
       aria-describedby={flow.problem ? `${codeId}-problem` : undefined}
       aria-invalid={flow.problem ? "true" : undefined}

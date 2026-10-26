@@ -266,7 +266,7 @@
     >
       {#if captionsReady}
         <!-- Captions come from the sidecar .vtt when the video has one; a video without one has none to show. Svelte and Biome read only an unconditional <track>. -->
-        <!-- svelte-ignore a11y_media_has_caption -->
+        <!-- svelte-ignore a11y_media_has_caption: the <track> is conditional on the sidecar .vtt, which the compiler does not read -->
         <!-- biome-ignore lint/a11y/useMediaCaption: the <track> is conditional on the sidecar .vtt, which Biome does not read -->
         <video
           aria-label={alt}

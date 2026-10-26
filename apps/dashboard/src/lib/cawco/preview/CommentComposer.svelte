@@ -125,7 +125,6 @@
   </DropdownMenu.Root>
 {/snippet}
 
-<!-- svelte-ignore a11y_no_static_element_interactions: the keys are the composer's field's, heard as they pass -->
 <div
   class="relative w-full"
   data-slot="comment-composer"

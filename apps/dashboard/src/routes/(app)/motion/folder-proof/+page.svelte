@@ -261,7 +261,6 @@
 
 <!-- Over the shell and anything it draws (a hub banner): the strip on its
      shelf, and the page its chosen tab opens into. -->
-<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div
   class="fixed inset-0 z-(--layer-bench) flex flex-col bg-surface-recess text-ink-strong"
   data-folder-proof
@@ -272,7 +271,6 @@
   style:--tab-rim-taper={taper === null ? undefined : String(taper)}
   style:--tab-rim-width={width === null ? undefined : String(width)}
 >
-  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div
     data-slot="group"
     class="@container/leaf flex min-h-0 flex-auto flex-col bg-surface-shelf pt-space-7"
@@ -282,7 +280,6 @@
     <PaneTabs {leaf} />
     <div class="h-space-7 bg-surface-recess"></div>
   </div>
-  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div
     data-slot="group"
     class="@container/leaf flex min-h-0 flex-auto flex-col bg-surface-shelf pt-space-7"

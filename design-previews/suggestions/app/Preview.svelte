@@ -15,6 +15,7 @@
   them (starters.js), and the designer's own copy.
 -->
 <script lang="ts">
+  import { untrack } from "svelte";
   import { drawsOf, noteOf, WHERE, writeState } from "./states.js";
   import CawStill from "./CawStill.svelte";
   import Drafts from "./directions/Drafts.svelte";
@@ -27,8 +28,7 @@
   const DRAWN = { today: Today, drafts: Drafts, ledger: Ledger, tray: Tray };
 
   let { initial }: { initial: State } = $props();
-  // svelte-ignore state_referenced_locally
-  let state = $state(initial);
+  let state = $state(untrack(() => initial));
   const key = $derived(writeState(state));
   const draws = $derived(drawsOf(state));
   const Direction = $derived(DRAWN[state.direction as keyof typeof DRAWN]);

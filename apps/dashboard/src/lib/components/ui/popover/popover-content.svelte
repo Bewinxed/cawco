@@ -96,7 +96,7 @@
 
 <script lang="ts">
   import { Popover as PopoverPrimitive } from "bits-ui";
-  import type { ComponentProps } from "svelte";
+  import { type ComponentProps, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import { type Morph, morph } from "#lib/cawco/motion/morph.svelte.js";
@@ -189,8 +189,8 @@
   // tween a frame behind it. A site that draws its own surface (`child`,
   // HangCard) or a card that hangs has no such fade here, and tweens from
   // the first.
-  // svelte-ignore state_referenced_locally: how it morphs is set once, by its site
-  const resize = morph(morphs);
+  // How it morphs is set once, by its site.
+  const resize = morph(untrack(() => morphs));
   let entered = $state(false);
   const tweens = $derived(entered || !!callerChild || motion === "hang");
 

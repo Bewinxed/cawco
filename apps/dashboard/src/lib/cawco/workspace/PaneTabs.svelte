@@ -1391,7 +1391,7 @@
            a 2px rule in the gap, on the near side; the tab that draws it
            stands over the strip while it does, so no neighbour's shape
            covers the rule. -->
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <!-- svelte-ignore a11y_no_static_element_interactions: a press here drags the tab or pulls its menu; the keyboard reaches the tab by its link -->
       <div
         data-slot="tab"
         data-needs={tab.activity === "blocked" || undefined}

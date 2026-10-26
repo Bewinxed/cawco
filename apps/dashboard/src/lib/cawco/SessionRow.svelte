@@ -351,7 +351,7 @@
       <!-- The title as a field, in the title's own type and place: no box of
            its own beyond the input recipe's hairline, so the row keeps its
            height. -->
-      <!-- svelte-ignore a11y_autofocus -->
+      <!-- svelte-ignore a11y_autofocus: the field opens on the person's own Rename, and takes the focus they asked for -->
       <input
         data-slot="title"
         data-field

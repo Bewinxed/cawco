@@ -909,7 +909,7 @@
          a pick and keeps the field's ink.
          specificity-trap: `data-own` stands only on a draft, and the pick's
          selected ink holds only off one (`not-data-draft`). -->
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_click_events_have_key_events: the field owns the keys for every row (aria-activedescendant) -->
     <!-- biome-ignore lint/a11y/useKeyWithClickEvents: the field owns the keys for every row (aria-activedescendant) -->
     <div
       data-slot="ghost"

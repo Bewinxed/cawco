@@ -206,7 +206,7 @@
      and leaves by `popOut` back down into the row (--dur-exit), global: the
      pane's `{#if}` that shuts it is outside this component, a snippet
      render between. -->
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions: Escape inside the plan shuts it, heard as it passes up from the control that has the focus -->
 <section
   data-slot="plan"
   aria-labelledby={titleId}

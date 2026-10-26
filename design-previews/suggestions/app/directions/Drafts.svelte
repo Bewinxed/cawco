@@ -16,6 +16,7 @@
   cleared brings it back. With less motion the travel is a fade.
 -->
 <script lang="ts">
+  import { untrack } from "svelte";
   import {
     dur,
     ease,
@@ -46,18 +47,13 @@
   const keyboard = $derived(where === "keyboard");
   const first = $derived(draws.items[0]?.text ?? "");
   // The state's own box: filled holds the first words, typing their start.
-  // svelte-ignore state_referenced_locally
-  let value = $state(
-    draws.phase === "filled"
+  let value = $state(untrack(() => draws.phase === "filled"
       ? first
       : draws.phase === "typing"
         ? typedOf(first)
-        : ""
-  );
-  // svelte-ignore state_referenced_locally
-  let taken = $state<number | null>(draws.phase === "filled" ? 0 : null);
-  // svelte-ignore state_referenced_locally
-  let expanded = $state(draws.expanded);
+        : ""));
+  let taken = $state<number | null>(untrack(() => draws.phase === "filled" ? 0 : null));
+  let expanded = $state(untrack(() => draws.expanded));
   let said = $state("");
   let field = $state<HTMLTextAreaElement>();
   let stack = $state<HTMLElement>();

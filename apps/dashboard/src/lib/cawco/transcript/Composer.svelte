@@ -3739,7 +3739,7 @@
              line's foot. The wheel writes `--roll-y` and `--roll-o` on this
              box while the roll is off the draft; with neither, the roll's
              translate and clip are invalid and so none. -->
-        <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+        <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions: a press on the field's padding only hands it the focus; keys reach the field itself -->
         <!-- biome-ignore lint/a11y/noStaticElementInteractions: a press on the field's padding only hands it the focus; keys reach the field itself -->
         <!-- biome-ignore lint/a11y/useKeyWithClickEvents: a press on the field's padding only hands it the focus; keys reach the field itself -->
         <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: a press on the field's padding only hands it the focus; keys reach the field itself -->
@@ -3891,7 +3891,7 @@
              opens to a step more (space-3), so each 34px control's touch area
              reaches 44px before meeting its neighbour's: the touch areas' gap
              (`--hit-gap-x`, which .touch-hit reads) switches with it. -->
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <!-- svelte-ignore a11y_no_static_element_interactions: a press on the controls only keeps the field's focus; the controls are buttons -->
         <!-- biome-ignore lint/a11y/noStaticElementInteractions: a press on the controls only keeps the field's focus; the controls are buttons -->
         <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: a press on the controls only keeps the field's focus; the controls are buttons -->
         <div

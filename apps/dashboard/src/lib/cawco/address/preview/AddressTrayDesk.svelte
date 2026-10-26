@@ -29,8 +29,8 @@
     network = "tailscale",
   }: { direction: Direction; network?: Network } = $props();
 
-  // svelte-ignore state_referenced_locally — the story's starting network, once
-  const tray = new AddressTray({ network });
+  // The story's starting network, once.
+  const tray = new AddressTray({ network: untrack(() => network) });
   onDestroy(() => tray.dispose());
   // The picture opens on the tray at the first step the person acts on
   // (Found it: Join), held still by the story's own jump, the row already

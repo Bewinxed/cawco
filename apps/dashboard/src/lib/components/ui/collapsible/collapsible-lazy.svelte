@@ -21,12 +21,10 @@
 
   // Seeded from the initial `open` so a panel that starts open is server-rendered:
   // effects do not run during SSR, so waiting for one would ship it empty.
-  // svelte-ignore state_referenced_locally
-  let rendered = $state(open);
+  let rendered = $state(untrack(() => open));
   // A panel that mounts open — the virtualiser building its row again, a
   // pane coming back — is drawn whole, at the height it was left at.
-  // svelte-ignore state_referenced_locally
-  let limit = $state(open ? Number.POSITIVE_INFINITY : 0);
+  let limit = $state(untrack(() => open) ? Number.POSITIVE_INFINITY : 0);
 
   $effect.pre(() => {
     if (open) {

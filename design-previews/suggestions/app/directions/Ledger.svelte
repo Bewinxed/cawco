@@ -18,6 +18,7 @@
   its own and comes back when it is cleared.
 -->
 <script lang="ts">
+  import { untrack } from "svelte";
   import {
     dur,
     ease,
@@ -51,18 +52,13 @@
   } = $props();
 
   const first = $derived(draws.items[0]?.text ?? "");
-  // svelte-ignore state_referenced_locally
-  let value = $state(
-    draws.phase === "filled"
+  let value = $state(untrack(() => draws.phase === "filled"
       ? first
       : draws.phase === "typing"
         ? typedOf(first)
-        : ""
-  );
-  // svelte-ignore state_referenced_locally
-  let checked = $state<number | null>(draws.phase === "filled" ? 0 : null);
-  // svelte-ignore state_referenced_locally
-  let expanded = $state(draws.expanded);
+        : ""));
+  let checked = $state<number | null>(untrack(() => draws.phase === "filled" ? 0 : null));
+  let expanded = $state(untrack(() => draws.expanded));
   let said = $state("");
   let field = $state<HTMLTextAreaElement>();
 

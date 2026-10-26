@@ -16,6 +16,7 @@
   the tray folds to its chip row. With less motion, only the fades.
 -->
 <script lang="ts">
+  import { untrack } from "svelte";
   import {
     dur,
     ease,
@@ -49,15 +50,12 @@
   const first = $derived(draws.items[0]?.text ?? "");
   const holds = (phase: string) =>
     phase === "filled" || phase === "scrolled" || phase === "reopened";
-  // svelte-ignore state_referenced_locally
-  let value = $state(holds(draws.phase) ? first : "");
-  // svelte-ignore state_referenced_locally
-  let reopened = $state(draws.phase === "reopened");
+  let value = $state(untrack(() => holds(draws.phase) ? first : ""));
+  let reopened = $state(untrack(() => draws.phase === "reopened"));
   let shut = $state(false);
   /** A lift in flight: the tray keeps its rows until the words are up. */
   let lifting = $state(false);
-  // svelte-ignore state_referenced_locally
-  let expanded = $state(draws.expanded);
+  let expanded = $state(untrack(() => draws.expanded));
   let said = $state("");
   let field = $state<HTMLTextAreaElement>();
   let chipRow = $state<HTMLElement>();

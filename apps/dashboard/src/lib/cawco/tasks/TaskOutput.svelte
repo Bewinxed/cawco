@@ -195,7 +195,7 @@
           />
         </button>
       {:else if kind === "video"}
-        <!-- svelte-ignore a11y_media_has_caption -->
+        <!-- svelte-ignore a11y_media_has_caption: a task's output carries no caption track; its file is what there is -->
         <!-- biome-ignore lint/a11y/useMediaCaption: a task's output carries no caption track; its file is what there is -->
         <video
           class="block w-full max-h-c-task-output-video-h rounded-sm bg-surface-recess"

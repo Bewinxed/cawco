@@ -344,7 +344,7 @@
       class="-mx-space-1 min-w-0 shrink grow truncate type-title text-ink-strong"
     >
       {#if draft !== null}
-        <!-- svelte-ignore a11y_autofocus -->
+        <!-- svelte-ignore a11y_autofocus: the field opens on the person's own Rename, and takes the focus they asked for -->
         <input
           data-slot="name"
           data-field

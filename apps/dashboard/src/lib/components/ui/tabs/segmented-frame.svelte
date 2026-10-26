@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   /**
    * The segmented control in a frame of its own (its states file's): the
    * kit's Tabs list, the groove round its lifted thumb under the chosen
@@ -17,8 +18,8 @@
     chosen: string;
   } = $props();
 
-  // svelte-ignore state_referenced_locally: the story's chosen segment is where it starts
-  let value = $state(chosen);
+  // The story's chosen segment is where it starts.
+  let value = $state(untrack(() => chosen));
 </script>
 
 <div class="p-space-5">

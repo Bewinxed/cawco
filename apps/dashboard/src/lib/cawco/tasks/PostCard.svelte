@@ -149,7 +149,7 @@
                   src={folderRawHref(projectId, file)}
                 />
               {:else if kind === "video"}
-                <!-- svelte-ignore a11y_media_has_caption -->
+                <!-- svelte-ignore a11y_media_has_caption: a post's media file carries no caption track -->
                 <!-- biome-ignore lint/a11y/useMediaCaption: a post's media file carries no caption track -->
                 <video
                   class="max-h-c-post-media-max-h max-w-full rounded-sm"

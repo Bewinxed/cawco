@@ -102,8 +102,8 @@
       children: Snippet;
     } = $props();
 
-  // svelte-ignore state_referenced_locally — defaultValue is a one-time initial
-  const state = new TabsState(defaultValue);
+  // defaultValue is read once, the starting tab.
+  const state = new TabsState(untrack(() => defaultValue));
   const sync = () => {
     state.controlled = value;
     state.selectedIndex = selectedIndex;

@@ -1681,7 +1681,7 @@
              (--dur-exit, The Fast Exit Rule). What it holds changing size
              (a reason field, a row leaving) tweens its height (`morph`),
              up from its foot. -->
-        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+        <!-- svelte-ignore a11y_no_noninteractive_element_interactions: Escape inside the shelf is heard on the region, as it passes up from the row's field -->
         <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: Escape inside the shelf (a row's reason field, then the shelf) is heard on the region; every control in it is its own button or field -->
         <section
           data-slot="shelf"
