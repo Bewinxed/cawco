@@ -1518,6 +1518,8 @@
     --ease-arrive: cubic-bezier(0.2, 0, 0, 1);
     /* A strategy figure's travel and growth (Configure → Accounts): a session riding into its lane, a bar filling, a lane reordering. The owner's reference motion, from the Projects mockups (mocks/project-paths). */
     --ease-figure: cubic-bezier(0.2, 0.8, 0.2, 1);
+    /* A shape pouring out of another through the goo filter (goo-blur, goo-threshold): a comment's card out of its pill. It overshoots a little and settles, the liquid's give. transitions.dev Gooey plus menu, its open curve (--pv3i). */
+    --ease-goo: cubic-bezier(0.34, 1.56, 0.64, 1);
     /* A glide's first stretch: speed rising evenly from rest (its position the square of its time), into the steady pace a tree's line, its room and the rows under it travel at. */
     --ease-glide-in: cubic-bezier(0.3333, 0, 0.6667, 0.3333);
     /* A glide's last stretch: from the steady pace, speed falling evenly to rest. */
@@ -1553,6 +1555,10 @@
     --dur-grow: 320ms;
     /* The grown composer folding back into its pill, shorter than its growth. */
     --dur-grow-exit: 220ms;
+    /* A comment's card pouring out of its pill through the goo filter, on --ease-goo. transitions.dev Gooey plus menu, its open (--pv3x). */
+    --dur-goo: 350ms;
+    /* A comment's card drawn back into its pill through the goo filter, on --ease-out, shorter than its open. transitions.dev Gooey plus menu, its close (--pv3g). */
+    --dur-goo-exit: 250ms;
     /* A queued message's words flying between its bubble and the composer field, either way, two copies crossfading on the drawer curve. */
     --dur-lift: 340ms;
     /* How long a touch rests on the composer, keyboard down, before the recall wheel comes up under it. */
@@ -1598,6 +1604,10 @@
     --fold-blur: 2px;
     /* How far out of focus the grown composer's parts come up from, and sink back into as it folds: an ask card's title, body and foot; the queued edit's label, hints and Keep it. Web only. */
     --part-blur: 4px;
+    /* The goo filter's blur, its feGaussianBlur stdDeviation in px: how far apart two shapes still pull a neck between them. transitions.dev Gooey plus menu (--pv3v: 6). */
+    --goo-blur: 6;
+    /* The goo filter's alpha slope, its feColorMatrix alpha row `slope (0.5 - slope × 5/12)`: how hard the blurred edge is cut back to a shape. transitions.dev Gooey plus menu (--pv2o: 18). */
+    --goo-threshold: 18;
     /* The opacity a skeleton pulses down to, half a pulse in. transitions.dev Skeleton loader and reveal, --pulse-min: 0.5. */
     --skeleton-pulse-floor: 0.5;
     /* How soft a skeleton is as it goes and its content as it comes, at the far end of the reveal's cross-fade. transitions.dev Skeleton loader and reveal, --reveal-blur: 2px. */

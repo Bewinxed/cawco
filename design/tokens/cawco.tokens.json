@@ -7549,6 +7549,16 @@
       "$value": [0.2, 0.8, 0.2, 1],
       "$description": "A strategy figure's travel and growth (Configure → Accounts): a session riding into its lane, a bar filling, a lane reordering. The owner's reference motion, from the Projects mockups (mocks/project-paths)."
     },
+    "ease-goo": {
+      "$type": "cubicBezier",
+      "$value": [0.34, 1.56, 0.64, 1],
+      "$description": "A shape pouring out of another through the goo filter (goo-blur, goo-threshold): a comment's card out of its pill. It overshoots a little and settles, the liquid's give. transitions.dev Gooey plus menu, its open curve (--pv3i).",
+      "$extensions": {
+        "dev.cawco": {
+          "platforms": ["web"]
+        }
+      }
+    },
     "ease-glide-in": {
       "$type": "cubicBezier",
       "$value": [0.3333, 0, 0.6667, 0.3333],
@@ -7702,6 +7712,32 @@
         "unit": "ms"
       },
       "$description": "The grown composer folding back into its pill, shorter than its growth."
+    },
+    "dur-goo": {
+      "$type": "duration",
+      "$value": {
+        "value": 350,
+        "unit": "ms"
+      },
+      "$description": "A comment's card pouring out of its pill through the goo filter, on --ease-goo. transitions.dev Gooey plus menu, its open (--pv3x).",
+      "$extensions": {
+        "dev.cawco": {
+          "platforms": ["web"]
+        }
+      }
+    },
+    "dur-goo-exit": {
+      "$type": "duration",
+      "$value": {
+        "value": 250,
+        "unit": "ms"
+      },
+      "$description": "A comment's card drawn back into its pill through the goo filter, on --ease-out, shorter than its open. transitions.dev Gooey plus menu, its close (--pv3g).",
+      "$extensions": {
+        "dev.cawco": {
+          "platforms": ["web"]
+        }
+      }
     },
     "dur-lift": {
       "$type": "duration",
@@ -7872,6 +7908,26 @@
         "unit": "px"
       },
       "$description": "How far out of focus the grown composer's parts come up from, and sink back into as it folds: an ask card's title, body and foot; the queued edit's label, hints and Keep it. Web only.",
+      "$extensions": {
+        "dev.cawco": {
+          "platforms": ["web"]
+        }
+      }
+    },
+    "goo-blur": {
+      "$type": "number",
+      "$value": 6,
+      "$description": "The goo filter's blur, its feGaussianBlur stdDeviation in px: how far apart two shapes still pull a neck between them. transitions.dev Gooey plus menu (--pv3v: 6).",
+      "$extensions": {
+        "dev.cawco": {
+          "platforms": ["web"]
+        }
+      }
+    },
+    "goo-threshold": {
+      "$type": "number",
+      "$value": 18,
+      "$description": "The goo filter's alpha slope, its feColorMatrix alpha row `slope (0.5 - slope × 5/12)`: how hard the blurred edge is cut back to a shape. transitions.dev Gooey plus menu (--pv2o: 18).",
       "$extensions": {
         "dev.cawco": {
           "platforms": ["web"]
