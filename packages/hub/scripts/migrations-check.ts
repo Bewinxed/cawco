@@ -21,9 +21,9 @@
  * database before landing.
  */
 import { Database } from "bun:sqlite";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { is } from "drizzle-orm";
 import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
 import { hubInProcess } from "./hub-in-process";
@@ -305,10 +305,15 @@ try {
   // Every stored JSON row reads as its column's schema once migrated: a
   // shape changed without a migration for its rows fails here.
   const stored = new Database(dbPath, { readwrite: true });
-  const { hubSecrets } = await import("../src/secret-box");
+  // A given database's sealed values open with its own hub's key, read where
+  // it lies and never made; the fixture's with the scratch hub's.
+  const { hubSecrets, makeSecretBox } = await import("../src/secret-box");
+  const givenKey = GIVEN && join(dirname(resolve(GIVEN)), "secrets.key");
+  const box =
+    givenKey && existsSync(givenKey) ? makeSecretBox(givenKey) : hubSecrets();
   const shapes = await storedRows(stored, (raw) => {
     try {
-      return hubSecrets().open(raw);
+      return box.open(raw);
     } catch {
       return null;
     }
