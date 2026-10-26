@@ -19,7 +19,7 @@ const KEY = WORKING_SET_KEY;
 /** Past this, the coldest conversation that is not open is forgotten. */
 const LIMIT = 10;
 
-interface Visit {
+export interface Visit {
   /** Only eviction reads this: the entry that goes is the coldest one. */
   at: number;
   cwd?: string;

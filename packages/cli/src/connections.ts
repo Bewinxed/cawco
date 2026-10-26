@@ -11,16 +11,9 @@
  * as the CLI's other hub calls are. What is printed is the name, the key's
  * length and the connection's state; never the key.
  */
-import {
-  CAWCO_ENV,
-  CONNECTION_NAME,
-  type ConnectionView,
-  readEnv,
-} from "@cawco/core";
-import { ownerAsk } from "./owner";
-import { z } from "zod";
+import { CAWCO_ENV, CONNECTION_NAME, readEnv } from "@cawco/core";
 import { ConnectionViewSchema } from "@cawco/core/stored-shapes";
-import { OwnerApprovalError, ownerFetch } from "./owner";
+import { ownerAsk } from "./owner";
 
 export class ConnectionKeyError extends Error {}
 

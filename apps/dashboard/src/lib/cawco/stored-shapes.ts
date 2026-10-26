@@ -49,6 +49,7 @@ import type {
   UserQuestionResult as UserQuestionResultType,
   UserQuestion as UserQuestionType,
 } from "@cawco/core/harness";
+import { HARNESSES, WIRE_PERMISSION_MODES } from "@cawco/core/harness";
 import type {
   PlanChange as PlanChangeType,
   PlanComment as PlanCommentType,
@@ -69,8 +70,6 @@ import {
 import type {
   CanvasShapes as CanvasShapesType,
   EmbedShape as EmbedShapeType,
-  ServerStageState as ServerStageStateType,
-  SheetStageState as SheetStageStateType,
   StageErrorKind as StageErrorKindType,
   StageError as StageErrorType,
   StageState as StageStateType,
@@ -128,7 +127,6 @@ import type { SpawnPrefs as SpawnPrefsType } from "./spawnPrefs.svelte";
 import type {
   StopJob as StopJobType,
   StopKind as StopKindType,
-  StopPhase as StopPhaseType,
   StopRow as StopRowType,
 } from "./stop-work.svelte";
 import type { Beside as BesideType } from "./tasks/beside.svelte";
@@ -140,14 +138,9 @@ import type {
 import type {
   ConnectFault as ConnectFaultType,
   ConnectSignIn as ConnectSignInType,
-  ConnectStage as ConnectStageType,
 } from "./transcript/connect-sign-ins.svelte";
 import type { Refusal as RefusalType } from "./updates/model";
-import type {
-  KeptUpdates as KeptUpdatesType,
-  SettingRefusal as SettingRefusalType,
-  UpdateSetting as UpdateSettingType,
-} from "./updates/updates.svelte";
+import type { KeptUpdates as KeptUpdatesType } from "./updates/updates.svelte";
 import type { Visit as VisitType } from "./working-set.svelte";
 import type { SessionContext as SessionContextType } from "./workspace/workspace.svelte";
 
@@ -156,6 +149,7 @@ export const AtLimitShape = z.object({
   move: z.boolean(),
   moveWholeUnderK: z.number(),
   prepareAtPct: z.number(),
+  staleAfterHours: z.number(),
   waitMinutes: z.number(),
 });
 export const AtLimitSchema: z.ZodType<AtLimitType> = AtLimitShape;
@@ -176,7 +170,7 @@ export const StrategyChoiceShape = z.object({
 export const StrategyChoiceSchema: z.ZodType<StrategyChoiceType> =
   StrategyChoiceShape;
 
-export const HarnessKindShape = z.enum(["claude", "opencode", "pi"]);
+export const HarnessKindShape = z.enum(HARNESSES);
 export const HarnessKindSchema: z.ZodType<HarnessKindType> = HarnessKindShape;
 
 export const ContinueSourceShape = z.object({
@@ -517,14 +511,10 @@ export const SheetStageStateShape = StageStateOfShape.extend({
   runs: z.literal("sheet"),
   toolchain: StageToolchainShape,
 });
-export const SheetStageStateSchema: z.ZodType<SheetStageStateType> =
-  SheetStageStateShape;
 
 export const ServerStageStateShape = StageStateOfShape.extend({
   runs: z.literal("serve"),
 });
-export const ServerStageStateSchema: z.ZodType<ServerStageStateType> =
-  ServerStageStateShape;
 
 export const StageStateShape = z.union([
   SheetStageStateShape,
@@ -878,15 +868,7 @@ export const EffortLevelShape = z.enum([
 ]);
 export const EffortLevelSchema: z.ZodType<EffortLevelType> = EffortLevelShape;
 
-export const PermissionModeShape = z.enum([
-  "default",
-  "acceptEdits",
-  "bypassPermissions",
-  "plan",
-  "dontAsk",
-  "auto",
-  "fullSend",
-]);
+export const PermissionModeShape = z.enum(WIRE_PERMISSION_MODES);
 export const PermissionModeSchema: z.ZodType<PermissionModeType> =
   PermissionModeShape;
 
@@ -990,7 +972,6 @@ export const StopPhaseShape = z.enum([
   "ending",
   "done",
 ]);
-export const StopPhaseSchema: z.ZodType<StopPhaseType> = StopPhaseShape;
 
 export const RunningSessionShape = z.object({
   cwd: z.string(),
@@ -1051,8 +1032,6 @@ export const ConnectStageShape = z.enum([
   "done",
   "failed",
 ]);
-export const ConnectStageSchema: z.ZodType<ConnectStageType> =
-  ConnectStageShape;
 
 export const ConnectSignInShape = z.object({
   expiresAt: z.number().optional(),
@@ -1069,8 +1048,6 @@ export const RefusalShape = z.object({
 export const RefusalSchema: z.ZodType<RefusalType> = RefusalShape;
 
 export const UpdateSettingShape = z.enum(["channel", "auto", "check"]);
-export const UpdateSettingSchema: z.ZodType<UpdateSettingType> =
-  UpdateSettingShape;
 
 export const BinaryUpdatePolicyShape = z.object({
   autoUpdate: z.boolean(),
@@ -1083,8 +1060,6 @@ export const SettingRefusalShape = z.object({
   policy: BinaryUpdatePolicyShape.optional(),
   reason: z.string(),
 });
-export const SettingRefusalSchema: z.ZodType<SettingRefusalType> =
-  SettingRefusalShape;
 
 export const KeptUpdatesShape = z.object({
   commanded: z.array(z.string()),
@@ -1171,8 +1146,6 @@ export const proved: [
   Same<z.output<typeof StageErrorShape>, StageErrorType>,
   Same<z.output<typeof StageStatusShape>, StageStatusType>,
   Same<z.output<typeof StageToolchainShape>, StageToolchainType>,
-  Same<z.output<typeof SheetStageStateShape>, SheetStageStateType>,
-  Same<z.output<typeof ServerStageStateShape>, ServerStageStateType>,
   Same<z.output<typeof StageStateShape>, StageStateType>,
   Same<z.output<typeof TailnetOriginShape>, TailnetOriginType>,
   Same<z.output<typeof PreviewFrameShape>, PreviewFrameType>,
@@ -1214,28 +1187,18 @@ export const proved: [
   Same<z.output<typeof ParkedStartShape>, ParkedStartType>,
   Same<z.output<typeof SpawnPrefsShape>, SpawnPrefsType>,
   Same<z.output<typeof StopKindShape>, StopKindType>,
-  Same<z.output<typeof StopPhaseShape>, StopPhaseType>,
   Same<z.output<typeof RunningSessionShape>, RunningSessionType>,
   Same<z.output<typeof StopRowShape>, StopRowType>,
   Same<z.output<typeof StopJobShape>, StopJobType>,
   Same<z.output<typeof BesideShape>, BesideType>,
   Same<z.output<typeof ConnectFaultShape>, ConnectFaultType>,
-  Same<z.output<typeof ConnectStageShape>, ConnectStageType>,
   Same<z.output<typeof ConnectSignInShape>, ConnectSignInType>,
   Same<z.output<typeof RefusalShape>, RefusalType>,
-  Same<z.output<typeof UpdateSettingShape>, UpdateSettingType>,
   Same<z.output<typeof BinaryUpdatePolicyShape>, BinaryUpdatePolicyType>,
-  Same<z.output<typeof SettingRefusalShape>, SettingRefusalType>,
   Same<z.output<typeof KeptUpdatesShape>, KeptUpdatesType>,
   Same<z.output<typeof VisitShape>, VisitType>,
   Same<z.output<typeof SessionContextShape>, SessionContextType>,
 ] = [
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
   true,
   true,
   true,

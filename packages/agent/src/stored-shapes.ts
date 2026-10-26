@@ -22,15 +22,10 @@ import type { MediaMeasurement as MediaMeasurementType } from "./browser/media-f
 import type { BrowserRecord as BrowserRecordType } from "./browser/state";
 import type {
   FleetHarnessSet as FleetHarnessSetType,
-  PlacedSetHook as PlacedSetHookType,
-  PlacedSetSkill as PlacedSetSkillType,
   SetHarnessConfig as SetHarnessConfigType,
   SetHook as SetHookType,
 } from "./fleet-harness-set";
-import type {
-  FleetMcpSet as FleetMcpSetType,
-  PlacedFleetMcp as PlacedFleetMcpType,
-} from "./fleet-mcp-set";
+import type { FleetMcpSet as FleetMcpSetType } from "./fleet-mcp-set";
 
 export const MediaMeasurementShape = z.object({
   at: z.number(),
@@ -103,16 +98,12 @@ export const SetHookShape = z.object({
 export const SetHookSchema: z.ZodType<SetHookType> = SetHookShape;
 
 export const PlacedSetHookShape = SetHookShape.extend({ cwd: z.string() });
-export const PlacedSetHookSchema: z.ZodType<PlacedSetHookType> =
-  PlacedSetHookShape;
 
 export const PlacedSetSkillShape = z.object({
   cwd: z.string(),
   dir: z.string(),
   name: z.string(),
 });
-export const PlacedSetSkillSchema: z.ZodType<PlacedSetSkillType> =
-  PlacedSetSkillShape;
 
 export const FleetHarnessSetShape = z.object({
   config: z.record(z.string(), SetHarnessConfigShape),
@@ -128,8 +119,6 @@ export const PlacedFleetMcpShape = z.object({
   cwd: z.string(),
   name: z.string(),
 });
-export const PlacedFleetMcpSchema: z.ZodType<PlacedFleetMcpType> =
-  PlacedFleetMcpShape;
 
 export const FleetMcpSetShape = z.object({
   placed: z.record(z.string(), PlacedFleetMcpShape),
@@ -161,9 +150,6 @@ export const proved: [
   Same<z.output<typeof BrowserRecordShape>, BrowserRecordType>,
   Same<z.output<typeof SetHarnessConfigShape>, SetHarnessConfigType>,
   Same<z.output<typeof SetHookShape>, SetHookType>,
-  Same<z.output<typeof PlacedSetHookShape>, PlacedSetHookType>,
-  Same<z.output<typeof PlacedSetSkillShape>, PlacedSetSkillType>,
   Same<z.output<typeof FleetHarnessSetShape>, FleetHarnessSetType>,
-  Same<z.output<typeof PlacedFleetMcpShape>, PlacedFleetMcpType>,
   Same<z.output<typeof FleetMcpSetShape>, FleetMcpSetType>,
-] = [true, true, true, true, true, true, true, true, true];
+] = [true, true, true, true, true, true];

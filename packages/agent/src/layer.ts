@@ -84,10 +84,9 @@ import { commandLine } from "@cawco/core/process-identity";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { listedPid, signal as signalPid } from "@cawco/core/signal";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
-import { systemProgram, trustedPath } from "@cawco/core/workspace-needs";
-import { removeTree } from "./remove-tree";
-import { z } from "zod";
 import { WorkspaceKindSchema } from "@cawco/core/stored-shapes";
+import { systemProgram, trustedPath } from "@cawco/core/workspace-needs";
+import { z } from "zod";
 import { removeTree } from "./remove-tree";
 
 /**

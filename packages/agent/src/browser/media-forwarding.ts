@@ -50,7 +50,7 @@ export interface MediaForwarding {
 }
 
 /** A measurement kept for a runtime endpoint. */
-interface MediaMeasurement {
+export interface MediaMeasurement {
   /** When it was measured (ms epoch). */
   at: number;
   /** The runtime endpoint it was measured through. */

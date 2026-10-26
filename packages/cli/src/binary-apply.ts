@@ -106,10 +106,6 @@ import { z } from "zod";
 import { recordApply } from "./apply-record";
 import { binaryLayout } from "./binary-install";
 import { service, stopService } from "./service";
-import { ProcessMarkerSchema } from "@cawco/core/process-identity";
-import { z } from "zod";
-import { ReleaseManifestSchema } from "@cawco/core/stored-shapes";
-import { parseRecord } from "@cawco/core/state-file";
 
 /** How long a keeper handed over to gets to answer at its own endpoint. */
 const HEALTH_MS = 45_000;

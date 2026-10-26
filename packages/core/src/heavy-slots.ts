@@ -64,9 +64,8 @@ import { join } from "node:path";
 import { z } from "zod";
 import { openLockFile, tryLock, unlock } from "./flock";
 import { workspaceCacheDir } from "./paths";
-import { HOUR_MS } from "./time";
-import { z } from "zod";
 import { parseRecord } from "./state-file";
+import { HOUR_MS } from "./time";
 
 /** Where the machine's heavy-work slots and their queue are kept. */
 const HEAVY_SLOTS_DIR = join(workspaceCacheDir(), "heavy-slots");

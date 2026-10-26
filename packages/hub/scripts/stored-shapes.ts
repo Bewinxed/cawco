@@ -252,6 +252,8 @@ const BUILT_IN = new Set([
   "Partial",
   "Omit",
   "Pick",
+  "Exclude",
+  "Extract",
   "Date",
   "Blob",
 ]);
@@ -571,6 +573,14 @@ const referenceOf = (
       }
       return `${schemaOf(inner, scope)}.partial()`;
     }
+    // An enum with some of its members left out, or kept alone.
+    case "Exclude":
+    case "Extract":
+      return `${schemaOf(arg(0), scope)}.${name.toLowerCase()}([${literalKeys(
+        arg(1)
+      )
+        .map((k) => JSON.stringify(k))
+        .join(", ")}])`;
     // JSON carries a date as its ISO text: read back as a Date.
     case "Date":
       return "z.coerce.date()";

@@ -28,8 +28,6 @@ import type {
 } from "./attachments";
 import type { ArchiveFetching as ArchiveFetchingType } from "./binary-distribution";
 import type {
-  BinaryDownload as BinaryDownloadType,
-  BinaryUpdateLanding as BinaryUpdateLandingType,
   BinaryUpdatePhase as BinaryUpdatePhaseType,
   BinaryUpdatePolicy as BinaryUpdatePolicyType,
   BinaryUpdateState as BinaryUpdateStateType,
@@ -72,6 +70,7 @@ import type {
 } from "./deliverables";
 import type {
   CliInstall as CliInstallType,
+  FaultCause as FaultCauseType,
   FleetConvergeState as FleetConvergeStateType,
   FleetFaultCause as FleetFaultCauseType,
   FleetItemState as FleetItemStateType,
@@ -87,7 +86,7 @@ import type {
   SessionInstruction as SessionInstructionType,
   SkillFile as SkillFileType,
 } from "./fleet";
-import { MCP_PLATFORMS, PLACED_SECTIONS } from "./fleet";
+import { FAULT_CAUSES, MCP_PLATFORMS, PLACED_SECTIONS } from "./fleet";
 import type { ConnectAccess as ConnectAccessType } from "./frames";
 import type {
   AuthState as AuthStateType,
@@ -125,6 +124,7 @@ import type {
   WorkspaceKind as WorkspaceKindType,
   WorkspaceRef as WorkspaceRefType,
 } from "./harness";
+import { HARNESSES, WIRE_PERMISSION_MODES } from "./harness";
 import type { HarnessConfigKind as HarnessConfigKindType } from "./harness-config";
 import { HARNESS_CONFIG_KINDS } from "./harness-config";
 import type {
@@ -202,14 +202,9 @@ import type { ReleaseManifest as ReleaseManifestType } from "./release-manifest"
 import type { DownloadProgress as DownloadProgressType } from "./resumable-download";
 import type {
   SessiondAck as SessiondAckType,
-  SessiondBacklog as SessiondBacklogType,
-  SessiondDelta as SessiondDeltaType,
-  SessiondDraining as SessiondDrainingType,
-  SessiondExit as SessiondExitType,
   SessiondLimit as SessiondLimitType,
   SessiondLine as SessiondLineType,
   SessiondProcInfo as SessiondProcInfoType,
-  SessiondReset as SessiondResetType,
   SessiondServerMessage as SessiondServerMessageType,
   SessiondWelcome as SessiondWelcomeType,
 } from "./sessiond";
@@ -227,7 +222,6 @@ import type {
 import type {
   DesignOfferEvent as DesignOfferEventType,
   DesignOfferThreadEvent as DesignOfferThreadEventType,
-  ItemEnd as ItemEndType,
   RoutineMadeEvent as RoutineMadeEventType,
   RoutineMadeThreadEvent as RoutineMadeThreadEventType,
   RoutineSchedule as RoutineScheduleType,
@@ -248,6 +242,11 @@ import type {
   LimitWindow as LimitWindowType,
   OpenCodeGoLimits as OpenCodeGoLimitsType,
 } from "./usage/types";
+import type {
+  ItemEnd as ItemEndType,
+  WorkItemState as WorkItemStateType,
+} from "./work-items";
+import { WORK_ITEM_STATES } from "./work-items";
 import type { Policy as PolicyType } from "./workspace-judge";
 
 export const DownloadProgressShape = z.object({
@@ -270,7 +269,7 @@ export const PolicyShape = z.object({
   denyRead: z.array(z.string()).readonly(),
   denyWrite: z.array(z.string()).readonly(),
   home: z.string(),
-  protectConfig: z.boolean().optional(),
+  protectConfig: z.array(z.string()).readonly().optional(),
   scratch: z.string(),
 });
 export const PolicySchema: z.ZodType<PolicyType> = PolicyShape;
@@ -619,16 +618,12 @@ export const SessiondDeltaShape = z.object({
   event: SessiondLineShape,
   type: z.literal("proc.line"),
 });
-export const SessiondDeltaSchema: z.ZodType<SessiondDeltaType> =
-  SessiondDeltaShape;
 
 export const SessiondBacklogShape = z.object({
   events: z.array(SessiondLineShape),
   procId: z.string(),
   type: z.literal("proc.backlog"),
 });
-export const SessiondBacklogSchema: z.ZodType<SessiondBacklogType> =
-  SessiondBacklogShape;
 
 export const SessiondResetShape = z.object({
   nextSeq: z.number(),
@@ -636,8 +631,6 @@ export const SessiondResetShape = z.object({
   procId: z.string(),
   type: z.literal("proc.reset"),
 });
-export const SessiondResetSchema: z.ZodType<SessiondResetType> =
-  SessiondResetShape;
 
 export const SessiondExitShape = z.object({
   exitCode: z.number().nullable(),
@@ -647,8 +640,6 @@ export const SessiondExitShape = z.object({
   stderr: z.string().optional(),
   type: z.literal("proc.exit"),
 });
-export const SessiondExitSchema: z.ZodType<SessiondExitType> =
-  SessiondExitShape;
 
 export const ChildLimitShape = z.enum(["tasks", "memory"]);
 export const ChildLimitSchema: z.ZodType<ChildLimitType> = ChildLimitShape;
@@ -674,8 +665,6 @@ export const SessiondAckShape = z.object({
 export const SessiondAckSchema: z.ZodType<SessiondAckType> = SessiondAckShape;
 
 export const SessiondDrainingShape = z.object({ type: z.literal("draining") });
-export const SessiondDrainingSchema: z.ZodType<SessiondDrainingType> =
-  SessiondDrainingShape;
 
 export const SessiondServerMessageShape = z.union([
   SessiondWelcomeShape,
@@ -770,8 +759,6 @@ export const BinaryDownloadShape = z.object({
   received: z.number(),
   total: z.number(),
 });
-export const BinaryDownloadSchema: z.ZodType<BinaryDownloadType> =
-  BinaryDownloadShape;
 
 export const HubWaitShape = z.enum(["behind", "unanswered", "trial"]);
 export const HubWaitSchema: z.ZodType<HubWaitType> = HubWaitShape;
@@ -782,8 +769,6 @@ export const BinaryUpdateLandingShape = z.object({
   outcome: z.enum(["installed", "rolled-back"]),
   version: z.string(),
 });
-export const BinaryUpdateLandingSchema: z.ZodType<BinaryUpdateLandingType> =
-  BinaryUpdateLandingShape;
 
 export const BinaryUpdatePhaseShape = z.enum(BINARY_UPDATE_PHASES);
 export const BinaryUpdatePhaseSchema: z.ZodType<BinaryUpdatePhaseType> =
@@ -842,18 +827,10 @@ export const BinaryUpdateStateShape = z.object({
 export const BinaryUpdateStateSchema: z.ZodType<BinaryUpdateStateType> =
   BinaryUpdateStateShape;
 
-export const HarnessKindShape = z.enum(["claude", "opencode", "pi"]);
+export const HarnessKindShape = z.enum(HARNESSES);
 export const HarnessKindSchema: z.ZodType<HarnessKindType> = HarnessKindShape;
 
-export const PermissionModeShape = z.enum([
-  "default",
-  "acceptEdits",
-  "bypassPermissions",
-  "plan",
-  "dontAsk",
-  "auto",
-  "fullSend",
-]);
+export const PermissionModeShape = z.enum(WIRE_PERMISSION_MODES);
 export const PermissionModeSchema: z.ZodType<PermissionModeType> =
   PermissionModeShape;
 
@@ -871,20 +848,14 @@ export const SessionCustodyShape = z.union([
 export const SessionCustodySchema: z.ZodType<SessionCustodyType> =
   SessionCustodyShape;
 
-export const FleetFaultCauseShape = z.enum([
-  "cli-too-old",
-  "cli-missing",
-  "marketplace-unlinked",
-  "hub-only",
-  "drifted",
-  "absent",
-  "unparsable",
-  "unwritable",
-  "timed-out",
-  "no-checkout",
-  "missing-bytes",
-  "unsafe-path",
-  "unknown",
+export const FaultCauseShape = z.enum(FAULT_CAUSES);
+export const FaultCauseSchema: z.ZodType<FaultCauseType> = FaultCauseShape;
+
+export const FleetFaultCauseShape = FaultCauseShape.exclude([
+  "auth-discovery",
+  "needs-auth",
+  "ssh-refused",
+  "unfetchable",
 ]);
 export const FleetFaultCauseSchema: z.ZodType<FleetFaultCauseType> =
   FleetFaultCauseShape;
@@ -1103,17 +1074,15 @@ export const WorkspaceToolSchema: z.ZodType<WorkspaceToolType> =
 export const MachineCapabilityShape = z.object({
   addresses: z.array(z.string()).optional(),
   available: z.boolean(),
-  id: z.enum([
-    "git",
-    "claude",
-    "opencode",
-    "pi",
-    "node",
-    "browser",
-    "container-runtime",
-    "public-address",
-    "service-manager",
-    "workspace",
+  id: z.union([
+    z.literal("git"),
+    HarnessKindShape,
+    z.literal("node"),
+    z.literal("browser"),
+    z.literal("container-runtime"),
+    z.literal("public-address"),
+    z.literal("service-manager"),
+    z.literal("workspace"),
   ]),
   installCommand: z.string(),
   media: MediaPathShape.optional(),
@@ -1452,6 +1421,7 @@ export const AtLimitShape = z.object({
   move: z.boolean(),
   moveWholeUnderK: z.number(),
   prepareAtPct: z.number(),
+  staleAfterHours: z.number(),
   waitMinutes: z.number(),
 });
 export const AtLimitSchema: z.ZodType<AtLimitType> = AtLimitShape;
@@ -2078,7 +2048,15 @@ export const RoutineScheduleShape = z.object({
 export const RoutineScheduleSchema: z.ZodType<RoutineScheduleType> =
   RoutineScheduleShape;
 
-export const ItemEndShape = z.enum(["done", "failed", "cancelled"]);
+export const WorkItemStateShape = z.enum(WORK_ITEM_STATES);
+export const WorkItemStateSchema: z.ZodType<WorkItemStateType> =
+  WorkItemStateShape;
+
+export const ItemEndShape = WorkItemStateShape.extract([
+  "done",
+  "failed",
+  "cancelled",
+]);
 export const ItemEndSchema: z.ZodType<ItemEndType> = ItemEndShape;
 
 export const RoutineMadeEventShape = z.object({
@@ -2546,14 +2524,9 @@ export const proved: [
   Same<z.output<typeof SessiondProcInfoShape>, SessiondProcInfoType>,
   Same<z.output<typeof SessiondWelcomeShape>, SessiondWelcomeType>,
   Same<z.output<typeof SessiondLineShape>, SessiondLineType>,
-  Same<z.output<typeof SessiondDeltaShape>, SessiondDeltaType>,
-  Same<z.output<typeof SessiondBacklogShape>, SessiondBacklogType>,
-  Same<z.output<typeof SessiondResetShape>, SessiondResetType>,
-  Same<z.output<typeof SessiondExitShape>, SessiondExitType>,
   Same<z.output<typeof ChildLimitShape>, ChildLimitType>,
   Same<z.output<typeof SessiondLimitShape>, SessiondLimitType>,
   Same<z.output<typeof SessiondAckShape>, SessiondAckType>,
-  Same<z.output<typeof SessiondDrainingShape>, SessiondDrainingType>,
   Same<z.output<typeof SessiondServerMessageShape>, SessiondServerMessageType>,
   Same<z.output<typeof StageErrorKindShape>, StageErrorKindType>,
   Same<z.output<typeof StageErrorShape>, StageErrorType>,
@@ -2562,9 +2535,7 @@ export const proved: [
   Same<z.output<typeof BinaryUpdatePolicyShape>, BinaryUpdatePolicyType>,
   Same<z.output<typeof RestartHoldReasonShape>, RestartHoldReasonType>,
   Same<z.output<typeof RestartHoldShape>, RestartHoldType>,
-  Same<z.output<typeof BinaryDownloadShape>, BinaryDownloadType>,
   Same<z.output<typeof HubWaitShape>, HubWaitType>,
-  Same<z.output<typeof BinaryUpdateLandingShape>, BinaryUpdateLandingType>,
   Same<z.output<typeof BinaryUpdatePhaseShape>, BinaryUpdatePhaseType>,
   Same<z.output<typeof KeptProcessShape>, KeptProcessType>,
   Same<z.output<typeof RetiringKeeperShape>, RetiringKeeperType>,
@@ -2572,6 +2543,7 @@ export const proved: [
   Same<z.output<typeof HarnessKindShape>, HarnessKindType>,
   Same<z.output<typeof PermissionModeShape>, PermissionModeType>,
   Same<z.output<typeof SessionCustodyShape>, SessionCustodyType>,
+  Same<z.output<typeof FaultCauseShape>, FaultCauseType>,
   Same<z.output<typeof FleetFaultCauseShape>, FleetFaultCauseType>,
   Same<z.output<typeof FleetItemStateShape>, FleetItemStateType>,
   Same<z.output<typeof PlacedSectionShape>, PlacedSectionType>,
@@ -2673,6 +2645,7 @@ export const proved: [
   Same<z.output<typeof StoppedCommandsShape>, StoppedCommandsType>,
   Same<z.output<typeof ThreadAnswerShape>, ThreadAnswerType>,
   Same<z.output<typeof RoutineScheduleShape>, RoutineScheduleType>,
+  Same<z.output<typeof WorkItemStateShape>, WorkItemStateType>,
   Same<z.output<typeof ItemEndShape>, ItemEndType>,
   Same<z.output<typeof RoutineMadeEventShape>, RoutineMadeEventType>,
   Same<
@@ -2712,11 +2685,6 @@ export const proved: [
   Same<z.output<typeof InstallShape>, InstallType>,
   Same<z.output<typeof NeutralSessionInfoShape>, NeutralSessionInfoType>,
 ] = [
-  true,
-  true,
-  true,
-  true,
-  true,
   true,
   true,
   true,
