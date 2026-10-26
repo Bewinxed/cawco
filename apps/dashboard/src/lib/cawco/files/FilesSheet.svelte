@@ -11,21 +11,9 @@
    * from the keyboard, the focus goes on to the panel's name); Show in
    * conversation takes the transcript to the message.
    */
-  import type { ArtifactSummary } from "@cawco/core";
   import * as Drawer from "#lib/components/ui/drawer/index.js";
-  import { showArtifact } from "../artifact-api";
-  import { barGlass } from "../bar-glass.svelte";
-  import { failureClause } from "../hub-read";
-  import { refusals } from "../refusals.svelte";
-  import { askOpenAt } from "../transcript/open-at.svelte";
-  import FilesList from "./FilesList.svelte";
-  import {
-    type AttachmentRow,
-    askForAPage,
-    attachToSession,
-    files,
-    focusPanelName,
-  } from "./files.svelte";
+  import FilesHere from "./FilesHere.svelte";
+  import { files } from "./files.svelte";
 
   /**
    * vaul's stops, as shares of the screen's height: the lower, where it
@@ -40,66 +28,6 @@
       snap = LOWER;
     }
   });
-
-  const instanceId = $derived(files.session);
-  /**
-   * The artifact the hub would not show, and why: said over the list
-   * (FilesList), kept through a reload (refusals.svelte.ts).
-   */
-  const pickKey = $derived(`files-pick:${files.session}`);
-  const pickRefused = $derived.by(() => {
-    const said = refusals.get(pickKey);
-    if (!said) {
-      return null;
-    }
-    const asked = said.asked as Pick<ArtifactSummary, "id" | "name">;
-    return { reason: said.reason, again: () => pick(asked) };
-  });
-
-  async function pick(artifact: Pick<ArtifactSummary, "id" | "name">) {
-    const id = instanceId;
-    if (!id) {
-      return;
-    }
-    // Chosen from the keyboard: the focus goes on to the panel's name.
-    const byKeyboard = !barGlass.byPointer;
-    refusals.delete(`files-pick:${id}`);
-    try {
-      await showArtifact(id, artifact.id);
-      files.sheet = false;
-      if (byKeyboard) {
-        focusPanelName(artifact.id);
-      }
-    } catch (error) {
-      refusals.set(`files-pick:${id}`, {
-        reason: `${artifact.name} was not shown: ${failureClause(error)}. Files stays open.`,
-        asked: { id: artifact.id, name: artifact.name },
-      });
-    }
-  }
-
-  /** The empty state's ask into the session's composer; the drawer goes, so the composer has the focus. */
-  function ask() {
-    if (instanceId && askForAPage(instanceId)) {
-      files.returnTo = null;
-      files.sheet = false;
-    }
-  }
-
-  /** Attach a file: the composer's own attach picker opens, and Files goes. */
-  function attach() {
-    if (instanceId && attachToSession(instanceId)) {
-      files.returnTo = null;
-      files.sheet = false;
-    }
-  }
-
-  function show(attachment: AttachmentRow) {
-    if (instanceId) {
-      askOpenAt(instanceId, attachment.messageId);
-    }
-    files.sheet = false;
-  }
 </script>
 
 <Drawer.Root
@@ -143,19 +71,16 @@
       style:--snap-drop="calc((1 - {typeof snap === 'number' ? snap : 1}) *
       100dvh)"
     >
-      {#if instanceId}
-        {#key instanceId}
-          <FilesList
-            {instanceId}
-            onask={ask}
-            onattach={attach}
-            onpick={pick}
-            onshow={show}
-            {pickRefused}
-            segmented
-          />
-        {/key}
-      {/if}
+      <FilesHere
+        close={() => {
+          files.sheet = false;
+        }}
+        leave={() => {
+          files.returnTo = null;
+          files.sheet = false;
+        }}
+        segmented
+      />
     </div>
   </Drawer.Content>
 </Drawer.Root>

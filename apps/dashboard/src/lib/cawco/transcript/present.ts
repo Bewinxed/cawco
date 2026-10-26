@@ -272,3 +272,13 @@ export function askDetail(body: string): string {
   }
   return askDetailOf(parts.tool, parts.input);
 }
+
+/** A delegate's or a branch's headline: the first line of its words, at a scannable length. */
+export const headline = (text: string): string => {
+  const line =
+    text
+      .split("\n")
+      .map((each) => each.trim())
+      .find(Boolean) ?? "";
+  return line.length > 120 ? `${line.slice(0, 119)}…` : line;
+};

@@ -1224,6 +1224,26 @@
 
 <!-- A state's glyph, in the chip's slot or the panel's state cell: 16px
      either way. -->
+<!-- A row's end: how long it has run, and its way out to its own view, as
+     the delegate card draws it (a queued delegate has no session to open
+     until it starts). -->
+{#snippet rowEnd(item: TrayChild)}
+  <span class="flex-none text-size-meta text-ink-muted num"
+    >{span(item.createdAt, item.endedAt ?? minute)}</span
+  >
+  {#if !item.queued}
+    <a
+      data-box
+      aria-label="Open {item.title} in its own view"
+      class="touch-hit flex-none size-c-row-mark grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--dur-control) ease-out hover:text-brand-ink hover:bg-surface-hover"
+      href={hrefOf(item)}
+      title="Open {item.title} in its own view"
+    >
+      <IconExternal class="size-icon-sm block" />
+    </a>
+  {/if}
+{/snippet}
+
 {#snippet glyph(tone: Tone)}
   {#if tone === "starting"}
     <Spinner aria-hidden="true" role="presentation" />
@@ -1533,20 +1553,7 @@
       >
         {@render glyph(tone)}
       </span>
-      <span class="flex-none text-size-meta text-ink-muted num"
-        >{span(item.createdAt, item.endedAt ?? minute)}</span
-      >
-      {#if !item.queued}
-        <a
-          data-box
-          aria-label="Open {item.title} in its own view"
-          class="touch-hit flex-none size-c-row-mark grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--dur-control) ease-out hover:text-brand-ink hover:bg-surface-hover"
-          href={hrefOf(item)}
-          title="Open {item.title} in its own view"
-        >
-          <IconExternal class="size-icon-sm block" />
-        </a>
-      {/if}
+      {@render rowEnd(item)}
     </div>
   </li>
 {/snippet}
@@ -1833,23 +1840,7 @@
               >
                 {@render glyph(tone)}
               </span>
-              <span class="flex-none text-size-meta text-ink-muted num"
-                >{span(item.createdAt, item.endedAt ?? minute)}</span
-              >
-              <!-- A queued delegate has no session to open until it starts.
-                   The delegate card's way out to its own view, as the card
-                   draws it. -->
-              {#if !item.queued}
-                <a
-                  data-box
-                  aria-label="Open {item.title} in its own view"
-                  class="touch-hit flex-none size-c-row-mark grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--dur-control) ease-out hover:text-brand-ink hover:bg-surface-hover"
-                  href={hrefOf(item)}
-                  title="Open {item.title} in its own view"
-                >
-                  <IconExternal class="size-icon-sm block" />
-                </a>
-              {/if}
+              {@render rowEnd(item)}
             </div>
             <DelegateTail
               instanceId={item.instanceId}

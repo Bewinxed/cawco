@@ -25,6 +25,7 @@
     easeOut,
     lifting,
     pinned,
+    pinnedAtBox,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { pageOut, route } from "#lib/cawco/motion/route.svelte.js";
 
@@ -136,23 +137,7 @@
     },
     {
       name: "SuggestionChips leave",
-      out: (node) =>
-        lifting(
-          node,
-          () => {
-            const box = node.getBoundingClientRect();
-            const frame = (
-              node.offsetParent ?? node.parentElement
-            )?.getBoundingClientRect();
-            return {
-              position: "absolute",
-              "inset-inline-start": `${box.left - (frame?.left ?? 0)}px`,
-              "inset-block-start": `${box.top - (frame?.top ?? 0)}px`,
-              "inline-size": `${box.width}px`,
-            };
-          },
-          fade()
-        ),
+      out: (node) => lifting(node, pinnedAtBox(node), fade()),
     },
   ];
 

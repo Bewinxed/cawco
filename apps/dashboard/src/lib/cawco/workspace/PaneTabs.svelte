@@ -101,7 +101,7 @@
   import SessionStatus from "./SessionStatus.svelte";
   import { rebuildScheduler } from "./scheduler.svelte";
   import { type StatusTone, sessionStatusOf } from "./session-status";
-  import { noNativeDrag, pressTab } from "./tab-drag.svelte";
+  import { noNativeDrag, pressTab, swallowClick } from "./tab-drag.svelte";
   import { warm } from "./warm.svelte";
   import { contextOf, type LeafNode, workspace } from "./workspace.svelte";
 
@@ -1141,16 +1141,6 @@
       setMenu(id, false);
     }
   };
-
-  /** The press that follows a pull lands on the tab as a click: it is not one. */
-  function swallowClick(node: HTMLElement) {
-    const swallow = (event: MouseEvent) => {
-      event.preventDefault();
-      event.stopPropagation();
-    };
-    node.addEventListener("click", swallow, { capture: true, once: true });
-    setTimeout(() => node.removeEventListener("click", swallow, true), 400);
-  }
 
   /** Where a pull's finger was, px down from where it pressed, and when. */
   interface PullSample {

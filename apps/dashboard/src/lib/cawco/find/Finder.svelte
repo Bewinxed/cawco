@@ -42,7 +42,13 @@
   import FindPeek from "./FindPeek.svelte";
   import FindRow from "./FindRow.svelte";
   import type { FindMoment, FindResult, WaitingItem } from "./find-client";
-  import { kindGlyph, kindNoun, rowOf, waitingRow } from "./find-rows";
+  import {
+    kindGlyph,
+    kindNoun,
+    type Row,
+    rowOf,
+    waitingRow,
+  } from "./find-rows";
   import {
     type FinderState,
     type GoTo,
@@ -561,27 +567,36 @@
   </div>
 {/snippet}
 
+<!-- One result's row: its key, whether a press peeks it, and what it draws. -->
+{#snippet findRow(key: string, peekable: boolean, row: Row)}
+  <FindRow
+    id={idOf(key)}
+    active={activeKey === key}
+    now={finder.now}
+    onhover={() => hover(key)}
+    onpeek={() => finder.togglePeek(key)}
+    onpick={() => pick(key)}
+    onsecret={(secret) => finder.showSecret(secret)}
+    {peekable}
+    peeked={finder.peeked === key}
+    {phone}
+    {row}
+    shown={finder.shownSecrets}
+  />
+{/snippet}
+
 {#snippet item_(item: Item)}
   {#if item.t === "row"}
-    <FindRow
-      id={idOf(item.key)}
-      active={activeKey === item.key}
-      now={finder.now}
-      onhover={() => hover(item.key)}
-      onpeek={() => finder.togglePeek(item.key)}
-      onpick={() => pick(item.key)}
-      onsecret={(key) => finder.showSecret(key)}
-      peekable={phone}
-      peeked={finder.peeked === item.key}
-      {phone}
-      row={rowOf(
+    {@render findRow(
+      item.key,
+      phone,
+      rowOf(
         item.result,
         finder.now,
         item.section === "said" ? "moment" : "name",
         finder.shownSecrets
-      )}
-      shown={finder.shownSecrets}
-    />
+      )
+    )}
   {:else if item.t === "peek"}
     <div data-slot="peek-slot" class="flex-none" data-flip>
       <FindPeek
@@ -601,20 +616,11 @@
       />
     </div>
   {:else if item.t === "goto"}
-    <FindRow
-      id={idOf(item.key)}
-      active={activeKey === item.key}
-      now={finder.now}
-      onhover={() => hover(item.key)}
-      onpeek={() => finder.togglePeek(item.key)}
-      onpick={() => pick(item.key)}
-      onsecret={(key) => finder.showSecret(key)}
-      peekable={phone && item.result.kind === "machine"}
-      peeked={finder.peeked === item.key}
-      {phone}
-      row={rowOf(item.result, finder.now, "name", finder.shownSecrets)}
-      shown={finder.shownSecrets}
-    />
+    {@render findRow(
+      item.key,
+      phone && item.result.kind === "machine",
+      rowOf(item.result, finder.now, "name", finder.shownSecrets)
+    )}
   {:else if item.t === "acts"}
     {@const row = stopKey(item.result)}
     <!-- biome-ignore lint/a11y/useSemanticElements: an option group inside a listbox (WAI-ARIA listbox); a fieldset groups form controls, not options -->

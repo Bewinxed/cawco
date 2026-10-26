@@ -18,10 +18,11 @@
    * readable is panned past it); the canvas's tools ask `fit()` for the same
    * frame the graph opened on.
    */
-  import { useStore, useSvelteFlow } from "@xyflow/svelte";
+  import { useSvelteFlow } from "@xyflow/svelte";
   import { untrack } from "svelte";
   import { dur, easeInOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { FIT } from "./fit";
+  import { onCanvasResize } from "./resized.svelte";
 
   let {
     nodeCount,
@@ -36,7 +37,6 @@
     minZoom?: number;
   } = $props();
   const { fitView } = useSvelteFlow();
-  const store = useStore();
   const frame = () => ({
     ...FIT,
     ...(minZoom === undefined ? {} : { minZoom }),
@@ -59,19 +59,9 @@
     }
     framed = count;
   });
-  let sized: string | undefined;
-  $effect(() => {
-    const size = `${store.width}x${store.height}`;
-    const before = sized;
-    sized = size;
-    if (
-      before !== undefined &&
-      before !== size &&
-      store.width > 0 &&
-      store.height > 0 &&
-      !untrack(() => held)
-    ) {
-      fitView(untrack(frame));
+  onCanvasResize(() => {
+    if (!held) {
+      fitView(frame());
     }
   });
   let placed: string | undefined;

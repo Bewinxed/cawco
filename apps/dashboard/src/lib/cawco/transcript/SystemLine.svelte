@@ -174,6 +174,64 @@
   );
 </script>
 
+<!-- A note's mark and its words, at the rail's glyph cell and text column. -->
+{#snippet noteHead(title: string)}
+  <span data-slot="rail-cell" class="rail-cell"
+    ><IconInfo class="size-icon-sm" /></span
+  >
+  <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
+    >{title}</span
+  >
+{/snippet}
+
+<!-- A harness note's line: its summary and how it went, the one word on
+     the line that is allowed to carry colour. -->
+{#snippet harnessHead(note: HarnessNote)}
+  {@render noteHead(note.title)}
+  {#if note.status}
+    <span
+      data-slot="hstatus"
+      class="flex-none text-ink-muted data-bad:text-data-bad"
+      data-bad={note.status === "failed" || undefined}>{note.status}</span
+    >
+  {/if}
+{/snippet}
+
+<!-- A folded note's line: its title and, when it says, the time it happened. -->
+{#snippet foldHead()}
+  {@render noteHead(foldTitle)}
+  {#if eventAt}
+    <time
+      data-slot="num"
+      data-eat
+      class="flex-none ms-space-2 font-normal text-ink-subtle num"
+      datetime={eventAt.toISOString()}>{eventClock}</time
+    >
+  {/if}
+{/snippet}
+
+<!-- The disclosure chevron after a note's words. -->
+{#snippet chevron()}
+  <span
+    data-open={open || undefined}
+    class="inline-flex flex-none data-open:rotate-90 motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out"
+    data-box><IconChevronRight class="size-icon-sm" /></span
+  >
+{/snippet}
+
+<!-- What a note offers to do next: keep a routine, a design, LFS. -->
+{#snippet offerActions()}
+  {#if routineMade}
+    <RoutineMadeActions routine={routineMade} />
+  {/if}
+  {#if designOffer}
+    <DesignOfferActions offer={designOffer} />
+  {/if}
+  {#if lfsOffer}
+    <LfsOfferActions offer={lfsOffer} />
+  {/if}
+{/snippet}
+
 <!-- Every line here is a rail row (app.css `rail-row`): its mark in the
      glyph cell, its words at the text column, a disclosure chevron after the
      words, and whatever opens under it hung at the text column. -->
@@ -191,26 +249,8 @@
              the same rail as every other note: the summary, how it went,
              and the report one click behind them. -->
         <Collapsible.Trigger class="max-w-full" look="note">
-          <span data-slot="rail-cell" class="rail-cell"
-            ><IconInfo class="size-icon-sm" /></span
-          >
-          <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
-            >{harness.title}</span
-          >
-          {#if harness.status}
-            <!-- The one word on this line that is allowed to carry colour. -->
-            <span
-              data-slot="hstatus"
-              class="flex-none text-ink-muted data-bad:text-data-bad"
-              data-bad={harness.status === "failed" || undefined}
-              >{harness.status}</span
-            >
-          {/if}
-          <span
-            data-open={open || undefined}
-            class="inline-flex flex-none data-open:rotate-90 motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out"
-            data-box><IconChevronRight class="size-icon-sm" /></span
-          >
+          {@render harnessHead(harness)}
+          {@render chevron()}
         </Collapsible.Trigger>
         <Collapsible.Content reveal>
           <!-- The report hangs at the text column under the line that opens
@@ -226,20 +266,7 @@
       <span
         class="inline-flex max-w-full text-size-label font-medium text-ink-muted rail-line"
       >
-        <span data-slot="rail-cell" class="rail-cell"
-          ><IconInfo class="size-icon-sm" /></span
-        >
-        <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
-          >{harness.title}</span
-        >
-        {#if harness.status}
-          <span
-            data-slot="hstatus"
-            class="flex-none text-ink-muted data-bad:text-data-bad"
-            data-bad={harness.status === "failed" || undefined}
-            >{harness.status}</span
-          >
-        {/if}
+        {@render harnessHead(harness)}
       </span>
     {/if}
   </div>
@@ -432,25 +459,8 @@
   >
     <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
       <Collapsible.Trigger look="note">
-        <span data-slot="rail-cell" class="rail-cell"
-          ><IconInfo class="size-icon-sm" /></span
-        >
-        <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
-          >{foldTitle}</span
-        >
-        {#if eventAt}
-          <time
-            data-slot="num"
-            data-eat
-            class="flex-none ms-space-2 font-normal text-ink-subtle num"
-            datetime={eventAt.toISOString()}>{eventClock}</time
-          >
-        {/if}
-        <span
-          data-open={open || undefined}
-          class="inline-flex flex-none data-open:rotate-90 motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out"
-          data-box><IconChevronRight class="size-icon-sm" /></span
-        >
+        {@render foldHead()}
+        {@render chevron()}
       </Collapsible.Trigger>
       <Collapsible.Content reveal>
         {#if foldCommand}
@@ -465,15 +475,7 @@
         {/if}
       </Collapsible.Content>
     </Collapsible.Root>
-    {#if routineMade}
-      <RoutineMadeActions routine={routineMade} />
-    {/if}
-    {#if designOffer}
-      <DesignOfferActions offer={designOffer} />
-    {/if}
-    {#if lfsOffer}
-      <LfsOfferActions offer={lfsOffer} />
-    {/if}
+    {@render offerActions()}
   </div>
 {:else}
   <!-- Nothing to open, so nothing that looks openable — the same dead-disclosure
@@ -484,29 +486,8 @@
     class="text-size-label font-medium text-ink-muted rail-row"
   >
     <span class="inline-flex max-w-full rail-line">
-      <span data-slot="rail-cell" class="rail-cell"
-        ><IconInfo class="size-icon-sm" /></span
-      >
-      <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
-        >{foldTitle}</span
-      >
-      {#if eventAt}
-        <time
-          data-slot="num"
-          data-eat
-          class="flex-none ms-space-2 font-normal text-ink-subtle num"
-          datetime={eventAt.toISOString()}>{eventClock}</time
-        >
-      {/if}
+      {@render foldHead()}
     </span>
-    {#if routineMade}
-      <RoutineMadeActions routine={routineMade} />
-    {/if}
-    {#if designOffer}
-      <DesignOfferActions offer={designOffer} />
-    {/if}
-    {#if lfsOffer}
-      <LfsOfferActions offer={lfsOffer} />
-    {/if}
+    {@render offerActions()}
   </div>
 {/if}

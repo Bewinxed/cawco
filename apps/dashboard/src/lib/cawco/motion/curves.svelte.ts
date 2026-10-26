@@ -564,6 +564,26 @@ export const pinned =
   });
 
 /**
+ * Where a leaving node stands, by its box on the screen against its frame's
+ * (its offset parent, else its parent), in logical sides: {@link lifting}'s
+ * lift for a node that may be scaled or scrolled sideways in its row (a
+ * suggestion chip), where its offsets would not say where it is drawn.
+ */
+export const pinnedAtBox =
+  (node: HTMLElement) => (): Record<string, string> => {
+    const box = node.getBoundingClientRect();
+    const frame = (
+      node.offsetParent ?? node.parentElement
+    )?.getBoundingClientRect();
+    return {
+      position: "absolute",
+      "inset-inline-start": `${box.left - (frame?.left ?? 0)}px`,
+      "inset-block-start": `${box.top - (frame?.top ?? 0)}px`,
+      "inline-size": `${box.width}px`,
+    };
+  };
+
+/**
  * An outro that lifts its node as it starts to leave: `lift` reads where it
  * stands and answers the inline styles that take it out of the flow (or the
  * pointer's way, or onto a stack of its own), by CSS property name.
@@ -666,5 +686,29 @@ export function lifting(
       }
       tick?.(t, u);
     },
+  };
+}
+
+/**
+ * The sheet recipe's motion (DESIGN.md Dialog, sheet and drawer): its whole
+ * size in from its edge along `axis` (X from the right, Y from the foot)
+ * over `--dur-panel` on the drawer curve, out over `--dur-exit`; with less
+ * motion a fade. A transform alone: nothing under it is told a size.
+ */
+export function sheetSlide(
+  _node: Element,
+  { axis = "Y", leaving }: { axis?: "X" | "Y"; leaving: boolean }
+): TransitionConfig {
+  if (!motionOk.current) {
+    return {
+      duration: dur(leaving ? "--dur-exit" : "--dur-fade"),
+      easing: easeOut,
+      css: (t: number) => `opacity: ${t}`,
+    };
+  }
+  return {
+    duration: dur(leaving ? "--dur-exit" : "--dur-panel"),
+    easing: leaving ? easeOut : easeDrawer,
+    css: (t: number) => `transform: translate${axis}(${(1 - t) * 100}%)`,
   };
 }

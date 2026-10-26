@@ -29,6 +29,7 @@ import {
   type Sample,
   sampleAt,
 } from "../motion/spring";
+import { catchSettle, gatherParked, type Parked } from "./parked";
 import { type LeafNode, workspace } from "./workspace.svelte";
 
 /** Travel before the pair is taken to mean anything. */
@@ -58,10 +59,7 @@ const VELOCITY_WINDOW = 80;
 
 type Phase = "idle" | "armed" | "claimed";
 /** A card in view: its element and its distance from the focus. */
-interface Card {
-  delta: number;
-  el: HTMLElement;
-}
+type Card = Parked;
 
 export function createDeck(
   getLeaves: () => LeafNode[],
@@ -89,8 +87,6 @@ export function createDeck(
   let path: Sample[] = [];
   let animations: Animation[] = [];
   let landing: ReturnType<typeof setTimeout> | null = null;
-  /** The settle's velocity where a pair stopped it, until that pair moves or leaves. */
-  let held: number | null = null;
 
   const reduced = () =>
     typeof window !== "undefined" &&
@@ -102,19 +98,7 @@ export function createDeck(
   });
 
   /** The cards the stylesheet parks a card away or in place, by their current deltas. */
-  const gather = (): Card[] => {
-    if (!root) {
-      return [];
-    }
-    const found: Card[] = [];
-    for (const el of root.querySelectorAll<HTMLElement>("[data-leaf]")) {
-      const delta = Number(el.dataset.delta);
-      if (Math.abs(delta) <= 1) {
-        found.push({ el, delta });
-      }
-    }
-    return found;
-  };
+  const gather = (): Card[] => gatherParked(root, "[data-leaf]");
 
   /** A card's parking place, in px: the stylesheet's calc, evaluated. */
   const rest = (delta: number) => delta * (height + GAP);
@@ -244,31 +228,17 @@ export function createDeck(
     }, touchdown.t * 1000);
   }
 
-  /** Fingers landing on a settling stack stop it where it is. */
-  function hold() {
-    if (animations.length === 0) {
-      return;
-    }
-    const at = progress();
-    stopSettle();
-    if (!at) {
-      land();
-      return;
-    }
-    offset = at.x;
-    held = at.v;
-    paint(offset);
-  }
-
-  /** The pair that stopped the settle left without moving it: let it go on. */
-  function resume() {
-    if (held === null) {
-      return;
-    }
-    const velocity = held;
-    held = null;
-    spring(velocity);
-  }
+  const caught = catchSettle({
+    land,
+    playing: () => animations.length > 0,
+    progress,
+    spring,
+    stand: (x) => {
+      offset = x;
+      paint(offset);
+    },
+    stop: stopSettle,
+  });
 
   function release() {
     const velocity = releaseVelocity();
@@ -329,7 +299,7 @@ export function createDeck(
           if (phase === "claimed") {
             release();
           } else if (phase === "armed") {
-            resume();
+            caught.resume();
           }
           phase = "idle";
           return;
@@ -343,7 +313,7 @@ export function createDeck(
         startY = mid.y;
         samples = [{ y: mid.y, t: performance.now() }];
         phase = "armed";
-        hold();
+        caught.hold();
       };
 
       // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the two-finger swipe/settle touchmove handler — one state machine, not split in this pass
@@ -353,7 +323,7 @@ export function createDeck(
         }
         if (event.touches.length !== 2) {
           if (phase === "armed") {
-            resume();
+            caught.resume();
             phase = "idle";
           }
           return;
@@ -373,7 +343,7 @@ export function createDeck(
           }
           // Taking hold mid-settle picks the card up where the pair stopped
           // it; the settle is dropped, not rewound.
-          held = null;
+          caught.drop();
           base = offset;
           height = node.clientHeight;
           cards = gather();
@@ -395,7 +365,7 @@ export function createDeck(
         if (phase === "claimed") {
           release();
         } else if (phase === "armed") {
-          resume();
+          caught.resume();
         }
         phase = "idle";
       };

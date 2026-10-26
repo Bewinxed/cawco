@@ -129,6 +129,7 @@
     motionOk,
     revealOn,
     rise,
+    sheetSlide,
   } from "../motion/curves.svelte";
   import { settleAway } from "../motion/rest.js";
   import { closeInto } from "../motion/share.svelte";
@@ -307,27 +308,6 @@
           css: (t: number) => `width: ${t * width}px; opacity: ${t}`,
         }
       : { duration: dur("--dur-exit"), css: (t: number) => `opacity: ${t}` };
-  }
-  /**
-   * The rail's foot sheet in and out on the sheet recipe (DESIGN.md Dialog,
-   * sheet and drawer): its whole height up from the well's foot over
-   * `--dur-panel` on `--ease-drawer`, down over `--dur-exit`; with less
-   * motion it fades. A transform alone, over the page: nothing under it is
-   * told a size.
-   */
-  function railSheetSlide(_node: Element, { leaving }: { leaving: boolean }) {
-    if (!motionOk.current) {
-      return {
-        duration: dur(leaving ? "--dur-exit" : "--dur-fade"),
-        easing: easeOut,
-        css: (t: number) => `opacity: ${t}`,
-      };
-    }
-    return {
-      duration: dur(leaving ? "--dur-exit" : "--dur-panel"),
-      easing: leaving ? easeOut : easeDrawer,
-      css: (t: number) => `transform: translateY(${(1 - t) * 100}%)`,
-    };
   }
   let connected = $state(false);
   let loaded = $state(false);
@@ -3566,6 +3546,44 @@
   onmessage={receive}
 />
 
+<!-- A stage that went down or never drew: Try again, and its own words
+     folded under Show details, as RowFault folds a machine's. -->
+{#snippet stageRetry()}
+  <Button
+    icon={IconRefresh}
+    label={sheetWords.tryAgain}
+    onclick={retry}
+    pending={retrying}
+    pendingLabel={sheetWords.tryingAgain}
+    size="sm"
+    variant="outline"
+  />
+{/snippet}
+{#snippet stageDetailsToggle()}
+  <Button
+    data-details
+    aria-controls={stageDetailsId}
+    aria-expanded={stageDetails}
+    label={stageDetails ? shellWords.hideDetails : shellWords.showDetails}
+    onclick={() => {
+      stageDetails = !stageDetails;
+    }}
+    size="sm"
+    variant="ghost"
+  />
+{/snippet}
+{#snippet stageDetailsText(said: string | null | undefined)}
+  {#if said && stageDetails}
+    <p
+      id={stageDetailsId}
+      data-slot="details"
+      class="mt-space-2 text-ink-muted type-code liga-none whitespace-pre-wrap wrap-anywhere"
+    >
+      {said}
+    </p>
+  {/if}
+{/snippet}
+
 <!-- The head's controls, each as the head draws it and as More's entries
      (SideSurface `items`, by the head's priority rule). -->
 {#snippet sendBar()}
@@ -4288,41 +4306,13 @@
         {/snippet}
         {#snippet action()}
           <div class="flex flex-wrap items-center gap-space-2">
-            <Button
-              icon={IconRefresh}
-              label={sheetWords.tryAgain}
-              onclick={retry}
-              pending={retrying}
-              pendingLabel={sheetWords.tryingAgain}
-              size="sm"
-              variant="outline"
-            />
+            {@render stageRetry()}
             {#if staged.message}
               <!-- The stage's own words, as RowFault folds a machine's: under Show details. -->
-              <Button
-                data-details
-                aria-controls={stageDetailsId}
-                aria-expanded={stageDetails}
-                label={stageDetails
-                  ? shellWords.hideDetails
-                  : shellWords.showDetails}
-                onclick={() => {
-                  stageDetails = !stageDetails;
-                }}
-                size="sm"
-                variant="ghost"
-              />
+              {@render stageDetailsToggle()}
             {/if}
           </div>
-          {#if staged.message && stageDetails}
-            <p
-              id={stageDetailsId}
-              data-slot="details"
-              class="mt-space-2 text-ink-muted type-code liga-none whitespace-pre-wrap wrap-anywhere"
-            >
-              {staged.message}
-            </p>
-          {/if}
+          {@render stageDetailsText(staged.message)}
         {/snippet}
       </EmptyState>
     </div>
@@ -4344,15 +4334,7 @@
         {/snippet}
         {#snippet action()}
           <div class="flex flex-wrap items-center gap-space-2">
-            <Button
-              icon={IconRefresh}
-              label={sheetWords.tryAgain}
-              onclick={retry}
-              pending={retrying}
-              pendingLabel={sheetWords.tryingAgain}
-              size="sm"
-              variant="outline"
-            />
+            {@render stageRetry()}
             <Button
               icon={IconTrash}
               label={sheetWords.remove}
@@ -4362,30 +4344,10 @@
             />
             {#if stageSaid}
               <!-- The stage's own last words, folded as the down stage's are. -->
-              <Button
-                data-details
-                aria-controls={stageDetailsId}
-                aria-expanded={stageDetails}
-                label={stageDetails
-                  ? shellWords.hideDetails
-                  : shellWords.showDetails}
-                onclick={() => {
-                  stageDetails = !stageDetails;
-                }}
-                size="sm"
-                variant="ghost"
-              />
+              {@render stageDetailsToggle()}
             {/if}
           </div>
-          {#if stageSaid && stageDetails}
-            <p
-              id={stageDetailsId}
-              data-slot="details"
-              class="mt-space-2 text-ink-muted type-code liga-none whitespace-pre-wrap wrap-anywhere"
-            >
-              {stageSaid}
-            </p>
-          {/if}
+          {@render stageDetailsText(stageSaid)}
           <AskHere asker={removeAsks} at="never-drawn-remove" />
         {/snippet}
       </EmptyState>
@@ -4485,8 +4447,8 @@
     <div
       class="absolute inset-x-0 bottom-(--keyboard-lift,0px) z-2 flex max-h-over-keyboard-60"
       data-slot="rail-sheet"
-      in:railSheetSlide={{ leaving: false }}
-      out:railSheetSlide={{ leaving: true }}
+      in:sheetSlide={{ leaving: false }}
+      out:sheetSlide={{ leaving: true }}
     >
       {@render railOf("sheet")}
     </div>

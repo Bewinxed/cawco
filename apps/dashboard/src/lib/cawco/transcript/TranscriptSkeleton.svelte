@@ -19,6 +19,39 @@
   const AFTER = ["72%", "35%"];
 </script>
 
+<!-- A turn's speaker line: the 18px mark at --radius-xs and the speaker's
+     name, on the line box Who.svelte's label sets. -->
+{#snippet who()}
+  <div
+    data-slot="who"
+    style:--who-h="max(var(--space-5), 1lh)"
+    class="flex items-center gap-space-2 text-size-label h-(--who-h) mb-space-2"
+  >
+    <Skeleton
+      data-transcript-skeleton-mark
+      cell="mark"
+      class="flex-none"
+      radius="text"
+    /><Skeleton
+      data-transcript-skeleton-name
+      height="x-height"
+      radius="line"
+      type="label"
+      width="short"
+    />
+  </div>
+{/snippet}
+
+<!-- One line of prose, its bar centred in its line box. -->
+{#snippet line(width: string)}
+  <Skeleton
+    class="my-(--sk-line-my)"
+    height="x-height"
+    radius="line"
+    style="width: {width}"
+  />
+{/snippet}
+
 <!-- Mirrors the transcript's list in Transcript.svelte: the same asymmetric
      gutters and narrow-breakpoint step-down, and the same foot reserve, so
      the placeholder's columns and its bottom edge are the transcript's. -->
@@ -44,60 +77,21 @@
        so the pitch is the prose's pitch. The well pads by the turn's --pad,
        which steps down at the narrow breakpoint (`turn-pad`). -->
   <div data-you data-slot="block" class="mt-space-4 turn-pad">
-    <div
-      data-slot="who"
-      style:--who-h="max(var(--space-5), 1lh)"
-      class="flex items-center gap-space-2 text-size-label h-(--who-h) mb-space-2"
-    >
-      <Skeleton
-        data-transcript-skeleton-mark
-        cell="mark"
-        class="flex-none"
-        radius="text"
-      /><Skeleton
-        data-transcript-skeleton-name
-        height="x-height"
-        radius="line"
-        type="label"
-        width="short"
-      />
-    </div>
+    {@render who()}
     <div
       data-slot="well"
       style:--well-pad-block="calc(var(--space-2) + 1px)"
       class="ms-(--well-x) py-(--well-pad-block) px-(--pad) inset-ring-1 inset-ring-well-edge rounded-well-r bg-surface-recess-deep"
     >
       <div class="flex flex-col max-w-c-measure text-size-body leading-body">
-        <Skeleton
-          class="my-(--sk-line-my)"
-          height="x-height"
-          radius="line"
-          style="width: 52%"
-        />
+        {@render line("52%")}
       </div>
     </div>
   </div>
 
   <!-- The agent's answer: two paragraphs, ragged the way prose is. -->
   <div data-slot="block" class="mt-space-4">
-    <div
-      data-slot="who"
-      style:--who-h="max(var(--space-5), 1lh)"
-      class="flex items-center gap-space-2 text-size-label h-(--who-h) mb-space-2"
-    >
-      <Skeleton
-        data-transcript-skeleton-mark
-        cell="mark"
-        class="flex-none"
-        radius="text"
-      /><Skeleton
-        data-transcript-skeleton-name
-        height="x-height"
-        radius="line"
-        type="label"
-        width="short"
-      />
-    </div>
+    {@render who()}
     {#each ANSWER as lines, i (i)}
       <div
         class={[
@@ -106,12 +100,7 @@
         ]}
       >
         {#each lines as width (width)}
-          <Skeleton
-            class="my-(--sk-line-my)"
-            height="x-height"
-            radius="line"
-            style="width: {width}"
-          />
+          {@render line(width)}
         {/each}
       </div>
     {/each}
@@ -141,32 +130,10 @@
 
   <!-- And what it said about them. -->
   <div data-slot="block" class="mt-space-4">
-    <div
-      data-slot="who"
-      style:--who-h="max(var(--space-5), 1lh)"
-      class="flex items-center gap-space-2 text-size-label h-(--who-h) mb-space-2"
-    >
-      <Skeleton
-        data-transcript-skeleton-mark
-        cell="mark"
-        class="flex-none"
-        radius="text"
-      /><Skeleton
-        data-transcript-skeleton-name
-        height="x-height"
-        radius="line"
-        type="label"
-        width="short"
-      />
-    </div>
+    {@render who()}
     <div class="flex flex-col max-w-c-measure text-size-body leading-body">
       {#each AFTER as width (width)}
-        <Skeleton
-          class="my-(--sk-line-my)"
-          height="x-height"
-          radius="line"
-          style="width: {width}"
-        />
+        {@render line(width)}
       {/each}
     </div>
   </div>

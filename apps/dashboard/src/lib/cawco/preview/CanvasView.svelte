@@ -32,37 +32,36 @@
   let { as = "button", onverify, verifying = false, view }: Props = $props();
 </script>
 
+<!-- One of the view's settings: its heading, and its values to pick one of. -->
+{#snippet choice(
+  heading: string,
+  options: readonly (readonly [string, string])[],
+  value: string,
+  onpick: (value: string) => void
+)}
+  <DropdownMenu.Group>
+    <DropdownMenu.GroupHeading>{heading}</DropdownMenu.GroupHeading>
+    <DropdownMenu.RadioGroup onValueChange={onpick} {value}>
+      {#each options as [option, words] (option)}
+        <DropdownMenu.RadioItem value={option}>{words}</DropdownMenu.RadioItem>
+      {/each}
+    </DropdownMenu.RadioGroup>
+  </DropdownMenu.Group>
+{/snippet}
+
 {#snippet entries()}
   <DropdownMenu.CheckboxItem
     checked={view.map}
     onCheckedChange={(on) => view.showMap(on)}>Map</DropdownMenu.CheckboxItem
   >
   <DropdownMenu.Separator />
-  <DropdownMenu.Group>
-    <DropdownMenu.GroupHeading>Scheme</DropdownMenu.GroupHeading>
-    <DropdownMenu.RadioGroup
-      onValueChange={(value) =>
-        view.send({ ...view.chosen, scheme: value as PreviewScheme })}
-      value={view.chosen.scheme}
-    >
-      {#each CANVAS_SCHEMES as [value, words] (value)}
-        <DropdownMenu.RadioItem {value}>{words}</DropdownMenu.RadioItem>
-      {/each}
-    </DropdownMenu.RadioGroup>
-  </DropdownMenu.Group>
+  {@render choice("Scheme", CANVAS_SCHEMES, view.chosen.scheme, (value) =>
+    view.send({ ...view.chosen, scheme: value as PreviewScheme })
+  )}
   <DropdownMenu.Separator />
-  <DropdownMenu.Group>
-    <DropdownMenu.GroupHeading>Width</DropdownMenu.GroupHeading>
-    <DropdownMenu.RadioGroup
-      onValueChange={(value) =>
-        view.send({ ...view.chosen, width: value as CanvasWidth })}
-      value={view.chosen.width}
-    >
-      {#each CANVAS_WIDTHS as [value, words] (value)}
-        <DropdownMenu.RadioItem {value}>{words}</DropdownMenu.RadioItem>
-      {/each}
-    </DropdownMenu.RadioGroup>
-  </DropdownMenu.Group>
+  {@render choice("Width", CANVAS_WIDTHS, view.chosen.width, (value) =>
+    view.send({ ...view.chosen, width: value as CanvasWidth })
+  )}
   <DropdownMenu.Separator />
   <DropdownMenu.CheckboxItem
     checked={view.chosen.motion === "reduce"}

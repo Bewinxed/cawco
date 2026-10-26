@@ -14,6 +14,7 @@
   import { useStore, useSvelteFlow } from "@xyflow/svelte";
   import { untrack } from "svelte";
   import { FIT } from "#lib/components/features/flow/fit.js";
+  import { onCanvasResize } from "#lib/components/features/flow/resized.svelte.js";
   import {
     dur,
     easeInOut,
@@ -133,20 +134,9 @@
 
   // The canvas taking its share of a pane, or the window turning: the
   // fitted view follows, a held one stays.
-  let sized: string | undefined;
-  $effect(() => {
-    const size = `${store.width}x${store.height}`;
-    const before = sized;
-    sized = size;
-    if (
-      before !== undefined &&
-      before !== size &&
-      store.width > 0 &&
-      store.height > 0 &&
-      framed !== undefined &&
-      !untrack(() => held)
-    ) {
-      untrack(() => frame());
+  onCanvasResize(() => {
+    if (framed !== undefined && !held) {
+      frame();
     }
   });
 </script>

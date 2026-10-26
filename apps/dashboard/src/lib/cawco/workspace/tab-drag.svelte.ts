@@ -462,8 +462,8 @@ export function noNativeDrag(node: HTMLElement): () => void {
   return () => node.removeEventListener("dragstart", refuse);
 }
 
-/** The click a drag's release would send the tab is not one. */
-function swallowClick(node: HTMLElement) {
+/** The click a drag's (or a pull's) release would send the tab is not one. */
+export function swallowClick(node: HTMLElement): void {
   const swallow = (event: MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();

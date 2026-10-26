@@ -700,6 +700,28 @@
   });
 </script>
 
+<!-- A ledger's first two column heads: its state column, named for a
+     screen reader alone, and the column that names each row. -->
+{#snippet leadHeads(state: string, name: string)}
+  <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+  <Table.Head class="z-2 w-(--col-state)" scope="col" variant="band"
+    ><span class="sr-only">{state}</span></Table.Head
+  >
+  <Table.Head class="z-2" scope="col" variant="band">{name}</Table.Head>
+  <!-- biome-ignore-end lint/a11y/noHeaderScope: the heads above -->
+{/snippet}
+
+<!-- A source's lead cell: its service's logo in the state column. -->
+{#snippet sourceLead(service: string, rule: "top" | undefined)}
+  <Table.Cell class="w-(--col-state)" {rule} variant="list"
+    ><span
+      data-slot="lead"
+      class="grid w-c-row-lead place-items-center text-ink-muted"
+      ><ProviderLogo provider={service} /></span
+    ></Table.Cell
+  >
+{/snippet}
+
 <!-- A block's count, and the needs-you mark while something in it waits on
      you, after its title. -->
 {#snippet meta(id: Part)}
@@ -1077,12 +1099,7 @@
         <Table.Header>
           <Table.Row variant="band">
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-            <Table.Head class="z-2 w-(--col-state)" scope="col" variant="band"
-              ><span class="sr-only">{words.columnState}</span></Table.Head
-            >
-            <Table.Head class="z-2" scope="col" variant="band"
-              >{words.columnRoutine}</Table.Head
-            >
+            {@render leadHeads(words.columnState, words.columnRoutine)}
             <Table.Head
               data-col-last
               class="z-2 w-c-routine-time-w"
@@ -1178,12 +1195,7 @@
         <Table.Header>
           <Table.Row variant="band">
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-            <Table.Head class="z-2 w-(--col-state)" scope="col" variant="band"
-              ><span class="sr-only">{words.columnService}</span></Table.Head
-            >
-            <Table.Head class="z-2" scope="col" variant="band"
-              >{words.columnSource}</Table.Head
-            >
+            {@render leadHeads(words.columnService, words.columnSource)}
             <Table.Head
               data-col-last
               class="z-2 w-c-routine-time-w"
@@ -1201,13 +1213,7 @@
               class="relative"
               variant="unruled"
             >
-              <Table.Cell class="w-(--col-state)" {rule} variant="list"
-                ><span
-                  data-slot="lead"
-                  class="grid w-c-row-lead place-items-center text-ink-muted"
-                  ><ProviderLogo provider={route.service} /></span
-                ></Table.Cell
-              >
+              {@render sourceLead(route.service, rule)}
               <Table.Cell {rule} variant="list">
                 <span
                   data-slot="name"
@@ -1243,13 +1249,7 @@
               class="relative"
               variant="unruled"
             >
-              <Table.Cell class="w-(--col-state)" {rule} variant="list"
-                ><span
-                  data-slot="lead"
-                  class="grid w-c-row-lead place-items-center text-ink-muted"
-                  ><ProviderLogo provider={poll.service.toLowerCase()} /></span
-                ></Table.Cell
-              >
+              {@render sourceLead(poll.service.toLowerCase(), rule)}
               <Table.Cell {rule} variant="list">
                 <span
                   data-slot="name"

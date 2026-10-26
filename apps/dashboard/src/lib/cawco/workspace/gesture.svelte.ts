@@ -41,6 +41,7 @@ import {
   type Sample,
   sampleAt,
 } from "../motion/spring";
+import { catchSettle, gatherParked, type Parked } from "./parked";
 import { workspace } from "./workspace.svelte";
 
 /** Travel before a drag is anything at all. */
@@ -57,10 +58,7 @@ const RESIST_MAX = 0.25;
 
 type Phase = "idle" | "tracking" | "decided";
 /** A pane in view: its element and its distance from the active tab. */
-interface Pane {
-  delta: number;
-  el: HTMLElement;
-}
+type Pane = Parked;
 
 /** What keeps a touch whichever way it goes: fields and sliders. */
 const KEEPS =
@@ -158,8 +156,6 @@ export function createSwipe(
   /** The settle in flight: its path and the animations playing it. */
   let path: Sample[] = [];
   let animations: Animation[] = [];
-  /** The settle's velocity where a finger stopped it, until that finger moves or leaves. */
-  let held: number | null = null;
   /** The frame reading the settle for the indicator. */
   let followFrame: number | null = null;
   /** What sideways scrollers the finger landed in, asked again at the claim for room. */
@@ -191,21 +187,8 @@ export function createSwipe(
     };
   };
 
-  const gather = (): Pane[] => {
-    if (!root) {
-      return [];
-    }
-    const found: Pane[] = [];
-    for (const el of root.querySelectorAll<HTMLElement>(
-      '[data-slot="pane"][data-pane]'
-    )) {
-      const delta = Number(el.dataset.delta);
-      if (Math.abs(delta) <= 1) {
-        found.push({ el, delta });
-      }
-    }
-    return found;
-  };
+  const gather = (): Pane[] =>
+    gatherParked(root, '[data-slot="pane"][data-pane]');
 
   /** A pane's parking place, in px: the stylesheet's `±100%`, evaluated. */
   const rest = (delta: number) => delta * width;
@@ -329,31 +312,17 @@ export function createSwipe(
     );
   }
 
-  /** A finger landing on a settling pane stops it where it is. */
-  function hold() {
-    if (animations.length === 0) {
-      return;
-    }
-    const at = progress();
-    stopSettle();
-    if (!at) {
-      land();
-      return;
-    }
-    offset = at.x;
-    held = at.v;
-    paint(offset);
-  }
-
-  /** The finger that stopped the settle left without moving it: let it go on. */
-  function resume() {
-    if (held === null) {
-      return;
-    }
-    const velocity = held;
-    held = null;
-    spring(velocity);
-  }
+  const caught = catchSettle({
+    land,
+    playing: () => animations.length > 0,
+    progress,
+    spring,
+    stand: (x) => {
+      offset = x;
+      paint(offset);
+    },
+    stop: stopSettle,
+  });
 
   /** Release velocity in px/ms, from the last few samples. */
   const releaseVelocity = () => {
@@ -566,7 +535,7 @@ export function createSwipe(
         if (phase === "decided") {
           release(false);
         } else if (phase === "tracking") {
-          resume();
+          caught.resume();
         }
         phase = "idle";
       };
@@ -597,7 +566,7 @@ export function createSwipe(
         startY = touch.clientY;
         samples = [{ x: touch.clientX, t: performance.now() }];
         phase = "tracking";
-        hold();
+        caught.hold();
       };
 
       // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the one-finger tab-swipe touchmove handler — one state machine, not split in this pass
@@ -629,7 +598,7 @@ export function createSwipe(
             Math.abs(dy) > Math.abs(dx) * SLOPE ||
             scrollers.some((el) => roomToward(el, dx))
           ) {
-            resume();
+            caught.resume();
             phase = "idle";
             return;
           }
@@ -640,7 +609,7 @@ export function createSwipe(
           // Taking hold mid-settle picks the pane up where the finger
           // stopped it; the settle is dropped, not rewound. A far tap's
           // leaving pane is out of reach of a drag, so it goes now.
-          held = null;
+          caught.drop();
           base = offset;
           if (leaving) {
             clear();
@@ -678,7 +647,7 @@ export function createSwipe(
           event.preventDefault();
           release(true);
         } else if (phase === "tracking") {
-          resume();
+          caught.resume();
         }
         phase = "idle";
       };
@@ -697,7 +666,7 @@ export function createSwipe(
             phase = "idle";
             targetId = null;
             past = false;
-            held = null;
+            caught.drop();
             land();
           }
         },

@@ -44,6 +44,7 @@
     askDetailOf,
     askShort,
     askShortOf,
+    headline,
     matchesSession,
   } from "./present";
   import { trayCard } from "./tray.svelte";
@@ -335,15 +336,6 @@
       ? formatDuration(endedAt - startedAt)
       : ""
   );
-
-  const headline = (text: string): string => {
-    const line =
-      text
-        .split("\n")
-        .map((each) => each.trim())
-        .find(Boolean) ?? "";
-    return line.length > 120 ? `${line.slice(0, 119)}…` : line;
-  };
 
   const failure = $derived(
     row?.lastError ??

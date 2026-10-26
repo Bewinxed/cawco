@@ -21,7 +21,7 @@
   import CompactionDivider from "./CompactionDivider.svelte";
   import { disclosure } from "./disclosure.svelte";
   import MessageRow from "./MessageRow.svelte";
-  import { subagentView } from "./present";
+  import { headline, subagentView } from "./present";
   import { branchRows, wellRuns } from "./rows";
   import Thinking from "./Thinking.svelte";
   import ToolGroup from "./ToolGroup.svelte";
@@ -60,16 +60,6 @@
         Date.parse(branch.startedAt)
     )
   );
-
-  /** A settled branch's headline: its first line, at a scannable length. */
-  const headline = (text: string): string => {
-    const line =
-      text
-        .split("\n")
-        .map((each) => each.trim())
-        .find(Boolean) ?? "";
-    return line.length > 120 ? `${line.slice(0, 119)}…` : line;
-  };
 </script>
 
 <!-- The spine is the rail row every rail block uses (app.css `rail-row`). -->

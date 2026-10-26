@@ -390,15 +390,24 @@ const TERMINAL: Shape = {
   word: "From a terminal",
 };
 
+/** A row of something live: its title, its state's glyph and word, breathing while it works. */
+const live = (
+  title: string,
+  s: Shape,
+  working: boolean
+): Pick<Drawn, "title" | "glyph" | "breathes" | "state"> => ({
+  title,
+  glyph: s.glyph,
+  breathes: working,
+  state: { word: s.word, tone: s.tone },
+});
+
 function conversationRow(r: FindConversation, reason: Reason): Drawn {
   const fromTerminal = r.instanceId === null;
   const s = fromTerminal ? TERMINAL : STATE[r.state];
   const [moment] = r.moments;
   return {
-    title: r.title,
-    glyph: s.glyph,
-    breathes: r.state === "working",
-    state: { word: s.word, tone: s.tone },
+    ...live(r.title, s, r.state === "working"),
     meta: words(
       r.project?.name,
       fromTerminal ? null : roleOf(r),
@@ -415,10 +424,7 @@ function threadRow(r: FindThread): Drawn {
   const s = THREAD[r.state];
   const [moment] = r.moments;
   return {
-    title: r.title,
-    glyph: s.glyph,
-    breathes: r.state === "working",
-    state: { word: s.word, tone: s.tone },
+    ...live(r.title, s, r.state === "working"),
     meta: words(r.project?.name, "Caw thread"),
     reason:
       !r.matched.includes("title") && moment
