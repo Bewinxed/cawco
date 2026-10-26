@@ -46,6 +46,7 @@ import { serverEnvironment, sessionEnvironment } from "@cawco/core/session-env";
 import {
   notAliveReason,
   type ProcSpec,
+  procSpecOf,
   SESSIOND_DRAINING,
   SESSIOND_PROCESS_LIMIT,
   SESSIOND_RELEASE,
@@ -614,11 +615,13 @@ export class SessiondServer {
    * a socket; the socket path funnels here after framing.
    */
   handle(conn: Conn, message: unknown): void {
-    const msg = message as Record<string, unknown>;
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: `message` is `unknown` off the wire — TS's cast doesn't rule out a runtime null/undefined (e.g. `JSON.parse("null")`)
-    const type = typeof msg?.type === "string" ? msg.type : "";
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: same as above — msg can be null/undefined at runtime despite the cast
-    const commandId = typeof msg?.commandId === "string" ? msg.commandId : "";
+    // Off the wire: its fields read one by one, none trusted to be there.
+    const msg: Record<string, unknown> =
+      typeof message === "object" && message !== null
+        ? Object.fromEntries(Object.entries(message))
+        : {};
+    const type = typeof msg.type === "string" ? msg.type : "";
+    const commandId = typeof msg.commandId === "string" ? msg.commandId : "";
 
     if (type === "subscribe") {
       this.#subscribe(
@@ -640,7 +643,7 @@ export class SessiondServer {
         settlement = this.#queueSpawn(
           commandId,
           String(msg.procId ?? ""),
-          msg.spec as ProcSpec
+          procSpecOf(msg.spec)
         );
         break;
       case "limits":
@@ -818,8 +821,7 @@ export class SessiondServer {
 
     let child: ChildProcessWithoutNullStreams;
     const mark = randomUUID();
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: spec is agent-side and opaque (§3.2) — the ProcSpec type promises args, the wire does not
-    const args = spec.args ?? [];
+    const { args } = spec;
     // With a cgroup of its own, the child starts in a shell that joins it and
     // execs the command in place (same pid): capped from its first instruction.
     const [command, argv] = group

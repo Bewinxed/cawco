@@ -17,6 +17,7 @@ import {
   workspacesDir,
 } from "@cawco/core/paths";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { z } from "zod";
 
 /** Where a workspace writes, so nothing run on the host is found there. */
 const writableInside = (): string[] => [
@@ -115,7 +116,9 @@ export const ghAccounts = async (): Promise<GhAccount[]> => {
   const out = await ghSays(["auth", "status", "--json", "hosts"]);
   let read: { hosts?: Record<string, unknown> };
   try {
-    read = JSON.parse(out ?? "{}") as { hosts?: Record<string, unknown> };
+    read = z
+      .object({ hosts: z.record(z.string(), z.unknown()).optional() })
+      .parse(JSON.parse(out ?? "{}"));
   } catch {
     return [];
   }

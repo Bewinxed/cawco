@@ -22,6 +22,7 @@
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { z } from "zod";
 import { installableTestFlight } from "./shipped";
 import {
   APP_SCHEMA,
@@ -299,7 +300,9 @@ if (import.meta.main) {
       continue;
     }
     const { problems, read } = frameProblems(
-      JSON.parse(show(base.commit, APP_SCHEMA)) as Schema,
+      z
+        .record(z.string(), z.unknown())
+        .parse(JSON.parse(show(base.commit, APP_SCHEMA))),
       openEnumNames(show(base.commit, GENERATOR_CONFIG)),
       frames
     );

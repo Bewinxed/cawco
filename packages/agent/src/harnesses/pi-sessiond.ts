@@ -21,6 +21,7 @@ import {
 } from "@cawco/core";
 import { workspaceSpillDir } from "@cawco/core/paths";
 import { standalone } from "@cawco/core/runtime";
+import { z } from "zod";
 import { type BrowserDoor, CHROME_DEVTOOLS } from "../browser/door";
 import { fleetMcpAt, readFleetMcpSet } from "../fleet-mcp-set";
 import { gateForm } from "../gate-form";
@@ -109,6 +110,47 @@ export interface PiHostState {
 const hostGateway = (state: PiHostState): number | undefined =>
   state.gatewayPort ??
   (readEnv(CAWCO_ENV.mcpPort) === undefined ? undefined : mcpGatewayPort());
+/**
+ * The host's commands and events read back off its line: checked to be a
+ * kind the other side sends. Both sides are the one build's (the agent
+ * starts its own host), and each kind's fields are read as typed here.
+ */
+const PI_HOST_COMMANDS: ReadonlySet<unknown> = new Set<PiHostCommand["type"]>([
+  "start",
+  "send",
+  "control",
+  "snapshot",
+  "stop",
+  "permission",
+  "withdraw",
+]);
+export const PI_HOST_COMMAND = z.custom<PiHostCommand>(
+  (value) =>
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value &&
+    PI_HOST_COMMANDS.has(value.type),
+  "a pi host command"
+);
+const PI_HOST_EVENTS: ReadonlySet<unknown> = new Set<PiHostEvent["type"]>([
+  "frame",
+  "busy",
+  "session",
+  "failed",
+  "rejected",
+  "reply",
+  "permission",
+  "permission_resolved",
+]);
+const PI_HOST_EVENT = z.custom<PiHostEvent>(
+  (value) =>
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value &&
+    PI_HOST_EVENTS.has(value.type),
+  "a pi host event"
+);
+
 export type PiHostEvent =
   | { type: "frame"; message: NeutralMessage }
   | { type: "busy"; active: boolean }
@@ -258,7 +300,7 @@ export class PiRemoteSession implements HarnessSession {
             return;
           }
           this.#seq = line.seq;
-          const event = JSON.parse(line.data) as PiHostEvent;
+          const event = PI_HOST_EVENT.parse(JSON.parse(line.data));
           switch (event.type) {
             case "frame":
             case "permission":
@@ -649,7 +691,7 @@ export async function piSnapshot(instanceId: string): Promise<PiHostState> {
     let stop = (): void => undefined;
     stop = client.subscribe(procIdFor("pi", instanceId), {
       line: (line) => {
-        const event = JSON.parse(line.data) as PiHostEvent;
+        const event = PI_HOST_EVENT.parse(JSON.parse(line.data));
         if (event.type !== "reply" || event.id !== id) {
           return;
         }

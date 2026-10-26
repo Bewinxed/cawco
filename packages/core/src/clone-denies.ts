@@ -13,6 +13,7 @@
  * the boundary's host, a plain Bun script, imports it as it is.
  */
 import { join } from "node:path";
+import { z } from "zod";
 import {
   PLACED_MEMORY,
   PLACED_SYNCED,
@@ -26,23 +27,28 @@ import {
  * its reader takes as nothing set; `none` for one that is never made (a
  * clone without `.git/config` is no clone).
  */
-type CloneDenyEmpty =
+const CloneDenyEmptySchema = z.discriminatedUnion("kind", [
   /** `readOnly`: made with no write bits, so no host tool fills it. */
-  | { readonly kind: "dir"; readonly readOnly?: true }
-  | { readonly kind: "file"; readonly text: string }
-  | { readonly kind: "none" };
+  z.object({ kind: z.literal("dir"), readOnly: z.literal(true).optional() }),
+  z.object({ kind: z.literal("file"), text: z.string() }),
+  z.object({ kind: z.literal("none") }),
+]);
+type CloneDenyEmpty = z.infer<typeof CloneDenyEmptySchema>;
 
 /** One path in a clone no workspace writes, and what stands in for it while the clone has none. */
-export interface CloneDeny {
-  readonly empty: CloneDenyEmpty;
-  readonly path: string;
-  /**
-   * Denied by srt itself at the clone's root, whatever the policy says (its
-   * mandatory names), rather than by the policy: given a stand-in and
-   * guarded like the rest, never added to the policy's write denies.
-   */
-  readonly srt?: true;
-}
+export const CloneDenySchema = z
+  .object({
+    empty: CloneDenyEmptySchema,
+    path: z.string(),
+    /**
+     * Denied by srt itself at the clone's root, whatever the policy says (its
+     * mandatory names), rather than by the policy: given a stand-in and
+     * guarded like the rest, never added to the policy's write denies.
+     */
+    srt: z.literal(true).optional(),
+  })
+  .readonly();
+export type CloneDeny = z.infer<typeof CloneDenySchema>;
 
 const DIR = { kind: "dir" } as const;
 const EMPTY_JSON = { kind: "file", text: "{}\n" } as const;

@@ -687,7 +687,8 @@ const unquoted = (value: string): string => {
     return value;
   }
   try {
-    return JSON.parse(value) as string;
+    const plain: unknown = JSON.parse(value);
+    return typeof plain === "string" ? plain : value;
   } catch {
     return value;
   }

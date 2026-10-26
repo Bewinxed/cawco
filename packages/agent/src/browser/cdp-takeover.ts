@@ -20,6 +20,7 @@
 import { readWithin } from "@cawco/core/bounded";
 import { BROWSER_SCREEN } from "@cawco/core/browser";
 import { CdpCalls } from "./cdp-calls";
+import { z } from "zod";
 
 /** What a view sends: the person's pointer, keys and words, in the page's CSS pixels. */
 export type CdpInput =
@@ -43,14 +44,16 @@ export interface CdpViewer {
 
 type Json = Record<string, unknown>;
 
-interface Message {
-  error?: { message: string };
-  id?: number;
-  method?: string;
-  params?: Json;
-  result?: Json;
-  sessionId?: string;
-}
+const JSON_OBJECT = z.record(z.string(), z.unknown());
+const MessageSchema = z.object({
+  error: z.object({ message: z.string() }).optional(),
+  id: z.number().optional(),
+  method: z.string().optional(),
+  params: JSON_OBJECT.optional(),
+  result: JSON_OBJECT.optional(),
+  sessionId: z.string().optional(),
+});
+type Message = z.infer<typeof MessageSchema>;
 
 /** A take-over's screencast: none yet, frames being made, or ended. */
 type CastState = "idle" | "casting" | "stopped";
@@ -78,7 +81,7 @@ export class CdpLink {
     socket.onmessage = (event) => {
       let message: Message;
       try {
-        message = JSON.parse(String(event.data)) as Message;
+        message = MessageSchema.parse(JSON.parse(String(event.data)));
       } catch {
         return;
       }
@@ -208,7 +211,7 @@ const finite = (value: unknown): value is number =>
 export const cdpInputOf = (text: string): CdpInput | undefined => {
   let value: Json;
   try {
-    value = JSON.parse(text) as Json;
+    value = JSON_OBJECT.parse(JSON.parse(text));
   } catch {
     return;
   }

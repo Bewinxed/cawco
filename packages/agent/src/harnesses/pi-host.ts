@@ -10,6 +10,7 @@ import type { HarnessContext, HarnessSession } from "../harness";
 import { startPiHost } from "./pi-runtime";
 import {
   backgroundShell,
+  PI_HOST_COMMAND,
   type PiGateAsk,
   type PiHostCommand,
   type PiHostEvent,
@@ -160,7 +161,7 @@ createInterface({ input: process.stdin })
   .on("line", (line) => {
     let command: PiHostCommand;
     try {
-      command = JSON.parse(line) as PiHostCommand;
+      command = PI_HOST_COMMAND.parse(JSON.parse(line));
     } catch (error) {
       output({ type: "failed", error: String(error) });
       return;

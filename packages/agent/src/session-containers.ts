@@ -102,8 +102,10 @@ import { machineId } from "@cawco/core/machine-id";
 import { cawcoDataDir, darwinSocketRoot } from "@cawco/core/paths";
 import { runCaptured } from "@cawco/core/run-captured";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { parseRecord } from "@cawco/core/state-file";
 import { containerWords } from "@cawco/core/words/containers";
 import { parseAllDocuments } from "yaml";
+import { z } from "zod";
 import { contextEndpoint } from "./browser/runtime";
 import { delegationHubUrl } from "./delegation";
 import { socketPlace } from "./tool-door";
@@ -182,10 +184,11 @@ export const ENDING_DIR_NAME = "containers-ending";
 const ENDING_DIR = (): string => join(cawcoDataDir(), ENDING_DIR_NAME);
 
 /** An ending as it is written down: the ids of the pods and containers it ends, and nothing else. */
-export interface EndingRecord {
-  containers: string[];
-  pods: string[];
-}
+const EndingRecordSchema = z.object({
+  containers: z.array(z.string()),
+  pods: z.array(z.string()),
+});
+export type EndingRecord = z.infer<typeof EndingRecordSchema>;
 
 const exists = (path: string): Promise<boolean> =>
   stat(path).then(
@@ -272,10 +275,20 @@ const podmanUpstream = async (
   if (process.platform === "darwin") {
     const inspected = await output(["podman", "machine", "inspect"]);
     const [machine] = inspected
-      ? (JSON.parse(inspected) as {
-          ConnectionInfo?: { PodmanSocket?: { Path?: string } };
-          State?: string;
-        }[])
+      ? z
+          .array(
+            z.object({
+              ConnectionInfo: z
+                .object({
+                  PodmanSocket: z
+                    .object({ Path: z.string().optional() })
+                    .optional(),
+                })
+                .optional(),
+              State: z.string().optional(),
+            })
+          )
+          .parse(JSON.parse(inspected))
       : [];
     const path = machine?.ConnectionInfo?.PodmanSocket?.Path;
     return machine?.State === "running" && path && (await exists(path))
@@ -1163,10 +1176,11 @@ export const finishEnding = async (
   const file = endingFile(instanceId);
   let record: EndingRecord;
   try {
-    record = JSON.parse(await readFile(file, "utf8")) as EndingRecord;
-    if (!(Array.isArray(record.containers) && Array.isArray(record.pods))) {
-      throw new Error("it names no pods and containers");
-    }
+    record = parseRecord(
+      file,
+      await readFile(file, "utf8"),
+      EndingRecordSchema
+    );
   } catch (error) {
     console.warn(
       `[containers] ${instanceId}'s ending at ${file} cannot be read, so it ends nothing: ${said(error)}`

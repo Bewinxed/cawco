@@ -25,6 +25,7 @@ import {
   workspaceStateDir,
 } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
+import { z } from "zod";
 
 /** Where Claude Code session `sessionId`, on `account` (none: the machine's own login) in `cwd`, saves its tool results. */
 export const claudeSpillDir = async (
@@ -45,10 +46,11 @@ const recordOf = (id: string): string =>
   join(workspaceStateDir(id), "first-session.json");
 
 /** A Claude session id minted at a workspace's cut, for its instance's first launch. */
-interface FirstSession {
-  readonly instanceId: string;
-  readonly sessionId: string;
-}
+const FirstSessionSchema = z.object({
+  instanceId: z.string(),
+  sessionId: z.string(),
+});
+type FirstSession = z.infer<typeof FirstSessionSchema>;
 
 /** The harnesses whose sessions keep a spill folder. */
 const SPILLING: readonly HarnessKind[] = ["claude", "opencode", "pi"];
@@ -134,15 +136,15 @@ export const takeFirstSession = async (
   }
   let record: Partial<FirstSession> = {};
   try {
-    record = JSON.parse(text) as Partial<FirstSession>;
+    record = FirstSessionSchema.partial().parse(JSON.parse(text));
   } catch {
-    // A record that does not parse names no session: it goes.
+    // A record that does not parse, or names no session, names none: it goes.
   }
   if (record.instanceId !== instanceId) {
     return;
   }
   await rm(recordOf(id), { force: true });
-  return typeof record.sessionId === "string" ? record.sessionId : undefined;
+  return record.sessionId;
 };
 
 /** Instance `instanceId` stopped: the id minted for its first launch in workspace `id`, if it never launched, goes with it. */

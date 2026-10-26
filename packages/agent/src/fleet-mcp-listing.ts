@@ -1,4 +1,5 @@
 import { readWithin } from "@cawco/core/bounded";
+import { z } from "zod";
 import { harnessMcpUrl } from "./delegation";
 
 /** Where every harness on this machine dials a fleet server the hub proxies. */
@@ -46,9 +47,9 @@ const resultOf = async (
     : [text];
   for (const candidate of candidates) {
     try {
-      const message = JSON.parse(candidate) as {
-        result?: Record<string, unknown>;
-      };
+      const message = z
+        .object({ result: z.record(z.string(), z.unknown()).optional() })
+        .parse(JSON.parse(candidate));
       if (message.result) {
         return message.result;
       }

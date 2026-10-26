@@ -68,12 +68,17 @@ import {
   type SandboxAskCallback,
   SandboxManager,
   type SandboxRuntimeConfig,
+  SandboxRuntimeConfigSchema,
 } from "@anthropic-ai/sandbox-runtime";
 import {
   nestedBoundaryReason,
   nestedBwrapLabel,
 } from "@cawco/core/boundary-nesting";
-import { type CloneDeny, cloneDenies } from "@cawco/core/clone-denies";
+import {
+  type CloneDeny,
+  CloneDenySchema,
+  cloneDenies,
+} from "@cawco/core/clone-denies";
 import { isGitDirSync } from "@cawco/core/git-dir";
 import { HUB_PREVIEWS_ENV } from "@cawco/core/hub-previews";
 import { mountedAnywhere, mountPointsOf } from "@cawco/core/mount-table";
@@ -82,6 +87,7 @@ import { srtRefusedLine } from "@cawco/core/srt-refusal";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import { systemProgram, trustedPath } from "@cawco/core/workspace-needs";
 import type { Subprocess } from "bun";
+import { z } from "zod";
 import {
   RELAY_SOCKET_ENV,
   RELAY_SOCKET_NAME,
@@ -229,13 +235,15 @@ const makePlaces = (): void => {
     mkdirSync(place, { recursive: true, mode: 0o700 });
   }
 };
-const settings = JSON.parse(
-  readFileSync(settingsFile, "utf8")
-) as SandboxRuntimeConfig;
+const settings: SandboxRuntimeConfig = SandboxRuntimeConfigSchema.parse(
+  JSON.parse(readFileSync(settingsFile, "utf8"))
+);
 const runner = readFileSync(runnerFile, "utf8");
 
 /** The clone-side deny paths the agent named (workspace-policy.ts `workspaceDenies`), each with what stands in for it. */
-const denies = JSON.parse(readFileSync(deniesFile, "utf8")) as CloneDeny[];
+const denies: CloneDeny[] = z
+  .array(CloneDenySchema)
+  .parse(JSON.parse(readFileSync(deniesFile, "utf8")));
 /** `<state>/sandbox`: `OUTER INNER IDLE...`, the running sandbox's pids, which the executor and the agent read. */
 const placeFile = join(process.cwd(), "sandbox");
 /** `<state>/guarded`: the running sandbox's protected binds, which the executor checks before every command. */

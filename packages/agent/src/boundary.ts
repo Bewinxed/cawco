@@ -180,6 +180,7 @@ import {
   readRecord,
   writeStateFile,
 } from "@cawco/core/state-file";
+import { PolicySchema } from "@cawco/core/stored-shapes";
 import type { UpstreamRule, UpstreamRules } from "@cawco/core/upstream-guard";
 import type { Policy } from "@cawco/core/workspace-judge";
 import {
@@ -194,6 +195,7 @@ import {
   workspaceSpills,
 } from "@cawco/core/workspace-policy";
 import { rgPath } from "@vscode/ripgrep-universal";
+import { z } from "zod";
 import { recordAgentState } from "./agent-state";
 import {
   MEMBERSHIP_PREFIX,
@@ -259,8 +261,6 @@ import {
 import { linkWorkspaceModules } from "./workspace-modules";
 import { workspaceRecords } from "./workspace-records";
 import { GIT_MOVE, gitShim, shimPaths } from "./worktree-guard";
-import { z } from "zod";
-import { PolicySchema } from "@cawco/core/stored-shapes";
 
 /** A running boundary, as a harness uses it. */
 const BoundaryShape = z.object({
@@ -2342,9 +2342,9 @@ export const launchedHook = async (
   }
   const events = HOOK_EVENTS_FLAG.test(commandLine);
   const gatesFiles = GATING_MATCHERS.has(matcher as string);
-  const command = JSON.parse(quoted) as string;
+  const command = z.string().parse(JSON.parse(quoted));
   if (quotedArgs) {
-    const args = JSON.parse(quotedArgs) as string[];
+    const args = z.array(z.string()).parse(JSON.parse(quotedArgs));
     const hook = args.at(-1);
     return command === perl() &&
       args.length === HOOK_ARGS.length + 1 &&

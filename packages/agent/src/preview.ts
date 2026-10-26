@@ -30,6 +30,7 @@ import {
   versionedFile,
 } from "@cawco/core/preview-proxy";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
+import { z } from "zod";
 import { wakeBrowser } from "./browser/browsers";
 import { cdpView } from "./browser/shield";
 import { type BrowserRecord, portsOf, readBrowser } from "./browser/state";
@@ -140,10 +141,9 @@ const HMR_PROTOCOL = "vite-hmr";
 /** Whether `message`, sent up a Vite HMR socket, is a custom event naming {@link MACHINE_EVENT}. */
 const machineEvent = (message: string | Buffer): boolean => {
   try {
-    const sent = JSON.parse(String(message)) as {
-      type?: unknown;
-      event?: unknown;
-    };
+    const sent = z
+      .object({ type: z.unknown().optional(), event: z.unknown().optional() })
+      .parse(JSON.parse(String(message)));
     return sent.type === "custom" && sent.event === MACHINE_EVENT;
   } catch {
     // Not JSON, or `null` (whose `.type` throws): no custom event.

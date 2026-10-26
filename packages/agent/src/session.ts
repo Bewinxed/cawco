@@ -6479,8 +6479,7 @@ export class SessionSupervisor {
           case "tagSession":
             await adapter.tagSession(
               args[0] as string,
-              // biome-ignore lint/suspicious/noUnnecessaryConditions: `args` is `unknown[]` off the wire; the cast tells TS args[1] is a string, but at runtime it can genuinely be absent
-              (args[1] as string) ?? null,
+              typeof args[1] === "string" ? args[1] : null,
               dirOf(args[2])
             );
             this.#closeTagging(args[0]);

@@ -88,6 +88,7 @@ import { systemProgram, trustedPath } from "@cawco/core/workspace-needs";
 import { removeTree } from "./remove-tree";
 import { z } from "zod";
 import { WorkspaceKindSchema } from "@cawco/core/stored-shapes";
+import { removeTree } from "./remove-tree";
 
 /**
  * How a workspace holds its private copy on its machine: a folder's view of
@@ -192,7 +193,7 @@ export const layerOf = async (
 /** Workspace `id`'s layer record, read synchronously; none when it has none whole. */
 const layerSync = (id: string): Layer | undefined => {
   try {
-    return JSON.parse(readFileSync(layerFile(id), "utf8")) as Layer;
+    return LayerSchema.parse(JSON.parse(readFileSync(layerFile(id), "utf8")));
   } catch {
     // No record, or one cut short: no layer on record.
   }

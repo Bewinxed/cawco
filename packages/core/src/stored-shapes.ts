@@ -26,6 +26,7 @@ import type {
   SendAttachment as SendAttachmentType,
   TextAttachment as TextAttachmentType,
 } from "./attachments";
+import type { ArchiveFetching as ArchiveFetchingType } from "./binary-distribution";
 import type {
   BinaryDownload as BinaryDownloadType,
   BinaryUpdateLanding as BinaryUpdateLandingType,
@@ -91,6 +92,7 @@ import type { ConnectAccess as ConnectAccessType } from "./frames";
 import type {
   AuthState as AuthStateType,
   CarryRestored as CarryRestoredType,
+  ChildLimit as ChildLimitType,
   ClaudeModelUsage as ClaudeModelUsageType,
   EffortLevel as EffortLevelType,
   EndedTask as EndedTaskType,
@@ -106,6 +108,7 @@ import type {
   MoveEnded as MoveEndedType,
   NeutralContentBlock as NeutralContentBlockType,
   NeutralOrigin as NeutralOriginType,
+  NeutralSessionInfo as NeutralSessionInfoType,
   NeutralUserMessage as NeutralUserMessageType,
   PermissionMode as PermissionModeType,
   PlaceLfsRow as PlaceLfsRowType,
@@ -196,10 +199,23 @@ import type {
 } from "./relays";
 import { RELAY_PROVIDERS, RELAY_STATES } from "./relays";
 import type { ReleaseManifest as ReleaseManifestType } from "./release-manifest";
+import type { DownloadProgress as DownloadProgressType } from "./resumable-download";
 import type {
-  CanvasDial as CanvasDialType,
-  CanvasEdge as CanvasEdgeType,
-  CanvasSpec as CanvasSpecType,
+  SessiondAck as SessiondAckType,
+  SessiondBacklog as SessiondBacklogType,
+  SessiondDelta as SessiondDeltaType,
+  SessiondDraining as SessiondDrainingType,
+  SessiondExit as SessiondExitType,
+  SessiondLimit as SessiondLimitType,
+  SessiondLine as SessiondLineType,
+  SessiondProcInfo as SessiondProcInfoType,
+  SessiondReset as SessiondResetType,
+  SessiondServerMessage as SessiondServerMessageType,
+  SessiondWelcome as SessiondWelcomeType,
+} from "./sessiond";
+import type {
+  StageErrorKind as StageErrorKindType,
+  StageError as StageErrorType,
 } from "./stage";
 import type { IngestMark as IngestMarkType } from "./stream";
 import type {
@@ -233,6 +249,15 @@ import type {
   OpenCodeGoLimits as OpenCodeGoLimitsType,
 } from "./usage/types";
 import type { Policy as PolicyType } from "./workspace-judge";
+
+export const DownloadProgressSchema = z.object({
+  received: z.number(),
+  total: z.number(),
+});
+
+export const ArchiveFetchingSchema = z.object({
+  fetching: DownloadProgressSchema,
+});
 
 export const PolicySchema = z.object({
   allowRead: z.array(z.string()).readonly(),
@@ -423,6 +448,35 @@ export const FleetMcpConfigSchema = z.union([
   McpStdioServerConfigSchema,
 ]);
 
+export const EffortLevelSchema = z.enum([
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+]);
+
+export const ModelInfoSchema = z.object({
+  contextWindow: z.number().optional(),
+  defaultEffort: EffortLevelSchema.nullable().optional(),
+  description: z.string().optional(),
+  displayName: z.string(),
+  released: z.string().optional(),
+  resolvedModel: z.string().optional(),
+  supportedEffortLevels: z.array(EffortLevelSchema).optional(),
+  supportsAdaptiveThinking: z.boolean().optional(),
+  supportsAutoMode: z.boolean().optional(),
+  supportsEffort: z.boolean().optional(),
+  supportsFastMode: z.boolean().optional(),
+  value: z.string(),
+});
+
+export const SignInFaultSchema = z.object({
+  at: z.number(),
+  provider: z.string(),
+  words: z.string(),
+});
+
 export const WorkspaceCutSchema = z.object({
   branch: z.string(),
   carry: z.string().optional(),
@@ -430,6 +484,151 @@ export const WorkspaceCutSchema = z.object({
 });
 
 export const WorkspaceKindSchema = z.enum(["repo", "folder"]);
+
+export const BuildInfoSchema = z.object({
+  commit: z.string().optional(),
+  dirty: z.boolean().optional(),
+  protocol: z.object({ min: z.number(), max: z.number() }).optional(),
+  startedAt: z.number(),
+  version: z.string(),
+});
+
+export const SignalsSchema = z.enum([
+  "SIGABRT",
+  "SIGALRM",
+  "SIGBUS",
+  "SIGCHLD",
+  "SIGCONT",
+  "SIGFPE",
+  "SIGHUP",
+  "SIGILL",
+  "SIGINT",
+  "SIGIO",
+  "SIGIOT",
+  "SIGKILL",
+  "SIGPIPE",
+  "SIGPOLL",
+  "SIGPROF",
+  "SIGPWR",
+  "SIGQUIT",
+  "SIGSEGV",
+  "SIGSTKFLT",
+  "SIGSTOP",
+  "SIGSYS",
+  "SIGTERM",
+  "SIGTRAP",
+  "SIGTSTP",
+  "SIGTTIN",
+  "SIGTTOU",
+  "SIGUNUSED",
+  "SIGURG",
+  "SIGUSR1",
+  "SIGUSR2",
+  "SIGVTALRM",
+  "SIGWINCH",
+  "SIGXCPU",
+  "SIGXFSZ",
+  "SIGBREAK",
+  "SIGLOST",
+  "SIGINFO",
+]);
+
+export const SessiondProcInfoSchema = z.object({
+  alive: z.boolean(),
+  cwd: z.string().optional(),
+  exitCode: z.number().optional(),
+  head: z.number(),
+  pid: z.number(),
+  procId: z.string(),
+  signal: SignalsSchema.optional(),
+  stderr: z.string().optional(),
+});
+
+export const SessiondWelcomeSchema = z.object({
+  build: BuildInfoSchema,
+  capabilities: z.array(z.string()).readonly(),
+  cgroup: z.string().optional(),
+  epoch: z.string(),
+  procs: z.array(SessiondProcInfoSchema),
+  type: z.literal("welcome"),
+});
+
+export const SessiondLineSchema = z.object({
+  data: z.string(),
+  procId: z.string(),
+  seq: z.number(),
+});
+
+export const SessiondDeltaSchema = z.object({
+  event: SessiondLineSchema,
+  type: z.literal("proc.line"),
+});
+
+export const SessiondBacklogSchema = z.object({
+  events: z.array(SessiondLineSchema),
+  procId: z.string(),
+  type: z.literal("proc.backlog"),
+});
+
+export const SessiondResetSchema = z.object({
+  nextSeq: z.number(),
+  oldest: z.number().optional(),
+  procId: z.string(),
+  type: z.literal("proc.reset"),
+});
+
+export const SessiondExitSchema = z.object({
+  exitCode: z.number().nullable(),
+  pid: z.number().optional(),
+  procId: z.string(),
+  signal: SignalsSchema.nullable(),
+  stderr: z.string().optional(),
+  type: z.literal("proc.exit"),
+});
+
+export const ChildLimitSchema = z.enum(["tasks", "memory"]);
+
+export const SessiondLimitSchema = z.object({
+  count: z.number(),
+  group: z.string(),
+  limit: ChildLimitSchema,
+  max: z.number(),
+  pid: z.number(),
+  procId: z.string(),
+  type: z.literal("proc.limit"),
+});
+
+export const SessiondAckSchema = z.object({
+  commandId: z.string(),
+  reason: z.string().optional(),
+  stage: z.enum(["accepted", "applied", "failed"]),
+  type: z.literal("ack"),
+});
+
+export const SessiondDrainingSchema = z.object({ type: z.literal("draining") });
+
+export const SessiondServerMessageSchema = z.union([
+  SessiondWelcomeSchema,
+  SessiondDeltaSchema,
+  SessiondBacklogSchema,
+  SessiondResetSchema,
+  SessiondExitSchema,
+  SessiondLimitSchema,
+  SessiondAckSchema,
+  SessiondDrainingSchema,
+]);
+
+export const StageErrorKindSchema = z.enum(["missing", "compile", "page"]);
+
+export const StageErrorSchema = z.object({
+  column: z.number().nullable(),
+  file: z.string(),
+  frame: z.string().nullable(),
+  kind: StageErrorKindSchema.optional(),
+  line: z.number().nullable(),
+  message: z.string(),
+  sheets: z.array(z.string()),
+});
 
 export const ReleaseManifestSchema = z.object({
   artifacts: z.array(
@@ -546,14 +745,6 @@ export const BinaryUpdateStateSchema = z.object({
   updatedAt: z.number(),
   waitingOn: z.array(RestartHoldSchema).optional(),
   waitingSince: z.number().optional(),
-});
-
-export const BuildInfoSchema = z.object({
-  commit: z.string().optional(),
-  dirty: z.boolean().optional(),
-  protocol: z.object({ min: z.number(), max: z.number() }).optional(),
-  startedAt: z.number(),
-  version: z.string(),
 });
 
 export const HarnessKindSchema = z.enum(["claude", "opencode", "pi"]);
@@ -757,35 +948,6 @@ export const HarnessCapabilitiesSchema = z.object({
   thinking: z.boolean(),
 });
 
-export const EffortLevelSchema = z.enum([
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-]);
-
-export const ModelInfoSchema = z.object({
-  contextWindow: z.number().optional(),
-  defaultEffort: EffortLevelSchema.nullable().optional(),
-  description: z.string().optional(),
-  displayName: z.string(),
-  released: z.string().optional(),
-  resolvedModel: z.string().optional(),
-  supportedEffortLevels: z.array(EffortLevelSchema).optional(),
-  supportsAdaptiveThinking: z.boolean().optional(),
-  supportsAutoMode: z.boolean().optional(),
-  supportsEffort: z.boolean().optional(),
-  supportsFastMode: z.boolean().optional(),
-  value: z.string(),
-});
-
-export const SignInFaultSchema = z.object({
-  at: z.number(),
-  provider: z.string(),
-  words: z.string(),
-});
-
 export const HarnessReportSchema = z.object({
   accounts: z.array(AccountReportSchema).optional(),
   auth: AuthStateSchema,
@@ -965,34 +1127,6 @@ export const RelayViewSchema = z.object({
   registered: z.boolean(),
   state: RelayStateSchema,
   testedAt: z.number().nullable(),
-});
-
-export const CanvasDialSchema = z.object({
-  kind: z.enum(["number", "color", "select", "toggle"]),
-  label: z.string().optional(),
-  max: z.number().optional(),
-  min: z.number().optional(),
-  name: z.string(),
-  options: z.array(z.string()).optional(),
-  step: z.number().optional(),
-  target: z.union([
-    z.object({ cssVar: z.string() }),
-    z.object({ arg: z.string() }),
-  ]),
-  unit: z.string().optional(),
-});
-
-export const CanvasEdgeSchema = z.object({
-  from: z.string(),
-  label: z.string().optional(),
-  to: z.string(),
-});
-
-export const CanvasSpecSchema = z.object({
-  dials: z.array(CanvasDialSchema).optional(),
-  edges: z.array(CanvasEdgeSchema).optional(),
-  group: z.record(z.string(), z.string()).optional(),
-  name: z.string().optional(),
 });
 
 export const ArtifactThumbnailSchema = z.object({
@@ -2042,6 +2176,21 @@ export const InstallSchema = z.object({
   target: z.string(),
 });
 
+export const NeutralSessionInfoSchema = z.object({
+  createdAt: z.number().optional(),
+  customTitle: z.string().optional(),
+  cwd: z.string().optional(),
+  fileSize: z.number().optional(),
+  firstPrompt: z.string().optional(),
+  firstTitle: z.string().optional(),
+  gitBranch: z.string().optional(),
+  harness: HarnessKindSchema,
+  lastModified: z.number(),
+  sessionId: z.string(),
+  summary: z.string().optional(),
+  tag: z.string().optional(),
+});
+
 /**
  * Each property, through every level, as a plain object type. `readonly`
  * goes: it says what code may do with a value, not what a record holds.
@@ -2061,6 +2210,8 @@ type Same<A, B> =
 
 /** Every schema of an exported type, proved against that type. */
 export const proved: [
+  Same<z.output<typeof DownloadProgressSchema>, DownloadProgressType>,
+  Same<z.output<typeof ArchiveFetchingSchema>, ArchiveFetchingType>,
   Same<z.output<typeof PolicySchema>, PolicyType>,
   Same<z.output<typeof MediaPathSchema>, MediaPathType>,
   Same<z.output<typeof BrowserPortsSchema>, BrowserPortsType>,
@@ -2083,8 +2234,26 @@ export const proved: [
   Same<z.output<typeof McpSSEServerConfigSchema>, McpSSEServerConfigType>,
   Same<z.output<typeof McpHttpServerConfigSchema>, McpHttpServerConfigType>,
   Same<z.output<typeof FleetMcpConfigSchema>, FleetMcpConfigType>,
+  Same<z.output<typeof EffortLevelSchema>, EffortLevelType>,
+  Same<z.output<typeof ModelInfoSchema>, ModelInfoType>,
+  Same<z.output<typeof SignInFaultSchema>, SignInFaultType>,
   Same<z.output<typeof WorkspaceCutSchema>, WorkspaceCutType>,
   Same<z.output<typeof WorkspaceKindSchema>, WorkspaceKindType>,
+  Same<z.output<typeof BuildInfoSchema>, BuildInfoType>,
+  Same<z.output<typeof SessiondProcInfoSchema>, SessiondProcInfoType>,
+  Same<z.output<typeof SessiondWelcomeSchema>, SessiondWelcomeType>,
+  Same<z.output<typeof SessiondLineSchema>, SessiondLineType>,
+  Same<z.output<typeof SessiondDeltaSchema>, SessiondDeltaType>,
+  Same<z.output<typeof SessiondBacklogSchema>, SessiondBacklogType>,
+  Same<z.output<typeof SessiondResetSchema>, SessiondResetType>,
+  Same<z.output<typeof SessiondExitSchema>, SessiondExitType>,
+  Same<z.output<typeof ChildLimitSchema>, ChildLimitType>,
+  Same<z.output<typeof SessiondLimitSchema>, SessiondLimitType>,
+  Same<z.output<typeof SessiondAckSchema>, SessiondAckType>,
+  Same<z.output<typeof SessiondDrainingSchema>, SessiondDrainingType>,
+  Same<z.output<typeof SessiondServerMessageSchema>, SessiondServerMessageType>,
+  Same<z.output<typeof StageErrorKindSchema>, StageErrorKindType>,
+  Same<z.output<typeof StageErrorSchema>, StageErrorType>,
   Same<z.output<typeof ReleaseManifestSchema>, ReleaseManifestType>,
   Same<z.output<typeof AuthStateSchema>, AuthStateType>,
   Same<z.output<typeof BinaryUpdatePolicySchema>, BinaryUpdatePolicyType>,
@@ -2097,7 +2266,6 @@ export const proved: [
   Same<z.output<typeof KeptProcessSchema>, KeptProcessType>,
   Same<z.output<typeof RetiringKeeperSchema>, RetiringKeeperType>,
   Same<z.output<typeof BinaryUpdateStateSchema>, BinaryUpdateStateType>,
-  Same<z.output<typeof BuildInfoSchema>, BuildInfoType>,
   Same<z.output<typeof HarnessKindSchema>, HarnessKindType>,
   Same<z.output<typeof PermissionModeSchema>, PermissionModeType>,
   Same<z.output<typeof SessionCustodySchema>, SessionCustodyType>,
@@ -2116,9 +2284,6 @@ export const proved: [
   Same<z.output<typeof AccountProviderSchema>, AccountProviderType>,
   Same<z.output<typeof AccountReportSchema>, AccountReportType>,
   Same<z.output<typeof HarnessCapabilitiesSchema>, HarnessCapabilitiesType>,
-  Same<z.output<typeof EffortLevelSchema>, EffortLevelType>,
-  Same<z.output<typeof ModelInfoSchema>, ModelInfoType>,
-  Same<z.output<typeof SignInFaultSchema>, SignInFaultType>,
   Same<z.output<typeof HarnessReportSchema>, HarnessReportType>,
   Same<z.output<typeof WorkspaceToolSchema>, WorkspaceToolType>,
   Same<z.output<typeof MachineCapabilitySchema>, MachineCapabilityType>,
@@ -2135,9 +2300,6 @@ export const proved: [
   Same<z.output<typeof RelayProviderSchema>, RelayProviderType>,
   Same<z.output<typeof RelayStateSchema>, RelayStateType>,
   Same<z.output<typeof RelayViewSchema>, RelayViewType>,
-  Same<z.output<typeof CanvasDialSchema>, CanvasDialType>,
-  Same<z.output<typeof CanvasEdgeSchema>, CanvasEdgeType>,
-  Same<z.output<typeof CanvasSpecSchema>, CanvasSpecType>,
   Same<z.output<typeof ArtifactThumbnailSchema>, ArtifactThumbnailType>,
   Same<z.output<typeof CompactStageSchema>, CompactStageType>,
   Same<z.output<typeof AccountHueSchema>, AccountHueType>,
@@ -2245,7 +2407,22 @@ export const proved: [
   Same<z.output<typeof InstallStateSchema>, InstallStateType>,
   Same<z.output<typeof InstallMarkSchema>, InstallMarkType>,
   Same<z.output<typeof InstallSchema>, InstallType>,
+  Same<z.output<typeof NeutralSessionInfoSchema>, NeutralSessionInfoType>,
 ] = [
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
   true,
   true,
   true,

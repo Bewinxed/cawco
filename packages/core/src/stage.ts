@@ -14,7 +14,6 @@
  */
 
 import type { PreviewDown } from "./index";
-import { CanvasSpecSchema } from "./stored-shapes";
 
 /**
  * The frameworks a stage mounts a component with: what the daemon hands its
@@ -413,7 +412,7 @@ export function canvasOf(path: string): { files: string[]; spec: CanvasSpec } {
   const query = new URL(path, "http://stage").searchParams;
   let spec: CanvasSpec = {};
   try {
-    spec = CanvasSpecSchema.parse(JSON.parse(query.get("spec") ?? "{}"));
+    spec = canvasSpecOf(JSON.parse(query.get("spec") ?? "{}"));
   } catch {
     spec = {};
   }
@@ -428,6 +427,122 @@ export interface CanvasSpec {
   group?: Record<string, string>;
   name?: string;
 }
+
+/*
+ * Reading back what this module wrote into a page or an address, without a
+ * schema library: the dashboard and the canvas page load this module, and a
+ * page carries no validator of its own. Each reads a value as the JSON it was
+ * written as, and keeps what is that shape.
+ */
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+const textOf = (value: unknown): string | undefined =>
+  typeof value === "string" ? value : undefined;
+const numberOf = (value: unknown): number | undefined =>
+  typeof value === "number" ? value : undefined;
+const textsOf = (value: unknown): string[] | undefined =>
+  Array.isArray(value) && value.every((one) => typeof one === "string")
+    ? value
+    : undefined;
+/** The keys of `value` that are present, each as it reads. */
+const present = <T extends object>(value: T): Partial<T> =>
+  Object.fromEntries(
+    Object.entries(value).filter(([, one]) => one !== undefined)
+  ) as Partial<T>;
+const DIAL_KINDS: readonly CanvasDial["kind"][] = [
+  "number",
+  "color",
+  "select",
+  "toggle",
+];
+
+const dialOf = (value: unknown): CanvasDial | undefined => {
+  if (!isRecord(value)) {
+    return;
+  }
+  const kind = DIAL_KINDS.find((one) => one === value.kind);
+  const name = textOf(value.name);
+  const target = isRecord(value.target) ? value.target : undefined;
+  const cssVar = textOf(target?.cssVar);
+  const arg = textOf(target?.arg);
+  if (!(kind && name && (cssVar || arg))) {
+    return;
+  }
+  return {
+    kind,
+    name,
+    target: cssVar ? { cssVar } : { arg: arg ?? "" },
+    ...present({
+      label: textOf(value.label),
+      max: numberOf(value.max),
+      min: numberOf(value.min),
+      options: textsOf(value.options),
+      step: numberOf(value.step),
+      unit: textOf(value.unit),
+    }),
+  };
+};
+
+const edgeOf = (value: unknown): CanvasEdge | undefined => {
+  if (!isRecord(value)) {
+    return;
+  }
+  const from = textOf(value.from);
+  const to = textOf(value.to);
+  return from && to
+    ? { from, to, ...present({ label: textOf(value.label) }) }
+    : undefined;
+};
+
+/** `value`, the JSON a {@link CanvasSpec} was written as, read back: what of it is a spec's. */
+export const canvasSpecOf = (value: unknown): CanvasSpec => {
+  if (!isRecord(value)) {
+    return {};
+  }
+  const group = isRecord(value.group)
+    ? Object.fromEntries(
+        Object.entries(value.group).filter(
+          (entry): entry is [string, string] => typeof entry[1] === "string"
+        )
+      )
+    : undefined;
+  return present({
+    dials: Array.isArray(value.dials)
+      ? value.dials.flatMap((one) => dialOf(one) ?? [])
+      : undefined,
+    edges: Array.isArray(value.edges)
+      ? value.edges.flatMap((one) => edgeOf(one) ?? [])
+      : undefined,
+    group,
+    name: textOf(value.name),
+  });
+};
+
+/** `value`, the JSON the stage wrote each states file's {@link SectionPlan} as, read back by file. */
+export const sectionPlansOf = (value: unknown): Record<string, SectionPlan> =>
+  isRecord(value)
+    ? Object.fromEntries(
+        Object.entries(value).flatMap(([file, plan]) => {
+          if (!(isRecord(plan) && Array.isArray(plan.stories))) {
+            return [];
+          }
+          const name = textOf(plan.name);
+          const stories = plan.stories.flatMap((story) => {
+            const storyName = isRecord(story) ? textOf(story.name) : undefined;
+            return isRecord(story) && storyName
+              ? [
+                  {
+                    label: textOf(story.label) ?? null,
+                    name: storyName,
+                    width: numberOf(story.width) ?? null,
+                  },
+                ]
+              : [];
+          });
+          return name === undefined ? [] : [[file, { name, stories }]];
+        })
+      )
+    : {};
 
 /** The bounds a canvas spec keeps. Ours. */
 export const CANVAS_SPEC_LIMITS = {

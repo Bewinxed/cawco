@@ -80,7 +80,8 @@ import { runCaptured } from "@cawco/core/run-captured";
 import { serverEnvironment } from "@cawco/core/session-env";
 import type { ProcSpec } from "@cawco/core/sessiond";
 import { isAlive, listedPid } from "@cawco/core/signal";
-import { writeStateFile } from "@cawco/core/state-file";
+import { parseRecord, writeStateFile } from "@cawco/core/state-file";
+import { ModelInfoSchema, SignInFaultSchema } from "@cawco/core/stored-shapes";
 import { HOUR_MS } from "@cawco/core/time";
 import type {
   CredentialCreateInput,
@@ -88,6 +89,7 @@ import type {
   SessionMessageInfo,
   V2Event,
 } from "@opencode/client";
+import { z } from "zod";
 import { CHROME_DEVTOOLS } from "../browser/door";
 import { gitIn, infoExcludeOf } from "../checkout-exclude";
 import { harnessMcpUrl } from "../delegation";
@@ -103,7 +105,7 @@ import {
   readFleetHarnessSet,
 } from "../fleet-harness-set";
 import { apartSignedOut, readFleetMcpSet } from "../fleet-mcp-set";
-import { GATE_FORM_ENV, gateForm } from "../gate-form";
+import { GATE_FORM_ENV, gateForm, LAUNCH_FLAGS } from "../gate-form";
 import { sessionGitEnv } from "../git-credential";
 import type {
   Harness,
@@ -1379,10 +1381,11 @@ const MESSAGE_PAGE = 100;
  * (none: the first page in that direction) and the message, which a `before`
  * window ends just before and a `start` window starts at.
  */
-interface WindowMark {
-  id: string;
-  page: string | null;
-}
+const WindowMarkSchema = z.object({
+  id: z.string(),
+  page: z.string().nullable(),
+});
+type WindowMark = z.infer<typeof WindowMarkSchema>;
 
 const markOf = (mark: WindowMark): string => `oc:${JSON.stringify(mark)}`;
 
@@ -1390,7 +1393,7 @@ const readMark = (token: string): WindowMark => {
   if (!token.startsWith("oc:")) {
     throw new Error(`not an OpenCode window cursor: ${token}`);
   }
-  return JSON.parse(token.slice(3)) as WindowMark;
+  return WindowMarkSchema.parse(JSON.parse(token.slice(3)));
 };
 
 /** A session's messages from `cursor` on in `order`, each with the cursor of the page it came on. */
@@ -1717,11 +1720,31 @@ const STANDALONE_READ_MS = 30_000;
  * (`serverEnvironment`, no `CAWCO_*`), so it reads the same config, catalog
  * and data dir; in `directory`, its location.
  */
-const standaloneRead = async <T>(
+/**
+ * The server's model answers as the client types them (`@opencode/client`,
+ * which ships no zod schema of them): their `data` checked to be the list or
+ * the record the rows are read from, each model's fields read as the client
+ * types them.
+ */
+const MODEL_LISTED = z.custom<ModelListed>(
+  (value) =>
+    typeof value === "object" &&
+    value !== null &&
+    "data" in value &&
+    Array.isArray(value.data),
+  "a model listing"
+);
+const MODEL_DEFAULT = z.custom<ModelDefault>(
+  (value) => typeof value === "object" && value !== null && "data" in value,
+  "a default model"
+);
+
+const standaloneRead = async <S extends z.ZodType>(
   launch: ServerLaunch,
   path: string,
-  directory: string
-): Promise<T> => {
+  directory: string,
+  schema: S
+): Promise<z.output<S>> => {
   const command = `opencode api --standalone GET ${path}`;
   const read = await readWithin(STANDALONE_READ_MS, async (signal) => {
     const { code, stdout, stderr } = await runCaptured(
@@ -1737,7 +1760,7 @@ const standaloneRead = async <T>(
         `\`${command}\` exited ${code}: ${stderr.trim().slice(-400) || "it said nothing"}`
       );
     }
-    return JSON.parse(stdout) as T;
+    return schema.parse(JSON.parse(stdout));
   });
   switch (read.kind) {
     case "answered":
@@ -2587,10 +2610,9 @@ export class OpencodeHarness implements Harness {
     for (const slot of this.#slots()) {
       for (const generation of slot.owner.generations) {
         try {
-          const flags = JSON.parse(generation.launch ?? "[]") as [
-            string,
-            string,
-          ][];
+          const flags = LAUNCH_FLAGS.parse(
+            JSON.parse(generation.launch ?? "[]")
+          );
           const dir = flags.find(([name]) => name === PLUGIN_FLAG)?.[1];
           if (dir) {
             kept.add(dir);
@@ -3604,7 +3626,11 @@ export class OpencodeHarness implements Harness {
       let stored: SignInFault[] = [];
       try {
         stored = existsSync(SIGN_IN_FAULTS)
-          ? (JSON.parse(readFileSync(SIGN_IN_FAULTS, "utf8")) as SignInFault[])
+          ? parseRecord(
+              SIGN_IN_FAULTS,
+              readFileSync(SIGN_IN_FAULTS, "utf8"),
+              z.array(SignInFaultSchema)
+            )
           : [];
       } catch (error) {
         console.warn(
@@ -4324,10 +4350,11 @@ export class OpencodeHarness implements Harness {
 
   #loadAccountCatalogs(): Record<string, ModelInfo[]> {
     this.#accountCatalogs ??= existsSync(ACCOUNT_CATALOGS)
-      ? (JSON.parse(readFileSync(ACCOUNT_CATALOGS, "utf8")) as Record<
-          string,
-          ModelInfo[]
-        >)
+      ? parseRecord(
+          ACCOUNT_CATALOGS,
+          readFileSync(ACCOUNT_CATALOGS, "utf8"),
+          z.record(z.string(), z.array(ModelInfoSchema))
+        )
       : {};
     return this.#accountCatalogs;
   }
@@ -4416,19 +4443,26 @@ export class OpencodeHarness implements Harness {
         return kept;
       }
       // One at a time: each boots a private server on the same database.
-      const listed = await standaloneRead<ModelListed>(
+      const listed = await standaloneRead(
         launch,
         "/api/model",
-        quiet
+        quiet,
+        MODEL_LISTED
       );
-      const fallback = await standaloneRead<ModelDefault>(
+      const fallback = await standaloneRead(
         launch,
         "/api/model/default",
-        quiet
+        quiet,
+        MODEL_DEFAULT
       );
-      const integrations = await standaloneRead<{
-        data: { id: string; name: string }[];
-      }>(launch, "/api/integration", quiet);
+      const integrations = await standaloneRead(
+        launch,
+        "/api/integration",
+        quiet,
+        z.object({
+          data: z.array(z.object({ id: z.string(), name: z.string() })),
+        })
+      );
       read = {
         models: catalogRows(listed, fallback),
         providers: integrations.data,

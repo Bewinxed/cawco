@@ -793,6 +793,18 @@ export interface FleetHook extends FleetPlacement {
 /** A hook as the editor holds it, before the hub assigns identity and hash. */
 export type HookDraft = Omit<FleetHook, "id" | "hash">;
 
+/** A handler as a form holds it before it is checked: its kind, and each of that kind's fields perhaps not given yet. */
+export type HookHandlerDraft = {
+  [K in HookHandler["type"]]: Partial<Extract<HookHandler, { type: K }>> & {
+    type: K;
+  };
+}[HookHandler["type"]];
+
+/** A hook as its form holds it before it is checked ({@link hookProblem}). */
+export type HookDraftForm = Omit<Partial<HookDraft>, "handler"> & {
+  handler?: HookHandlerDraft;
+};
+
 const NAME_SHAPE = /^[A-Za-z0-9][A-Za-z0-9 ._-]*$/u;
 const INVALID_REGEX_PREFIX = /^Invalid regular expression:\s*/u;
 const SENTENCE_SEPARATOR = /[|,]/u;
@@ -804,7 +816,7 @@ const SENTENCE_SEPARATOR = /[|,]/u;
  * cases that fail silently rather than loudly.
  */
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: walks every draft field once per handler type — the last gate before a hook's script runs unattended on every machine in the fleet (see the block comment above).
-export function hookProblem(draft: Partial<HookDraft>): Record<string, string> {
+export function hookProblem(draft: HookDraftForm): Record<string, string> {
   const wrong: Record<string, string> = {};
 
   const name = draft.name?.trim() ?? "";
@@ -890,7 +902,6 @@ export function hookProblem(draft: Partial<HookDraft>): Record<string, string> {
       break;
     }
     case "http": {
-      // biome-ignore lint/suspicious/noUnnecessaryConditions: `handler` is Partial<HookDraft>'s field — typed as a required HookHttpHandler, but this draft is unvalidated form state where url can genuinely be missing.
       const url = handler.url?.trim() ?? "";
       if (url === "") {
         wrong.url = "Give the URL this hook posts to.";
@@ -912,11 +923,9 @@ export function hookProblem(draft: Partial<HookDraft>): Record<string, string> {
       break;
     }
     case "mcp_tool": {
-      // biome-ignore lint/suspicious/noUnnecessaryConditions: same unvalidated-draft reasoning as the url check above — mcp_server_name is typed required but the draft can omit it.
       if (!handler.mcp_server_name?.trim()) {
         wrong.mcp_server_name = "Name the MCP server holding the tool.";
       }
-      // biome-ignore lint/suspicious/noUnnecessaryConditions: same unvalidated-draft reasoning — tool_name is typed required but the draft can omit it.
       if (!handler.tool_name?.trim()) {
         wrong.tool_name = "Name the tool to call.";
       }
@@ -924,7 +933,6 @@ export function hookProblem(draft: Partial<HookDraft>): Record<string, string> {
     }
     case "prompt":
     case "agent": {
-      // biome-ignore lint/suspicious/noUnnecessaryConditions: same unvalidated-draft reasoning — prompt is typed required but the draft can omit it.
       if (!handler.prompt?.trim()) {
         wrong.prompt = "Write the prompt this hook evaluates.";
       }

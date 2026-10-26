@@ -12,6 +12,7 @@ import { readFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
 import Docker from "dockerode";
+import { z } from "zod";
 import { colimaHome, colimaProfileOf } from "./media-forwarding";
 
 /** A container runtime that answered. */
@@ -65,7 +66,11 @@ export const contextEndpoint = async (): Promise<
   let name = process.env.DOCKER_CONTEXT;
   if (!name) {
     const config = await readFile(join(configDir, "config.json"), "utf8")
-      .then((text) => JSON.parse(text) as { currentContext?: string })
+      .then((text) =>
+        z
+          .object({ currentContext: z.string().optional() })
+          .parse(JSON.parse(text))
+      )
       .catch(() => undefined);
     name = config?.currentContext;
   }
@@ -77,9 +82,16 @@ export const contextEndpoint = async (): Promise<
     join(configDir, "contexts", "meta", id, "meta.json"),
     "utf8"
   )
-    .then(
-      (text) =>
-        JSON.parse(text) as { Endpoints?: { docker?: { Host?: string } } }
+    .then((text) =>
+      z
+        .object({
+          Endpoints: z
+            .object({
+              docker: z.object({ Host: z.string().optional() }).optional(),
+            })
+            .optional(),
+        })
+        .parse(JSON.parse(text))
     )
     .catch(() => undefined);
   const host = meta?.Endpoints?.docker?.Host;

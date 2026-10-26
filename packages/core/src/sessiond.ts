@@ -56,6 +56,44 @@ export interface ProcSpec {
 }
 
 /**
+ * `value`, a spawn's spec off the keeper's socket, as a {@link ProcSpec}:
+ * undefined when it names no command. Arguments and environment entries that
+ * are not strings are left out, as the keeper starts nothing it cannot pass.
+ */
+export const procSpecOf = (value: unknown): ProcSpec | undefined => {
+  if (typeof value !== "object" || value === null) {
+    return;
+  }
+  const field = (key: string): unknown => Reflect.get(value, key);
+  const command = field("command");
+  if (typeof command !== "string") {
+    return;
+  }
+  const args = field("args");
+  const cwd = field("cwd");
+  const env = field("env");
+  const inherit = field("inherit");
+  return {
+    command,
+    args: Array.isArray(args)
+      ? args.filter((arg): arg is string => typeof arg === "string")
+      : [],
+    ...(typeof cwd === "string" ? { cwd } : {}),
+    ...(typeof env === "object" && env !== null
+      ? {
+          env: Object.fromEntries(
+            Object.entries(env).filter(
+              (entry): entry is [string, string] => typeof entry[1] === "string"
+            )
+          ),
+        }
+      : {}),
+    ...(inherit === "server" || inherit === "session" ? { inherit } : {}),
+    ...(field("workspace") === true ? { workspace: true as const } : {}),
+  };
+};
+
+/**
  * agent → sessiond: start a child under sessiond's custody. `procId` is
  * minted by the agent, so sessiond never sees the harness it belongs to;
  * `commandId` names the ack that answers this one spawn.

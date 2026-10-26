@@ -28,6 +28,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, parse, resolve } from "node:path";
+import { z } from "zod";
 import {
   AGENT_SOURCE,
   agentCalls,
@@ -1356,7 +1357,9 @@ const bases = [...byCommit.values()];
 const readers = bases.map((base) => {
   const atBase = (path: string): string =>
     git("show", `${base.commit}:${path}`);
-  const schema = JSON.parse(atBase(APP_SCHEMA)) as object;
+  const schema = z
+    .record(z.string(), z.unknown())
+    .parse(JSON.parse(atBase(APP_SCHEMA)));
   const roots = {
     frames: Object.values(FRAMES).flat(),
     sent: SENT,
@@ -1495,10 +1498,14 @@ for (const nightly of agents) {
   const lost = [...calls].filter(
     ([pattern]) => routesFor(hubRoutes, pattern).length === 0
   );
-  const read = JSON.parse(show(APP_SCHEMA)) as {
-    components?: { schemas?: Record<string, unknown> };
-    paths?: Record<string, unknown>;
-  };
+  const read = z
+    .object({
+      components: z
+        .object({ schemas: z.record(z.string(), z.unknown()).optional() })
+        .optional(),
+      paths: z.record(z.string(), z.unknown()).optional(),
+    })
+    .parse(JSON.parse(show(APP_SCHEMA)));
   const asked = Object.fromEntries(
     Object.entries(read.paths ?? {}).filter(([path]) =>
       [...calls.keys()].some(

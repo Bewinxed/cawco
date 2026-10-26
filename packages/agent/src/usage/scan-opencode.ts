@@ -3,6 +3,7 @@ import { basename } from "node:path";
 import type { UsageTokens } from "@cawco/core";
 import { costForUsage, totalTokens } from "@cawco/core";
 import { scanRanges } from "@cawco/jsonl-parser/opencode";
+import { z } from "zod";
 import type { ScannedRecord } from "./types";
 
 /**
@@ -40,30 +41,45 @@ interface MessageRow {
   worktree: string | null;
 }
 
-interface ModelRef {
-  id?: string;
-  providerID?: string;
-}
+const ModelRefSchema = z.object({
+  id: z.string().optional(),
+  providerID: z.string().optional(),
+});
 
 /** The part of a message's `data` the scan reads. */
-interface MessageData {
-  model?: ModelRef;
-  status?: string;
-  time?: { created?: number; completed?: number };
-  tokens?: {
-    input?: number;
-    output?: number;
-    reasoning?: number;
-    cache?: { read?: number; write?: number };
-  };
-}
+const MessageDataSchema = z.object({
+  model: ModelRefSchema.optional(),
+  status: z.string().optional(),
+  time: z
+    .object({
+      created: z.number().optional(),
+      completed: z.number().optional(),
+    })
+    .optional(),
+  tokens: z
+    .object({
+      input: z.number().optional(),
+      output: z.number().optional(),
+      reasoning: z.number().optional(),
+      cache: z
+        .object({ read: z.number().optional(), write: z.number().optional() })
+        .optional(),
+    })
+    .optional(),
+});
+type MessageData = z.infer<typeof MessageDataSchema>;
 
-const parse = <T>(text: string | null): T | undefined => {
+/** `text` as `schema`'s shape; none when it is empty, not JSON, or not that shape (a row OpenCode wrote otherwise is skipped). */
+const parse = <S extends z.ZodType>(
+  text: string | null,
+  schema: S
+): z.output<S> | undefined => {
   if (!text) {
     return undefined;
   }
   try {
-    return JSON.parse(text) as T;
+    const read = schema.safeParse(JSON.parse(text));
+    return read.success ? read.data : undefined;
   } catch {
     return undefined;
   }
@@ -100,7 +116,7 @@ const recordOf = (
   if (totalTokens(tokens) === 0) {
     return undefined;
   }
-  const model = data.model ?? parse<ModelRef>(row.session_model);
+  const model = data.model ?? parse(row.session_model, ModelRefSchema);
   if (!model?.id) {
     return undefined;
   }
@@ -162,7 +178,7 @@ export const scanOpencode = async (
       since,
       (row) => {
         next = Math.max(next, row.time_updated);
-        const data = parse<MessageData>(row.data);
+        const data = parse(row.data, MessageDataSchema);
         const record =
           data && settled(row, data) ? recordOf(row, data) : undefined;
         if (record) {

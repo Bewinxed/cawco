@@ -1,5 +1,28 @@
 /** Passive custody inspection: never starts or asks a harness, model or provider. */
+
+import { z } from "zod";
 import type { SessiondClient } from "./sessiond-client";
+
+/** A ring line read back: its fields as they are, `message` a line of its own. */
+export const RingLineSchema: z.ZodType<RingLine> = z.lazy(() =>
+  z.looseObject({
+    active: z.unknown().optional(),
+    command_uuid: z.unknown().optional(),
+    message: RingLineSchema.optional(),
+    request: z
+      .looseObject({
+        subtype: z.unknown().optional(),
+        input: z.unknown().optional(),
+      })
+      .optional(),
+    request_id: z.unknown().optional(),
+    session_id: z.unknown().optional(),
+    skip_transcript: z.unknown().optional(),
+    subtype: z.unknown().optional(),
+    type: z.unknown().optional(),
+    value: z.looseObject({ busy: z.unknown().optional() }).optional(),
+  })
+);
 
 export interface RingLine {
   active?: unknown;

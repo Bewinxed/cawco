@@ -86,7 +86,9 @@ import {
   WEIGHT_PATH,
   WRITE_PATH,
 } from "@cawco/core/stage";
+import { StageErrorSchema } from "@cawco/core/stored-shapes";
 import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
+import { z } from "zod";
 import { agentServerStarted, ensureBoundary, shellQuote } from "./boundary";
 import { excludeFromCheckout } from "./checkout-exclude";
 import { closeBridge, reachWorkspace } from "./preview-bridge";
@@ -905,15 +907,16 @@ function sleep(stage: Stage): void {
 }
 
 /** One of the host's words (stage-host/host.ts `say`); null for a line of anyone else's (a config's own console.log). */
-interface HostWord {
-  cawco?: string;
-  errors?: StageError[];
-  message?: string;
-}
+const HostWordSchema = z.object({
+  cawco: z.string(),
+  errors: z.array(StageErrorSchema).optional(),
+  message: z.string().optional(),
+});
+type HostWord = z.infer<typeof HostWordSchema>;
 const hostWord = (line: string): HostWord | null => {
   try {
-    const word = JSON.parse(line) as HostWord | null;
-    return typeof word?.cawco === "string" ? word : null;
+    const word = HostWordSchema.safeParse(JSON.parse(line));
+    return word.success ? word.data : null;
   } catch {
     return null;
   }

@@ -17,6 +17,7 @@ import {
 } from "@cawco/core/paths";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
+import { z } from "zod";
 import {
   accountEnv,
   authStatusIn,
@@ -282,7 +283,9 @@ type Json = Record<string, unknown>;
 
 const readJson = async (path: string): Promise<Json | undefined> => {
   const text = await readText(path);
-  return text === undefined ? undefined : (JSON.parse(text) as Json);
+  return text === undefined
+    ? undefined
+    : z.record(z.string(), z.unknown()).parse(JSON.parse(text));
 };
 
 /** Writes `oauthAccount` into (or, undefined, out of) one `.claude.json`. */

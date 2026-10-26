@@ -4,6 +4,7 @@
  * the bundle carries the five bodies it draws and nothing else of the set.
  */
 import { readFileSync } from "node:fs";
+import { z } from "zod";
 
 const NAMES = {
   pen: "pen-bold-duotone",
@@ -16,12 +17,16 @@ const NAMES = {
 export type GlyphName = keyof typeof NAMES;
 
 export function solarGlyphs(): Record<GlyphName, string> {
-  const set = JSON.parse(
-    readFileSync(
-      Bun.resolveSync("@iconify-json/solar/icons.json", import.meta.dir),
-      "utf8"
-    )
-  ) as { icons: Record<string, { body: string }> };
+  const set = z
+    .object({ icons: z.record(z.string(), z.object({ body: z.string() })) })
+    .parse(
+      JSON.parse(
+        readFileSync(
+          Bun.resolveSync("@iconify-json/solar/icons.json", import.meta.dir),
+          "utf8"
+        )
+      )
+    );
   return Object.fromEntries(
     Object.entries(NAMES).map(([name, icon]) => {
       const found = set.icons[icon];

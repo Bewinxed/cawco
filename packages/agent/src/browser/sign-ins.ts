@@ -29,6 +29,8 @@
  * reading it back. An origin whose databases encode past
  * {@link IDB_CAP_CHARS} is not carried, and the log names it and its size.
  */
+
+import { z } from "zod";
 import { CdpLink } from "./cdp-takeover";
 import { idbRead, idbWrite } from "./sign-ins-page";
 
@@ -224,7 +226,12 @@ const readDatabases = async (
   const answer = String(
     await evaluate(link, session, idbRead(IDB_CAP_CHARS), IDB_MS)
   );
-  const read = JSON.parse(answer) as { databases?: unknown[]; over?: number };
+  const read = z
+    .object({
+      databases: z.array(z.unknown()).optional(),
+      over: z.number().optional(),
+    })
+    .parse(JSON.parse(answer));
   if (read.over !== undefined) {
     console.info(
       `[browser] ${origin}'s IndexedDB was not carried: it encodes past ${read.over} characters, over the ${IDB_CAP_CHARS}-character cap`
@@ -391,4 +398,6 @@ export const missingSignIns = async (
 
 /** The databases of a snapshot, each as it was read: name, version, stores and records. */
 const databasesOf = (snapshot: string): { name: string }[] =>
-  (JSON.parse(snapshot) as { databases: { name: string }[] }).databases;
+  z
+    .object({ databases: z.array(z.object({ name: z.string() })) })
+    .parse(JSON.parse(snapshot)).databases;

@@ -19,6 +19,7 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
 import { hostProgram } from "../host-gh";
 import { configHome, readYamlConfig, sameHost } from "./cli-config";
 import type { ForgeAdapter, ForgeSignIn } from "./forge";
@@ -58,7 +59,7 @@ const answerText = (result: CallToolResult, tool: string): string => {
 /** An object's `html_url` at its top or one level down, as Gitea's answers carry it. */
 const htmlUrl = (text: string): string | undefined => {
   try {
-    const read = JSON.parse(text) as Record<string, unknown>;
+    const read = z.record(z.string(), z.unknown()).parse(JSON.parse(text));
     const nested = Object.values(read).find(
       (value): value is Record<string, unknown> =>
         typeof value === "object" && value !== null && "html_url" in value
@@ -73,7 +74,9 @@ const htmlUrl = (text: string): string | undefined => {
 /** A pull request's page when the answer is one still open; Gitea's lookup by branches answers its latest, closed or not. */
 const openUrl = (text: string): string | undefined => {
   try {
-    const read = JSON.parse(text) as { state?: unknown };
+    const read = z
+      .object({ state: z.unknown().optional() })
+      .parse(JSON.parse(text));
     return read.state === "open" ? htmlUrl(text) : undefined;
   } catch {
     // Not JSON: no pull request it names.
@@ -156,10 +159,12 @@ export const giteaForge: ForgeAdapter = {
     };
     return {
       account: async () => {
-        const me = JSON.parse(await call("get_me", {})) as {
-          login?: unknown;
-          username?: unknown;
-        };
+        const me = z
+          .object({
+            login: z.unknown().optional(),
+            username: z.unknown().optional(),
+          })
+          .parse(JSON.parse(await call("get_me", {})));
         const login = me.login ?? me.username;
         if (typeof login !== "string") {
           throw new Error("gitea-mcp's get_me named no login");

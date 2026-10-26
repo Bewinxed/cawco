@@ -18,6 +18,7 @@ import { readWithin } from "@cawco/core/bounded";
 import { standalone } from "@cawco/core/runtime";
 import { writeStateFile } from "@cawco/core/state-file";
 import type { McpServerConfig } from "@earendil-works/pi-coding-agent";
+import { z } from "zod";
 import {
   type BrowserDoor,
   CHROME_DEVTOOLS,
@@ -86,12 +87,13 @@ export const piMcpEntry = (
 };
 
 /** One server as `pi mcp list --json` reports it (dist/extensions/mcp/cli.js `list`). */
-interface Listed {
-  error?: string;
-  name: string;
-  state: string;
-  tools: string[];
-}
+const ListedSchema = z.object({
+  error: z.string().optional(),
+  name: z.string(),
+  state: z.string(),
+  tools: z.array(z.string()),
+});
+type Listed = z.infer<typeof ListedSchema>;
 
 /** pi's word on a server, in the fleet's. */
 const stateOf = (listed: Listed | undefined): FleetItemState => {
@@ -163,11 +165,9 @@ export const piMcpList = async (
         ])
       );
     }
-    const listed = (
-      JSON.parse(read.value.slice(read.value.indexOf("{"))) as {
-        servers?: Listed[];
-      }
-    ).servers;
+    const listed = z
+      .object({ servers: z.array(ListedSchema).optional() })
+      .parse(JSON.parse(read.value.slice(read.value.indexOf("{")))).servers;
     return Object.fromEntries(
       names.map((name) => [
         name,

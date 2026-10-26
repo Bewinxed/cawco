@@ -57,6 +57,7 @@ import {
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { Display, type Wl_interface } from "wayland-client";
 import coreProtocol from "wayland-client/protocol/wayland.json" with { type: "json" };
+import { z } from "zod";
 import { resolveBin, toolEnv } from "./tools";
 
 /** How often the polled sources are read. Our call: a lock or a return shows within 5 s. */
@@ -230,7 +231,9 @@ const busctl = async (
     return;
   }
   try {
-    const answer = JSON.parse(out) as { data?: unknown };
+    const answer = z
+      .object({ data: z.unknown().optional() })
+      .parse(JSON.parse(out));
     return Array.isArray(answer.data) ? answer.data : [answer.data];
   } catch {
     // An answer that is not JSON is no answer.

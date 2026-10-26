@@ -25,6 +25,8 @@ import type {
   CredentialStore,
 } from "@earendil-works/pi-ai";
 import { getAgentDir, ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { z } from "zod";
+import { CredentialSchema } from "../provider-accounts";
 
 /** The machine's own pi auth file, where pi itself reads it. */
 const machineAuthPath = (): string => join(getAgentDir(), "auth.json");
@@ -69,9 +71,11 @@ const readAccount = (
 ): { credential: Credential; provider: string } | undefined => {
   try {
     const [entry] = Object.entries(
-      JSON.parse(
-        readFileSync(accountCredentialPath(accountId), "utf8")
-      ) as Record<string, Credential>
+      z
+        .record(z.string(), CredentialSchema)
+        .parse(
+          JSON.parse(readFileSync(accountCredentialPath(accountId), "utf8"))
+        )
     );
     return entry ? { provider: entry[0], credential: entry[1] } : undefined;
   } catch {

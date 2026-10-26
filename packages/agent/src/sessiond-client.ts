@@ -52,6 +52,8 @@ import {
   type SessiondServerMessage,
   sessiondEndpoint,
 } from "@cawco/core/sessiond";
+import { SessiondServerMessageSchema } from "@cawco/core/stored-shapes";
+import { z } from "zod";
 import { KeeperRefused } from "./harness";
 import { parseProcId } from "./proc-id";
 import { holdRestart } from "./restart";
@@ -669,7 +671,7 @@ export class SessiondClient {
   #onMessage(line: string): void {
     let message: SessiondServerMessage;
     try {
-      message = JSON.parse(line) as SessiondServerMessage;
+      message = SessiondServerMessageSchema.parse(JSON.parse(line));
     } catch {
       return; // sessiond does not emit malformed frames; a partial one is not fatal
     }
@@ -1169,7 +1171,9 @@ const parseRingLine = (
   data: string
 ): { type?: unknown; uuid?: unknown } | undefined => {
   try {
-    return JSON.parse(data) as { type?: unknown; uuid?: unknown };
+    return z
+      .object({ type: z.unknown().optional(), uuid: z.unknown().optional() })
+      .parse(JSON.parse(data));
   } catch {
     return undefined;
   }

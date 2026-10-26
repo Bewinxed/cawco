@@ -22,6 +22,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { HookHarness } from "@cawco/core/hooks";
 import { embeddedFile, standalone } from "@cawco/core/runtime";
+import { z } from "zod";
 
 /** The judge's source as this build runs it: from the checkout, or as the binary embedded it (scripts/build-binary.ts). */
 const judgeSource = (): string =>
@@ -45,10 +46,13 @@ export const gateForm = (harness: HookHarness, plugin = ""): string =>
 /** The environment variable an OpenCode server's launch names its gate form in, so a server of another form fails its launch check. */
 export const GATE_FORM_ENV = "CAWCO_GATE_FORM";
 
+/** An OpenCode server's launch flags as its record keeps them: name and value. */
+export const LAUNCH_FLAGS = z.array(z.tuple([z.string(), z.string()]));
+
 /** The gate form an OpenCode server was launched on, read off its launch flags (`launchOf`); "none" for one launched before servers carried it. */
 export const launchGateForm = (launch: string | undefined): string => {
   try {
-    const entries = JSON.parse(launch ?? "[]") as [string, string][];
+    const entries = LAUNCH_FLAGS.parse(JSON.parse(launch ?? "[]"));
     return entries.find(([name]) => name === GATE_FORM_ENV)?.[1] ?? "none";
   } catch {
     return "none";

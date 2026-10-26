@@ -89,7 +89,9 @@ import {
 } from "@cawco/core/paths";
 import { processStart } from "@cawco/core/process-identity";
 import { identifiedPid, signal as sendSignal } from "@cawco/core/signal";
-import { writeStateFileSync } from "@cawco/core/state-file";
+import { parseRecord, writeStateFileSync } from "@cawco/core/state-file";
+import { FleetMcpConfigSchema } from "@cawco/core/stored-shapes";
+import { z } from "zod";
 import { harnessMcpUrl } from "./delegation";
 import { fleetMcpAt, readFleetMcpSet } from "./fleet-mcp-set";
 import { gatePath, type McpGate } from "./mcp-gate";
@@ -161,24 +163,26 @@ const METHOD_NOT_FOUND = -32_601;
 /** An implementation error of the host's own: the server could not answer. */
 const SERVER_ERROR = -32_000;
 
-interface Message {
-  error?: unknown;
-  id?: number | string | null;
-  jsonrpc?: string;
-  method?: string;
-  params?: Record<string, unknown>;
-  result?: Record<string, unknown>;
-}
+const MessageSchema = z.object({
+  error: z.unknown().optional(),
+  id: z.union([z.number(), z.string()]).nullable().optional(),
+  jsonrpc: z.string().optional(),
+  method: z.string().optional(),
+  params: z.record(z.string(), z.unknown()).optional(),
+  result: z.record(z.string(), z.unknown()).optional(),
+});
+type Message = z.infer<typeof MessageSchema>;
 
 /** What a server said the last time it ran, kept for its config. */
-interface Kept {
+const KeptSchema = z.object({
   /** Its `initialize` result. */
-  initialize: Record<string, unknown>;
+  initialize: z.record(z.string(), z.unknown()),
   /** The config it ran on, hashed: another config keeps nothing of this. */
-  key: string;
+  key: z.string(),
   /** Each list method its capabilities name, with every item of every page. */
-  lists: Record<string, unknown[]>;
-}
+  lists: z.record(z.string(), z.array(z.unknown())),
+});
+type Kept = z.infer<typeof KeptSchema>;
 
 /** Where the host keeps its state: listings, and the processes it started. */
 const hostDir = (): string => join(cawcoDataDir(), "mcp-host");
@@ -331,7 +335,7 @@ class Child {
   #take(text: string): void {
     let message: Message;
     try {
-      message = JSON.parse(text) as Message;
+      message = MessageSchema.parse(JSON.parse(text));
     } catch {
       // Not JSON-RPC: a server's stray stdout line is no message.
       return;
@@ -539,7 +543,7 @@ class Hosted {
     this.#keptFile = kept;
     this.#launch = launch;
     try {
-      const read = JSON.parse(readFileSync(kept, "utf8")) as Kept;
+      const read = parseRecord(kept, readFileSync(kept, "utf8"), KeptSchema);
       this.#kept = read.key === this.key ? read : undefined;
     } catch {
       // Nothing kept: its first handshake starts it.
@@ -801,13 +805,17 @@ class McpHost {
   restore(): void {
     let kept: { name: string; config: HostedConfig }[];
     try {
-      kept = JSON.parse(readFileSync(sharedFile(), "utf8")) as typeof kept;
+      kept = parseRecord(
+        sharedFile(),
+        readFileSync(sharedFile(), "utf8"),
+        z.array(z.object({ name: z.string(), config: FleetMcpConfigSchema }))
+      ).flatMap(({ name, config }) =>
+        "command" in config ? [{ name, config }] : []
+      );
     } catch {
       return;
     }
-    if (Array.isArray(kept)) {
-      this.#take(kept);
-    }
+    this.#take(kept);
   }
 
   #take(servers: { name: string; config: HostedConfig }[]): void {
@@ -890,7 +898,11 @@ class McpHost {
   async sweep(): Promise<void> {
     let left: { pid: number; start: string }[];
     try {
-      left = JSON.parse(readFileSync(startedFile(), "utf8")) as typeof left;
+      left = parseRecord(
+        startedFile(),
+        readFileSync(startedFile(), "utf8"),
+        z.array(z.object({ pid: z.number(), start: z.string() }))
+      );
     } catch {
       return;
     }

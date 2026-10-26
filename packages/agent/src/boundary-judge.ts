@@ -150,11 +150,21 @@ const answer = (text: string, shellPrefix: string): string => {
   try {
     // The workspace's executor is gone when the workspace was archived.
     accessSync(exec, constants.X_OK);
-    const input = JSON.parse(text) as {
-      cwd?: unknown;
-      tool_input?: Record<string, unknown>;
-      tool_name?: unknown;
-      transcript_path?: unknown;
+    // A plain Bun script beside the policy: read as unknown and narrowed.
+    const parsed: unknown = JSON.parse(text);
+    const field = (key: string): unknown =>
+      typeof parsed === "object" && parsed !== null
+        ? Reflect.get(parsed, key)
+        : undefined;
+    const toolInput = field("tool_input");
+    const input = {
+      cwd: field("cwd"),
+      tool_input:
+        typeof toolInput === "object" && toolInput !== null
+          ? Object.fromEntries(Object.entries(toolInput))
+          : undefined,
+      tool_name: field("tool_name"),
+      transcript_path: field("transcript_path"),
     };
     if (typeof input.tool_name !== "string") {
       throw new Error("the call names no tool");

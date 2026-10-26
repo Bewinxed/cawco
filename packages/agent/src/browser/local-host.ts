@@ -33,6 +33,7 @@ import {
   spawnedPid,
 } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
+import { z } from "zod";
 import { browserExecutable, chromiumSandboxed } from "../capabilities";
 import { resolveBin, toolEnv } from "../tools";
 import {
@@ -148,7 +149,9 @@ const writePreferences = async (profile: string): Promise<void> => {
   const file = join(profile, "Default", "Preferences");
   await mkdir(dirname(file), { recursive: true, mode: 0o700 });
   const kept = await readFile(file, "utf8")
-    .then((text) => JSON.parse(text) as Json)
+    .then((text): Json =>
+      z.record(z.string(), z.unknown()).parse(JSON.parse(text))
+    )
     .catch(() => ({}));
   await writeStateFile(
     file,

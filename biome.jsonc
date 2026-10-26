@@ -4,6 +4,8 @@
   // Law A: a read with a deadline goes through packages/core/src/bounded.ts.
   // A system program is found by the OS's own lookup, through
   // packages/core/src/workspace-needs.ts, never by a path of our own.
+  // Stored data is read back through its schema: a JSON column is
+  // storedJson(schema), a record readRecord(file, schema), never a cast.
   "plugins": [
     "./scripts/lint/no-raw-deadline.grit",
     "./scripts/lint/no-system-path.grit",
@@ -11,6 +13,7 @@
     // it again (packages/core/src/listeners.ts).
     "./scripts/lint/no-exit-code.grit",
     "./scripts/lint/uncaught-handlers-exit.grit",
+    "./scripts/lint/stored-json.grit",
   ],
   // Design mock-ups and their build scratch, not shipped code.
   // jsonl-parser is publishable and linted/formatted by oxlint/oxfmt instead.

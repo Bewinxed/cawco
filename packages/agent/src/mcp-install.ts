@@ -32,8 +32,8 @@ import { fleetMcpInstallsDir } from "@cawco/core/paths";
 import { runCaptured } from "@cawco/core/run-captured";
 import { isAlive, listedPid } from "@cawco/core/signal";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
-import { toolEnv } from "./tools";
 import { z } from "zod";
+import { toolEnv } from "./tools";
 
 /** What a row's npx command line asks for: one package, the bin it runs, and that bin's arguments. */
 export interface NpxRun {
@@ -221,8 +221,10 @@ const exactVersion = async (
   if (asked.exitCode !== 0) {
     return { failed: npmSaid(asked.stderr, asked.exitCode) };
   }
-  const said = JSON.parse(asked.stdout.trim() || "null") as
-    string | string[] | null;
+  const said = z
+    .union([z.string(), z.array(z.string())])
+    .nullable()
+    .parse(JSON.parse(asked.stdout.trim() || "null"));
   const version = Array.isArray(said) ? said.at(-1) : said;
   return typeof version === "string"
     ? version

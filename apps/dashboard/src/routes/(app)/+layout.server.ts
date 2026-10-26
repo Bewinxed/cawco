@@ -117,15 +117,29 @@ function parse(raw: string | null | undefined): WorkspaceV1 | null {
     return null;
   }
   try {
-    const held = JSON.parse(raw) as WorkspaceV1;
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: JSON.parse can return null at runtime (e.g. stored literal "null") despite the WorkspaceV1 cast
-    if (held?.v !== 1 || !validate(held.root)) {
+    const held: unknown = JSON.parse(raw);
+    if (typeof held !== "object" || held === null) {
       return null;
     }
-    if (typeof held.focusedLeaf !== "string") {
+    const root: unknown = Reflect.get(held, "root");
+    const focusedLeaf: unknown = Reflect.get(held, "focusedLeaf");
+    const ctx: unknown = Reflect.get(held, "ctx");
+    if (
+      Reflect.get(held, "v") !== 1 ||
+      !validate(root) ||
+      typeof focusedLeaf !== "string"
+    ) {
       return null;
     }
-    return held;
+    return {
+      v: 1,
+      root,
+      focusedLeaf,
+      // Each session's context as the tab last kept it; read as it was kept.
+      ...(typeof ctx === "object" && ctx !== null
+        ? { ctx: ctx as Record<string, SessionContext> }
+        : {}),
+    };
   } catch {
     return null;
   }

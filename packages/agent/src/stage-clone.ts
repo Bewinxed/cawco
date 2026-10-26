@@ -76,12 +76,12 @@ import {
 } from "@cawco/core/stage";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { stageCloneId } from "@cawco/core/workspace-policy";
+import { z } from "zod";
 import { ensureBoundary, stopWorkspaceBoundary } from "./boundary";
 import { expandHome } from "./fs";
 import { runHubCommand } from "./hub-command";
 import { removeTree } from "./remove-tree";
 import { copyOwnSecrets, gitUntil } from "./workspace";
-import { z } from "zod";
 
 /** How often a serving place stage's clone is brought in step with its checkout. Ours: an edit shows within a second, for one `git status` (20 ms on cockpit). */
 export const MIRROR_MS = 1000;
@@ -444,7 +444,9 @@ const packageManagerIn = async (dir: string): Promise<string | undefined> => {
   }
   let field: unknown;
   try {
-    field = (JSON.parse(text) as { packageManager?: unknown }).packageManager;
+    field = z
+      .object({ packageManager: z.unknown().optional() })
+      .parse(JSON.parse(text)).packageManager;
   } catch (error) {
     throw new Error(
       `${file} does not parse as JSON (${error instanceof Error ? error.message : String(error)}), so the stage can't read which package manager installs it.`,

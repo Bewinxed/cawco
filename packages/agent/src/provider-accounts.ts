@@ -50,6 +50,7 @@ import type {
   CredentialStore,
 } from "@earendil-works/pi-ai";
 import { getAgentDir, ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { z } from "zod";
 import { removeAccountDir } from "./accounts";
 import { storeRead } from "./stores/client";
 
@@ -61,12 +62,33 @@ export interface Held {
   provider: string;
 }
 
+/**
+ * A pi credential as its auth file stores it (pi-ai auth/types.ts
+ * `Credential`): an API key, or OAuth tokens with whatever else the
+ * provider's flow kept beside them.
+ */
+export const CredentialSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("api_key"),
+    key: z.string().optional(),
+    env: z.record(z.string(), z.string()).optional(),
+  }),
+  z.looseObject({
+    type: z.literal("oauth"),
+    refresh: z.string(),
+    access: z.string(),
+    expires: z.number(),
+  }),
+]);
+
 /** The account's credential as it is on disk now; undefined when it holds none. */
 export const readHeld = (accountId: string): Held | undefined => {
   try {
-    const stored = JSON.parse(
-      readFileSync(accountCredentialPath(accountId), "utf8")
-    ) as Record<string, Credential>;
+    const stored = z
+      .record(z.string(), CredentialSchema)
+      .parse(
+        JSON.parse(readFileSync(accountCredentialPath(accountId), "utf8"))
+      );
     const [entry] = Object.entries(stored);
     return entry ? { provider: entry[0], credential: entry[1] } : undefined;
   } catch {
@@ -1078,12 +1100,13 @@ export const homeStoresStamp = async (): Promise<string | undefined> => {
     .slice(0, 16);
 };
 
-type Json = Record<string, Record<string, unknown>>;
+const JsonSchema = z.record(z.string(), z.record(z.string(), z.unknown()));
+type Json = z.infer<typeof JsonSchema>;
 
 /** pi's or OpenCode's own store at `path`, read off the loop; empty when absent or unreadable. */
 const readJson = async (path: string): Promise<Json> => {
   try {
-    return JSON.parse(await readFile(path, "utf8")) as Json;
+    return JsonSchema.parse(JSON.parse(await readFile(path, "utf8")));
   } catch {
     return {};
   }

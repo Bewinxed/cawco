@@ -476,6 +476,7 @@ import {
   type StageStatus,
   storiesKey,
 } from "@cawco/core/stage";
+import { NeutralSessionInfoSchema } from "@cawco/core/stored-shapes";
 import type { RelayFrame } from "@cawco/core/stream-relay";
 import { CAPABILITY_KINDS } from "@cawco/core/suggest";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
@@ -4688,8 +4689,9 @@ export const createServer = (
   }): boolean =>
     db
       .owedSends({ instanceId: row.id })
-      .some((send) =>
-        send.owed !== null && startsTurnIn(row, send.owed.payload.message)
+      .some(
+        (send) =>
+          send.owed !== null && startsTurnIn(row, send.owed.payload.message)
       );
   /**
    * Whether `row` has no process and what is owed to it is only what may not
@@ -13509,8 +13511,9 @@ export const createServer = (
         );
   };
   /** The texts and files a stored send carried (`SendPayload.attachments`). */
-  const attachmentsOf = (whole: Envelope<SendPayload> | null): SendAttachment[] =>
-    whole?.payload.attachments ?? [];
+  const attachmentsOf = (
+    whole: Envelope<SendPayload> | null
+  ): SendAttachment[] => whole?.payload.attachments ?? [];
   /**
    * Withdraws each of the session's unread artifact events `same` names
    * (by its words), in order: the words, pictures, texts and files of each
@@ -19989,11 +19992,14 @@ export const createServer = (
     // The row's stored title wins in `resolveSessionTitle` either way, so naming
     // from the given title is not a mismatch with what the client would show.
     const names = new Map<string, string>();
-    for (const info of answer.value.result as NeutralSessionInfo[]) {
-      // biome-ignore lint/suspicious/noUnnecessaryConditions: `answer.result` is an untrusted control reply cast to this type, not a value TS actually proved shaped — a malformed entry can still be null at runtime.
-      if (typeof info?.sessionId !== "string") {
+    const listed: unknown = answer.value.result;
+    for (const entry of Array.isArray(listed) ? listed : []) {
+      // An untrusted control reply: an entry that is not a session's is passed over.
+      const read = NeutralSessionInfoSchema.safeParse(entry);
+      if (!read.success) {
         continue;
       }
+      const info = read.data;
       const source =
         (info.customTitle || info.summary)?.trim() || info.firstPrompt;
       const name =

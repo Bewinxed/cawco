@@ -182,7 +182,13 @@ const zodSource = (declaration: Declaration): ts.EntityName | undefined => {
   if (!ts.isTypeAliasDeclaration(declaration)) {
     return;
   }
-  const { type } = declaration;
+  // `Readonly<z.infer<typeof X>>`: X's output, read-only in TypeScript alone.
+  const outer = declaration.type;
+  const [inner] =
+    ts.isTypeReferenceNode(outer) && outer.typeName.getText() === "Readonly"
+      ? (outer.typeArguments ?? [])
+      : [];
+  const type = inner ?? outer;
   if (
     ts.isTypeReferenceNode(type) &&
     ZOD_OUTPUT.test(type.typeName.getText()) &&
@@ -761,7 +767,9 @@ const importsOf = (out: string, { types, values }: Needs): string[] => {
     at(file).named.push(...names);
   }
   for (const [file, names] of types) {
-    at(file).typed.push(...[...names].map((name) => `${name} as ${alias(name)}`));
+    at(file).typed.push(
+      ...[...names].map((name) => `${name} as ${alias(name)}`)
+    );
   }
   return [...bySpecifier]
     .toSorted(([a], [b]) => rank(a) - rank(b) || (a < b ? -1 : Number(a > b)))
@@ -770,10 +778,14 @@ const importsOf = (out: string, { types, values }: Needs): string[] => {
       // a generated file never loads it (schema.ts and moves.ts read these).
       // Biome sorts a renamed import by the name it is given here.
       ...(typed.length > 0
-        ? [`import type { ${typed.toSorted(byLocalName).join(", ")} } from "${from}";`]
+        ? [
+            `import type { ${typed.toSorted(byLocalName).join(", ")} } from "${from}";`,
+          ]
         : []),
       ...(named.length > 0
-        ? [`import { ${[...new Set(named)].toSorted(byLocalName).join(", ")} } from "${from}";`]
+        ? [
+            `import { ${[...new Set(named)].toSorted(byLocalName).join(", ")} } from "${from}";`,
+          ]
         : []),
     ]);
 };
@@ -800,14 +812,12 @@ export const proved: [${names.map((name) => `Same<z.output<typeof ${name}Schema>
 // The repository's formatter (scripts/fmt.ts), outside this package's
 // project, so loaded by its path at run time.
 const fmt: unknown = await import(join(ROOT, "scripts/fmt.ts"));
-if (
-  !(
-    typeof fmt === "object" &&
-    fmt !== null &&
-    "formatText" in fmt &&
-    typeof fmt.formatText === "function"
-  )
-) {
+if (!(
+  typeof fmt === "object" &&
+  fmt !== null &&
+  "formatText" in fmt &&
+  typeof fmt.formatText === "function"
+)) {
   throw new Error("stored-shapes: scripts/fmt.ts has no formatText");
 }
 const { formatText } = fmt;

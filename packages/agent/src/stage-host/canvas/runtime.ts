@@ -27,6 +27,7 @@ import {
   CANVAS_PLAN_ID,
   type CanvasGraph,
   type CanvasSpec,
+  canvasSpecOf,
   FORMS,
   type FormName,
   type FramePictureRead,
@@ -46,6 +47,7 @@ import {
   type StageErrorKind,
   type Story,
   sectionName,
+  sectionPlansOf,
 } from "@cawco/core/stage";
 import { shellWords } from "@cawco/core/words/shell";
 import { Chrome } from "./chrome";
@@ -314,9 +316,9 @@ const headOf = (head: HTMLElement, file: string, name: string): void => {
 /** Each states file's plan as the stage wrote it into the page; none when the page has no plan. */
 const planOfPage = (): Record<string, SectionPlan> => {
   try {
-    return JSON.parse(
-      document.getElementById(CANVAS_PLAN_ID)?.textContent ?? "{}"
-    ) as Record<string, SectionPlan>;
+    return sectionPlansOf(
+      JSON.parse(document.getElementById(CANVAS_PLAN_ID)?.textContent ?? "{}")
+    );
   } catch {
     return {};
   }
@@ -324,7 +326,7 @@ const planOfPage = (): Record<string, SectionPlan> => {
 
 const specOf = (params: URLSearchParams): CanvasSpec => {
   try {
-    return JSON.parse(params.get("spec") ?? "{}") as CanvasSpec;
+    return canvasSpecOf(JSON.parse(params.get("spec") ?? "{}"));
   } catch {
     return {};
   }

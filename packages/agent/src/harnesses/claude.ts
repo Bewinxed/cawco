@@ -237,7 +237,12 @@ import {
   type SessiondClient,
   sessiondBridge,
 } from "../sessiond-client";
-import { ChildActivity, type RingLine, readRing } from "../sessiond-custody";
+import {
+  ChildActivity,
+  type RingLine,
+  RingLineSchema,
+  readRing,
+} from "../sessiond-custody";
 import { sawTool } from "../tools";
 import {
   forgetWakeups,
@@ -4472,7 +4477,7 @@ const endsTurn = (message: unknown): boolean => {
 
 const parseLine = (data: string): RingLine | undefined => {
   try {
-    return JSON.parse(data) as RingLine;
+    return RingLineSchema.parse(JSON.parse(data));
   } catch {
     return undefined;
   }
