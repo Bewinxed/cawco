@@ -268,16 +268,16 @@ const stepsOf = async (
 };
 
 /** What a work item may spend before the hub stops it: `delegate`'s and the task tools' one shape. */
-export const budgetParameter = () =>
+export const budgetParameter = (
+  description = "At a limit the hub stops the work and fails it, naming the limit. Unset: the task's, then the project's."
+) =>
   z
     .object({
       usd: z.number().positive().optional(),
       turns: z.number().int().min(1).optional(),
       minutes: z.number().int().min(1).optional(),
     })
-    .describe(
-      "At a limit the hub stops the work and fails it, naming the limit. Unset: the task's, then the project's."
-    );
+    .describe(description);
 
 /** Globs of the repository's files a work item owns: `delegate`'s and the task tools' one shape. */
 export const ownsParameter = () =>

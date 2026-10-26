@@ -97,7 +97,8 @@ import {
   routineWords,
 } from "./presenters/project";
 import type { Push } from "./push";
-import { refusalAnswer, refuser, StatusRefusal } from "./refusal";
+import { refusalAttempt, refuser, StatusRefusal } from "./refusal";
+import { budgetParameter } from "./task-tools";
 import { BUDGET, LANDS } from "./tasks";
 import {
   budgetProblem,
@@ -105,6 +106,7 @@ import {
   isRoutineParent,
   routineParent,
   titleProblem,
+  type WorkItemRequest,
   type WorkItems,
 } from "./work-items";
 
@@ -939,14 +941,19 @@ export const createRoutines = ({
   };
 
   /**
-   * A delegate run: its work item, started; the run running under it. A
-   * curator run reads `as.input` (the inbox) after the routine's prompt, in
-   * the `curator` role.
+   * A run as a work item the hub starts: skipped when the routine has no
+   * place to run, else briefed with the routine's prompt, `kind.lead` before
+   * it and `kind.input` after it, and started with `kind.fields`.
    */
-  const fireDelegate = async (
+  const fireWorkItem = async (
     routine: RoutineRow,
     run: RoutineRunRow,
-    as?: { input: string; role: SessionRole }
+    kind: {
+      lead: string;
+      input: string;
+      fields: Pick<WorkItemRequest, "role" | "lands" | "canDelegate" | "host">;
+      noted: string;
+    }
   ): Promise<void> => {
     const place = await placeWithin(routine);
     if (typeof place === "string") {
@@ -964,10 +971,9 @@ export const createRoutines = ({
     const begun = await workItems.startForHub(
       {
         title: routine.name,
-        prompt: `Routine “${routine.name}”, its ${label} run${run.attempt > 1 ? ` (attempt ${run.attempt}: the last one failed)` : ""}. Its prompt:\n\n${routine.prompt}${as ? `\n\n${as.input}` : inputOf(run)}\n\n${CONTRACT}`,
+        prompt: `Routine “${routine.name}”, its ${label} run${run.attempt > 1 ? ` (attempt ${run.attempt}: the last one failed)` : ""}. ${kind.lead}Its prompt:\n\n${routine.prompt}${kind.input}\n\n${CONTRACT}`,
         ...(type ? { type } : {}),
-        ...(as ? { role: as.role } : {}),
-        lands: routine.lands,
+        ...kind.fields,
         ...(routine.budget ? { budget: routine.budget } : {}),
         cwd: place.cwd,
         machineId: place.machineId,
@@ -983,9 +989,26 @@ export const createRoutines = ({
     store.setRun(run.id, { state: "running", workItemId: begun.item.id });
     running.add(begun.item.instanceId);
     console.log(
-      `[routines] ${routine.name} (${run.slot}, attempt ${run.attempt}): work item ${begun.item.id}`
+      `[routines] ${routine.name} (${run.slot}, attempt ${run.attempt}): ${kind.noted}work item ${begun.item.id}`
     );
   };
+
+  /**
+   * A delegate run: its work item, started; the run running under it. A
+   * curator run reads `as.input` (the inbox) after the routine's prompt, in
+   * the `curator` role.
+   */
+  const fireDelegate = (
+    routine: RoutineRow,
+    run: RoutineRunRow,
+    as?: { input: string; role: SessionRole }
+  ): Promise<void> =>
+    fireWorkItem(routine, run, {
+      lead: "",
+      input: as ? `\n\n${as.input}` : inputOf(run),
+      fields: { ...(as ? { role: as.role } : {}), lands: routine.lands },
+      noted: "",
+    });
 
   /**
    * An orchestrator run (decision page workflows-future: "A routine can start
@@ -997,48 +1020,16 @@ export const createRoutines = ({
    * outlives whoever made the routine, and its end is read as a delegate
    * run's is.
    */
-  const fireOrchestrator = async (
+  const fireOrchestrator = (
     routine: RoutineRow,
     run: RoutineRunRow
-  ): Promise<void> => {
-    const place = await placeWithin(routine);
-    if (typeof place === "string") {
-      store.setRun(run.id, {
-        state: "skipped",
-        reason: place,
-        endedAt: new Date(),
-      });
-      console.log(`[routines] ${routine.name} (${run.slot}) skipped: ${place}`);
-      drain(routine.id);
-      return;
-    }
-    const label = slotLabel(run.slot, routine.timeZone);
-    const type = await runType(routine);
-    const begun = await workItems.startForHub(
-      {
-        title: routine.name,
-        prompt: `Routine “${routine.name}”, its ${label} run${run.attempt > 1 ? ` (attempt ${run.attempt}: the last one failed)` : ""}. You orchestrate it: delegate its work, read your delegates' reports, and decide. Its prompt:\n\n${routine.prompt}${inputOf(run)}\n\n${CONTRACT}`,
-        ...(type ? { type } : {}),
-        canDelegate: true,
-        host: true,
-        ...(routine.budget ? { budget: routine.budget } : {}),
-        cwd: place.cwd,
-        machineId: place.machineId,
-      },
-      routineParent({
-        id: routine.id,
-        name: routine.name,
-        projectId: routine.projectId,
-        cwd: place.cwd,
-        machineId: place.machineId,
-      })
-    );
-    store.setRun(run.id, { state: "running", workItemId: begun.item.id });
-    running.add(begun.item.instanceId);
-    console.log(
-      `[routines] ${routine.name} (${run.slot}, attempt ${run.attempt}): orchestrator, work item ${begun.item.id}`
-    );
-  };
+  ): Promise<void> =>
+    fireWorkItem(routine, run, {
+      lead: "You orchestrate it: delegate its work, read your delegates' reports, and decide. ",
+      input: inputOf(run),
+      fields: { canDelegate: true, host: true },
+      noted: "orchestrator, ",
+    });
 
   /**
    * A lead run: the slot noted in the routine's thread, and Caw woken there.
@@ -2379,14 +2370,7 @@ export const createRoutines = ({
             .enum(LANDS_MODES)
             .optional()
             .describe("Where a run's commits go; none when left out."),
-          budget: z
-            .object({
-              usd: z.number().positive().optional(),
-              turns: z.number().int().min(1).optional(),
-              minutes: z.number().int().min(1).optional(),
-            })
-            .optional()
-            .describe("What each run may spend."),
+          budget: budgetParameter("What each run may spend.").optional(),
           daily_cap_usd: z
             .number()
             .positive()
@@ -2522,8 +2506,16 @@ const ROUTINE_TOOL_NAMES = [
 export type RoutineTool = (typeof ROUTINE_TOOL_NAMES)[number];
 export const ROUTINE_TOOLS: ReadonlySet<string> = new Set(ROUTINE_TOOL_NAMES);
 
-/** A refusal as the route's answer. */
-const answer = refusalAnswer(RoutineRefusal);
+/** Runs a route's work, a refusal answered with its status. */
+const answered = refusalAttempt(RoutineRefusal);
+
+/** How a routine's runs are made and what they may spend, as a route sets them. */
+const RUN_FIELDS = {
+  delegateType: t.Optional(t.Nullable(t.String())),
+  lands: t.Optional(LANDS),
+  budget: t.Optional(t.Nullable(BUDGET)),
+  dailyCapUsd: t.Optional(t.Nullable(t.Number())),
+};
 
 const TARGET = t.Union([
   t.Literal("delegate"),
@@ -2537,13 +2529,7 @@ export const routineRoutes = (routines: Routines) =>
     .get(
       "/api/routines/schedule",
       { query: t.Object({ cron: t.String(), timeZone: t.String() }) },
-      ({ query }) => {
-        try {
-          return schedulePreview(query.cron, query.timeZone);
-        } catch (error) {
-          return answer(error);
-        }
-      }
+      ({ query }) => answered(() => schedulePreview(query.cron, query.timeZone))
     )
     .get(
       "/api/routines",
@@ -2571,28 +2557,15 @@ export const routineRoutes = (routines: Routines) =>
           timeZone: t.String(),
           target: TARGET,
           prompt: t.String(),
-          delegateType: t.Optional(t.Nullable(t.String())),
-          lands: t.Optional(LANDS),
-          budget: t.Optional(t.Nullable(BUDGET)),
-          dailyCapUsd: t.Optional(t.Nullable(t.Number())),
+          ...RUN_FIELDS,
           keep: t.Optional(t.Boolean()),
         }),
       },
-      ({ body }) => {
-        try {
-          return routines.create(body, "owner");
-        } catch (error) {
-          return answer(error);
-        }
-      }
+      ({ body }) => answered(() => routines.create(body, "owner"))
     )
-    .get("/api/routines/:id", ({ params }) => {
-      try {
-        return routines.get(params.id);
-      } catch (error) {
-        return answer(error);
-      }
-    })
+    .get("/api/routines/:id", ({ params }) =>
+      answered(() => routines.get(params.id))
+    )
     .patch(
       "/api/routines/:id",
       {
@@ -2601,33 +2574,17 @@ export const routineRoutes = (routines: Routines) =>
           cron: t.Optional(t.String()),
           timeZone: t.Optional(t.String()),
           prompt: t.Optional(t.String()),
-          delegateType: t.Optional(t.Nullable(t.String())),
-          lands: t.Optional(LANDS),
-          budget: t.Optional(t.Nullable(BUDGET)),
-          dailyCapUsd: t.Optional(t.Nullable(t.Number())),
+          ...RUN_FIELDS,
           enabled: t.Optional(t.Boolean()),
           keep: t.Optional(t.Boolean()),
         }),
       },
-      ({ params, body }) => {
-        try {
-          return routines.update(params.id, body, "owner");
-        } catch (error) {
-          return answer(error);
-        }
-      }
+      ({ params, body }) =>
+        answered(() => routines.update(params.id, body, "owner"))
     )
-    .delete("/api/routines/:id", ({ params }) => {
-      try {
-        return routines.remove(params.id, "owner");
-      } catch (error) {
-        return answer(error);
-      }
-    })
-    .post("/api/routines/:id/run", ({ params }) => {
-      try {
-        return routines.runNow(params.id, "owner");
-      } catch (error) {
-        return answer(error);
-      }
-    });
+    .delete("/api/routines/:id", ({ params }) =>
+      answered(() => routines.remove(params.id, "owner"))
+    )
+    .post("/api/routines/:id/run", ({ params }) =>
+      answered(() => routines.runNow(params.id, "owner"))
+    );
