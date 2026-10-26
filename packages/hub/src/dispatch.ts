@@ -112,10 +112,15 @@ import {
   todoLink,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
-import type { AttemptStart, Stage, TaskSummary } from "@cawco/core/task-views";
+import type {
+  AttemptStart,
+  Stage,
+  TaskSummary,
+  WaitWitness,
+} from "@cawco/core/task-views";
 import { Elysia, status, t } from "elysia";
 import type { DbShape, PlaceRow, ProjectRow, WorkItemRow } from "./db";
-import type { Origin, WaitWitness, WorkBudget } from "./db/schema";
+import type { Origin, WorkBudget } from "./db/schema";
 import { needsDesignSystem } from "./design-offers";
 import type { JevAccess } from "./jev";
 import {

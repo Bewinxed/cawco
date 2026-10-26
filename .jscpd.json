@@ -8,7 +8,11 @@
     "**/dist/**",
     "**/fixtures/**",
     "apps/dashboard/src/lib/tokens/tokens.ts",
-    "packages/hub/skills/decision-page/kit/vendor/**"
+    "packages/hub/skills/decision-page/kit/vendor/**",
+    "packages/core/src/stored-shapes.ts",
+    "packages/hub/src/db/stored-shapes.ts",
+    "packages/agent/src/stored-shapes.ts",
+    "apps/dashboard/src/lib/cawco/stored-shapes.ts"
   ],
   "minTokens": 50,
   "threshold": 0,

@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { cardSettlings, decidesSettings } from "./schema";
 
-export type CardSettlingRow = typeof cardSettlings.$inferSelect;
+type CardSettlingRow = typeof cardSettlings.$inferSelect;
 
 /** The one {@link decidesSettings} row's key. */
 const DECIDES_ID = "decides";

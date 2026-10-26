@@ -772,7 +772,10 @@ export const createRoutines = ({
     if (cap === null) {
       return undefined;
     }
-    const spent = store.spentSince(routine.id, dayStart(routine.timeZone, now));
+    const { usd: spent } = store.runsSince(
+      routine.id,
+      dayStart(routine.timeZone, now)
+    );
     return spent >= cap
       ? `today's runs spent $${spent.toFixed(2)} of its $${cap.toFixed(2)} daily cap`
       : undefined;

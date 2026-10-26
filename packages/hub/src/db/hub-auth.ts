@@ -7,7 +7,7 @@ import {
   previewPasses,
 } from "./schema";
 
-export type OwnerDeviceRow = typeof ownerDevices.$inferSelect;
+type OwnerDeviceRow = typeof ownerDevices.$inferSelect;
 
 /** The rows hub-auth.ts keeps: the mode, the person's devices, the machines' keys. */
 export interface HubAuthDb {

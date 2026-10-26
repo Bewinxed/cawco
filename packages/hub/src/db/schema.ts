@@ -69,7 +69,6 @@ import {
   ConnectAccessSchema,
   DelegateEventPayloadSchema,
   EndedBySchema,
-  EnvelopeSchema,
   EnvelopeShape,
   FleetItemStatusSchema,
   FleetMcpConfigSchema,
@@ -93,7 +92,7 @@ import {
   RelayReachSchema,
   ScratchWorktreeSchema,
   SendAttachmentSchema,
-  SendPayloadSchema,
+  SendPayloadShape,
   SessionCommandsSchema,
   SessionToolingSchema,
   SkillFileSchema,
@@ -103,6 +102,7 @@ import {
   ThreadEventSchema,
   ThreadImageSchema,
   ThreadQuestionSchema,
+  WaitWitnessSchema,
   WorkspaceCutSchema,
   WorkspaceHoldingSchema,
 } from "@cawco/core/stored-shapes";
@@ -149,7 +149,6 @@ import {
   TrackerCursorSchema,
   TrackerSyncedSchema,
   TrashedRowsSchema,
-  WaitWitnessSchema,
   WorkBudgetSchema,
   WorkItemSubmissionSchema,
   WorkLandingSchema,
@@ -157,6 +156,16 @@ import {
 } from "./stored-shapes";
 
 const timestamp = (column: string) => integer(column, { mode: "timestamp_ms" });
+/** A time column a row's insert stamps with now, unless given one. */
+const stampedNow = (column: string) =>
+  timestamp(column)
+    .notNull()
+    .$defaultFn(() => new Date());
+/** The project a row is of, deleted with it. */
+const projectKey = () =>
+  text("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" });
 
 /**
  * A secret column (secret-box.ts): sealed on every write, opened on every
@@ -179,9 +188,11 @@ const sealedJson = <S extends z.ZodType>(schema: S) =>
     open: (raw) => openOrNull(raw),
   });
 
+/** An envelope as its machine is handed it, payload unread. */
+const EnvelopeSchema: z.ZodType<Envelope> = EnvelopeShape;
 /** A send as its machine is handed it (`Envelope<SendPayload>`). */
 const SendEnvelopeSchema: z.ZodType<Envelope<SendPayload>> =
-  EnvelopeShape.extend({ payload: SendPayloadSchema });
+  EnvelopeShape.extend({ payload: SendPayloadShape });
 /** A session's start as its machine is handed it (`Envelope<SpawnPayload>`). */
 const SpawnEnvelopeSchema: z.ZodType<Envelope<SpawnPayload>> =
   EnvelopeShape.extend({ payload: SpawnPayloadSchema });
@@ -263,9 +274,7 @@ export const agents = sqliteTable("agents", {
    */
   pauseStopped: storedJson(StoppedCommandsSchema)("pause_stopped"),
   lastSeenAt: timestamp("last_seen_at"),
-  createdAt: timestamp("created_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
+  createdAt: stampedNow("created_at"),
 });
 
 /**
@@ -512,9 +521,7 @@ export const projects = sqliteTable("projects", {
   lfsUrl: text("lfs_url"),
   /** The fleet connection whose key signs in to {@link lfsUrl}, by name; set with it. */
   lfsConnection: text("lfs_connection"),
-  createdAt: timestamp("created_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
+  createdAt: stampedNow("created_at"),
 });
 
 /**
@@ -564,9 +571,7 @@ export const queuedTaskStarts = sqliteTable(
      * that waited is still yours (work_items.by_person). Null: its parent's.
      */
     origin: text("origin").$type<Origin>(),
-    queuedAt: timestamp("queued_at")
-      .notNull()
-      .$defaultFn(() => new Date()),
+    queuedAt: stampedNow("queued_at"),
   },
   (table) => [primaryKey({ columns: [table.projectId, table.taskId] })]
 );
@@ -581,9 +586,7 @@ export const queuedTaskStarts = sqliteTable(
 export const projectTasks = sqliteTable(
   "project_tasks",
   {
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    projectId: projectKey(),
     /** The file, from the project folder's root: `tasks/tsk-12-fix-toggle.md`. */
     path: text("path").notNull(),
     /** `tsk-12`, from the file's name. */
@@ -611,9 +614,7 @@ export const projectTasks = sqliteTable(
     /** sha256 hex of the file's content as indexed. */
     hash: text("hash").notNull(),
     /** When the hub last saw the content change. */
-    updatedAt: timestamp("updated_at")
-      .notNull()
-      .$defaultFn(() => new Date()),
+    updatedAt: stampedNow("updated_at"),
   },
   (table) => [
     primaryKey({ columns: [table.projectId, table.path] }),
@@ -623,13 +624,6 @@ export const projectTasks = sqliteTable(
 
 /** A task file's blocking edge: what it waits on (`waits_on`). */
 export type TaskEdgeKind = "waits_on";
-
-/** One card or pin an attempt was dispatched on, and the value it settled with (`workItems.waitedOn`). */
-export interface WaitWitness {
-  /** The wait as its task's file keeps it (wait-targets.ts). */
-  target: string;
-  value: string;
-}
 
 /**
  * What a task waits on (`waits_on:`), one row each, in the order its file
@@ -733,9 +727,7 @@ export type PlacePath = MachinePath | HubFolder;
 export const projectAccounts = sqliteTable(
   "project_accounts",
   {
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    projectId: projectKey(),
     accountId: text("account_id")
       .notNull()
       .references(() => accounts.id, { onDelete: "cascade" }),
@@ -748,9 +740,7 @@ export const projectPlaces = sqliteTable(
   "project_places",
   {
     id: text("id").primaryKey(),
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    projectId: projectKey(),
     /** Not a reference: a machine's places go with it in `deleteMachine`. */
     machineId: text("machine_id").notNull(),
     /** Absolute on its machine; the hub's own folder (kind `hub`) is relative to the hub's data. */
@@ -764,9 +754,7 @@ export const projectPlaces = sqliteTable(
     isPrimary: integer("is_primary", { mode: "boolean" })
       .notNull()
       .default(false),
-    createdAt: timestamp("created_at")
-      .notNull()
-      .$defaultFn(() => new Date()),
+    createdAt: stampedNow("created_at"),
   },
   (table) => [
     uniqueIndex("project_places_where").on(
@@ -788,15 +776,11 @@ export const projectPlaces = sqliteTable(
 export const projectRepositories = sqliteTable(
   "project_repositories",
   {
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    projectId: projectKey(),
     /** Not a reference: a machine's repositories go with it in `deleteMachine`. */
     machineId: text("machine_id").notNull(),
     path: text("path").$type<MachinePath>().notNull(),
-    recordedAt: timestamp("recorded_at")
-      .notNull()
-      .$defaultFn(() => new Date()),
+    recordedAt: stampedNow("recorded_at"),
   },
   (table) => [primaryKey({ columns: [table.projectId, table.machineId] })]
 );
@@ -1073,12 +1057,8 @@ export const instances = sqliteTable("instances", {
   /** What `lastError` was, typed where it was found (core `LastErrorKind`); null when nothing typed it. */
   lastErrorKind:
     text("last_error_kind").$type<import("@cawco/core").LastErrorKind>(),
-  createdAt: timestamp("created_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
-  updatedAt: timestamp("updated_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
+  createdAt: stampedNow("created_at"),
+  updatedAt: stampedNow("updated_at"),
   /**
    * When the hub last issued a spawn or restore for this row. A `starting` row's
    * grace measures from here: asking for a process is not session activity.
@@ -1266,9 +1246,7 @@ export const workspaces = sqliteTable("workspaces", {
    * from its repository.
    */
   cutFrom: storedJson(WorkspaceFromSchema)("cut_from"),
-  createdAt: timestamp("created_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
+  createdAt: stampedNow("created_at"),
 });
 
 /**
@@ -1594,9 +1572,7 @@ export const workItems = sqliteTable(
      * review shows.
      */
     error: text("error"),
-    createdAt: timestamp("created_at")
-      .notNull()
-      .$defaultFn(() => new Date()),
+    createdAt: stampedNow("created_at"),
     endedAt: timestamp("ended_at"),
     /**
      * When the reader dismissed its chip from the parent's delegate tray: a
@@ -1699,9 +1675,7 @@ export const queuedWorkItems = sqliteTable("queued_work_items", {
   /** The session id it stands under while it waits (`queuedAs.instanceId`): minted, no row yet. */
   queuedInstanceId: text("queued_instance_id").notNull(),
   title: text("title").notNull(),
-  queuedAt: timestamp("queued_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
+  queuedAt: stampedNow("queued_at"),
 });
 
 /**
@@ -1761,9 +1735,7 @@ export const delegateEvents = sqliteTable(
     completedAt: text("completed_at"),
     /** An ask's own state; null on an answer and a report, which settle nothing. */
     status: text("status").$type<DelegateAskStatus>(),
-    createdAt: timestamp("created_at")
-      .notNull()
-      .$defaultFn(() => new Date()),
+    createdAt: stampedNow("created_at"),
   },
   (table) => [
     index("delegate_events_report").on(
@@ -1902,9 +1874,7 @@ export const tools = sqliteTable("tools", {
   required: integer("required", { mode: "boolean" }).notNull().default(false),
   /** Null takes whatever the installer calls latest. */
   pinnedVersion: text("pinned_version"),
-  createdAt: timestamp("created_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
+  createdAt: stampedNow("created_at"),
 });
 
 /**
@@ -1942,9 +1912,7 @@ export const mcpServers = sqliteTable("mcp_servers", {
    * started at its first call, rather than one per session at its start.
    */
   shared: integer("shared", { mode: "boolean" }).notNull().default(false),
-  createdAt: timestamp("created_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
+  createdAt: stampedNow("created_at"),
 });
 
 /**
@@ -2022,9 +1990,28 @@ export const marketplaces = sqliteTable("marketplaces", {
   name: text("name").primaryKey(),
   /** Whatever `claude plugin marketplace add` accepts, passed through verbatim. */
   source: text("source").notNull(),
-  createdAt: timestamp("created_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
+  createdAt: stampedNow("created_at"),
+});
+
+/** A skill's or a plugin's fetched files and versions, as both tables keep them (new columns each call). */
+const fetchedColumns = () => ({
+  /** Null until a resolve succeeds; a machine writes only when this changes. */
+  hash: text("hash"),
+  bytes: integer("bytes"),
+  /** Why the last resolve failed. A failed row is kept so the dashboard can say so. */
+  error: text("error"),
+  files: storedJson(z.array(SkillFileSchema))("files"),
+  /**
+   * What the source held when last read (latest_*, checked_at) and why that
+   * read failed (check_error), the version the stored files declare, and
+   * what the last fetch of a row that had files came to (FleetVersioned).
+   */
+  version: text("version"),
+  lastRefresh: storedJson(FleetRefreshSchema)("last_refresh"),
+  latestHash: text("latest_hash"),
+  latestVersion: text("latest_version"),
+  checkedAt: timestamp("checked_at"),
+  checkError: text("check_error"),
 });
 
 /** The plugins the fleet installs, by the CLI's own `plugin@marketplace` id. */
@@ -2037,28 +2024,11 @@ export const plugins = sqliteTable(
     /**
      * The resolved content, the same way {@link skills} keeps it, and for the
      * same reason: the hub fetches a plugin once and every machine is sent the
-     * bytes. Null until a resolve succeeds — a row with no files is one the
-     * machines still install the old way, by asking the CLI to go and get it.
+     * bytes. A row with no files is one the machines still install the old
+     * way, by asking the CLI to go and get it.
      */
-    hash: text("hash"),
-    bytes: integer("bytes"),
-    /** Why the last resolve failed. Kept, so the dashboard can say so. */
-    error: text("error"),
-    files: storedJson(z.array(SkillFileSchema))("files"),
-    /**
-     * What the source held when last read (latest_*, checked_at) and why that
-     * read failed (check_error), the version the stored files declare, and
-     * what the last fetch of a row that had files came to (FleetVersioned).
-     */
-    version: text("version"),
-    lastRefresh: storedJson(FleetRefreshSchema)("last_refresh"),
-    latestHash: text("latest_hash"),
-    latestVersion: text("latest_version"),
-    checkedAt: timestamp("checked_at"),
-    checkError: text("check_error"),
-    createdAt: timestamp("created_at")
-      .notNull()
-      .$defaultFn(() => new Date()),
+    ...fetchedColumns(),
+    createdAt: stampedNow("created_at"),
   },
   // Every column the fleet's listing reads (db/index.ts `listPlugins`), so
   // it is read off this index alone: those after `files` sat behind its
@@ -2096,23 +2066,7 @@ export const skills = sqliteTable(
     source: text("source").notNull(),
     /** A disabled row stays here and is deleted from the machines. */
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
-    /** Null until a resolve succeeds; a machine writes only when this changes. */
-    hash: text("hash"),
-    bytes: integer("bytes"),
-    /** Why the last resolve failed. A failed row is kept so the dashboard can say so. */
-    error: text("error"),
-    files: storedJson(z.array(SkillFileSchema))("files"),
-    /**
-     * What the source held when last read (latest_*, checked_at) and why that
-     * read failed (check_error), the version the stored files declare, and
-     * what the last fetch of a row that had files came to (FleetVersioned).
-     */
-    version: text("version"),
-    lastRefresh: storedJson(FleetRefreshSchema)("last_refresh"),
-    latestHash: text("latest_hash"),
-    latestVersion: text("latest_version"),
-    checkedAt: timestamp("checked_at"),
-    checkError: text("check_error"),
+    ...fetchedColumns(),
     /**
      * Bound to one project (`project`: `<checkout>/.claude/skills/<name>/`);
      * null for every machine (`~/.claude/skills/`). Placed at every checkout
@@ -2120,9 +2074,7 @@ export const skills = sqliteTable(
      */
     scope: text("scope").$type<FleetScope>(),
     projectId: text("project_id"),
-    createdAt: timestamp("created_at")
-      .notNull()
-      .$defaultFn(() => new Date()),
+    createdAt: stampedNow("created_at"),
   },
   // Every column the fleet's listing reads (db/index.ts `listSkills`), so it
   // is read off this index alone, never past `files` (10 ms a read on the
@@ -2161,9 +2113,7 @@ export const fleetAgents = sqliteTable("fleet_agents", {
   /** sha256 hex of the content — what tells a machine's copy apart from this. */
   hash: text("hash").notNull(),
   bytes: integer("bytes").notNull(),
-  updatedAt: timestamp("updated_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
+  updatedAt: stampedNow("updated_at"),
 });
 
 /** The fleet's user-scope CLAUDE.md — one row, one document (NEW.md §11). */
@@ -2173,9 +2123,7 @@ export const fleetMemory = sqliteTable("fleet_memory", {
   content: text("content").notNull(),
   /** sha256 hex of the content, which is what a machine compares before writing. */
   hash: text("hash").notNull(),
-  updatedAt: timestamp("updated_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
+  updatedAt: stampedNow("updated_at"),
 });
 
 /**
@@ -2208,9 +2156,7 @@ export const fleetMemoryDocs = sqliteTable("fleet_memory_docs", {
    * the delegates it is about.
    */
   briefer: integer("briefer", { mode: "boolean" }).notNull().default(false),
-  updatedAt: timestamp("updated_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
+  updatedAt: stampedNow("updated_at"),
 });
 
 /**
@@ -2246,9 +2192,7 @@ export const memoryBriefings = sqliteTable(
       .notNull()
       .references(() => fleetMemoryDocs.path, { onDelete: "cascade" }),
     hash: text("hash").notNull(),
-    handedAt: timestamp("handed_at")
-      .notNull()
-      .$defaultFn(() => new Date()),
+    handedAt: stampedNow("handed_at"),
   },
   (table) => [primaryKey({ columns: [table.instanceId, table.path] })]
 );
@@ -2265,9 +2209,7 @@ export const fleetMemoryDocProjects = sqliteTable(
     path: text("path")
       .notNull()
       .references(() => fleetMemoryDocs.path, { onDelete: "cascade" }),
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    projectId: projectKey(),
   },
   (table) => [primaryKey({ columns: [table.path, table.projectId] })]
 );
@@ -2288,9 +2230,7 @@ export const fleetMemoryHistory = sqliteTable("fleet_memory_history", {
    * CLAUDE.md, which is every row written before the set existed.
    */
   path: text("path"),
-  createdAt: timestamp("created_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
+  createdAt: stampedNow("created_at"),
 });
 
 /**
@@ -2326,9 +2266,7 @@ export const usageBuckets = sqliteTable(
     reasoningTokens: integer("reasoning_tokens").notNull().default(0),
     costUsd: real("cost_usd").notNull().default(0),
     messages: integer("messages").notNull().default(0),
-    updatedAt: timestamp("updated_at")
-      .notNull()
-      .$defaultFn(() => new Date()),
+    updatedAt: stampedNow("updated_at"),
   },
   (table) => [
     index("usage_buckets_start_idx").on(table.start),
@@ -2350,9 +2288,7 @@ export const usageLimits = sqliteTable("usage_limits", {
   machineId: text("machine_id").primaryKey(),
   /** The OpenCode Go plan's windows; null on a machine with no Go key. */
   openCodeGo: storedJson(OpenCodeGoLimitsSchema)("open_code_go"),
-  fetchedAt: timestamp("fetched_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
+  fetchedAt: stampedNow("fetched_at"),
 });
 
 /**
@@ -2392,9 +2328,7 @@ export const accounts = sqliteTable(
     orgId: text("org_id"),
     /** Where its unfinished setup stands (core `AccountSetupStep`); null once done. */
     setupStep: text("setup_step").$type<AccountSetupStep>(),
-    createdAt: timestamp("created_at")
-      .notNull()
-      .$defaultFn(() => new Date()),
+    createdAt: stampedNow("created_at"),
   },
   (table) => [
     index("accounts_identity").on(
@@ -2433,9 +2367,7 @@ export const accountSignins = sqliteTable(
     movedFrom: text("moved_from").$type<HomeStore>(),
     /** Why the hub signed it out itself: the refusal a session on it met (`AccountSignin.reason`); null otherwise. */
     reason: text("reason"),
-    checkedAt: timestamp("checked_at")
-      .notNull()
-      .$defaultFn(() => new Date()),
+    checkedAt: stampedNow("checked_at"),
   },
   (table) => [primaryKey({ columns: [table.accountId, table.machineId] })]
 );
@@ -2601,9 +2533,7 @@ export const limitHolds = sqliteTable("limit_holds", {
   accountId: text("account_id").notNull(),
   until: timestamp("until"),
   staleAt: timestamp("stale_at"),
-  createdAt: timestamp("created_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
+  createdAt: stampedNow("created_at"),
 });
 
 /**
@@ -2616,9 +2546,7 @@ export const moveEndings = sqliteTable("move_endings", {
     .primaryKey()
     .references(() => instances.id, { onDelete: "cascade" }),
   ended: storedJson(MoveEndedSchema)("ended").notNull(),
-  createdAt: timestamp("created_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
+  createdAt: stampedNow("created_at"),
 });
 
 /**
@@ -2667,9 +2595,7 @@ export const owedMoves = sqliteTable("owed_moves", {
   /** The line written once it lands; null for none. */
   move: storedJson(AccountMoveSchema)("move"),
   waits: text("waits").$type<"turn" | "work" | "machine">().notNull(),
-  createdAt: timestamp("created_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
+  createdAt: stampedNow("created_at"),
 });
 
 /**
@@ -2701,9 +2627,7 @@ export const limitCompactions = sqliteTable("limit_compactions", {
    * `recoverCompaction`). Null until a step's turn ends.
    */
   endedStep: text("ended_step"),
-  createdAt: timestamp("created_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
+  createdAt: stampedNow("created_at"),
 });
 
 /**
@@ -2914,12 +2838,8 @@ export const rules = sqliteTable("rules", {
   scopeRole: text("scope_role").$type<NonNullable<RuleScope["role"]>>(),
   /** The delegate type the sessions it fires on were started as, by name. */
   scopeDelegateType: text("scope_delegate_type"),
-  createdAt: timestamp("created_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
-  updatedAt: timestamp("updated_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
+  createdAt: stampedNow("created_at"),
+  updatedAt: stampedNow("updated_at"),
 });
 
 /**
@@ -3009,11 +2929,22 @@ export const configTrash = sqliteTable("config_trash", {
  */
 export const taskCommentIds = sqliteTable("task_comment_ids", {
   id: text("id").primaryKey(),
-  projectId: text("project_id")
-    .notNull()
-    .references(() => projects.id, { onDelete: "cascade" }),
+  projectId: projectKey(),
   taskId: text("task_id").notNull(),
   saidAt: timestamp("said_at").notNull(),
+});
+
+/** What a hook does and where, as {@link fleetHooks} and its history keep it (new columns each call). */
+const hookColumns = () => ({
+  event: text("event").$type<HookEvent>().notNull(),
+  matcher: text("matcher"),
+  handler: storedJson(HookHandlerSchema)("handler").notNull(),
+  /** A command hook's script body, written to every machine that gets this hook. */
+  script: text("script"),
+  /** sha256 hex of the material a machine compares before writing. */
+  hash: text("hash").notNull(),
+  scope: text("scope").$type<FleetScope>(),
+  projectId: text("project_id"),
 });
 
 /**
@@ -3037,21 +2968,9 @@ export const fleetHooks = sqliteTable("fleet_hooks", {
   name: text("name").notNull(),
   /** A disabled hook stays here and is registered nowhere. */
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
-  event: text("event").$type<HookEvent>().notNull(),
-  matcher: text("matcher"),
-  handler: storedJson(HookHandlerSchema)("handler").notNull(),
-  /** A command hook's script body, written to every machine that gets this hook. */
-  script: text("script"),
-  /** sha256 hex of the material a machine compares before writing. */
-  hash: text("hash").notNull(),
-  scope: text("scope").$type<FleetScope>(),
-  projectId: text("project_id"),
-  createdAt: timestamp("created_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
-  updatedAt: timestamp("updated_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
+  ...hookColumns(),
+  createdAt: stampedNow("created_at"),
+  updatedAt: stampedNow("updated_at"),
 });
 
 /**
@@ -3077,12 +2996,8 @@ export const fleetHarnessConfig = sqliteTable("fleet_harness_config", {
   package: text("package"),
   scope: text("scope").$type<FleetScope>(),
   projectId: text("project_id"),
-  createdAt: timestamp("created_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
-  updatedAt: timestamp("updated_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
+  createdAt: stampedNow("created_at"),
+  updatedAt: stampedNow("updated_at"),
 });
 
 /**
@@ -3098,18 +3013,10 @@ export const fleetHookHistory = sqliteTable("fleet_hook_history", {
   hookId: text("hook_id").notNull(),
   name: text("name").notNull(),
   enabled: integer("enabled", { mode: "boolean" }).notNull(),
-  event: text("event").$type<HookEvent>().notNull(),
-  matcher: text("matcher"),
-  handler: storedJson(HookHandlerSchema)("handler").notNull(),
-  script: text("script"),
-  hash: text("hash").notNull(),
-  scope: text("scope").$type<FleetScope>(),
-  projectId: text("project_id"),
+  ...hookColumns(),
   /** `fleet` for every version today — a hook is never edited from a machine. */
   source: text("source").notNull(),
-  createdAt: timestamp("created_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
+  createdAt: stampedNow("created_at"),
 });
 
 /**
@@ -3135,9 +3042,7 @@ export const fleetSkillHistory = sqliteTable("fleet_skill_history", {
   files: storedJson(z.array(SkillFileSchema))("files").notNull(),
   /** `fleet` for the hub's own row; `machine:<machineId>` for an edited copy an overwrite took off it. */
   source: text("source").notNull(),
-  createdAt: timestamp("created_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
+  createdAt: stampedNow("created_at"),
 });
 
 /**
@@ -3162,9 +3067,7 @@ export const supervisorConfig = sqliteTable("supervisor_config", {
    * finished afterwards.
    */
   relayAskedAt: timestamp("relay_asked_at"),
-  updatedAt: timestamp("updated_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
+  updatedAt: stampedNow("updated_at"),
 });
 
 /**
@@ -3558,9 +3461,7 @@ export const moves = sqliteTable(
   "moves",
   {
     id: text("id").primaryKey(),
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    projectId: projectKey(),
     stage: text("stage").$type<MoveStage>().notNull(),
     /**
      * Everything the job has learned and decided, as moves.ts keeps it, read
@@ -3997,9 +3898,7 @@ export const designProposals = sqliteTable("design_proposals", {
 export const projectStarterSets = sqliteTable(
   "project_starter_sets",
   {
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    projectId: projectKey(),
     place: text("place").$type<StarterPlace>().notNull(),
     generatedAt: timestamp("generated_at").notNull(),
     /** The hash of the inputs Jev was asked over. */
@@ -4065,9 +3964,7 @@ export const starterOutcomes = sqliteTable(
   "starter_outcomes",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    projectId: projectKey(),
     /** The place the starter stood in. */
     place: text("place").$type<StarterPlace>().notNull(),
     text: text("text").notNull(),
@@ -4364,9 +4261,7 @@ export const streamRelay = sqliteTable("stream_relay", {
     .notNull()
     .default(sql`'[]'`),
   checkedAt: timestamp("checked_at"),
-  createdAt: timestamp("created_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
+  createdAt: stampedNow("created_at"),
 });
 
 /**
@@ -4449,9 +4344,7 @@ export const streamRelayJourney = sqliteTable("stream_relay_journey", {
   closed: text("closed").$type<"later" | "done-for-now">(),
   /** When the relay first went live on this journey: Settings shows its summary from then. */
   liveAt: timestamp("live_at"),
-  createdAt: timestamp("created_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
+  createdAt: stampedNow("created_at"),
 });
 
 /**
@@ -4520,9 +4413,7 @@ export const artifactUpdates = sqliteTable(
 export const leadTurns = sqliteTable("lead_turns", {
   /** The lead session. */
   instanceId: text("instance_id").primaryKey(),
-  projectId: text("project_id")
-    .notNull()
-    .references(() => projects.id, { onDelete: "cascade" }),
+  projectId: projectKey(),
   /** Whose turn it is: `you`, `kept` or `event`. */
   origin: text("origin").$type<WorkOrigin>().notNull(),
   /** The thread it answers; null for a turn no thread woke. */
@@ -4625,9 +4516,7 @@ export const sessionSubagents = sqliteTable(
 export const factUses = sqliteTable(
   "fact_uses",
   {
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    projectId: projectKey(),
     /** `knowledge/<topic>.md`. */
     path: text("path").notNull(),
     /** The fact's words, hashed (memory-facts.ts `factKey`): its parenthesis may change, its words not. */
@@ -4645,9 +4534,7 @@ export const factUses = sqliteTable(
 export const declinedRewrites = sqliteTable(
   "declined_rewrites",
   {
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    projectId: projectKey(),
     path: text("path").notNull(),
     /** The declined prose, hashed (memory-facts.ts `factKey` of the whole file). */
     words: text("words").notNull(),
@@ -4684,9 +4571,7 @@ export const leadCalls = sqliteTable(
   "lead_calls",
   {
     id: text("id").primaryKey(),
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    projectId: projectKey(),
     instanceId: text("instance_id").notNull(),
     /** The thread his turn answered: a task named in it owns the call's changes. */
     threadId: text("thread_id"),
@@ -4721,9 +4606,7 @@ export const projectThreads = sqliteTable(
   "project_threads",
   {
     id: text("id").primaryKey(),
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    projectId: projectKey(),
     /** The first message's opening words. */
     title: text("title").notNull(),
     /** A Setup thread of the project: opened when New project made it (caw.ts `setup`), or one the person asked Caw for Setup in (`project_setup`). */
@@ -4749,9 +4632,7 @@ export const cawTurns = sqliteTable(
   "caw_turns",
   {
     id: text("id").primaryKey(),
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    projectId: projectKey(),
     /** The thread that woke the turn; null when none did. */
     threadId: text("thread_id").references(
       (): AnySQLiteColumn => projectThreads.id,
@@ -4816,9 +4697,7 @@ export const threadMessageTasks = sqliteTable(
       .notNull()
       .references(() => threadMessages.id, { onDelete: "cascade" }),
     /** The message's thread's project, which a task id is unique within. */
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    projectId: projectKey(),
     taskId: text("task_id").notNull(),
   },
   (table) => [
@@ -5058,9 +4937,7 @@ export const connectionProjects = sqliteTable(
     connectionId: text("connection_id")
       .notNull()
       .references(() => connections.id, { onDelete: "cascade" }),
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    projectId: projectKey(),
   },
   (table) => [
     primaryKey({ columns: [table.connectionId, table.projectId] }),
@@ -5087,9 +4964,7 @@ export const inboundEvents = sqliteTable(
     deliveryKey: text("delivery_key").notNull(),
     /** `pr.opened`, `pr.merged`, `pr.closed`, `issue.opened`, `issue.closed`, `issue.labeled`, `comment.created`, `item`. */
     kind: text("kind").notNull(),
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    projectId: projectKey(),
     /** The event as ingress.ts normalised it, JSON, at most 64 KB (cut with a marker). */
     payload: text("payload").notNull(),
     receivedAt: timestamp("received_at").notNull(),
@@ -5119,9 +4994,7 @@ export const eventRoutes = sqliteTable(
   "event_routes",
   {
     id: text("id").primaryKey(),
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    projectId: projectKey(),
     /** A source, `*` matching any run of characters: `github:*`, `conn:linear:*`. */
     source: text("source").notNull(),
     /** The event's author, any case. */
@@ -5215,9 +5088,7 @@ export const connectorPolls = sqliteTable(
   "connector_polls",
   {
     id: text("id").primaryKey(),
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    projectId: projectKey(),
     connection: text("connection").notNull(),
     tool: text("tool").notNull(),
     args: storedJson(z.record(z.string(), z.unknown()))("args").notNull(),
@@ -5334,9 +5205,7 @@ export interface TrackerSynced {
 export const trackerLinks = sqliteTable(
   "tracker_links",
   {
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    projectId: projectKey(),
     /** The task, `tsk-12`. */
     taskId: text("task_id").notNull(),
     provider: text("provider")
@@ -5380,9 +5249,7 @@ export const trackerLinks = sqliteTable(
 export const trackerComments = sqliteTable(
   "tracker_comments",
   {
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    projectId: projectKey(),
     taskId: text("task_id").notNull(),
     remoteId: text("remote_id").notNull(),
     /** `cawco`: written on the task and posted to the issue; `tracker`: written on the issue and added to the task. */
@@ -5417,9 +5284,7 @@ export const actions = sqliteTable(
   "actions",
   {
     id: text("id").primaryKey(),
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    projectId: projectKey(),
     /** The task it is for, and moves on success; null for none. */
     taskId: text("task_id"),
     /** The connection's name, and the service and account it signed in as at proposal. */
@@ -5488,9 +5353,7 @@ export const relays = sqliteTable(
   {
     /** 128 random bits, base64url: the path's last part. */
     id: text("id").primaryKey(),
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    projectId: projectKey(),
     provider: text("provider").$type<RelayProvider>().notNull(),
     /** What deliveries are signed with: minted for a webhook the hub registers, else the owner's (`cawco relay set-secret`). */
     secret: sealedText("secret"),
@@ -5551,9 +5414,7 @@ export const parkedAsks = sqliteTable(
 export const projectBlocks = sqliteTable(
   "project_blocks",
   {
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    projectId: projectKey(),
     /** `board`, `table`, `pipeline` or `routines` (core `BLOCK_PAGES`). */
     page: text("page").$type<BlockPage>().notNull(),
     /** A built-in block's word, or `view:<name>`. */
@@ -5580,9 +5441,7 @@ export const projectBlocks = sqliteTable(
 export const viewProposals = sqliteTable(
   "view_proposals",
   {
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    projectId: projectKey(),
     /** The draft view's name (`views/drafts/<view>.oui`). */
     view: text("view").notNull(),
     page: text("page").$type<BlockPage>().notNull(),

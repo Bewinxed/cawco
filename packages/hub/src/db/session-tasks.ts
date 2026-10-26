@@ -3,7 +3,7 @@ import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { sessionTasks } from "./schema";
 
 /** One background task a session's process runs (schema `sessionTasks`). */
-export interface SessionTask {
+interface SessionTask {
   description: string;
   since: Date;
   taskId: string;

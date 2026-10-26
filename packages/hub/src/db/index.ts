@@ -70,6 +70,7 @@ import {
   REMOVED_MACHINE,
   RESTART_LOST,
   resolveRates,
+  ruleSettings,
   scoped,
   stoppedWords,
 } from "@cawco/core";
@@ -309,7 +310,7 @@ const MIGRATIONS_DIR = standalone
     );
 
 export type InstanceKind = (typeof instances.$inferSelect)["kind"];
-export type InstanceRole = NonNullable<(typeof instances.$inferSelect)["role"]>;
+type InstanceRole = NonNullable<(typeof instances.$inferSelect)["role"]>;
 /**
  * A session's stored row, its `cwd` named as {@link MachinePath}, which the
  * API's schema reads as the string it is on the wire.
@@ -358,7 +359,7 @@ export interface SourceNote {
   lastRefresh?: FleetRefresh | null;
 }
 
-export interface LimitNote {
+interface LimitNote {
   at: number;
   content: string;
   id: string;
@@ -366,14 +367,15 @@ export interface LimitNote {
 /** A machine's line as its row keeps it, with which kind it is. */
 export type MachineLine = LimitNote & { kind: MachineLineKind };
 export type { MachineLineKind } from "./schema";
+
 /** How many of a session's machine lines of each kind are kept. */
-export const LIMIT_NOTES_KEPT = 20;
+const LIMIT_NOTES_KEPT = 20;
 /** A fleet-watch line kept for a session ({@link DbShape.noteWatchLine}). */
-export type WatchLine = LimitNote;
+type WatchLine = LimitNote;
 /** How many of a session's fleet-watch lines are kept. */
-export const WATCH_LINES_KEPT = 20;
+const WATCH_LINES_KEPT = 20;
 /** A session's move line ({@link DbShape.noteMovedHere}). */
-export interface MovedHere {
+interface MovedHere {
   at: number;
   moved: string;
   stayed?: string;
@@ -385,7 +387,7 @@ export interface MovedHere {
  */
 export type BoardInstanceRow = PublicInstanceRow & { workLive: boolean | null };
 /** A session's whole row but its `tooling` ({@link PublicInstanceRow}). */
-export type OwnedInstanceRow = Omit<StoredInstanceRow, "tooling" | "commands">;
+type OwnedInstanceRow = Omit<StoredInstanceRow, "tooling" | "commands">;
 export type PlaceRow = typeof projectPlaces.$inferSelect;
 /** One device's last word on the person, as notifications.ts keeps it. */
 export type PresenceClientRow = typeof presenceClients.$inferSelect;
@@ -422,7 +424,7 @@ export type PushDeviceRow = Omit<
   "secret" | "key"
 > & { key: string; secret: string };
 export type ProjectOfferRow = typeof projectOffers.$inferSelect;
-export type SessionPlanRow = typeof sessionPlans.$inferSelect;
+type SessionPlanRow = typeof sessionPlans.$inferSelect;
 export type PlanChangeRow = typeof planChanges.$inferSelect;
 /** What a session has done that taints its memory notes (memory.ts), its open subagents with it. */
 export type SessionTaintRow = typeof sessionTaints.$inferSelect & {
@@ -435,7 +437,7 @@ export type LeadCallRow = typeof leadCalls.$inferSelect;
  * (`lead_turn_reading`), and its unread wakes by send uuid, each the thread
  * it woke or `""` for none (`lead_turn_waiting`).
  */
-export type LeadTurnRow = typeof leadTurns.$inferSelect & {
+type LeadTurnRow = typeof leadTurns.$inferSelect & {
   reading: string[];
   waiting: Record<string, string>;
 };
@@ -454,7 +456,7 @@ export type MoveRow = Omit<
   "state" | "sourceMachineId" | "targetMachineId" | "stopOn"
 > & { state: MoveState };
 export type WorkItemRow = typeof workItems.$inferSelect;
-export type QueuedTaskStartRow = typeof queuedTaskStarts.$inferSelect;
+type QueuedTaskStartRow = typeof queuedTaskStarts.$inferSelect;
 /**
  * A queued delegate as the queue hands it out: its request whole again,
  * the task, session id and globs it stands under put back in it from their
@@ -469,14 +471,14 @@ export type WorkspaceRow = Omit<
   typeof workspaces.$inferSelect,
   "path" | "repoRoot"
 > & { path: MachinePath; repoRoot: MachinePath };
-export type SessionIdentityRow = typeof sessionIdentities.$inferSelect;
+type SessionIdentityRow = typeof sessionIdentities.$inferSelect;
 
 /**
  * A session the returning daemon no longer carries. `resumes` is the whole
  * question: the SDK still has its conversation, so the process can be started
  * again on top of it rather than the work being lost with the restart.
  */
-export interface SettledInstance {
+interface SettledInstance {
   resumes: boolean;
   row: typeof instances.$inferSelect;
 }
@@ -529,7 +531,7 @@ export const isSessionSend = (row: SentMessageRow): row is SessionSendRow =>
   row.instanceId !== null;
 
 /** What folding a session's former rows into it did, for the hub's log. */
-export interface FoldedSession {
+interface FoldedSession {
   /** The former rows whose process may still run: each is ended at its machine's register, then goes. */
   ending: string[];
   formers: string[];
@@ -539,7 +541,7 @@ export interface FoldedSession {
 }
 
 /** What a continuation's new session took on from the session it continues ({@link DbShape.adoptChildren}). */
-export interface AdoptedChildren {
+interface AdoptedChildren {
   asks: number;
   items: number;
   queuedItems: number;
@@ -632,7 +634,7 @@ export interface HookVersionMaterial {
 }
 
 /** A stored OpenCode Go reading, one per machine (USAGE-SPEC.md §6). */
-export type UsageLimitRow = typeof usageLimits.$inferSelect;
+type UsageLimitRow = typeof usageLimits.$inferSelect;
 
 export interface DbShape {
   /** Accounts, where they are signed in, how they route, and their limits. */
@@ -2748,16 +2750,7 @@ const moveOf = ({
 /** A stored rule row back into the shape the fleet and the dashboard share. */
 const ruleOf = (row: typeof rules.$inferSelect): Rule => ({
   id: row.id,
-  name: row.name,
-  enabled: row.enabled,
-  pattern: row.pattern,
-  matchKind: row.matchKind,
-  caseSensitive: row.caseSensitive,
-  wholeWord: row.wholeWord,
-  watch: row.watch,
-  reply: row.reply,
-  timing: row.timing,
-  repeat: row.repeat,
+  ...ruleSettings(row),
   scope: {
     ...(row.scopeMachineId ? { machineId: row.scopeMachineId } : {}),
     ...(row.scopeProjectId ? { projectId: row.scopeProjectId } : {}),
@@ -2772,16 +2765,7 @@ const ruleOf = (row: typeof rules.$inferSelect): Rule => ({
 /** A rule as its stored row: its own `createdAt`, written now. */
 const ruleValues = (rule: Rule): typeof rules.$inferInsert => ({
   id: rule.id,
-  name: rule.name,
-  enabled: rule.enabled,
-  pattern: rule.pattern,
-  matchKind: rule.matchKind,
-  caseSensitive: rule.caseSensitive,
-  wholeWord: rule.wholeWord,
-  watch: rule.watch,
-  reply: rule.reply,
-  timing: rule.timing,
-  repeat: rule.repeat,
+  ...ruleSettings(rule),
   scopeMachineId: rule.scope.machineId || null,
   scopeProjectId: rule.scope.projectId || null,
   scopeHarness: rule.scope.harness || null,
@@ -2809,14 +2793,10 @@ const skillMeta = (
 ): FleetSkillMeta => ({
   name: row.name,
   source: row.source,
-  enabled: row.enabled,
-  ...(row.hash ? { hash: row.hash } : {}),
-  ...(row.bytes === null ? {} : { bytes: row.bytes }),
-  ...(row.error ? { error: row.error } : {}),
   ...(row.projectId
     ? { projectId: row.projectId, scope: row.scope ?? "project" }
     : {}),
-  ...versioned(row),
+  ...fetched(row),
 });
 
 /** The columns a skill and a plugin row keep their {@link FleetVersioned} in. */
@@ -2842,6 +2822,19 @@ const versioned = (row: VersionColumns): FleetVersioned => ({
   ...(row.hash && row.latestHash && row.latestHash !== row.hash
     ? { updateAvailable: true }
     : {}),
+});
+
+/** A skill's or a plugin's row as both read: whether it is on, its last fetch, and its versions. */
+const fetched = (
+  row: VersionColumns &
+    Pick<typeof skills.$inferSelect, "enabled" | "bytes" | "error">
+): Pick<FleetPlugin, "enabled" | "hash" | "bytes" | "error"> &
+  FleetVersioned => ({
+  enabled: row.enabled,
+  ...(row.hash ? { hash: row.hash } : {}),
+  ...(row.bytes === null ? {} : { bytes: row.bytes }),
+  ...(row.error ? { error: row.error } : {}),
+  ...versioned(row),
 });
 
 /** A row nothing has fetched or checked yet. */
@@ -2970,10 +2963,10 @@ const harnessConfigOf = (
       ];
 
 /** A hub place's machine: the hub itself, which is no machine of the fleet. */
-export const HUB_PLACE_MACHINE = "hub";
+const HUB_PLACE_MACHINE = "hub";
 
 /** A fleet MCP server's detail between saving a new config and the server's first answer. */
-export const MCP_NOT_YET_REACHED = "The hub has not reached this server yet.";
+const MCP_NOT_YET_REACHED = "The hub has not reached this server yet.";
 
 /**
  * `instances.turn_open_at` of a session from before the hub kept the turn it
@@ -2999,8 +2992,7 @@ export const checkoutOf = (project: ProjectRow): PlaceRow | undefined =>
   project.places.find((place) => place.isPrimary);
 
 /** The project's folder on the hub, the place every project has from the start. */
-export const hubPlacePath = (projectId: string): HubFolder =>
-  `projects/${projectId}`;
+const hubPlacePath = (projectId: string): HubFolder => `projects/${projectId}`;
 
 /**
  * Each project with its places, the primary first, then oldest first, and
@@ -3229,11 +3221,16 @@ const make = async (path: string): Promise<DbShape> => {
         and(eq(cawTurns.projectId, projectId), sql`${cawTurns.at} >= ${since}`)
       )
       .get()?.usd ?? 0;
-  const listedInstances = () =>
+  /** A row its machine still holds: not removed, not discarded, not being ended (a stop keeps it). */
+  const keptInstances = () =>
     and(
       eq(instances.machineRemoved, false),
       ne(instances.status, "discarded"),
-      or(isNull(instances.endIntent), eq(instances.endIntent, "stop")),
+      or(isNull(instances.endIntent), eq(instances.endIntent, "stop"))
+    );
+  const listedInstances = () =>
+    and(
+      keptInstances(),
       or(
         // A move's row is work in hand however long its yes or its copy takes;
         // a stopping one however long its away machine takes to confirm.
@@ -3856,18 +3853,41 @@ const make = async (path: string): Promise<DbShape> => {
    * `to` registered already: then that row is the current one, and `from`'s
    * goes with its reports.
    */
+  /** Whether the hub keeps a row for the machine. */
+  const machineKept = (tx: Tx, machineId: string): boolean =>
+    tx
+      .select({ machineId: agents.machineId })
+      .from(agents)
+      .where(eq(agents.machineId, machineId))
+      .get() !== undefined;
+
+  /** A machine's rows filed under one of `statuses`, owed no spawn, whose process `listed` leaves out. */
+  const claimingProcesses = (
+    machineId: string,
+    statuses: (typeof instances.$inferSelect.status)[],
+    listed: string[]
+  ) =>
+    db
+      .select()
+      .from(instances)
+      .where(
+        and(
+          eq(instances.machineId, machineId),
+          eq(instances.machineRemoved, false),
+          isNull(instances.owedSpawn),
+          inArray(instances.status, statuses),
+          listed.length > 0 ? notInArray(instances.id, listed) : undefined
+        )
+      )
+      .all();
+
   const moveMachineRow = (tx: Tx, from: string, to: string, note: Moved) => {
     const row = tx
       .select()
       .from(agents)
       .where(eq(agents.machineId, from))
       .get();
-    const current = tx
-      .select({ machineId: agents.machineId })
-      .from(agents)
-      .where(eq(agents.machineId, to))
-      .get();
-    if (row && !current) {
+    if (row && !machineKept(tx, to)) {
       tx.insert(agents)
         .values({ ...row, machineId: to })
         .run();
@@ -4188,13 +4208,7 @@ const make = async (path: string): Promise<DbShape> => {
   const putToolCells = (machineId: string, statuses: ToolStatus[]): void => {
     db.transaction((tx) => {
       // A machine the hub keeps no row for has no cells to keep.
-      if (
-        !tx
-          .select({ machineId: agents.machineId })
-          .from(agents)
-          .where(eq(agents.machineId, machineId))
-          .get()
-      ) {
+      if (!machineKept(tx, machineId)) {
         return;
       }
       for (const status of statuses) {
@@ -4719,14 +4733,7 @@ const make = async (path: string): Promise<DbShape> => {
       db
         .select({ tooling: instances.tooling })
         .from(instances)
-        .where(
-          and(
-            eq(instances.id, id),
-            eq(instances.machineRemoved, false),
-            ne(instances.status, "discarded"),
-            or(isNull(instances.endIntent), eq(instances.endIntent, "stop"))
-          )
-        )
+        .where(and(eq(instances.id, id), keptInstances()))
         .get()?.tooling,
     ownedInstance: (id, machineId) =>
       db
@@ -5575,14 +5582,7 @@ const make = async (path: string): Promise<DbShape> => {
       const visible = db
         .select({ id: instances.id })
         .from(instances)
-        .where(
-          and(
-            eq(instances.id, id),
-            ne(instances.status, "discarded"),
-            eq(instances.machineRemoved, false),
-            or(isNull(instances.endIntent), eq(instances.endIntent, "stop"))
-          )
-        )
+        .where(and(eq(instances.id, id), keptInstances()))
         .get();
       if (!visible) {
         return;
@@ -6232,19 +6232,11 @@ const make = async (path: string): Promise<DbShape> => {
           .run();
       }
 
-      const orphans = db
-        .select()
-        .from(instances)
-        .where(
-          and(
-            eq(instances.machineId, machineId),
-            eq(instances.machineRemoved, false),
-            isNull(instances.owedSpawn),
-            inArray(instances.status, ["running", "starting", "unknown"]),
-            liveIds.length > 0 ? notInArray(instances.id, liveIds) : undefined
-          )
-        )
-        .all();
+      const orphans = claimingProcesses(
+        machineId,
+        ["running", "starting", "unknown"],
+        liveIds
+      );
 
       const catalog = resumable && new Set(resumable);
       const held = new Set(heldIds);
@@ -6333,19 +6325,7 @@ const make = async (path: string): Promise<DbShape> => {
       // The beat's silence, which is the half that was missing. A row claiming a
       // process the machine neither lists nor holds has no process; the only
       // question left is whether the conversation outlived it.
-      const gone = db
-        .select()
-        .from(instances)
-        .where(
-          and(
-            eq(instances.machineId, machineId),
-            eq(instances.machineRemoved, false),
-            isNull(instances.owedSpawn),
-            inArray(instances.status, ["running", "starting"]),
-            alive.length > 0 ? notInArray(instances.id, alive) : undefined
-          )
-        )
-        .all()
+      const gone = claimingProcesses(machineId, ["running", "starting"], alive)
         // Only `starting` gets grace, measured from when the spawn was issued,
         // not the session's last activity. Without an issue-time there is no grace.
         .filter(
@@ -6483,13 +6463,7 @@ const make = async (path: string): Promise<DbShape> => {
     // report did not name; every other harness stays as it was.
     mergeAgentHarnesses: (machineId, reports) => {
       db.transaction((tx) => {
-        if (
-          !tx
-            .select({ machineId: agents.machineId })
-            .from(agents)
-            .where(eq(agents.machineId, machineId))
-            .get()
-        ) {
+        if (!machineKept(tx, machineId)) {
           return;
         }
         const latest = [
@@ -6962,11 +6936,7 @@ const make = async (path: string): Promise<DbShape> => {
         .all()
         .map((row) => ({
           id: row.id,
-          enabled: row.enabled,
-          ...(row.hash ? { hash: row.hash } : {}),
-          ...(row.bytes === null ? {} : { bytes: row.bytes }),
-          ...(row.error ? { error: row.error } : {}),
-          ...versioned(row),
+          ...fetched(row),
         })),
     putPlugin: ({ id, enabled }) => {
       const plugin: FleetPlugin = { id, enabled: enabled ?? true };
@@ -7651,14 +7621,7 @@ const make = async (path: string): Promise<DbShape> => {
         : db
             .select(boardColumns)
             .from(instances)
-            .where(
-              and(
-                inArray(instances.id, ids),
-                eq(instances.machineRemoved, false),
-                ne(instances.status, "discarded"),
-                or(isNull(instances.endIntent), eq(instances.endIntent, "stop"))
-              )
-            )
+            .where(and(inArray(instances.id, ids), keptInstances()))
             .all()
             .map(asListed),
     projectHolding: (machineId, cwd) => {
@@ -7774,28 +7737,14 @@ const make = async (path: string): Promise<DbShape> => {
       return db
         .select(publicColumns)
         .from(instances)
-        .where(
-          and(
-            inArray(instances.id, ids),
-            eq(instances.machineRemoved, false),
-            ne(instances.status, "discarded"),
-            or(isNull(instances.endIntent), eq(instances.endIntent, "stop"))
-          )
-        )
+        .where(and(inArray(instances.id, ids), keptInstances()))
         .all();
     },
     instanceBySessionId: (sessionId) =>
       db
         .select(publicColumns)
         .from(instances)
-        .where(
-          and(
-            eq(instances.sessionId, sessionId),
-            eq(instances.machineRemoved, false),
-            ne(instances.status, "discarded"),
-            or(isNull(instances.endIntent), eq(instances.endIntent, "stop"))
-          )
-        )
+        .where(and(eq(instances.sessionId, sessionId), keptInstances()))
         .limit(1)
         .all()[0],
     unnamedSessions: (machineId) =>

@@ -5,7 +5,7 @@ import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { instances, turnUsage } from "./schema";
 
 /** Two weeks: two weekly windows, enough to measure a rate across a reset. */
-export const TURN_USAGE_RETENTION_MS = 14 * DAY_MS;
+const TURN_USAGE_RETENTION_MS = 14 * DAY_MS;
 
 export type TurnUsageRow = typeof turnUsage.$inferSelect;
 

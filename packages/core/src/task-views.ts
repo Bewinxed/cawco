@@ -14,10 +14,8 @@ import type { WaitKind } from "./wait-targets";
 import type { taskLinkWords } from "./words/task-links";
 import type { WorkItemState } from "./work-items";
 
-// Not exported: the hub's db schema.ts exports the stored one, of the same
-// name and shape, and the OpenAPI schema is named for it.
 /** One card or pin an attempt was dispatched on, and the value it settled with (`workItems.waitedOn`). */
-interface WaitWitness {
+export interface WaitWitness {
   /** The wait as its task's file keeps it (wait-targets.ts). */
   target: string;
   value: string;

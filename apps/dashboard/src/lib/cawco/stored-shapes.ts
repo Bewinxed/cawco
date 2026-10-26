@@ -146,7 +146,7 @@ import type { KeptUpdates as KeptUpdatesType } from "./updates/updates.svelte";
 import type { Visit as VisitType } from "./working-set.svelte";
 import type { SessionContext as SessionContextType } from "./workspace/tree";
 
-export const AtLimitShape = z.object({
+const AtLimitShape = z.object({
   delegateWork: z.literal("move"),
   move: z.boolean(),
   moveWholeUnderK: z.number(),
@@ -156,26 +156,24 @@ export const AtLimitShape = z.object({
 });
 export const AtLimitSchema: z.ZodType<AtLimitType> = AtLimitShape;
 
-export const PlacementStrategyShape = z.enum([
+const PlacementStrategyShape = z.enum([
   "pinned",
   "fill-first",
   "spread",
   "soonest-reset",
 ]);
-export const PlacementStrategySchema: z.ZodType<PlacementStrategyType> =
-  PlacementStrategyShape;
 
-export const StrategyChoiceShape = z.object({
+const StrategyChoiceShape = z.object({
   pinnedAccountId: z.string().optional(),
   strategy: PlacementStrategyShape,
 });
 export const StrategyChoiceSchema: z.ZodType<StrategyChoiceType> =
   StrategyChoiceShape;
 
-export const HarnessKindShape = z.enum(HARNESSES);
+const HarnessKindShape = z.enum(HARNESSES);
 export const HarnessKindSchema: z.ZodType<HarnessKindType> = HarnessKindShape;
 
-export const ContinueSourceShape = z.object({
+const ContinueSourceShape = z.object({
   cwd: z.string(),
   harness: HarnessKindShape,
   instanceId: z.string(),
@@ -186,20 +184,14 @@ export const ContinueSourceShape = z.object({
 export const ContinueSourceSchema: z.ZodType<ContinueSourceType> =
   ContinueSourceShape;
 
-export const EmbedShapeShape = z.object({
-  h: z.number(),
-  w: z.number().nullable(),
-});
-export const EmbedShapeSchema: z.ZodType<EmbedShapeType> = EmbedShapeShape;
+const EmbedShapeShape = z.object({ h: z.number(), w: z.number().nullable() });
 
-export const CanvasShapesShape = z.object({
+const CanvasShapesShape = z.object({
   drawn: z.record(z.string(), z.object({ h: z.number(), w: z.number() })),
   said: z.record(z.string(), EmbedShapeShape),
 });
-export const CanvasShapesSchema: z.ZodType<CanvasShapesType> =
-  CanvasShapesShape;
 
-export const MediaArtifactShape = z
+const MediaArtifactShape = z
   .object({
     embed: z.string().optional(),
     kind: z.string(),
@@ -210,15 +202,14 @@ export const MediaArtifactShape = z
 export const MediaArtifactSchema: z.ZodType<MediaArtifactType> =
   MediaArtifactShape;
 
-export const DraftCanvasShape = z.object({
+const DraftCanvasShape = z.object({
   folded: z.boolean(),
   id: z.string(),
   name: z.string(),
   thumb: z.string().nullable(),
 });
-export const DraftCanvasSchema: z.ZodType<DraftCanvasType> = DraftCanvasShape;
 
-export const PendingFileShape = z.object({
+const PendingFileShape = z.object({
   as: z.enum(["image", "text"]).optional(),
   blob: z.instanceof(Blob).optional(),
   error: z.string().optional(),
@@ -232,24 +223,21 @@ export const PendingFileShape = z.object({
   size: z.number(),
   width: z.number().optional(),
 });
-export const PendingFileSchema: z.ZodType<PendingFileType> = PendingFileShape;
 
-export const StoredFileShape = PendingFileShape.pick({
+const StoredFileShape = PendingFileShape.pick({
   name: true,
   mediaType: true,
   size: true,
   ref: true,
 }).extend({ blob: z.instanceof(Blob).optional() });
-export const StoredFileSchema: z.ZodType<StoredFileType> = StoredFileShape;
 
-export const PendingTextShape = z.object({
+const PendingTextShape = z.object({
   content: z.string(),
   kind: z.literal("text"),
   name: z.string(),
 });
-export const PendingTextSchema: z.ZodType<PendingTextType> = PendingTextShape;
 
-export const DraftRecordShape = z.object({
+const DraftRecordShape = z.object({
   canvas: DraftCanvasShape.nullable().optional(),
   files: z.array(StoredFileShape).optional(),
   images: z.array(
@@ -267,7 +255,7 @@ export const DraftRecordShape = z.object({
 });
 export const DraftRecordSchema: z.ZodType<DraftRecordType> = DraftRecordShape;
 
-export const PairingStageShape = z.union([
+const PairingStageShape = z.union([
   z.object({
     kind: z.literal("waiting"),
     expiresAt: z.number(),
@@ -279,28 +267,22 @@ export const PairingStageShape = z.union([
   z.object({ kind: z.literal("asking") }),
   z.object({ kind: z.enum(["denied", "expired"]) }),
 ]);
-export const PairingStageSchema: z.ZodType<PairingStageType> =
-  PairingStageShape;
 
-export const KeptPairingShape = z.object({
+const KeptPairingShape = z.object({
   deviceCode: z.string().optional(),
   interval: z.number().optional(),
   stage: PairingStageShape,
 });
 export const KeptPairingSchema: z.ZodType<KeptPairingType> = KeptPairingShape;
 
-export const PlanEditKindShape = z.enum(PLAN_EDIT_KINDS);
-export const PlanEditKindSchema: z.ZodType<PlanEditKindType> =
-  PlanEditKindShape;
+const PlanEditKindShape = z.enum(PLAN_EDIT_KINDS);
 
-export const PlanReceiverShape = z.union([
+const PlanReceiverShape = z.union([
   z.object({ kind: z.literal("session"), instanceId: z.string() }),
   z.object({ kind: z.literal("caw"), projectId: z.string() }),
 ]);
-export const PlanReceiverSchema: z.ZodType<PlanReceiverType> =
-  PlanReceiverShape;
 
-export const PlanChangeShape = z.object({
+const PlanChangeShape = z.object({
   at: z.string(),
   id: z.string(),
   kind: PlanEditKindShape,
@@ -311,23 +293,16 @@ export const PlanChangeShape = z.object({
   was: z.string(),
   words: z.string(),
 });
-export const PlanChangeSchema: z.ZodType<PlanChangeType> = PlanChangeShape;
 
-export const PlanSpecShape = z.object({ at: z.string(), markdown: z.string() });
-export const PlanSpecSchema: z.ZodType<PlanSpecType> = PlanSpecShape;
+const PlanSpecShape = z.object({ at: z.string(), markdown: z.string() });
 
-export const PlanCommentShape = z.object({ at: z.string(), text: z.string() });
-export const PlanCommentSchema: z.ZodType<PlanCommentType> = PlanCommentShape;
+const PlanCommentShape = z.object({ at: z.string(), text: z.string() });
 
-export const PlanStepPriorityShape = z.enum(PLAN_STEP_PRIORITIES);
-export const PlanStepPrioritySchema: z.ZodType<PlanStepPriorityType> =
-  PlanStepPriorityShape;
+const PlanStepPriorityShape = z.enum(PLAN_STEP_PRIORITIES);
 
-export const PlanStepStatusShape = z.enum(PLAN_STEP_STATUSES);
-export const PlanStepStatusSchema: z.ZodType<PlanStepStatusType> =
-  PlanStepStatusShape;
+const PlanStepStatusShape = z.enum(PLAN_STEP_STATUSES);
 
-export const PlanStepShape = z.object({
+const PlanStepShape = z.object({
   comments: z.array(PlanCommentShape).optional(),
   content: z.string(),
   depth: z.number(),
@@ -337,9 +312,8 @@ export const PlanStepShape = z.object({
   waitsOn: z.string().optional(),
   waitsOnPage: z.string().optional(),
 });
-export const PlanStepSchema: z.ZodType<PlanStepType> = PlanStepShape;
 
-export const TaskTodoShape = z.object({
+const TaskTodoShape = z.object({
   depth: z.number(),
   done: z.boolean(),
   id: z.string().nullable(),
@@ -348,9 +322,8 @@ export const TaskTodoShape = z.object({
   proposed: z.boolean(),
   text: z.string(),
 });
-export const TaskTodoSchema: z.ZodType<TaskTodoType> = TaskTodoShape;
 
-export const SessionPlanShape = z.object({
+const SessionPlanShape = z.object({
   awayUnseen: z.object({ since: z.string() }).optional(),
   changes: z.array(PlanChangeShape).optional(),
   source: z.literal("cawco"),
@@ -361,14 +334,14 @@ export const SessionPlanShape = z.object({
 });
 export const SessionPlanSchema: z.ZodType<SessionPlanType> = SessionPlanShape;
 
-export const ComposeTargetShape = z.object({
+const ComposeTargetShape = z.object({
   anchor: z.looseObject({ selector: z.string() }),
   elements: z.array(z.unknown()),
 });
 export const ComposeTargetSchema: z.ZodType<ComposeTargetType> =
   ComposeTargetShape;
 
-export const CommentAttachmentShape = z.object({
+const CommentAttachmentShape = z.object({
   height: z.number().optional(),
   kind: z.enum(["image", "text", "file"]),
   mediaType: z.string(),
@@ -377,10 +350,8 @@ export const CommentAttachmentShape = z.object({
   size: z.number(),
   width: z.number().optional(),
 });
-export const CommentAttachmentSchema: z.ZodType<CommentAttachmentType> =
-  CommentAttachmentShape;
 
-export const ThreadEntryShape = z.object({
+const ThreadEntryShape = z.object({
   asks: z.literal(true).optional(),
   at: z.string(),
   attachments: z.array(CommentAttachmentShape).optional(),
@@ -392,27 +363,22 @@ export const ThreadEntryShape = z.object({
 });
 export const ThreadEntrySchema: z.ZodType<ThreadEntryType> = ThreadEntryShape;
 
-export const BrowserKeyShape = z.union([
+const BrowserKeyShape = z.union([
   z.templateLiteral(["project:", z.string()]),
   z.templateLiteral(["machine:", z.string()]),
 ]);
-export const BrowserKeySchema: z.ZodType<BrowserKeyType> = BrowserKeyShape;
 
-export const BrowserAskFrameShape = z.object({
+const BrowserAskFrameShape = z.object({
   artifactId: z.string(),
   key: BrowserKeyShape,
   machineId: z.string(),
   origin: z.string(),
   reason: z.string(),
 });
-export const BrowserAskFrameSchema: z.ZodType<BrowserAskFrameType> =
-  BrowserAskFrameShape;
 
-export const BrowserHostKindShape = z.enum(["container", "local"]);
-export const BrowserHostKindSchema: z.ZodType<BrowserHostKindType> =
-  BrowserHostKindShape;
+const BrowserHostKindShape = z.enum(["container", "local"]);
 
-export const BrowserStateShape = z.enum([
+const BrowserStateShape = z.enum([
   "pulling",
   "building",
   "starting",
@@ -421,10 +387,8 @@ export const BrowserStateShape = z.enum([
   "asleep",
   "failed",
 ]);
-export const BrowserStateSchema: z.ZodType<BrowserStateType> =
-  BrowserStateShape;
 
-export const ListedBrowserShape = z.object({
+const ListedBrowserShape = z.object({
   host: BrowserHostKindShape,
   key: BrowserKeyShape,
   lastUsedAt: z.number(),
@@ -446,14 +410,10 @@ export const ListedBrowserShape = z.object({
     .nullable(),
   why: z.string().optional(),
 });
-export const ListedBrowserSchema: z.ZodType<ListedBrowserType> =
-  ListedBrowserShape;
 
-export const ArtifactKindShape = z.enum(ARTIFACT_KINDS);
-export const ArtifactKindSchema: z.ZodType<ArtifactKindType> =
-  ArtifactKindShape;
+const ArtifactKindShape = z.enum(ARTIFACT_KINDS);
 
-export const PreviewSourceShape = z.union([
+const PreviewSourceShape = z.union([
   z.object({
     port: z.number(),
     path: z.string().optional(),
@@ -464,14 +424,10 @@ export const PreviewSourceShape = z.union([
   z.object({ dir: z.string(), path: z.string().optional() }),
   z.object({ page: z.string() }),
 ]);
-export const PreviewSourceSchema: z.ZodType<PreviewSourceType> =
-  PreviewSourceShape;
 
-export const StageErrorKindShape = z.enum(["missing", "compile", "page"]);
-export const StageErrorKindSchema: z.ZodType<StageErrorKindType> =
-  StageErrorKindShape;
+const StageErrorKindShape = z.enum(["missing", "compile", "page"]);
 
-export const StageErrorShape = z.object({
+const StageErrorShape = z.object({
   column: z.number().nullable(),
   file: z.string(),
   frame: z.string().nullable(),
@@ -480,18 +436,16 @@ export const StageErrorShape = z.object({
   message: z.string(),
   sheets: z.array(z.string()),
 });
-export const StageErrorSchema: z.ZodType<StageErrorType> = StageErrorShape;
 
-export const StageStatusShape = z.enum([
+const StageStatusShape = z.enum([
   "starting",
   "waking",
   "live",
   "error",
   "asleep",
 ]);
-export const StageStatusSchema: z.ZodType<StageStatusType> = StageStatusShape;
 
-export const StageStateOfShape = z.object({
+const StageStateOfShape = z.object({
   at: z.string(),
   dir: z.string(),
   errors: z.array(StageErrorShape),
@@ -499,33 +453,25 @@ export const StageStateOfShape = z.object({
   status: StageStatusShape,
 });
 
-export const StageToolchainShape = z.enum(["vite", "astro", "nuxt"]);
-export const StageToolchainSchema: z.ZodType<StageToolchainType> =
-  StageToolchainShape;
+const StageToolchainShape = z.enum(["vite", "astro", "nuxt"]);
 
-export const SheetStageStateShape = StageStateOfShape.extend({
+const SheetStageStateShape = StageStateOfShape.extend({
   runs: z.literal("sheet"),
   toolchain: StageToolchainShape,
 });
 
-export const ServerStageStateShape = StageStateOfShape.extend({
+const ServerStageStateShape = StageStateOfShape.extend({
   runs: z.literal("serve"),
 });
 
-export const StageStateShape = z.union([
-  SheetStageStateShape,
-  ServerStageStateShape,
-]);
-export const StageStateSchema: z.ZodType<StageStateType> = StageStateShape;
+const StageStateShape = z.union([SheetStageStateShape, ServerStageStateShape]);
 
-export const TailnetOriginShape = z.object({
+const TailnetOriginShape = z.object({
   hosts: z.array(z.string()),
   origin: z.string(),
 });
-export const TailnetOriginSchema: z.ZodType<TailnetOriginType> =
-  TailnetOriginShape;
 
-export const PreviewFrameShape = z.object({
+const PreviewFrameShape = z.object({
   artifact: z.object({
     ask: z.string().optional(),
     id: z.string(),
@@ -544,10 +490,8 @@ export const PreviewFrameShape = z.object({
   state: z.enum(["open", "closed"]),
   tailnet: TailnetOriginShape.optional(),
 });
-export const PreviewFrameSchema: z.ZodType<PreviewFrameType> =
-  PreviewFrameShape;
 
-export const ArtifactSessionFrameShape = z.object({
+const ArtifactSessionFrameShape = z.object({
   ask: z
     .object({ browserAsk: BrowserAskFrameShape, requestId: z.string() })
     .nullable(),
@@ -573,10 +517,8 @@ export const ArtifactSessionFrameShape = z.object({
   type: z.literal("artifact.session"),
   working: z.boolean(),
 });
-export const ArtifactSessionFrameSchema: z.ZodType<ArtifactSessionFrameType> =
-  ArtifactSessionFrameShape;
 
-export const ArtifactSessionHeardShape = z.union([
+const ArtifactSessionHeardShape = z.union([
   ArtifactSessionFrameShape,
   z.object({
     payload: z.union([
@@ -596,36 +538,25 @@ export const ArtifactSessionHeardShape = z.union([
 export const ArtifactSessionHeardSchema: z.ZodType<ArtifactSessionHeardType> =
   ArtifactSessionHeardShape;
 
-export const PreviewSchemeShape = z.enum(PREVIEW_SCHEMES);
-export const PreviewSchemeSchema: z.ZodType<PreviewSchemeType> =
-  PreviewSchemeShape;
+const PreviewSchemeShape = z.enum(PREVIEW_SCHEMES);
 
-export const CanvasWidthShape = z.enum(["own", "390", "768", "1280", "all"]);
-export const CanvasWidthSchema: z.ZodType<CanvasWidthType> = CanvasWidthShape;
+const CanvasWidthShape = z.enum(["own", "390", "768", "1280", "all"]);
 
 export const CanvasChosenShape = z.object({
   motion: z.enum(["on", "reduce"]),
   scheme: PreviewSchemeShape,
   width: CanvasWidthShape,
 });
-export const CanvasChosenSchema: z.ZodType<CanvasChosenType> =
-  CanvasChosenShape;
 
 export const CalledArtifactShape = z.object({
   id: z.string(),
   kind: ArtifactKindShape.optional(),
   name: z.string().optional(),
 });
-export const CalledArtifactSchema: z.ZodType<CalledArtifactType> =
-  CalledArtifactShape;
 
-export const PinShape = z.object({
-  id: z.string(),
-  kind: z.literal("project"),
-});
+const PinShape = z.object({ id: z.string(), kind: z.literal("project") });
 
-export const RailSortShape = z.enum(["recent", "name", "state"]);
-export const RailSortSchema: z.ZodType<RailSortType> = RailSortShape;
+const RailSortShape = z.enum(["recent", "name", "state"]);
 
 export const RailLayoutShape = z.object({
   delegates: z.boolean(),
@@ -633,72 +564,52 @@ export const RailLayoutShape = z.object({
   pins: z.array(PinShape),
   sort: RailSortShape,
 });
-export const RailLayoutSchema: z.ZodType<RailLayoutType> = RailLayoutShape;
 
-export const CommandRefusalShape = z.object({
+const CommandRefusalShape = z.object({
   asked: z.unknown().optional(),
   reason: z.string(),
 });
 export const CommandRefusalSchema: z.ZodType<CommandRefusalType> =
   CommandRefusalShape;
 
-export const RoutineActShape = z.enum([
-  "run",
-  "pause",
-  "resume",
-  "keep",
-  "remove",
-]);
-export const RoutineActSchema: z.ZodType<RoutineActType> = RoutineActShape;
+const RoutineActShape = z.enum(["run", "pause", "resume", "keep", "remove"]);
 
-export const RoutineRefusalShape = z.object({
+const RoutineRefusalShape = z.object({
   act: RoutineActShape,
   reason: z.string(),
 });
 export const RoutineRefusalSchema: z.ZodType<RoutineRefusalType> =
   RoutineRefusalShape;
 
-export const TextAttachmentShape = z.object({
+const TextAttachmentShape = z.object({
   content: z.string(),
   kind: z.literal("text"),
   name: z.string(),
 });
-export const TextAttachmentSchema: z.ZodType<TextAttachmentType> =
-  TextAttachmentShape;
 
-export const FileAttachmentShape = z.object({
+const FileAttachmentShape = z.object({
   kind: z.literal("file"),
   mediaType: z.string(),
   name: z.string(),
   ref: z.string(),
   size: z.number(),
 });
-export const FileAttachmentSchema: z.ZodType<FileAttachmentType> =
-  FileAttachmentShape;
 
-export const SendAttachmentShape = z.union([
-  TextAttachmentShape,
-  FileAttachmentShape,
-]);
-export const SendAttachmentSchema: z.ZodType<SendAttachmentType> =
-  SendAttachmentShape;
+const SendAttachmentShape = z.union([TextAttachmentShape, FileAttachmentShape]);
 
-export const UserAnswersShape = z.record(
+const UserAnswersShape = z.record(
   z.string(),
   z.union([z.string(), z.array(z.string())])
 );
-export const UserAnswersSchema: z.ZodType<UserAnswersType> = UserAnswersShape;
 
-export const UserQuestionShape = z.object({
+const UserQuestionShape = z.object({
   header: z.string(),
   multiSelect: z.boolean(),
   options: z.array(z.object({ label: z.string(), description: z.string() })),
   question: z.string(),
 });
-export const UserQuestionSchema: z.ZodType<UserQuestionType> =
-  UserQuestionShape;
 
-export const UserQuestionAnsweredShape = z.object({
+const UserQuestionAnsweredShape = z.object({
   annotations: z
     .record(
       z.string(),
@@ -710,24 +621,18 @@ export const UserQuestionAnsweredShape = z.object({
   questions: z.array(UserQuestionShape),
   response: z.string().optional(),
 });
-export const UserQuestionAnsweredSchema: z.ZodType<UserQuestionAnsweredType> =
-  UserQuestionAnsweredShape;
 
-export const UserQuestionDismissedShape = z.object({
+const UserQuestionDismissedShape = z.object({
   outcome: z.literal("dismissed"),
   questions: z.array(UserQuestionShape),
 });
-export const UserQuestionDismissedSchema: z.ZodType<UserQuestionDismissedType> =
-  UserQuestionDismissedShape;
 
-export const UserQuestionResultShape = z.union([
+const UserQuestionResultShape = z.union([
   UserQuestionAnsweredShape,
   UserQuestionDismissedShape,
 ]);
-export const UserQuestionResultSchema: z.ZodType<UserQuestionResultType> =
-  UserQuestionResultShape;
 
-export const NeutralContentBlockShape = z.union([
+const NeutralContentBlockShape = z.union([
   z.object({ type: z.literal("text"), text: z.string() }),
   z.object({
     type: z.literal("thinking"),
@@ -765,19 +670,16 @@ export const NeutralContentBlockShape = z.union([
     ]),
   }),
 ]);
-export const NeutralContentBlockSchema: z.ZodType<NeutralContentBlockType> =
-  NeutralContentBlockShape;
 
-export const HarnessNoteShape = z.object({
+const HarnessNoteShape = z.object({
   body: z.string(),
   kind: z.enum(["task-notification", "system-reminder"]),
   status: z.string(),
   title: z.string(),
   toolUseId: z.string().optional(),
 });
-export const HarnessNoteSchema: z.ZodType<HarnessNoteType> = HarnessNoteShape;
 
-export const NeutralOriginShape = z.union([
+const NeutralOriginShape = z.union([
   z.object({ kind: z.literal("human") }),
   z.object({
     kind: z.literal("peer"),
@@ -793,10 +695,8 @@ export const NeutralOriginShape = z.union([
     name: z.string().optional(),
   }),
 ]);
-export const NeutralOriginSchema: z.ZodType<NeutralOriginType> =
-  NeutralOriginShape;
 
-export const NeutralUserMessageShape = z.object({
+const NeutralUserMessageShape = z.object({
   compactSummary: z.literal(true).optional(),
   keepAlive: z.literal(true).optional(),
   message: z.object({
@@ -814,16 +714,13 @@ export const NeutralUserMessageShape = z.object({
   type: z.literal("user"),
   uuid: z.string().optional(),
 });
-export const NeutralUserMessageSchema: z.ZodType<NeutralUserMessageType> =
-  NeutralUserMessageShape;
 
-export const SentMessageShape = NeutralUserMessageShape.extend({
+const SentMessageShape = NeutralUserMessageShape.extend({
   origin: NeutralOriginShape,
   uuid: z.string(),
 });
-export const SentMessageSchema: z.ZodType<SentMessageType> = SentMessageShape;
 
-export const SendPayloadShape = z.object({
+const SendPayloadShape = z.object({
   attachments: z.array(SendAttachmentShape).optional(),
   delivery: z.string().optional(),
   from: z.string().optional(),
@@ -834,16 +731,14 @@ export const SendPayloadShape = z.object({
   message: SentMessageShape,
   projectId: z.string().optional(),
 });
-export const SendPayloadSchema: z.ZodType<SendPayloadType> = SendPayloadShape;
 
-export const SendExtrasShape = SendPayloadShape.pick({
+const SendExtrasShape = SendPayloadShape.pick({
   attachments: true,
   images: true,
   projectId: true,
 });
-export const SendExtrasSchema: z.ZodType<SendExtrasType> = SendExtrasShape;
 
-export const KeptSendShape = z.object({
+const KeptSendShape = z.object({
   at: z.number(),
   commandId: z.string(),
   extras: SendExtrasShape,
@@ -855,20 +750,11 @@ export const KeptSendShape = z.object({
 });
 export const KeptSendSchema: z.ZodType<KeptSendType> = KeptSendShape;
 
-export const EffortLevelShape = z.enum([
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-]);
-export const EffortLevelSchema: z.ZodType<EffortLevelType> = EffortLevelShape;
+const EffortLevelShape = z.enum(["low", "medium", "high", "xhigh", "max"]);
 
-export const PermissionModeShape = z.enum(WIRE_PERMISSION_MODES);
-export const PermissionModeSchema: z.ZodType<PermissionModeType> =
-  PermissionModeShape;
+const PermissionModeShape = z.enum(WIRE_PERMISSION_MODES);
 
-export const SessionDraftShape = z.object({
+const SessionDraftShape = z.object({
   account: z.string().optional(),
   asks: z.boolean(),
   baseCwd: z.string(),
@@ -891,22 +777,21 @@ export const SessionDraftShape = z.object({
 export const SessionDraftSchema: z.ZodType<SessionDraftType> =
   SessionDraftShape;
 
-export const ModelUseShape = z.object({
+const ModelUseShape = z.object({
   lastSpawnAt: z.string().optional(),
   lastUsedAt: z.record(z.string(), z.string()),
 });
 export const ModelUseSchema: z.ZodType<ModelUseType> = ModelUseShape;
 
-export const ForkSourceShape = z.object({
+const ForkSourceShape = z.object({
   at: z.string().optional(),
   cwd: z.string(),
   harness: HarnessKindShape,
   machineId: z.string(),
   sessionId: z.string(),
 });
-export const ForkSourceSchema: z.ZodType<ForkSourceType> = ForkSourceShape;
 
-export const SpawnPrefillShape = z.object({
+const SpawnPrefillShape = z.object({
   cwd: z.string().optional(),
   fork: ForkSourceShape.optional(),
   machineId: z.string().optional(),
@@ -914,25 +799,22 @@ export const SpawnPrefillShape = z.object({
   prompt: z.object({ text: z.string(), extras: SendExtrasShape }).optional(),
   spinOff: z.boolean().optional(),
 });
-export const SpawnPrefillSchema: z.ZodType<SpawnPrefillType> =
-  SpawnPrefillShape;
 
-export const KeptFormShape = z.object({
+const KeptFormShape = z.object({
   open: z.boolean(),
   prefill: SpawnPrefillShape.optional(),
   shown: z.string().nullable(),
 });
 export const KeptFormSchema: z.ZodType<KeptFormType> = KeptFormShape;
 
-export const ParkedAskShape = z.object({
+const ParkedAskShape = z.object({
   asked: z.boolean(),
   instanceId: z.string(),
   machineId: z.string(),
   sent: z.boolean(),
 });
-export const ParkedAskSchema: z.ZodType<ParkedAskType> = ParkedAskShape;
 
-export const ParkedStartShape = z.object({
+const ParkedStartShape = z.object({
   askedAt: z.number(),
   asks: z.array(ParkedAskShape),
   continueFrom: ContinueSourceShape.optional(),
@@ -954,12 +836,10 @@ export const SpawnPrefsShape = z.object({
   model: z.string(),
   permissionMode: PermissionModeShape.nullable(),
 });
-export const SpawnPrefsSchema: z.ZodType<SpawnPrefsType> = SpawnPrefsShape;
 
-export const StopKindShape = z.enum(["forget", "caw-off"]);
-export const StopKindSchema: z.ZodType<StopKindType> = StopKindShape;
+const StopKindShape = z.enum(["forget", "caw-off"]);
 
-export const StopPhaseShape = z.enum([
+const StopPhaseShape = z.enum([
   "none",
   "list",
   "armed",
@@ -969,7 +849,7 @@ export const StopPhaseShape = z.enum([
   "done",
 ]);
 
-export const RunningSessionShape = z.object({
+const RunningSessionShape = z.object({
   cwd: z.string(),
   id: z.string(),
   machineId: z.string(),
@@ -977,10 +857,8 @@ export const RunningSessionShape = z.object({
   parentId: z.string().nullable(),
   title: z.string().nullable(),
 });
-export const RunningSessionSchema: z.ZodType<RunningSessionType> =
-  RunningSessionShape;
 
-export const StopRowShape = z.object({
+const StopRowShape = z.object({
   arrived: z.boolean(),
   departed: z.boolean(),
   error: z.string().nullable(),
@@ -991,9 +869,8 @@ export const StopRowShape = z.object({
   turn: z.boolean(),
   view: z.object({ href: z.string().optional(), title: z.string().optional() }),
 });
-export const StopRowSchema: z.ZodType<StopRowType> = StopRowShape;
 
-export const StopJobShape = z.object({
+const StopJobShape = z.object({
   at: z.string(),
   kind: StopKindShape,
   off: z.boolean(),
@@ -1008,28 +885,18 @@ export const StopJobShape = z.object({
 });
 export const StopJobSchema: z.ZodType<StopJobType> = StopJobShape;
 
-export const BesideShape = z.object({
-  projectId: z.string(),
-  taskId: z.string(),
-});
+const BesideShape = z.object({ projectId: z.string(), taskId: z.string() });
 export const BesideSchema: z.ZodType<BesideType> = BesideShape;
 
-export const ConnectFaultShape = z.union([
+const ConnectFaultShape = z.union([
   z.object({ kind: z.literal("closed") }),
   z.object({ kind: z.literal("refused"), reason: z.string() }),
   z.object({ kind: z.literal("expired") }),
 ]);
-export const ConnectFaultSchema: z.ZodType<ConnectFaultType> =
-  ConnectFaultShape;
 
-export const ConnectStageShape = z.enum([
-  "asking",
-  "waiting",
-  "done",
-  "failed",
-]);
+const ConnectStageShape = z.enum(["asking", "waiting", "done", "failed"]);
 
-export const ConnectSignInShape = z.object({
+const ConnectSignInShape = z.object({
   expiresAt: z.number().optional(),
   fault: ConnectFaultShape.nullable(),
   stage: ConnectStageShape,
@@ -1037,27 +904,24 @@ export const ConnectSignInShape = z.object({
 export const ConnectSignInSchema: z.ZodType<ConnectSignInType> =
   ConnectSignInShape;
 
-export const RefusalShape = z.object({
+const RefusalShape = z.object({
   act: z.enum(["install", "cancel"]),
   reason: z.string(),
 });
-export const RefusalSchema: z.ZodType<RefusalType> = RefusalShape;
 
-export const UpdateSettingShape = z.enum(["channel", "auto", "check"]);
+const UpdateSettingShape = z.enum(["channel", "auto", "check"]);
 
-export const BinaryUpdatePolicyShape = z.object({
+const BinaryUpdatePolicyShape = z.object({
   autoUpdate: z.boolean(),
   channel: z.enum(["stable", "nightly"]),
 });
-export const BinaryUpdatePolicySchema: z.ZodType<BinaryUpdatePolicyType> =
-  BinaryUpdatePolicyShape;
 
-export const SettingRefusalShape = z.object({
+const SettingRefusalShape = z.object({
   policy: BinaryUpdatePolicyShape.optional(),
   reason: z.string(),
 });
 
-export const KeptUpdatesShape = z.object({
+const KeptUpdatesShape = z.object({
   commanded: z.array(z.string()),
   refused: z.array(z.tuple([z.string(), RefusalShape])),
   settings: z
@@ -1066,7 +930,7 @@ export const KeptUpdatesShape = z.object({
 });
 export const KeptUpdatesSchema: z.ZodType<KeptUpdatesType> = KeptUpdatesShape;
 
-export const VisitShape = z.object({
+const VisitShape = z.object({
   at: z.number(),
   cwd: z.string().optional(),
   harness: z.string().optional(),
@@ -1076,7 +940,7 @@ export const VisitShape = z.object({
 });
 export const VisitSchema: z.ZodType<VisitType> = VisitShape;
 
-export const SessionContextShape = z.object({
+const SessionContextShape = z.object({
   cwd: z.string(),
   harness: HarnessKindShape,
   machine: z.string(),
@@ -1100,190 +964,105 @@ type Same<A, B> =
     : 2
     ? true
     : false;
+/** Compiles only when every proof it is given holds; a call, so nothing need be exported for it. */
+const prove = <Proofs extends true[]>(): Proofs | undefined => undefined;
 
 /** Every schema of an exported type, proved against that type. */
-export const proved: [
-  Same<z.output<typeof AtLimitShape>, AtLimitType>,
-  Same<z.output<typeof PlacementStrategyShape>, PlacementStrategyType>,
-  Same<z.output<typeof StrategyChoiceShape>, StrategyChoiceType>,
-  Same<z.output<typeof HarnessKindShape>, HarnessKindType>,
-  Same<z.output<typeof ContinueSourceShape>, ContinueSourceType>,
-  Same<z.output<typeof EmbedShapeShape>, EmbedShapeType>,
-  Same<z.output<typeof CanvasShapesShape>, CanvasShapesType>,
-  Same<z.output<typeof MediaArtifactShape>, MediaArtifactType>,
-  Same<z.output<typeof DraftCanvasShape>, DraftCanvasType>,
-  Same<z.output<typeof PendingFileShape>, PendingFileType>,
-  Same<z.output<typeof StoredFileShape>, StoredFileType>,
-  Same<z.output<typeof PendingTextShape>, PendingTextType>,
-  Same<z.output<typeof DraftRecordShape>, DraftRecordType>,
-  Same<z.output<typeof PairingStageShape>, PairingStageType>,
-  Same<z.output<typeof KeptPairingShape>, KeptPairingType>,
-  Same<z.output<typeof PlanEditKindShape>, PlanEditKindType>,
-  Same<z.output<typeof PlanReceiverShape>, PlanReceiverType>,
-  Same<z.output<typeof PlanChangeShape>, PlanChangeType>,
-  Same<z.output<typeof PlanSpecShape>, PlanSpecType>,
-  Same<z.output<typeof PlanCommentShape>, PlanCommentType>,
-  Same<z.output<typeof PlanStepPriorityShape>, PlanStepPriorityType>,
-  Same<z.output<typeof PlanStepStatusShape>, PlanStepStatusType>,
-  Same<z.output<typeof PlanStepShape>, PlanStepType>,
-  Same<z.output<typeof TaskTodoShape>, TaskTodoType>,
-  Same<z.output<typeof SessionPlanShape>, SessionPlanType>,
-  Same<z.output<typeof ComposeTargetShape>, ComposeTargetType>,
-  Same<z.output<typeof CommentAttachmentShape>, CommentAttachmentType>,
-  Same<z.output<typeof ThreadEntryShape>, ThreadEntryType>,
-  Same<z.output<typeof BrowserKeyShape>, BrowserKeyType>,
-  Same<z.output<typeof BrowserAskFrameShape>, BrowserAskFrameType>,
-  Same<z.output<typeof BrowserHostKindShape>, BrowserHostKindType>,
-  Same<z.output<typeof BrowserStateShape>, BrowserStateType>,
-  Same<z.output<typeof ListedBrowserShape>, ListedBrowserType>,
-  Same<z.output<typeof ArtifactKindShape>, ArtifactKindType>,
-  Same<z.output<typeof PreviewSourceShape>, PreviewSourceType>,
-  Same<z.output<typeof StageErrorKindShape>, StageErrorKindType>,
-  Same<z.output<typeof StageErrorShape>, StageErrorType>,
-  Same<z.output<typeof StageStatusShape>, StageStatusType>,
-  Same<z.output<typeof StageToolchainShape>, StageToolchainType>,
-  Same<z.output<typeof StageStateShape>, StageStateType>,
-  Same<z.output<typeof TailnetOriginShape>, TailnetOriginType>,
-  Same<z.output<typeof PreviewFrameShape>, PreviewFrameType>,
-  Same<z.output<typeof ArtifactSessionFrameShape>, ArtifactSessionFrameType>,
-  Same<z.output<typeof ArtifactSessionHeardShape>, ArtifactSessionHeardType>,
-  Same<z.output<typeof PreviewSchemeShape>, PreviewSchemeType>,
-  Same<z.output<typeof CanvasWidthShape>, CanvasWidthType>,
-  Same<z.output<typeof CanvasChosenShape>, CanvasChosenType>,
-  Same<z.output<typeof CalledArtifactShape>, CalledArtifactType>,
-  Same<z.output<typeof RailSortShape>, RailSortType>,
-  Same<z.output<typeof RailLayoutShape>, RailLayoutType>,
-  Same<z.output<typeof CommandRefusalShape>, CommandRefusalType>,
-  Same<z.output<typeof RoutineActShape>, RoutineActType>,
-  Same<z.output<typeof RoutineRefusalShape>, RoutineRefusalType>,
-  Same<z.output<typeof TextAttachmentShape>, TextAttachmentType>,
-  Same<z.output<typeof FileAttachmentShape>, FileAttachmentType>,
-  Same<z.output<typeof SendAttachmentShape>, SendAttachmentType>,
-  Same<z.output<typeof UserAnswersShape>, UserAnswersType>,
-  Same<z.output<typeof UserQuestionShape>, UserQuestionType>,
-  Same<z.output<typeof UserQuestionAnsweredShape>, UserQuestionAnsweredType>,
-  Same<z.output<typeof UserQuestionDismissedShape>, UserQuestionDismissedType>,
-  Same<z.output<typeof UserQuestionResultShape>, UserQuestionResultType>,
-  Same<z.output<typeof NeutralContentBlockShape>, NeutralContentBlockType>,
-  Same<z.output<typeof HarnessNoteShape>, HarnessNoteType>,
-  Same<z.output<typeof NeutralOriginShape>, NeutralOriginType>,
-  Same<z.output<typeof NeutralUserMessageShape>, NeutralUserMessageType>,
-  Same<z.output<typeof SentMessageShape>, SentMessageType>,
-  Same<z.output<typeof SendPayloadShape>, SendPayloadType>,
-  Same<z.output<typeof SendExtrasShape>, SendExtrasType>,
-  Same<z.output<typeof KeptSendShape>, KeptSendType>,
-  Same<z.output<typeof EffortLevelShape>, EffortLevelType>,
-  Same<z.output<typeof PermissionModeShape>, PermissionModeType>,
-  Same<z.output<typeof SessionDraftShape>, SessionDraftType>,
-  Same<z.output<typeof ModelUseShape>, ModelUseType>,
-  Same<z.output<typeof ForkSourceShape>, ForkSourceType>,
-  Same<z.output<typeof SpawnPrefillShape>, SpawnPrefillType>,
-  Same<z.output<typeof KeptFormShape>, KeptFormType>,
-  Same<z.output<typeof ParkedAskShape>, ParkedAskType>,
-  Same<z.output<typeof ParkedStartShape>, ParkedStartType>,
-  Same<z.output<typeof SpawnPrefsShape>, SpawnPrefsType>,
-  Same<z.output<typeof StopKindShape>, StopKindType>,
-  Same<z.output<typeof RunningSessionShape>, RunningSessionType>,
-  Same<z.output<typeof StopRowShape>, StopRowType>,
-  Same<z.output<typeof StopJobShape>, StopJobType>,
-  Same<z.output<typeof BesideShape>, BesideType>,
-  Same<z.output<typeof ConnectFaultShape>, ConnectFaultType>,
-  Same<z.output<typeof ConnectSignInShape>, ConnectSignInType>,
-  Same<z.output<typeof RefusalShape>, RefusalType>,
-  Same<z.output<typeof BinaryUpdatePolicyShape>, BinaryUpdatePolicyType>,
-  Same<z.output<typeof KeptUpdatesShape>, KeptUpdatesType>,
-  Same<z.output<typeof VisitShape>, VisitType>,
-  Same<z.output<typeof SessionContextShape>, SessionContextType>,
-] = [
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-  true,
-];
+prove<
+  [
+    Same<z.output<typeof AtLimitShape>, AtLimitType>,
+    Same<z.output<typeof PlacementStrategyShape>, PlacementStrategyType>,
+    Same<z.output<typeof StrategyChoiceShape>, StrategyChoiceType>,
+    Same<z.output<typeof HarnessKindShape>, HarnessKindType>,
+    Same<z.output<typeof ContinueSourceShape>, ContinueSourceType>,
+    Same<z.output<typeof EmbedShapeShape>, EmbedShapeType>,
+    Same<z.output<typeof CanvasShapesShape>, CanvasShapesType>,
+    Same<z.output<typeof MediaArtifactShape>, MediaArtifactType>,
+    Same<z.output<typeof DraftCanvasShape>, DraftCanvasType>,
+    Same<z.output<typeof PendingFileShape>, PendingFileType>,
+    Same<z.output<typeof StoredFileShape>, StoredFileType>,
+    Same<z.output<typeof PendingTextShape>, PendingTextType>,
+    Same<z.output<typeof DraftRecordShape>, DraftRecordType>,
+    Same<z.output<typeof PairingStageShape>, PairingStageType>,
+    Same<z.output<typeof KeptPairingShape>, KeptPairingType>,
+    Same<z.output<typeof PlanEditKindShape>, PlanEditKindType>,
+    Same<z.output<typeof PlanReceiverShape>, PlanReceiverType>,
+    Same<z.output<typeof PlanChangeShape>, PlanChangeType>,
+    Same<z.output<typeof PlanSpecShape>, PlanSpecType>,
+    Same<z.output<typeof PlanCommentShape>, PlanCommentType>,
+    Same<z.output<typeof PlanStepPriorityShape>, PlanStepPriorityType>,
+    Same<z.output<typeof PlanStepStatusShape>, PlanStepStatusType>,
+    Same<z.output<typeof PlanStepShape>, PlanStepType>,
+    Same<z.output<typeof TaskTodoShape>, TaskTodoType>,
+    Same<z.output<typeof SessionPlanShape>, SessionPlanType>,
+    Same<z.output<typeof ComposeTargetShape>, ComposeTargetType>,
+    Same<z.output<typeof CommentAttachmentShape>, CommentAttachmentType>,
+    Same<z.output<typeof ThreadEntryShape>, ThreadEntryType>,
+    Same<z.output<typeof BrowserKeyShape>, BrowserKeyType>,
+    Same<z.output<typeof BrowserAskFrameShape>, BrowserAskFrameType>,
+    Same<z.output<typeof BrowserHostKindShape>, BrowserHostKindType>,
+    Same<z.output<typeof BrowserStateShape>, BrowserStateType>,
+    Same<z.output<typeof ListedBrowserShape>, ListedBrowserType>,
+    Same<z.output<typeof ArtifactKindShape>, ArtifactKindType>,
+    Same<z.output<typeof PreviewSourceShape>, PreviewSourceType>,
+    Same<z.output<typeof StageErrorKindShape>, StageErrorKindType>,
+    Same<z.output<typeof StageErrorShape>, StageErrorType>,
+    Same<z.output<typeof StageStatusShape>, StageStatusType>,
+    Same<z.output<typeof StageToolchainShape>, StageToolchainType>,
+    Same<z.output<typeof StageStateShape>, StageStateType>,
+    Same<z.output<typeof TailnetOriginShape>, TailnetOriginType>,
+    Same<z.output<typeof PreviewFrameShape>, PreviewFrameType>,
+    Same<z.output<typeof ArtifactSessionFrameShape>, ArtifactSessionFrameType>,
+    Same<z.output<typeof ArtifactSessionHeardShape>, ArtifactSessionHeardType>,
+    Same<z.output<typeof PreviewSchemeShape>, PreviewSchemeType>,
+    Same<z.output<typeof CanvasWidthShape>, CanvasWidthType>,
+    Same<z.output<typeof CanvasChosenShape>, CanvasChosenType>,
+    Same<z.output<typeof CalledArtifactShape>, CalledArtifactType>,
+    Same<z.output<typeof RailSortShape>, RailSortType>,
+    Same<z.output<typeof RailLayoutShape>, RailLayoutType>,
+    Same<z.output<typeof CommandRefusalShape>, CommandRefusalType>,
+    Same<z.output<typeof RoutineActShape>, RoutineActType>,
+    Same<z.output<typeof RoutineRefusalShape>, RoutineRefusalType>,
+    Same<z.output<typeof TextAttachmentShape>, TextAttachmentType>,
+    Same<z.output<typeof FileAttachmentShape>, FileAttachmentType>,
+    Same<z.output<typeof SendAttachmentShape>, SendAttachmentType>,
+    Same<z.output<typeof UserAnswersShape>, UserAnswersType>,
+    Same<z.output<typeof UserQuestionShape>, UserQuestionType>,
+    Same<z.output<typeof UserQuestionAnsweredShape>, UserQuestionAnsweredType>,
+    Same<
+      z.output<typeof UserQuestionDismissedShape>,
+      UserQuestionDismissedType
+    >,
+    Same<z.output<typeof UserQuestionResultShape>, UserQuestionResultType>,
+    Same<z.output<typeof NeutralContentBlockShape>, NeutralContentBlockType>,
+    Same<z.output<typeof HarnessNoteShape>, HarnessNoteType>,
+    Same<z.output<typeof NeutralOriginShape>, NeutralOriginType>,
+    Same<z.output<typeof NeutralUserMessageShape>, NeutralUserMessageType>,
+    Same<z.output<typeof SentMessageShape>, SentMessageType>,
+    Same<z.output<typeof SendPayloadShape>, SendPayloadType>,
+    Same<z.output<typeof SendExtrasShape>, SendExtrasType>,
+    Same<z.output<typeof KeptSendShape>, KeptSendType>,
+    Same<z.output<typeof EffortLevelShape>, EffortLevelType>,
+    Same<z.output<typeof PermissionModeShape>, PermissionModeType>,
+    Same<z.output<typeof SessionDraftShape>, SessionDraftType>,
+    Same<z.output<typeof ModelUseShape>, ModelUseType>,
+    Same<z.output<typeof ForkSourceShape>, ForkSourceType>,
+    Same<z.output<typeof SpawnPrefillShape>, SpawnPrefillType>,
+    Same<z.output<typeof KeptFormShape>, KeptFormType>,
+    Same<z.output<typeof ParkedAskShape>, ParkedAskType>,
+    Same<z.output<typeof ParkedStartShape>, ParkedStartType>,
+    Same<z.output<typeof SpawnPrefsShape>, SpawnPrefsType>,
+    Same<z.output<typeof StopKindShape>, StopKindType>,
+    Same<z.output<typeof RunningSessionShape>, RunningSessionType>,
+    Same<z.output<typeof StopRowShape>, StopRowType>,
+    Same<z.output<typeof StopJobShape>, StopJobType>,
+    Same<z.output<typeof BesideShape>, BesideType>,
+    Same<z.output<typeof ConnectFaultShape>, ConnectFaultType>,
+    Same<z.output<typeof ConnectSignInShape>, ConnectSignInType>,
+    Same<z.output<typeof RefusalShape>, RefusalType>,
+    Same<z.output<typeof BinaryUpdatePolicyShape>, BinaryUpdatePolicyType>,
+    Same<z.output<typeof KeptUpdatesShape>, KeptUpdatesType>,
+    Same<z.output<typeof VisitShape>, VisitType>,
+    Same<z.output<typeof SessionContextShape>, SessionContextType>,
+  ]
+>();

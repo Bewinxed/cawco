@@ -31,7 +31,7 @@ import {
  * of the dashboard's Undo toast (sonner's 4 s, paused while a pointer rests
  * on it or the tab is hidden), which closes when this runs out.
  */
-export const UNDO_MS = 60_000;
+const UNDO_MS = 60_000;
 
 /** What a config delete answers: core's {@link Deleted}, the entry the dashboard's Undo names. */
 export interface Undoable extends Deleted {
@@ -46,13 +46,13 @@ export const undoable = (restore: number): Undoable => ({
 });
 
 /** What a delete names: the item, by its kind and key. */
-export type TrashItem =
+type TrashItem =
   | { kind: Exclude<TrashKind, "memory">; key: string }
   /** The main memory file, with the documents it links (`docs`), which go with it. */
   | { kind: "memory"; key: string; docs: readonly string[] };
 
 /** What a restore came to. */
-export type Untrashed =
+type Untrashed =
   | { kind: TrashKind; key: string; ok: true }
   /** Its window passed, its project went, or it was never trashed. */
   | { ok: false; why: "gone" }

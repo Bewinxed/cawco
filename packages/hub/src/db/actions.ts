@@ -5,7 +5,7 @@ import { type ActionState, actions } from "./schema";
 export type ActionRow = typeof actions.$inferSelect;
 
 /** What may change on a row after its proposal: never its call (connection, tool, args). */
-export type ActionPatch = Partial<
+type ActionPatch = Partial<
   Omit<
     ActionRow,
     | "id"

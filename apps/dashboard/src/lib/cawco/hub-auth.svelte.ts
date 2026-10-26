@@ -22,7 +22,7 @@ import type {
   PairingStart,
   WaitingMachine,
 } from "@cawco/core";
-import { KeptPairingShape } from "#lib/cawco/stored-shapes.js";
+import { KeptPairingSchema } from "#lib/cawco/stored-shapes.js";
 import { heardFrame, heardSince, readLeaves } from "./heard";
 import { failureWords, hubRefusal } from "./hub-read";
 import { leaveThePage } from "./leaving";
@@ -144,7 +144,7 @@ function stageTo(
  * again. False when there is nothing to bring back, so a code is asked for.
  */
 export function resumePairing(): boolean {
-  const kept = readJson(KEPT, KeptPairingShape.nullable(), null, "session");
+  const kept = readJson(KEPT, KeptPairingSchema.nullable(), null, "session");
   if (!kept || kept.stage.kind === "idle" || kept.stage.kind === "asking") {
     return false;
   }

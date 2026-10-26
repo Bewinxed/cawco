@@ -10,10 +10,10 @@ import {
   BrowserRelayShape,
   BrowserRowShape,
   BrowserStateShape,
-  FleetMcpConfigShape,
+  FleetMcpConfigSchema,
   HarnessConfigKindShape,
   HookEventShape,
-  HookHandlerShape,
+  HookHandlerSchema,
   HookMatchTestShape,
   MediaPathShape,
 } from "@cawco/core/stored-shapes";
@@ -27,7 +27,7 @@ import type {
 } from "./fleet-harness-set";
 import type { FleetMcpSet as FleetMcpSetType } from "./fleet-mcp-set";
 
-export const MediaMeasurementShape = z.object({
+const MediaMeasurementShape = z.object({
   at: z.number(),
   endpoint: z.string(),
   media: MediaPathShape,
@@ -36,7 +36,7 @@ export const MediaMeasurementShape = z.object({
 export const MediaMeasurementSchema: z.ZodType<MediaMeasurementType> =
   MediaMeasurementShape;
 
-export const BrowserRecordShape = z.object({
+const BrowserRecordShape = z.object({
   container: z
     .object({
       address: z.string().optional(),
@@ -77,29 +77,26 @@ export const BrowserRecordShape = z.object({
 export const BrowserRecordSchema: z.ZodType<BrowserRecordType> =
   BrowserRecordShape;
 
-export const SetHarnessConfigShape = z.object({
+const SetHarnessConfigShape = z.object({
   cwd: z.string().optional(),
   entry: z.string().optional(),
   kind: HarnessConfigKindShape,
   name: z.string(),
   settings: z.record(z.string(), z.unknown()).optional(),
 });
-export const SetHarnessConfigSchema: z.ZodType<SetHarnessConfigType> =
-  SetHarnessConfigShape;
 
-export const SetHookShape = z.object({
+const SetHookShape = z.object({
   event: HookEventShape,
-  handler: HookHandlerShape,
+  handler: HookHandlerSchema,
   id: z.string(),
   matcher: z.string().optional(),
   name: z.string(),
   test: HookMatchTestShape,
 });
-export const SetHookSchema: z.ZodType<SetHookType> = SetHookShape;
 
-export const PlacedSetHookShape = SetHookShape.extend({ cwd: z.string() });
+const PlacedSetHookShape = SetHookShape.extend({ cwd: z.string() });
 
-export const PlacedSetSkillShape = z.object({
+const PlacedSetSkillShape = z.object({
   cwd: z.string(),
   dir: z.string(),
   name: z.string(),
@@ -111,21 +108,18 @@ export const FleetHarnessSetShape = z.object({
   placedHooks: z.record(z.string(), PlacedSetHookShape),
   placedSkills: z.record(z.string(), PlacedSetSkillShape),
 });
-export const FleetHarnessSetSchema: z.ZodType<FleetHarnessSetType> =
-  FleetHarnessSetShape;
 
-export const PlacedFleetMcpShape = z.object({
-  config: FleetMcpConfigShape,
+const PlacedFleetMcpShape = z.object({
+  config: FleetMcpConfigSchema,
   cwd: z.string(),
   name: z.string(),
 });
 
 export const FleetMcpSetShape = z.object({
   placed: z.record(z.string(), PlacedFleetMcpShape),
-  servers: z.record(z.string(), FleetMcpConfigShape),
+  servers: z.record(z.string(), FleetMcpConfigSchema),
   signedOut: z.array(z.string()),
 });
-export const FleetMcpSetSchema: z.ZodType<FleetMcpSetType> = FleetMcpSetShape;
 
 /**
  * Each property, through every level, as a plain object type. `readonly`
@@ -143,13 +137,17 @@ type Same<A, B> =
     : 2
     ? true
     : false;
+/** Compiles only when every proof it is given holds; a call, so nothing need be exported for it. */
+const prove = <Proofs extends true[]>(): Proofs | undefined => undefined;
 
 /** Every schema of an exported type, proved against that type. */
-export const proved: [
-  Same<z.output<typeof MediaMeasurementShape>, MediaMeasurementType>,
-  Same<z.output<typeof BrowserRecordShape>, BrowserRecordType>,
-  Same<z.output<typeof SetHarnessConfigShape>, SetHarnessConfigType>,
-  Same<z.output<typeof SetHookShape>, SetHookType>,
-  Same<z.output<typeof FleetHarnessSetShape>, FleetHarnessSetType>,
-  Same<z.output<typeof FleetMcpSetShape>, FleetMcpSetType>,
-] = [true, true, true, true, true, true];
+prove<
+  [
+    Same<z.output<typeof MediaMeasurementShape>, MediaMeasurementType>,
+    Same<z.output<typeof BrowserRecordShape>, BrowserRecordType>,
+    Same<z.output<typeof SetHarnessConfigShape>, SetHarnessConfigType>,
+    Same<z.output<typeof SetHookShape>, SetHookType>,
+    Same<z.output<typeof FleetHarnessSetShape>, FleetHarnessSetType>,
+    Same<z.output<typeof FleetMcpSetShape>, FleetMcpSetType>,
+  ]
+>();

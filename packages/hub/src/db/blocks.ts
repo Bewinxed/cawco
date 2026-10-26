@@ -3,8 +3,8 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { projectBlocks, viewProposals } from "./schema";
 
-export type BlockRow = typeof projectBlocks.$inferSelect;
-export type ProposalRow = typeof viewProposals.$inferSelect;
+type BlockRow = typeof projectBlocks.$inferSelect;
+type ProposalRow = typeof viewProposals.$inferSelect;
 
 type Tx = Parameters<Parameters<BunSQLiteDatabase["transaction"]>[0]>[0];
 

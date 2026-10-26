@@ -32,7 +32,7 @@ export interface StoredRelay {
 }
 
 /** What a change to the record names; the rest stays. */
-export type RelayChange = Partial<
+type RelayChange = Partial<
   Pick<
     StoredRelay,
     | "state"

@@ -12,7 +12,8 @@
  * the key's change rows.
  */
 import type { Database } from "bun:sqlite";
-import { applyUpdate, Doc, encodeStateAsUpdate, encodeStateVector } from "yjs";
+import { encodeStateAsUpdate, encodeStateVector } from "yjs";
+import { docOf } from "./merge-project-pages";
 
 /** Migration 0317's journal `when`: the key is dropped while no applied migration is as new. */
 export const GRAPH_PLACES_MIGRATION_WHEN = 1_792_915_298_473;
@@ -38,20 +39,6 @@ const settled = (client: Database): boolean => {
     .query("SELECT max(created_at) AS at FROM __drizzle_migrations")
     .get() as { at: number | null };
   return (newest.at ?? 0) >= GRAPH_PLACES_MIGRATION_WHEN;
-};
-
-/** An artifact's doc, loaded from its update log in order. */
-const docOf = (client: Database, id: string): Doc => {
-  const doc = new Doc();
-  const updates = client
-    .query(
-      'SELECT "update" FROM artifact_updates WHERE artifact_id = ? ORDER BY seq'
-    )
-    .all(id) as { update: Uint8Array }[];
-  for (const { update } of updates) {
-    applyUpdate(doc, update);
-  }
-  return doc;
 };
 
 /**

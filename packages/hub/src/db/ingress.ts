@@ -31,7 +31,7 @@ export type EventRouteRow = typeof eventRoutes.$inferSelect & {
   kinds: string[];
 };
 /** A project's GitHub poller with its resources' cursors (`github_poll_cursors`). */
-export type GitHubPollerRow = typeof githubPollers.$inferSelect & {
+type GitHubPollerRow = typeof githubPollers.$inferSelect & {
   cursors: Partial<Record<GitHubResource, GitHubCursor>>;
 };
 /** A connector poll with how many items its last call kept; null until it has looked. */

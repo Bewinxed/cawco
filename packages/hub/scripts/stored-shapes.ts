@@ -52,6 +52,7 @@ const JS = /\.js$/u;
 const TS_FILE = /\.ts$/u;
 const SCHEMA_SUFFIX = /(?:Schema|Shape)$/u;
 const SHAPE_NAME = /\b\w+Shape\b/gu;
+const SCHEMA_NAME = /\b\w+Schema\b/gu;
 const SHAPES_IMPORT =
   /import\s*\{([^}]*)\}\s*from\s*"(?:@cawco\/core|#lib(?:\/[\w.-]+)*|\.{1,2}(?:\/[\w.-]+)*)\/stored-shapes(?:\.js)?"/gu;
 const TEST_FILE = /\.test\.ts$/u;
@@ -110,6 +111,8 @@ const listed = Bun.spawnSync(
   .map((path) => join(ROOT, path))
   .filter((path) => !OUTS.includes(path));
 const roots = new Set<string>();
+/** Each `XSchema` or `XShape` a file outside the generated ones imports: the names a generated file exports. */
+const imported = new Set<string>();
 /** Core's files, and every file that reads a schema: the program the types are read from. */
 const programFiles: string[] = [];
 for (const file of listed) {
@@ -122,9 +125,10 @@ for (const file of listed) {
   }
   for (const match of matches) {
     for (const named of (match[1] ?? "").split(",")) {
-      const [imported = ""] = named.trim().split(" as ");
-      if (SCHEMA_SUFFIX.test(imported)) {
-        roots.add(imported.replace(SCHEMA_SUFFIX, ""));
+      const [name = ""] = named.trim().split(" as ");
+      if (SCHEMA_SUFFIX.test(name)) {
+        imported.add(name);
+        roots.add(name.replace(SCHEMA_SUFFIX, ""));
       }
     }
   }
@@ -757,7 +761,9 @@ const declarationSchema = (declaration: Declaration): string => {
 const alias = (name: string) => `${name}Type`;
 
 /** Each file's schemas, in order, and the core schemas the others read. */
-const made = new Map<string, string[]>(OUTS.map((out) => [out, []]));
+const made = new Map<string, { name: string; schema: string }[]>(
+  OUTS.map((out) => [out, []])
+);
 const proved = new Map<string, string[]>(OUTS.map((out) => [out, []]));
 const coreNames = new Set(
   order.filter((d) => outOf(d) === CORE_OUT).map((d) => `${d.name.text}Shape`)
@@ -769,25 +775,51 @@ for (const declaration of order) {
     add("types", declaration.getSourceFile().fileName, name);
     proved.get(target)?.push(name);
   }
-  const schema = declarationSchema(declaration);
+  let schema = declarationSchema(declaration);
   if (target !== CORE_OUT) {
+    // A core schema used whole is read by the typed name core already
+    // exports, if it does; its shape only for its combinators.
+    schema = schema.replace(SHAPE_NAME, (used, at: number) =>
+      coreNames.has(used) &&
+      schema[at + used.length] !== "." &&
+      imported.has(used.replace(SCHEMA_SUFFIX, "Schema"))
+        ? used.replace(SCHEMA_SUFFIX, "Schema")
+        : used
+    );
     for (const [used] of schema.matchAll(SHAPE_NAME)) {
       if (coreNames.has(used)) {
+        add("values", CORE_OUT, used);
+        imported.add(used);
+      }
+    }
+    for (const [used] of schema.matchAll(SCHEMA_NAME)) {
+      if (coreNames.has(used.replace(SCHEMA_SUFFIX, "Shape"))) {
         add("values", CORE_OUT, used);
       }
     }
   }
-  // The shape is the schema as made, whose combinators (`.extend`, `.shape`,
-  // `.partial`) other schemas use; `XSchema` is the same schema typed as `X`,
-  // so a column or a read of it is typed by the declared name, which the
-  // OpenAPI document reads.
-  const typed = isExported(declaration) || roots.has(name);
-  made
-    .get(target)
-    ?.push(
-      `export const ${name}Shape = ${schema};${typed ? `\nexport const ${name}Schema: z.ZodType<${alias(name)}> = ${name}Shape;` : ""}`
-    );
+  made.get(target)?.push({ name, schema });
 }
+
+/**
+ * One schema's lines. The shape is the schema as made, whose combinators
+ * (`.extend`, `.shape`, `.partial`) other schemas use; `XSchema` is the same
+ * schema typed as `X`, so a column or a read of it is typed by the declared
+ * name, which the OpenAPI document reads. Each is exported only when a file
+ * outside this one imports it by that name.
+ */
+const linesOf = ({
+  name,
+  schema,
+}: {
+  name: string;
+  schema: string;
+}): string => {
+  const shape = `${imported.has(`${name}Shape`) ? "export " : ""}const ${name}Shape = ${schema};`;
+  return imported.has(`${name}Schema`)
+    ? `${shape}\nexport const ${name}Schema: z.ZodType<${alias(name)}> = ${name}Shape;`
+    : shape;
+};
 
 /* ---------------------------------------------------------- the file */
 
@@ -810,7 +842,9 @@ type Flat<T> = T extends readonly unknown[]
 type Same<A, B> =
   (<T>() => T extends Flat<A> ? 1 : 2) extends <T>() => T extends Flat<B> ? 1 : 2
     ? true
-    : false;`;
+    : false;
+/** Compiles only when every proof it is given holds; a call, so nothing need be exported for it. */
+const prove = <Proofs extends true[]>(): Proofs | undefined => undefined;`;
 
 /** Biome's import order: packages, then `../`, then `./`; a module's types before its values. */
 const rank = (from: string): number => {
@@ -872,12 +906,12 @@ const textOf = (out: string): string => {
  */
 ${importsOf(out, own).join("\n")}
 
-${(made.get(out) ?? []).join("\n\n")}
+${(made.get(out) ?? []).map(linesOf).join("\n\n")}
 
 ${PROOF}
 
 /** Every schema of an exported type, proved against that type. */
-export const proved: [${names.map((name) => `Same<z.output<typeof ${name}Shape>, ${alias(name)}>`).join(", ")}] = [${names.map(() => "true").join(", ")}];
+prove<[${names.map((name) => `Same<z.output<typeof ${name}Shape>, ${alias(name)}>`).join(", ")}]>();
 `;
 };
 

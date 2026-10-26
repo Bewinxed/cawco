@@ -128,6 +128,7 @@ import {
 import { ownCommitsShell } from "@cawco/core/own-commits";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import type { StageCloneFrame } from "@cawco/core/stage";
+import type { WaitWitness } from "@cawco/core/task-views";
 import { DAY_MS } from "@cawco/core/time";
 import {
   CONTROL_FORGE_POST,
@@ -152,7 +153,6 @@ import type {
   ItemBlock,
   LandingPhase,
   Origin,
-  WaitWitness,
   WorkBudget,
   WorkItemSubmission,
   WorkLanding,

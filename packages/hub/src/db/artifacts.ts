@@ -58,7 +58,7 @@ const workspaceColumnsOf = (
 };
 
 /** A source as its columns keep it: one of page, dir or port set, the rest of its kind's beside it. */
-export const sourceColumnsOf = (
+const sourceColumnsOf = (
   source: PreviewSource
 ): Pick<StoredArtifact, SourceColumn> => ({
   sourcePage: "page" in source ? source.page : null,
@@ -73,7 +73,7 @@ export const sourceColumnsOf = (
 });
 
 /** A stored artifact with its source whole again. */
-export const artifactOf = ({
+const artifactOf = ({
   sourcePage,
   sourceDir,
   sourcePort,
@@ -108,7 +108,7 @@ export const artifactOf = ({
 };
 
 /** One key's last change on an artifact: the seq it changed at, and who changed it. */
-export interface ArtifactChange {
+interface ArtifactChange {
   by: "person" | "agent";
   key: string;
   seq: number;
@@ -119,7 +119,7 @@ export interface ArtifactChange {
  * kind or birth. Its session changes only for a project's page another
  * session of the project makes again ({@link ArtifactsDb.projectPage}).
  */
-export type ArtifactPatch = Partial<
+type ArtifactPatch = Partial<
   Omit<ArtifactRow, "id" | "projectId" | "kind" | "createdAt">
 >;
 

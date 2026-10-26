@@ -30,8 +30,8 @@ interface Entry {
   at?: string;
 }
 
-/** An artifact's doc, loaded from its update log in order. */
-const docOf = (client: Database, id: string): Doc => {
+/** An artifact's doc, loaded from its update log in order (drop-graph-places.ts reads it too). */
+export const docOf = (client: Database, id: string): Doc => {
   const doc = new Doc();
   const updates = client
     .query(

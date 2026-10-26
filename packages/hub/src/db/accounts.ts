@@ -40,14 +40,14 @@ import {
 const LIMIT_HISTORY_RETENTION_MS = 30 * DAY_MS;
 
 /** What an account's editable settings may be patched with. */
-export type AccountPatch = Partial<
+type AccountPatch = Partial<
   Pick<
     Account,
     "atPlanLimit" | "hue" | "label" | "neverBackup" | "order" | "reservePct"
   > & { setupStep: AccountSetupStep | null }
 >;
 
-export type AccountHistoryRow = typeof usageLimitHistory.$inferSelect;
+type AccountHistoryRow = typeof usageLimitHistory.$inferSelect;
 
 /** A credential moving out of a machine's own store into an account (`login_moves`). */
 export interface LoginMove {
@@ -667,23 +667,16 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
           })
           .run();
         // A window this report did not name whose reset has passed is over:
-        // what it said is of a window that no longer runs.
-        if (report.windows !== undefined) {
-          for (const w of overWindows(before, reported, at)) {
-            tx.delete(accountWindows)
-              .where(
-                and(
-                  eq(accountWindows.accountId, accountId),
-                  eq(accountWindows.kind, w.kind),
-                  eq(accountWindows.scopeLabel, w.scopeLabel ?? "")
-                )
-              )
-              .run();
-          }
-        }
-        // The windows reported replace their own rows, read after the ones
-        // this report did not name; every other window stays as it was.
-        for (const w of reported) {
+        // what it said is of a window that no longer runs. The windows
+        // reported replace their own rows, read after the ones this report
+        // did not name; every other window stays as it was.
+        const replaced = [
+          ...(report.windows === undefined
+            ? []
+            : overWindows(before, reported, at)),
+          ...reported,
+        ];
+        for (const w of replaced) {
           tx.delete(accountWindows)
             .where(
               and(

@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { designOffers } from "./schema";
 
-export type DesignOfferRow = typeof designOffers.$inferSelect;
+type DesignOfferRow = typeof designOffers.$inferSelect;
 
 /** Caw's one design-system offer per project (schema `designOffers`). */
 export interface DesignOffersDb {

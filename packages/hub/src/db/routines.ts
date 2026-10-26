@@ -10,7 +10,7 @@ export type RoutineRunRow = typeof routineRuns.$inferSelect;
  * run, which is a delivery and is never dropped); or skipped, each with the
  * sentence that says why.
  */
-export type RunDecision =
+type RunDecision =
   { state: "starting" } | { reason: string; state: "queued" | "skipped" };
 
 /** What a decision reads: the routine, its run still going, and whether runs wait behind it. */
@@ -81,8 +81,6 @@ export interface RoutinesDb {
     id: string,
     patch: Partial<Omit<RoutineRunRow, "id" | "routineId">>
   ) => RoutineRunRow | undefined;
-  /** Dollars a routine's runs started at or after `since` (ms) have spent. */
-  readonly spentSince: (routineId: string, since: number) => number;
   readonly update: (
     id: string,
     patch: Partial<Omit<RoutineRow, "id" | "createdAt">>
@@ -274,18 +272,5 @@ export const routinesDb = (db: BunSQLiteDatabase): RoutinesDb => {
           )
         )
         .get() ?? { runs: 0, usd: 0 },
-    spentSince: (routineId, since) =>
-      db
-        .select({
-          usd: sql<number>`coalesce(sum(${routineRuns.usd}), 0)`,
-        })
-        .from(routineRuns)
-        .where(
-          and(
-            eq(routineRuns.routineId, routineId),
-            gte(routineRuns.startedAt, new Date(since))
-          )
-        )
-        .get()?.usd ?? 0,
   };
 };

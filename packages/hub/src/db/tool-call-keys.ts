@@ -2,10 +2,10 @@ import { and, eq, lte, ne } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { toolCallKeys } from "./schema";
 
-export type ToolCallKeyRow = typeof toolCallKeys.$inferSelect;
+type ToolCallKeyRow = typeof toolCallKeys.$inferSelect;
 
 /** A keyed call's answer as it was sent: replayed byte for byte. */
-export interface KeptAnswer {
+interface KeptAnswer {
   body: Uint8Array;
   headers: [string, string][];
   status: number;
