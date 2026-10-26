@@ -28,9 +28,11 @@
  *    {@link FILES_PER_WAKE} files is refused: "file a task".
  * 4. **Reads run**: a shell line that only reads ({@link readOnly}: readers
  *    and reading git, `git -C <path>` and `git fetch` of a named remote among
- *    them, output only into `/dev/null` or another descriptor) runs without
- *    asking whatever woke him: it writes nothing in the tree, publishes
- *    nothing, and reaches no host the project does not name.
+ *    them, the machine's own listings (`ps`, `ss`, `ip addr`), a `curl` GET,
+ *    output only into `/dev/null` or another descriptor) runs without asking
+ *    whatever woke him: it writes nothing in the tree, publishes nothing, and
+ *    reaches a host only as his WebFetch on Claude and OpenCode, which no
+ *    gate holds, already does.
  * 5. **Wake source**: a turn whose every read send is the owner's message
  *    (a thread message, a view request, his own words straight into the
  *    session) with no outside text riding on it, and that has read no web
@@ -516,6 +518,9 @@ const wrapperWords = (name: string, words: string[]): number => {
   return at;
 };
 
+/** `command`'s options that look a word up instead of running it. */
+const COMMAND_LOOKUP = /^-[vV]$/u;
+
 /** A simple command's words from the program it runs: past its assignments, keywords and wrappers. */
 const programWords = (segment: string[]): string[] => {
   let words = segment;
@@ -524,8 +529,13 @@ const programWords = (segment: string[]): string[] => {
       (word) => !(ASSIGNMENT.test(word) || KEYWORDS.has(word))
     );
     words = lead < 0 ? [] : words.slice(lead);
-    const [program] = words;
-    if (program === undefined || !WRAPPERS[baseName(program)]) {
+    const [program, option] = words;
+    if (
+      program === undefined ||
+      !WRAPPERS[baseName(program)] ||
+      // `command -v` and `-V` name what a word runs, and run nothing.
+      (baseName(program) === "command" && COMMAND_LOOKUP.test(option ?? ""))
+    ) {
       return words;
     }
     words = words.slice(wrapperWords(baseName(program), words));
@@ -1081,20 +1091,370 @@ const SYSTEMCTL_VALUED: ReadonlySet<string> = new Set([
   "--output",
   "--state",
 ]);
-/** systemctl's options that reach another host or machine. */
-const SYSTEMCTL_REMOTE = /^(?:-H|--host|-M|--machine)(?:=|$)/u;
+/** systemd-analyze's verbs that only read the boot, the units or their settings. */
+const ANALYZE_READS: ReadonlySet<string> = new Set([
+  "time",
+  "blame",
+  "critical-chain",
+  "plot",
+  "dot",
+  "dump",
+  "cat-config",
+  "unit-files",
+  "unit-paths",
+  "exit-status",
+  "capability",
+  "condition",
+  "syscall-filter",
+  "filesystems",
+  "calendar",
+  "timestamp",
+  "timespan",
+  "security",
+  "architectures",
+]);
+/** systemd-analyze's options that take the next word as their value. */
+const ANALYZE_VALUED: ReadonlySet<string> = new Set([
+  "--root",
+  "--image",
+  "--fuzz",
+  "--from-pattern",
+  "--to-pattern",
+  "--iterations",
+  "--base-time",
+  "--unit",
+  "--threshold",
+  "--security-policy",
+  "--profile",
+]);
+/** A systemd tool's options that reach another host or machine. */
+const SYSTEMD_REMOTE = /^(?:-H|--host|-M|--machine)(?:=|$)/u;
 
-/** systemctl's word that makes it act: a verb that is not a read, or a remote host; none when it only reads (no verb lists units). */
-function systemctlReads(args: string[]): string | undefined {
-  for (let at = 0; at < args.length; at += 1) {
-    const arg = args[at] as string;
-    if (SYSTEMCTL_REMOTE.test(arg)) {
-      return arg;
+/**
+ * A systemd tool's reader: its word that makes it act is a verb not in
+ * `reads`, or a remote host; none when it only reads (no verb is its
+ * listing). An option in `valued` takes the next word.
+ */
+const systemdReads =
+  (reads: ReadonlySet<string>, valued: ReadonlySet<string>): Reader =>
+  (args) => {
+    for (let at = 0; at < args.length; at += 1) {
+      const arg = args[at] as string;
+      if (SYSTEMD_REMOTE.test(arg)) {
+        return arg;
+      }
+      if (valued.has(arg)) {
+        at += 1;
+      } else if (!arg.startsWith("-")) {
+        return reads.has(arg) ? undefined : arg;
+      }
     }
-    if (SYSTEMCTL_VALUED.has(arg)) {
-      at += 1;
-    } else if (!arg.startsWith("-")) {
-      return SYSTEMCTL_READS.has(arg) ? undefined : arg;
+  };
+
+/** `ss`'s options that kill sockets (`-K`), dump raw data into a file (`-D`) or keep it running (`-E`). */
+const SS_ACTS =
+  /^(?:--kill|--events|--diag(?:=.*)?|-[a-zA-Z]*[KDE][a-zA-Z]*)$/u;
+/** `netstat`'s options that keep it running. */
+const NETSTAT_ACTS = /^(?:--continuous|-[a-zA-Z]*c[a-zA-Z]*)$/u;
+/** `lsof`'s repeat mode, which keeps it running. */
+const LSOF_ACTS = /^[-+]r/u;
+/** `free`'s options that repeat it every few seconds. */
+const FREE_ACTS = /^(?:--seconds(?:=.*)?|-[a-zA-Z]*s[a-zA-Z]*\d*)$/u;
+/** `hostname`'s options that set the name from a file or at boot. */
+const HOSTNAME_ACTS = /^(?:-F|--file|-b|--boot)$/u;
+
+/** `hostname`'s word that sets the name: a name given, or a file to set it from; none when it only prints. */
+const hostnameReads: Reader = (args) =>
+  args.find((arg) => HOSTNAME_ACTS.test(arg) || !arg.startsWith("-"));
+
+/**
+ * The `ip` objects whose listing only reads, each as iproute2 takes it
+ * written out or cut short (`ip a`, `ip r`).
+ */
+const IP_OBJECTS: ReadonlySet<string> = new Set([
+  "address",
+  "addr",
+  "a",
+  "route",
+  "r",
+  "link",
+  "l",
+  "neighbour",
+  "neighbor",
+  "neigh",
+  "n",
+  "rule",
+]);
+/**
+ * The `ip` verbs that list, written out: iproute2 takes any prefix of a verb
+ * (`ip addr a` is `add`), so a cut verb is not read. `get` asks the kernel
+ * which route it would take.
+ */
+const IP_LISTS: ReadonlySet<string> = new Set(["show", "list", "lst", "get"]);
+/** `ip`'s global options that only shape what it prints; `-batch` (commands from a file) and `-netns` are not among them. */
+const IP_FLAGS =
+  /^--?(?:4|6|0|br(?:ief)?|c(?:olor)?(?:=\w+)?|j(?:son)?|p(?:retty)?|s(?:tats?|tatistics)?|d(?:etails)?|o(?:neline)?|h(?:uman(?:-readable)?)?|r(?:esolve)?)$/u;
+
+/** `ip`'s word that makes it act: an option or object the gate does not know, or a verb that is not a listing; none when it lists addresses, routes, links, neighbours or rules. */
+function ipReads(args: string[]): string | undefined {
+  const at = args.findIndex((arg) => !IP_FLAGS.test(arg));
+  const object = args[at];
+  if (object === undefined) {
+    // `ip` with no object prints its usage.
+    return;
+  }
+  if (!IP_OBJECTS.has(object)) {
+    return object;
+  }
+  const verb = args[at + 1];
+  return verb === undefined || IP_LISTS.has(verb) ? undefined : verb;
+}
+
+/**
+ * curl's short options, by the long name the rules below judge them by. A
+ * letter not here (`-d`, `-F`, `-T`, `-O`, `-c`, `-K`, `-J`, `-Q` …) is one
+ * the gate does not know only reads.
+ */
+const CURL_SHORT: Readonly<Record<string, string>> = {
+  s: "--silent",
+  S: "--show-error",
+  f: "--fail",
+  L: "--location",
+  I: "--head",
+  i: "--include",
+  v: "--verbose",
+  k: "--insecure",
+  N: "--no-buffer",
+  g: "--globoff",
+  "4": "--ipv4",
+  "6": "--ipv6",
+  "0": "--http1.0",
+  "#": "--progress-bar",
+  q: "--disable",
+  Z: "--parallel",
+  j: "--junk-session-cookies",
+  n: "--netrc",
+  ":": "--next",
+  H: "--header",
+  A: "--user-agent",
+  e: "--referer",
+  b: "--cookie",
+  u: "--user",
+  U: "--proxy-user",
+  x: "--proxy",
+  m: "--max-time",
+  w: "--write-out",
+  Y: "--speed-limit",
+  y: "--speed-time",
+  r: "--range",
+  z: "--time-cond",
+  E: "--cert",
+  X: "--request",
+  o: "--output",
+  D: "--dump-header",
+};
+/** curl's switches that only shape a GET: how it fails, retries, follows, prints and speaks. */
+const CURL_FLAGS: ReadonlySet<string> = new Set([
+  "--silent",
+  "--show-error",
+  "--fail",
+  "--fail-with-body",
+  "--fail-early",
+  "--location",
+  "--head",
+  "--include",
+  "--show-headers",
+  "--verbose",
+  "--insecure",
+  "--proxy-insecure",
+  "--no-buffer",
+  "--globoff",
+  "--compressed",
+  "--ipv4",
+  "--ipv6",
+  "--http1.0",
+  "--http1.1",
+  "--http2",
+  "--http2-prior-knowledge",
+  "--http3",
+  "--http3-only",
+  "--progress-bar",
+  "--no-progress-meter",
+  "--disable",
+  "--parallel",
+  "--parallel-immediate",
+  "--junk-session-cookies",
+  "--netrc",
+  "--netrc-optional",
+  "--next",
+  "--retry-all-errors",
+  "--retry-connrefused",
+  "--no-keepalive",
+  "--tcp-nodelay",
+  "--path-as-is",
+  "--raw",
+  "--ssl-reqd",
+  "--tlsv1.2",
+  "--tlsv1.3",
+  "--ca-native",
+  "--anyauth",
+  "--basic",
+  "--digest",
+  "--negotiate",
+  "--suppress-connect-headers",
+]);
+/** curl's options whose value only shapes the request or what it prints: a header, a timeout, a retry, a proxy, a certificate, a file it reads. */
+const CURL_VALUED: ReadonlySet<string> = new Set([
+  "--header",
+  "--proxy-header",
+  "--user-agent",
+  "--referer",
+  "--cookie",
+  "--user",
+  "--proxy-user",
+  "--oauth2-bearer",
+  "--proxy",
+  "--noproxy",
+  "--max-time",
+  "--connect-timeout",
+  "--expect100-timeout",
+  "--keepalive-time",
+  "--retry",
+  "--retry-delay",
+  "--retry-max-time",
+  "--max-redirs",
+  "--max-filesize",
+  "--limit-rate",
+  "--speed-limit",
+  "--speed-time",
+  "--resolve",
+  "--connect-to",
+  "--cacert",
+  "--capath",
+  "--cert",
+  "--cert-type",
+  "--key",
+  "--key-type",
+  "--pass",
+  "--pinnedpubkey",
+  "--time-cond",
+  "--range",
+  "--url-query",
+  "--netrc-file",
+]);
+/** curl's request methods that read. */
+const CURL_METHOD = /^(?:GET|HEAD)$/u;
+const HTTP_URL = /^https?:\/\//iu;
+const ANY_SCHEME = /^[a-z][a-z0-9+.-]*:\/\//iu;
+/** Hosts curl reads, with no scheme written, as another protocol's ("If the outermost subdomain name matches DICT, FTP, IMAP, LDAP, POP3 or SMTP … that protocol is used"). */
+const CURL_GUESSED = /^(?:[^/@]*@)?(?:dict|ftp|imap|ldap|pop3|smtp)\./iu;
+
+/** A variable or a substitution in an address (`$HOST`, `$(…)`, `` `…` ``). */
+const UNREAD_URL = /\$|`…`/u;
+
+/**
+ * Whether curl speaks HTTP to an address: an `http(s)://` URL, or one with
+ * no scheme whose host curl does not take for another protocol's (`gopher`,
+ * `dict`, `telnet` and `smtp` send what they are given). A variable or a
+ * substitution in it is an address the gate cannot read.
+ */
+const curlSpeaksHttp = (url: string): boolean =>
+  !UNREAD_URL.test(url) &&
+  (HTTP_URL.test(url) || !(ANY_SCHEME.test(url) || CURL_GUESSED.test(url)));
+
+/** Where curl's output may go and nothing is written: stdout (`-`), or `/dev/null`. */
+const toStdout = (value: string): boolean =>
+  value === "-" || value === DEV_NULL;
+
+/** curl's options whose value decides whether it only reads, each with the values that do. */
+const CURL_JUDGED: Readonly<Record<string, (value: string) => boolean>> = {
+  "--request": (value) => CURL_METHOD.test(value),
+  "--url": curlSpeaksHttp,
+  // `%output{file}` (curl 8.3) writes what follows into a file; `@file` reads a format the gate can't see.
+  "--write-out": (value) =>
+    !(value.startsWith("@") || value.includes("%output{")),
+  "--output": toStdout,
+  "--dump-header": toStdout,
+  "--trace": toStdout,
+  "--trace-ascii": toStdout,
+  "--stderr": toStdout,
+};
+
+const curlTakesValue = (name: string): boolean =>
+  CURL_VALUED.has(name) || Object.hasOwn(CURL_JUDGED, name);
+
+/**
+ * A curl word's options by long name, each with a value written into the
+ * word (`-XGET`'s `GET`; a long option takes its value as the next word
+ * only); none when the word is an address. Short letters run together
+ * (`-fsSL`) until one that takes a value.
+ */
+const curlOptions = (
+  word: string
+): { name: string; value?: string }[] | undefined => {
+  if (word.startsWith("--")) {
+    return [{ name: word }];
+  }
+  if (!word.startsWith("-") || word === "-") {
+    return;
+  }
+  const options: { name: string; value?: string }[] = [];
+  for (let at = 1; at < word.length; at += 1) {
+    const letter = word[at] as string;
+    const name = CURL_SHORT[letter] ?? `-${letter}`;
+    const rest = word.slice(at + 1);
+    if (curlTakesValue(name)) {
+      options.push(rest ? { name, value: rest } : { name });
+      return options;
+    }
+    options.push({ name });
+  }
+  return options;
+};
+
+/** One curl option's words that make it more than a read, given its value when it takes one; none when it only reads. */
+const curlOptionActs = (
+  name: string,
+  value: string | undefined
+): string | undefined => {
+  if (value === undefined) {
+    return CURL_FLAGS.has(name) ? undefined : name;
+  }
+  const judged = CURL_JUDGED[name];
+  return judged && !judged(value) ? `${name} ${value}` : undefined;
+};
+
+/**
+ * curl's word that makes it more than an HTTP read, as written: a method
+ * other than GET or HEAD, a body or an upload (`-d`, `--json`, `-F`, `-T`),
+ * a config file (`-K`), output into a file (`-o file`, `-O`, `-c`, `-D
+ * file`, `--trace file`), a unix socket (Docker's and podman's, and the
+ * GitHub door's, which writes with the machine's token), an address of
+ * another protocol, or any option the gate does not know; none when it only
+ * reads. A GET reaches outside hosts as Caw's WebFetch on Claude and
+ * OpenCode, which no gate holds, already does; its content makes his wake
+ * external as that does (web-reads.ts).
+ */
+function curlReads(args: string[]): string | undefined {
+  for (let at = 0; at < args.length; at += 1) {
+    const word = args[at] as string;
+    const options = curlOptions(word);
+    if (!options) {
+      if (!curlSpeaksHttp(word)) {
+        return word;
+      }
+      continue;
+    }
+    for (const { name, value: inline } of options) {
+      let value = inline;
+      if (value === undefined && curlTakesValue(name)) {
+        at += 1;
+        value = args[at] ?? "";
+      }
+      const acts = curlOptionActs(name, value);
+      if (acts) {
+        return acts;
+      }
     }
   }
 }
@@ -1433,12 +1793,29 @@ const READERS: Readonly<Record<string, Reader>> = {
   mawk: awkReads,
   nawk: awkReads,
   gh: ghReads,
-  systemctl: systemctlReads,
+  systemctl: systemdReads(SYSTEMCTL_READS, SYSTEMCTL_VALUED),
+  "systemd-analyze": systemdReads(ANALYZE_READS, ANALYZE_VALUED),
   journalctl: unless(JOURNAL_ACTS),
   date: unless(DATE_ACTS),
   whoami: onlyReads,
   id: onlyReads,
   uname: onlyReads,
+  hostname: hostnameReads,
+  nproc: onlyReads,
+  uptime: onlyReads,
+  free: unless(FREE_ACTS),
+  ps: onlyReads,
+  // pgrep finds processes; pkill, which signals them, is not a reader.
+  pgrep: onlyReads,
+  ss: unless(SS_ACTS),
+  netstat: unless(NETSTAT_ACTS),
+  lsof: unless(LSOF_ACTS),
+  ip: ipReads,
+  curl: curlReads,
+  // It only waits: a wait loop's pause.
+  sleep: onlyReads,
+  // Only `command -v` and `-V` reach here ({@link programWords}): they name what a word runs.
+  command: onlyReads,
 };
 
 /** What a judge says of one command: why it is more than the line may run, in words; none when it may run. */
@@ -1498,8 +1875,9 @@ const readBlocker = (command: string): string | undefined =>
  * remote by name among them, which moves only its remote-tracking refs);
  * redirected only into `/dev/null`, onto another descriptor or from a file;
  * nothing backgrounded, nothing unreadable. Nothing such a line does writes
- * the place's tree, publishes, or reaches a host the project does not name,
- * and Caw's own Read and Grep tools, which no gate holds, read as much.
+ * the place's tree or publishes, and Caw's own Read, Grep and WebFetch
+ * tools, which no gate holds, read as much: a `curl` GET reaches a host as
+ * his WebFetch does.
  */
 const readOnly = (command: string): boolean =>
   readBlocker(command) === undefined;
