@@ -23,8 +23,17 @@ export type BrowserHostKind = "container" | "local";
  * the same number). The gate, HTTP and DevTools listen on 127.0.0.1 alone;
  * media on every address. The local host uses DevTools only. A browser
  * takes its three when it first starts, not before.
+ *
+ * Below Linux's ephemeral range, 32768–60999 ("The default values are 32768
+ * and 60999 respectively", kernel Documentation/networking/ip-sysctl.rst,
+ * `ip_local_port_range`), where any socket the kernel gives a port to could
+ * hold one first (43000–43060 until 2026-10-26). IANA's registry assigns
+ * none of 14060–14140, Wikipedia's list of TCP and UDP port numbers names no
+ * use of one, and nmap-services finds each open on at most 0.033% of hosts
+ * (all read 2026-10-26). scripts/fixed-ports-check.ts holds every port
+ * constant out of that range.
  */
-export const BROWSER_PORTS = { first: 43_000, last: 43_060 } as const;
+export const BROWSER_PORTS = { first: 14_070, last: 14_130 } as const;
 
 /** The machine's DevTools gate: every session's browser tool, every browser, by the path's gate id. */
 export const BROWSER_GATE_PORT = BROWSER_PORTS.first;

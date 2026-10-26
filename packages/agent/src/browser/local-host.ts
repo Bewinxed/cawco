@@ -203,13 +203,22 @@ export class LocalHost implements BrowserHost {
     return !!pid && isAlive(pid);
   }
 
+  servesItsPorts(record: BrowserRecord): Promise<boolean> {
+    return answers(portsOf(record).devtools);
+  }
+
   async start(
     record: BrowserRecord,
     options: { relay?: BrowserRelay; progress: (row: Progress) => void }
   ): Promise<BrowserRecord> {
     const { devtools } = portsOf(record);
-    if ((await this.running(record)) && (await answers(devtools))) {
-      return { ...record, host: "local", state: "live" };
+    if (await this.running(record)) {
+      if (await answers(devtools)) {
+        return { ...record, host: "local", state: "live" };
+      }
+      // Running, but not on its DevTools port (one an earlier range gave
+      // it): ended, so the one started here has its profile to itself.
+      await this.stop(record);
     }
     options.progress({ state: "starting" });
     const chromium = await chromiumExecutable();

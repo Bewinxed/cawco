@@ -38,6 +38,7 @@ import {
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { detach } from "@cawco/core/detach";
 import { LineSplitter } from "@cawco/core/lines";
+import { listenOrEnd } from "@cawco/core/listeners";
 import { PacedWriter } from "@cawco/core/paced-write";
 import { serverEnvironment, sessionEnvironment } from "@cawco/core/session-env";
 // The protocol lives behind its own subpath: `sessiond.ts` reaches for `node:os`
@@ -523,16 +524,10 @@ export class SessiondServer {
     return true;
   }
 
-  #bind(endpoint: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const server = createServer((socket) => this.#accept(socket));
-      server.once("error", reject);
-      server.listen(endpoint, () => {
-        server.removeListener("error", reject);
-        this.#server = server;
-        resolve();
-      });
-    });
+  async #bind(endpoint: string): Promise<void> {
+    const server = createServer((socket) => this.#accept(socket));
+    await listenOrEnd(server, endpoint, "sessiond");
+    this.#server = server;
   }
 
   /** What is alive, right now — the body of both `welcome` and `list`. */

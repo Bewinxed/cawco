@@ -48,6 +48,7 @@ import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Boundary } from "../../../packages/agent/src/boundary";
+import { BROWSER_GATE_PORT } from "../../../packages/core/src/browser";
 import { projectClaudeDir } from "../../../packages/core/src/paths";
 import {
   MACHINE,
@@ -553,7 +554,7 @@ const standUp = async (kit: Kit) => {
     300_000
   );
 
-  const gateUrl = `http://127.0.0.1:${fleet.env.CAWCO_BROWSER_GATE_PORT ?? "43000"}/`;
+  const gateUrl = `http://127.0.0.1:${fleet.env.CAWCO_BROWSER_GATE_PORT ?? BROWSER_GATE_PORT}/`;
   const repo = join(fleet.sandbox, "code");
   await repository(
     repo,

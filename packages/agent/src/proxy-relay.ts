@@ -73,6 +73,7 @@ import {
   hubPreviewOriginsOf,
   isHubPreview,
 } from "@cawco/core/hub-previews";
+import { listenOrEnd } from "@cawco/core/listeners";
 import { SOCAT_BACKLOG } from "@cawco/core/socat";
 
 /** The relay's port inside a Linux workspace's sandbox, beside srt's 3128 (HTTP) and 1080 (SOCKS) there. */
@@ -585,13 +586,7 @@ export const startProxyRelay = async (options: {
   const server = createServer({ allowHalfOpen: true }, (client) =>
     relayOne(client, options.upstream, authorization, previews)
   );
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(options.socket, () => {
-      server.off("error", reject);
-      resolve();
-    });
-  });
+  await listenOrEnd(server, options.socket, "the proxy relay");
   chmodSync(options.socket, 0o600);
   return server;
 };

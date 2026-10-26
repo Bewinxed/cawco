@@ -97,6 +97,7 @@ import {
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { listenOrEnd } from "@cawco/core/listeners";
 import { machineId } from "@cawco/core/machine-id";
 import { cawcoDataDir, darwinSocketRoot } from "@cawco/core/paths";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -782,13 +783,7 @@ export const openContainerDoors = (
       const server = createServer({ allowHalfOpen: true }, (client) =>
         serveConnection(client, upstream.path, stamp)
       );
-      await new Promise<void>((done, fail) => {
-        server.once("error", fail);
-        server.listen(path, () => {
-          server.off("error", fail);
-          done();
-        });
-      });
+      await listenOrEnd(server, path, `${instanceId}'s door to ${kind}`);
       servers.push(server);
       upstreams.set(kind, upstream.path);
       env[ENV_OF[kind]] = `${UNIX}${path}`;
@@ -820,11 +815,22 @@ const closeContainerDoors = async (instanceId: string): Promise<void> => {
   );
 };
 
-/** What a session's notice says of the runtimes its containers do not stop on; none when there are none. */
+/**
+ * What a session's notice says of the runtimes its containers do not stop
+ * on: every one when its doors did not open (`shut`, why), else those it
+ * reaches with no door; none when there are none.
+ */
 export const containersUntrackedWords = (
-  untracked: readonly string[]
-): string | undefined =>
-  untracked.length === 0 ? undefined : containerWords.untracked(untracked);
+  untracked: readonly string[],
+  shut?: string
+): string | undefined => {
+  if (shut !== undefined) {
+    return containerWords.doorsShut(shut);
+  }
+  return untracked.length === 0
+    ? undefined
+    : containerWords.untracked(untracked);
+};
 
 /** The `/` the Engine API puts before each container's name. */
 const NAME_SLASH = /^\//u;

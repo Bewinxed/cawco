@@ -117,6 +117,7 @@ import {
 } from "@cawco/core/handover";
 import { machineEndpoint } from "@cawco/core/keepers";
 import { capLaunchdLogs, sweepLaunchdLogs } from "@cawco/core/launchd";
+import { endProcess } from "@cawco/core/listeners";
 import { machineId } from "@cawco/core/machine-id";
 import {
   machineKeyPath,
@@ -3806,8 +3807,10 @@ export const startDaemon = (rediscover = false) =>
                 stop();
               }
             },
+            // Its gate is every session's one door to a browser: an agent
+            // without it ends, to be started again (core listeners.ts).
             (error: unknown) =>
-              console.warn(`[browser] not watched: ${String(error)}`)
+              endProcess("[browser] the browsers are not served", error)
           )
       )
     );
@@ -4127,18 +4130,13 @@ export const runDaemon = (rediscover = false): void => {
     endSignIns();
     endProviderSignIns();
   });
-  process.on("unhandledRejection", (reason: unknown) => {
-    Effect.runFork(
-      Effect.logError(
-        `[daemon] unhandledRejection: ${reason instanceof Error ? reason.stack : String(reason)}`
-      )
-    );
-  });
-  process.on("uncaughtException", (reason: Error) => {
-    Effect.runFork(
-      Effect.logError(
-        `[daemon] uncaughtException: ${reason instanceof Error ? reason.stack : String(reason)}`
-      )
-    );
-  });
+  // Said, then ended: a throw nothing caught may be a listener's error
+  // event, and an agent that carried on past one stayed up without serving
+  // it (core listeners.ts). Its service manager starts it again.
+  process.on("unhandledRejection", (reason: unknown) =>
+    endProcess("[daemon] unhandledRejection", reason)
+  );
+  process.on("uncaughtException", (reason: Error) =>
+    endProcess("[daemon] uncaughtException", reason)
+  );
 };

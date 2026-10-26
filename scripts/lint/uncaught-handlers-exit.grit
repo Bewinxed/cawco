@@ -1,0 +1,13 @@
+language js
+
+// A handler for an uncaught throw or an unhandled rejection says it, then
+// ends the process (core listeners.ts `endProcess`). One that only logs
+// turns every uncaught throw into a log line: a listener's `error` event
+// with no handler of its own lands there, and the process lives on without
+// serving it.
+`process.$on($event, $handler)` as $hit where {
+  $on <: or { `on`, `once`, `addListener`, `prependListener`, `prependOnceListener` },
+  $event <: r"[\"'`](?:uncaughtException|unhandledRejection)[\"'`]",
+  $handler <: not contains or { `process.exit($_)`, `endProcess($_, $_)` },
+  register_diagnostic(span=$hit, message="An uncaughtException or unhandledRejection handler ends the process once it has said why: call endProcess from @cawco/core/listeners (or process.exit).")
+}

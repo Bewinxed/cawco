@@ -451,6 +451,7 @@ const standsAsAsked = async (
   if (!(
     record.state === "live" &&
     (await host.running(record)) &&
+    (await host.servesItsPorts(record)) &&
     !relayDue(record, relay)
   )) {
     return false;

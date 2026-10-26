@@ -1,0 +1,11 @@
+language js
+
+// A long-running CawCo process that fails ends (core listeners.ts
+// `endProcess`): `process.exitCode = 1` only says how it will end once
+// nothing keeps it up, and work begun before the failure keeps it up. On
+// 2026-10-26 an agent whose gateway could not listen set it and stayed up,
+// never registering (7c27d1a31).
+`process.exitCode = $_` as $hit where {
+  $filename <: includes "packages/",
+  register_diagnostic(span=$hit, message="Use process.exit (endProcess from @cawco/core/listeners says why first): a process with work in flight stays up past process.exitCode.")
+}

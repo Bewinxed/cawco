@@ -7,6 +7,10 @@
   "plugins": [
     "./scripts/lint/no-raw-deadline.grit",
     "./scripts/lint/no-system-path.grit",
+    // A long-running process that fails ends, so its service manager starts
+    // it again (packages/core/src/listeners.ts).
+    "./scripts/lint/no-exit-code.grit",
+    "./scripts/lint/uncaught-handlers-exit.grit",
   ],
   // Design mock-ups and their build scratch, not shipped code.
   // jsonl-parser is publishable and linted/formatted by oxlint/oxfmt instead.

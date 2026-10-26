@@ -3538,18 +3538,21 @@ export class SessionSupervisor {
     );
     // Its doors to the machine's container runtimes (session-containers.ts),
     // so what its work starts stops with it. A workspace's boundary reaches
-    // no runtime at all: a bounded session gets none.
+    // no runtime at all: a bounded session gets none. Doors that did not
+    // open leave the session without them, and it is told so.
+    let shut: string | undefined;
     const doors = boundary
       ? undefined
       : await openContainerDoors(spec.instanceId).catch((error: unknown) => {
+          shut = errorText(error);
           warn(
-            `${spec.instanceId}: its doors to the container runtimes did not open, so containers it starts are not stopped with it: ${errorText(error)}`
+            `${spec.instanceId}: its doors to the container runtimes did not open, so containers it starts are not stopped with it: ${shut}`
           );
           return { env: {}, untracked: [] };
         });
     const containerEnv = doors?.env;
     // A runtime it reaches with no door: it is told once, as it launches.
-    const untracked = containersUntrackedWords(doors?.untracked ?? []);
+    const untracked = containersUntrackedWords(doors?.untracked ?? [], shut);
     if (untracked && !recovery) {
       this.#sayGone({
         kind: "frame",

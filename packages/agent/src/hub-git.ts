@@ -54,6 +54,7 @@ import { chmod, rm } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { join } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
+import { listenOrEnd } from "@cawco/core/listeners";
 import {
   hubCredentialSocket,
   workspaceDoorDir,
@@ -1545,13 +1546,7 @@ export const openGitDoor = async (ref: WorkspaceRef): Promise<void> => {
     serveConnection(ref, socket)
   );
   doors.set(ref.id, server);
-  await new Promise<void>((done, fail) => {
-    server.once("error", fail);
-    server.listen(path, () => {
-      server.off("error", fail);
-      done();
-    });
-  });
+  await listenOrEnd(server, path, `${ref.id}'s git door`);
 };
 
 /**

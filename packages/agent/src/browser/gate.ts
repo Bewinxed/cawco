@@ -1614,9 +1614,10 @@ let listening: Server<LinkData> | undefined;
 
 /**
  * Listens on 127.0.0.1 at `browserGatePort()`, the one door to every
- * browser of the machine; the daemon's alone. A port another process holds
- * is said in the log, and every session's browser tool answers that it
- * cannot connect until the agent starts again with it free.
+ * browser of the machine; the daemon's alone. A port it cannot take throws,
+ * naming it, and the agent ends on it (daemon.ts, its `watchBrowsers`) to
+ * be started again: an agent left up without its gate served no session's
+ * browser tool until it was restarted by hand.
  */
 export const listenGates = (): void => {
   if (listening) {
@@ -1637,8 +1638,9 @@ export const listenGates = (): void => {
       },
     });
   } catch (error) {
-    console.warn(
-      `[browser] the DevTools gate does not listen on 127.0.0.1:${port}: ${String(error)}`
+    throw new Error(
+      `the DevTools gate cannot listen on 127.0.0.1:${port}: ${String(error)}`,
+      { cause: error }
     );
   }
 };

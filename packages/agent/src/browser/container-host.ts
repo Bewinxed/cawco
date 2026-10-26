@@ -376,6 +376,17 @@ export class ContainerHost implements BrowserHost {
     return wanted !== null && wanted.rules !== record.container?.hostRules;
   }
 
+  servesItsPorts(record: BrowserRecord): Promise<boolean> {
+    const made = record.container?.ports;
+    const now = portsOf(record);
+    return Promise.resolve(
+      made !== undefined &&
+        made.http === now.http &&
+        made.devtools === now.devtools &&
+        made.media === now.media
+    );
+  }
+
   async running(record: BrowserRecord): Promise<boolean> {
     if (!record.container) {
       return false;

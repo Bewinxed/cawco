@@ -34,6 +34,7 @@
     "./machine-room": "./src/machine-room.ts",
     "./live-processes": "./src/live-processes.ts",
     "./detach": "./src/detach.ts",
+    "./listeners": "./src/listeners.ts",
     "./lines": "./src/lines.ts",
     "./paced-write": "./src/paced-write.ts",
     "./wire": "./src/wire.ts",

@@ -124,6 +124,12 @@ export interface BrowserHost {
   rulesDue?: (record: BrowserRecord) => Promise<boolean>;
   /** Whether the record's browser runs now, read from the runtime or the process. */
   running: (record: BrowserRecord) => Promise<boolean>;
+  /**
+   * Whether its running browser serves on the ports its slot names now: one
+   * made for others (the ports moved below the ephemeral range on
+   * 2026-10-26, core `BROWSER_PORTS`) is made again on its profile.
+   */
+  servesItsPorts: (record: BrowserRecord) => Promise<boolean>;
   /** Starts (or wakes) it and answers the record once it is live. */
   start: (
     record: BrowserRecord,

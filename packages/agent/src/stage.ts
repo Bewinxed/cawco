@@ -46,8 +46,14 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
-import { type PreviewSource, sheetWords, type WorkspaceRef } from "@cawco/core";
+import {
+  mcpGatewayPort,
+  type PreviewSource,
+  sheetWords,
+  type WorkspaceRef,
+} from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { BROWSER_PORTS, browserGatePort } from "@cawco/core/browser";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { type Pid, signalGroup, spawnedPid } from "@cawco/core/signal";
 import {
@@ -105,9 +111,45 @@ type Framework = "svelte" | "vue" | "react" | "solid" | "preact";
 const HOST_DIR = ".cawco/stage";
 const HOST_FILE = `${HOST_DIR}/host.mjs`;
 
-/** The ports a stage takes on its boundary's loopback, one per workspace and root. Ours: clear of Vite's 5173 and the common dev ports. */
-const PORT_BASE = 41_000;
-const PORT_SPAN = 8000;
+/**
+ * The ports a stage takes on its boundary's loopback (the host's on macOS),
+ * one per workspace and root, by its key's hash ({@link stagePort}). Ours:
+ * clear of Vite's 5173 and the common dev ports, and below Linux's ephemeral
+ * range, 32768–60999 (kernel ip-sysctl.rst, `ip_local_port_range`), where a
+ * socket the kernel gave a port to could hold a stage's first; 41000–48999
+ * until 2026-10-26, which held the MCP gateway's 43879 and the browsers'
+ * 43000–43060. Of its ports Wikipedia's list of TCP and UDP port numbers
+ * names Syncthing's 22000 as the one common service on a developer's
+ * machine (read 2026-10-26), and no stage takes it.
+ */
+const STAGE_PORTS = { first: 20_000, last: 23_999 } as const;
+/** Syncthing's default listener: a stage beside it on the host's loopback (macOS) would never start. */
+const SYNCTHING_PORT = 22_000;
+
+/**
+ * The stage port of a key whose hash is `hash`: the hash-th port of
+ * {@link STAGE_PORTS} past every port CawCo holds as this agent names it now
+ * (its gateway and browser gate, a scratch fleet's moved ones among them,
+ * and its browsers' range) and Syncthing's. scripts/fixed-ports-check.ts
+ * keeps every other port constant of CawCo's out of the range.
+ */
+const stagePort = (hash: number): number => {
+  const held = new Set<number>([
+    mcpGatewayPort(),
+    browserGatePort(),
+    SYNCTHING_PORT,
+  ]);
+  const ports: number[] = [];
+  for (let port = STAGE_PORTS.first; port <= STAGE_PORTS.last; port += 1) {
+    if (!(
+      held.has(port) ||
+      (port >= BROWSER_PORTS.first && port <= BROWSER_PORTS.last)
+    )) {
+      ports.push(port);
+    }
+  }
+  return ports[hash % ports.length] as number;
+};
 
 /** How long a health look waits for its answer. Ours. */
 const HEALTH_WAIT_MS = 5000;
@@ -577,7 +619,7 @@ function stageFor(
       runtime,
       toolchain,
     },
-    port: PORT_BASE + (hash % PORT_SPAN),
+    port: stagePort(hash),
   };
 }
 

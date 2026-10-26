@@ -698,7 +698,7 @@ const gitCredential = async (args: Args): Promise<number> => {
   }).catch(() => undefined);
   if (!answer?.ok) {
     console.error(
-      "cawco: this machine's agent gave no credential for the hub's git remote: it is not running, or not connected to this hub."
+      "cawco: this machine's agent gave no credential for the hub's git remote: it is not running, not connected to this hub, or its credential socket did not open (its log says why)."
     );
     return 1;
   }
