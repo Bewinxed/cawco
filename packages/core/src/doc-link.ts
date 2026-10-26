@@ -46,7 +46,7 @@ export const ARTIFACT_GONE = 4410;
 export const deviceDocName = (id: string): string => `cawco-artifact:${id}`;
 
 /** How long a device keeps the doc of an artifact no one opened there, ms: 30 days. Our call. */
-export const DEVICE_DOC_MS = 30 * DAY_MS;
+const DEVICE_DOC_MS = 30 * DAY_MS;
 
 /** Where a device notes when it last opened artifact `id`'s doc (localStorage, beside its database). */
 const usedKey = (id: string) => `cawco-artifact-used:${id}`;
@@ -94,14 +94,14 @@ export function tendDeviceDocs(id: string): void {
 export const RESYNC_MS = 10_000;
 
 /** How long one attempt at the socket may stand connecting before it is closed and tried again, ms. Our call. */
-export const OPEN_WITHIN_MS = 10_000;
+const OPEN_WITHIN_MS = 10_000;
 
 /**
  * How long an open socket may hear nothing before its link counts as lost,
  * ms: two of the hub's missed beats ({@link RESYNC_MS}) and a margin, under
  * y-websocket 3.1.0's own 30 s no-message check. Our call.
  */
-export const SILENT_MS = 25_000;
+const SILENT_MS = 25_000;
 
 /** How often {@link watchSilence} reads the time since the last message, ms. Our call. */
 const SILENCE_READ_MS = 1000;

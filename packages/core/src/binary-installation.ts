@@ -215,7 +215,7 @@ const STAGED_PHASES: ReadonlySet<BinaryUpdateState["phase"]> = new Set([
  * installed before it, in `versions/` and, on the hub's machine, in the hub's
  * archive cache ({@link hubReleasesDir}).
  */
-export const KEPT_INSTALLS = 3;
+const KEPT_INSTALLS = 3;
 
 /**
  * The builds this machine installed, in the order it installed them, newest

@@ -17,7 +17,6 @@ import {
   CLAUDE_DIR_NAME,
   CLAUDE_JSON_NAME,
   PLACED_MEMORY,
-  PLACED_SYNCED,
   PROJECT_SKILLS,
   TREE_STORE_DIR,
 } from "./claude-dirs";
@@ -66,13 +65,6 @@ export const userLayerPath = (...parts: string[]): string =>
  * reads it too).
  */
 export const claudeHomeJson = (): string => join(homedir(), CLAUDE_JSON_NAME);
-
-/**
- * The `.claude.json` a Claude Code run with this `CLAUDE_CONFIG_DIR` reads
- * (inside it), or {@link claudeHomeJson} for one run with none.
- */
-export const configDirClaudeJson = (configDir: string | undefined): string =>
-  configDir ? join(configDir, CLAUDE_JSON_NAME) : claudeHomeJson();
 
 /**
  * One account's Claude Code config dir on this machine: its own credential,
@@ -274,18 +266,6 @@ export const fleetSyncedPaths = (): string[] => [
 /** Where a project's fleet skills are placed in a folder: its project skills, which Claude Code and OpenCode both read. */
 export const placedSkillsDir = (cwd: string): string =>
   join(cwd, PROJECT_SKILLS);
-
-/**
- * What the fleet sync places in a folder that a harness loads, the folder's
- * part of {@link fleetSyncedPaths}: its skills dir ({@link placedSkillsDir})
- * and the tree store beside it that its links land in (`.claude/.cawco-trees`,
- * agent fleet.ts `placeSkill`). In a workspace's clone each is held read only
- * (core clone-denies.ts `cloneDenies`): a delegate reads a placed skill
- * and cannot change it, nor put another in its place for the clone's later
- * sessions to load.
- */
-export const placedSyncedPaths = (cwd: string): string[] =>
-  PLACED_SYNCED.map((name) => join(cwd, name));
 
 /** The user layer's files ({@link USER_LAYER_DIRS} has why each is the user's). */
 export const USER_LAYER_FILES = [
@@ -575,7 +555,7 @@ export const claudeVersionPath = (): string =>
   join(cawcoDataDir(), "claude-version.json");
 
 /** Where an installed hub keeps its database (`cawco.db`) and the backups beside it. */
-export const hubDataDir = (): string =>
+const hubDataDir = (): string =>
   process.platform === "darwin"
     ? join(homedir(), "Library", "Application Support", "cawco")
     : cawcoDataDir();
@@ -651,8 +631,7 @@ export const workspaceScratchRoot = (): string =>
  * {@link UNIX_SOCKET_PATH_MAX} ("Socket path too long",
  * process_singleton_posix.cc).
  */
-export const SCRATCH_SOCKET_SUFFIX =
-  "org.chromium.Chromium.XXXXXX/SingletonSocket";
+const SCRATCH_SOCKET_SUFFIX = "org.chromium.Chromium.XXXXXX/SingletonSocket";
 
 /**
  * A workspace's scratch dir, its `TMPDIR`: in {@link workspaceScratchRoot},
@@ -874,7 +853,7 @@ export const workspaceDoorDir = (id: string): string => {
  * whoever packs it (perl's `pack_sockaddr_un` among them), so a listener
  * and a caller never meet.
  */
-export const UNIX_SOCKET_PATH_MAX = process.platform === "darwin" ? 103 : 107;
+const UNIX_SOCKET_PATH_MAX = process.platform === "darwin" ? 103 : 107;
 
 /**
  * Why `path` cannot be a unix socket's, or nothing: refused up front, in
@@ -1126,7 +1105,7 @@ export const hostCaEnv = (): Record<string, string> => {
 };
 
 /** Where Playwright's browsers are on the host: a workspace runs them from there, read-only. */
-export const hostPlaywrightBrowsers = (): string =>
+const hostPlaywrightBrowsers = (): string =>
   process.platform === "darwin"
     ? join(homedir(), "Library", "Caches", "ms-playwright")
     : join(
@@ -1287,7 +1266,7 @@ export const workspaceRuntimeDir = (): string =>
  * one outside its own clone; its own repository's are copied into its clone
  * when it is cut.
  */
-export const SECRET_FILE_NAME = String.raw`\.env[^/]*|[^/]*\.env(\.[^/]*)?`;
+const SECRET_FILE_NAME = String.raw`\.env[^/]*|[^/]*\.env(\.[^/]*)?`;
 
 /** {@link SECRET_FILE_NAME} as a test on one file's name. */
 export const isSecretFileName = (name: string): boolean =>

@@ -92,7 +92,7 @@ import { findProgram, startedPath } from "./workspace-needs";
  * store, the project's memory documents as the fleet places them), and its
  * stage's host (agent stage.ts `writeHost`).
  */
-export const cloneWritten = (clone: string): string[] =>
+const cloneWritten = (clone: string): string[] =>
   [...cloneDenies(clone).map((deny) => deny.path), join(clone, ".cawco")].map(
     (path) => relative(clone, path)
   );
@@ -374,7 +374,7 @@ const ANY_GROUP_OR_OTHER_BIT = process.platform === "darwin" ? "+077" : "/077";
  * hides each from his shell and file tools; an MCP server the owner runs
  * reaches its own data on its own.
  */
-export const ownerOnlyIn = (root: string): Promise<string[]> =>
+const ownerOnlyIn = (root: string): Promise<string[]> =>
   findIn(
     root,
     [
@@ -488,7 +488,7 @@ const collapsed = (
  * ({@link collapsed}): srt refuses a profile past its cap whole, and the
  * place's boundary would not start at all.
  */
-export const linkedIn = async (root: string): Promise<string[]> => {
+const linkedIn = async (root: string): Promise<string[]> => {
   const ignored = await ignoredDirs(root);
   const [files, dirs] = await Promise.all([
     findIn(

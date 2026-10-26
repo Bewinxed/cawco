@@ -11,7 +11,7 @@ import type { FindField } from "./find";
  * remembered, then what it was for. Our own call, after the task model's
  * "title above purpose above project" (options doc, shared ground 3).
  */
-export const FIELD_WEIGHT: Record<FindField, number> = {
+const FIELD_WEIGHT: Record<FindField, number> = {
   title: 1,
   id: 0.9,
   path: 0.85,
@@ -252,7 +252,7 @@ const STOP_WORDS: ReadonlySet<string> = new Set(
 );
 
 /** One matched token of a marked text: where it stands in the unmarked words, and its words. */
-export interface Mark {
+interface Mark {
   from: number;
   terms: string[];
   to: number;

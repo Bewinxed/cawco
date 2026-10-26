@@ -58,8 +58,8 @@ export const PROJECT_SKILLS = projectClaudeRelative("skills");
 /**
  * What the fleet sync places in a project that a harness loads, relative to
  * the project: its skills dir ({@link PROJECT_SKILLS}) and the tree store
- * beside it that its links land in ({@link TREE_STORE_DIR}; paths.ts
- * `placedSyncedPaths`).
+ * beside it that its links land in ({@link TREE_STORE_DIR}). In a workspace's clone each is held
+ * read only (clone-denies.ts `cloneDenies`).
  */
 export const PLACED_SYNCED: readonly string[] = [
   PROJECT_SKILLS,

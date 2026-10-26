@@ -14,7 +14,7 @@
  */
 
 /** Every number the recogniser decides by, our own calls. */
-export const SHAPE_THRESHOLDS = {
+const SHAPE_THRESHOLDS = {
   /** Points the stroke is resampled to, evenly spaced along it. */
   samples: 64,
   /** Closed: its end lies within this share of its box's diagonal from its start. */
@@ -43,7 +43,7 @@ export const SHAPE_THRESHOLDS = {
   minConfidence: 0.6,
 } as const;
 
-export type ShapeType = "line" | "arrow" | "rectangle" | "ellipse" | "triangle";
+type ShapeType = "line" | "arrow" | "rectangle" | "ellipse" | "triangle";
 
 type Point = [x: number, y: number];
 

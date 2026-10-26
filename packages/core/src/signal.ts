@@ -15,7 +15,6 @@ export {
   listedPid,
   ownPid,
   type Pid,
-  SignalRefused,
   type Spawned,
   signal,
   spawnedPid,

@@ -91,7 +91,7 @@ export interface PreviewWays {
 export const INSTANT_REFUSAL_MS = 10;
 
 /** Our call: a probe unanswered in 10 s is a failed one. */
-export const PROBE_ANSWER_MS = 10_000;
+const PROBE_ANSWER_MS = 10_000;
 
 /** Every way a browser's probe of a preview origin fails, by what it shows. */
 export type PreviewUnreached =

@@ -380,7 +380,7 @@ export const uuidOf = (sdk: NeutralMessage): string | undefined =>
   "uuid" in sdk ? sdk.uuid : undefined;
 
 /** An ISO time, or nothing when the text is no time at all. */
-export const isoOf = (text: string | undefined): string | undefined => {
+const isoOf = (text: string | undefined): string | undefined => {
   if (!text) {
     return undefined;
   }
@@ -1954,7 +1954,7 @@ export const sendRef = (
   ...(sdkUuid ? { sdkUuid } : {}),
 });
 
-export const isSendRef = (block: TranscriptBlock): boolean =>
+const isSendRef = (block: TranscriptBlock): boolean =>
   block.type === "send.ref";
 
 /**
@@ -1981,7 +1981,7 @@ export const newer = (
  * hub's clock, the record's state. `sdkUuid` is the stored entry's own id,
  * when it has one — the handle a rewind goes by.
  */
-export function sendRow(
+function sendRow(
   record: SendRecord,
   sdkUuid: string | undefined = record.harnessId
 ): TranscriptBlock {

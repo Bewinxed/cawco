@@ -73,10 +73,7 @@ const severityOf = (percent: number): string => {
 };
 
 /** The answer's windows, by length; a window of a length CawCo has no kind for is left out. */
-export const chatgptWindows = (
-  body: UsageRaw,
-  now = Date.now()
-): LimitWindow[] =>
+const chatgptWindows = (body: UsageRaw, now = Date.now()): LimitWindow[] =>
   [body.rate_limit?.primary_window, body.rate_limit?.secondary_window].flatMap(
     (raw) => {
       const shape = raw ? shapeOf(raw.limit_window_seconds) : undefined;

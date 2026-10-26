@@ -7,7 +7,7 @@
  * event's key, lowercased; `shift` is whether ⇧ must be down, must be up, or
  * either.
  */
-export const SHELL_SHORTCUTS = [
+const SHELL_SHORTCUTS = [
   /** ⌘⇧N: a new session. */
   { name: "new-session", key: "n", shift: true },
   /** ⌘K: Jump, open or shut (⇧ either way). */

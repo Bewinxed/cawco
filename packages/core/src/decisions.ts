@@ -79,7 +79,7 @@ export interface DecisionLink {
 }
 
 /** What the hub reads of one page: its progress, its state and its writer. */
-export interface DecisionPageFacts {
+interface DecisionPageFacts {
   /** Its artifact; null for a page whose artifact the hub no longer holds. */
   artifactId: string | null;
   /** Its cards. */
@@ -217,9 +217,6 @@ export interface DecisionSent {
 
 /** The task field that links a task back to its card: `decided: <page>#<card>`. */
 export const DECIDED_FIELD = "decided";
-
-export const decidedRef = (page: string, card: string): string =>
-  `${page}#${card}`;
 
 const DECIDED = /^([a-z0-9][a-z0-9-]{0,62})#(.+)$/u;
 

@@ -26,7 +26,7 @@ import {
  * its reader takes as nothing set; `none` for one that is never made (a
  * clone without `.git/config` is no clone).
  */
-export type CloneDenyEmpty =
+type CloneDenyEmpty =
   /** `readOnly`: made with no write bits, so no host tool fills it. */
   | { readonly kind: "dir"; readonly readOnly?: true }
   | { readonly kind: "file"; readonly text: string }
@@ -177,10 +177,7 @@ const GIT_EMPTY: Readonly<Record<string, CloneDenyEmpty>> = {
  * (`PLACED_MEMORY`). The agent writes each whenever the fleet syncs, a
  * command running in the folder or not.
  */
-export const FLEET_PLACED: readonly string[] = [
-  ...PLACED_SYNCED,
-  PLACED_MEMORY,
-];
+const FLEET_PLACED: readonly string[] = [...PLACED_SYNCED, PLACED_MEMORY];
 
 /**
  * The config a host program loads from a folder outside any boundary, by its

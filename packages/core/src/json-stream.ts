@@ -21,7 +21,7 @@
  * string encoded or decoded in one native call. Our choice: a few
  * milliseconds of work, a small fraction of a wire part.
  */
-export const JSON_PIECE_CHARS = 64 * 1024;
+const JSON_PIECE_CHARS = 64 * 1024;
 
 /** A value's JSON text, a piece at a time: `undefined` once it is all given. */
 export interface JsonPieces {

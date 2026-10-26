@@ -8,8 +8,14 @@
  * writes the JSON as the parts go ({@link encodeJson}) and the receiver reads
  * each part into the message as it arrives ({@link WireAssembler}), so neither
  * end ever encodes or parses a long message in one call.
- * Every frame on the wire is therefore at most {@link WIRE_FRAME_LIMIT_BYTES},
- * which every end accepts, and no single `send()` carries more than one part:
+ * Every frame on the wire is therefore at most 4 MiB, which every end
+ * accepts: our choice, under every end's own limit (Bun's WebSocket client
+ * closes at about 256 MB, 1009 "Message too big"; the Apple app's socket
+ * takes 64 MiB; browsers more). A part is at most 3 bytes of UTF-8 per
+ * character of its slice (a quote or backslash escapes to 2; a character
+ * outside ASCII is at most 3, or 6 for a surrogate split at a cut), so a
+ * {@link WIRE_PART_CHARS} slice fits with room for its header. And no single
+ * `send()` carries more than one part:
  * with permessage-deflate negotiated (the hub's server offers it to every
  * socket, Bun having one WebSocket config per server), a client's `send()`
  * deflates synchronously at ~15 ms per MB, so a 64 MB message held the
@@ -39,17 +45,6 @@ import {
 } from "./json-stream";
 
 /**
- * The largest frame any end sends, and so the largest any end must accept.
- * Our choice, under every end's own limit: Bun's WebSocket client closes at
- * about 256 MB (1009 "Message too big"), the Apple app's socket takes 64 MiB,
- * browsers more. A part is at most 3 bytes of UTF-8 per character of its
- * slice (a quote or backslash escapes to 2; a character outside ASCII is at
- * most 3, or 6 for a surrogate split at a cut), so a {@link WIRE_PART_CHARS}
- * slice fits with room for its header.
- */
-export const WIRE_FRAME_LIMIT_BYTES = 4 * 1024 * 1024;
-
-/**
  * Characters of a message's JSON per part. Our choice: one deflated part costs
  * its sender ~17 ms (measured, Bun 1.4.2), well under the 50 ms a loop may be
  * held for, and a message of ordinary size goes as one frame.
@@ -76,7 +71,7 @@ export const WIRE_MESSAGE_LIMIT_BYTES = 512 * 1024 * 1024;
  * taken for gone, and a tab or phone that stopped reading is closed within
  * a minute.
  */
-export const WIRE_STALL_MS = 60_000;
+const WIRE_STALL_MS = 60_000;
 
 /**
  * The marker a client puts on its socket's URL to say it reads parts:
@@ -87,8 +82,8 @@ export const WIRE_STALL_MS = 60_000;
  * (still in order, never dropped), and takes whole messages from it up to
  * {@link WIRE_MESSAGE_LIMIT_BYTES}.
  */
-export const WIRE_PARTS_PARAM = "wire";
-export const WIRE_PARTS_VALUE = "parts";
+const WIRE_PARTS_PARAM = "wire";
+const WIRE_PARTS_VALUE = "parts";
 
 /** `url` with the parts marker, for a client's socket. */
 export const announcingParts = (url: string): string =>
@@ -100,7 +95,7 @@ export const announcesParts = (
 ): boolean => query[WIRE_PARTS_PARAM] === WIRE_PARTS_VALUE;
 
 /** One part of a message too long for one frame. */
-export interface WirePart {
+interface WirePart {
   part: { id: string; last: boolean; seq: number };
   text: string;
 }
@@ -477,7 +472,7 @@ export const serverTransport = (
 const CLIENT_POLL_MS = 5;
 
 /** An outbox's way onto a client `WebSocket` (a browser's, or Bun's in the agent). */
-export const clientTransport = (socket: WebSocket): OutboxTransport => ({
+const clientTransport = (socket: WebSocket): OutboxTransport => ({
   buffered: () => socket.bufferedAmount,
   pollMs: CLIENT_POLL_MS,
   write: (frame) => {

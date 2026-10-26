@@ -34281,7 +34281,7 @@ export const createServer = (
           })
       )
       .ws("/ws", {
-        // An agent on this build sends parts of at most WIRE_FRAME_LIMIT_BYTES
+        // An agent on this build sends parts of at most 4 MiB
         // (`@cawco/core/wire`), joined in `guardedAgentMessage`; one on the
         // build before sends each message whole, a transcript read tens of
         // MB, until it updates through this very socket. So a frame is taken

@@ -288,7 +288,7 @@ export const heldWords = (
  * session reads; none when there is no write, or it is to the project's
  * own repository.
  */
-export const writeRefusal = (
+const writeRefusal = (
   rule: UpstreamRule,
   write: UpstreamWrite | undefined
 ): string | undefined => {

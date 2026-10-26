@@ -63,7 +63,7 @@ export const KEEPERS_ASK_AGAIN_MS = 10_000;
 export const REGISTER_ACK_MS = 120_000;
 
 /** The pause before the `attempt`th re-send of a register: 1 s, doubling, at most 30 s. */
-export const registerRetryMs = (attempt: number): number =>
+const registerRetryMs = (attempt: number): number =>
   Math.min(30_000, 1000 * 2 ** Math.min(attempt - 1, 5));
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -74,13 +74,13 @@ export const registerRetryMs = (attempt: number): number =>
  * `retrying`: a lapsed register waits for its pause and a fresh payload); or
  * registered. A register goes out only while it is registering.
  */
-export type Link =
+type Link =
   | { kind: "down" }
   | { kind: "registering"; attempt: number; retrying: boolean }
   | { kind: "registered" };
 
 /** Why a machine is away: its socket closed (`agent`) or the hub started and has not heard it (`hub`). */
-export type AwayWhy = "agent" | "hub";
+type AwayWhy = "agent" | "hub";
 
 /** A machine as the hub reads it, at one moment: everything that reads presence reads this. */
 export type Presence =
@@ -124,8 +124,7 @@ interface Custody {
  * armed. What fails in an arming is said by the arming itself (agent
  * boundary.ts `rearmOne`).
  */
-export type WorkspaceArm =
-  { kind: "later" } | { kind: "arming" } | { kind: "armed" };
+type WorkspaceArm = { kind: "later" } | { kind: "arming" } | { kind: "armed" };
 
 /**
  * The agent's start-up reading of its workspaces: not begun, being read,
@@ -134,7 +133,7 @@ export type WorkspaceArm =
  * Blocked is a named state: every workspace's gate refuses with it until a
  * reading is whole.
  */
-export type ArmingPhase =
+type ArmingPhase =
   | { kind: "idle" }
   | { kind: "listing" }
   | { kind: "listed" }
@@ -247,7 +246,7 @@ export type HandoverCommand =
   | { kind: "arm-listed" };
 
 /** What a send to a machine is told: handed to it, held for its return, or failed for its absence. */
-export type SendVerdict = "deliver" | "hold" | "fail";
+type SendVerdict = "deliver" | "hold" | "fail";
 
 export interface Stepped {
   commands: HandoverCommand[];

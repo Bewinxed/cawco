@@ -47,7 +47,7 @@ import { downloadWords } from "./words/downloads";
  * two hundred times the longest pause seen and still notices a dead link
  * within about a minute.
  */
-export const STALL_MS = 60_000;
+const STALL_MS = 60_000;
 
 /** Attempts in a row that brought no byte before the download gives up: the progress rule's end. */
 const GIVE_UP_AFTER = 5;
@@ -120,7 +120,7 @@ export interface ResumableDownload {
 }
 
 /** A refusal: said as it is, never retried. */
-export class Refused extends Error {}
+class Refused extends Error {}
 
 /** A write to the partial file failed: the disk's error, never retried as the network's. */
 class LocalWrite extends Error {}

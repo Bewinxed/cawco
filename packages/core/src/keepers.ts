@@ -64,7 +64,7 @@ const CHECKOUT_ENDPOINT = /^checkout-sessiond-(.+)\.sock$/u;
 const NOT_IN_A_JOB_NAME = /[^A-Za-z0-9._-]/gu;
 
 /** A keeper's own endpoint file name. */
-export const endpointName = (keeper: KeeperName): string =>
+const endpointName = (keeper: KeeperName): string =>
   keeper.kind === "build"
     ? `sessiond-${keeper.version}.sock`
     : `checkout-sessiond-${keeper.version}.sock`;
@@ -76,7 +76,7 @@ export const keeperEndpoint = (
 ): string => join(dirname(machine), endpointName(keeper));
 
 /** The keeper an endpoint file name belongs to; undefined for any other file, the machine's endpoint among them. */
-export const keeperOf = (name: string): KeeperName | undefined => {
+const keeperOf = (name: string): KeeperName | undefined => {
   const checkout = CHECKOUT_ENDPOINT.exec(name);
   if (checkout?.[1]) {
     return { kind: "checkout", version: checkout[1] };

@@ -67,7 +67,7 @@ export const handedInputSchema = (strict: boolean) => {
 };
 
 /** What the hub checks every entry against. */
-export const HANDED_INPUT = handedInputSchema(true);
+const HANDED_INPUT = handedInputSchema(true);
 
 export type HandedInput = z.infer<typeof HANDED_INPUT>;
 
@@ -75,7 +75,7 @@ export type HandedInput = z.infer<typeof HANDED_INPUT>;
 export type HeldInput = Exclude<HandedInput, string>;
 
 /** Every entry's shape, in the words a refusal shows. */
-export const HANDED_SHAPES =
+const HANDED_SHAPES =
   "an absolute path to a file or folder, or one of { report: id }, { artifact: id }, { pins: artifact id }, { find: ref }, { attachment: id or name, session?: id }, { assets: item id }, { text, name }, { blob: base64, name }";
 
 /**

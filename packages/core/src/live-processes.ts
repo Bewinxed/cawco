@@ -132,7 +132,7 @@ async function macProcesses(): Promise<LiveProcess[]> {
 }
 
 /** Every process this user can see, now. */
-export const liveProcesses = (): Promise<LiveProcess[]> =>
+const liveProcesses = (): Promise<LiveProcess[]> =>
   process.platform === "linux"
     ? Promise.resolve(linuxProcesses())
     : macProcesses();

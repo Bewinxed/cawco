@@ -10,10 +10,10 @@
  */
 
 /** The words every account move's relaunch line carries. */
-export const RELAUNCHES_ON = "relaunches on";
+const RELAUNCHES_ON = "relaunches on";
 
 /** What each relaunch is for: its log tag, and where it relaunches the session. */
-export const RELAUNCH_FOR = {
+const RELAUNCH_FOR = {
   boundary: { tag: "boundary", onto: "onto the fail-closed hook" },
   compact: {
     tag: "compact",

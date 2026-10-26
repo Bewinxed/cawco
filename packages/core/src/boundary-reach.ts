@@ -64,7 +64,7 @@ const family = (address: string): "ipv4" | "ipv6" =>
  * one in the space every boundary refuses, or one of `own`, its machine's
  * own addresses.
  */
-export const workspaceRefuses = (
+const workspaceRefuses = (
   address: string,
   own: readonly string[] = []
 ): boolean => {

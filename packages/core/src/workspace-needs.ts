@@ -253,7 +253,7 @@ const chainUnchangeable = (
  * owns everything it could change, so for root it is whatever lies outside
  * its home dir, where its own installs and sessions write.
  */
-export const unchangeable = (path: string): boolean => {
+const unchangeable = (path: string): boolean => {
   const uid = process.getuid?.() ?? 0;
   const groups = process.getgroups?.() ?? [];
   const home = homedir();

@@ -70,25 +70,11 @@ import type { Interaction } from "./stage";
  * gets none; `draw`, any pointer inks and the page gets none. A pen inks in
  * every mode.
  */
-export const PREVIEW_MODES = ["interact", "comment", "draw"] as const;
+const PREVIEW_MODES = ["interact", "comment", "draw"] as const;
 export type PreviewMode = (typeof PREVIEW_MODES)[number];
 /** `value` as a mode, or null when it names none. */
 export const previewMode = (value: unknown): PreviewMode | null =>
   PREVIEW_MODES.find((mode) => mode === value) ?? null;
-
-/**
- * The first line a pin's thread says, cut for a peek or a row: its first
- * words, else the names of what its first entry carries (a picture sent on
- * its own); null when it says nothing.
- */
-export const pinFirstLine = (pin: Pin): string | null => {
-  const [first] = pin.thread;
-  return (
-    first?.text.split("\n")[0]?.trim() ||
-    first?.attachments?.map((one) => one.name).join(", ") ||
-    null
-  );
-};
 
 export const COMMENT_LIMITS = {
   /** Pins an artifact keeps. */
@@ -251,7 +237,7 @@ const chainWords = (anchor: PageAnchor): string | null => {
 };
 
 /** A canvas's mark stands on one of its elements, by id. */
-export interface CanvasAnchor {
+interface CanvasAnchor {
   element: string;
 }
 
@@ -280,7 +266,7 @@ export interface CommentAttachment {
 }
 
 /** A hub file reference: `/api/files/` and the bytes' sha256. */
-export const FILE_REF = /^\/api\/files\/[0-9a-f]{64}$/u;
+const FILE_REF = /^\/api\/files\/[0-9a-f]{64}$/u;
 
 export interface ThreadEntry {
   /**
@@ -349,10 +335,7 @@ export interface Pin {
 }
 
 /** A pin's head (`pins`): what it is, written once as it is made. */
-export type PinHead = Pick<
-  Pin,
-  "at" | "by" | "id" | "kind" | "number" | "title"
->;
+type PinHead = Pick<Pin, "at" | "by" | "id" | "kind" | "number" | "title">;
 
 /** Where a pin stands (`places`): moved by the page as its anchor finds its element again, or by the person placing it again. */
 export type PinPlace = Pick<
@@ -1188,7 +1171,7 @@ export const unheardEntries = (pin: Pin): ThreadEntry[] => {
 };
 
 /** Whether the session has heard of a pin at all: delivered or read, or answered in its thread. */
-export const pinKnown = (pin: Pin): boolean =>
+const pinKnown = (pin: Pin): boolean =>
   !!pin.sentAt || pin.thread.some((entry) => entry.by === "agent");
 
 /** Whether a pin has something the session has not heard: itself, a person's entry since, or a change to what they said. */
@@ -1215,7 +1198,7 @@ export const pinReady = (pin: Pin): boolean =>
  * unchanged, and `heard` what `sent` said. Whatever the person changed since
  * `sent` was taken (a new entry, an edit, a resolve) stays owed.
  */
-export const pinHeard = (current: Pin, sent: Pin, at: string): Pin => {
+const pinHeard = (current: Pin, sent: Pin, at: string): Pin => {
   const went = new Map(
     sent.thread
       .filter((entry) => entry.by === "person")
@@ -1287,7 +1270,7 @@ const letGo = (doc: MapDoc, ids: readonly string[]): void => {
 };
 
 /** The origin of the writes {@link honourDeletions} makes. */
-export const HONOUR_ORIGIN = "gone";
+const HONOUR_ORIGIN = "gone";
 
 /**
  * From now on, `doc` lets go of every pin its tombstones name, whenever
@@ -1573,7 +1556,7 @@ export const generatedId = (id: string): boolean => MINTED_ID.test(id);
  * from the page's root (`body > section:nth-of-type(2) > h2:nth-of-type(1)`)
  * names whatever stands there now.
  */
-export const stableSelector = (selector: string): boolean =>
+const stableSelector = (selector: string): boolean =>
   PAGE_ROOTS.has(selector) ||
   (selector.startsWith("#") && !MINTED_ID_SELECTOR.test(selector)) ||
   ANCHOR_IDENTITIES.some((name) => selector.startsWith(`[${name}=`));
@@ -1828,7 +1811,7 @@ export function inkSection(
 export type Carried = { picture: number } | { as: "text" } | { as: "file" };
 
 /** One attachment's line in its pin's section, as {@link Carried} carries it. */
-export const attachedLine = (
+const attachedLine = (
   attachment: CommentAttachment,
   carried: Carried
 ): string => {

@@ -34,7 +34,7 @@ export const INK_LIMITS = {
 /** A point of a stroke: x and y as fractions of the anchor's box, and the pen's pressure. */
 export type InkPoint = [x: number, y: number, pressure: number];
 
-export interface InkStroke {
+interface InkStroke {
   at: string;
   points: InkPoint[];
 }
@@ -60,7 +60,7 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);
 
 /** Why a group may not be kept; null when it may. */
-export function inkGroupProblem(value: unknown): string | null {
+function inkGroupProblem(value: unknown): string | null {
   if (!(isObject(value) && Array.isArray(value.strokes))) {
     return "A stroke group is an object with its strokes.";
   }

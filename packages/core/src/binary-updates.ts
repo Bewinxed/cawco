@@ -38,7 +38,7 @@ export const BINARY_UPDATE_PHASES = [
 export type BinaryUpdatePhase = (typeof BINARY_UPDATE_PHASES)[number];
 
 /** How far a download of a build is, in bytes of its signed size. */
-export interface BinaryDownload {
+interface BinaryDownload {
   received: number;
   total: number;
 }
@@ -69,7 +69,7 @@ export interface BinaryUpdateChannels {
  * record (`POST /api/notices/seen`, as `landed:<machineId>:<at>`), so one
  * acknowledgement holds for every tab and device.
  */
-export interface BinaryUpdateLanding {
+interface BinaryUpdateLanding {
   /** When it finished, in milliseconds: the landing's identity. */
   at: number;
   /** The landed build's release notes. */

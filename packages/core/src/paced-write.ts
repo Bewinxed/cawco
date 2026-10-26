@@ -18,7 +18,7 @@
 import type { Socket } from "node:net";
 
 /** Our choice: large enough that a message of ordinary size goes as one write, small enough that the native buffer stays a fraction of a megabyte. */
-export const PACED_PIECE = 256 * 1024;
+const PACED_PIECE = 256 * 1024;
 
 export class PacedWriter {
   readonly #to: Socket;

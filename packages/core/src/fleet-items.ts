@@ -340,7 +340,3 @@ const stable = (value: unknown): string =>
 /** An item's content hash: sha256 of its value, `force` left out. */
 export const itemHash = (value: unknown): string =>
   new Bun.CryptoHasher("sha256").update(stable(value)).digest("hex");
-
-/** Every item's hash, by id. */
-export const itemHashes = (items: FleetItems): Record<string, string> =>
-  Object.fromEntries([...items].map(([id, value]) => [id, itemHash(value)]));

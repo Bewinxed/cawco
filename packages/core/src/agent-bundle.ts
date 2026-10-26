@@ -24,10 +24,10 @@
 export const AGENT_BUNDLE_ID = "dev.cawco.agent";
 
 /** The name macOS shows for it in every privacy list and prompt. */
-export const AGENT_BUNDLE_NAME = "CawCo Agent";
+const AGENT_BUNDLE_NAME = "CawCo Agent";
 
 /** The bundle's executable, inside `Contents/MacOS`. */
-export const AGENT_EXECUTABLE_NAME = "cawco";
+const AGENT_EXECUTABLE_NAME = "cawco";
 
 /** The bundle's folder, in a build's folder and in the release archive. */
 export const AGENT_BUNDLE = `${AGENT_BUNDLE_NAME}.app`;
@@ -111,7 +111,7 @@ const USAGE: readonly (readonly [string, string])[] = [
 ];
 
 /** The Bonjour service type the hub advertises and the agent browses for (core `CAWCO_MDNS_TYPE`, as Bonjour writes it). */
-export const AGENT_BONJOUR_SERVICES: readonly string[] = ["_cawco._tcp"];
+const AGENT_BONJOUR_SERVICES: readonly string[] = ["_cawco._tcp"];
 
 /**
  * Local Network privacy on macOS 15 and later: the hub's `.local` name and its
@@ -125,7 +125,7 @@ export const AGENT_BONJOUR_SERVICES: readonly string[] = ["_cawco._tcp"];
  * property to its Info.plist to explain its behavior to the user"; "add a
  * list of service types to the NSBonjourServices property".
  */
-export const AGENT_LOCAL_NETWORK_USAGE =
+const AGENT_LOCAL_NETWORK_USAGE =
   "CawCo answers cawco.local on this network and finds your hub here, so your devices on it can open CawCo.";
 
 /**

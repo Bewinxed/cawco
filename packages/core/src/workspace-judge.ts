@@ -30,7 +30,7 @@ import { basename, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { HarnessKind } from "./harness";
 
-export type Access = "read" | "write";
+type Access = "read" | "write";
 
 /** A workspace's policy, every path a real path but an account's user-layer links. */
 export interface Policy {
@@ -61,7 +61,7 @@ export interface Policy {
  * relative path: the first of its leading paths that ends in one of
  * `protect` (the policy's `protectConfig`); none when it lies in none.
  */
-export const protectedConfig = (
+const protectedConfig = (
   relative: string,
   protect: readonly string[]
 ): string | undefined => {
@@ -228,11 +228,7 @@ const elsewhere = (policy: Policy): string =>
  * path decides, a tie denies. Writes: a `denyWrite` entry over it refuses, and
  * so does no `allowWrite` entry over it.
  */
-export const judge = (
-  policy: Policy,
-  path: string,
-  access: Access
-): Verdict => {
+const judge = (policy: Policy, path: string, access: Access): Verdict => {
   let real: string;
   try {
     real = resolveReal(path);
@@ -433,7 +429,7 @@ const BUILT_INS: Record<Call["harness"], Record<string, readonly Field[]>> = {
  * workspace. A cawco tool missing here names no file. The `mcp-file-args`
  * probe holds this table to the hub's schemas.
  */
-export const CAWCO_FILE_ARGS: Readonly<
+const CAWCO_FILE_ARGS: Readonly<
   Record<string, Readonly<Record<string, Access | "show">>>
 > = {
   artifact_create: { dir: "read" },

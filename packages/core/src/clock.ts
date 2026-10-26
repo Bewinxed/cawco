@@ -13,8 +13,5 @@
  * pace its machines set; no published binary carries that.
  */
 
-/** How many times faster than written the timers run. */
-export const TIME_SCALE = 1;
-
 /** A timer's length in milliseconds. */
 export const timerMs = (ms: number): number => ms;

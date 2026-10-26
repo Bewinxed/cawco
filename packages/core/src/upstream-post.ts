@@ -20,7 +20,7 @@
  */
 
 /** The forges CawCo posts to through an adapter. */
-export const FORGES = ["github", "gitlab", "gitea"] as const;
+const FORGES = ["github", "gitlab", "gitea"] as const;
 export type Forge = (typeof FORGES)[number];
 
 /** Each forge as a person names it. */
@@ -90,7 +90,7 @@ export interface GitPost {
 }
 
 /** A GitHub connection's write tool, called by the hub. */
-export interface McpPost {
+interface McpPost {
   readonly args: Readonly<Record<string, unknown>>;
   readonly connection: string;
   readonly tool: string;

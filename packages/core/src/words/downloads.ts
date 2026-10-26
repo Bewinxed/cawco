@@ -10,7 +10,7 @@
  */
 
 /** Bytes as megabytes, whole: "45", "118". */
-export const megabytes = (bytes: number): string =>
+const megabytes = (bytes: number): string =>
   String(Math.round(bytes / 1_000_000));
 
 /** Bytes as megabytes to a tenth, for the log: "45.2". */

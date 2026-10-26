@@ -31,7 +31,7 @@ export type JevQuestion =
       readonly criteria: readonly JevText[];
     };
 
-export interface JevNoulAnswer {
+interface JevNoulAnswer {
   /** The calibrated probability that the answer is yes. */
   noul: number;
   type: "noul";
@@ -42,7 +42,7 @@ export interface JevChoiceAnswer<Option extends string = string> {
   probabilities: Record<Option, number>;
   type: "choice";
 }
-export interface JevScoreAnswer {
+interface JevScoreAnswer {
   confidence: number;
   /** Level index → the level as it was given. */
   legend: Record<string, JevText>;
@@ -52,7 +52,7 @@ export interface JevScoreAnswer {
 }
 export type JevAnswer = JevNoulAnswer | JevChoiceAnswer | JevScoreAnswer;
 /** The answer a question of this shape comes back as. */
-export type JevAnswerOf<Question> = Question extends { type: "noul" }
+type JevAnswerOf<Question> = Question extends { type: "noul" }
   ? JevNoulAnswer
   : Question extends { type: "choice"; criteria: infer Criteria }
     ? JevChoiceAnswer<Extract<keyof Criteria, string>>

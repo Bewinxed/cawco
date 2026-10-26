@@ -36,7 +36,7 @@ interface Emitted {
 const LOWERED = /[^{}]*\{[^{}]*var\(--buncss-(?:light|dark)[^{}]*\}/gu;
 
 /** The rules in `css` that read Bun's scheme switch variables. */
-export const loweredRules = (css: string): string[] =>
+const loweredRules = (css: string): string[] =>
   (css.match(LOWERED) ?? []).map((rule) => rule.trim());
 
 /** Throws, naming every rule, when any of `outputs`' stylesheets carries a lowered `light-dark()`. */

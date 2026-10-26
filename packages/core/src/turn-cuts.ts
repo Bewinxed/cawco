@@ -29,7 +29,7 @@ export interface TurnCut {
 }
 
 /** How long after a cut the harness's line for it can land: its abort, then its write. */
-export const CUT_REACH_MS = 30_000;
+const CUT_REACH_MS = 30_000;
 
 /** How far a machine's clock, which a stored entry is dated by, may run behind the hub's. */
 const CUT_SKEW_MS = 5000;

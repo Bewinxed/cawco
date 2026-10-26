@@ -69,14 +69,14 @@ const webpWidth = (bytes: Uint8Array): number | null => {
 };
 
 /** A picture's width in pixels from its header; null when it is none of PNG, JPEG or WebP, or its header is cut. */
-export const imageWidth = (bytes: Uint8Array): number | null =>
+const imageWidth = (bytes: Uint8Array): number | null =>
   pngWidth(bytes) ?? jpegWidth(bytes) ?? webpWidth(bytes);
 
 const IMG_SOURCE = /<img\b[^>]*?\ssrc\s*=\s*(?:"([^"]*)"|'([^']*)')/giu;
 const DATA_URL = /^data:[^;,]*;base64,(.*)$/su;
 
 /** Each `<img>` source on a page, in order. */
-export const imageSources = (html: string): string[] =>
+const imageSources = (html: string): string[] =>
   [...html.matchAll(IMG_SOURCE)].map((match) => match[1] ?? match[2] ?? "");
 
 /** A `data:` URL's bytes when it is base64; null for any other source. */

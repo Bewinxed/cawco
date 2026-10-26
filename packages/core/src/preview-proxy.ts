@@ -88,7 +88,7 @@ export function loadOverlay(): Promise<string> {
 }
 
 /** The window global the overlay reads its host's allowed origins from (host-origin.ts). */
-export const PARENTS_GLOBAL = "__cawcoParents";
+const PARENTS_GLOBAL = "__cawcoParents";
 
 /** The last overlay gzipped, by its whole text: the parents line changes only when the hub's addresses do. */
 let zipped: { text: string; body: Uint8Array<ArrayBuffer> } | undefined;
@@ -115,7 +115,7 @@ let keyed: { key: string; text: string } | undefined;
  * parent origin is a new key. The hub writes it into every page's overlay
  * tag ({@link keyOverlay}), and serves the overlay at it for good.
  */
-export async function overlayKey(parents: readonly string[]): Promise<string> {
+async function overlayKey(parents: readonly string[]): Promise<string> {
   const text = await overlayText(parents);
   if (keyed?.text !== text) {
     const hex = new Bun.CryptoHasher("sha256").update(text).digest("hex");
@@ -493,7 +493,7 @@ const directives = (value: string | null): Set<string> =>
  *   `no-store` is the one value it leaves alone ("Will not cache",
  *   developers.cloudflare.com/cache/concepts/cache-control/).
  */
-export function previewCache(
+function previewCache(
   upstream: Headers,
   direct: boolean
 ): "immutable" | "no-cache" | "no-store" {

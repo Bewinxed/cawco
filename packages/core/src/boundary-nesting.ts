@@ -25,10 +25,10 @@ import { hostEnvironment } from "./session-env";
 import { systemProgram } from "./workspace-needs";
 
 /** The AppArmor profile that strips capabilities beneath bwrap. */
-export const NESTED_BOUNDARY_PROFILE = "/etc/apparmor.d/bwrap-userns-restrict";
+const NESTED_BOUNDARY_PROFILE = "/etc/apparmor.d/bwrap-userns-restrict";
 
 /** The AppArmor profile name a process beneath bwrap carries in its label. */
-export const NESTED_BOUNDARY_LABEL = "unpriv_bwrap";
+const NESTED_BOUNDARY_LABEL = "unpriv_bwrap";
 
 /**
  * This process's AppArmor label when it runs beneath bwrap under the
@@ -57,7 +57,7 @@ export const nestedBwrapLabel = (): string | undefined => {
  * there already can; with that sysctl at 1, bwrap needs the profile to start
  * at all, so the two change together.
  */
-export const NESTED_BOUNDARY_ROOT_COMMANDS = [
+const NESTED_BOUNDARY_ROOT_COMMANDS = [
   `sudo ln -s ${NESTED_BOUNDARY_PROFILE} /etc/apparmor.d/disable/bwrap-userns-restrict`,
   `sudo apparmor_parser -R ${NESTED_BOUNDARY_PROFILE}`,
 ] as const;
@@ -70,7 +70,7 @@ export const nestedBoundaryReason = (label: string): string =>
   `this machine's CawCo runs inside another bwrap sandbox (AppArmor ${label}), and the host's AppArmor profile ${NESTED_BOUNDARY_PROFILE} denies every capability to what runs beneath bwrap, so a boundary cannot start inside it. That ${MARK}: the hub's log names the two root commands that turn the profile off`;
 
 /** Whether `reason` (a failed spawn or wake) is this refusal. */
-export const isNestedBoundaryRefusal = (reason: string): boolean =>
+const isNestedBoundaryRefusal = (reason: string): boolean =>
   reason.includes(MARK) && reason.includes(NESTED_BOUNDARY_PROFILE);
 
 /**
@@ -83,7 +83,7 @@ export const isNestedBoundaryRefusal = (reason: string): boolean =>
 const SEATBELT_REFUSED = "sandbox_apply: Operation not permitted";
 
 /** The boundary's words when this process already runs under a Seatbelt profile. */
-export const nestedSeatbeltReason = (): string =>
+const nestedSeatbeltReason = (): string =>
   `this machine's CawCo runs inside another macOS sandbox (Seatbelt), and Seatbelt does not nest: sandbox-exec answers "${SEATBELT_REFUSED}" to any profile applied beneath another, so a boundary cannot start inside it. That is macOS, not CawCo: run this outside every workspace, from a shell on the Mac`;
 
 /**

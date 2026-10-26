@@ -66,7 +66,7 @@ import { workspaceCacheDir } from "./paths";
 import { HOUR_MS } from "./time";
 
 /** Where the machine's heavy-work slots and their queue are kept. */
-export const HEAVY_SLOTS_DIR = join(workspaceCacheDir(), "heavy-slots");
+const HEAVY_SLOTS_DIR = join(workspaceCacheDir(), "heavy-slots");
 
 /**
  * Set for every process a lease's holder starts: they run under that lease

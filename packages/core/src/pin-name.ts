@@ -145,8 +145,3 @@ export function pinName(pin: Pin): string {
   const [first] = pin.elements;
   return elementWords(typeof first === "string" ? undefined : first);
 }
-
-/** The pin's selector, for the head's tooltip; a canvas pin has none. */
-export function pinSelector(pin: Pin): string | null {
-  return "selector" in pin.anchor ? pin.anchor.selector : null;
-}

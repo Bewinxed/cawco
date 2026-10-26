@@ -41,7 +41,7 @@ import coverage from "./house-faces.json" with { type: "json" };
 export type FaceRole = "sans" | "mono" | "wordmark";
 
 /** A house face: its family as a page's CSS names it, its file and its weight axis. */
-export interface HouseFace {
+interface HouseFace {
   family: string;
   /** Its file in {@link FONTS_DIR}. */
   file: string;
@@ -64,7 +64,7 @@ export interface HouseFace {
 const PICKER_ONLY = ["aalt"] as const;
 
 /** The faces, upright, each one variable file. */
-export const HOUSE_FACES: readonly HouseFace[] = [
+const HOUSE_FACES: readonly HouseFace[] = [
   {
     role: "sans",
     family: "Figtree Variable",
@@ -100,7 +100,7 @@ export const HOUSE_FACES: readonly HouseFace[] = [
 ];
 
 /** Where the faces' files are kept: the Apple app's, the one copy in the repository. */
-export const FONTS_DIR = new URL(
+const FONTS_DIR = new URL(
   "../../../apps/apple/Packages/CawCoKit/Sources/CawCoDesign/Resources/Fonts/",
   import.meta.url
 ).pathname;
@@ -345,7 +345,7 @@ const unicodeRange = (ranges: [number, number][]): string =>
     .join(", ");
 
 /** A piece's `@font-face` rule, its file at `url`. */
-export const faceRule = (piece: FacePiece, url: string): string =>
+const faceRule = (piece: FacePiece, url: string): string =>
   `@font-face {
   font-family: '${piece.family}';
   font-style: normal;

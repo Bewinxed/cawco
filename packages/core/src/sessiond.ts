@@ -59,7 +59,7 @@ export interface ProcSpec {
  * minted by the agent, so sessiond never sees the harness it belongs to;
  * `commandId` names the ack that answers this one spawn.
  */
-export interface SessiondSpawn {
+interface SessiondSpawn {
   commandId: string;
   procId: string;
   spec: ProcSpec;
@@ -74,14 +74,14 @@ export interface SessiondSpawn {
  * no agent has told yet holds none. The agent says them on every connection
  * it opens, before anything else it sends there, and again on every change.
  */
-export interface SessiondSetLimits {
+interface SessiondSetLimits {
   commandId: string;
   limits: SessionLimits;
   type: "limits";
 }
 
 /** agent → sessiond: bytes on the child's stdin. Opaque — sessiond never parses them. */
-export interface SessiondWrite {
+interface SessiondWrite {
   commandId: string;
   data: string;
   procId: string;
@@ -89,7 +89,7 @@ export interface SessiondWrite {
 }
 
 /** agent → sessiond: a signal for the child, by name (design §3.4 — "Signal names are the whole vocabulary"). */
-export interface SessiondSignal {
+interface SessiondSignal {
   commandId: string;
   procId: string;
   sig: NodeJS.Signals;
@@ -97,7 +97,7 @@ export interface SessiondSignal {
 }
 
 /** agent → sessiond: close the child's stdin (the SDK's own EOF + grace path). */
-export interface SessiondStdinEnd {
+interface SessiondStdinEnd {
   commandId: string;
   procId: string;
   type: "stdin_end";
@@ -118,7 +118,7 @@ export const SESSIOND_RELEASE = "sessiond.release";
  * holds, or holds under another pid (a start since under the same id, whose
  * own end is its own follower's to settle).
  */
-export interface SessiondRelease {
+interface SessiondRelease {
   commandId: string;
   pid: number;
   procId: string;
@@ -130,14 +130,14 @@ export interface SessiondRelease {
  * resume; absent follows from now — the same subscribe choreography as the
  * Ledger Protocol's {@link import('./stream').StreamSubscribe}.
  */
-export interface SessiondSubscribe {
+interface SessiondSubscribe {
   afterSeq?: number;
   procId: string;
   type: "subscribe";
 }
 
 /** agent → sessiond: what is alive, right now. */
-export interface SessiondList {
+interface SessiondList {
   type: "list";
 }
 
@@ -197,13 +197,13 @@ export interface SessiondLine {
 }
 
 /** sessiond → agent, live fan-out of one sequenced line. */
-export interface SessiondDelta {
+interface SessiondDelta {
   event: SessiondLine;
   type: "proc.line";
 }
 
 /** sessiond → agent when the requested gap is inside the ring: contiguous, ascending. */
-export interface SessiondBacklog {
+interface SessiondBacklog {
   events: SessiondLine[];
   procId: string;
   type: "proc.backlog";
@@ -214,7 +214,7 @@ export interface SessiondBacklog {
  * `afterSeq` names a dead epoch. An honest refusal, never a partial replay
  * (design §6); the agent forwards a `sessiond_stream_gap` system frame.
  */
-export interface SessiondReset {
+interface SessiondReset {
   nextSeq: number;
   /**
    * The earliest seq sessiond can still serve, when it holds one at all.
@@ -234,7 +234,7 @@ export interface SessiondReset {
 }
 
 /** sessiond → agent: a child exited. Delivered once per procId per epoch. */
-export interface SessiondExit {
+interface SessiondExit {
   exitCode: number | null;
   /** The process that exited: what a {@link SessiondRelease} of it names. Absent from a keeper that predates it. */
   pid?: number;
@@ -292,7 +292,7 @@ export interface SessiondAck {
  * hears it carries no new work to this keeper: the next start dials whichever
  * keeper listens next.
  */
-export interface SessiondDraining {
+interface SessiondDraining {
   type: "draining";
 }
 
@@ -420,7 +420,7 @@ const sessiondLinkName = (home: string = homedir()): string =>
   `${SESSIOND_LINK}-${createHash("sha256").update(home).digest("hex").slice(0, 8)}`;
 
 /** {@link sessiondLinkDir}'s path alone, nothing made. */
-export const sessiondLinkPath = (): string =>
+const sessiondLinkPath = (): string =>
   join(darwinSocketRoot(), sessiondLinkName());
 
 /**
