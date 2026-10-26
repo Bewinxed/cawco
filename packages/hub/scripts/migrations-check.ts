@@ -18,10 +18,18 @@
  * `--db <path>`: the same over a copy of that database instead (a live
  * hub's, or a copy of one), taken by `VACUUM INTO`; the given file is never
  * written: hub start-up and migrations are proven on a copy of the live
- * database before landing.
+ * database before landing. Its hub's `secrets.key` is copied beside the copy,
+ * so its sealed values open as they do on that hub.
  */
 import { Database } from "bun:sqlite";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { is } from "drizzle-orm";
@@ -201,6 +209,14 @@ try {
     } finally {
       given.close();
     }
+    // Its hub's key beside the copy (secret-box.ts keeps it beside the
+    // database): the hub started on the copy opens its sealed values as that
+    // hub does, so one that does not open is a real mismatch, not the copy's.
+    const key = join(dirname(resolve(GIVEN)), "secrets.key");
+    if (existsSync(key)) {
+      copyFileSync(key, join(scratch, "secrets.key"));
+      chmodSync(join(scratch, "secrets.key"), 0o600);
+    }
   } else {
     await Bun.write(
       dbPath,
@@ -305,15 +321,10 @@ try {
   // Every stored JSON row reads as its column's schema once migrated: a
   // shape changed without a migration for its rows fails here.
   const stored = new Database(dbPath, { readwrite: true });
-  // A given database's sealed values open with its own hub's key, read where
-  // it lies and never made; the fixture's with the scratch hub's.
-  const { hubSecrets, makeSecretBox } = await import("../src/secret-box");
-  const givenKey = GIVEN && join(dirname(resolve(GIVEN)), "secrets.key");
-  const box =
-    givenKey && existsSync(givenKey) ? makeSecretBox(givenKey) : hubSecrets();
+  const { hubSecrets } = await import("../src/secret-box");
   const shapes = await storedRows(stored, (raw) => {
     try {
-      return box.open(raw);
+      return hubSecrets().open(raw);
     } catch {
       return null;
     }
