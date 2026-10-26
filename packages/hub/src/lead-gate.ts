@@ -649,7 +649,11 @@ const GIT_VALUED: ReadonlySet<string> = new Set(GIT_VALUED_OPTIONS);
  * rust-v0.120.0 shell-command/src/command_safety/is_dangerous_command.rs),
  * with `-c` judged by its key ({@link gitConfigReads}). `-C <path>` is not
  * among them: Codex reads `git -C . branch --show-current` as safe, and it
- * only moves where git reads, as `git status` in the place reads there.
+ * only moves where git reads. What git there could run is what that
+ * repository's own config and hooks name, and no session writes those: a
+ * workspace's policy denies writing its clone's `.git/config`, `.git/hooks`
+ * and `.git/modules` (core clone-denies.ts `GIT_EMPTY`), and a place's guard
+ * moves aside any a command made (agent boundary.ts `placeGuard`).
  */
 const GIT_RUNS_GLOBAL =
   /^(?:--config-env|--exec-path|--git-dir|--work-tree|--namespace|--super-prefix)(?:=|$)/u;
@@ -988,6 +992,47 @@ const RG_ACTS =
 /** journalctl's options that change the journal, write a file or keep it running. */
 const JOURNAL_ACTS =
   /^(?:-f|--follow|--vacuum-\w+(?:=.*)?|--rotate|--flush|--sync|--relinquish-var|--smart-relinquish-var|--setup-keys|--update-catalog|--cursor-file(?:=.*)?|-[a-zA-Z]*f[a-zA-Z]*)$/u;
+
+/**
+ * gh's commands that only read GitHub, by `<group> <verb>`: what a person
+ * would read on the site. None changes an issue, a pull request, a run or a
+ * repository; `gh api`, which can, is not among them.
+ */
+const GH_READS: ReadonlySet<string> = new Set([
+  "auth status",
+  "issue view",
+  "issue list",
+  "issue status",
+  "pr view",
+  "pr list",
+  "pr status",
+  "pr diff",
+  "pr checks",
+  "run view",
+  "run list",
+  "workflow view",
+  "workflow list",
+  "repo view",
+  "release view",
+  "release list",
+  "label list",
+  "search issues",
+  "search prs",
+  "search repos",
+  "search code",
+  "search commits",
+]);
+/** gh's options that open a browser or keep it running. */
+const GH_ACTS = /^(?:-w|--web|--watch|-i|--interactive)$/u;
+
+/** gh's words that make it act: a command not in {@link GH_READS}, or an option that opens a browser or keeps it running; none when it only reads. */
+function ghReads(args: string[]): string | undefined {
+  const [group = "", verb = ""] = args;
+  if (!GH_READS.has(`${group} ${verb}`)) {
+    return `${group} ${verb}`.trim();
+  }
+  return args.find((arg) => GH_ACTS.test(arg));
+}
 
 /** systemctl's verbs that only read a unit or the manager. */
 const SYSTEMCTL_READS: ReadonlySet<string> = new Set([
@@ -1372,6 +1417,7 @@ const READERS: Readonly<Record<string, Reader>> = {
   gawk: awkReads,
   mawk: awkReads,
   nawk: awkReads,
+  gh: ghReads,
   systemctl: systemctlReads,
   journalctl: unless(JOURNAL_ACTS),
   date: unless(DATE_ACTS),
