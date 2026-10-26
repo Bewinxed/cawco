@@ -339,6 +339,8 @@ export default {
     "packages/hub": {
       // knip.dev/reference/configuration: "When a repository (or workspace) is self-contained or private, you may want to include entry files when reporting unused exports". This package is private and consumed only inside the repo, so its `exports` map is no public API.
       includeEntryExports: true,
+      // knip.dev/reference/configuration: "In files with multiple exports, some of them might be used only internally. If these exports should not be reported, there is a `ignoreExportsUsedInFile` option available." Here for interfaces and types only: createServer's declared type reaches types no file imports (db/index.ts's DbShape names MemoryVersion, MemoryDocRow, SkillVersion and HookVersionMaterial; server.ts BridgedHeldPlace; project-delegate-types.ts DelegateCatalog), and `tsc -b` refuses them unexported with TS4023/TS4058 ("Exported variable 'createServer' has or is using name … but cannot be named"); they are named schemas in openapi.json too. Knip counts a type that another used export of its file names only under this option (node_modules/knip/dist/graph/analyze.js:39-42, `isReferencedInUsedExport`).
+      ignoreExportsUsedInFile: { interface: true, type: true },
       entry: [
         // Spawned by the release: scripts/release.ts:836.
         "scripts/wire-frames.ts",

@@ -51887,7 +51887,7 @@
         ]
       },
       "HookVersion": {
-        "description": "One superseded version of one hook, as a listing reads it — without the material.",
+        "description": "One superseded version of one hook, as a listing reads it — without the\nmaterial. A hook is kept every time it is saved or deleted over one that\nalready existed, so this is a full edit history. `createdAt` is a `Date` in\nthe hub and its ISO string on the wire (`GET /api/fleet/hooks/history`).",
         "type": "object",
         "properties": {
           "createdAt": {
@@ -51907,7 +51907,7 @@
             "type": "string"
           },
           "source": {
-            "description": "`fleet` for every version today — a hook has never been edited from a machine.",
+            "description": "`fleet` for the hub's own row; `machine:<machineId>` for an edited script a forced push took off that machine.",
             "type": "string"
           }
         },

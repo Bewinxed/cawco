@@ -3,6 +3,7 @@ import type {
   FleetHook,
   FleetItemState,
   HookDraft,
+  HookVersion as KeptHookVersion,
 } from "@cawco/core";
 import { hubCall, jsonBody } from "#lib/cawco/hub-read.js";
 import type { Machine } from "./client.svelte";
@@ -20,26 +21,13 @@ import type { Machine } from "./client.svelte";
  */
 
 export type { FleetHook, HookDraft } from "@cawco/core";
+/** One superseded version of a hook as `GET /api/fleet/hooks/history` sends it: core's, its `createdAt` the ISO string. */
+export type HookVersion = Omit<KeptHookVersion, "createdAt"> & {
+  createdAt: string;
+};
 /** What `GET /api/fleet/hooks` answers with. */
 export interface HooksPayload {
   hooks: FleetHook[];
-}
-
-/**
- * One superseded version of a hook, as the hub's undo trail lists it — without
- * the material, the same way `/api/fleet/hooks/history` answers. A hook is
- * kept every time it is saved or deleted over one that already existed, so
- * this is a full edit history, not a sample of runs.
- */
-export interface HookVersion {
-  createdAt: string;
-  hash: string;
-  hookId: string;
-  id: number;
-  name: string;
-  /** `fleet` for the hub's own row; `machine:<machineId>` for an edited
-   *  script an overwrite took off that machine. */
-  source: string;
 }
 
 /** A machine's per-hook convergence, by the same id the hub keeps hooks under.

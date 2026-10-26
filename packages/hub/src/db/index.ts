@@ -30,6 +30,7 @@ import type {
   HarnessReport,
   HookEvent,
   HookHandler,
+  HookVersion,
   InstanceStatus,
   McpPlatform,
   MemoryScope,
@@ -599,17 +600,6 @@ const memoryDocRow = (
     updatedAt: row.updatedAt,
   };
 };
-
-/** One superseded version of one hook, as a listing reads it — without the material. */
-export interface HookVersion {
-  createdAt: Date;
-  hash: string;
-  hookId: string;
-  id: number;
-  name: string;
-  /** `fleet` for every version today — a hook has never been edited from a machine. */
-  source: string;
-}
 
 /** One superseded version of one skill, as a listing reads it — without its files. */
 export interface SkillVersion {

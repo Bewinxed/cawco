@@ -20699,8 +20699,8 @@ export const createServer = (
   /**
    * The version of a hook that a save, an edit or a delete is about to
    * replace or destroy — kept before it goes, the same moment a memory
-   * document's version is. `fleet` is the only source today: a hook is
-   * never edited from a machine, only converged onto one.
+   * document's version is, with `fleet` its source (a forced push keeps a
+   * machine's edited script as `machine:<machineId>` itself).
    */
   const keepHookVersion = (hook: FleetHook): void => {
     db.recordFleetHook({

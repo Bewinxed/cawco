@@ -790,6 +790,22 @@ export interface FleetHook extends FleetPlacement {
   script?: string;
 }
 
+/**
+ * One superseded version of one hook, as a listing reads it — without the
+ * material. A hook is kept every time it is saved or deleted over one that
+ * already existed, so this is a full edit history. `createdAt` is a `Date` in
+ * the hub and its ISO string on the wire (`GET /api/fleet/hooks/history`).
+ */
+export interface HookVersion {
+  createdAt: Date;
+  hash: string;
+  hookId: string;
+  id: number;
+  name: string;
+  /** `fleet` for the hub's own row; `machine:<machineId>` for an edited script a forced push took off that machine. */
+  source: string;
+}
+
 /** A hook as the editor holds it, before the hub assigns identity and hash. */
 export type HookDraft = Omit<FleetHook, "id" | "hash">;
 

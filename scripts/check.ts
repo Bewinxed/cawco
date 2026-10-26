@@ -641,6 +641,30 @@ const gated: Gated[] = [
           .join("\n")
       ),
   },
+  {
+    // Dead files, exports, types and dependencies (knip.ts), over every
+    // workspace at once; after the sync, for the dashboard's `$app/tsconfig`.
+    name: "knip",
+    argv: [join(ROOT, "node_modules/.bin/knip")],
+    inputs: [],
+    // What it reads: the code, every manifest and tsconfig, the lockfile and its config.
+    key: () =>
+      keyOf([
+        ...files.filter((p) => CODE.test(p) || p.endsWith(".css")),
+        ...tsconfigs,
+        ...manifests,
+        "bun.lock",
+        "knip.ts",
+      ]),
+  },
+  {
+    // Duplicated code (.jscpd.json: threshold 0).
+    name: "jscpd",
+    argv: [join(ROOT, "node_modules/.bin/jscpd")],
+    inputs: ["packages/", "apps/dashboard/", ".jscpd.json"],
+  },
+  // Its own oxlint: Biome leaves the package out (biome.jsonc).
+  run("packages/jsonl-parser", "lint", []),
 ];
 for (const check of gated) {
   const inputs = check.inputs.includes("./")
