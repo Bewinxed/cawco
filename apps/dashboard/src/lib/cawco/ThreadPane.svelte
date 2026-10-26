@@ -294,9 +294,19 @@
 
   // --- his questions, parked on the composer ---------------------------------
 
+  /*
+   * Every ask of his session, whichever thread its turn answers: he is one
+   * reader, so an ask open in any thread holds what you write in this one
+   * too (it waits in his queue behind that call). An ask filed under
+   * another thread was shown only there, and his turn waited on it unseen.
+   */
   const asks = $derived<BlockedRequest[]>(
     threadId
-      ? cawco.blocked.filter((row) => row.request.threadId === threadId)
+      ? cawco.blocked.filter(
+          (row) =>
+            row.request.threadId === threadId ||
+            (lead !== null && row.instanceId === lead)
+        )
       : []
   );
   function onanswer(

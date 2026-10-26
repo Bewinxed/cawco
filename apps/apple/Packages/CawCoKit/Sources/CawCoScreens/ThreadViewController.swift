@@ -420,11 +420,15 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
 
     // MARK: His asks, on the composer
 
-    /// Every ask made in this thread, oldest first: his questions, a project
+    /// Every ask made in this thread, and every ask of his session whichever
+    /// thread its turn answers (he is one reader: an ask open anywhere holds
+    /// what is written here too), oldest first: his questions, a project
     /// setting, a memory proposal he asked about, wherever the hub parked
     /// it, each answered on the machine its envelope named.
     private func syncCards() {
-        let asks = hub.needs.parked.values.joined().filter { $0.threadId == threadId }
+        let lead = caw?.leadInstanceId
+        let asks = hub.needs.parked.values.joined()
+            .filter { $0.threadId == threadId || (lead != nil && $0.instanceId == lead) }
             .sorted { ($0.raisedAt ?? .infinity, $0.requestId) < ($1.raisedAt ?? .infinity, $1.requestId) }
         // One at a time (ThreadPane.svelte `firstAsk`): the first stands, "N of M", the rest counted.
         let place = askRun.place(first: asks.first?.requestId, more: max(0, asks.count - 1))

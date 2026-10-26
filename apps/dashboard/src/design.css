@@ -730,6 +730,11 @@
 @utility scheme-inherit {
   color-scheme: inherit;
 }
+/* A frame's ground: the system canvas in its own color-scheme, what a page
+   with no background of its own is drawn on (PreviewPane's iframe). */
+@utility bg-system-canvas {
+  background-color: Canvas;
+}
 @utility pointer-events-all {
   pointer-events: all;
 }

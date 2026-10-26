@@ -752,12 +752,85 @@ function themesWithHost(): boolean {
   return kind === "page" || kind === "component";
 }
 
-/** `root` (this page's, or its copy's in schemes.ts) set to draw in `scheme`. */
+/**
+ * What says a page is written for a dark scheme: a `prefers-color-scheme`
+ * query, a `light-dark()` colour, or rules keyed on `data-theme` (which
+ * {@link themeRoot} sets), in any sheet the page can read.
+ */
+const DARK_AWARE = /prefers-color-scheme|light-dark\(|data-theme/iu;
+
+/**
+ * Whether the page at `root` can draw dark: its own `color-scheme` (its
+ * CSS, or its `<meta name="color-scheme">`) takes dark, or a rule of its
+ * answers to one ({@link DARK_AWARE}). A page that does neither was written
+ * on the web's white canvas with its colours fixed for it (`color:#1d1d1f`
+ * and no ground): put in a dark scheme its canvas goes dark under that text,
+ * and it reads as nothing.
+ */
+function drawsDark(root: HTMLElement): boolean {
+  const doc = root.ownerDocument;
+  const meta = doc.querySelector<HTMLMetaElement>('meta[name="color-scheme"]');
+  if (meta?.content.includes("dark")) {
+    return true;
+  }
+  const set = root.style.colorScheme;
+  root.style.colorScheme = "";
+  const own = doc.defaultView?.getComputedStyle(root).colorScheme ?? "";
+  root.style.colorScheme = set;
+  if (own.includes("dark")) {
+    return true;
+  }
+  for (const styles of Array.from(doc.styleSheets)) {
+    let rules: CSSRuleList;
+    try {
+      rules = styles.cssRules;
+    } catch {
+      // A sheet of another origin is not ours to read.
+      continue;
+    }
+    for (const rule of Array.from(rules)) {
+      if (DARK_AWARE.test(rule.cssText)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * A light page in a dark frame stands on its own white canvas: its root
+ * painted `Canvas` (white, in the light scheme the root now has) when
+ * neither it nor its body paints a ground, so no body background loses its
+ * way to the canvas.
+ */
+function groundLight(root: HTMLElement) {
+  const { body, defaultView: view } = root.ownerDocument;
+  if (
+    view &&
+    CLEAR.test(view.getComputedStyle(root).backgroundColor) &&
+    (!body || CLEAR.test(view.getComputedStyle(body).backgroundColor))
+  ) {
+    root.style.backgroundColor = "Canvas";
+  }
+}
+
+/**
+ * `root` (this page's, or its copy's in schemes.ts) set to draw in `scheme`.
+ * A page artifact written for light only ({@link drawsDark}) draws light
+ * whatever the host's theme: it keeps the canvas its colours were chosen on.
+ */
 function themeRoot(root: HTMLElement, scheme: Scheme) {
-  root.style.colorScheme = scheme;
-  root.dataset.theme = scheme;
+  const drawn =
+    scheme === "dark" && artifact.kind() === "page" && !drawsDark(root)
+      ? "light"
+      : scheme;
+  root.style.colorScheme = drawn;
+  root.dataset.theme = drawn;
+  if (drawn !== scheme) {
+    groundLight(root);
+  }
   if (artifact.kind() === "component") {
-    root.classList.toggle("dark", scheme === "dark");
+    root.classList.toggle("dark", drawn === "dark");
   }
 }
 

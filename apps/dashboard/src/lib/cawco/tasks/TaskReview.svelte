@@ -41,6 +41,7 @@
     IconError,
     IconLink,
   } from "#lib/icons.js";
+  import { artifactNamed } from "../artifact-names.svelte";
   import { cawco } from "../client.svelte";
   import { failureWords as message } from "../hub-read";
   import { idForWords, type SentWords } from "../id";
@@ -249,16 +250,22 @@
       ? folderRawHref(projectId, one.path)
       : folderFileHref(projectId, one.path);
   };
-  const nameOf = (one: ResultArtifact): string =>
-    one.kind === "link"
-      ? `${artifactName(one)} · ${host(one.url)}`
-      : artifactName(one);
+  /** An artifact handed in with no name of its own is named by its title, never its id. */
+  const nameOf = (one: ResultArtifact): string => {
+    if (one.kind === "link") {
+      return `${artifactName(one)} · ${host(one.url)}`;
+    }
+    if (one.kind === "artifact" && !one.name) {
+      return artifactNamed(one.artifactId)?.name ?? "Its page";
+    }
+    return artifactName(one);
+  };
   const titleOf = (one: ResultArtifact): string => {
     switch (one.kind) {
       case "link":
         return one.url;
       case "artifact":
-        return artifactName(one);
+        return nameOf(one);
       case "file":
       case "post":
         break;

@@ -650,6 +650,7 @@ import type {
 } from "./db/schema";
 import { TAG_MARKERS, tagStoredSend } from "./db/tag-markers";
 import { undoable } from "./db/trash";
+import { sendWords } from "./db/words";
 import { buildDecisionPage, type PageSources } from "./decision-page";
 import {
   type ArtifactNamed,
@@ -3227,7 +3228,13 @@ export const createServer = (
   const streams = createStreamHub({
     lifetime,
     // A follower's plan whole (plans.ts), built below with the tasks it reads.
-    planSnapshot: (instanceId, send) => plans.snapshotTo(instanceId, send),
+    // A Caw thread (`thread:<id>`) is followed as a session but has no plan
+    // of its own: its plan is its lead's, which its pane follows by his id.
+    planSnapshot: (instanceId, send) => {
+      if (!threadTarget(instanceId)) {
+        plans.snapshotTo(instanceId, send);
+      }
+    },
     // A screen that follows a session uses its panel's preview: one that
     // stands on no port now (its session slept and gave it up) takes one,
     // told on the session's stream and the board.
@@ -26110,14 +26117,31 @@ export const createServer = (
       handledIds(prefix, db.allThreads(), (thread) => thread.id).map(
         (thread) => thread.id
       ),
+    // A thread's turns: its own rows (Caw's replies, events, your answers)
+    // and your words written there, which are sends (thread-transcript.ts),
+    // each at when it was written.
     threadMessages: (threadId) =>
-      db.threadMessages(threadId).map((message) => ({
-        id: message.id,
-        at: message.createdAt,
-        author: message.author,
-        body: message.body,
-        noteTitle: message.noteTitle,
-      })),
+      [
+        ...db.threadMessages(threadId).map((message) => ({
+          id: message.id,
+          at: message.createdAt,
+          author: message.author,
+          body: message.body,
+          noteTitle: message.noteTitle,
+        })),
+        ...db
+          .threadSends(threadId)
+          .filter(
+            (send) => send.state !== "cancelled" && send.state !== "replaced"
+          )
+          .map((send) => ({
+            id: send.uuid,
+            at: send.readAt ?? send.acceptedAt,
+            author: "you",
+            body: sendWords(send.body),
+            noteTitle: null,
+          })),
+      ].sort((a, b) => a.at.getTime() - b.at.getTime()),
   });
   /**
    * A session's transcript, every page back to the conversation's start,
