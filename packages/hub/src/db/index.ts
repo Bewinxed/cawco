@@ -34,6 +34,7 @@ import type {
   InstanceStatus,
   McpPlatform,
   MemoryScope,
+  MemoryVersion,
   NeutralUserMessage,
   OnCap,
   OpenCodeGoLimits,
@@ -548,17 +549,6 @@ interface AdoptedChildren {
   queuedItems: number;
   queuedStarts: number;
   sessions: string[];
-}
-
-/** One superseded version of the fleet's memory, as a listing reads it. */
-export interface MemoryVersion {
-  bytes: number;
-  createdAt: Date;
-  hash: string;
-  id: number;
-  /** Which document of the set it was a version of; absent is the main one. */
-  path?: string;
-  source: string;
 }
 
 /**

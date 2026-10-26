@@ -25,6 +25,7 @@ import {
   type MarketplacePluginInfo,
   type MarketplaceRead,
   type MemoryScope,
+  type MemoryVersion,
   parseAgentFrontMatter,
 } from "@cawco/core/fleet";
 import type { ConnectAccess, FleetFetchFrame } from "@cawco/core/frames";
@@ -968,17 +969,10 @@ export async function discoverAgents(
   };
 }
 
-/** One superseded version of the memory, as the history list reads it. */
-export interface FleetMemoryVersion {
-  bytes: number;
+/** One superseded version of the memory as `GET /api/fleet/memory/history` sends it: core's, its `createdAt` the ISO string. */
+export type FleetMemoryVersion = Omit<MemoryVersion, "createdAt"> & {
   createdAt: string;
-  hash: string;
-  id: number;
-  /** Which document of the set it was a version of; absent is the main file. */
-  path?: string;
-  /** `fleet`, or `machine:<machineId>` for a copy an overwrite took off one. */
-  source: string;
-}
+};
 
 /** What a save came to: the row the hub stored, or the one it has instead. */
 export type MemorySave =

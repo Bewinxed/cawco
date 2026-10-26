@@ -51509,7 +51509,7 @@
         ]
       },
       "MemoryVersion": {
-        "description": "One superseded version of the fleet's memory, as a listing reads it.",
+        "description": "One superseded version of the fleet's memory, as a listing reads it —\nwithout its content. `createdAt` is a `Date` in the hub and its ISO string\non the wire (`GET /api/fleet/memory/history`).",
         "type": "object",
         "properties": {
           "bytes": {
@@ -51530,6 +51530,7 @@
             "type": "string"
           },
           "source": {
+            "description": "`fleet` for the hub's own row; `machine:<machineId>` for a copy a forced push took off that machine.",
             "type": "string"
           }
         },
