@@ -12119,19 +12119,26 @@ export const createServer = (
    */
   const endPreviews = (instanceId: string): void => {
     closePreview(instanceId);
-    previewListeners.release(instanceId);
     db.previewPasses.revoke({ instanceId });
-    // Its artifacts' own origins go with it, their machines' listeners too:
-    // each keeps its port for when it is shown again.
-    for (const key of previewListeners.releaseEmbeds(instanceId)) {
-      const target = embedTargets.get(key);
-      embedTargets.delete(key);
+    endOrigin(instanceId);
+  };
+
+  /**
+   * Preview origin `key` (a session's, a project's) ended: its listener
+   * stops and its port is free again, and so is each artifact origin it
+   * opened, their machines' listeners stopped too.
+   */
+  const endOrigin = (key: string): void => {
+    previewListeners.release(key);
+    for (const embed of previewListeners.releaseEmbeds(key)) {
+      const target = embedTargets.get(embed);
+      embedTargets.delete(embed);
       if (target && !("page" in target.source)) {
         detach(
           callAgent(
             target.machineId,
             PREVIEW_STOP,
-            [{ instanceId: key }],
+            [{ instanceId: embed }],
             BUSY_TIMEOUT_MS
           ),
           "embedded preview stop"
@@ -32615,8 +32622,9 @@ export const createServer = (
           db.project(params.id)?.places.map((place) => place.machineId)
         );
         db.deleteProject(params.id);
-        // Its pages' origin goes with it (its port's row went in the delete).
-        previewListeners.release(projectOrigin(params.id));
+        // Its pages' origin goes with it (its port's row went in the
+        // delete), and every machine preview its pages opened.
+        endOrigin(projectOrigin(params.id));
         projectsChanged();
         // Its hooks leave every place it had.
         for (const machineId of machines) {
