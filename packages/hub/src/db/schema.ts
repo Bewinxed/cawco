@@ -551,8 +551,9 @@ export const projectTasks = sqliteTable(
     stage: text("stage").notNull(),
     /** The delegate type it is assigned to. */
     type: text("type"),
-    parent: text("parent"),
-    /** The task it was found in: one of the canvas's edges (the others are `project_task_edges`). */
+    /** The task it is a part of (`part_of`): it inherits that task's waits. */
+    partOf: text("part_of"),
+    /** The task or pin it was found in (`found_in`), written by the hub. */
     foundIn: text("found_in"),
     /** The task it repeats (`duplicate_of`): a task waiting on it waits on that one instead. */
     duplicateOf: text("duplicate_of"),
@@ -579,14 +580,22 @@ export const projectTasks = sqliteTable(
   ]
 );
 
-/** A task file's edge to another task: one it waits for (`after`), or one it is related to (`related`). */
-export type TaskEdgeKind = "after" | "related";
+/** A task file's blocking edge: what it waits on (`waits_on`). */
+export type TaskEdgeKind = "waits_on";
+
+/** One card or pin an attempt was dispatched on, and the value it settled with (`workItems.waitedOn`). */
+export interface WaitWitness {
+  /** The wait as its task's file keeps it (wait-targets.ts). */
+  target: string;
+  value: string;
+}
 
 /**
- * A task's edges to other tasks (`after:`, `related:`), one row each, in the
- * order its file lists them (rowid). Rebuilt with its task's index row; the
- * other task is named by id, not keyed, since a file may name a task that
- * has no file.
+ * What a task waits on (`waits_on:`), one row each, in the order its file
+ * lists them (rowid): `other_id` the target as the file keeps it (a task as
+ * `tsk-12`; a card, a pin, a pull request, a run or a session as
+ * wait-targets.ts keeps it). Rebuilt with its task's index row; a task is
+ * named by id, not keyed, since a file may name a task that has no file.
  */
 export const projectTaskEdges = sqliteTable(
   "project_task_edges",
@@ -595,7 +604,7 @@ export const projectTaskEdges = sqliteTable(
     /** The task's file: its index row's key with `projectId`. */
     path: text("path").notNull(),
     kind: text("kind").$type<TaskEdgeKind>().notNull(),
-    /** `tsk-…`. */
+    /** What it waits on, as the file keeps it. */
     otherId: text("other_id").notNull(),
   },
   (table) => [
@@ -606,7 +615,7 @@ export const projectTaskEdges = sqliteTable(
       columns: [table.projectId, table.path],
       foreignColumns: [projectTasks.projectId, projectTasks.path],
     }).onDelete("cascade"),
-    // Who waits for a task, who is related to it.
+    // Who waits on a task, a card or a pull request.
     index("project_task_edges_other").on(
       table.projectId,
       table.kind,
@@ -1447,6 +1456,13 @@ export const workItems = sqliteTable(
       at: number;
       sha: string;
     }>(),
+    /**
+     * What an attempt at a task was dispatched on (dispatch.ts): each card
+     * or pin its task waited on, its own or its parts' chain's, and the
+     * value it settled with then (task-waits.ts `value`). A card answered
+     * differently since is told by its value, not its time. Null: none.
+     */
+    waitedOn: text("waited_on", { mode: "json" }).$type<WaitWitness[]>(),
     /**
      * What its session handed in on its task (`task_result`): its words,
      * what to check, and its artifacts. A later call replaces it. Null:

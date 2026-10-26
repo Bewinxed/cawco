@@ -12,7 +12,8 @@
  *   Send it runs at once).
  * - **delegate**: a delegated session or work item: the session tools, reads
  *   of its project's tasks, folder and its own task's to-dos; changes to tasks and
- *   fleet settings go to its parent through handoff.
+ *   fleet settings go to its parent through handoff. A coordinator (an
+ *   attempt at a whole) starts its parts with task_start.
  * - **lead**: a project's Caw. Board tools only: tasks and to-dos, threads,
  *   drafting views, its project's folder on the hub and decision pages in it
  *   with their graph,
@@ -189,6 +190,9 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     ...TASK_READ,
     // An attempt at a task hands in its result (task-tools.ts).
     "task_result",
+    // A coordinator, an attempt at a whole, starts its parts (dispatch.ts
+    // `coordinates`); any other delegate's start is refused there.
+    "task_start",
     "memory_note",
     // Anything said or made, as the dashboard's Find finds it (find-tool.ts).
     "find",

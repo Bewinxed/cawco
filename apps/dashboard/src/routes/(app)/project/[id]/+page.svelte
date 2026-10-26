@@ -293,7 +293,6 @@
 
   const allowedFrom = (stage: string): Set<string> =>
     stages ? movesFrom(stages, stage) : new Set();
-  const kindOf = (id: string): StageKind | null | undefined => kindById.get(id);
 
   // --- Caw, the views and the data they bind to ------------------------------
 
@@ -791,9 +790,8 @@
       stage: task.stage,
       kind: task.kind,
       needsYou: task.needsYou,
-      after: task.after,
-      parent: task.parent,
-      related: task.related,
+      waitsOn: task.waitsOn,
+      partOf: task.partOf,
       foundIn: task.foundIn,
       duplicateOf: task.duplicateOf,
       // The row's fields are the ones that hold one scalar (the hub's TaskSummary).
@@ -810,7 +808,12 @@
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
       attempts: task.attempts,
-      blockedBy: task.blockedBy,
+      waits: task.waits,
+      unblocks: task.unblocks,
+      parts: task.parts,
+      heldBy: task.heldBy,
+      ready: task.ready,
+      builtOn: task.builtOn,
       lastAttemptFailed: task.lastAttemptFailed,
       lastAttemptStopped: task.lastAttemptStopped,
       liveAttempt: task.liveAttempt,
@@ -1685,7 +1688,6 @@
     archived={applyFilter(archived, filter, find.ids)}
     {dateOf}
     hrefOf={(id) => hrefOf(id)}
-    {kindOf}
     moving={(id) => id in moving}
     {newIn}
     oncreate={create}
@@ -2000,7 +2002,6 @@
   {:else if value === "canvas"}
     <ViewCanvas
       hrefOf={(id) => hrefOf(id)}
-      {kindOf}
       onopen={openOne}
       tasks={shownTasks}
     />

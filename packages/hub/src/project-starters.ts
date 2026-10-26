@@ -258,7 +258,7 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
       failed: task.lastAttemptFailed
         ? (task.attempts[0]?.endedHow ?? "It failed without a reason.")
         : null,
-      blocked: task.blockedBy.length > 0,
+      blocked: task.waits.some((wait) => !wait.settled),
       design: designShaped(template, task),
     }));
     const routineFailures = db.routines.list(projectId).flatMap((routine) => {

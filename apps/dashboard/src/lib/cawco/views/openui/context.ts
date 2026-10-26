@@ -42,14 +42,6 @@ export const viewContext = (): ViewContext => getContext<ViewContext>(KEY);
 export const rowsOf = <T>(value: unknown): T[] =>
   Array.isArray(value) ? (value as T[]) : [];
 
-/** The kind of each task's stage among `rows`, by id: what a card reads to say whether what it waits on has landed. */
-export const kindsOf = (
-  rows: ViewTaskRow[]
-): ((id: string) => StageKind | null | undefined) => {
-  const kinds = new Map(rows.map((row) => [row.id, row.kind]));
-  return (id) => kinds.get(id);
-};
-
 /**
  * A value at a path inside a task ("dates.updatedAt", "fields.post_at",
  * "stage", "labels"), as words: a date in the app's own form ("17 Oct

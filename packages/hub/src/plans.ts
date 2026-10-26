@@ -11,8 +11,9 @@
  * The person changes a plan too ({@link Plans.edit}): each change is applied
  * to the steps here and kept as a row in their words (`plan_changes`);
  * plan-changes.ts decides who hears it and when. A step keeps the person's
- * comments and its decision-page wait across the session's own writes, by
- * id; and a write of the session's steps that would undo a change it has
+ * comments and its wait across the session's own writes, by id. A step's
+ * wait is a task's wait (wait-targets.ts): the hub's one resolver settles it
+ * (task-waits.ts `settled`), and a settled wait is dropped; and a write of the session's steps that would undo a change it has
  * not written over since is refused once, naming the change
  * ({@link Plans.write}).
  *
@@ -32,9 +33,11 @@ import {
   type PlanReceiver,
   type PlanSnapshot,
   type PlanStep,
-  type PlanWait,
   type SessionPlan,
   stepLink,
+  stepWaitsOnArtifact,
+  waitArtifact,
+  waitTarget,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { Elysia, t } from "elysia";
@@ -60,7 +63,7 @@ export interface PlansDeps {
   >;
   /** Fans a plan frame out to the session's followers (stream.ts). */
   publish: (instanceId: string, message: PlanSnapshot | PlanDelta) => void;
-  tasks: Pick<Tasks, "get">;
+  tasks: Pick<Tasks, "get" | "waitState">;
 }
 
 interface Held {
@@ -75,8 +78,29 @@ const CHANGES_SHOWN = 20;
  * A step as the session writes it (`todo_write`): its `waitsOn` set, kept
  * when left out, cleared with null. Comments are the person's: never written.
  */
-export type WrittenStep = Omit<PlanStep, "comments" | "waitsOn"> & {
-  waitsOn?: PlanWait | null;
+export type WrittenStep = Omit<
+  PlanStep,
+  "comments" | "wait" | "waitsOn" | "waitsOnPage"
+> & {
+  wait?: string | null;
+};
+
+/**
+ * A step as a plan is sent: with `waitsOn` in the shape TestFlight ios
+ * 20261018 reads (wire-compat.ts BRIDGES), filled from its card wait or its
+ * whole-page wait. Nothing reads it back; it goes with that build.
+ */
+const bridgedWait = (step: PlanStep): PlanStep => {
+  const target = step.wait ? waitTarget(step.wait) : undefined;
+  if (target?.kind === "card") {
+    return {
+      ...step,
+      waitsOn: { artifactId: target.artifactId, card: target.card },
+    };
+  }
+  return step.waitsOnPage
+    ? { ...step, waitsOn: { artifactId: step.waitsOnPage } }
+    : step;
 };
 
 /** The receiver's key, as `plan_changes.receiver` holds it. */
@@ -190,10 +214,28 @@ const pageNamed = (db: Pick<DbShape, "artifacts">, id: string): string => {
   return page ? artifactLink(page.id, page.name) : "a page since removed";
 };
 
+/** What a step waits on, in a message's words: a card or pin by its page's link, any other target as kept. */
+const waitWords = (db: Pick<DbShape, "artifacts">, handle: string): string => {
+  const target = waitTarget(handle);
+  switch (target?.kind) {
+    case "card":
+      return `the person's pick on ${pageNamed(db, target.artifactId)}`;
+    case "pin":
+      return `pin ${target.number} on ${pageNamed(db, target.artifactId)}`;
+    case "session":
+      return "a session's work";
+    case "task":
+    case "pr":
+    case "run":
+    case undefined:
+      return handle;
+  }
+};
+
 /**
  * A plan's steps as a message lists them: a box per status, nested by
  * indent, each by its link (session `session`'s, its words the label), a
- * wait by its page's link.
+ * wait by what it waits on.
  */
 export const stepLines = (
   db: Pick<DbShape, "artifacts">,
@@ -206,10 +248,10 @@ export const stepLines = (
         .map((step) => {
           const box = BOX[step.status];
           let wait = "";
-          if (step.waitsOn?.card) {
-            wait = ` (waiting on the person's pick on ${pageNamed(db, step.waitsOn.artifactId)})`;
-          } else if (step.waitsOn) {
-            wait = ` (waiting on the person on ${pageNamed(db, step.waitsOn.artifactId)})`;
+          if (step.wait) {
+            wait = ` (waiting on ${waitWords(db, step.wait)})`;
+          } else if (step.waitsOnPage) {
+            wait = ` (waiting on the person on ${pageNamed(db, step.waitsOnPage)})`;
           }
           return `${"  ".repeat(step.depth)}- ${box} ${stepLink(session, step.id, step.content)}${wait}`;
         })
@@ -459,7 +501,7 @@ export const createPlans = (deps: PlansDeps) => {
         ? { awayUnseen: { since: away.since } }
         : {}),
       source: "cawco",
-      steps: own?.steps ?? [],
+      steps: (own?.steps ?? []).map(bridgedWait),
       ...(changes.length > 0 ? { changes } : {}),
       ...(own?.spec && own.specAt
         ? { spec: { markdown: own.spec, at: own.specAt.toISOString() } }
@@ -482,9 +524,41 @@ export const createPlans = (deps: PlansDeps) => {
    * Reads the plan and tells the followers what changed: nothing, a delta
    * from the last revision, or a snapshot when the change is most of it.
    */
+  /**
+   * A step's wait the resolver settles now is dropped from it (task-waits.ts
+   * `settled`, read in the session's project): what stopped a step waiting
+   * on a card once its page's Send carried a pick, for every kind of wait.
+   */
+  const dropSettled = async (row: InstanceRow): Promise<void> => {
+    const own = db.sessionPlan(row.id);
+    const waits = [
+      ...new Set(own?.steps.flatMap((step) => step.wait ?? []) ?? []),
+    ];
+    if (!own || waits.length === 0) {
+      return;
+    }
+    const settled = new Set<string>();
+    for (const handle of waits) {
+      // biome-ignore lint/performance/noAwaitInLoops: a plan's few waits, each read in turn
+      if ((await deps.tasks.waitState(row.projectId ?? null, handle)).settled) {
+        settled.add(handle);
+      }
+    }
+    if (settled.size > 0) {
+      db.putSessionSteps(
+        row.id,
+        own.steps.map(({ wait, ...step }) =>
+          wait && !settled.has(wait) ? { ...step, wait } : step
+        )
+      );
+    }
+  };
+
   const settle = (instanceId: string): Promise<Held> =>
     inTurn(instanceId, async () => {
-      const plan = await compute(rowOf(instanceId));
+      const row = rowOf(instanceId);
+      await dropSettled(row);
+      const plan = await compute(row);
       const before = held.get(instanceId);
       if (!before) {
         const first = { plan, rev: 1 };
@@ -507,21 +581,18 @@ export const createPlans = (deps: PlansDeps) => {
       return after;
     });
 
-  /** Each step of the session's plan whose wait `drops` names stops waiting; its followers hear it. */
-  const dropWaits = (
-    instanceId: string,
-    drops: (wait: PlanWait) => boolean
-  ): void => {
+  /** Each step of the session's plan waiting on page `artifactId` whole stops waiting; its followers hear it. */
+  const dropPageWaits = (instanceId: string, artifactId: string): void => {
     const own = db.sessionPlan(instanceId);
-    if (!own?.steps.some((step) => step.waitsOn && drops(step.waitsOn))) {
+    if (!own?.steps.some((step) => step.waitsOnPage === artifactId)) {
       return;
     }
     db.putSessionSteps(
       instanceId,
-      own.steps.map(({ waitsOn, ...step }) =>
-        waitsOn && drops(waitsOn)
+      own.steps.map(({ waitsOnPage, ...step }) =>
+        waitsOnPage === artifactId
           ? step
-          : { ...step, ...(waitsOn ? { waitsOn } : {}) }
+          : { ...step, ...(waitsOnPage ? { waitsOnPage } : {}) }
       )
     );
     settleQuietly(instanceId);
@@ -591,13 +662,14 @@ export const createPlans = (deps: PlansDeps) => {
         }
         db.putSessionSteps(
           row.id,
-          steps.map(({ waitsOn, ...step }) => {
+          steps.map(({ wait: given, ...step }) => {
             const kept = before.find((one) => one.id === step.id);
-            const wait = waitsOn === undefined ? kept?.waitsOn : waitsOn;
+            const wait = given === undefined ? kept?.wait : given;
             return {
               ...step,
               ...(kept?.comments ? { comments: kept.comments } : {}),
-              ...(wait ? { waitsOn: wait } : {}),
+              ...(wait ? { wait } : {}),
+              ...(kept?.waitsOnPage ? { waitsOnPage: kept.waitsOnPage } : {}),
             };
           })
         );
@@ -646,22 +718,23 @@ export const createPlans = (deps: PlansDeps) => {
       return change;
     },
 
-    /**
-     * The page's Send carried picks for these cards: each step of the
-     * session's plan waiting on one of them stops waiting.
-     */
-    clearWaits(
-      instanceId: string,
-      artifactId: string,
-      picked: ReadonlySet<string>
-    ): void {
-      dropWaits(
-        instanceId,
-        (wait) =>
-          wait.artifactId === artifactId &&
-          wait.card !== undefined &&
-          picked.has(wait.card)
-      );
+    /** A wait of the session's steps may have settled (a page's picks moved): the plan is read again, settled waits dropped. */
+    waitsMoved(instanceId: string): void {
+      settleQuietly(instanceId);
+    },
+
+    /** Page `artifactId`'s picks or pins moved: each followed plan with a step waiting on a card or pin of it is read again. */
+    pageMoved(artifactId: string): void {
+      for (const [instanceId, { plan }] of held) {
+        if (
+          plan.steps.some(
+            (step) =>
+              step.wait !== undefined && waitArtifact(step.wait) === artifactId
+          )
+        ) {
+          settleQuietly(instanceId);
+        }
+      }
     },
 
     /**
@@ -673,21 +746,20 @@ export const createPlans = (deps: PlansDeps) => {
      */
     waitOn(instanceId: string, artifactId: string): string | null {
       const steps = db.sessionPlan(instanceId)?.steps ?? [];
-      const waiting = steps.find(
-        (step) =>
-          step.status !== "completed" && step.waitsOn?.artifactId === artifactId
+      const waiting = steps.find((step) =>
+        stepWaitsOnArtifact(step, artifactId)
       );
       if (waiting) {
         return waiting.id;
       }
       const current = steps.find((step) => step.status === "in_progress");
-      if (!current || current.waitsOn) {
+      if (!current || current.wait || current.waitsOnPage) {
         return null;
       }
       db.putSessionSteps(
         instanceId,
         steps.map((step) =>
-          step.id === current.id ? { ...step, waitsOn: { artifactId } } : step
+          step.id === current.id ? { ...step, waitsOnPage: artifactId } : step
         )
       );
       settleQuietly(instanceId);
@@ -696,10 +768,7 @@ export const createPlans = (deps: PlansDeps) => {
 
     /** Nothing on artifact `artifactId` waits on the person now: no step of the session waits on it whole. */
     clearArtifactWait(instanceId: string, artifactId: string): void {
-      dropWaits(
-        instanceId,
-        (wait) => wait.artifactId === artifactId && wait.card === undefined
-      );
+      dropPageWaits(instanceId, artifactId);
     },
 
     /** The session's steps as they stand: what its artifacts' waits are read against. */

@@ -381,6 +381,7 @@ import {
   WORK_ITEM_ORIGIN,
   WORKSPACE_CREATE_TIMEOUT_MS,
   type WorkInFlight,
+  waitArtifact,
   withMovedLine,
   withPresenceLine,
   workWords,
@@ -704,7 +705,7 @@ import { recordHubEvent } from "./hub-record";
 import { hubRestarts } from "./hub-restart";
 import { hubHttpUrl } from "./hub-self";
 import { createHubTools } from "./hub-tools";
-import { createIngress, ingressRoutes } from "./ingress";
+import { createIngress, type Ingress, ingressRoutes } from "./ingress";
 import { createInstalls } from "./installs";
 import { jevAccess } from "./jev";
 import { JevFailed, jevAttach, jevType, offLine } from "./jev-placement";
@@ -1521,6 +1522,10 @@ const askerWords = (by: ContinuationAsker): string => {
 };
 /** The origin of the hub's word to a sender that its message did not arrive. */
 const UNDELIVERED_ORIGIN = "undelivered";
+/** How long after a session heard a pin's thread a task it files counts as found in that pin (tasks.ts `found_in`). */
+const PIN_ASK_MS = 30 * 60_000;
+/** The origin of the hub's word to a live attempt that a wait of its task moved (tasks.ts `tell`). */
+const TASK_WAITS_ORIGIN = "task-waits";
 /**
  * The hub's words that may start a turn in a session at rest (asleep or
  * failed, no process): each is the far end of something a person, the
@@ -9248,9 +9253,8 @@ export const createServer = (
    */
   const waitingOn = (session: string, steps: readonly PlanStep[]): AwayWait[] =>
     steps.flatMap((step) => {
-      const page = step.waitsOn
-        ? db.artifacts.get(step.waitsOn.artifactId)
-        : undefined;
+      const pageId = step.waitsOnPage ?? (step.wait && waitArtifact(step.wait));
+      const page = pageId ? db.artifacts.get(pageId) : undefined;
       return page && step.status !== "completed"
         ? [
             {
@@ -13588,6 +13592,39 @@ export const createServer = (
       notifications.clear([artifactCollapseId(id)], "settled");
     },
   });
+  /**
+   * A page's picks or pins moved: once the burst is over, each project whose
+   * tasks wait on a card or pin of it looks again (tasks.ts `waitsMoved`:
+   * readiness is live, and a live attempt dispatched on a card answered
+   * differently hears it once), and each plan waiting on one is read again.
+   */
+  const WAIT_PAGE_MS = 1000;
+  const waitPagesTelling = new Map<string, HubTimer>();
+  const waitPageMoved = (artifactId: string): void => {
+    if (waitPagesTelling.has(artifactId)) {
+      return;
+    }
+    waitPagesTelling.set(
+      artifactId,
+      lifetime.after(WAIT_PAGE_MS, () => {
+        waitPagesTelling.delete(artifactId);
+        plans.pageMoved(artifactId);
+        for (const project of db.listProjects()) {
+          if (
+            db
+              .taskIndex(project.id)
+              .some((row) =>
+                row.waitsOn.some(
+                  (target) => waitArtifact(target) === artifactId
+                )
+              )
+          ) {
+            detach(tasks.waitsMoved(project.id), "task waits moved");
+          }
+        }
+      })
+    );
+  };
   const artifactDocs = createArtifactDocs({
     db: db.artifacts,
     lifetime,
@@ -13600,6 +13637,8 @@ export const createServer = (
       }
       // A build held for the person's picks on it may land now.
       workItems.picksMoved(id);
+      // A task or a plan step waiting on a card or pin of it may settle now.
+      waitPageMoved(id);
     },
     // A pick or a note on a project's page moves its Decisions tab.
     changed: (id) => {
@@ -13879,7 +13918,7 @@ export const createServer = (
     },
     sending: (instance, artifact, state) => {
       // A step of the session's plan that waited on a card picked here stops waiting.
-      plans.clearWaits(instance.id, artifact.id, new Set(Object.keys(state)));
+      plans.waitsMoved(instance.id);
       return applySetupPicks(artifact, instance.projectId, state, {
         fleet: (choices) => setFleetChoices(fleetChoices, choices),
         // Set up opens the relay's journey, and its row stands in Needs you;
@@ -23999,6 +24038,29 @@ export const createServer = (
   };
   /** Set once approved actions exist (below): until then no `action` move goes. */
   let actionMoves: NonNullable<TaskStore["actionMove"]> = () => false;
+  /** The pull requests and runs a project's tasks wait on, as its GitHub poll reads them (ingress.ts); set once ingress is made. */
+  let githubWaits:
+    Pick<Ingress, "githubWait" | "githubWaitRefusal"> | undefined;
+  /** A session a wait names by its handle (`cockpit#5a167bde`): the one whose id its handle begins, among every session the hub holds. */
+  const sessionByHandle = (
+    handle: string
+  ): { dir: string; id: string; item: boolean } | string => {
+    const id = handleId(handle);
+    const found = isHandle(handle)
+      ? db.getInstancesByIds(db.find.idsByPrefix(id))
+      : [];
+    const [row] = found;
+    if (found.length !== 1 || !row) {
+      return found.length > 1
+        ? `“${handle}” names ${found.length} sessions; give more of its id.`
+        : `“${handle}” names no session on this hub.`;
+    }
+    return {
+      id: row.id,
+      dir: sessionLabel(row).name,
+      item: row.workItemId !== null && row.workItemId !== undefined,
+    };
+  };
   /** Set once the design system exists (below, design-system.ts `approvalRefusal`). */
   let designApproval: NonNullable<TaskStore["approvalRefusal"]> = () =>
     Promise.resolve(undefined);
@@ -24043,6 +24105,57 @@ export const createServer = (
       projectTypes.resolveTypeFor(projectId, type) !== undefined,
     queuedStarts: (projectId) =>
       db.queuedTaskStarts(projectId).map((row) => row.taskId),
+    // What the one resolver reads past the project's tasks (task-waits.ts).
+    waitWorld: (projectId) => ({
+      card: (artifactId, card) => artifacts.waitCard(artifactId, card),
+      pin: (artifactId, number) => artifacts.waitPin(artifactId, number),
+      github: (target) =>
+        githubWaits?.githubWait(projectId, target) ?? {
+          state: "checking",
+          title: null,
+        },
+      session: (instanceId) => {
+        const [row] = db.getInstancesByIds([instanceId]);
+        if (!row) {
+          return;
+        }
+        const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
+        return { title: boardTitle(row), item: item?.state ?? null };
+      },
+    }),
+    waitReader: (projectId, actor) => ({
+      page: (asked) =>
+        artifacts.waitPage(actor.instanceId ?? null, projectId, asked),
+      cards: (artifactId) => artifacts.waitCards(artifactId),
+      pinHeld: (artifactId, number) =>
+        artifacts.waitPin(artifactId, number) !== undefined,
+      session: sessionByHandle,
+      githubRefusal: () =>
+        githubWaits?.githubWaitRefusal(projectId) ??
+        "the hub's GitHub poll is not up yet; try again in a moment.",
+    }),
+    // A wait of a live session's task moved: it hears once, as the hub.
+    tell: (instanceId, text) => {
+      const [row] = db.getInstancesByIds([instanceId]);
+      if (!row) {
+        return;
+      }
+      deliverSend({
+        verb: "send",
+        machineId: row.machineId,
+        instanceId: row.id,
+        payload: {
+          instanceId: row.id,
+          message: {
+            type: "user",
+            uuid: crypto.randomUUID(),
+            message: { role: "user", content: text },
+            parent_tool_use_id: null,
+            origin: { kind: "system", name: TASK_WAITS_ORIGIN },
+          },
+        },
+      });
+    },
   });
   // A project made from a template before the hub recorded which one is
   // known by its stages.md (stages.ts `templateOf`: kinds and moves, through
@@ -25482,7 +25595,12 @@ export const createServer = (
     jevAccess: () => jevAccess(db),
     lifetime,
     routines,
+    // A pull request or run a task waits on moved: its project looks again.
+    waitsMoved: (projectId) => {
+      detach(tasks.waitsMoved(projectId), "task waits moved");
+    },
   });
+  githubWaits = ingress;
   // The relay (relay.ts): a project's one public webhook path through
   // Funnel, to a receiver of its own on 127.0.0.1; deliveries go to ingest.
   const relays = createRelay({
@@ -25802,6 +25920,19 @@ export const createServer = (
     browserTools: (actor, toolUseId) => browserAsks.tools(actor, toolUseId),
     connectTools: (actor, toolUseId) => connectAsks.tools(actor, toolUseId),
     workItemTask: (id) => db.workItem(id)?.taskId,
+    // Where a task a session files was found: its work item's task in the
+    // same project, else the pin whose thread it heard a person's words
+    // from in the last half hour (tasks.ts `found_in`).
+    foundIn: (actor) => {
+      const item = actor.workItemId ? db.workItem(actor.workItemId) : undefined;
+      if (item?.taskId && item.projectId === actor.projectId) {
+        return item.taskId;
+      }
+      const pin = artifacts.askedFromPin(actor.id, Date.now() - PIN_ASK_MS);
+      return pin ? `${pin.artifactId}/${pin.number}` : null;
+    },
+    stepWait: (actor, written) =>
+      tasks.keptWait(actor.projectId ?? null, sessionActor(actor), written),
     // A host-scope item ends with its report alone (work-items.ts `startHost`).
     workItemLands: (id) => {
       const item = db.workItem(id);

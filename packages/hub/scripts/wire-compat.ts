@@ -162,6 +162,21 @@ export const BRIDGES: Bridge[] = [
     property,
     until: UNSENT_20261018,
   })),
+  // Task links are one blocking edge since 2026-10-26 (tasks.ts): the old
+  // links, filled from the new ones, for the build that reads them alone.
+  ...(["after", "blockedBy", "parent", "related"] as const).map(
+    (property): SentBridge => ({
+      property,
+      beside: "unblocks",
+      until: `the old task link \`${property}\` beside the new ones (\`waitsOn\`, \`partOf\`, \`waits\`, \`unblocks\`), filled from them, which TestFlight ios 20261018 requires; it goes once that build is no longer installable, 2027-01-16 (bash apps/apple/scripts/testflight.sh --expire 20261018)`,
+    })
+  ),
+  {
+    property: "waitsOn",
+    beside: "waitsOnPage",
+    until:
+      "a plan step's wait as an object ({artifactId, card}) beside `wait` and `waitsOnPage`, filled from them, which TestFlight ios 20261018 requires; it goes once that build is no longer installable, 2027-01-16 (bash apps/apple/scripts/testflight.sh --expire 20261018)",
+  },
   {
     property: "machines",
     beside: "claude",

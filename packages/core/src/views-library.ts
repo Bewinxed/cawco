@@ -57,9 +57,17 @@ const task: z.ZodType<ViewTask> = z.object({
   rank: z.string().nullable(),
   needsYou: z.boolean().describe("It waits for the person."),
   liveAttempt: z.boolean().describe("An attempt at it is running now."),
-  blockedBy: z
-    .array(z.string())
-    .describe("The tasks it waits on that have not landed, by id."),
+  waits: z
+    .array(
+      z.object({
+        label: z.string(),
+        settled: z.boolean(),
+        state: z.string(),
+      })
+    )
+    .describe(
+      "What it waits on, unsettled first: a task, a decision card, a pin, a pull request, a run or a session, each by its name, with where it stands."
+    ),
   todos: z.object({ done: z.number(), total: z.number() }),
   fields: z
     .record(z.string(), z.string())

@@ -11,8 +11,14 @@
    *   or whose outcome is unknown says so, and Remove puts it away;
    * - its newest session failed or was stopped: which, when, and Try again,
    *   a new session (`ended`; the task's own pane carries it in its review);
-   * - it waits on tasks that have not landed: not yours to do, so it reads
-   *   quiet, each blocker with Open, which shows it here in its place.
+   * - it waits on something not settled yet (a task, a card, a pin, a pull
+   *   request, a run, a session; the hub's one resolver says): not yours to
+   *   do, so it reads quiet, a task with Open, which shows it here in its
+   *   place, anything else by its chip, a flagged one as "Blocked: …";
+   * - it is done, and a card or pin its session built on was answered
+   *   differently or reopened since: said, with Reopen where the pane
+   *   offers a stage to reopen it in (`reopenTo`). Nothing reopens on its
+   *   own.
    * Nothing holds the page; a refusal stays under what it refused.
    *
    * A stage of kind `you` is a review, drawn by TaskReview: the task's view
@@ -32,12 +38,14 @@
   import { failureWords as message } from "../hub-read";
   import { rowHref } from "../links";
   import {
+    moveTask,
     readTask,
     retryTask,
     type TaskSummary,
     type TaskView,
   } from "../project-tasks";
   import RowFault from "../RowFault.svelte";
+  import { referenceOf } from "../references";
   import { actionsOf, asksOf } from "./needs.svelte";
 
   let {
@@ -47,8 +55,11 @@
     onchanged,
     onopen,
     ended = true,
+    reopenTo = null,
   }: {
     projectId: string;
+    /** The stage a task built on a moved card reopens in, when you may move it there; null: no Reopen here. */
+    reopenTo?: string | null;
     task: TaskView;
     /** Its newest session that failed or was stopped, with Try again; false where its review beside says it (TaskPane). */
     ended?: boolean;
@@ -73,7 +84,35 @@
       !task.liveAttempt
   );
   const lastAttempt = $derived(task.attempts[0]);
-  const blockers = $derived(task.blockedBy);
+  const blockers = $derived(task.waits.filter((wait) => !wait.settled));
+  const builtOn = $derived(task.builtOn);
+
+  // --- a done task built on a card that moved ------------------------------------
+
+  let reopening = $state(false);
+  let reopenProblem = $state<string | null>(null);
+
+  async function reopen() {
+    if (!reopenTo) {
+      return;
+    }
+    reopening = true;
+    reopenProblem = null;
+    try {
+      onchanged(
+        await moveTask(
+          projectId,
+          task.id,
+          reopenTo,
+          "built on a decision answered differently since"
+        )
+      );
+    } catch (error) {
+      reopenProblem = message(error);
+    } finally {
+      reopening = false;
+    }
+  }
 
   // --- a failed attempt --------------------------------------------------------
 
@@ -118,7 +157,7 @@
   const titleOf = (id: string) => tasks.find((each) => each.id === id)?.title;
 </script>
 
-{#if asks.length > 0 || actions.length > 0 || failed || blockers.length > 0}
+{#if asks.length > 0 || actions.length > 0 || failed || blockers.length > 0 || builtOn.length > 0}
   <div data-slot="task-needs-needs-stack" class="flex flex-col gap-space-3">
     {#each asks as blocked (blocked.request.requestId)}
       <section
@@ -310,30 +349,99 @@
           />
           <span
             >Waits on {blockers.length === 1
-              ? "a task that has not landed"
-              : `${blockers.length} tasks that have not landed`}</span
+              ? "something not settled yet"
+              : `${blockers.length} things not settled yet`}</span
           >
         </h3>
         <ul class="flex flex-col gap-space-1 m-0 p-0 list-none">
-          {#each blockers as id (id)}
+          {#each blockers as wait (wait.target)}
             <li class="flex items-center gap-space-2 min-w-0">
-              <span
-                class="flex-none type-meta font-mono liga-none text-ink-muted"
-                >{id}</span
+              {#if wait.kind === "task"}
+                <span
+                  class="flex-none type-meta font-mono liga-none text-ink-muted"
+                  >{wait.target}</span
+                >
+                <span
+                  class="flex-auto min-w-0 type-label text-ink-strong truncate"
+                  >{titleOf(wait.target) ?? wait.label}</span
+                >
+              {:else}
+                {@const drawn = wait.href.startsWith("cawco:")
+                  ? referenceOf(wait.href)
+                  : null}
+                <span class="flex-auto min-w-0 type-label truncate">
+                  {#if drawn?.draw === "element"}
+                    <drawn.element
+                      id={drawn.id}
+                      kind={drawn.kind}
+                      label={wait.label}
+                    />
+                  {:else if wait.href.startsWith("http")}
+                    <a
+                      class="text-ink-strong"
+                      href={wait.href}
+                      rel="noreferrer"
+                      target="_blank">{wait.label}</a
+                    >
+                  {:else}
+                    <span class="text-ink-strong">{wait.label}</span>
+                  {/if}
+                </span>
+              {/if}
+              <span class="flex-none type-meta text-ink-muted"
+                >{wait.flag ? `Blocked: ${wait.flag}` : wait.state}</span
               >
-              <span
-                class="flex-auto min-w-0 type-label text-ink-strong truncate"
-                >{titleOf(id) ?? ""}</span
-              >
-              <Button
-                label="Open"
-                onclick={() => onopen(id)}
-                size="xs"
-                variant="ghost"
-              />
+              {#if wait.kind === "task" && titleOf(wait.target)}
+                <Button
+                  label="Open"
+                  onclick={() => onopen(wait.target)}
+                  size="xs"
+                  variant="ghost"
+                />
+              {/if}
             </li>
           {/each}
         </ul>
+      </section>
+    {/if}
+    {#if builtOn.length > 0}
+      <section
+        data-slot="needs"
+        aria-label="Built on a decision that moved"
+        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-border-hairline rounded-md bg-surface-recess"
+      >
+        <ul class="flex flex-col gap-space-1 m-0 p-0 list-none">
+          {#each builtOn as moved (moved.target)}
+            {@const drawn = referenceOf(moved.href)}
+            <li
+              class="flex flex-wrap items-baseline gap-space-1 min-w-0 type-label text-ink-strong"
+            >
+              <span>Built on</span>
+              {#if drawn.draw === "element"}
+                <drawn.element
+                  id={drawn.id}
+                  kind={drawn.kind}
+                  label={moved.label}
+                />
+              {:else}
+                <span>{moved.label}</span>
+              {/if}
+              <span>, {moved.since} since</span>
+            </li>
+          {/each}
+        </ul>
+        {#if reopenTo}
+          <div class="flex">
+            <Button
+              disabled={reopening}
+              label="Reopen"
+              onclick={reopen}
+              size="xs"
+              variant="secondary"
+            />
+          </div>
+          <RowFault reason={reopenProblem} />
+        {/if}
       </section>
     {/if}
   </div>

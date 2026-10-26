@@ -537,7 +537,7 @@ const seedProject = async (probe: Probe, orch: Session, lead: Session) => {
       acceptance: "- The button is secondary\n- The settings spec passes",
       todos: ["Change the button", "Run the spec"],
       labels: ["settings"],
-      ...(n > 1 ? { after: [`tsk-${n - 1}`] } : {}),
+      ...(n > 1 ? { waits_on: [`tsk-${n - 1}`] } : {}),
     });
   }
   await tool(lead, "routine_create", {
@@ -628,14 +628,14 @@ const calls = (
     args: {
       title: "Quiet the hover on every save button",
       todos: ["Change the hover colour"],
-      after: ["tsk-8"],
+      waits_on: ["tsk-8"],
     },
     leads: true,
   },
   {
     as: orch,
     name: "task_link",
-    args: { id: "tsk-3", edge: "related", to: "tsk-5" },
+    args: { task: "tsk-5", waits_on: ["tsk-3"] },
     leads: true,
   },
   {

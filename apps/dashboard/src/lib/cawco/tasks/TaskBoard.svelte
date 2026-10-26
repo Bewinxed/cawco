@@ -33,7 +33,6 @@
     adding = $bindable(false),
     allowedFrom,
     hrefOf,
-    kindOf,
     dateOf = () => null,
     onopen,
     onmove,
@@ -57,7 +56,6 @@
     adding?: boolean;
     allowedFrom: (stage: string) => Set<string>;
     hrefOf: (id: string) => string;
-    kindOf: (id: string) => StageKind | null | undefined;
     /** The date a task's file sets it for, said short; null without one. */
     dateOf?: (id: string) => string | null;
     onopen: (id: string) => void;
@@ -125,7 +123,6 @@
     foot={name && name === newIn ? addTask : undefined}
     {hrefOf}
     {kind}
-    {kindOf}
     {label}
     {moving}
     onpick={onpick &&
@@ -177,7 +174,6 @@
           {dateOf}
           {hrefOf}
           kind={null}
-          {kindOf}
           label="Archived"
           {onopen}
         />

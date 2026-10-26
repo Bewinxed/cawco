@@ -146,6 +146,7 @@ export * from "./usage";
 // A project's custom views: their files, and the view tools' inputs and
 // outputs. The OpenUI library itself is `@cawco/core/views-library`.
 export * from "./views";
+export * from "./wait-targets";
 
 // sessiond's protocol types are deliberately NOT re-exported here. That module
 // reaches for `node:os` and `node:path` to derive its endpoint, and this barrel
@@ -1984,6 +1985,7 @@ export * from "./words/skills";
 export * from "./words/spawn";
 export * from "./words/spend";
 export * from "./words/tailnet";
+export * from "./words/task-links";
 export * from "./words/threads";
 export * from "./words/transcript";
 export * from "./words/updates";

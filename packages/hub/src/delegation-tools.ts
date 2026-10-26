@@ -1105,8 +1105,26 @@ const ALWAYS_LOAD: ReadonlySet<string> = new Set([
  * (2026-10-19). Every other session finds it by the deferred groups' first
  * line ({@link DEFERRED_GROUPS}).
  */
-export const loadsUpfront = (name: string, searcher: boolean): boolean =>
-  ALWAYS_LOAD.has(name) || (searcher && name === "find");
+export const loadsUpfront = (
+  name: string,
+  searcher: boolean,
+  filesTasks = false
+): boolean =>
+  ALWAYS_LOAD.has(name) ||
+  (searcher && name === "find") ||
+  (filesTasks && CORE_TASK_TOOLS.has(name));
+
+/**
+ * The core task tools load upfront together for a session that files tasks
+ * (its role has task_link, roles.ts): filing, reading and linking are one
+ * act, and linking sat a separate ToolSearch away while agents wrote 32 of
+ * 91 open tasks' waits as prose and none as links (2026-10-26).
+ */
+const CORE_TASK_TOOLS: ReadonlySet<string> = new Set([
+  "task_create",
+  "task_read",
+  "task_link",
+]);
 
 /**
  * The deferred groups by prefix, as the server's instructions name them:

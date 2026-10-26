@@ -52,6 +52,7 @@ import {
   type SendAttachment,
   type ShownFailure,
   sessionLink,
+  stepWaitsOnArtifact,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
@@ -5949,10 +5950,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           asked.movedAt ||
           asked.at >= from ||
           movedOn(row.id, asked, steps) ||
-          steps.some(
-            (step) =>
-              step.status !== "completed" && step.waitsOn?.artifactId === row.id
-          ) ||
+          steps.some((step) => stepWaitsOnArtifact(step, row.id)) ||
           !pendingFor(row)
         ) {
           continue;
@@ -6037,6 +6035,119 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * with no pick (core `pickMade`) or with an open pin on it. A page since
      * removed owes nothing. Empty: the build may land.
      */
+    /**
+     * Card `card` of page `artifactId` as a wait reads it (task-waits.ts
+     * `settled`): its question, whether the page asks it, and the pick it
+     * holds (core `pickMade`) as its value, the options picked or the value
+     * set; null while unpicked. Undefined once the page is deleted.
+     */
+    waitCard: (
+      artifactId: string,
+      card: string
+    ):
+      | { asked: boolean; page: string; question: string; value: string | null }
+      | undefined => {
+      const page = db.get(artifactId);
+      if (!page) {
+        return;
+      }
+      const asked = choicesAsked(page).find((choice) => choice.id === card);
+      const entry = stateOf(docs.doc(artifactId))[card];
+      const picked = !!asked && pickMade(asked.card, entry);
+      let value: string | null = null;
+      if (picked && entry) {
+        value =
+          entry.options.length > 0
+            ? entry.options.join(", ")
+            : JSON.stringify(entry.value);
+      }
+      return {
+        page: page.name,
+        question: asked?.card?.question ?? card,
+        asked: !!asked,
+        value,
+      };
+    },
+
+    /** Pin `number` of artifact `artifactId` as a wait reads it: what it stands on, and whether it is resolved; undefined when it is gone. */
+    waitPin: (
+      artifactId: string,
+      number: number
+    ): { label: string; resolved: boolean } | undefined => {
+      if (!db.get(artifactId)) {
+        return;
+      }
+      const pin = [...readPins(docs.doc(artifactId)).values()].find(
+        (one) => one.number === number
+      );
+      return pin
+        ? { label: pinName(pin), resolved: !!pin.resolvedAt }
+        : undefined;
+    },
+
+    /** The cards page `artifactId` asks, by id. */
+    waitCards: (artifactId: string): string[] => {
+      const page = db.get(artifactId);
+      return page ? choicesAsked(page).map((choice) => choice.id) : [];
+    },
+
+    /**
+     * The page a wait names, by its name, handle or id: among what session
+     * `instanceId` may name ({@link whole}), or, for the dashboard (null),
+     * any of the project's pages. A refusal in words when it names none.
+     */
+    waitPage: (
+      instanceId: string | null,
+      projectId: string,
+      asked: string
+    ): { id: string; name: string } | string => {
+      try {
+        const id = instanceId
+          ? whole(sessionOf(instanceId), asked)
+          : byHandle(
+              asked,
+              db.ofProject(projectId),
+              {
+                id: (row) => row.id,
+                names: (row) => [row.name],
+                said: (row) =>
+                  `${row.name} (${row.kind} ${row.id.slice(0, 8)})`,
+              },
+              "artifact"
+            ).id;
+        const page = db.get(id);
+        return page
+          ? { id: page.id, name: page.name }
+          : `No page ${asked} is in the project.`;
+      } catch (error) {
+        return error instanceof Error ? error.message : String(error);
+      }
+    },
+
+    /**
+     * The pin whose thread session `instanceId` last heard a person's words
+     * from, at or after `since` (ms epoch): the pin thread an ask it acts on
+     * came from (tasks.ts `found_in`). Undefined when none.
+     */
+    askedFromPin: (
+      instanceId: string,
+      since: number
+    ): { artifactId: string; number: number } | undefined => {
+      const told = db.ofInstance(instanceId).flatMap((row) =>
+        [...readPins(docs.doc(row.id)).values()].flatMap((pin) =>
+          pin.thread.map((entry) => ({
+            artifactId: row.id,
+            number: pin.number,
+            at: entry.sentAt ? Date.parse(entry.sentAt) : Number.NaN,
+          }))
+        )
+      );
+      const [newest] = told
+        .filter((one) => one.at >= since)
+        .sort((a, b) => b.at - a.at);
+      return newest && { artifactId: newest.artifactId, number: newest.number };
+    },
+
     owedOn: (from: readonly PlanWait[]): PageOwed[] => {
       const owed: PageOwed[] = [];
       for (const [id, waits] of Map.groupBy(from, (wait) => wait.artifactId)) {

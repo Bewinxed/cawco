@@ -55,6 +55,7 @@ import {
   type HarnessKind,
   notNowId,
   type PlanStep,
+  stepWaitsOnArtifact,
 } from "@cawco/core";
 import type { ArtifactRow } from "../db/artifacts";
 
@@ -178,11 +179,7 @@ export const movedOn = (
   if (!asked) {
     return false;
   }
-  if (
-    steps.some(
-      (step) => step.status !== "completed" && step.waitsOn?.artifactId === id
-    )
-  ) {
+  if (steps.some((step) => stepWaitsOnArtifact(step, id))) {
     return false;
   }
   return asked.step !== undefined || asked.movedAt !== undefined;

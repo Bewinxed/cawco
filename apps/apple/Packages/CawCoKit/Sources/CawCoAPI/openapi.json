@@ -2600,7 +2600,7 @@
             }
           },
           {
-            "name": "parent",
+            "name": "partOf",
             "in": "query",
             "required": false,
             "schema": {
@@ -2790,22 +2790,13 @@
                   "type": {
                     "type": "string"
                   },
-                  "after": {
+                  "waitsOn": {
                     "type": "array",
                     "items": {
                       "type": "string"
                     }
                   },
-                  "parent": {
-                    "type": "string"
-                  },
-                  "related": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "foundIn": {
+                  "partOf": {
                     "type": "string"
                   },
                   "checks": {
@@ -4356,27 +4347,22 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "edge": {
-                    "type": "string",
-                    "enum": [
-                      "after",
-                      "parent",
-                      "related",
-                      "found_in",
-                      "duplicate_of"
-                    ]
+                  "waitsOn": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   },
-                  "to": {
+                  "partOf": {
+                    "type": "string"
+                  },
+                  "duplicateOf": {
                     "type": "string"
                   },
                   "remove": {
                     "type": "boolean"
                   }
-                },
-                "required": [
-                  "edge",
-                  "to"
-                ]
+                }
               }
             }
           }
@@ -34846,12 +34832,6 @@
         "description": "One task as a list shows it: the index's row, and what its attempts and edges say.",
         "type": "object",
         "properties": {
-          "after": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
           "duplicateOf": {
             "description": "The task it repeats (`duplicate_of`); null when none.",
             "type": [
@@ -34864,7 +34844,7 @@
             "description": "The fields its file carries beyond a task file's own that hold one scalar (`priority: high`), as written."
           },
           "foundIn": {
-            "description": "The task it was found in (`found_in`); null when none.",
+            "description": "The task or pin it was found in (`found_in`); null when none.",
             "type": [
               "null",
               "string"
@@ -34897,7 +34877,8 @@
               "type": "string"
             }
           },
-          "parent": {
+          "partOf": {
+            "description": "The task it is a part of (`part_of`); null when none.",
             "type": [
               "null",
               "string"
@@ -34918,13 +34899,6 @@
               "null",
               "string"
             ]
-          },
-          "related": {
-            "description": "The tasks it is related to (`related`).",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
           },
           "stage": {
             "type": "string"
@@ -34954,6 +34928,13 @@
               "string"
             ]
           },
+          "waitsOn": {
+            "description": "What it waits on (`waits_on`), as its file keeps it.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "attempts": {
             "description": "Its attempts, newest first.",
             "type": "array",
@@ -34961,12 +34942,19 @@
               "$ref": "#/components/schemas/TaskAttempt"
             }
           },
-          "blockedBy": {
-            "description": "The tasks it waits for (`after`) that are not done. Done: in a stage of\nkind done, or dropped as a duplicate of a task that is done. A task the\nproject lacks counts as waited for, unless the folder's history shows its\nfile deleted or moved out of tasks/ (task-history.ts `goneTasks`).",
+          "builtOn": {
+            "description": "A done task's cards and pins that moved since its attempt was dispatched on them.",
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/BuiltOn"
             }
+          },
+          "heldBy": {
+            "description": "The ancestor whose live attempt coordinates it, holding it from the hub's dispatch; null when none.",
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "lastAttemptFailed": {
             "description": "Its newest attempt failed, and it is not done or dropped since. The\nfailure is its starter's business (the session that started it, or the\nlead for the dispatcher's), who hears the report: never the person's\nNeeds you. It keeps the task off the dispatcher's frontier until someone\nstarts or retries it.",
@@ -34980,8 +34968,19 @@
             "description": "An attempt at it is starting or running.",
             "type": "boolean"
           },
+          "parts": {
+            "description": "Its parts: the tasks `part_of` it, by id.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "queuedStart": {
             "description": "Its stage's `runs:` hook asked for an attempt, which waits for a slot under the project's max_attempts.",
+            "type": "boolean"
+          },
+          "ready": {
+            "description": "Ready: in a `todo` stage, every wait settled (its own and its `part_of`\nancestors'), no live attempt, and no coordinator holding it. The one\nrule dispatch, the board and every tool answer read.",
             "type": "boolean"
           },
           "startProblem": {
@@ -34990,6 +34989,20 @@
               "null",
               "string"
             ]
+          },
+          "unblocks": {
+            "description": "The tasks that wait on it (`waits_on`), by id.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "waits": {
+            "description": "Every wait it has, its own and its `part_of` chain's, unsettled first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskWait"
+            }
           },
           "createdAt": {
             "description": "When the commit that first added its file landed, ms epoch.",
@@ -35041,6 +35054,34 @@
               "null",
               "number"
             ]
+          },
+          "after": {
+            "description": "Its waits on tasks (`waitsOn`'s tasks).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "blockedBy": {
+            "description": "Its unsettled waits on tasks, its own and its whole's.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "parent": {
+            "description": "Its whole (`partOf`).",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "related": {
+            "description": "Always empty: related links are See also comments now.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -35048,6 +35089,7 @@
           "archivedAt",
           "attempts",
           "blockedBy",
+          "builtOn",
           "closeReason",
           "completedAt",
           "createdAt",
@@ -35055,6 +35097,7 @@
           "duplicateOf",
           "fields",
           "foundIn",
+          "heldBy",
           "id",
           "labels",
           "lastAttemptFailed",
@@ -35064,10 +35107,13 @@
           "number",
           "outputs",
           "parent",
+          "partOf",
+          "parts",
           "path",
           "problem",
           "queuedStart",
           "rank",
+          "ready",
           "related",
           "stage",
           "startProblem",
@@ -35075,7 +35121,10 @@
           "title",
           "todos",
           "type",
-          "updatedAt"
+          "unblocks",
+          "updatedAt",
+          "waits",
+          "waitsOn"
         ]
       },
       "TaskAttempt": {
@@ -35118,6 +35167,13 @@
           "state": {
             "$ref": "#/components/schemas/WorkItemState"
           },
+          "waitedOn": {
+            "description": "The cards and pins it was dispatched on, with the value each settled with then.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WaitWitness"
+            }
+          },
           "workItemId": {
             "type": "string"
           }
@@ -35129,6 +35185,7 @@
           "instanceId",
           "startedAt",
           "state",
+          "waitedOn",
           "workItemId"
         ]
       },
@@ -35268,6 +35325,124 @@
           "starting"
         ]
       },
+      "WaitWitness": {
+        "description": "One card or pin an attempt was dispatched on, and the value it settled with (`workItems.waitedOn`).",
+        "type": "object",
+        "properties": {
+          "target": {
+            "description": "The wait as its task's file keeps it (wait-targets.ts).",
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "value"
+        ]
+      },
+      "BuiltOn": {
+        "description": "A card or pin a done task's attempt was dispatched on whose value moved\nsince: answered differently, or reopened. Nothing reopens on its own.",
+        "type": "object",
+        "properties": {
+          "href": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "since": {
+            "$ref": "#/components/schemas/BuiltOnSince"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "href",
+          "label",
+          "since",
+          "target"
+        ]
+      },
+      "TaskWait": {
+        "description": "One wait of a task, its own or inherited, as task-waits.ts settles it.",
+        "type": "object",
+        "properties": {
+          "via": {
+            "description": "The `part_of` ancestor it is inherited from; null for the task's own.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "dropped": {
+            "description": "A task target dropped since (not as a duplicate): the wait is removed.",
+            "type": "boolean"
+          },
+          "flag": {
+            "description": "Why it is blocked for good until someone removes or re-points it (`closed unmerged`); null when it is not.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "href": {
+            "description": "Where it opens: its `cawco:` reference, or the pull request's or run's page.",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/WaitKind"
+          },
+          "label": {
+            "description": "What it is called: a task's title, a card's question, what a pin stands on, `PR #418`.",
+            "type": "string"
+          },
+          "settled": {
+            "type": "boolean"
+          },
+          "state": {
+            "description": "Where it stands, in a word or two: `doing`, `open`, `picked`, `merged`, `red`.",
+            "type": "string"
+          },
+          "target": {
+            "description": "The wait as its file keeps it ({@link waitHandle}).",
+            "type": "string"
+          },
+          "value": {
+            "description": "What it settled with, for a card (its pick) or a pin; null otherwise or while unsettled.",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "dropped",
+          "flag",
+          "href",
+          "kind",
+          "label",
+          "settled",
+          "state",
+          "target",
+          "value",
+          "via"
+        ]
+      },
+      "WaitKind": {
+        "description": "What a task waits on (hub task-file.ts `waits_on:`) and what a plan step\nwaits on (`PlanStep.waitsOn`): one grammar, its kind read from the\nhandle's shape, never from a type field. The hub's task-waits.ts reads\nwhat an agent writes into it and settles each target.\n\n| Kind    | An agent writes                                   | A file keeps                    |\n| ------- | ------------------------------------------------- | ------------------------------- |\n| task    | `tsk-12` (`#12`, `12`)                            | `12`                            |\n| card    | `<page>#<card>`, the page by name, handle or id   | `<artifact id>#<card>`          |\n| pin     | `<page>/<number>`                                 | `<artifact id>/<number>`        |\n| pr      | `https://github.com/<owner>/<repo>/pull/<n>`      | the same                        |\n| run     | `https://github.com/<owner>/<repo>/actions/runs/<n>` | the same                     |\n| session | `<dir>#<id8>`, the handle CawCo's tools name it by | `<dir>#<session id>`           |\n\nA kept card's artifact and a kept session are whole ids, so `<uuid>#<card>`\nand `<dir>#<uuid>` never read as each other.",
+        "type": "string",
+        "enum": [
+          "card",
+          "pin",
+          "pr",
+          "run",
+          "session",
+          "task"
+        ]
+      },
       "TaskHistoryActor": {
         "description": "Who made a change.",
         "type": "object",
@@ -35311,12 +35486,6 @@
           },
           "accounts": {
             "description": "The accounts its attempts may run on; empty: every account.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "after": {
             "type": "array",
             "items": {
               "type": "string"
@@ -35373,6 +35542,22 @@
               "string"
             ]
           },
+          "foundInNamed": {
+            "description": "Where it was found, as its link names it: a task's title, what a pin stands on; null when it was found nowhere.",
+            "type": "object",
+            "properties": {
+              "href": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "href",
+              "label"
+            ]
+          },
           "group": {
             "description": "Its attempts' group: their parent hears one combined report once all have ended.",
             "type": [
@@ -35425,7 +35610,7 @@
               "type": "string"
             }
           },
-          "parent": {
+          "partOf": {
             "type": [
               "null",
               "string"
@@ -35445,12 +35630,6 @@
               "null",
               "string"
             ]
-          },
-          "related": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
           },
           "result": {
             "description": "What its newest finished attempt handed back; null until one has.",
@@ -35500,6 +35679,12 @@
               "string"
             ]
           },
+          "waitsOn": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "attempts": {
             "description": "Its attempts, newest first.",
             "type": "array",
@@ -35507,12 +35692,19 @@
               "$ref": "#/components/schemas/TaskAttempt"
             }
           },
-          "blockedBy": {
-            "description": "The tasks it waits for (`after`) that are not done. Done: in a stage of\nkind done, or dropped as a duplicate of a task that is done. A task the\nproject lacks counts as waited for, unless the folder's history shows its\nfile deleted or moved out of tasks/ (task-history.ts `goneTasks`).",
+          "builtOn": {
+            "description": "A done task's cards and pins that moved since its attempt was dispatched on them.",
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/BuiltOn"
             }
+          },
+          "heldBy": {
+            "description": "The ancestor whose live attempt coordinates it, holding it from the hub's dispatch; null when none.",
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "lastAttemptFailed": {
             "description": "Its newest attempt failed, and it is not done or dropped since. The\nfailure is its starter's business (the session that started it, or the\nlead for the dispatcher's), who hears the report: never the person's\nNeeds you. It keeps the task off the dispatcher's frontier until someone\nstarts or retries it.",
@@ -35526,8 +35718,19 @@
             "description": "An attempt at it is starting or running.",
             "type": "boolean"
           },
+          "parts": {
+            "description": "Its parts: the tasks `part_of` it, by id.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "queuedStart": {
             "description": "Its stage's `runs:` hook asked for an attempt, which waits for a slot under the project's max_attempts.",
+            "type": "boolean"
+          },
+          "ready": {
+            "description": "Ready: in a `todo` stage, every wait settled (its own and its `part_of`\nancestors'), no live attempt, and no coordinator holding it. The one\nrule dispatch, the board and every tool answer read.",
             "type": "boolean"
           },
           "startProblem": {
@@ -35536,6 +35739,20 @@
               "null",
               "string"
             ]
+          },
+          "unblocks": {
+            "description": "The tasks that wait on it (`waits_on`), by id.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "waits": {
+            "description": "Every wait it has, its own and its `part_of` chain's, unsettled first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskWait"
+            }
           },
           "createdAt": {
             "description": "When the commit that first added its file landed, ms epoch.",
@@ -35587,6 +35804,34 @@
               "null",
               "number"
             ]
+          },
+          "after": {
+            "description": "Its waits on tasks (`waitsOn`'s tasks).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "blockedBy": {
+            "description": "Its unsettled waits on tasks, its own and its whole's.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "parent": {
+            "description": "Its whole (`partOf`).",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "related": {
+            "description": "Always empty: related links are See also comments now.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -35597,6 +35842,7 @@
           "attempts",
           "blockedBy",
           "buildsFrom",
+          "builtOn",
           "checks",
           "closeReason",
           "comments",
@@ -35610,6 +35856,7 @@
           "foundIn",
           "group",
           "hash",
+          "heldBy",
           "id",
           "labels",
           "lastAttemptFailed",
@@ -35620,10 +35867,13 @@
           "outputs",
           "owns",
           "parent",
+          "partOf",
+          "parts",
           "path",
           "problems",
           "queuedStart",
           "rank",
+          "ready",
           "related",
           "runsOn",
           "sections",
@@ -35633,7 +35883,10 @@
           "title",
           "todos",
           "type",
-          "updatedAt"
+          "unblocks",
+          "updatedAt",
+          "waits",
+          "waitsOn"
         ]
       },
       "WorkBudget": {
@@ -40446,9 +40699,17 @@
           "status": {
             "$ref": "#/components/schemas/PlanStepStatus"
           },
+          "wait": {
+            "description": "What it waits on, set by the session (`todo_write`'s `waitsOn`): a\ntask, a card, a pin, a pull request, a run or a session, as a task's\n`waits_on` keeps it (wait-targets.ts), settled by the hub's one resolver\n(hub task-waits.ts). The hub drops it once it settles.",
+            "type": "string"
+          },
           "waitsOn": {
             "$ref": "#/components/schemas/PlanWait",
-            "description": "It waits on the person's pick on a decision page."
+            "description": "Sent for TestFlight ios 20261018 alone, which reads a step's wait in\nthis shape (hub wire-compat.ts BRIDGES): a card wait, or the page whole.\nThe hub fills it from `wait` and `waitsOnPage` as it sends a plan;\nnothing reads it. It goes once that build is no longer installable,\n2027-01-16."
+          },
+          "waitsOnPage": {
+            "description": "The page it waits on the person on, whole, by its artifact id: set by\nthe hub on the session's current step when its `artifact_create` or\n`artifact_update` with `does: pick` or `judge` returns (hub plans.ts\n`waitOn`), gone once nothing on the page waits on the person (core\nartifact-needs.ts). While it waits, the page's Needs-you item stands.",
+            "type": "string"
           }
         },
         "required": [
@@ -40484,7 +40745,7 @@
         ]
       },
       "PlanWait": {
-        "description": "A step waiting on the person: the card it asked on a decision page, set\nby the session as it asks (`todo_write`'s `waitsOn`), or the whole\nartifact, set by the hub on the session's current step when its\n`artifact_create` or `artifact_update` with `does: pick` or `judge`\nreturns (hub plans.ts `waitOn`). The plan draws it \"Waiting on you\" with a\nlink to the card or the artifact; it stops waiting when the page's Send\ncarries a pick for that card, or once nothing on the artifact waits on\nthe person (core artifact-needs.ts). While it waits, the artifact's\nNeeds-you item stands; once the step is ticked or removed, it goes.",
+        "description": "A page, or one card of it, a build builds from (`builds_from`, a work\nitem's `buildsFrom`): its landing waits on the person's picks there.",
         "type": "object",
         "properties": {
           "artifactId": {
@@ -60011,6 +60272,13 @@
         "enum": [
           "docker",
           "podman"
+        ]
+      },
+      "BuiltOnSince": {
+        "type": "string",
+        "enum": [
+          "decided differently",
+          "reopened"
         ]
       },
       "CatalogTypeSource": {

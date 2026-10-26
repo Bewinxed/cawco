@@ -28,8 +28,20 @@
  *   through the same calls as everyone, as an actor marked `tracker`.
  * - **Attempts** are work items at a task (dispatch.ts starts them). Every
  *   read carries a task's attempts and what follows from them and its edges:
- *   a live attempt, the tasks it still waits for, a last attempt that failed
- *   or was stopped, and how. That is its starter's business (the session
+ *   a live attempt, what it still waits on, a last attempt that failed or
+ *   was stopped, and how.
+ * - **Links** (task-file.ts `EDGES`). `waits_on` blocks: a task is ready
+ *   exactly when it is in a `todo` stage, every target it and its `part_of`
+ *   ancestors wait on is settled (task-waits.ts `settled`, the one
+ *   resolver), no attempt at it is live, and no coordinator holds it (a
+ *   live attempt at one of its ancestors). `part_of` makes it a part: it
+ *   inherits every wait of its chain, and a whole closes once its last part
+ *   is done and no coordinator of it is live. `duplicate_of` closes it as a
+ *   duplicate and moves every wait on it to the survivor; a task dropped
+ *   otherwise is taken out of every wait on it. `found_in` is the hub's: the
+ *   task or pin the filer's work came from. A write that would close a
+ *   cycle of waits or parts, a wait on itself, or a target that does not
+ *   exist is refused, naming the path. That is its starter's business (the session
  *   that started it, or the lead for the dispatcher's), never the person's
  *   Needs you: a task waits for you only in a stage of kind `you`. The hub
  *   moves a task as `hub`: code, which the file's moves do not bind; its
@@ -44,17 +56,29 @@ import {
   type InstanceRow,
   type IssueTracker,
   type LandsMode,
+  markdownLink,
   type ProjectStarter,
   type ResultArtifact,
   STARTER_PLACES,
   type StarterPlace,
   type TaskIssueLink,
+  taskLink,
+  taskLinkWords,
+  taskTarget,
   todoProgress,
+  type WaitTarget,
+  waitHandle,
+  waitTarget,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { Elysia, t } from "elysia";
 import type { TaskIndexRow, WorkItemRow } from "./db";
-import type { Tracker, WorkBudget, WorkItemState } from "./db/schema";
+import type {
+  Tracker,
+  WaitWitness,
+  WorkBudget,
+  WorkItemState,
+} from "./db/schema";
 import {
   deleteFolderFile,
   type Exclusive,
@@ -141,6 +165,16 @@ import {
   TRAILERS,
   taskFileIn,
 } from "./task-history";
+import {
+  cycleFrom,
+  readWait,
+  settledHandle,
+  unsettledFirst,
+  type WaitReader,
+  WaitRefusal,
+  type WaitState,
+  type WaitWorld,
+} from "./task-waits";
 import { runsOf, skillTypes, templateTypes, typeFiles } from "./template-types";
 import {
   budgetProblem,
@@ -248,6 +282,8 @@ export interface TaskAttempt {
   /** When it was filed, ms epoch. */
   startedAt: number;
   state: WorkItemState;
+  /** The cards and pins it was dispatched on, with the value each settled with then. */
+  waitedOn: WaitWitness[];
   workItemId: string;
 }
 
@@ -267,17 +303,32 @@ export interface TaskResult {
   workItemId: string;
 }
 
+/** One wait of a task, its own or inherited, as task-waits.ts settles it. */
+export interface TaskWait extends WaitState {
+  /** The `part_of` ancestor it is inherited from; null for the task's own. */
+  via: string | null;
+}
+
+/**
+ * A card or pin a done task's attempt was dispatched on whose value moved
+ * since: answered differently, or reopened. Nothing reopens on its own.
+ */
+export interface BuiltOn {
+  href: string;
+  label: string;
+  since:
+    typeof taskLinkWords.decidedDifferently | typeof taskLinkWords.reopened;
+  target: string;
+}
+
 /** What a task's attempts and edges say about it, worked out on every read. */
 export interface TaskFlags {
   /** Its attempts, newest first. */
   attempts: TaskAttempt[];
-  /**
-   * The tasks it waits for (`after`) that are not done. Done: in a stage of
-   * kind done, or dropped as a duplicate of a task that is done. A task the
-   * project lacks counts as waited for, unless the folder's history shows its
-   * file deleted or moved out of tasks/ (task-history.ts `goneTasks`).
-   */
-  blockedBy: string[];
+  /** A done task's cards and pins that moved since its attempt was dispatched on them. */
+  builtOn: BuiltOn[];
+  /** The ancestor whose live attempt coordinates it, holding it from the hub's dispatch; null when none. */
+  heldBy: string | null;
   /**
    * Its newest attempt failed, and it is not done or dropped since. The
    * failure is its starter's business (the session that started it, or the
@@ -294,11 +345,57 @@ export interface TaskFlags {
   lastAttemptStopped: boolean;
   /** An attempt at it is starting or running. */
   liveAttempt: boolean;
+  /** Its parts: the tasks `part_of` it, by id. */
+  parts: string[];
   /** Its stage's `runs:` hook asked for an attempt, which waits for a slot under the project's max_attempts. */
   queuedStart: boolean;
+  /**
+   * Ready: in a `todo` stage, every wait settled (its own and its `part_of`
+   * ancestors'), no live attempt, and no coordinator holding it. The one
+   * rule dispatch, the board and every tool answer read.
+   */
+  ready: boolean;
   /** Why the hub could not start an attempt the last time it tried, while the task is unchanged since. */
   startProblem: string | null;
+  /** The tasks that wait on it (`waits_on`), by id. */
+  unblocks: string[];
+  /** Every wait it has, its own and its `part_of` chain's, unsettled first. */
+  waits: TaskWait[];
 }
+
+/**
+ * The links TestFlight ios 20261018 reads in their old shape, sent beside the
+ * new ones and filled from them (wire-compat.ts BRIDGES): nothing in the
+ * hub, the dashboard or the tools reads them. They go once that build is no
+ * longer installable, 2027-01-16.
+ */
+export interface BridgedLinks {
+  /** Its waits on tasks (`waitsOn`'s tasks). */
+  after: string[];
+  /** Its unsettled waits on tasks, its own and its whole's. */
+  blockedBy: string[];
+  /** Its whole (`partOf`). */
+  parent: string | null;
+  /** Always empty: related links are See also comments now. */
+  related: string[];
+}
+
+/** {@link BridgedLinks} from a task's new links and flags. */
+const bridgedLinks = (
+  task: { partOf: string | null; waitsOn: string[] },
+  flags: Pick<TaskFlags, "waits">
+): BridgedLinks => ({
+  after: task.waitsOn.filter((target) => taskTarget(target) === target),
+  blockedBy: flags.waits
+    .filter((wait) => !wait.settled && wait.kind === "task")
+    .map((wait) => wait.target),
+  parent: task.partOf,
+  related: [],
+});
+
+/** Its waits that are not settled: what it still waits on. */
+export const unsettledWaits = (task: Pick<TaskFlags, "waits">): TaskWait[] =>
+  task.waits.filter((wait) => !wait.settled);
 
 /**
  * A change to a project's tasks, for the dispatcher to look again. A task
@@ -373,6 +470,7 @@ export interface TaskStore {
     | "summary"
     | "taskId"
     | "taskResult"
+    | "waitedOn"
   >[];
   /**
    * The task a comment went on, written under `id`, the id its device chose
@@ -439,11 +537,19 @@ export interface TaskStore {
     projectId: string,
     task: { hash: string; id: string }
   ) => string | null;
-  /** The indexed tasks that wait for a task (db `taskWaiters`). */
+  /** One message from the hub to a live session: a wait of its task moved (closed, answered differently). */
+  readonly tell?: (instanceId: string, text: string) => void;
+  /** The indexed tasks that wait on a task (db `taskWaiters`). */
   readonly waiters: (
     projectId: string,
     taskId: string
   ) => { id: string; path: string }[];
+  /** How a wait the actor writes reads in the project (task-waits.ts `readWait`): the pages, sessions and GitHub it may name. */
+  readonly waitReader: (projectId: string, actor: TaskActor) => WaitReader;
+  /** What the resolver reads of the hub past the project's tasks: cards, pins, pull requests and runs, sessions. */
+  readonly waitWorld: (
+    projectId: string
+  ) => Pick<WaitWorld, "card" | "github" | "pin" | "session">;
 }
 
 /**
@@ -467,13 +573,12 @@ export interface TaskTimes extends TaskLife {
 }
 
 /** One task as a list shows it: the index's row, and what its attempts and edges say. */
-export interface TaskSummary extends TaskFlags, TaskTimes {
-  after: string[];
+export interface TaskSummary extends TaskFlags, TaskTimes, BridgedLinks {
   /** The task it repeats (`duplicate_of`); null when none. */
   duplicateOf: string | null;
   /** The fields its file carries beyond a task file's own that hold one scalar (`priority: high`), as written. */
   fields: Record<string, string>;
-  /** The task it was found in (`found_in`); null when none. */
+  /** The task or pin it was found in (`found_in`); null when none. */
   foundIn: string | null;
   id: string;
   /** The kind of its stage; null when its stage is not one of the project's. */
@@ -488,18 +593,19 @@ export interface TaskSummary extends TaskFlags, TaskTimes {
   number: number;
   /** The project folder files its work produces (`outputs:`). */
   outputs: string[];
-  parent: string | null;
+  /** The task it is a part of (`part_of`); null when none. */
+  partOf: string | null;
   path: string;
   /** What in the file could not be read, or a stage the project lacks, in a sentence; null when all is well. */
   problem: string | null;
   rank: string | null;
-  /** The tasks it is related to (`related`). */
-  related: string[];
   stage: string;
   title: string;
   /** Its agreed to-dos ticked, of all agreed (core `todoProgress`): offered ones are left out. */
   todos: { done: number; total: number };
   type: string | null;
+  /** What it waits on (`waits_on`), as its file keeps it. */
+  waitsOn: string[];
 }
 
 export interface TaskList {
@@ -552,11 +658,10 @@ export interface StagesTemplateView {
 }
 
 /** One task, its file read whole, and what its attempts and edges say. */
-export interface TaskView extends TaskFlags, TaskTimes {
+export interface TaskView extends TaskFlags, TaskTimes, BridgedLinks {
   acceptance: string;
   /** The accounts its attempts may run on; empty: every account. */
   accounts: string[];
-  after: string[];
   /** What an attempt may spend before the hub stops it; null: the project's default. */
   budget: WorkBudget | null;
   /** The decision pages its attempts build from (`builds_from`), each `<artifact id>` or `<artifact id>#<card>`. */
@@ -572,6 +677,8 @@ export interface TaskView extends TaskFlags, TaskTimes {
   /** The fields its file carries that a task file does not know, with their values (a scalar or a list); kept as written. */
   extra: Record<string, ExtraValue>;
   foundIn: string | null;
+  /** Where it was found, as its link names it: a task's title, what a pin stands on; null when it was found nowhere. */
+  foundInNamed: { href: string; label: string } | null;
   /** Its attempts' group: their parent hears one combined report once all have ended. */
   group: string | null;
   /** sha256 hex of the file as read. */
@@ -593,11 +700,10 @@ export interface TaskView extends TaskFlags, TaskTimes {
   outputs: string[];
   /** Globs of the repository's files an attempt owns. */
   owns: string[];
-  parent: string | null;
+  partOf: string | null;
   path: string;
   problems: string[];
   rank: string | null;
-  related: string[];
   /** What its newest finished attempt handed back; null until one has. */
   result: TaskResult | null;
   /** Where its attempts run (runs-on.ts), as the file says; null: the project's. */
@@ -608,12 +714,15 @@ export interface TaskView extends TaskFlags, TaskTimes {
   title: string;
   todos: Todo[];
   type: string | null;
+  waitsOn: string[];
 }
 
-/** A new task. Edges name tasks as `tsk-12` (or `12`). */
+/**
+ * A new task. `waitsOn` and `partOf` as the filer writes them
+ * (task-waits.ts `readWait`); `foundIn` the hub's, as a file keeps it.
+ */
 export interface TaskDraft {
   acceptance?: string;
-  after?: string[];
   budget?: WorkBudget;
   /** The decision pages its attempts build from, resolved (core `planWaitRef`). */
   buildsFrom?: string[];
@@ -623,15 +732,15 @@ export interface TaskDraft {
   description?: string;
   /** Fields a task file does not know (`priority`, `due`): a scalar or a list each. */
   fields?: Record<string, ExtraValue>;
+  /** The task or pin the filer's work came from, as a file keeps it: the hub's, never the filer's. */
   foundIn?: string;
   group?: string;
   labels?: string[];
   lands?: LandsMode;
   outputs?: string[];
   owns?: string[];
-  parent?: string;
+  partOf?: string;
   rank?: string;
-  related?: string[];
   /** Where its attempts run: a machine, or a capability like `apple`. */
   runsOn?: string;
   stage?: string;
@@ -639,7 +748,63 @@ export interface TaskDraft {
   /** Top-level to-dos, one line each. */
   todos?: string[];
   type?: string;
+  waitsOn?: string[];
 }
+
+/**
+ * One write of a task's links (`task_link`): what it waits on, the whole it
+ * is a part of, or the task it repeats; `remove` takes the named ones out.
+ * Each written as task-waits.ts `readWait` reads it.
+ */
+export interface TaskLinks {
+  duplicateOf?: string;
+  partOf?: string;
+  remove?: boolean;
+  waitsOn?: string[];
+}
+
+/** What a link write changed, for its answer. */
+export interface LinkOutcome {
+  /** Waits it added, as kept. */
+  added: string[];
+  /** The survivor it closed the task as a duplicate of; null when it closed none. */
+  duplicateOf: string | null;
+  /** The tasks whose waits moved to the survivor. */
+  moved: string[];
+  /** The whole it is a part of now, when the write set or took it out; undefined when it left it. */
+  partOf: string | null | undefined;
+  /** Waits it took out, settled as they stand now. */
+  removed: WaitState[];
+}
+
+/** What closing a task did around it: its answer's "Now ready" and "Still waiting". */
+export interface Closing {
+  /** Tasks that waited on it and are ready now. */
+  nowReady: string[];
+  /** Tasks that waited on it and still wait, with what. */
+  stillWaiting: { id: string; on: TaskWait[] }[];
+  /** Tasks it was taken out of the waits of: it was dropped, not done. */
+  unwaited: string[];
+  /** The whole its being done closed: its last part. */
+  wholeClosed: string | null;
+}
+
+/** What a project's task links cutover did ({@link Tasks.migrateLinks}). */
+export interface LinkMigration {
+  /** Files rewritten. */
+  files: number;
+  /** `parent` edges made `part_of`. */
+  partOf: number;
+  /** `related` edges taken out, into See also comments. */
+  related: number;
+  /** See also comments written: one per task that had related ones. */
+  seeAlso: number;
+  /** `after` edges made `waits_on`. */
+  waitsOn: number;
+}
+
+/** The stage kinds that close a task. */
+const CLOSED_KINDS: ReadonlySet<StageKind> = new Set(["done", "dropped"]);
 
 /** A change to a task's fields and owned sections; what is left out stays. Null clears. */
 export interface TaskPatch {
@@ -674,7 +839,7 @@ export interface TaskPatch {
 export interface TaskFilter {
   /** Only tasks archived in tasks/archive/, instead of the board's. */
   archived?: boolean;
-  /** true: only tasks still waiting for another; false: only tasks that are not. */
+  /** true: only tasks with a wait unsettled; false: only tasks with none. */
   blocked?: boolean;
   /** Fields a task file does not know, each to equal the value given (as written). */
   fields?: Record<string, string>;
@@ -683,8 +848,8 @@ export interface TaskFilter {
   label?: string;
   /** true: only tasks that need you; false: only tasks that do not. */
   needsYou?: boolean;
-  /** The parent task (`tsk-12`). */
-  parent?: string;
+  /** The task they are part of (`tsk-12`). */
+  partOf?: string;
   /** Words to find, case aside, in its id, title or description. */
   q?: string;
   stage?: string;
@@ -1032,6 +1197,7 @@ const attemptOf = (
   endedAt: item.endedAt?.getTime() ?? null,
   endedHow: endedHowOf(item),
   headline: item.headline?.trim() || null,
+  waitedOn: item.waitedOn ?? [],
 });
 
 /** The newest attempt that finished with a report, as a task's read shows it ({@link TaskResult}). */
@@ -1051,24 +1217,21 @@ const resultOf = (
     : null;
 };
 
-/** What an edge to a task asks of it: its stage, and the task it repeats. */
-type EdgeEnd = Pick<TaskIndexRow, "duplicateOf" | "stage">;
-
-/** Every indexed task's stage and duplicate_of, by id. */
-const endsById = (rows: TaskIndexRow[]): Map<string, EdgeEnd> =>
+/** Every indexed task, by id. */
+const rowsById = (rows: TaskIndexRow[]): Map<string, TaskIndexRow> =>
   new Map(rows.map((row) => [row.id, row]));
 
 /**
  * Whether the dispatcher may start an attempt at a task on its own (the
- * frontier): it is in a `todo` stage, everything it waits for is done, no
- * attempt at it is live, its last one neither failed nor was stopped (so a
- * failure is never restarted on its own, and a stop is never undone), and
- * the hub's last try to start one did not fail on the task as it stands.
+ * frontier): it is ready ({@link TaskFlags.ready}), it has no parts (a
+ * whole is never dispatched as a plain worker: a coordinator you or a
+ * session start runs it), its last attempt neither failed nor was stopped
+ * (so a failure is never restarted on its own, and a stop is never undone),
+ * and the hub's last try to start one did not fail on the task as it stands.
  */
 export const onFrontier = (task: TaskSummary): boolean =>
-  task.kind === "todo" &&
-  task.blockedBy.length === 0 &&
-  !task.liveAttempt &&
+  task.ready &&
+  task.parts.length === 0 &&
   !task.lastAttemptFailed &&
   !task.lastAttemptStopped &&
   task.startProblem === null;
@@ -1093,10 +1256,10 @@ const summaryOf = (
     kind,
     needsYou: kind === "you",
     ...flags,
+    ...bridgedLinks(row, flags),
     type: row.type,
-    after: row.after,
-    parent: row.parent,
-    related: row.related,
+    waitsOn: row.waitsOn,
+    partOf: row.partOf,
     foundIn: row.foundIn,
     duplicateOf: row.duplicateOf,
     rank: row.rank,
@@ -1116,7 +1279,7 @@ const viewOf = (
   title: string,
   hash: string,
   stages: Stages | undefined,
-  flags: TaskFlags,
+  flags: TaskFlags & Pick<TaskView, "foundInNamed">,
   times: TaskTimes,
   result: TaskResult | null,
   issue: TaskIssueLink | null
@@ -1130,11 +1293,11 @@ const viewOf = (
   kind: kindIn(stages, parsed.fields.stage ?? ""),
   needsYou: kindIn(stages, parsed.fields.stage ?? "") === "you",
   ...flags,
+  ...bridgedLinks(parsed.fields, flags),
   result,
   type: parsed.fields.type,
-  after: parsed.fields.after,
-  parent: parsed.fields.parent,
-  related: parsed.fields.related,
+  waitsOn: parsed.fields.waitsOn,
+  partOf: parsed.fields.partOf,
   foundIn: parsed.fields.foundIn,
   duplicateOf: parsed.fields.duplicateOf,
   checks: parsed.fields.checks,
@@ -1175,26 +1338,26 @@ const taskRef = (what: string, ref: string): string => {
 const flagHolds = (asked: boolean | undefined, is: boolean): boolean =>
   asked === undefined || asked === is;
 
-/** Whether a task's stage, labels, type and parent hold to the filter's. */
+/** Whether a task's stage, labels, type and whole hold to the filter's. */
 const placeHolds = (
   task: TaskSummary,
   filter: TaskFilter,
-  parent: string | null
+  partOf: string | null
 ): boolean =>
   (!filter.stage || task.stage === filter.stage) &&
   (!filter.kind || task.kind === filter.kind) &&
   (!filter.label || task.labels.includes(filter.label)) &&
   (!filter.type || task.type === filter.type) &&
-  (!parent || task.parent === parent);
+  (!partOf || task.partOf === partOf);
 
 /** Whether a task holds to every condition of a list's filter but its words (`q`, read from files). */
 const holds = (
   task: TaskSummary,
   filter: TaskFilter,
-  parent: string | null
+  partOf: string | null
 ): boolean =>
-  placeHolds(task, filter, parent) &&
-  flagHolds(filter.blocked, task.blockedBy.length > 0) &&
+  placeHolds(task, filter, partOf) &&
+  flagHolds(filter.blocked, unsettledWaits(task).length > 0) &&
   flagHolds(filter.needsYou, task.needsYou) &&
   Object.entries(filter.fields ?? {}).every(
     ([key, value]) => task.fields[key] === value
@@ -1205,18 +1368,16 @@ const named = (rows: { title: string }[], one: string, many: string): string =>
   `${rows.map((row) => `“${row.title}”`).join(", ")} ${rows.length === 1 ? one : many}`;
 
 /**
- * Who holds on to a task, in a sentence: the tasks waiting for it (`after`)
- * and the tasks under it (`parent`); empty when none does.
+ * Who holds on to a task, in a sentence: the tasks waiting on it
+ * (`waits_on`) and its parts (`part_of`); empty when none does.
  */
 const holders = (
   waiting: { title: string }[],
-  under: { title: string }[]
+  parts: { title: string }[]
 ): string =>
   [
-    ...(waiting.length > 0
-      ? [`${named(waiting, "waits", "wait")} for it`]
-      : []),
-    ...(under.length > 0 ? [`${named(under, "is", "are")} under it`] : []),
+    ...(waiting.length > 0 ? [`${named(waiting, "waits", "wait")} on it`] : []),
+    ...(parts.length > 0 ? [`${named(parts, "is", "are")} part of it`] : []),
   ].join(", and ");
 
 /** A list's sort: ranked tasks by rank, then the rest by number. */
@@ -1232,54 +1393,10 @@ const byRank = (a: TaskSummary, b: TaskSummary): number => {
 
 /** What an edge's commit message says it did. */
 const EDGE_PHRASE: Record<Edge, string> = {
-  after: "after",
-  parent: "parent",
-  related: "related to",
+  waits_on: "waits on",
+  part_of: "part of",
   found_in: "found in",
   duplicate_of: "duplicate of",
-};
-
-/** The one-task edges, by the field each is read into. */
-const ONE_EDGE_FIELD = {
-  parent: "parent",
-  found_in: "foundIn",
-  duplicate_of: "duplicateOf",
-} as const;
-
-/** Sets or clears a one-task edge (`parent`, `found_in`, `duplicate_of`). */
-const linkOne = (
-  doc: TaskDoc,
-  edge: keyof typeof ONE_EDGE_FIELD,
-  target: string,
-  remove: boolean | undefined
-): string => {
-  const phrase = `${EDGE_PHRASE[edge]} ${target}`;
-  if (!remove) {
-    doc.setField(edge, target);
-    return phrase;
-  }
-  if (doc.read().fields[ONE_EDGE_FIELD[edge]] === target) {
-    doc.setField(edge, null);
-  }
-  return `no longer ${phrase}`;
-};
-
-/** Adds or takes out one task of a list edge (`after`, `related`). */
-const linkMany = (
-  doc: TaskDoc,
-  edge: "after" | "related",
-  target: string,
-  remove: boolean | undefined
-): string => {
-  const phrase = `${EDGE_PHRASE[edge]} ${target}`;
-  const list = doc.read().fields[edge];
-  doc.setField(
-    edge,
-    remove
-      ? list.filter((each) => each !== target)
-      : [...new Set([...list, target])]
-  );
-  return remove ? `no longer ${phrase}` : phrase;
 };
 
 /** Applies a patch to a task file; answers what it changed, for the commit message. */
@@ -1565,57 +1682,193 @@ export const createTasks = (store: TaskStore) => {
   const queuedIn = (projectId: string): Set<string> =>
     new Set(store.queuedStarts?.(projectId) ?? []);
 
+  /**
+   * What every task's flags are read against: the project's tasks as
+   * indexed, their attempts, and the resolver's world (task-waits.ts), each
+   * target settled once per read.
+   */
+  interface FlagContext {
+    attempts: Map<string, TaskAttempt[]>;
+    byId: Map<string, TaskIndexRow>;
+    /** Each task's parts, by id. */
+    partsOf: Map<string, string[]>;
+    /** The tasks whose hook start waits for a slot. */
+    queued: Set<string>;
+    /** Each target settled once per read, by its handle. */
+    settled: Map<string, WaitState>;
+    stages: Stages | undefined;
+    /** The tasks that wait on each task, by id. */
+    waitersOf: Map<string, string[]>;
+    world: WaitWorld;
+  }
+
+  /** The context a read's flags take, from the project's index as it is. */
+  const contextOf = (
+    projectId: string,
+    rows: TaskIndexRow[],
+    stages: Stages | undefined,
+    gone: ReadonlySet<string>
+  ): FlagContext => {
+    const byId = rowsById(rows);
+    const partsOf = new Map<string, string[]>();
+    const waitersOf = new Map<string, string[]>();
+    const add = (map: Map<string, string[]>, key: string, id: string) =>
+      map.set(key, [...(map.get(key) ?? []), id]);
+    for (const row of rows) {
+      if (row.partOf) {
+        add(partsOf, row.partOf, row.id);
+      }
+      for (const target of row.waitsOn) {
+        if (taskTarget(target) === target) {
+          add(waitersOf, target, row.id);
+        }
+      }
+    }
+    return {
+      attempts: attemptsByTask(projectId),
+      byId,
+      partsOf,
+      waitersOf,
+      queued: queuedIn(projectId),
+      settled: new Map(),
+      stages,
+      world: {
+        projectId,
+        ...store.waitWorld(projectId),
+        gone: (id) => gone.has(id),
+        task: (id) => {
+          const row = byId.get(id);
+          return row
+            ? {
+                title: row.title,
+                stage: row.stage,
+                kind: kindIn(stages, row.stage),
+                duplicateOf: row.duplicateOf,
+              }
+            : undefined;
+        },
+      },
+    };
+  };
+
+  /** A target settled, once per read. */
+  const settleIn = (context: FlagContext, handle: string): WaitState => {
+    const known = context.settled.get(handle);
+    if (known) {
+      return known;
+    }
+    const state = settledHandle(handle, context.world);
+    context.settled.set(handle, state);
+    return state;
+  };
+
+  /** A task's `part_of` ancestors, nearest first, a loop cut where it closes. */
+  const chainOf = (
+    context: FlagContext,
+    task: { id: string; partOf: string | null }
+  ): string[] => {
+    const chain: string[] = [];
+    const seen = new Set([task.id]);
+    let at = task.partOf;
+    while (at && !seen.has(at)) {
+      chain.push(at);
+      seen.add(at);
+      at = context.byId.get(at)?.partOf ?? null;
+    }
+    return chain;
+  };
+
+  /** Every wait of a task, its own then its chain's, each target once, unsettled first. */
+  const waitsIn = (
+    context: FlagContext,
+    task: { id: string; partOf: string | null; waitsOn: string[] }
+  ): TaskWait[] => {
+    const seen = new Set<string>();
+    const waits: TaskWait[] = [];
+    const take = (handles: readonly string[], via: string | null) => {
+      for (const handle of handles) {
+        if (!seen.has(handle)) {
+          seen.add(handle);
+          waits.push({ ...settleIn(context, handle), via });
+        }
+      }
+    };
+    take(task.waitsOn, null);
+    for (const ancestor of chainOf(context, task)) {
+      take(context.byId.get(ancestor)?.waitsOn ?? [], ancestor);
+    }
+    return unsettledFirst(waits);
+  };
+
+  /** The cards and pins a done attempt was dispatched on whose value moved since. */
+  const builtOnOf = (
+    context: FlagContext,
+    attempt: TaskAttempt | undefined
+  ): BuiltOn[] =>
+    (attempt?.waitedOn ?? []).flatMap((witness) => {
+      const now = settleIn(context, witness.target);
+      if (now.value === witness.value) {
+        return [];
+      }
+      return [
+        {
+          target: witness.target,
+          label: now.label,
+          href: now.href,
+          since:
+            now.value === null
+              ? taskLinkWords.reopened
+              : taskLinkWords.decidedDifferently,
+        },
+      ];
+    });
+
   /** What a task's attempts and edges say, against the project's other tasks as indexed. */
   const flagsOf = (
     projectId: string,
-    task: { after: string[]; hash: string; id: string; stage: string },
-    context: {
-      attempts: Map<string, TaskAttempt[]>;
-      /** Every task's stage and duplicate_of, by id. */
-      ends: Map<string, EdgeEnd>;
-      /** The tasks the folder's history shows taken out of tasks/. */
-      gone: ReadonlySet<string>;
-      /** The tasks whose hook start waits for a slot. */
-      queued: Set<string>;
-      stages: Stages | undefined;
-    }
+    task: {
+      hash: string;
+      id: string;
+      partOf: string | null;
+      stage: string;
+      waitsOn: string[];
+    },
+    context: FlagContext
   ): TaskFlags => {
-    const { attempts: byTask, queued, ends, gone, stages } = context;
-    const attempts = byTask.get(task.id) ?? [];
+    const attempts = context.attempts.get(task.id) ?? [];
     const [last] = attempts;
-    const kind = kindIn(stages, task.stage);
+    const kind = kindIn(context.stages, task.stage);
     const open = kind !== "done" && kind !== "dropped";
-    /**
-     * Done: in a done stage, or dropped as a duplicate of a task that is
-     * done. A task the folder's history shows taken out of tasks/ is done
-     * with, whatever the index (a cache a single read does not catch up)
-     * still holds for it.
-     */
-    const done = (id: string, seen: Set<string>): boolean => {
-      if (gone.has(id)) {
-        return true;
-      }
-      const end = ends.get(id);
-      if (!end) {
-        return false;
-      }
-      const at = kindIn(stages, end.stage);
-      if (at === "done") {
-        return true;
-      }
-      if (at !== "dropped" || !end.duplicateOf || seen.has(id)) {
-        return false;
-      }
-      seen.add(id);
-      return done(end.duplicateOf, seen);
-    };
+    const waits = waitsIn(context, task);
+    const liveAttempt = attempts.some((attempt) => isLive(attempt.state));
+    const heldBy =
+      chainOf(context, task).find((ancestor) =>
+        (context.attempts.get(ancestor) ?? []).some((attempt) =>
+          isLive(attempt.state)
+        )
+      ) ?? null;
     return {
       attempts,
-      liveAttempt: attempts.some((attempt) => isLive(attempt.state)),
-      blockedBy: task.after.filter((id) => !done(id, new Set())),
+      liveAttempt,
+      waits,
+      heldBy,
+      ready:
+        kind === "todo" &&
+        waits.every((wait) => wait.settled) &&
+        !liveAttempt &&
+        heldBy === null,
+      parts: context.partsOf.get(task.id) ?? [],
+      unblocks: context.waitersOf.get(task.id) ?? [],
+      builtOn:
+        kind === "done"
+          ? builtOnOf(
+              context,
+              attempts.find((attempt) => attempt.state === "done")
+            )
+          : [],
       lastAttemptFailed: last?.state === "failed" && open,
       lastAttemptStopped: last?.state === "cancelled" && open,
-      queuedStart: queued.has(task.id),
+      queuedStart: context.queued.has(task.id),
       startProblem: store.startProblem?.(projectId, task) ?? null,
     };
   };
@@ -1734,9 +1987,8 @@ export const createTasks = (store: TaskStore) => {
       title: parsed.title ?? doc.title(),
       stage: parsed.fields.stage ?? "",
       type: parsed.fields.type,
-      after: parsed.fields.after,
-      parent: parsed.fields.parent,
-      related: parsed.fields.related,
+      waitsOn: parsed.fields.waitsOn,
+      partOf: parsed.fields.partOf,
       foundIn: parsed.fields.foundIn,
       duplicateOf: parsed.fields.duplicateOf,
       rank: parsed.fields.rank,
@@ -2334,6 +2586,129 @@ export const createTasks = (store: TaskStore) => {
   ): Promise<string | null> =>
     ref ? ((await targets(projectId, edge, [ref]))[0] ?? null) : null;
 
+  /**
+   * Waits as `actor` writes them (task-waits.ts `readWait`), as a file keeps
+   * them: a task the project has on its board or in its archive, or a card,
+   * a pin, a pull request, a run or a session the reader settles. Refused,
+   * in the reader's words, when one names nothing that exists.
+   */
+  const waitsFor = async (
+    projectId: string,
+    actor: TaskActor,
+    written: string[]
+  ): Promise<string[]> => {
+    if (written.length === 0) {
+      return [];
+    }
+    const reader = store.waitReader(projectId, actor);
+    const have = await ids(projectId);
+    const archived = new Set(
+      (await archivedNames(projectId)).map((name) =>
+        taskId(fileTaskNumber(name) as number)
+      )
+    );
+    return [
+      ...new Set(
+        items("waits_on", written).map((one) => {
+          let target: WaitTarget;
+          try {
+            target = readWait(one, reader);
+          } catch (error) {
+            if (error instanceof WaitRefusal) {
+              return refuse(400, `waits_on: ${error.message}`);
+            }
+            throw error;
+          }
+          if (
+            target.kind === "task" &&
+            !(have.has(target.id) || archived.has(target.id))
+          ) {
+            return refuse(
+              404,
+              `waits_on: the project has no task ${target.id}.`
+            );
+          }
+          return waitHandle(target);
+        })
+      ),
+    ];
+  };
+
+  /**
+   * What a task depends on to close, as readiness reads it: the tasks it
+   * waits on, the tasks its `part_of` chain waits on, and its parts. A
+   * write is checked over it with its own change applied (`changed`).
+   */
+  const dependsOn = (
+    rows: TaskIndexRow[],
+    changed: Map<string, { partOf: string | null; waitsOn: string[] }>
+  ): ((id: string) => string[]) => {
+    const byId = rowsById(rows);
+    const of = (at: string) => changed.get(at) ?? byId.get(at);
+    return (id: string): string[] => {
+      const parts = rows
+        .map((row) => ({ id: row.id, ...(changed.get(row.id) ?? row) }))
+        .filter((row) => row.partOf === id)
+        .map((row) => row.id);
+      const chain: string[] = [];
+      const seen = new Set([id]);
+      for (let at = of(id)?.partOf ?? null; at && !seen.has(at);) {
+        chain.push(at);
+        seen.add(at);
+        at = of(at)?.partOf ?? null;
+      }
+      return [
+        ...new Set([
+          ...[id, ...chain].flatMap((at) =>
+            (of(at)?.waitsOn ?? []).filter(
+              (target) => taskTarget(target) === target
+            )
+          ),
+          ...parts,
+        ]),
+      ];
+    };
+  };
+
+  /**
+   * Refuses a write to task `id` that would close a cycle of waits or parts
+   * (`changed`, its fields as they would stand), naming the path by each
+   * task's link; nothing changes.
+   */
+  const refuseCycle = (
+    projectId: string,
+    id: string,
+    changed: { partOf: string | null; waitsOn: string[] }
+  ): void => {
+    const rows = store.index(projectId);
+    const cycle = cycleFrom(id, dependsOn(rows, new Map([[id, changed]])));
+    if (cycle) {
+      const byId = rowsById(rows);
+      const path = cycle
+        .map((at) => taskLink(projectId, at, byId.get(at)?.title ?? at))
+        .join(" → ");
+      refuse(409, taskLinkWords.cycle(path));
+    }
+  };
+
+  /**
+   * Where a new task was found, as the hub hands it (the filer's running
+   * task, or the pin thread its ask came from): a task the project has, or
+   * a pin; nothing when it names neither.
+   */
+  const foundInOf = async (
+    projectId: string,
+    given: string | undefined
+  ): Promise<string | null> => {
+    const target = given ? waitTarget(given) : undefined;
+    if (target?.kind === "pin") {
+      return waitHandle(target);
+    }
+    return target?.kind === "task" && (await ids(projectId)).has(target.id)
+      ? target.id
+      : null;
+  };
+
   /** Where a new task starts: the stage asked for, if the actor may put it there, else the first todo stage. */
   const startStage = async (
     projectId: string,
@@ -2548,6 +2923,10 @@ export const createTasks = (store: TaskStore) => {
       [{ path, stage, updatedAt: observed }],
       stages
     );
+    const context = contextOf(projectId, rows, stages, gone);
+    const foundAt = parsed.fields.foundIn
+      ? settleIn(context, parsed.fields.foundIn)
+      : null;
     return viewOf(
       path,
       number,
@@ -2555,17 +2934,20 @@ export const createTasks = (store: TaskStore) => {
       doc.title(),
       hash,
       stages,
-      flagsOf(
-        projectId,
-        { id: taskId(number), after: parsed.fields.after, stage, hash },
-        {
-          attempts: attemptsByTask(projectId),
-          queued: queuedIn(projectId),
-          ends: endsById(rows),
-          gone,
-          stages,
-        }
-      ),
+      {
+        ...flagsOf(
+          projectId,
+          {
+            id: taskId(number),
+            waitsOn: parsed.fields.waitsOn,
+            partOf: parsed.fields.partOf,
+            stage,
+            hash,
+          },
+          context
+        ),
+        foundInNamed: foundAt && { label: foundAt.label, href: foundAt.href },
+      },
       times.get(path) as TaskTimes,
       resultOf(
         store
@@ -2644,21 +3026,18 @@ export const createTasks = (store: TaskStore) => {
       const old = taskId(was);
       const doc = new TaskDoc(file.path, file.content);
       const { fields } = doc.read();
+      // A task target is renamed; a card, a pin, a pull request, a run or a
+      // session is the same wherever the task lives.
+      const target = (ref: string): string[] =>
+        taskTarget(ref) === ref ? renamed(ref, old) : [ref];
+      doc.setField("waits_on", fields.waitsOn.flatMap(target));
       doc.setField(
-        "after",
-        fields.after.flatMap((ref) => renamed(ref, old))
-      );
-      doc.setField(
-        "related",
-        fields.related.flatMap((ref) => renamed(ref, old))
-      );
-      doc.setField(
-        "parent",
-        fields.parent ? (renamed(fields.parent, old)[0] ?? null) : null
+        "part_of",
+        fields.partOf ? (renamed(fields.partOf, old)[0] ?? null) : null
       );
       doc.setField(
         "found_in",
-        fields.foundIn ? (renamed(fields.foundIn, old)[0] ?? null) : null
+        fields.foundIn ? (target(fields.foundIn)[0] ?? null) : null
       );
       // A to-do promoted to a task names it `→ #<n>`.
       const content = doc
@@ -2751,40 +3130,59 @@ export const createTasks = (store: TaskStore) => {
     actor: TaskActor,
     apply: (doc: TaskDoc, id: string) => Promise<string | Did> | string | Did
   ): Promise<TaskView> =>
-    inTurn(projectId, async () => {
-      known(projectId);
-      const { path, number } = await locate(projectId, ref, true);
-      const id = taskId(number);
-      const read = (await readFolderFile(projectId, path)).content;
-      // A stage or comments written into the file are put back before any
-      // change reads it, so no commit of the hub's carries them on.
-      const fix = await fixFor(projectId, path, read);
-      const content = fix
-        ? await settle(projectId, path, number, read, fix)
-        : read;
-      const doc = new TaskDoc(path, content);
-      const applied = await apply(doc, id);
-      const { what, ...did } =
-        typeof applied === "string" ? { what: applied } : applied;
-      const next = doc.toString();
-      if (next === content) {
-        return view(
-          projectId,
-          path,
-          number,
-          content,
-          await currentStages(projectId)
-        );
-      }
-      return await save(
+    inTurn(projectId, () => amend(projectId, ref, actor, apply));
+
+  /** {@link change} inside the project's turn, already taken: a write that changes other tasks with its own. */
+  const amend = async (
+    projectId: string,
+    ref: string,
+    actor: TaskActor,
+    apply: (doc: TaskDoc, id: string) => Promise<string | Did> | string | Did
+  ): Promise<TaskView> => {
+    known(projectId);
+    const { path, number } = await locate(projectId, ref, true);
+    const id = taskId(number);
+    const read = (await readFolderFile(projectId, path)).content;
+    // A stage or comments written into the file are put back before any
+    // change reads it, so no commit of the hub's carries them on.
+    const fix = await fixFor(projectId, path, read);
+    const content = fix
+      ? await settle(projectId, path, number, read, fix)
+      : read;
+    const doc = new TaskDoc(path, content);
+    const applied = await apply(doc, id);
+    const { what, ...did } =
+      typeof applied === "string" ? { what: applied } : applied;
+    const next = doc.toString();
+    if (next === content) {
+      return view(
         projectId,
         path,
         number,
-        next,
-        actor,
-        commitMessage(actor, `task ${id}`, what, did)
+        content,
+        await currentStages(projectId)
       );
-    });
+    }
+    return await save(
+      projectId,
+      path,
+      number,
+      next,
+      actor,
+      commitMessage(actor, `task ${id}`, what, did)
+    );
+  };
+
+  /** Refuses a move into `to` with its problem, when it has one. */
+  const refuseMove = (
+    stages: Stages,
+    to: string,
+    problem: string | undefined
+  ): void => {
+    if (problem) {
+      refuse(stageNamed(stages, to) ? 403 : 400, problem);
+    }
+  };
 
   /**
    * Puts a task in stage `to`, checked against the moves for the actor's
@@ -2798,7 +3196,9 @@ export const createTasks = (store: TaskStore) => {
     id: string,
     stages: Stages,
     to: string,
-    actor: TaskActor
+    actor: TaskActor,
+    /** A close as a duplicate: any filer may make it, so the stage is checked as the hub's own moves are. */
+    asClose = false
   ): { from: string; to: string } | undefined => {
     const from = doc.read().fields.stage ?? "";
     if (from === to) {
@@ -2813,13 +3213,13 @@ export const createTasks = (store: TaskStore) => {
         `This task cannot go to ${to} as an approved action: only an action the owner approved, once its call is done, moves its own task to the stage it named.`
       );
     }
-    const problem =
-      actor.mover === "hub"
+    refuseMove(
+      stages,
+      to,
+      actor.mover === "hub" || asClose
         ? hubProblem(stages, to)
-        : moveProblem(stages, id, from, to, actor.mover);
-    if (problem) {
-      refuse(stageNamed(stages, to) ? 403 : 400, problem);
-    }
+        : moveProblem(stages, id, from, to, actor.mover)
+    );
     // The lead reviews, never the doer: a task whose only changes are
     // Caw's own closes or passes review on your move, or once you approved
     // them (lead-gate.ts `reviewProblem`).
@@ -2833,70 +3233,94 @@ export const createTasks = (store: TaskStore) => {
     return { from, to };
   };
 
-  /** The task an edge names, as `tsk-…`: one the project has, unless the edge is being taken out. */
-  const edgeTarget = async (
-    projectId: string,
-    request: { edge: Edge; to: string; remove?: boolean },
-    id: string
-  ): Promise<string> => {
-    const number = taskNumber(request.to);
-    if (number === undefined) {
-      return refuse(
-        400,
-        `“${request.to}” is not a task id; tasks are named like tsk-12.`
-      );
-    }
-    return request.remove
-      ? taskId(number)
-      : ((await targets(projectId, request.edge, [request.to], id))[0] ??
-          taskId(number));
-  };
-
   /**
-   * Links a task's file `duplicate_of` `target` and drops it: it moves to
-   * the project's first stage of kind dropped, checked for the actor as any
-   * move, with the reason "duplicate of <target>". A task in a dropped stage
-   * already stays where it is. Refused when `target` is a duplicate of it,
-   * or the project has no dropped stage.
+   * Closes task `id` (its file `doc`) as a duplicate of `survivor`: links it
+   * `duplicate_of`, moves it to the project's first stage of kind dropped
+   * with the reason "duplicate" (any filer may: a close keeps the record,
+   * so the stage is checked as the hub's own moves are), and answers the
+   * move. A task in a dropped stage already stays where it is. Refused when
+   * `survivor` is a duplicate of it, or the project has no dropped stage.
    */
   const markDuplicate = async (
     projectId: string,
     doc: TaskDoc,
     id: string,
-    target: string,
+    survivor: string,
     actor: TaskActor
   ): Promise<Did> => {
-    const rows = store.index(projectId);
-    if (
-      loops(rows, id, target, (row) =>
-        row.duplicateOf ? [row.duplicateOf] : []
-      )
+    const byId = rowsById(store.index(projectId));
+    for (
+      let at: string | null = survivor, seen = 0;
+      at && seen < byId.size;
+      at = byId.get(at)?.duplicateOf ?? null, seen += 1
     ) {
-      refuse(
-        409,
-        `${target} is already a duplicate of ${id}, so ${id} cannot be a duplicate of it.`
-      );
+      if (at === id) {
+        refuse(
+          409,
+          `${taskLink(projectId, survivor, byId.get(survivor)?.title ?? survivor)} is already a duplicate of this task, so this task cannot be a duplicate of it. Nothing changed.`
+        );
+      }
     }
-    const phrase = linkOne(doc, "duplicate_of", target, false);
-    const stages = await usableStages(projectId, "drop a duplicate");
+    doc.setField("duplicate_of", survivor);
+    const phrase = `${EDGE_PHRASE.duplicate_of} ${survivor}`;
+    const stages = await usableStages(projectId, "close a duplicate");
     const dropped = stages.stages.find((each) => each.kind === "dropped");
     if (!dropped) {
       return refuse(
         409,
-        `The project has no stage of kind dropped, so ${id} cannot be closed as a duplicate of ${target}. Add one to stages.md.`
+        "The project has no stage of kind dropped, so this task cannot be closed as a duplicate. Add one to stages.md."
       );
     }
     if (kindIn(stages, doc.read().fields.stage ?? "") === "dropped") {
       return { what: phrase };
     }
-    const stage = moveTo(projectId, doc, id, stages, dropped.name, actor);
+    const stage = moveTo(projectId, doc, id, stages, dropped.name, actor, true);
     return stage
       ? {
           what: `${phrase}; stage ${stage.from || NO_STAGE} → ${stage.to}`,
           stage,
-          reason: phrase,
+          reason: "duplicate",
         }
       : { what: phrase };
+  };
+
+  /**
+   * Every wait on task `from` moved to `to` (a duplicate closed, its waits
+   * on its survivor; `to` null, a dropped task taken out of them), as the
+   * hub, each waiter's file one commit. Inside the project's turn. Answers
+   * the tasks whose waits moved.
+   */
+  const repoint = async (
+    projectId: string,
+    from: string,
+    to: string | null,
+    why: string
+  ): Promise<string[]> => {
+    const waiters = store
+      .index(projectId)
+      .filter((row) => row.waitsOn.includes(from) && row.id !== from);
+    const moved: string[] = [];
+    for (const waiter of waiters) {
+      // biome-ignore lint/performance/noAwaitInLoops: each waiter is its own commit, in turn
+      await amend(projectId, waiter.id, hubActor(why), (doc, id) => {
+        const kept = doc.read().fields.waitsOn;
+        doc.setField("waits_on", [
+          ...new Set(
+            kept.flatMap((target) => {
+              if (target !== from) {
+                return [target];
+              }
+              return to && to !== id ? [to] : [];
+            })
+          ),
+        ]);
+        return to && to !== id
+          ? `waits on ${to}, not ${from}`
+          : `no longer waits on ${from}`;
+      });
+      moved.push(waiter.id);
+    }
+    return moved;
   };
 
   /** Moves a task's file to tasks/archive/ (what a write around the hub left settled first). Inside the turn. */
@@ -2983,33 +3407,6 @@ export const createTasks = (store: TaskStore) => {
   const reasonOf = (reason: string | undefined): string | undefined =>
     reason?.trim() ? oneLine("reason", reason, REASON_LIMIT) : undefined;
 
-  /** Would `id` waiting on `target` (or having it as parent) close a loop? */
-  const loops = (
-    rows: TaskIndexRow[],
-    id: string,
-    target: string,
-    next: (row: TaskIndexRow) => string[]
-  ): boolean => {
-    const byId = new Map(rows.map((row) => [row.id, row]));
-    const seen = new Set<string>();
-    const stack = [target];
-    while (stack.length > 0) {
-      const at = stack.pop() as string;
-      if (at === id) {
-        return true;
-      }
-      if (seen.has(at)) {
-        continue;
-      }
-      seen.add(at);
-      const row = byId.get(at);
-      if (row) {
-        stack.push(...next(row));
-      }
-    }
-    return false;
-  };
-
   /**
    * Each comment being written now, by the id its device chose: the same
    * comment again meanwhile (a device sending it again after its answer was
@@ -3077,45 +3474,512 @@ export const createTasks = (store: TaskStore) => {
     );
   };
 
+  /** The project's tasks from the index, caught up with the files first. */
+  const listTasks = async (
+    projectId: string,
+    filter: TaskFilter = {}
+  ): Promise<TaskList> => {
+    const tracker = known(projectId);
+    const partOf = filter.partOf ? taskRef("part_of", filter.partOf) : null;
+    const [{ rows: board, problems }, { reading }] = await Promise.all([
+      sync(projectId),
+      stagesOf(projectId),
+    ]);
+    const rows = filter.archived ? await archivedRows(projectId) : board;
+    const stages = reading.ok ? reading.stages : undefined;
+    const { gone, times } = await timesOf(projectId, rows, stages);
+    const context = contextOf(projectId, board, stages, gone);
+    const kept = rows
+      .map((row) =>
+        summaryOf(
+          row,
+          stages,
+          flagsOf(projectId, row, context),
+          times.get(row.path) as TaskTimes
+        )
+      )
+      .filter((task) => holds(task, filter, partOf));
+    const tasks = (
+      filter.q?.trim() ? await saying(projectId, kept, filter.q) : kept
+    ).sort(byRank);
+    return {
+      tracker,
+      tasks,
+      problems,
+      stagesProblems: reading.ok ? [] : reading.problems,
+    };
+  };
+
+  /** A task by its link, labelled by its title: what a message names it by. */
+  const linked = (projectId: string, task: { id: string; title: string }) =>
+    taskLink(projectId, task.id, task.title);
+
+  /** Its live attempt's session, if it has one. */
+  const liveSession = (task: TaskSummary): string | undefined =>
+    task.attempts.find((attempt) => isLive(attempt.state))?.instanceId;
+
+  /**
+   * What closing task `id` (moved to a done or dropped stage) does around
+   * it, once its move has landed: a plain drop is taken out of every wait
+   * on it; a part done closes its whole once every part is done and no
+   * coordinator of it is live; every live session whose task waited on it
+   * hears once what changed; and the answer names what became ready and
+   * what still waits.
+   */
+  const afterClose = async (
+    projectId: string,
+    id: string
+  ): Promise<Closing> => {
+    const before = await listTasks(projectId);
+    const closed = before.tasks.find((task) => task.id === id);
+    if (!closed) {
+      return {
+        nowReady: [],
+        stillWaiting: [],
+        unwaited: [],
+        wholeClosed: null,
+      };
+    }
+    const waiting = before.tasks.filter((task) =>
+      task.waits.some((wait) => wait.target === id)
+    );
+    const dropped = closed.kind === "dropped" && !closed.duplicateOf;
+    const unwaited = dropped
+      ? await inTurn(projectId, () =>
+          repoint(projectId, id, null, `${id} was dropped`)
+        )
+      : [];
+    const wholeClosed = await closeWhole(projectId, closed, before.tasks);
+    const after = await listTasks(projectId);
+    const now = new Map(after.tasks.map((task) => [task.id, task]));
+    const open = waiting
+      .map((waiter) => now.get(waiter.id))
+      .filter(
+        (task): task is TaskSummary =>
+          task !== undefined && !CLOSED_KINDS.has(task.kind ?? "todo")
+      );
+    tellWaiters(projectId, closed, dropped, waiting, now);
+    return {
+      nowReady: open.filter((task) => task.ready).map((task) => task.id),
+      stillWaiting: open
+        .filter((task) => !task.ready)
+        .map((task) => ({ id: task.id, on: unsettledWaits(task) })),
+      unwaited,
+      wholeClosed,
+    };
+  };
+
+  /** Each live session whose task waited on a task now closed hears once what changed. */
+  const tellWaiters = (
+    projectId: string,
+    closed: TaskSummary,
+    dropped: boolean,
+    waiting: TaskSummary[],
+    now: Map<string, TaskSummary>
+  ): void => {
+    const how = dropped
+      ? "was dropped, so it is taken out of your task's waits"
+      : `is ${closed.stage}`;
+    for (const waiter of waiting) {
+      const session = liveSession(waiter);
+      const left = unsettledWaits(now.get(waiter.id) ?? waiter).length;
+      const rest =
+        left === 0
+          ? "It waits on nothing else now."
+          : `It still waits on ${left} more: task_read shows them.`;
+      if (session) {
+        store.tell?.(
+          session,
+          `[CawCo] ${linked(projectId, closed)}, which your task ${linked(projectId, waiter)} waits on, ${how}. ${rest}`
+        );
+      }
+    }
+  };
+
+  /**
+   * A part done closes its whole, as the hub, once every part of it is done
+   * or dropped and no attempt at the whole (its coordinator) is live: the
+   * whole moves to the project's first done stage. Answers the whole it
+   * closed, or null.
+   */
+  const closeWhole = async (
+    projectId: string,
+    part: TaskSummary,
+    tasks: TaskSummary[]
+  ): Promise<string | null> => {
+    const whole = part.partOf
+      ? tasks.find((task) => task.id === part.partOf)
+      : undefined;
+    if (
+      part.kind !== "done" ||
+      !whole ||
+      whole.kind === "done" ||
+      whole.kind === "dropped" ||
+      whole.liveAttempt ||
+      !whole.parts.every((id) => {
+        const kind = tasks.find((task) => task.id === id)?.kind;
+        return kind === "done" || kind === "dropped";
+      })
+    ) {
+      return null;
+    }
+    const stages = await currentStages(projectId);
+    const done = stages?.stages.find((stage) => stage.kind === "done");
+    if (!done || done.hooks.by === "action") {
+      return null;
+    }
+    try {
+      await moveTask(
+        projectId,
+        whole.id,
+        done.name,
+        hubActor(`its last part, ${part.id}, is done`)
+      );
+      return whole.id;
+    } catch (error) {
+      console.warn(
+        `[tasks] ${projectId} ${whole.id}: its last part is done, and it did not close: ${error instanceof Error ? error.message : String(error)}`
+      );
+      return null;
+    }
+  };
+
+  /**
+   * Moves a task to another stage ({@link Tasks.move}); a move into a done
+   * or dropped stage carries what closing it did ({@link afterClose}).
+   */
+  const moveTask = async (
+    projectId: string,
+    ref: string,
+    stage: string,
+    actor: TaskActor,
+    reason?: string,
+    options?: { tickCriteria?: boolean }
+  ): Promise<TaskView & { closing?: Closing }> => {
+    const why = reasonOf(reason);
+    const tick = options?.tickCriteria
+      ? (doc: TaskDoc) => doc.tickCriteria()
+      : () => 0;
+    let moved: { from: string; to: string } | undefined;
+    let approved = false;
+    const task = await change(projectId, ref, actor, async (doc, id) => {
+      const stages = await usableStages(projectId, "check a stage change");
+      const to = stageName(stage);
+      moved = moveTo(projectId, doc, id, stages, to, actor);
+      if (!moved) {
+        return `stage ${to}`;
+      }
+      tick(doc);
+      approved =
+        actor.mover === "you" &&
+        kindIn(stages, moved.from) === "you" &&
+        passesReview(stages, moved.from, to);
+      if (approved) {
+        await approvable(projectId, id);
+      }
+      const because = approved ? `approved${why ? `: ${why}` : ""}` : why;
+      return {
+        what: `stage ${moved.from || NO_STAGE} → ${to}`,
+        stage: moved,
+        ...(because ? { reason: because } : {}),
+      };
+    });
+    if (!moved) {
+      return task;
+    }
+    told(
+      {
+        kind: "moved",
+        projectId,
+        id: task.id,
+        actor,
+        ...moved,
+        ...(why ? { reason: why } : {}),
+        ...(approved ? { approved: true as const } : {}),
+      },
+      task
+    );
+    const wasOpen = !CLOSED_KINDS.has(
+      kindIn(await currentStages(projectId), moved.from) ?? "todo"
+    );
+    return wasOpen && (task.kind === "done" || task.kind === "dropped")
+      ? { ...task, closing: await afterClose(projectId, task.id) }
+      : task;
+  };
+
+  /** A written wait to take out, matched to the target it names as kept; undefined when it names none of them. */
+  const keptMatch = (
+    kept: readonly string[],
+    written: string,
+    reader: WaitReader
+  ): string | undefined => {
+    let read: string | undefined;
+    try {
+      read = waitHandle(readWait(written, reader));
+    } catch (error) {
+      if (!(error instanceof WaitRefusal)) {
+        throw error;
+      }
+      const raw = waitTarget(written);
+      read = raw ? waitHandle(raw) : undefined;
+    }
+    return kept.find(
+      (target) =>
+        target === read ||
+        (read === undefined && target.endsWith(written.trim()))
+    );
+  };
+
+  /**
+   * The cutover of a project's task files to one blocking edge, each file
+   * once: one still carrying `after:`, `parent:` or `related:` (task-file.ts
+   * `takeLegacyLinks`) is rewritten, `after` into `waits_on`, `parent` into
+   * `part_of`, and its related tasks into one "See also" comment by the hub;
+   * every file in one commit by the hub, and the board's re-indexed. A file
+   * written around the hub is settled first. Inside the project's turn.
+   * Answers what it did, as counts.
+   */
+  const migrateLinks = async (projectId: string): Promise<LinkMigration> => {
+    const counts: LinkMigration = {
+      files: 0,
+      waitsOn: 0,
+      partOf: 0,
+      seeAlso: 0,
+      related: 0,
+    };
+    const paths = [
+      ...(await folderFileNames(projectId, "tasks"))
+        .filter((name) => fileTaskNumber(name) !== undefined)
+        .map((name) => `tasks/${name}`),
+      ...(await archivedNames(projectId)).map(
+        (name) => `${ARCHIVE_DIR}/${name}`
+      ),
+    ];
+    const read = await Promise.all(
+      paths.map(async (path) => {
+        const { content } = await readFolderFile(projectId, path);
+        const fix = await fixFor(projectId, path, content);
+        return {
+          path,
+          number: fileTaskNumber(path) as number,
+          content: fix
+            ? await settle(
+                projectId,
+                path,
+                fileTaskNumber(path) as number,
+                content,
+                fix
+              )
+            : content,
+        };
+      })
+    );
+    const titles = new Map(
+      read.map(({ path, number, content }) => [
+        taskId(number),
+        new TaskDoc(path, content).title(),
+      ])
+    );
+    const writes: { content: string; number: number; path: string }[] = [];
+    for (const file of read) {
+      const doc = new TaskDoc(file.path, file.content);
+      const legacy = doc.takeLegacyLinks();
+      if (!legacy) {
+        continue;
+      }
+      const { fields } = doc.read();
+      doc.setField("waits_on", [
+        ...new Set([...fields.waitsOn, ...legacy.after]),
+      ]);
+      if (legacy.parent && !fields.partOf) {
+        doc.setField("part_of", legacy.parent);
+        counts.partOf += 1;
+      }
+      if (legacy.related.length > 0) {
+        doc.addComment(
+          { name: AUTHOR.hub, mover: "hub", id: null },
+          new Date(),
+          `See also: ${legacy.related
+            .map((id) => {
+              const title = titles.get(id);
+              return title ? taskLink(projectId, id, title) : id;
+            })
+            .join(", ")}.`
+        );
+        counts.seeAlso += 1;
+        counts.related += legacy.related.length;
+      }
+      counts.waitsOn += legacy.after.length;
+      counts.files += 1;
+      writes.push({
+        path: file.path,
+        number: file.number,
+        content: doc.toString(),
+      });
+    }
+    if (writes.length === 0) {
+      return counts;
+    }
+    const actor = hubActor(
+      "task links are one blocking edge: after is waits_on, parent is part_of, related is a See also comment"
+    );
+    stands(projectId);
+    await writeFolderFiles(
+      projectId,
+      writes.map(({ path, content }) => ({ path, content })),
+      {
+        author: actor.author,
+        message: commitMessage(
+          actor,
+          `tasks ${writes.map((write) => taskId(write.number)).join(", ")}`,
+          `links: ${counts.waitsOn} after → waits_on, ${counts.partOf} parent → part_of, ${counts.seeAlso} related → See also`
+        ),
+      }
+    );
+    stands(projectId);
+    store.put(
+      writes
+        .filter(({ path }) => !inArchive(path))
+        .map(({ path, number, content }) =>
+          indexRow(projectId, path, number, content, hashOf(content))
+        )
+    );
+    console.info(
+      `[tasks] project ${projectId}: task links migrated in ${counts.files} files: ${counts.waitsOn} after → waits_on, ${counts.partOf} parent → part_of, ${counts.related} related in ${counts.seeAlso} See also comments.`
+    );
+    return counts;
+  };
+
+  /**
+   * Each live attempt's moved witnesses already told, by work item, target
+   * and the value told: one message per change, none for the same answer.
+   */
+  const toldMoves = new Set<string>();
+
+  /**
+   * What a link write does to a task's `duplicate_of`: closes it as a
+   * duplicate of the survivor ({@link markDuplicate}), or takes the link
+   * out with `remove` (it stays closed).
+   */
+  const linkDuplicate = async (
+    projectId: string,
+    doc: TaskDoc,
+    id: string,
+    actor: TaskActor,
+    {
+      duplicateOf,
+      remove,
+      was,
+    }: { duplicateOf?: string; remove?: boolean; was: string | null }
+  ): Promise<
+    Omit<Did, "what"> & { said: string[]; survivor: string | null }
+  > => {
+    if (duplicateOf === undefined) {
+      return { said: [], survivor: null };
+    }
+    if (remove) {
+      if (was === taskRef("duplicate_of", duplicateOf)) {
+        doc.setField("duplicate_of", null);
+      }
+      return {
+        said: [`no longer a duplicate of ${duplicateOf}`],
+        survivor: null,
+      };
+    }
+    const survivor = await single(projectId, "duplicate_of", duplicateOf);
+    if (!survivor || survivor === id) {
+      return refuse(400, "A task cannot be a duplicate of itself.");
+    }
+    const { what, ...marked } = await markDuplicate(
+      projectId,
+      doc,
+      id,
+      survivor,
+      actor
+    );
+    return { ...marked, said: [what], survivor };
+  };
+
+  /** A write that would make a task wait on itself or be its own part, refused by its path. */
+  const refuseSelf = (projectId: string, doc: TaskDoc, id: string): never => {
+    const self = linked(projectId, { id, title: doc.title() });
+    return refuse(409, taskLinkWords.cycle(`${self} → ${self}`));
+  };
+
+  /** What a link write does to a task's waits: added, or taken out with `remove`. */
+  const linkWaits = async (
+    projectId: string,
+    actor: TaskActor,
+    doc: TaskDoc,
+    id: string,
+    { waitsOn, remove }: TaskLinks
+  ): Promise<{
+    added: string[];
+    removed: string[];
+    said: string[];
+    waits: string[];
+  }> => {
+    const kept = doc.read().fields.waitsOn;
+    if (waitsOn === undefined) {
+      return { waits: kept, added: [], removed: [], said: [] };
+    }
+    if (remove) {
+      const reader = store.waitReader(projectId, actor);
+      const out = items("waits_on", waitsOn).map(
+        (written) =>
+          keptMatch(kept, written, reader) ??
+          refuse(
+            404,
+            `It waits on nothing named “${written}”. Nothing changed.`
+          )
+      );
+      return {
+        waits: kept.filter((target) => !out.includes(target)),
+        added: [],
+        removed: out,
+        said: [`no longer waits on ${out.join(", ")}`],
+      };
+    }
+    const added = await waitsFor(projectId, actor, waitsOn);
+    if (added.includes(id)) {
+      refuseSelf(projectId, doc, id);
+    }
+    return {
+      waits: [...new Set([...kept, ...added])],
+      added: added.filter((target) => !kept.includes(target)),
+      removed: [],
+      said: [`waits on ${added.join(", ")}`],
+    };
+  };
+
+  /** What a link write does to a task's whole: set, or taken out with `remove`. */
+  const linkWhole = async (
+    projectId: string,
+    doc: TaskDoc,
+    id: string,
+    { partOf, remove }: TaskLinks
+  ): Promise<{ partOf: string | null; said: string[] }> => {
+    const kept = doc.read().fields.partOf;
+    if (partOf === undefined) {
+      return { partOf: kept, said: [] };
+    }
+    if (remove) {
+      const out = taskRef("part_of", partOf);
+      return {
+        partOf: kept === out ? null : kept,
+        said: [`no longer part of ${out}`],
+      };
+    }
+    const whole = await single(projectId, "part_of", partOf);
+    if (whole === id) {
+      refuseSelf(projectId, doc, id);
+    }
+    return { partOf: whole, said: [`part of ${whole}`] };
+  };
+
   return {
     /** The project's tasks from the index, caught up with the files first. */
-    async list(projectId: string, filter: TaskFilter = {}): Promise<TaskList> {
-      const tracker = known(projectId);
-      const parent = filter.parent ? taskRef("parent", filter.parent) : null;
-      const [{ rows: board, problems }, { reading }] = await Promise.all([
-        sync(projectId),
-        stagesOf(projectId),
-      ]);
-      const rows = filter.archived ? await archivedRows(projectId) : board;
-      const stages = reading.ok ? reading.stages : undefined;
-      const { gone, times } = await timesOf(projectId, rows, stages);
-      const context = {
-        attempts: attemptsByTask(projectId),
-        queued: queuedIn(projectId),
-        ends: endsById(board),
-        gone,
-        stages,
-      };
-      const kept = rows
-        .map((row) =>
-          summaryOf(
-            row,
-            stages,
-            flagsOf(projectId, row, context),
-            times.get(row.path) as TaskTimes
-          )
-        )
-        .filter((task) => holds(task, filter, parent));
-      const tasks = (
-        filter.q?.trim() ? await saying(projectId, kept, filter.q) : kept
-      ).sort(byRank);
-      return {
-        tracker,
-        tasks,
-        problems,
-        stagesProblems: reading.ok ? [] : reading.problems,
-      };
-    },
+    list: listTasks,
 
     /** One task, its file read and parsed; the index catches up if the file moved. */
     get: readTask,
@@ -3132,10 +3996,9 @@ export const createTasks = (store: TaskStore) => {
         const fields: Partial<TaskFields> = {
           stage,
           type: draft.type ? typeName(draft.type) : null,
-          after: await targets(projectId, "after", draft.after ?? []),
-          parent: await single(projectId, "parent", draft.parent),
-          related: await targets(projectId, "related", draft.related ?? []),
-          foundIn: await single(projectId, "found_in", draft.foundIn),
+          waitsOn: await waitsFor(projectId, actor, draft.waitsOn ?? []),
+          partOf: await single(projectId, "part_of", draft.partOf),
+          foundIn: await foundInOf(projectId, draft.foundIn),
           checks: items("checks", draft.checks ?? []),
           outputs: items("outputs", draft.outputs ?? []),
           context: items("context", draft.context ?? []),
@@ -3249,114 +4112,133 @@ export const createTasks = (store: TaskStore) => {
      * its commit's reason says `approved`, and its event says so, for the
      * agent that filed it (task-approval.ts). `tickCriteria`: a close whose
      * acceptance criteria were shown met (dispatch.ts `settle`) ticks them
-     * in the same commit as the move.
+     * in the same commit as the move. A close answers what it did around the
+     * task (`closing`): what became ready, what still waits, a whole closed.
      */
-    async move(
-      projectId: string,
-      ref: string,
-      stage: string,
-      actor: TaskActor,
-      reason?: string,
-      options?: { tickCriteria?: boolean }
-    ): Promise<TaskView> {
-      const why = reasonOf(reason);
-      const tick = options?.tickCriteria
-        ? (doc: TaskDoc) => doc.tickCriteria()
-        : () => 0;
-      let moved: { from: string; to: string } | undefined;
-      let approved = false;
-      const task = await change(projectId, ref, actor, async (doc, id) => {
-        const stages = await usableStages(projectId, "check a stage change");
-        const to = stageName(stage);
-        moved = moveTo(projectId, doc, id, stages, to, actor);
-        if (!moved) {
-          return `stage ${to}`;
-        }
-        tick(doc);
-        approved =
-          actor.mover === "you" &&
-          kindIn(stages, moved.from) === "you" &&
-          passesReview(stages, moved.from, to);
-        if (approved) {
-          await approvable(projectId, id);
-        }
-        const because = approved ? `approved${why ? `: ${why}` : ""}` : why;
-        return {
-          what: `stage ${moved.from || NO_STAGE} → ${to}`,
-          stage: moved,
-          ...(because ? { reason: because } : {}),
-        };
-      });
-      return moved
-        ? told(
-            {
-              kind: "moved",
-              projectId,
-              id: task.id,
-              actor,
-              ...moved,
-              ...(why ? { reason: why } : {}),
-              ...(approved ? { approved: true as const } : {}),
-            },
-            task
-          )
-        : task;
-    },
+    move: moveTask,
 
     /**
-     * Adds or removes one edge from a task to another. Linking
-     * `duplicate_of` also drops the task: it moves to the project's first
-     * stage of kind dropped, checked for the actor as any move, with the
-     * reason "duplicate of tsk-n"; listeners hear of the move.
+     * The one later write of a task's links: `waitsOn` adds what it waits on
+     * (or takes it out, with `remove`); `partOf` makes it a part of a whole,
+     * inheriting its waits (or no longer, with `remove`); `duplicateOf`
+     * closes it as a duplicate of the survivor and moves every wait on it
+     * there. Refused, nothing changed, for a cycle of waits or parts (named
+     * by its path), a wait on itself, or a target that does not exist.
+     * Answers the task with what changed (`linked`).
      */
     async link(
       projectId: string,
       ref: string,
-      request: { edge: Edge; to: string; remove?: boolean },
+      request: TaskLinks,
       actor: TaskActor
-    ): Promise<TaskView> {
+    ): Promise<TaskView & { linked: LinkOutcome }> {
+      const { waitsOn, partOf, duplicateOf, remove } = request;
+      if (
+        waitsOn === undefined &&
+        partOf === undefined &&
+        duplicateOf === undefined
+      ) {
+        refuse(
+          400,
+          "Give waits_on, part_of or duplicate_of: what the task waits on, the whole it is a part of, or the task it repeats."
+        );
+      }
       let moved: { from: string; to: string } | undefined;
-      const task = await change(projectId, ref, actor, async (doc, id) => {
-        const { edge, remove } = request;
-        const target = await edgeTarget(projectId, request, id);
-        if (edge === "duplicate_of" && !remove) {
-          const marked = await markDuplicate(projectId, doc, id, target, actor);
-          moved = marked.stage;
-          return marked;
-        }
-        const rows = store.index(projectId);
-        if (
-          edge === "parent" ||
-          edge === "found_in" ||
-          edge === "duplicate_of"
-        ) {
-          if (
-            !remove &&
-            edge === "parent" &&
-            loops(rows, id, target, (row) => (row.parent ? [row.parent] : []))
-          ) {
-            refuse(
-              409,
-              `${target} is already under ${id}, so ${id} cannot be its child.`
-            );
+      let removed: string[] = [];
+      const outcome: LinkOutcome = {
+        added: [],
+        removed: [],
+        partOf: undefined,
+        duplicateOf: null,
+        moved: [],
+      };
+      const task = await inTurn(projectId, async () => {
+        known(projectId);
+        const done = await amend(projectId, ref, actor, async (doc, id) => {
+          const { fields } = doc.read();
+          const waits = await linkWaits(projectId, actor, doc, id, request);
+          const whole = await linkWhole(projectId, doc, id, request);
+          if (!remove && (waitsOn !== undefined || partOf !== undefined)) {
+            refuseCycle(projectId, id, {
+              partOf: whole.partOf,
+              waitsOn: waits.waits,
+            });
           }
-          return linkOne(doc, edge, target, remove);
-        }
-        if (
-          !remove &&
-          edge === "after" &&
-          loops(rows, id, target, (row) => row.after)
-        ) {
-          refuse(
-            409,
-            `${target} already waits for ${id}, so ${id} waiting for it would never start.`
+          doc.setField("waits_on", waits.waits);
+          doc.setField("part_of", whole.partOf);
+          ({ removed } = waits);
+          outcome.added = waits.added;
+          if (partOf !== undefined) {
+            outcome.partOf = whole.partOf;
+          }
+          const said = [...waits.said, ...whole.said];
+          const dup = await linkDuplicate(projectId, doc, id, actor, {
+            duplicateOf,
+            remove,
+            was: fields.duplicateOf,
+          });
+          moved = dup.stage;
+          outcome.duplicateOf = dup.survivor;
+          return { ...dup, what: [...said, ...dup.said].join("; ") };
+        });
+        if (outcome.duplicateOf) {
+          outcome.moved = await repoint(
+            projectId,
+            done.id,
+            outcome.duplicateOf,
+            `${done.id} closed as a duplicate of ${outcome.duplicateOf}`
           );
         }
-        return linkMany(doc, edge, target, remove);
+        return done;
       });
-      return moved
-        ? told({ kind: "moved", projectId, id: task.id, actor, ...moved }, task)
-        : told({ kind: "changed", projectId }, task);
+      const answered =
+        outcome.moved.length > 0 ? await readTask(projectId, task.id) : task;
+      if (removed.length > 0) {
+        const context = contextOf(
+          projectId,
+          store.index(projectId),
+          await currentStages(projectId),
+          new Set()
+        );
+        outcome.removed = removed.map((handle) => settleIn(context, handle));
+      }
+      if (moved) {
+        told(
+          {
+            kind: "moved",
+            projectId,
+            id: task.id,
+            actor,
+            ...moved,
+            reason: "duplicate",
+          },
+          answered
+        );
+      } else {
+        told({ kind: "changed", projectId, id: task.id }, answered);
+      }
+      if (outcome.duplicateOf && outcome.moved.length > 0) {
+        told({ kind: "changed", projectId }, answered);
+        const survivor = outcome.duplicateOf;
+        const list = await listTasks(projectId);
+        const nameOf = (id: string) =>
+          linked(
+            projectId,
+            list.tasks.find((each) => each.id === id) ?? { id, title: id }
+          );
+        for (const waiter of list.tasks.filter((each) =>
+          outcome.moved.includes(each.id)
+        )) {
+          const session = liveSession(waiter);
+          if (session) {
+            store.tell?.(
+              session,
+              `[CawCo] ${linked(projectId, answered)}, which your task ${linked(projectId, waiter)} waited on, closed as a duplicate of ${nameOf(survivor)}: your task waits on that one now.`
+            );
+          }
+        }
+      }
+      return { ...answered, linked: outcome };
     },
 
     /**
@@ -3509,8 +4391,8 @@ export const createTasks = (store: TaskStore) => {
 
     /**
      * Deletes a task's file, as one commit; its history stays in the
-     * folder's. Refused while another task waits for it (`after`) or sits
-     * under it (`parent`), naming them: archive it instead, which they take
+     * folder's. Refused while another task waits on it (`waits_on`) or is
+     * part of it (`part_of`), naming them: archive it instead, which they take
      * as done, or take their edges out first.
      */
     remove(
@@ -3528,7 +4410,7 @@ export const createTasks = (store: TaskStore) => {
         );
         const held = holders(
           rows.filter((row) => row.path !== path && waiting.has(row.path)),
-          rows.filter((row) => row.path !== path && row.parent === id)
+          rows.filter((row) => row.path !== path && row.partOf === id)
         );
         if (held) {
           refuse(
@@ -3650,6 +4532,94 @@ export const createTasks = (store: TaskStore) => {
       }).then((written) => told({ kind: "changed", projectId }, written));
     },
 
+    /**
+     * A page's picks or pins moved (a card answered, reopened or answered
+     * again; a pin resolved): listeners look again (readiness is live, so a
+     * reopened card blocks its to-do dependents again), and each live
+     * attempt dispatched on a card or pin whose value moved since hears it
+     * once. The witness is the pick's value, so the same answer again tells
+     * nobody.
+     */
+    async waitsMoved(projectId: string): Promise<void> {
+      const list = await listTasks(projectId);
+      emit({ kind: "changed", projectId });
+      for (const task of list.tasks) {
+        const live = task.attempts.find((attempt) => isLive(attempt.state));
+        for (const witness of live?.waitedOn ?? []) {
+          const now = task.waits.find((wait) => wait.target === witness.target);
+          const key = `${live?.workItemId}\0${witness.target}\0${now?.value}`;
+          if (
+            !(live && now) ||
+            now.value === witness.value ||
+            toldMoves.has(key)
+          ) {
+            continue;
+          }
+          toldMoves.add(key);
+          store.tell?.(
+            live.instanceId,
+            `[CawCo] ${markdownLink(now.label, now.href)}, which ${linked(projectId, task)} was started on, ${now.value === null ? "was reopened" : "was answered differently"} since. Read it again before you build on it.`
+          );
+        }
+      }
+    },
+
+    /**
+     * One wait settled now (task-waits.ts `settled`), read in project
+     * `projectId` (null: none, so a task target names nothing): a plan
+     * step's wait.
+     */
+    async waitState(
+      projectId: string | null,
+      handle: string
+    ): Promise<WaitState> {
+      const rows = projectId ? store.index(projectId) : [];
+      const stages = projectId ? await currentStages(projectId) : undefined;
+      return settleIn(
+        contextOf(projectId ?? "", rows, stages, new Set()),
+        handle
+      );
+    },
+
+    /**
+     * A wait as `actor` writes it outside a task (a plan step's), read as a
+     * task's are ({@link waitsFor}) and kept as a file keeps it; refused in
+     * words when it names nothing that exists. `projectId` null: the
+     * session is in none, so only a target outside a project reads.
+     */
+    async keptWait(
+      projectId: string | null,
+      actor: TaskActor,
+      written: string
+    ): Promise<string> {
+      if (projectId) {
+        const [kept] = await waitsFor(projectId, actor, [written]);
+        return kept ?? refuse(400, `“${written}” names nothing to wait on.`);
+      }
+      try {
+        const target = readWait(written, store.waitReader("", actor));
+        return target.kind === "task"
+          ? refuse(
+              400,
+              "This session is in no project, so it has no tasks to wait on."
+            )
+          : waitHandle(target);
+      } catch (error) {
+        if (error instanceof WaitRefusal) {
+          return refuse(400, error.message);
+        }
+        throw error;
+      }
+    },
+
+    /** {@link migrateLinks} in the project's turn: what the hub runs for each project as it starts. */
+    migrateLinks(projectId: string): Promise<LinkMigration> {
+      return inTurn(projectId, async () => {
+        known(projectId);
+        return await migrateLinks(projectId);
+      });
+    },
+
     /** Hears every change to a project's tasks once it has landed; answers how to stop. */
     listen(listener: (event: TaskEvent) => void): () => void {
       listeners.add(listener);
@@ -3708,6 +4678,7 @@ export const createTasks = (store: TaskStore) => {
             await inTurn(projectId, async () => {
               await dropTemplateCopy(projectId);
               await fillTypes(projectId);
+              await migrateLinks(projectId);
             });
             await sync(projectId);
           } catch (error) {
@@ -3725,13 +4696,6 @@ export type Tasks = ReturnType<typeof createTasks>;
 
 // --- routes ----------------------------------------------------------------
 
-const EDGE = t.Union([
-  t.Literal("after"),
-  t.Literal("parent"),
-  t.Literal("related"),
-  t.Literal("found_in"),
-  t.Literal("duplicate_of"),
-]);
 const KIND = t.Union([
   t.Literal("todo"),
   t.Literal("active"),
@@ -3789,9 +4753,9 @@ export const taskRoutes = (tasks: Tasks) =>
           q: t.Optional(t.String()),
           label: t.Optional(t.String()),
           type: t.Optional(t.String()),
-          /** The parent task, like tsk-12. */
-          parent: t.Optional(t.String()),
-          /** 1: only tasks still waiting for another; 0: only tasks that are not. */
+          /** The whole they are part of, like tsk-12. */
+          partOf: t.Optional(t.String()),
+          /** 1: only tasks with a wait unsettled; 0: only tasks with none. */
           blocked: t.Optional(FLAG),
           /** 1: only tasks that need you; 0: only tasks that do not. */
           needsYou: t.Optional(FLAG),
@@ -3807,7 +4771,7 @@ export const taskRoutes = (tasks: Tasks) =>
             q: query.q,
             label: query.label,
             type: query.type,
-            parent: query.parent,
+            partOf: query.partOf,
             blocked: flagOf(query.blocked),
             needsYou: flagOf(query.needsYou),
             archived: query.archived === "1",
@@ -3826,10 +4790,10 @@ export const taskRoutes = (tasks: Tasks) =>
           title: t.String(),
           stage: t.Optional(t.String()),
           type: t.Optional(t.String()),
-          after: t.Optional(t.Array(t.String())),
-          parent: t.Optional(t.String()),
-          related: t.Optional(t.Array(t.String())),
-          foundIn: t.Optional(t.String()),
+          /** What it waits on: tasks (tsk-12), cards (<page>#<card>), pins (<page>/<n>), GitHub pull requests and Actions runs, sessions. */
+          waitsOn: t.Optional(t.Array(t.String())),
+          /** The whole it is a part of, like tsk-12: it inherits its waits. */
+          partOf: t.Optional(t.String()),
           checks: t.Optional(t.Array(t.String())),
           outputs: t.Optional(t.Array(t.String())),
           context: t.Optional(t.Array(t.String())),
@@ -3998,13 +4962,15 @@ export const taskRoutes = (tasks: Tasks) =>
       },
       async ({ params, body }) => {
         try {
-          return await tasks.move(
+          // The dashboard reads the task; what the close did is a tool's answer.
+          const { closing: _closing, ...task } = await tasks.move(
             params.id,
             params.taskId,
             body.stage,
             YOU_ACTOR,
             body.reason
           );
+          return task as TaskView;
         } catch (error) {
           return refused(error);
         }
@@ -4014,14 +4980,25 @@ export const taskRoutes = (tasks: Tasks) =>
       "/api/projects/:id/tasks/:taskId/links",
       {
         body: t.Object({
-          edge: EDGE,
-          to: t.String(),
+          /** Waits to add (or take out, with `remove`), each as task_link writes them. */
+          waitsOn: t.Optional(t.Array(t.String())),
+          /** The whole it is a part of, like tsk-12. */
+          partOf: t.Optional(t.String()),
+          /** The task it repeats: closes it, and moves every wait on it there. */
+          duplicateOf: t.Optional(t.String()),
           remove: t.Optional(t.Boolean()),
         }),
       },
       async ({ params, body }) => {
         try {
-          return await tasks.link(params.id, params.taskId, body, YOU_ACTOR);
+          // The dashboard reads the task; what the write changed is a tool's answer.
+          const { linked: _linked, ...task } = await tasks.link(
+            params.id,
+            params.taskId,
+            body,
+            YOU_ACTOR
+          );
+          return task as TaskView;
         } catch (error) {
           return refused(error);
         }

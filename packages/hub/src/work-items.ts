@@ -153,6 +153,7 @@ import type {
   ItemBlock,
   LandingPhase,
   Origin,
+  WaitWitness,
   WorkBudget,
   WorkItemSubmission,
   WorkLanding,
@@ -810,6 +811,8 @@ export interface WorkItemRequest {
   /** What the caller named the work: the item's title and its session's. */
   title: string;
   type?: string;
+  /** An attempt's cards and pins and the values they settled with as it was dispatched (dispatch.ts): its witnesses. */
+  waitedOn?: WaitWitness[];
   /**
    * An existing workspace's id or unique prefix: the item is its follow-up,
    * on the session its last item ran, so type, model, harness, skills and
@@ -6220,6 +6223,7 @@ export const createWorkItems = ({
       group: request.group?.trim() || null,
       owns: request.owns?.length ? request.owns : null,
       buildsFrom: request.buildsFrom?.length ? request.buildsFrom : null,
+      waitedOn: request.waitedOn?.length ? request.waitedOn : null,
       budget: budgetFrom(request.budget, project?.budget),
     };
   };
