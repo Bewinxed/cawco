@@ -261,6 +261,7 @@ import {
   FRAMES_LOST,
   FRESH_START,
   forkNotice,
+  GATEWAY_RELAUNCH,
   GENERATE_IMAGE,
   type GhAccount,
   HARNESS_TOOL,
@@ -1178,6 +1179,13 @@ const ACTIVITY_TOUCH_MS = 60_000;
  * `sleeping`, which is a wake button away.
  */
 const RESTORE_MAX = 20;
+
+/** The `system` subtypes an agent asks a relaunch at rest with, each with what it is for (`relaunchAtRest`). */
+const RELAUNCH_SUBTYPES: ReadonlyMap<string, RelaunchFor> = new Map([
+  [BOUNDARY_RELAUNCH, "boundary"],
+  [COMPACT_RELAUNCH, "compact"],
+  [GATEWAY_RELAUNCH, "gateway"],
+]);
 
 /**
  * At a hub start, the sends a machine was handed before the hub kept each
@@ -26765,7 +26773,9 @@ export const createServer = (
    * the attach and at each of its turns' ends), so it comes back with the
    * workspace's hook that refuses instead; or its Claude Code process ran a
    * manual `/compact` ({@link COMPACT_RELAUNCH}), so its next one runs in a
-   * process that never held the history before it. Relaunched on its
+   * process that never held the history before it; or its process names
+   * another MCP gateway port than its agent serves on ({@link
+   * GATEWAY_RELAUNCH}), so it reaches CawCo's tools again. Relaunched on its
    * conversation, account and config dir — the at-limit move's path. Only
    * between turns: one mid-turn, or with a send or an ask outstanding, is
    * left to its next turn's end, which says so again. A send that follows the
@@ -35971,19 +35981,17 @@ export const createServer = (
                   }
                   break;
                 }
-                // A session whose boundary hook fails open, or whose Claude
-                // Code process ran a manual /compact, at a turn boundary:
-                // relaunched on its conversation when idle.
-                if (
-                  frame.message.type === "system" &&
-                  (frame.message.subtype === BOUNDARY_RELAUNCH ||
-                    frame.message.subtype === COMPACT_RELAUNCH)
-                ) {
+                // A session whose boundary hook fails open, whose Claude Code
+                // process ran a manual /compact, or whose process names
+                // another MCP gateway port, at a turn boundary: relaunched on
+                // its conversation when idle.
+                const relaunchFor =
+                  frame.message.type === "system"
+                    ? RELAUNCH_SUBTYPES.get(frame.message.subtype)
+                    : undefined;
+                if (relaunchFor) {
                   const { machineId, instanceId } = message;
-                  const why =
-                    frame.message.subtype === BOUNDARY_RELAUNCH
-                      ? "boundary"
-                      : "compact";
+                  const why = relaunchFor;
                   relaunchAtRest(machineId, instanceId, why).catch(
                     (error: unknown) =>
                       console.error(

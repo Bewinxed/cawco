@@ -13,9 +13,11 @@ import {
   CAWCO_ENV,
   CONTROL_INTERRUPT,
   CONTROL_MCP_FLEET_CHANGED,
+  GATEWAY_RELAUNCH,
   MESSAGES_HELD,
   MESSAGES_READ,
   mcpGatewayPort,
+  readEnv,
 } from "@cawco/core";
 import { workspaceSpillDir } from "@cawco/core/paths";
 import { standalone } from "@cawco/core/runtime";
@@ -88,9 +90,25 @@ export interface PiHostState {
    * tools may be unjudged.
    */
   gateForm?: string;
+  /**
+   * The MCP gateway port the host reaches CawCo's tools on, as its agent
+   * named it at its start (`CAWCO_MCP_PORT`, {@link spawnPi}); absent on a
+   * host started before hosts said it ({@link hostGateway}).
+   */
+  gatewayPort?: number;
   held: string[];
   sessionId: string | null;
 }
+
+/**
+ * The MCP gateway port a host reaches CawCo's tools on. One started before
+ * hosts said it ran on the port its agent served on then: the machine's own
+ * `CAWCO_MCP_PORT`, which an update leaves as it is, or else that build's
+ * default, which is not this one's: undefined.
+ */
+const hostGateway = (state: PiHostState): number | undefined =>
+  state.gatewayPort ??
+  (readEnv(CAWCO_ENV.mcpPort) === undefined ? undefined : mcpGatewayPort());
 export type PiHostEvent =
   | { type: "frame"; message: NeutralMessage }
   | { type: "busy"; active: boolean }
@@ -191,6 +209,8 @@ export class PiRemoteSession implements HarnessSession {
   #exited = false;
   /** The gate form the host reports it started on ({@link PiHostState.gateForm}). */
   #hostForm: string | undefined;
+  /** The MCP gateway port the host reaches CawCo's tools on ({@link hostGateway}). */
+  #hostGateway: number | undefined;
   /** What the host said before the supervisor installed this session, in order. */
   readonly #early: { seq: number; event: InOrder }[] = [];
   /**
@@ -380,6 +400,7 @@ export class PiRemoteSession implements HarnessSession {
   applyState(state: PiHostState): void {
     this.sessionId = state.sessionId;
     this.#hostForm = state.gateForm;
+    this.#hostGateway = hostGateway(state);
     // What the host holds unread when it answers: the reads after it come
     // as frames. One sent since it answered is in the set already.
     for (const uuid of state.held) {
@@ -404,20 +425,22 @@ export class PiRemoteSession implements HarnessSession {
    * gate than this build's ({@link gateForm}) — one started by an earlier
    * build, or before hosts recorded their gate, whose file tools may be
    * unjudged — onto this build's ({@link BOUNDARY_RELAUNCH}, the rule a
-   * Claude CLI on a hook that fails open follows). Called at the attach when
-   * no turn is running, and as each turn ends; the hub relaunches it only
-   * while it is idle, never mid-turn.
+   * Claude CLI on a hook that fails open follows). Else any session whose
+   * host reaches CawCo's tools on another port than this agent's gateway
+   * ({@link GATEWAY_RELAUNCH}); either relaunch mends both. Called at the
+   * attach when no turn is running, and as each turn ends; the hub
+   * relaunches it only while it is idle, never mid-turn.
    */
   askRelaunch(): void {
-    if (!(this.#ctx.boundary && this.#ready) || this.#exited) {
+    if (!this.#ready || this.#exited) {
       return;
     }
-    const current = gateForm("pi");
-    if (this.#hostForm === current) {
-      return;
+    if (this.#ctx.boundary && this.#hostForm !== gateForm("pi")) {
+      staleHosts.set(this.#ctx.instanceId, this.#hostForm ?? "none");
+      this.#ctx.frame({ type: "system", subtype: BOUNDARY_RELAUNCH });
+    } else if (this.#hostGateway !== mcpGatewayPort()) {
+      this.#ctx.frame({ type: "system", subtype: GATEWAY_RELAUNCH });
     }
-    staleHosts.set(this.#ctx.instanceId, this.#hostForm ?? "none");
-    this.#ctx.frame({ type: "system", subtype: BOUNDARY_RELAUNCH });
   }
 
   attached(): void {

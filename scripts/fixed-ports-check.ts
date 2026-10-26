@@ -5,10 +5,10 @@
  * kernel Documentation/networking/ip-sysctl.rst, `ip_local_port_range`),
  * where any socket the kernel gives a port to (a `port: 0` listener, an
  * outgoing connection) can hold it first. On 2026-10-26 an agent's loop
- * watch echo took the MCP gateway's 43879 that way, and the agent stayed up
- * without its gateway (7c27d1a31). `ip_local_reserved_ports` would fence a
- * port off from those picks, but it is a root step on each machine, not
- * CawCo's to take.
+ * watch echo took the MCP gateway's port that way, while the gateway sat in
+ * that range, and the agent stayed up without it (7c27d1a31).
+ * `ip_local_reserved_ports` would fence a port off from those picks, but it
+ * is a root step on each machine, not CawCo's to take.
  *
  * Every `*_PORT` and `*_PORTS` constant in packages/ is read: each number in
  * its value (a `{ first, last }` object as the range it is), never inside a
@@ -29,11 +29,6 @@ const RANGE_KEY = /range$/iu;
 
 /** Ports in {@link EPHEMERAL} CawCo keeps on purpose, each with why. */
 const ALLOWED: { first: number; last: number; why: string }[] = [
-  {
-    first: 43_879,
-    last: 43_879,
-    why: "the MCP gateway (core fleet.ts CAWCO_MCP_DEFAULT_PORT): the owner's call, since every session's MCP config names it and moving it relaunches them all; it binds before any listener of the agent takes a kernel-picked port (7c27d1a31)",
-  },
   {
     first: 59_000,
     last: 59_100,

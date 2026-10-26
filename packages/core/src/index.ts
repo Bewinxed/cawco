@@ -1898,8 +1898,12 @@ let gatewayPort: number | undefined;
  *
  * A session's CLI is started with the gateway URL in its config and keeps it
  * for its whole life, across restarts of its agent (the keeper holds it).
- * Changing the port on a live machine therefore cuts every running session
- * off from CawCo's tools until each is relaunched.
+ * So when the port changes (an update that moves the default, or a new
+ * `CAWCO_MCP_PORT`), the agent asks the hub to relaunch each session whose
+ * process names another port, between its turns ({@link GATEWAY_RELAUNCH}:
+ * a Claude CLI by its CawCo slot's URL, a pi host by the port it says),
+ * and each OpenCode server, whose config and plugin carry the URL, fails its
+ * launch check and is replaced at rest.
  */
 export const mcpGatewayPort = (): number => {
   if (gatewayPort === undefined) {

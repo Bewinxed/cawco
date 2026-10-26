@@ -1,7 +1,8 @@
 /**
  * What the hub's log says of a relaunch at rest (hub server.ts
  * `relaunchAtRest`): a session whose CLI runs a boundary hook that fails
- * open, or whose Claude Code process ran a manual `/compact`, relaunched on
+ * open, whose Claude Code process ran a manual `/compact`, or whose process
+ * names another MCP gateway port than its agent serves on, relaunched on
  * its conversation between turns, and the hold on a boundary relaunch; and
  * of an account move's relaunch (`relaunchOnAccount`, `relaunchMoved`),
  * which starts only a session whose process worked (`processWorks`).
@@ -19,6 +20,7 @@ const RELAUNCH_FOR = {
     tag: "compact",
     onto: "into a process that never held its compacted history",
   },
+  gateway: { tag: "gateway", onto: "onto the MCP gateway's port" },
 } as const;
 
 export type RelaunchFor = keyof typeof RELAUNCH_FOR;

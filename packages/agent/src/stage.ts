@@ -117,8 +117,8 @@ const HOST_FILE = `${HOST_DIR}/host.mjs`;
  * clear of Vite's 5173 and the common dev ports, and below Linux's ephemeral
  * range, 32768–60999 (kernel ip-sysctl.rst, `ip_local_port_range`), where a
  * socket the kernel gave a port to could hold a stage's first; 41000–48999
- * until 2026-10-26, which held the MCP gateway's 43879 and the browsers'
- * 43000–43060. Of its ports Wikipedia's list of TCP and UDP port numbers
+ * until 2026-10-26, which held the MCP gateway's port then and the
+ * browsers' 43000–43060. Of its ports Wikipedia's list of TCP and UDP port numbers
  * names Syncthing's 22000 as the one common service on a developer's
  * machine (read 2026-10-26), and no stage takes it.
  */

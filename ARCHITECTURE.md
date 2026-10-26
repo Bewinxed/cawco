@@ -257,10 +257,13 @@ reconnects the fleet's servers.
 
 Every harness reaches `/mcp/cawco` and the fleet proxy on loopback: the hub
 itself on the hub's machine, elsewhere its own agent's MCP gateway at
-`127.0.0.1:43879`. A second agent on one host (a rig, a dev checkout) names
-another port with `CAWCO_MCP_PORT`; the agent logs the port it serves on, and
-its sessions' configs carry it for their whole life, so a machine whose port
-changes needs its sessions relaunched.
+`127.0.0.1:14060` (core `CAWCO_MCP_DEFAULT_PORT`, below Linux's ephemeral
+range). A second agent on one host (a rig, a dev checkout) names another port
+with `CAWCO_MCP_PORT`; the agent logs the port it serves on. Its sessions'
+configs carry the port for their whole life, so when it changes the agent asks
+the hub to relaunch each session whose process names another port between its
+turns (`GATEWAY_RELAUNCH`), and each OpenCode server fails its launch check and
+is replaced at rest.
 
 The proxy streams MCP JSON and SSE with the upstream status and MCP headers.
 It adds the hub's bearer token, refreshes within sixty seconds of expiry through

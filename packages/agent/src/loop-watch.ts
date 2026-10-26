@@ -142,11 +142,12 @@ const WATCHDOG_URL = new URL(
  * is: neither keeps the agent from exiting.
  *
  * The daemon starts it once its MCP gateway listens, never before: the echo
- * listens on a port the kernel picks from its ephemeral range, and Linux's
- * (32768–60999) holds the gateway's fixed 43879 (core `mcpGatewayPort`).
- * On 2026-10-26 an agent's echo took 43879 first, its gateway could not
- * listen ("MCP gateway port 127.0.0.1:43879 is held by pid 473", its own
- * pid) and it never registered.
+ * listens on a port the kernel picks from its ephemeral range, Linux's
+ * 32768–60999, and a `CAWCO_MCP_PORT` may name one in it (core
+ * `mcpGatewayPort`). On 2026-10-26, while the default lay in that range, an
+ * agent's echo took the gateway's port first, its gateway could not listen
+ * ("MCP gateway port … is held by pid 473", its own pid) and it never
+ * registered.
  */
 export const watchFromItsOwnThread = (): void => {
   const shared = new Float64Array(new SharedArrayBuffer(3 * 8));

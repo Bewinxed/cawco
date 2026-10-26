@@ -96,6 +96,7 @@ import {
   configurePage,
   conversationGone,
   EFFORT_READ,
+  GATEWAY_RELAUNCH,
   harnessWords,
   INSPECT_CONFIG,
   INSTALL_SESSION_CREDENTIAL,
@@ -103,6 +104,7 @@ import {
   LEAD_GATED_TOOLS,
   MESSAGES_HELD,
   MESSAGES_READ,
+  mcpGatewayPort,
   type OfferedMode,
   offeredMode,
   PERMISSION_MODES,
@@ -2168,6 +2170,12 @@ class ClaudeSession implements HarnessSession {
   #boundaryFailure: string | undefined;
   /** Set once the session was stopped because its boundary hook can no longer run ({@link #hookGone}). */
   #hookRefusal: HeldProcessRefused | undefined;
+  /**
+   * The MCP gateway port an attached CLI's CawCo slot names, when it is not
+   * the one this agent serves on ({@link #verifyHeldCredential}): it reaches
+   * none of CawCo's tools until it is relaunched ({@link askRelaunch}).
+   */
+  #movedFrom: string | undefined;
   /** The transcript tail of a CLI that does not report its hooks in its stream ({@link #watchTranscript}). */
   #transcriptWatch: (() => void) | undefined;
   /** The child's sessiond. */
@@ -3194,18 +3202,22 @@ class ClaudeSession implements HarnessSession {
    * Asks the hub to relaunch the session onto the workspace's hook script
    * ({@link BOUNDARY_RELAUNCH}) when its CLI runs a hook that fails open
    * (`hookFailsOpen`): one that runs what can go missing, or one launched on
-   * shell tools alone, which leaves file tools and MCP calls unjudged. Called
-   * at the attach when no turn is running, and as each turn ends. The hub
-   * does so only while the session is idle; until then the turn-start check
-   * and the transcript watch stand in for a hook that can go missing.
+   * shell tools alone, which leaves file tools and MCP calls unjudged. Else
+   * onto this agent's MCP gateway ({@link GATEWAY_RELAUNCH}) when its CawCo
+   * slot names another port ({@link #movedFrom}); either relaunch mends
+   * both. Called at the attach when no turn is running, and as each turn
+   * ends. The hub does so only while the session is idle; until then the
+   * turn-start check and the transcript watch stand in for a hook that can
+   * go missing.
    */
   askRelaunch(): void {
-    if (
-      this.#boundaryHook &&
-      hookFailsOpen(this.#boundaryHook) &&
-      !this.#hookRefusal
-    ) {
+    if (this.#hookRefusal) {
+      return;
+    }
+    if (this.#boundaryHook && hookFailsOpen(this.#boundaryHook)) {
       this.#ctx.frame({ type: "system", subtype: BOUNDARY_RELAUNCH });
+    } else if (this.#movedFrom !== undefined) {
+      this.#ctx.frame({ type: "system", subtype: GATEWAY_RELAUNCH });
     }
   }
 
@@ -4209,6 +4221,22 @@ class ClaudeSession implements HarnessSession {
       );
     }
     const credential = header.slice("Bearer ".length);
+    const port =
+      cawco?.config?.type === "http"
+        ? new URL(cawco.config.url).port
+        : undefined;
+    if (port !== undefined && port !== String(mcpGatewayPort())) {
+      // Nothing it holds reaches this agent: its relaunch is the mend, and
+      // its credential is the hub's to prove at that launch.
+      this.#movedFrom = port;
+      console.info(
+        `[claude] ${this.instanceId}: attached with its CawCo MCP on port ${port}, not the gateway's ${mcpGatewayPort()}; it is relaunched onto it at rest`
+      );
+      if (!this.#turn.busy) {
+        this.askRelaunch();
+      }
+      return { credential };
+    }
     if (cawco?.status === "connected") {
       // A slot can read connected for a while after the hub it reached went:
       // the ACK is the hub's own word on the credential.

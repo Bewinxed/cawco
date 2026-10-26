@@ -262,6 +262,17 @@ export const BOUNDARY_RELAUNCH = "boundary_relaunch";
 export const COMPACT_RELAUNCH = "compact_relaunch";
 
 /**
+ * The `system` subtype an agent says for a session whose process names
+ * another MCP gateway port than the agent serves on (core
+ * `mcpGatewayPort`): one launched before an update moved the default, which
+ * reaches none of CawCo's tools. Said at the attach when no turn is running,
+ * and at each of its turns' ends; the hub relaunches it onto its
+ * conversation between turns, as for {@link BOUNDARY_RELAUNCH}, and the new
+ * process names the gateway's port. It never reaches a screen.
+ */
+export const GATEWAY_RELAUNCH = "gateway_relaunch";
+
+/**
  * The `system` subtype an agent passes a Claude session's `rate_limit_event`
  * on in, its `rate_limit_info` as Claude Code reported it. The hub reads it as
  * the session's account's limit reading; it never reaches a screen.
