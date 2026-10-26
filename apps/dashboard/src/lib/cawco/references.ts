@@ -58,7 +58,7 @@ const thing = (kind: ThingKind): ReferenceElement => ({
 const ofArtifact = (id: string, artifact: string | undefined): string | null =>
   artifact && artifactNamed(artifact) ? id : null;
 
-export const REFERENCE_ELEMENTS: Record<ReferenceKind, ReferenceElement> = {
+const REFERENCE_ELEMENTS: Record<ReferenceKind, ReferenceElement> = {
   /**
    * A session, delegate or Caw thread, by its full id, a
    * short one or its handle (session-names.svelte.ts): a row of the

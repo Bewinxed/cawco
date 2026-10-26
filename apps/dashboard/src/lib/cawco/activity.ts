@@ -78,14 +78,6 @@ export const STOPPING_LABEL = "Stopping…";
  */
 export const FAILED_LABEL = "Failed";
 
-/** Why a failed row is not idle, for its tooltip. */
-export const FAILED_HINT =
-  "Failed — the session's process exited badly. Open it to see why.";
-
-/** Why that is not a failure, wherever a sleeping row can carry a tooltip. */
-export const SLEEPING_HINT =
-  "Sleeping — it resumes when you open or message it.";
-
 /**
  * The fifth word, for the status the old system could not admit at all: a row
  * whose owning machine the hub cannot currently reach (`isStale`). It is not
@@ -99,12 +91,3 @@ export const UNKNOWN_LABEL = "Unknown";
 /** Why an unknown row is not the same as idle or asleep, for its tooltip. */
 export const UNKNOWN_HINT =
   "Unknown — the hub can't currently reach this session's machine.";
-
-/**
- * The same fact as {@link UNKNOWN_HINT}, said once at the level it is actually
- * true — a machine, not each of its sessions (leaf Y1). Before this, every
- * session on an unreachable box repeated `UNKNOWN_HINT` on its own row; the
- * measured count on one board was 176 identical copies of one fact.
- */
-export const MACHINE_UNREACHABLE_HINT =
-  "The hub can't currently reach this machine.";

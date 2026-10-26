@@ -21,7 +21,7 @@ export function machineIcon(os: string): Component {
 }
 
 /** The tile hue: one of three identity hues while online, a neutral when not. */
-export const MACHINE_HUES = [
+const MACHINE_HUES = [
   "var(--hue-amber-500)",
   "var(--hue-green-500)",
   "var(--hue-cyan-400)",

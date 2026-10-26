@@ -3,11 +3,11 @@
   import { tv } from "#lib/utils.js";
 
   /** Its callers' looks: the rail's lists, its rows two pixels apart. */
-  export const sidebarMenuVariants = tv({
+  const sidebarMenuVariants = tv({
     variants: { gap: { tight: "gap-0.5" } },
   });
 
-  export type SidebarMenuLooks = VariantProps<typeof sidebarMenuVariants>;
+  type SidebarMenuLooks = VariantProps<typeof sidebarMenuVariants>;
 </script>
 
 <script lang="ts">

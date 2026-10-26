@@ -47,7 +47,7 @@ export function buildConvergence(
  * machine that has never synced at all. "11 days" is the number that would
  * have made the Mac's drift visible on day one; this is where it comes from.
  */
-export function fleetSyncAgeMs(
+function fleetSyncAgeMs(
   fleet: FleetSyncReport | undefined,
   now: number = Date.now()
 ): number | undefined {
@@ -152,7 +152,7 @@ const PROJECT_KIND_WORDS: Record<string, string> = {
 };
 
 /** What a fleet item is, in words: "MCP server chrome-devtools", "skill show", "the memory". */
-export function itemWords(id: string): string {
+function itemWords(id: string): string {
   const project = PROJECT_ITEM.exec(id);
   if (project) {
     const [, kind = "", key = ""] = project;

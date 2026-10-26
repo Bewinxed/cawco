@@ -4,11 +4,11 @@
 
   /** Its callers' looks: the rail's content, its sections set by their own
       pads with no gap between them, a hairline at each end. */
-  export const sidebarContentVariants = tv({
+  const sidebarContentVariants = tv({
     variants: { pad: { rail: "gap-0 py-space-1" } },
   });
 
-  export type SidebarContentLooks = VariantProps<typeof sidebarContentVariants>;
+  type SidebarContentLooks = VariantProps<typeof sidebarContentVariants>;
 </script>
 
 <script lang="ts">

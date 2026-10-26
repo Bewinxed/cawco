@@ -144,7 +144,7 @@ function moveMarks(
 }
 
 /** When the owner last looked at it or archived it, on any device. */
-export const seenAt = (row: BoardRow): number => {
+const seenAt = (row: BoardRow): number => {
   const seen = epochOf(row, "seenAt");
   return marks.cleared.get(row.id) === seen
     ? 0
@@ -399,7 +399,7 @@ export interface AskItem {
 }
 
 /** A project past its spend cap: once, until its period ends or the cap is raised. */
-export interface CapItem {
+interface CapItem {
   cap: ProjectCap;
   href: string;
   key: string;
@@ -414,7 +414,7 @@ export interface CapItem {
  * to approve or deny, or one that failed or whose call may or may not have
  * happened, to read and remove.
  */
-export interface ActionItem {
+interface ActionItem {
   action: ApprovedActionView;
   /** The project's page, at the task when it has one. */
   href: string;
@@ -432,7 +432,7 @@ export interface ActionItem {
  * triage said so, or its project's Caw is off. It opens the session, and
  * leaves once you write to it or it moves on.
  */
-export interface WatchItem {
+interface WatchItem {
   cwd: string;
   href: string;
   instanceId: string;
@@ -451,7 +451,7 @@ export interface WatchItem {
  * agents may post to other people's repositories. Its two options answer it
  * on the row, and it leaves once the hub has the answer.
  */
-export interface ChoiceItem {
+interface ChoiceItem {
   key: string;
   kind: "choice";
   place: string;
@@ -465,7 +465,7 @@ export interface ChoiceItem {
  * one line with its one button. The hub checks again on its own; once the
  * step is taken the row ticks (`done`) for a moment, then leaves.
  */
-export interface TailnetItem {
+interface TailnetItem {
   done: boolean;
   key: string;
   kind: "tailnet";
@@ -485,7 +485,7 @@ export interface TailnetItem {
  * the agent's report on, or asks the browser. Nothing reports before it.
  * Once allowed the row ticks (`done`) for a moment, then leaves.
  */
-export interface DeskItem {
+interface DeskItem {
   /** This computer's CawCo agent, by its machine's name, whose report Allow turns on; null when the browser asks, or none can. */
   agent: string | null;
   done: boolean;
@@ -507,7 +507,7 @@ export interface DeskItem {
  * or Done for now. Drawn as the journey's card itself (RelayJourney `row`);
  * once proven while this page stood, its tick, until the next open.
  */
-export interface RelayItem {
+interface RelayItem {
   done: boolean;
   journey: RelayJourneyView;
   key: string;
@@ -521,7 +521,7 @@ export interface RelayItem {
  * A device asking to pair (hub hub-auth.ts): approved here, it runs the
  * fleet as you. Its code is the one on that device's screen.
  */
-export interface PairingItem {
+interface PairingItem {
   href: string;
   key: string;
   kind: "pairing";
@@ -532,7 +532,7 @@ export interface PairingItem {
 }
 
 /** A machine waiting to be admitted (hub hub-auth.ts): admitted, it joins the fleet. */
-export interface AdmissionItem {
+interface AdmissionItem {
   href: string;
   key: string;
   kind: "admission";
@@ -547,7 +547,7 @@ export interface AdmissionItem {
  * `MACHINE_LOST_MS` with sessions on it. Nothing here acts on it: the
  * machine does, and the item leaves once it answers.
  */
-export interface LostMachineItem {
+interface LostMachineItem {
   /** The hub runs on it: what stopped is its agent (core `contactWords`). */
   hub: boolean;
   key: string;
@@ -565,7 +565,7 @@ export interface LostMachineItem {
  * An install of a machine that failed or was lost (hub installs.ts): it
  * opens Add machine's window on its outcome, where it is acted on.
  */
-export interface InstallItem {
+interface InstallItem {
   href: string;
   install: Install;
   key: string;
@@ -580,7 +580,7 @@ export interface InstallItem {
  * `you`, or its last session failed): it opens the task, its deliverable and
  * the way to act on it first.
  */
-export interface TaskItem {
+interface TaskItem {
   href: string;
   key: string;
   kind: "task";
@@ -604,7 +604,7 @@ export interface TaskItem {
  * the artifact in its panel at its first pending stop; its Send sends what
  * is unsent; its Not now puts it away until it is raised again.
  */
-export interface ArtifactItem {
+interface ArtifactItem {
   artifactId: string;
   artifactKind: ArtifactKind;
   /** Where the session runs: its mark's hue, the seed every list uses. */
@@ -646,7 +646,7 @@ export interface ArtifactItem {
  * signs in again; the provider's words stand under Show details. It leaves
  * once the server is signed in again or removed.
  */
-export interface McpItem {
+interface McpItem {
   href: string;
   key: string;
   kind: "mcp";
@@ -683,7 +683,7 @@ export type NeedsItem =
 export const askView = (item: AskItem): string =>
   item.thread ?? item.origin ?? item.instanceId;
 
-export interface RecentItem {
+interface RecentItem {
   at: number;
   href: string;
   info: NeutralSessionInfo | null;
@@ -737,10 +737,7 @@ const WORKSPACE_ID = /-[0-9a-f]{8}$/u;
  * else its leaf without a workspace id: what a stored transcript, which has
  * no row to name its project, is named by.
  */
-export function projectOf(
-  machineId: string,
-  cwd: string | null | undefined
-): string {
+function projectOf(machineId: string, cwd: string | null | undefined): string {
   const folder = cwd ?? "";
   const project = projectHolding(cawco.projects, { machineId, cwd: folder });
   return (
@@ -754,7 +751,7 @@ export function projectOf(
  * session at the top of its chain of parents (tree.ts `topsIn`), as the
  * rail places it; undefined while that session has none.
  */
-export function rowProject(row: BoardRow): ProjectRow | undefined {
+function rowProject(row: BoardRow): ProjectRow | undefined {
   const top = topsIn(cawco.instanceIndex.byId)(row);
   return top.projectId
     ? cawco.projects.find((project) => project.id === top.projectId)
@@ -775,7 +772,7 @@ export function projectOfRow(row: BoardRow): string {
 }
 
 /** A project as a row names it: its name and the hue its mark wears in the rail. */
-export interface ProjectMarking {
+interface ProjectMarking {
   hue: MarkHue;
   name: string;
 }
@@ -784,7 +781,7 @@ export interface ProjectMarking {
  * The project a place is in, with its mark's hue: a fleet project's is the
  * rail's (`markHue(folderOf(project))`), a bare folder's its own path's.
  */
-export function projectAt(
+function projectAt(
   machineId: string,
   cwd: string | null | undefined
 ): ProjectMarking | null {
@@ -798,7 +795,7 @@ export function projectAt(
 }
 
 /** A row's project with its mark's hue ({@link rowProject}), else its top's place's. */
-export function projectMarkOfRow(row: BoardRow): ProjectMarking | null {
+function projectMarkOfRow(row: BoardRow): ProjectMarking | null {
   const project = rowProject(row);
   if (project) {
     return { name: project.name, hue: markHue(folderOf(project)) };
@@ -808,10 +805,7 @@ export function projectMarkOfRow(row: BoardRow): ProjectMarking | null {
 }
 
 /** "machine · project". */
-export function placeOf(
-  machineId: string,
-  cwd: string | null | undefined
-): string {
+function placeOf(machineId: string, cwd: string | null | undefined): string {
   const where = projectOf(machineId, cwd);
   return where
     ? `${machineName(machineId)} · ${where}`
@@ -1077,7 +1071,7 @@ const listed = (row: BoardRow): boolean => rail.delegates || !isDelegate(row);
 
 /* ── The machines ──────────────────────────────────────────────────── */
 
-export interface MachineException {
+interface MachineException {
   machineId: string;
   /** What is wrong, in a word or two ("behind hub"); said on the machine's
       own row, so it never names the machine again. */

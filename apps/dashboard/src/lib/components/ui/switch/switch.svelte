@@ -3,11 +3,11 @@
   import { tv } from "#lib/utils.js";
 
   /** Its callers' looks: set a hairline down, on its label's first line. */
-  export const switchVariants = tv({
+  const switchVariants = tv({
     variants: { align: { "first-line": "mt-px" } },
   });
 
-  export type SwitchLooks = VariantProps<typeof switchVariants>;
+  type SwitchLooks = VariantProps<typeof switchVariants>;
 </script>
 
 <script lang="ts">

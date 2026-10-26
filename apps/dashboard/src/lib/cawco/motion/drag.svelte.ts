@@ -38,7 +38,7 @@ import { motionOk } from "./curves.svelte";
 import { integrate, spring } from "./spring";
 
 /** The edge a surface came in from, and leaves through. */
-export type Edge = "left" | "right" | "top" | "bottom";
+type Edge = "left" | "right" | "top" | "bottom";
 
 export interface DragToDismiss {
   /** Close the surface. Called once, as the spring that carries it off starts. */

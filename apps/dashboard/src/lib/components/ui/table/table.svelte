@@ -12,7 +12,7 @@
    * head alone), a card row a grid on the caller's `--card-cols`, its cells
    * blocks of their own size.
    */
-  export const tableCards = {
+  const tableCards = {
     /** Under a 640px ledger (`phone`): the board's card. */
     phone: {
       table: "@max-phone/table:block",
@@ -81,8 +81,9 @@
     /** Where its rows become cards (the root's `stacks`); undefined: never. */
     readonly stacks: TableStacks | undefined;
   }
-  export const [getTableContext, setTableContext] =
-    createContext<TableContext>();
+  const [getTableContext, setTableContext] = createContext<TableContext>();
+
+  export { getTableContext };
 
   /**
    * A column's variants, a head's and its cells' alike. `edge`, not
@@ -135,7 +136,7 @@
     },
   } as const;
 
-  export const tableVariants = tv({
+  const tableVariants = tv({
     slots: {
       /**
        * The sideways scroller, and the container its columns fold by
@@ -164,7 +165,7 @@
     },
   });
 
-  export type TableLayout = VariantProps<typeof tableVariants>["layout"];
+  type TableLayout = VariantProps<typeof tableVariants>["layout"];
 </script>
 
 <script lang="ts">

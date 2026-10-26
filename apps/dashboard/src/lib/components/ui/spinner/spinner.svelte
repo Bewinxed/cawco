@@ -7,7 +7,7 @@
    * turning once per `--dur-loop`; it keeps turning under reduced motion
    * (The Reduced Motion Rule: an indeterminate spinner keeps turning).
    */
-  export const spinnerVariants = tv({
+  const spinnerVariants = tv({
     base: "loops size-icon-md animate-spin",
     variants: {
       /** The muted ink; or the live glyph while its run is running. */
@@ -28,7 +28,7 @@
     },
   });
 
-  export type SpinnerLooks = VariantProps<typeof spinnerVariants>;
+  type SpinnerLooks = VariantProps<typeof spinnerVariants>;
 </script>
 
 <script lang="ts">

@@ -19,7 +19,7 @@ export const motionOk = new MediaQuery(
 );
 
 /** A CSS `cubic-bezier(x1, y1, x2, y2)` as a function of progress. */
-export function bezier(
+function bezier(
   x1: number,
   y1: number,
   x2: number,
@@ -159,8 +159,6 @@ export const dur = (name: `--dur-${string}`): number => msOf(rootToken(name));
 export const ease = (name: `--ease-${string}`): string => rootToken(name);
 export const popScale = (): number =>
   Number.parseFloat(rootToken("--pop-scale"));
-/** `--pop-rise` in px: how far a small entrance travels. */
-export const popRise = (): number => Number.parseFloat(rootToken("--pop-rise"));
 /** A unitless or px token as its number (`--echo-scale`, `--ride-fade`). */
 export const numberOf = (name: `--${string}`): number =>
   Number.parseFloat(rootToken(name));
@@ -411,7 +409,7 @@ export function crossIn(_node: Element) {
 }
 
 /** `--ease-crossfade` (CSS ease-in-out): a skeleton's pulse and its reveal. */
-export const easeCrossfade = bezier(0.42, 0, 0.58, 1);
+const easeCrossfade = bezier(0.42, 0, 0.58, 1);
 
 /**
  * The reveal (transitions.dev Skeleton loader and reveal, DESIGN.md

@@ -18,14 +18,14 @@ import { readJson, writeJson } from "../storage";
 import { installable, type Refusal, type UpdateMachine } from "./model";
 
 /** A setting on Configure › Updates whose save the hub can refuse. */
-export type UpdateSetting = "channel" | "auto" | "check";
+type UpdateSetting = "channel" | "auto" | "check";
 
 /**
  * What the hub refused of a setting: said under that setting in words,
  * with Try again, until the reader acts on it. `policy` is what was asked
  * for, so Try again asks for it again.
  */
-export interface SettingRefusal {
+interface SettingRefusal {
   policy?: BinaryUpdatePolicy;
   reason: string;
 }

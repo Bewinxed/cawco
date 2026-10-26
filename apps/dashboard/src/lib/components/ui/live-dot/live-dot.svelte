@@ -10,7 +10,7 @@
    * its answer will come, never a status on its own: what it means is said
    * in words, on screen or to a screen reader.
    */
-  export const liveDotVariants = tv({
+  const liveDotVariants = tv({
     base: "breathe loops inline-block flex-none rounded-pill",
     variants: {
       /**
@@ -35,7 +35,7 @@
     defaultVariants: { tone: "live", size: "dot" },
   });
 
-  export type LiveDotLooks = VariantProps<typeof liveDotVariants>;
+  type LiveDotLooks = VariantProps<typeof liveDotVariants>;
 </script>
 
 <script lang="ts">

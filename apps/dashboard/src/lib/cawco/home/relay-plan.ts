@@ -39,7 +39,7 @@ export interface RelayPlan<T> {
 }
 
 /** The key of a machine's header line. */
-export const headKey = (machineId: string): string => `head:${machineId}`;
+const headKey = (machineId: string): string => `head:${machineId}`;
 
 /** The leaving half: every line `old` has that `fresh` does not, top down. */
 function departures<T extends { id: string }>(

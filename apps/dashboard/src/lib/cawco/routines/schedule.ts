@@ -21,7 +21,7 @@ export const readerZone = (): string =>
   Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 /** An IANA zone's place, as a person names it: "America/New_York" → "New York". */
-export const placeOf = (zone: string): string =>
+const placeOf = (zone: string): string =>
   (zone.split("/").at(-1) ?? zone).replaceAll("_", " ");
 
 const two = (n: number) => String(n).padStart(2, "0");

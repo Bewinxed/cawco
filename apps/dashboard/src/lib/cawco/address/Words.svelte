@@ -12,7 +12,7 @@
   const SPACES = /(\s+)/u;
 
   /** `text` in runs, each address marked so it is kept whole on one line. */
-  export function runsOf(text: string): { text: string; address: boolean }[] {
+  function runsOf(text: string): { text: string; address: boolean }[] {
     return text.split(SPACES).map((part) => ({
       text: part,
       address: ADDRESS.test(part),

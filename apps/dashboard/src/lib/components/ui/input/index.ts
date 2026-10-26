@@ -1,1 +1,1 @@
-export { default as Root, default as Input } from "./input.svelte";
+export { default as Input } from "./input.svelte";

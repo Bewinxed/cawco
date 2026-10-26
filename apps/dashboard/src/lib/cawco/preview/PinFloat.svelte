@@ -74,7 +74,7 @@
   }
 
   /** A pill's face: its fill and its edge, as tokens (PinMark's faces). */
-  export interface PinFace {
+  interface PinFace {
     edge: `--${string}`;
     fill: `--${string}`;
   }

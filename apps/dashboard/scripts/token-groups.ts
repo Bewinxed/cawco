@@ -18,7 +18,7 @@ import { TOKENS_EXTENSION } from "../../../packages/hub/src/dtcg-values";
 const SITE_GROUPS = new Set(["marketing"]);
 
 /** The platforms a token is drawn on. */
-export type Platform = "web" | "apple";
+type Platform = "web" | "apple";
 const PLATFORMS = new Set<string>(["web", "apple"]);
 
 function isProductToken(token: TransformedToken): boolean {

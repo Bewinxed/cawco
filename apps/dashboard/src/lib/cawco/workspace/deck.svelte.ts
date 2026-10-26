@@ -36,7 +36,7 @@ const SLOP = 8;
 /** Beyond this much horizontal travel it is something else, whatever the vertical is. */
 const SLOPE = 0.7;
 /** Breathing room between stacked cards, in px. */
-export const GAP = 12;
+const GAP = 12;
 /** How far the projected release must reach, as a fraction of the height. */
 const COMMIT = 0.35;
 /** A flick: short but fast still counts, in px/s. Sonner's 0.11 px/ms. */

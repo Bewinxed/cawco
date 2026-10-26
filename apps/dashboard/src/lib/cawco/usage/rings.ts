@@ -41,7 +41,7 @@ export type Part =
   | { account: string; color: string };
 
 /** One window as a ring draws it: the share left, and its clock. */
-export interface RingWindow {
+interface RingWindow {
   /** Percent left, 0–100. */
   left: number;
   resetsAt: number | null;
@@ -49,7 +49,7 @@ export interface RingWindow {
   runsOutAt: number | null;
 }
 
-export type RingState = "ok" | "limit" | "reserve" | "stale";
+type RingState = "ok" | "limit" | "reserve" | "stale";
 
 /** One account (or opencode's plan) as every Rings surface draws it. */
 export interface RingAccount {
@@ -117,7 +117,7 @@ const hueToken = (hue: AccountHue): string => `var(--account-${hue})`;
  * given a worn swatch by hand, and the opencode Go plan, which has no stored
  * hue. Past seven accounts on screen at once the hues repeat, in that order.
  */
-export function shownHues(
+function shownHues(
   own: readonly AccountHue[],
   worn: readonly AccountHue[] = []
 ): AccountHue[] {
@@ -223,7 +223,7 @@ const DATE_TIME = new Intl.DateTimeFormat(undefined, {
   hourCycle: "h23",
 });
 /** A week's reset as a day and a time ("Tue 09:00"), the date past a week. */
-export const dayTime = (at: number, now: number): string =>
+const dayTime = (at: number, now: number): string =>
   (at - now < 7 * DAY_MS ? WEEKDAY_TIME : DATE_TIME)
     .format(at)
     .replace(",", "");
@@ -705,7 +705,7 @@ export interface Stop {
  * hub's run-out for its binding window, none when every window lasts to its
  * reset (forecast.ts windowForecast). Null past the 5-hour horizon.
  */
-export function stopFor(
+function stopFor(
   r: RingAccount,
   c: ClaudeRings | null,
   now: number
@@ -724,7 +724,7 @@ export function stopFor(
  * An account whose stop is read as if it took over now (`stopFor`'s idle):
  * one running no session that does not carry you.
  */
-export const isIdle = (r: RingAccount, c: ClaudeRings | null): boolean =>
+const isIdle = (r: RingAccount, c: ClaudeRings | null): boolean =>
   c !== null && r.sessions.length === 0 && r.id !== c.carry?.id;
 
 /** When an account stops (`stopFor`), as a moment. */
@@ -894,11 +894,7 @@ export function shownNames(
  * its week spends at the fleet's weekly pace (`c.burnWeek`) until its
  * reset. The sooner of the two; null when nothing burns.
  */
-export function takeover(
-  r: RingAccount,
-  c: ClaudeRings,
-  now: number
-): Stop | null {
+function takeover(r: RingAccount, c: ClaudeRings, now: number): Stop | null {
   const from = c.at;
   const horizon = now + HORIZON_MS;
   let five: number | null = null;

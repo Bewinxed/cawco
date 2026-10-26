@@ -70,7 +70,7 @@
 
   export type BadgeVariant = VariantProps<typeof badgeVariants>["variant"];
   /** The looks a caller draws over its variant. */
-  export type BadgeLooks = Omit<VariantProps<typeof badgeVariants>, "variant">;
+  type BadgeLooks = Omit<VariantProps<typeof badgeVariants>, "variant">;
 </script>
 
 <script lang="ts">

@@ -35,7 +35,7 @@ import type {
 } from "@cawco/core";
 
 /** How long a submitted command may go unacknowledged before it is called off. */
-export const COMMAND_ACK_TIMEOUT_MS = 15_000;
+const COMMAND_ACK_TIMEOUT_MS = 15_000;
 
 /** How many settled commands are kept for the UI to read back. */
 export const SETTLED_COMMAND_LIMIT = 50;
@@ -48,10 +48,10 @@ export const SETTLED_COMMAND_TTL_MS = 5 * 60_000;
  * the ring can heal it and asks for the history instead. Without this a hub
  * that answers every resume with the same unusable backlog is a livelock.
  */
-export const MAX_RESYNC_ATTEMPTS = 3;
+const MAX_RESYNC_ATTEMPTS = 3;
 
 /** What the client knows about one session's place in its stream. */
-export interface SessionCursor {
+interface SessionCursor {
   /** The highest seq applied. Meaningless until {@link seen}. */
   lastSeq: number;
   /**
@@ -85,7 +85,7 @@ export interface SessionCursor {
   warned: boolean;
 }
 
-export type CommandStage = "submitted" | "accepted" | "applied" | "failed";
+type CommandStage = "submitted" | "accepted" | "applied" | "failed";
 
 /**
  * The stage at which the PROTOCOL has said its last word about a command —
@@ -523,7 +523,7 @@ export function handleStreamMessage(
 }
 
 /** What a delta did, for anyone reading a trace. */
-export type DeltaOutcome =
+type DeltaOutcome =
   "applied" | "duplicate" | "gap" | "malformed" | "unfollowed";
 
 function applyDelta(
@@ -962,7 +962,7 @@ export function failLocally(
 }
 
 /** Folds the hub's word on a command in. Acks for commands this tab never sent are not ours. */
-export function noteCommandAck(
+function noteCommandAck(
   state: StreamState,
   ack: CommandAck,
   now: number,
@@ -1086,7 +1086,7 @@ function nextAckDeadline(state: StreamState): number | null {
  * handle is replaced rather than accumulated, and cancelled outright by
  * {@link disarmCommandSweep} when the client goes away.
  */
-export function armCommandSweep(state: StreamState, host: StreamHost): void {
+function armCommandSweep(state: StreamState, host: StreamHost): void {
   if (!host.setTimer) {
     return;
   }
@@ -1110,19 +1110,6 @@ export function disarmCommandSweep(state: StreamState, host: StreamHost): void {
   }
   host.clearTimer?.(state.sweepTimer);
   state.sweepTimer = null;
-}
-
-/** Every command this tab has submitted for a session, oldest first. */
-export function sessionCommands(
-  state: StreamState,
-  sessionId: string
-): CommandRecord[] {
-  if (!sessionId) {
-    return [];
-  }
-  return Object.values(state.commands)
-    .filter((record) => record.sessionId && record.sessionId === sessionId)
-    .sort((a, b) => a.at - b.at);
 }
 
 /**

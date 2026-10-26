@@ -22,7 +22,7 @@ import { MachineAwayError } from "./hub-read";
 const LISTED_ONLINE_WAIT_MS = 2000;
 
 /** The machine an ask waits for, as the fleet lists it by name. */
-export const awayMachineName = (away: MachineAwayError): string => {
+const awayMachineName = (away: MachineAwayError): string => {
   const row = cawco.machines.find(
     (listed) => listed.machineId === away.machineId
   );

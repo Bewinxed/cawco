@@ -7,7 +7,7 @@
 import { identityHue } from "./identity";
 import { readJson, writeJson } from "./storage";
 
-export interface FolderPref {
+interface FolderPref {
   /** A hue chosen by hand; without one, the cwd's hash chooses. */
   hue?: number;
 }

@@ -5,16 +5,14 @@
   /** Its callers' looks: the rail's section labels on its rows' inline
       axis; and one with an action at its end, which ends where the rows do
       (no end pad of its own) and whose height is a finger's under one. */
-  export const sidebarGroupLabelVariants = tv({
+  const sidebarGroupLabelVariants = tv({
     variants: {
       pad: { rail: "px-2.5" },
       end: { action: "pointer-coarse:h-11 pr-0" },
     },
   });
 
-  export type SidebarGroupLabelLooks = VariantProps<
-    typeof sidebarGroupLabelVariants
-  >;
+  type SidebarGroupLabelLooks = VariantProps<typeof sidebarGroupLabelVariants>;
 </script>
 
 <script lang="ts">

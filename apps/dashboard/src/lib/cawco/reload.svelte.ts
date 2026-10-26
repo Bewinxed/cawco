@@ -229,9 +229,9 @@ export function unsavedWords(): boolean {
  * - `unsaved`: words a reload would lose ({@link unsavedWords});
  * - `recent`: in view, the last pointer or key input is under {@link IDLE_MS} old.
  */
-export type Busy = "typing" | "unsaved" | "recent";
+type Busy = "typing" | "unsaved" | "recent";
 
-export function busy(): Busy | null {
+function busy(): Busy | null {
   const recent =
     document.visibilityState === "visible" &&
     performance.now() - lastInput < IDLE_MS;

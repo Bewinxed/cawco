@@ -36,7 +36,7 @@
       steps wrap as its height ladder was measured). Every dialog is as tall as its
       content up to the cap (`c-dialog-max-h`; the sheet's 85vh under the
       phone line), its body scrolling inside. */
-  export const dialogContentVariants = tv({
+  const dialogContentVariants = tv({
     variants: {
       width: {
         form: "phone:max-w-128",
@@ -58,7 +58,7 @@
    * area still kept on the sheet); `document`, for a document (a diff) that
    * lays itself out in a column and scrolls in its own viewer.
    */
-  export const dialogBodyVariants = tv({
+  const dialogBodyVariants = tv({
     slots: {
       frame:
         "relative flex min-h-0 flex-1 flex-col phone:coarse:pb-[calc(var(--space-5)-var(--hit-foot))] text-body text-ink-strong coarse:[--hit-foot:calc((var(--c-touch-floor)-var(--c-btn-h-xs))/2+0.5px)] max-phone:coarse:pb-[calc(1rem+var(--safe-bottom)-var(--hit-foot))]",
@@ -77,7 +77,7 @@
     },
   });
 
-  export type DialogContentLooks = VariantProps<typeof dialogContentVariants> &
+  type DialogContentLooks = VariantProps<typeof dialogContentVariants> &
     Omit<VariantProps<typeof dialogBodyVariants>, "closed">;
 </script>
 

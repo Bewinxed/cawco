@@ -6,7 +6,7 @@
       text, 16px in controls and rows (the default for any unsized icon),
       20px in nav and headers"), and its callers' look: at 80%. A caller
       never tints a mark, so no look carries a colour. */
-  export const providerLogoVariants = tv({
+  const providerLogoVariants = tv({
     variants: {
       size: {
         meta: "size-icon-sm",
@@ -18,7 +18,7 @@
     defaultVariants: { size: "control" },
   });
 
-  export type ProviderLogoLooks = VariantProps<typeof providerLogoVariants>;
+  type ProviderLogoLooks = VariantProps<typeof providerLogoVariants>;
 </script>
 
 <script lang="ts">

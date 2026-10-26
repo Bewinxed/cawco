@@ -3,7 +3,7 @@
   import { tv } from "#lib/utils.js";
 
   /** Its callers' looks, each as they drew it. */
-  export const sidebarMenuSubButtonVariants = tv({
+  const sidebarMenuSubButtonVariants = tv({
     variants: {
       /** A row under a project that stands on a compact session row's axes
           and height (`--row-compact-*`); tall (`data-tall`), among the
@@ -18,7 +18,7 @@
     },
   });
 
-  export type SidebarMenuSubButtonLooks = VariantProps<
+  type SidebarMenuSubButtonLooks = VariantProps<
     typeof sidebarMenuSubButtonVariants
   >;
 </script>

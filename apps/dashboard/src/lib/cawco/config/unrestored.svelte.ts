@@ -30,7 +30,7 @@ const keyOf = (section: string, id: string): string =>
 const landings = new Map<string, (row: unknown) => void>();
 
 /** Asks the hub's trash to put the item back, answering its row. */
-export async function restoreDeleted<T>(deleted: Deleted): Promise<T> {
+async function restoreDeleted<T>(deleted: Deleted): Promise<T> {
   const response = await fetch(`/api/trash/${deleted.restore}/restore`, {
     method: "POST",
   });

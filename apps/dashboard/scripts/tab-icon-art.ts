@@ -23,7 +23,7 @@ import { dirname, join } from "node:path";
 import { chromium } from "playwright-core";
 import { cssOfNode } from "../../../packages/hub/src/design-tokens";
 import { NEEDS_YOU, type Shot, SLEEPING } from "./tab-icon-shots";
-import { TAB_ICON } from "./tab-icon-tile";
+import { type openTile, TAB_ICON } from "./tab-icon-tile";
 
 const here = (path: string) => join(import.meta.dir, "..", path);
 const RIVE = here("node_modules/@rive-app/canvas/");
@@ -127,13 +127,14 @@ async function strip(job: Job): Promise<Buffer> {
     ).rive;
     RuntimeLoader.setWasmUrl("/rive.wasm");
     RuntimeLoader.setWasmFallbackUrl(null);
-    const { openTile }: typeof import("./tab-icon-tile") = await import(
+    // The page's /tile.js is tab-icon-tile.ts, bundled above.
+    const tiles: { openTile: typeof openTile } = await import(
       "/tile.js" as string
     );
     const bytes = await (
       await fetch(`/${asked.shot.status}.riv`)
     ).arrayBuffer();
-    const tile = await openTile(await RuntimeLoader.awaitInstance(), {
+    const tile = await tiles.openTile(await RuntimeLoader.awaitInstance(), {
       ...asked,
       bytes,
     });

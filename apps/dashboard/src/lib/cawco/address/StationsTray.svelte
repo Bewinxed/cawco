@@ -1,6 +1,6 @@
 <script lang="ts" module>
   /** The five stations, in the order the set-up runs them. */
-  export type Station = "join" | "address" | "secure" | "keep" | "phone";
+  type Station = "join" | "address" | "secure" | "keep" | "phone";
 </script>
 
 <script lang="ts">

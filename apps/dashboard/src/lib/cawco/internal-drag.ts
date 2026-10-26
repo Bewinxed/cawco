@@ -18,10 +18,10 @@
  */
 
 /** The private type every internal drag carries, and nothing a field reads. */
-export const INTERNAL_DRAG = "application/x-cawco-drag";
+const INTERNAL_DRAG = "application/x-cawco-drag";
 
 /** Whether a drag is one of the dashboard's own. Readable from `dragenter` on. */
-export const isInternalDrag = (data: DataTransfer | null): boolean =>
+const isInternalDrag = (data: DataTransfer | null): boolean =>
   data?.types.includes(INTERNAL_DRAG) ?? false;
 
 /**

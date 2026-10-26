@@ -8,12 +8,12 @@
    * (`display: contents`), so what it wraps keeps its place in its
    * parent's flex or grid and the right click lands on it.
    */
-  export const contextMenuTriggerVariants = tv({
+  const contextMenuTriggerVariants = tv({
     base: "select-none",
     variants: { box: { none: "contents" } },
   });
 
-  export type ContextMenuTriggerLooks = VariantProps<
+  type ContextMenuTriggerLooks = VariantProps<
     typeof contextMenuTriggerVariants
   >;
 </script>

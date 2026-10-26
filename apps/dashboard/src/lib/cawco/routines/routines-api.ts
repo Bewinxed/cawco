@@ -15,10 +15,9 @@ import {
 import { json, send } from "#lib/cawco/project-tasks.js";
 
 /** How a run ended (routines.ts `RoutineOutcome`). */
-export type RoutineOutcome = "silent" | "delivered" | "failed" | "cancelled";
+type RoutineOutcome = "silent" | "delivered" | "failed" | "cancelled";
 /** Where a run is (routines.ts `RoutineRunState`). */
-export type RoutineRunState =
-  "queued" | "starting" | "running" | "ended" | "skipped";
+type RoutineRunState = "queued" | "starting" | "running" | "ended" | "skipped";
 
 /** One run, as the hub answers it (times in ms). */
 export interface RoutineRun {
@@ -60,7 +59,7 @@ export interface Routine {
 }
 
 /** A route that sends a service's events to a routine (ingress.ts `EventRouteView`). */
-export interface EventRoute {
+interface EventRoute {
   author: string | null;
   branch: string | null;
   enabled: boolean;

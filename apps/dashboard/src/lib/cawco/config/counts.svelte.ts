@@ -51,7 +51,7 @@ export function countOf(store: ConfigStore, slug: SectionSlug): number | null {
 }
 
 /** Every fault the fleet has right now, hub-side and machine-side. */
-export function allFaults(store: ConfigStore) {
+function allFaults(store: ConfigStore) {
   const fleet = store.fleet.value;
   return [
     ...(fleet

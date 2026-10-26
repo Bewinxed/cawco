@@ -19,7 +19,7 @@ import {
 /** Where a step stands: its status glyph (DESIGN.md, Status displays). */
 export type MarkState = "done" | "current" | "failed" | "stopped" | "future";
 
-export interface CheckRow {
+interface CheckRow {
   check: InstallCheck;
   state: MarkState;
   words: string;

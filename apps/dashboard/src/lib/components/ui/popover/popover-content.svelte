@@ -62,7 +62,7 @@
       gap between what it holds, a card's frame, and the New Session form's
       look: the form's theme, recessed under its raised body as the dialog's
       card is (spawn/NewSessionPopover). */
-  export const popoverContentVariants = tv({
+  const popoverContentVariants = tv({
     variants: {
       width: {
         narrow: "w-64",
@@ -91,7 +91,7 @@
     },
   });
 
-  export type PopoverContentLooks = VariantProps<typeof popoverContentVariants>;
+  type PopoverContentLooks = VariantProps<typeof popoverContentVariants>;
 </script>
 
 <script lang="ts">

@@ -17,7 +17,7 @@ import { signInToMcp } from "../fleet";
 import { failureWords } from "../hub-read";
 import { readJson, writeJson } from "../storage";
 
-export type ConnectStage =
+type ConnectStage =
   /** Asked: the address shown, nothing opened yet. */
   | "asking"
   /** Connect pressed: the provider's page is open in a tab of its own. */

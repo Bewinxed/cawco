@@ -30,10 +30,6 @@ export function progressWords(
   return page.tasks > 0 ? words.decidedTasks(decided, page.tasks) : decided;
 }
 
-/** `· 3 notes` after a page's figure while it is picked on; nothing with none. */
-export const notesWords = (notes: number): string | null =>
-  notes > 0 ? words.notes(notes) : null;
-
 /** A decided page's head meta: its figure and when it was decided, `12 decided · 14 tasks · 3d ago`. */
 export function decidedMeta(
   page: Parameters<typeof progressWords>[0],

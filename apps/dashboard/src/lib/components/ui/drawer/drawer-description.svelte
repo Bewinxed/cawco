@@ -4,7 +4,7 @@
 
   /** Its callers' looks: a description at the body size; read out but not
       drawn (`visible: false`) on a sheet whose content says it on screen. */
-  export const drawerDescriptionVariants = tv({
+  const drawerDescriptionVariants = tv({
     base: "text-ink-muted text-label",
     variants: {
       text: { body: "text-body" },
@@ -13,9 +13,7 @@
     defaultVariants: { visible: true },
   });
 
-  export type DrawerDescriptionLooks = VariantProps<
-    typeof drawerDescriptionVariants
-  >;
+  type DrawerDescriptionLooks = VariantProps<typeof drawerDescriptionVariants>;
 </script>
 
 <script lang="ts">

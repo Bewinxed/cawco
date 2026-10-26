@@ -194,9 +194,9 @@
 
   export type ButtonVariant = VariantProps<typeof buttonVariants>["variant"];
   export type ButtonSize = VariantProps<typeof buttonVariants>["size"];
-  export type ButtonPress = VariantProps<typeof buttonVariants>["press"];
+  type ButtonPress = VariantProps<typeof buttonVariants>["press"];
   /** The looks a caller draws over its variant and size. */
-  export type ButtonLooks = Omit<
+  type ButtonLooks = Omit<
     VariantProps<typeof buttonVariants>,
     "variant" | "size" | "press"
   >;

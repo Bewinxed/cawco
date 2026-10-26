@@ -103,8 +103,8 @@ const SELECTION_OUT = "src/lib/tokens/selection.css";
 
 /**
  * The kit's bridge names (shadcn's `background`, `muted-foreground` …) that
- * resolve, in both schemes, to a house token: markup names the house token
- * (scripts/vocab-codemod.ts), and the theme makes no key for them. `card`,
+ * resolve, in both schemes, to a house token: markup names the house token,
+ * and the theme makes no key for them. `card`,
  * `accent`, `border` and `input` resolve to no other token, so they keep
  * theirs. `font-sans` is `font-body`'s stack; markup names the role.
  */

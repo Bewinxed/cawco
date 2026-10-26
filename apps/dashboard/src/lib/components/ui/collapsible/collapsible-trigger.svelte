@@ -7,7 +7,7 @@
    * `.touch-hit`, its drawn size unchanged); `opener`'s press is its row's
    * already, so it stays unpositioned and its `::after` covers the row.
    */
-  export const collapsibleTriggerVariants = tv({
+  const collapsibleTriggerVariants = tv({
     base: "touch-hit",
     variants: {
       /**
@@ -37,7 +37,7 @@
     },
   });
 
-  export type CollapsibleTriggerLooks = VariantProps<
+  type CollapsibleTriggerLooks = VariantProps<
     typeof collapsibleTriggerVariants
   >;
 </script>

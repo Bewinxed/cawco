@@ -2,7 +2,7 @@
   import type { VariantProps } from "tailwind-variants";
   import { tv } from "#lib/utils.js";
 
-  export const tableRowVariants = tv({
+  const tableRowVariants = tv({
     base: "border-b transition-colors data-[state=selected]:bg-neutral-2",
     variants: {
       variant: {
@@ -40,9 +40,7 @@
     },
   });
 
-  export type TableRowVariant = VariantProps<
-    typeof tableRowVariants
-  >["variant"];
+  type TableRowVariant = VariantProps<typeof tableRowVariants>["variant"];
 </script>
 
 <script lang="ts">

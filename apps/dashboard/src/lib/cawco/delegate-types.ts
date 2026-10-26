@@ -28,7 +28,7 @@ export type ProjectDelegateType = DelegateType & {
 };
 
 /** A file under `delegates/` that did not make a type, or a field one ignored. */
-export interface TypeFileProblem {
+interface TypeFileProblem {
   path: string;
   problem: string;
 }
@@ -70,13 +70,6 @@ const json = (body: unknown): RequestInit => ({
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify(body),
 });
-
-export const loadDelegateTypes = (): Promise<DelegateTypesPayload> =>
-  send<DelegateTypesPayload>(
-    "/api/delegate-types",
-    {},
-    "load the delegate types"
-  );
 
 /** Create and edit are the same route on the hub — `PUT` upserts by name. */
 export const saveDelegateType = (draft: DelegateType): Promise<DelegateType> =>

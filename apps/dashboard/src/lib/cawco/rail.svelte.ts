@@ -7,7 +7,7 @@
 import type { Machine } from "./client.svelte";
 import { readJson, writeJson } from "./storage";
 
-export const RAIL_LAYOUT_KEY = "cawco-rail-layout";
+const RAIL_LAYOUT_KEY = "cawco-rail-layout";
 
 /**
  * How the rail orders the sessions inside a project and in its flat lists.

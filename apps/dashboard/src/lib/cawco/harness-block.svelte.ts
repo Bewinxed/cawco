@@ -33,7 +33,7 @@ import { installTool } from "./tools";
 import { TRY_AGAIN } from "./unanswered";
 
 /** Where the fix stands, as the hub's cell for it says. */
-export type HarnessFix =
+type HarnessFix =
   | { phase: "idle" }
   | { phase: "running" }
   /** An install or update that ran and left it refused: the machine's words. */
@@ -110,7 +110,7 @@ export function harnessBlockOf(
 }
 
 /** Every harness the machine refuses, in {@link HARNESSES}' order. */
-export const harnessBlocksOf = (machine: Machine): HarnessBlock[] =>
+const harnessBlocksOf = (machine: Machine): HarnessBlock[] =>
   HARNESSES.flatMap((harness) => harnessBlockOf(machine, harness) ?? []);
 
 /**

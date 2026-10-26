@@ -1,6 +1,6 @@
 <script lang="ts" module>
   /** The empty states The Empty Starts Work Rule gave an action, by where they stand. */
-  export type EmptySite =
+  type EmptySite =
     | "hooks"
     | "rules"
     | "rules-waiting"

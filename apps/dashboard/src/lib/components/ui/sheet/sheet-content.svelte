@@ -5,15 +5,15 @@
   /** Its callers' looks: a sheet whose content pads itself; a sheet that
       stands only under the drawer line (DESIGN.md, Breakpoints: at 900px
       "the rail becomes a burger sheet"), gone past it however it was left. */
-  export const sheetContentVariants = tv({
+  const sheetContentVariants = tv({
     variants: {
       pad: { none: "p-0" },
       narrow: { true: "desk:hidden" },
     },
   });
 
-  export type SheetContentLooks = VariantProps<typeof sheetContentVariants>;
-  export type Side = "top" | "right" | "bottom" | "left";
+  type SheetContentLooks = VariantProps<typeof sheetContentVariants>;
+  type Side = "top" | "right" | "bottom" | "left";
   /** Where a sheet stands while it is away: out past the edge it comes in from. */
   const AWAY: Record<Side, string> = {
     left: "translate3d(-100%, 0, 0)",

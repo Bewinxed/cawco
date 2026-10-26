@@ -35,7 +35,7 @@ import type { ToolsSnapshot } from "../tools";
  * Created by the /config layout and handed down through context — never a
  * module-level singleton, which the server render would share across requests.
  */
-export class Slot<T> {
+class Slot<T> {
   value = $state<T | null>(null);
   error = $state<string | null>(null);
   loading = $state(false);

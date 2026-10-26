@@ -19,9 +19,11 @@
  */
 import { createContext } from "svelte";
 
-export const [presence, providePresence] = createContext<{
+const [presence, providePresence] = createContext<{
   readonly present: boolean;
 }>();
+
+export { presence };
 
 /** Provides the overlay's presence to its Portal; answers its Root's `onOpenChangeComplete`. */
 export function rootPresence(shown: () => boolean): (open: boolean) => void {

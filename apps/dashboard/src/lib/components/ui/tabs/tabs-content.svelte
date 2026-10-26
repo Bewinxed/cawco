@@ -2,7 +2,7 @@
   import type { VariantProps } from "tailwind-variants";
   import { tv } from "#lib/utils.js";
 
-  export const tabsContentVariants = tv({
+  const tabsContentVariants = tv({
     base: "focus-inset flex-1 rounded-lg text-body",
     variants: {
       layout: {
@@ -12,9 +12,7 @@
     },
   });
 
-  export type TabsContentLayout = VariantProps<
-    typeof tabsContentVariants
-  >["layout"];
+  type TabsContentLayout = VariantProps<typeof tabsContentVariants>["layout"];
 
   /** What a Tab can land on inside a panel. */
   const FOCUSABLE =

@@ -2,7 +2,7 @@
   import { Command as CommandPrimitive } from "bits-ui";
   import { cn } from "#lib/utils.js";
 
-  export type CommandRootApi = CommandPrimitive.Root;
+  type CommandRootApi = CommandPrimitive.Root;
 
   let {
     api = $bindable(null),

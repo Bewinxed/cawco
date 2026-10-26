@@ -36,7 +36,7 @@ import { route } from "./motion/route.svelte";
 import { readJson, writeJson } from "./storage";
 
 /** Where a tray stands. */
-export type StopPhase =
+type StopPhase =
   "none" | "list" | "armed" | "stopping" | "fail" | "ending" | "done";
 
 /** What a job ends in once nothing it stops still runs. */

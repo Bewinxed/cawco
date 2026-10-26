@@ -16,8 +16,7 @@
    * claims the first is done. The answer stays up until the reader puts it
    * away: it is the confirmation, nothing closes on its own.
    */
-  export type Outcome =
-    { kind: "working" } | { kind: "done"; state: AuthState };
+  type Outcome = { kind: "working" } | { kind: "done"; state: AuthState };
 
   let {
     outcome,

@@ -31,9 +31,6 @@ export const CONTROL_TIMEOUT_MS = 15_000;
 /** Discarding a spin-off removes a git worktree, which is slower disk work. */
 export const DISCARD_TIMEOUT_MS = 30_000;
 
-/** `claude update` downloads a release, so it gets far longer than a control call. */
-export const UPDATE_TIMEOUT_MS = 180_000;
-
 /** Installing a tool fetches an installer and runs it — slower still. */
 export const INSTALL_TIMEOUT_MS = 300_000;
 

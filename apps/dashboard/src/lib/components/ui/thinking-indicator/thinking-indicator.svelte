@@ -5,7 +5,7 @@
   import { tv, type WithElementRef } from "#lib/utils.js";
   import type { SizeVariant } from "./size-context";
 
-  export type ThinkingIndicatorProps = WithElementRef<
+  type ThinkingIndicatorProps = WithElementRef<
     HTMLAttributes<HTMLSpanElement>
   > &
     ThinkingIndicatorLooks & {
@@ -27,13 +27,11 @@
 
   /** Its callers' looks: inline in a line that pads it, its mark and words
       the line's gap apart (`--indicator-gap`). */
-  export const thinkingIndicatorVariants = tv({
+  const thinkingIndicatorVariants = tv({
     variants: { fit: { inline: "gap-(--indicator-gap) p-0" } },
   });
 
-  export type ThinkingIndicatorLooks = VariantProps<
-    typeof thinkingIndicatorVariants
-  >;
+  type ThinkingIndicatorLooks = VariantProps<typeof thinkingIndicatorVariants>;
 </script>
 
 <script lang="ts">

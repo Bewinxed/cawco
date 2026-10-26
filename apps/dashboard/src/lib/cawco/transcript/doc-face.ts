@@ -28,7 +28,7 @@ export function linesLine(content: string): string {
 }
 
 /** The tail of a name that always stays in view: its last characters and extension. */
-export const TAIL = 8;
+const TAIL = 8;
 
 /** A name as a head that gives way inside and the tail that always shows. */
 export function nameParts(name: string): { head: string; tail: string } {

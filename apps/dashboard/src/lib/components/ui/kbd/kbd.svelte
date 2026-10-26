@@ -2,7 +2,7 @@
   import type { VariantProps } from "tailwind-variants";
   import { tv } from "#lib/utils.js";
 
-  export const kbdVariants = tv({
+  const kbdVariants = tv({
     base: "pointer-events-none inline-flex h-icon-lg w-fit min-w-5 select-none items-center justify-center gap-space-1 rounded-xs bg-surface-recess px-space-1 font-body text-ink-muted text-meta [&_svg:not([class*='size-'])]:size-icon-sm",
     variants: {
       /**
@@ -38,7 +38,7 @@
     defaultVariants: { look: "key" },
   });
 
-  export type KbdLooks = VariantProps<typeof kbdVariants>;
+  type KbdLooks = VariantProps<typeof kbdVariants>;
 </script>
 
 <script lang="ts">

@@ -15,8 +15,8 @@
  */
 
 /** The perceptual duration, in seconds. */
-export const SETTLE = 0.4;
-export const BOUNCE = 0;
+const SETTLE = 0.4;
+const BOUNCE = 0;
 
 const MASS = 1;
 const STIFFNESS = ((2 * Math.PI) / SETTLE) ** 2;

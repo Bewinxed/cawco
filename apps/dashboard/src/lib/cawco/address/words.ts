@@ -26,7 +26,7 @@ import {
 export const HEADSCALE_USER = "bewinxed";
 
 /** A press the tray offers: its words, what it does, whether it opens another page. */
-export interface Press {
+interface Press {
   act: () => void;
   /** It opens a page of the network's own in a new tab. */
   away?: boolean;

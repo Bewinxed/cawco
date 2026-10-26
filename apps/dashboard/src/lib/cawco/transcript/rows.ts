@@ -169,7 +169,7 @@ export const moveOf = (row: Extract<Row, { kind: "account" }>): AccountMove =>
  * card, a command's output, an interruption) is its own voice and
  * ends every group. Rows that paint nothing change nothing.
  */
-export interface Voices {
+interface Voices {
   /** Whether the agent's group has drawn its header yet. */
   headed: boolean;
   speaker: "you" | "agent" | null;
@@ -177,7 +177,7 @@ export interface Voices {
 
 const NO_VOICE: Voices = { speaker: null, headed: false };
 
-export type Voice = "you" | "says" | "acts" | "note" | "none";
+type Voice = "you" | "says" | "acts" | "note" | "none";
 
 /** SystemLine's rows that belong to the agent's run rather than interrupt it. */
 const RUN_LINES = new Set(["system.task"]);
@@ -186,7 +186,7 @@ const RUN_LINES = new Set(["system.task"]);
  * Whose voice one message is, by the rule above. The history reader asks it
  * too, so a chunk never starts in the middle of the reader's run of turns.
  */
-export function voiceOfMessage(m: Message): Voice {
+function voiceOfMessage(m: Message): Voice {
   // Harness plumbing in the reader's role is a task note on the rail.
   if (isHarnessNote(m)) {
     return "acts";
@@ -374,7 +374,7 @@ const isReminder = (trimmed: string): boolean =>
  * local command's echo, a denied permission) match none of these triggers and
  * keep the line they already had.
  */
-export function isHarnessNote(m: Message): boolean {
+function isHarnessNote(m: Message): boolean {
   if (m.type !== "user" && m.type !== "ui.system_note") {
     return false;
   }
@@ -398,7 +398,7 @@ export function isHarnessNote(m: Message): boolean {
  * the failure mode this exists to kill is the soup inline — one click away is
  * always better than flattened across the transcript.
  */
-export function parseHarnessNote(text: string): HarnessNote {
+function parseHarnessNote(text: string): HarnessNote {
   const whole = text.trim();
   if (isReminder(whole)) {
     return {
@@ -684,7 +684,7 @@ function accountRunAt(
 }
 
 /** One of CawCo's notices to the agent (core `CAWCO_NOTICE`). */
-export const isNotice = (m: Message | undefined): m is Message =>
+const isNotice = (m: Message | undefined): m is Message =>
   m?.type === "ui.system_note" && m.metadata?.subtype === CAWCO_NOTICE;
 
 /**
@@ -951,7 +951,7 @@ export function branchRows(branch: SubagentState): Row[] {
  * The live row the last fold ended on — what tells the next fold whether its
  * live row is the SAME row, still being written, or a new one.
  */
-export interface LiveMemo {
+interface LiveMemo {
   /** Its answer so far; empty while it reasons or only indicates. */
   answer: string;
   /** Which generation of the tail it is: the `live:<gen>` in its key. */
@@ -1051,7 +1051,7 @@ export interface FoldMemo {
  * with that failed is a failure, one that succeeded, or a boundary of its
  * own, is done, and with neither it never happened and its row folds away.
  */
-export interface Told {
+interface Told {
   /** The drawn message it began after; null before the first. */
   after: string | null;
   /** The drawn message its row stands after while no boundary tells it. */
@@ -1325,7 +1325,7 @@ const withoutWait = new WeakMap<object, Row>();
  * one draws the lines before it; a row that is only that wait goes. Read
  * over every row on each fold, as a wait already folded is followed later.
  */
-export function withoutEndedWaits(rows: Row[]): Row[] {
+function withoutEndedWaits(rows: Row[]): Row[] {
   const last = rows.findLastIndex((row) => row.kind === "account");
   const ended = (row: Row, at: number): boolean =>
     at < last && row.kind === "account" && moveOf(row).kind === "waiting";

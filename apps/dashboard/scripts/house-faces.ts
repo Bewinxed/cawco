@@ -8,7 +8,7 @@
  *
  * Vite writes them as it starts (vite.config.ts `houseFaces`). Whatever
  * reads app.css without Vite (lint's Tailwind design-system checks:
- * specificity-trap, class-collision, role-order) needs them first, so
+ * specificity-trap, role-order) needs them first, so
  * `bun apps/dashboard/scripts/house-faces.ts` writes them, first in
  * `bun run check`: a fresh checkout has none.
  */

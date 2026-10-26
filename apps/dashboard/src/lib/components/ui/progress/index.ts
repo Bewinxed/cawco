@@ -1,1 +1,1 @@
-export { default as Root, default as Progress } from "./progress.svelte";
+export { default as Progress } from "./progress.svelte";

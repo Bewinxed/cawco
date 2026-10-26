@@ -1,7 +1,8 @@
 <script lang="ts" module>
   import type { VariantProps } from "tailwind-variants";
   import { tv } from "#lib/utils.js";
-  export const inputGroupAddonVariants = tv({
+
+  const inputGroupAddonVariants = tv({
     base: "flex h-auto cursor-text select-none items-center justify-center gap-2 py-2 font-medium text-ink-muted text-label group-data-[disabled=true]/input-group:opacity-50 [&>svg:not([class*='size-'])]:size-icon-md",
     variants: {
       align: {
@@ -20,7 +21,7 @@
     },
   });
 
-  export type InputGroupAddonAlign = VariantProps<
+  type InputGroupAddonAlign = VariantProps<
     typeof inputGroupAddonVariants
   >["align"];
 </script>

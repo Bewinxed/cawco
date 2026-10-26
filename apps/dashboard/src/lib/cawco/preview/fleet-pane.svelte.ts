@@ -11,7 +11,7 @@ import { TRY_AGAIN } from "../unanswered";
 import type { PaneFleet, PaneMachine } from "./pane-fleet";
 
 /** A machine's folders over the app's socket, opening on where it was working last. */
-export const fleetFolders: FolderReader = {
+const fleetFolders: FolderReader = {
   list: (machineId, path) => machineFs<FsEntry[]>(machineId, "list", path),
   unanswered: (machineId, missed) =>
     didntAnswer(machineId, missed, {

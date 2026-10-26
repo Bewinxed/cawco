@@ -116,5 +116,4 @@ export const chipsVariants = tv({
   base: "flex flex-wrap gap-space-2 hit-gap-x-space-2 hit-gap-y-space-2 coarse:gap-y-space-4 coarse:hit-gap-y-space-4",
 });
 
-export type ChipVariant = VariantProps<typeof chipVariants>["variant"];
 export type ChipSize = VariantProps<typeof chipVariants>["size"];

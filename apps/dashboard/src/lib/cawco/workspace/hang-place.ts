@@ -12,7 +12,7 @@ import { placeHang } from "#lib/cawco/motion/hang-shape.js";
 const HANG_CORNER = 12;
 const HANG_RUN = 4;
 /** Their margin to the room's edges. */
-export const HANG_MARGIN = 12;
+const HANG_MARGIN = 12;
 /** The session card's width at most. */
 const CARD_W = 416;
 

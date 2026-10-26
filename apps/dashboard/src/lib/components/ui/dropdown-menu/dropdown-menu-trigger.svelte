@@ -16,7 +16,7 @@
    * 0.97 on press"); while the composer's controls are inert under an ask
    * (`group/ctrls`), its edge is the outline button's and it lifts.
    */
-  export const dropdownMenuTriggerVariants = tv({
+  const dropdownMenuTriggerVariants = tv({
     variants: {
       face: {
         title:
@@ -30,7 +30,7 @@
     },
   });
 
-  export type DropdownMenuTriggerLooks = VariantProps<
+  type DropdownMenuTriggerLooks = VariantProps<
     typeof dropdownMenuTriggerVariants
   >;
 </script>

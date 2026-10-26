@@ -108,7 +108,7 @@ const folderName = (cwd: string): string =>
  * A session nothing has been said in: its own agent fills it, asked to read
  * where it stands and say what is there.
  */
-export const firstAskWords = (cwd: string): string =>
+const firstAskWords = (cwd: string): string =>
   `Read through ${folderName(cwd) || "this folder"} and tell me what's here and where the work stands.`;
 
 /** Its action, naming the session's own agent (Files' "Ask Claude Code for a page"). */

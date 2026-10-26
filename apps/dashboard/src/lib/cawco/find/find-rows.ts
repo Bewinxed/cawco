@@ -53,7 +53,7 @@ import type {
 } from "./find-client";
 
 /** How a word on line 2 is tinted: only a state that asks something takes a hue. */
-export type Tone = Extract<StatusPair, "live" | "attn" | "fail"> | "quiet";
+type Tone = Extract<StatusPair, "live" | "attn" | "fail"> | "quiet";
 
 /**
  * One run of words a row draws: matched ones strong; one that is part of a
@@ -135,14 +135,14 @@ const NONE_SHOWN: ReadonlySet<string> = new Set();
  * among their secrets. A moment's secret has one key in its row and its
  * peek, so showing it in one shows it in both.
  */
-export const secretKey = (owner: string, field: string, index: number) =>
+const secretKey = (owner: string, field: string, index: number) =>
   `${owner}|${field}|${index}`;
 
 /**
  * `runs` cut at each of `spans`' edges (counted in the runs' joined words),
  * each run inside a span naming its secret by `keyOf` its index.
  */
-export function withSecrets(
+function withSecrets(
   runs: readonly { matched: boolean; text: string }[],
   spans: readonly SecretSpan[] | undefined,
   keyOf: (index: number) => string
@@ -216,13 +216,13 @@ export const momentParts = (owner: string, moment: FindMoment): Run[] =>
     secretKey(owner, `m:${moment.docId}`, i)
   );
 
-export const momentReason = (owner: string, moment: FindMoment): Excerpt => ({
+const momentReason = (owner: string, moment: FindMoment): Excerpt => ({
   source: AUTHOR[moment.author],
   parts: momentParts(owner, moment),
 });
 
 /** The words `runs` read as: a secret not shown said as hidden, once. */
-export function spokenOf(
+function spokenOf(
   runs: readonly Run[],
   shown: ReadonlySet<string> = NONE_SHOWN
 ): string {
@@ -241,7 +241,7 @@ export const secretsIn = (runs: readonly Run[]): string[] => [
 ];
 
 /** The plain words an excerpt reads as. */
-export const excerptText = (
+const excerptText = (
   excerpt: Excerpt,
   shown: ReadonlySet<string> = NONE_SHOWN
 ): string => spokenOf(excerpt.parts, shown);

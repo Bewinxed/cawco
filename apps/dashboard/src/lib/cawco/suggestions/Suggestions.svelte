@@ -33,7 +33,7 @@
    *   always peeks past the edge, and the house edge fade (`kit-edge-fade`)
    *   on whichever edge has more to scroll to.
    */
-  export const SUGGESTION_LOOKS = ["list", "rows", "chips", "row"] as const;
+  const SUGGESTION_LOOKS = ["list", "rows", "chips", "row"] as const;
   export type SuggestionLook = (typeof SUGGESTION_LOOKS)[number];
 
   /**
@@ -46,7 +46,7 @@
    * - `composer`: standing on the composer, where only the sentences are
    *   shown and every reason is left out.
    */
-  export const SUGGESTION_PLACEMENTS = ["thread", "panel", "composer"] as const;
+  const SUGGESTION_PLACEMENTS = ["thread", "panel", "composer"] as const;
   export type SuggestionPlacement = (typeof SUGGESTION_PLACEMENTS)[number];
 </script>
 

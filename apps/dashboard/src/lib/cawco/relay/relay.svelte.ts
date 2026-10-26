@@ -26,7 +26,6 @@ import type {
 } from "@cawco/core/stream-relay";
 import {
   actOnRelay,
-  cawco,
   relayTry,
   reportRelayProof,
 } from "#lib/cawco/client.svelte.js";
@@ -119,7 +118,7 @@ const seenBy = (turnUrl: string): Promise<string | null> =>
   });
 
 /** This screen's proof running now: the card draws its step as checking. */
-export const relayProof = $state({
+const relayProof = $state({
   running: false,
   refusal: null as string | null,
 });
@@ -128,7 +127,7 @@ export const relayProof = $state({
 let provedFor: string | null = null;
 
 /** This screen's proof of the relay, told to the hub: each URL at once, and the screen's own public address. */
-export async function proveRelayHere(): Promise<void> {
+async function proveRelayHere(): Promise<void> {
   if (relayProof.running) {
     return;
   }
@@ -198,17 +197,3 @@ export async function actOnRelayCard(act: RelayAct): Promise<void> {
   }
   await actOnRelay(act);
 }
-
-/**
- * The take-over's stream place (a later item draws it): whether to show the
- * journey's entry there, because this page came through a domain, which
- * carries pages and not streams, while no relay is live; and that domain.
- */
-export const relayEntry = (): { show: boolean; domain: string | null } => {
-  const domain = cawco.relayDomain;
-  const live = cawco.relayJourney?.summary?.state === "live";
-  return { show: domain !== null && !live, domain };
-};
-
-/** The entry's Set up the stream relay: the journey opened, its row in Needs you, the card in place. */
-export const setUpRelay = (): Promise<void> => actOnRelay({ act: "set-up" });

@@ -3,11 +3,11 @@
   import { tv } from "#lib/utils.js";
 
   /** Its callers' looks: a group in a column that may shrink below its content. */
-  export const resizablePaneGroupVariants = tv({
+  const resizablePaneGroupVariants = tv({
     variants: { height: { shrink: "min-h-0" } },
   });
 
-  export type ResizablePaneGroupLooks = VariantProps<
+  type ResizablePaneGroupLooks = VariantProps<
     typeof resizablePaneGroupVariants
   >;
 </script>

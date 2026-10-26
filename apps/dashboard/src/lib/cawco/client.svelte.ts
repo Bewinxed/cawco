@@ -220,7 +220,6 @@ import {
   resumePendingSends,
   SETTLED_COMMAND_LIMIT,
   SETTLED_COMMAND_TTL_MS,
-  sessionCommands,
   submitCommand as submitTrackedCommand,
   subscribeSession,
   sweepCommands,
@@ -241,8 +240,7 @@ import { type MissedRead, TRY_AGAIN, unansweredWords } from "./unanswered";
 import { updates } from "./updates/updates.svelte";
 import { contextOf, workspace } from "./workspace/workspace.svelte";
 
-export type ConnectionStatus =
-  "connecting" | "connected" | "disconnected" | "error";
+type ConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
 
 /**
  * What to *tell a reader* about the hub, which is coarser than the socket's own
@@ -357,7 +355,7 @@ let secondTicker: ReturnType<typeof setInterval> | undefined;
 let lastDeadline = 0;
 
 /** Whether `deadline` (epoch ms) is still ahead, read so its reader turns when it passes. */
-export function ahead(deadline: number): boolean {
+function ahead(deadline: number): boolean {
   // Read off the tick, so a reader is asked again on every one; the tick is
   // never later than the time itself.
   const now = Math.max(second.now, Date.now());
@@ -520,7 +518,7 @@ export interface ContextUsage {
  * the prose. Per instance, because two machines rarely have the same skills
  * installed and a session only ever offers its own.
  */
-export interface CommandState {
+interface CommandState {
   /** When the session last answered — the refresh throttle reads this. */
   at: number;
   /** Descriptions and argument hints, `null` until something has asked. */
@@ -2811,7 +2809,7 @@ export function takeAccounts(taker: (view: AccountsView) => void): void {
  * and the providers the fleet's machines know; a failed read keeps what was
  * there.
  */
-export async function readAccounts(): Promise<void> {
+async function readAccounts(): Promise<void> {
   accountsFollower?.();
   accountsReads += 1;
   const ticket = accountsReads;
@@ -4021,7 +4019,7 @@ const REASON_STOP = /\.$/u;
  * hub's why, what stands meanwhile; the way on (Try again, or the control
  * itself) stands beside it. The operator's terms, never the wire's.
  */
-export function failureNotice(record: CommandRecord): string {
+function failureNotice(record: CommandRecord): string {
   const why = (record.reason ?? "the hub didn't say why").replace(
     REASON_STOP,
     ""
@@ -4315,7 +4313,7 @@ function sweepOnTraffic(): void {
 }
 
 /** Re-exported so a component reads one import for a command and its stages. */
-export type { CommandRecord, CommandStage } from "./stream";
+export type { CommandRecord } from "./stream";
 
 /** One command's record, by the id {@link submitCommand} returned. */
 export function commandRecord(commandId: string): CommandRecord | null {
@@ -4357,11 +4355,6 @@ function sayAskEnd(
 function answeredHere(requestId: string): boolean {
   const record = answerFor(requestId);
   return record !== null && record.stage !== "failed";
-}
-
-/** Every command this tab has submitted for a session, oldest first. */
-export function commandsFor(instanceId: string): CommandRecord[] {
-  return sessionCommands(streamState, instanceId);
 }
 
 /**
@@ -4667,7 +4660,7 @@ let outboxVersion = $state(0);
  * echo does not keep) is still in hand. The row asks before offering the
  * affordance, so the answer is "no button" rather than "a button that lies".
  */
-export function canResend(commandId: string): boolean {
+function canResend(commandId: string): boolean {
   // Reading the version is what subscribes the caller's `$derived` to the Map.
   return outboxVersion >= 0 && sendOutbox.has(commandId);
 }
@@ -5034,7 +5027,7 @@ export async function editFailed(message: Message): Promise<string> {
 }
 
 /** The yes-or-no capabilities a harness reports (`HarnessCapabilities`). */
-export type HarnessCapability = {
+type HarnessCapability = {
   [K in keyof HarnessCapabilities]: HarnessCapabilities[K] extends boolean
     ? K
     : never;
@@ -5048,7 +5041,7 @@ export type HarnessCapability = {
  * `supportedCommands: false` answered the ask with nothing, and the menu's
  * `.map` threw on it).
  */
-export const harnessCan = (
+const harnessCan = (
   where: { harness: HarnessKind | null; machineId: string },
   capability: HarnessCapability
 ): boolean =>
@@ -7751,7 +7744,7 @@ export function answeredOr<T>(
  * stored sessions in time, in {@link didntAnswer}'s voice: its sessions are
  * the ones it listed last.
  */
-export function harnessDidntAnswer(
+function harnessDidntAnswer(
   machineId: string,
   { harness, after }: HarnessUnanswered
 ): string {
@@ -7766,7 +7759,7 @@ export function harnessDidntAnswer(
  * What the person reads when one harness on `machineId` couldn't list its
  * stored sessions (its listing threw), in {@link harnessDidntAnswer}'s voice.
  */
-export function harnessCouldntList(
+function harnessCouldntList(
   machineId: string,
   { harness, error }: HarnessFailed
 ): string {
@@ -8696,7 +8689,7 @@ async function readContext(
  * agent restart. Expected for a moment, and the next ask gets through, so it
  * is not an error to log or to show.
  */
-export const isCustodyRefusal = (error: unknown): boolean =>
+const isCustodyRefusal = (error: unknown): boolean =>
   error instanceof Error && error.message.includes("(custody)");
 
 /**
@@ -9021,7 +9014,7 @@ const rewindable = new WeakMap<
   { cursor: string | null; length: number; rev: number; turns: Set<string> }
 >();
 
-export function rewindableTurns(target: SessionState): Set<string> {
+function rewindableTurns(target: SessionState): Set<string> {
   const { cursor, rev } = target;
   const { length } = target.messages;
   const kept = rewindable.get(target);

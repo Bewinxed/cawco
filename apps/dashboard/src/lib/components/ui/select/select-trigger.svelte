@@ -3,7 +3,7 @@
   import { tv } from "#lib/utils.js";
 
   /** Its callers' looks, each as they drew it. */
-  export const selectTriggerVariants = tv({
+  const selectTriggerVariants = tv({
     variants: {
       /** Its height: the input's (DESIGN.md, Inputs and fields: "Select
           trigger: the input's look"), or a control standing in a composer
@@ -32,7 +32,7 @@
     },
   });
 
-  export type SelectTriggerLooks = VariantProps<typeof selectTriggerVariants>;
+  type SelectTriggerLooks = VariantProps<typeof selectTriggerVariants>;
 </script>
 
 <script lang="ts">

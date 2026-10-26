@@ -11,7 +11,7 @@
  * advice. Effort is not only thinking depth — a lower level also buys fewer and
  * more consolidated tool calls, less preamble and terser confirmations.
  */
-import type { EffortLevel, ModelInfo } from "@cawco/core";
+import type { EffortLevel } from "@cawco/core";
 
 export interface EffortLevelOption {
   /** `high` is what the API answers on when nothing asks for a level. */
@@ -54,41 +54,3 @@ export const EFFORT_LEVELS: EffortLevelOption[] = [
       "Can deliver gains in some use cases but may show diminishing returns from increased token usage; can be prone to overthinking.",
   },
 ];
-
-/** What a trigger says for a level, including one the API named and we do not offer. */
-export function effortLabel(level: EffortLevel): string {
-  return EFFORT_LEVELS.find((option) => option.value === level)?.label ?? level;
-}
-
-/** One stop of the scale, and whether the chosen model can actually be run at it. */
-export interface EffortStop extends EffortLevelOption {
-  reachable: boolean;
-}
-
-/**
- * Whether a model has an effort scale worth drawing. Both halves are required:
- * `supportsEffort` alone says a scale exists without saying where it stops, and
- * a slider drawn from that would be five stops of guesswork. Which models reach
- * `xhigh` or `max` changes with every release, so it is never our list to keep.
- */
-export function hasEffortScale(model: ModelInfo | null | undefined): boolean {
-  return (
-    model?.supportsEffort === true &&
-    (model.supportedEffortLevels?.length ?? 0) > 0
-  );
-}
-
-/**
- * The scale as this model can be run at it: every stop, always, each carrying
- * whether the model reaches it. The full five are returned rather than only the
- * reachable ones so the slider stays the same scale on every model — a reader
- * moving from Opus to something shallower sees `max` go out of range instead of
- * seeing the scale silently get shorter.
- */
-export function effortStops(model: ModelInfo | null | undefined): EffortStop[] {
-  const offered = model?.supportedEffortLevels ?? [];
-  return EFFORT_LEVELS.map((option) => ({
-    ...option,
-    reachable: offered.includes(option.value),
-  }));
-}

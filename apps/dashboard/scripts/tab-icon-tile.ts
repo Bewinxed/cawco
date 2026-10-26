@@ -12,9 +12,7 @@ import type { RuntimeLoader } from "@rive-app/canvas";
 import { FPS, type Shot } from "./tab-icon-shots";
 
 /** Rive's low-level runtime, as the dashboard's own package loads it. */
-export type RiveRuntime = Awaited<
-  ReturnType<typeof RuntimeLoader.awaitInstance>
->;
+type RiveRuntime = Awaited<ReturnType<typeof RuntimeLoader.awaitInstance>>;
 
 /** The files' 592 px artboard and the 512 px still box in it, at (43, 40). */
 const ARTBOARD = 592;
@@ -23,7 +21,7 @@ const BOX = { x: 43, y: 40 };
 /** The side a tab draws its icon at, in CSS px: what `tab-icon-r` is given at. */
 export const TAB_ICON = 16;
 
-export interface TileSpec {
+interface TileSpec {
   /** The shot's status file's bytes. */
   bytes: ArrayBuffer;
   /** The tile's fill, any CSS colour. */
@@ -41,7 +39,7 @@ export interface TileSpec {
   side: number;
 }
 
-export interface Tile {
+interface Tile {
   close: () => void;
   /** The tile with Caw at `frame` of the shot's loop, as a PNG data URL. */
   draw: (frame: number) => string;

@@ -22,18 +22,17 @@
  */
 
 import { detach } from "@cawco/core/detach";
-import {
-  currentStep,
-  type DraftStamp,
-  type Install,
-  type InstallDraft,
-  type InstallDraftEdit,
-  type InstallRoute,
-  type InstallSignIn,
-  type InstallStart,
-  type InstallStarted,
-  type InstallsFrame,
-  type InstallsRead,
+import type {
+  DraftStamp,
+  Install,
+  InstallDraft,
+  InstallDraftEdit,
+  InstallRoute,
+  InstallSignIn,
+  InstallStart,
+  InstallStarted,
+  InstallsFrame,
+  InstallsRead,
 } from "@cawco/core/install";
 import type { JoinInfo } from "@cawco/core/join";
 import { MediaQuery } from "svelte/reactivity";
@@ -50,10 +49,10 @@ const DRAFT_KEY = "new";
 export const phone = new MediaQuery("(width < 640px)");
 
 /** Which of the window's steps stands: the draft's details, an install running, its outcome. */
-export type ConnectStep = "reach" | "running" | "outcome";
+type ConnectStep = "reach" | "running" | "outcome";
 
 /** The draft as the window edits it: the hub's, kept as the person types. */
-export interface DraftFields {
+interface DraftFields {
   address: string | null;
   port: string;
   route: InstallRoute | null;
@@ -595,9 +594,6 @@ export function takeInstallsFrame(frame: InstallsFrame): void {
 export function readInstalls(): Promise<void> {
   return connect.reconnected();
 }
-
-/** A running install's step line, as the band and the window's head say it. */
-export const runningStep = (install: Install) => currentStep(install);
 
 /**
  * Where an install's work is parked, for focus to go back to as its window

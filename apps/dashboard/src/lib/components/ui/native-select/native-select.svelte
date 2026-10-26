@@ -4,11 +4,11 @@
 
   /** Its callers' looks: how wide it may run, shrinking below its words
       or up to a field's cap. */
-  export const nativeSelectVariants = tv({
+  const nativeSelectVariants = tv({
     variants: { measure: { shrink: "min-w-0", "cap-md": "max-w-96" } },
   });
 
-  export type NativeSelectLooks = VariantProps<typeof nativeSelectVariants>;
+  type NativeSelectLooks = VariantProps<typeof nativeSelectVariants>;
 </script>
 
 <script lang="ts">

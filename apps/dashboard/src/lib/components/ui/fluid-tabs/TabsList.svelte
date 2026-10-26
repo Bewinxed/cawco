@@ -42,7 +42,7 @@
    *   ellipsis, the count standing whole (DESIGN.md, The Truncate Inside
    *   Rule).
    */
-  export const tabsListVariants = tv({
+  const tabsListVariants = tv({
     base: "relative inline-flex flex-none select-none items-center gap-(--gap) rounded-(--radius) bg-(--muted) p-(--pad) [--gap:var(--space-row)] [--icon:var(--icon-md)] [--item:var(--c-tab-item)] [--pad:var(--space-1)] [--px:var(--c-tab-px)] [--radius:var(--radius-sm)] [--shape:calc(var(--radius)_-_var(--pad))] [--sheet:var(--surface-raised)] [--text:var(--text-label)] coarse:[--item:var(--space-8)]",
     variants: {
       size: {

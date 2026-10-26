@@ -12,7 +12,7 @@
    * own side pads; standing where a transcript's first row would, the
    * transcript's start edge (--space-7, --space-5 under the desk line).
    */
-  export const emptyStateVariants = tv({
+  const emptyStateVariants = tv({
     base: "flex flex-col items-start gap-space-2 py-space-6 text-start",
     variants: {
       inline: {
@@ -32,7 +32,7 @@
   });
 
   /** Its action's looks: `fill`, an action as wide as the block (a column of starters). */
-  export const emptyActionVariants = tv({
+  const emptyActionVariants = tv({
     base: "mt-space-2",
     variants: {
       inline: { true: "mt-0 flex-none" },
@@ -40,7 +40,7 @@
     },
   });
 
-  export type EmptyStateLooks = VariantProps<typeof emptyStateVariants> &
+  type EmptyStateLooks = VariantProps<typeof emptyStateVariants> &
     VariantProps<typeof emptyActionVariants>;
 </script>
 

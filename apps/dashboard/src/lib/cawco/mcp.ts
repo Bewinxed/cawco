@@ -8,7 +8,7 @@ export interface ConfiguredServer {
  * The hostname a server's config names: HTTP, SSE and claude.ai proxy configs
  * name a URL; a stdio server runs on the machine itself and has none (null).
  */
-export function mcpHost(server: ConfiguredServer): string | null {
+function mcpHost(server: ConfiguredServer): string | null {
   const { config } = server;
   if (
     !(config && typeof config === "object" && "url" in config) ||

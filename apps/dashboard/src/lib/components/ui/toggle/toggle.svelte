@@ -2,7 +2,7 @@
   import type { VariantProps } from "tailwind-variants";
   import { tv } from "#lib/utils.js";
 
-  export const toggleVariants = tv({
+  const toggleVariants = tv({
     base: "group/toggle mark-line touch-hit inline-flex items-center justify-center gap-space-1 whitespace-nowrap rounded-sm font-medium text-ink-strong text-label transition-control-press not-aria-pressed:hover:bg-surface-hover disabled:pointer-events-none disabled:opacity-50 aria-pressed:bg-surface-pressed motion-safe:active:not-disabled:[transform:scale(var(--press-scale))] [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     variants: {
       variant: {
@@ -23,9 +23,8 @@
     },
   });
 
-  export type ToggleVariant = VariantProps<typeof toggleVariants>["variant"];
-  export type ToggleSize = VariantProps<typeof toggleVariants>["size"];
-  export type ToggleVariants = VariantProps<typeof toggleVariants>;
+  type ToggleVariant = VariantProps<typeof toggleVariants>["variant"];
+  type ToggleSize = VariantProps<typeof toggleVariants>["size"];
 </script>
 
 <script lang="ts">

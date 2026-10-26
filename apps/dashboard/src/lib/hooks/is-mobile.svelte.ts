@@ -23,22 +23,6 @@ export class IsCoarsePointer extends MediaQuery {
 }
 
 /**
- * A touch device being held upright.
- *
- * This is how the tablet picks its layout, and it is asked as orientation
- * rather than as a width because width cannot tell the two apart: a 12.9"
- * iPad is 1024 px wide in portrait, and a 9.7" is 1024 px wide in landscape.
- * Any width line drawn between them puts one of the two on the wrong side.
- * A phone is covered by the width breakpoint it already had, in either
- * orientation, so this only ever adds the tablet held upright.
- */
-export class IsTouchPortrait extends MediaQuery {
-  constructor() {
-    super("(pointer: coarse) and (orientation: portrait)");
-  }
-}
-
-/**
  * Where the rail is a drawer: under 900px wide, the line the Shell's styles
  * hide the rail and show the burger at. Width alone: a tablet held upright
  * at 900px or more is on the narrow line below and still has its rail.

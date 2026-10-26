@@ -187,7 +187,7 @@ const SETTLES = [
 ];
 
 /** A row's box in the container's own coordinates. */
-export interface LaidOut {
+interface LaidOut {
   height: number;
   left: number;
   top: number;

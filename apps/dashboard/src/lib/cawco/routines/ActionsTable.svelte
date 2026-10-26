@@ -12,7 +12,7 @@
       action.checkedAt === null);
 
   /** An approved action's status, its word, and when. */
-  export function actionOf(action: ApprovedActionView): {
+  function actionOf(action: ApprovedActionView): {
     status: Status;
     word: string;
     at: number | null;

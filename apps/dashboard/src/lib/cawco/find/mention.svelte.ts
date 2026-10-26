@@ -23,7 +23,7 @@ const SPACES = /\s+/u;
 const ENDS_IN_SPACE = /\s$/u;
 
 /** How many candidates the menu holds (the wireframe's "up to five"). */
-export const MENU_ROWS = 5;
+const MENU_ROWS = 5;
 
 /** What @ offers without a kind word: what a message hands work to. */
 const NAMED: FindKind[] = ["conversation", "thread", "machine"];
@@ -87,7 +87,7 @@ const tipOf = (result: FindResult, now: number): string => {
 };
 
 /** The chip `result` becomes, beside the other candidates it was chosen from. */
-export function chipOf(
+function chipOf(
   result: FindResult,
   candidates: FindResult[],
   now: number

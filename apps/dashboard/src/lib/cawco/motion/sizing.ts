@@ -8,7 +8,7 @@
  * that site (`on`), never heard by observing every attribute: one that turns
  * on every pointer move (a highlighted row) would measure the page on each.
  */
-export const SIZING = ["class", "hidden", "open", "data-state"] as const;
+const SIZING = ["class", "hidden", "open", "data-state"] as const;
 
 /** The mutations that can move a size or a place inside a box, its site's own state attributes (`on`) with them. */
 export const sizingChanges = (

@@ -2,7 +2,7 @@
   import type { VariantProps } from "tailwind-variants";
   import { tv } from "#lib/utils.js";
 
-  export const sidebarMenuButtonVariants = tv({
+  const sidebarMenuButtonVariants = tv({
     base: "peer/menu-button group/menu-button mark-line focus-inset press-tint flex w-full select-none items-center gap-2 overflow-hidden rounded-sm px-3 py-2 text-left text-label transition-[width,height,padding,color,background-color] duration-(--dur-toggle) ease-out hover:text-ink-strong active:text-ink-strong disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-active:font-medium data-active:text-selected-ink data-open:hover:text-ink-strong [&>span:last-child]:min-w-0 [&>span:last-child]:overflow-clip [&>span:last-child]:text-ellipsis [&>span:last-child]:whitespace-nowrap [&>svg]:size-icon-md [&>svg]:shrink-0 data-active:[&_svg]:text-selected-icon",
     variants: {
       variant: {
@@ -32,13 +32,13 @@
     },
   });
 
-  export type SidebarMenuButtonVariant = VariantProps<
+  type SidebarMenuButtonVariant = VariantProps<
     typeof sidebarMenuButtonVariants
   >["variant"];
-  export type SidebarMenuButtonSize = VariantProps<
+  type SidebarMenuButtonSize = VariantProps<
     typeof sidebarMenuButtonVariants
   >["size"];
-  export type SidebarMenuButtonRow = VariantProps<
+  type SidebarMenuButtonRow = VariantProps<
     typeof sidebarMenuButtonVariants
   >["row"];
 </script>

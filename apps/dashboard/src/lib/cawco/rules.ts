@@ -18,7 +18,7 @@ import { hubFailure } from "#lib/cawco/hub-read.js";
  * fires, and the form's refusals must be the hub's own words.
  */
 
-export type { Rule, RuleDraft, RuleRow } from "@cawco/core";
+export type { Rule, RuleDraft } from "@cawco/core";
 /** What `GET /api/rules` answers with. */
 export interface RulesPayload {
   rules: RuleRow[];
@@ -74,9 +74,6 @@ const json = (body: unknown): RequestInit => ({
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify(body),
 });
-
-export const loadRules = (): Promise<RulesPayload> =>
-  send<RulesPayload>("/api/rules", {}, "load the rules");
 
 /** Create: the hub mints the id and answers with the whole rule. */
 export const createRule = (draft: RuleDraft): Promise<Rule> =>

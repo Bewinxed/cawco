@@ -4,14 +4,14 @@
 
   /** Its callers' looks: a width of its own instead of its trigger's, or a
       least width under the kit's. */
-  export const dropdownMenuContentVariants = tv({
+  const dropdownMenuContentVariants = tv({
     variants: {
       width: { compact: "w-44", regular: "w-52", wide: "w-64" },
       min: { compact: "min-w-40", regular: "min-w-44" },
     },
   });
 
-  export type DropdownMenuContentLooks = VariantProps<
+  type DropdownMenuContentLooks = VariantProps<
     typeof dropdownMenuContentVariants
   >;
 </script>

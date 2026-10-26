@@ -44,7 +44,7 @@ import { newerBuild } from "../served-build.svelte";
 import { toast } from "../toasts";
 
 /** The toast's one id: a second build changes it in place. */
-export const UPDATE_TOAST = "cawco-update-ready";
+const UPDATE_TOAST = "cawco-update-ready";
 
 /** The page's visibility, read reactively. */
 const visibility = createSubscriber((changed) => {

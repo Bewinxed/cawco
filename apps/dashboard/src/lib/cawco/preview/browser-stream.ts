@@ -40,7 +40,7 @@ export interface StreamEvents {
 }
 
 /** What the person does on the stream, in the stream's own pixels. */
-export interface StreamInput {
+interface StreamInput {
   button: (x: number, y: number, button: number, down: boolean) => void;
   key: (event: KeyboardEvent, down: boolean) => void;
   move: (x: number, y: number) => void;
@@ -129,7 +129,7 @@ const LATIN1_LAST = 0xff;
 const UNICODE_KEYSYM = 0x01_00_00_00;
 
 /** The keysym of a keyboard event's key; undefined for a key X has none for ("Unidentified", "Dead"). */
-export const keysymOf = (key: string): number | undefined => {
+const keysymOf = (key: string): number | undefined => {
   const named = KEYSYMS[key];
   if (named !== undefined) {
     return named;

@@ -13,7 +13,7 @@
    * wide. Its ink: the body's by default, or the outcome the step stands for
    * (a move's steps: done, running, failed, waiting on the person, stopped).
    */
-  export const thinkingStepIcon = tv({
+  const thinkingStepIcon = tv({
     base: "grid h-lh min-h-icon-md w-icon-md place-items-center status-ahead:text-ink-subtle",
     variants: {
       ink: {

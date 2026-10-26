@@ -109,7 +109,7 @@ const underThreads = new WeakMap<InstanceRow, InstanceRow>();
  * `threadId`) rather than under his lead session: the thread is where that
  * work was asked for.
  */
-export const underThread = (row: InstanceRow): InstanceRow => {
+const underThread = (row: InstanceRow): InstanceRow => {
   if (!row.threadId) {
     return row;
   }

@@ -37,7 +37,7 @@ import {
 import { momentParts, rowOf, secretsIn } from "./find-rows";
 
 /** After the last keystroke, how long before every machine is asked (ms). The critique's call, under the 1 s wait grace. */
-export const SETTLE_MS = 250;
+const SETTLE_MS = 250;
 /** How long a wait goes unremarked before skeleton rows stand in (DESIGN.md --dur-wait-grace). */
 export const GRACE_MS = 1000;
 
@@ -55,7 +55,7 @@ const TIMES = [
   { words: ["today"], label: "today", days: 0 },
   { words: ["yesterday"], label: "yesterday", days: 1 },
 ] as const;
-export type TimeWord = (typeof TIMES)[number]["label"];
+type TimeWord = (typeof TIMES)[number]["label"];
 
 /** Kind words: a non-session kind he names goes to the Go-to row. */
 const KIND_WORDS: Record<string, FindResult["kind"][]> = {
@@ -94,7 +94,7 @@ export interface Parsed {
 
 const SPACES = /\s+/u;
 
-export function parse(text: string): Parsed {
+function parse(text: string): Parsed {
   const words = text.trim().split(SPACES).filter(Boolean);
   const lower = words.map((w) => w.toLowerCase());
   let time: TimeWord | null = null;
@@ -132,7 +132,7 @@ const startOfDay = (now: number, back: number) => {
 };
 
 /** Whether `at` falls in the time word's span. */
-export function within(time: TimeWord | null, at: number | null, now: number) {
+function within(time: TimeWord | null, at: number | null, now: number) {
   if (time === null) {
     return true;
   }

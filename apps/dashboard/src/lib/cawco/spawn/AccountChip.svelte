@@ -2,7 +2,7 @@
   import { nameFields, type Part, type RingAccount } from "../usage/rings";
 
   /** One account the chip offers. */
-  export interface AccountOption {
+  interface AccountOption {
     color: string;
     /** Out of reach for a new session: its limit is spent. */
     disabled: boolean;

@@ -23,7 +23,7 @@
  */
 import { ease, motionOk } from "./curves.svelte";
 
-export const OUT_MS = 200;
+const OUT_MS = 200;
 const OUT_STAGGER = 18;
 /** The entrance waits for the exit's first row: never both in one place. */
 const IN_LEAD = OUT_MS;
@@ -35,7 +35,7 @@ const STAGGER_CAP = 9;
 /** How many leaving rows keep animating. A list shows about five. */
 const LEAVING = 8;
 /** How long the leaving layer stands, its last row's delay plus its exit. */
-export const LEAVE_MS = OUT_MS + OUT_STAGGER * LEAVING;
+const LEAVE_MS = OUT_MS + OUT_STAGGER * LEAVING;
 
 export class ListSwap<T> {
   /** The rows the last list had, still on screen while the new ones arrive. */

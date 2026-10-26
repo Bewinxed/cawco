@@ -12,7 +12,7 @@
    * by `reveal` (motion/curves). Each prop names what it stands for,
    * never a number.
    */
-  export const skeletonVariants = tv({
+  const skeletonVariants = tv({
     base: "loops block rounded-sm bg-surface-fill motion-safe:animate-skeleton-pulse",
     variants: {
       /** The block it holds the place of, at that block's height. */
@@ -98,7 +98,7 @@
     },
   });
 
-  export type SkeletonLooks = VariantProps<typeof skeletonVariants>;
+  type SkeletonLooks = VariantProps<typeof skeletonVariants>;
 </script>
 
 <script lang="ts">

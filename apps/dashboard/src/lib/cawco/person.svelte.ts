@@ -185,7 +185,7 @@ const agentHere = () =>
       );
 
 /** What says whether the person is at this computer: its CawCo agent, this browser's Idle Detection, or nothing. */
-export const deskSource = (): "agent" | "browser" | "none" => {
+const deskSource = (): "agent" | "browser" | "none" => {
   if (agentHere()) {
     return "agent";
   }

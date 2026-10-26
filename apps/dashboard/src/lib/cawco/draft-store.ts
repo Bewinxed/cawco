@@ -28,7 +28,7 @@ type StoredFile = Pick<PendingFile, "name" | "mediaType" | "size" | "ref"> & {
 };
 
 /** The most the stored drafts may weigh together, in bytes. */
-export const CAP_BYTES = 50 * 1024 * 1024;
+const CAP_BYTES = 50 * 1024 * 1024;
 
 interface DraftRecord {
   /** The canvas the message carries; absent on a record stored before canvases. */

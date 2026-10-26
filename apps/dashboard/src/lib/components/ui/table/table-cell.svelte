@@ -3,7 +3,7 @@
   import { tv } from "#lib/utils.js";
   import { tableColumn } from "./table.svelte";
 
-  export const tableCellVariants = tv({
+  const tableCellVariants = tv({
     base: "whitespace-nowrap px-space-3 py-space-2 align-middle",
     variants: {
       variant: {
@@ -62,12 +62,10 @@
     },
   });
 
-  export type TableCellVariant = VariantProps<
-    typeof tableCellVariants
-  >["variant"];
-  export type TableCellRule = VariantProps<typeof tableCellVariants>["rule"];
-  export type TableCellEdge = VariantProps<typeof tableCellVariants>["edge"];
-  export type TableCellFold = VariantProps<typeof tableCellVariants>["fold"];
+  type TableCellVariant = VariantProps<typeof tableCellVariants>["variant"];
+  type TableCellRule = VariantProps<typeof tableCellVariants>["rule"];
+  type TableCellEdge = VariantProps<typeof tableCellVariants>["edge"];
+  type TableCellFold = VariantProps<typeof tableCellVariants>["fold"];
 </script>
 
 <script lang="ts">

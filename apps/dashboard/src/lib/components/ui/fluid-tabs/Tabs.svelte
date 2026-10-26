@@ -17,7 +17,7 @@
       bar's height, its two ends left to the sidebar toggle and Caw's glass.
       `strip="hosted"`, the same tabs in a host's row: the same ladder, filling
       the host's row and drawing nothing of its own. */
-  export const tabsVariants = tv({
+  const tabsVariants = tv({
     variants: {
       fill: { none: "background-none p-0" },
       strip: {
@@ -30,7 +30,7 @@
     },
   });
 
-  export type TabsLooks = VariantProps<typeof tabsVariants>;
+  type TabsLooks = VariantProps<typeof tabsVariants>;
 </script>
 
 <script lang="ts">

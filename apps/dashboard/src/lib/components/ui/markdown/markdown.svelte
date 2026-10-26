@@ -2,7 +2,7 @@
   import type { VariantProps } from "tailwind-variants";
   import { tv } from "#lib/utils.js";
 
-  export const markdownVariants = tv({
+  const markdownVariants = tv({
     variants: {
       /**
        * Prose standing in a surface whose type it takes (a release's notes
@@ -18,7 +18,7 @@
     },
   });
 
-  export type MarkdownLooks = VariantProps<typeof markdownVariants>;
+  type MarkdownLooks = VariantProps<typeof markdownVariants>;
 </script>
 
 <script lang="ts">

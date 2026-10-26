@@ -6,7 +6,7 @@
       selected ink while its row is chosen. `live`: a live count in the live
       pair, which turns to the attention pair while something is blocked
       (`data-blocked`); its ink is its own, whatever the row's state. */
-  export const sidebarMenuBadgeVariants = tv({
+  const sidebarMenuBadgeVariants = tv({
     variants: {
       tone: {
         row: "text-ink-strong peer-data-active/menu-button:text-selected-ink",
@@ -16,9 +16,7 @@
     defaultVariants: { tone: "row" },
   });
 
-  export type SidebarMenuBadgeLooks = VariantProps<
-    typeof sidebarMenuBadgeVariants
-  >;
+  type SidebarMenuBadgeLooks = VariantProps<typeof sidebarMenuBadgeVariants>;
 </script>
 
 <script lang="ts">

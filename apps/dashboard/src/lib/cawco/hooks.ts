@@ -71,9 +71,6 @@ const json = (body: unknown): RequestInit => ({
   body: JSON.stringify(body),
 });
 
-export const loadHooks = (): Promise<HooksPayload> =>
-  send<HooksPayload>("/api/fleet/hooks", {}, "load the hooks");
-
 /** Only the fields the hub's schema accepts — `force`/`cwd` are the hub's own to
  *  set. The hub merges a PUT over the stored hook, so an optional field the
  *  draft leaves empty goes as `null`, which clears it; an absent one would keep

@@ -1,31 +1,8 @@
 <script lang="ts" module>
-  import { depart } from "#lib/cawco/motion/share.svelte.js";
-
   /** What the row's last action came to: running, done, or why it failed. */
   export interface RowNote {
     text: string;
     tone: "busy" | "done" | "fail";
-  }
-
-  /**
-   * A row about to become another: its icon and title take off for the row
-   * `href` names, which lands them when it mounts (a starter template turning
-   * into the hook it wrote). Called before the list changes.
-   */
-  export function departInto(name: string, href: string): void {
-    const row = document.querySelector<HTMLElement>(
-      `[data-row-name="${CSS.escape(name)}"]`
-    );
-    for (const [part, key] of [
-      ['[data-slot="tile"]', `icon:${href}`],
-      ['[data-slot="section-row-label"]', `title:${href}`],
-    ]) {
-      const piece = row?.querySelector<HTMLElement>(part);
-      if (piece) {
-        piece.dataset.share = key;
-        depart(piece);
-      }
-    }
   }
 </script>
 

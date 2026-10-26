@@ -5,14 +5,14 @@
   /** Its callers' looks: a width of its own (`regular` as the menu's own
       `regular`, so a submenu and the menu holding the same entries stand
       equally wide), or a least width over the kit's. */
-  export const dropdownMenuSubContentVariants = tv({
+  const dropdownMenuSubContentVariants = tv({
     variants: {
       width: { regular: "w-52", wide: "w-72" },
       min: { compact: "min-w-40" },
     },
   });
 
-  export type DropdownMenuSubContentLooks = VariantProps<
+  type DropdownMenuSubContentLooks = VariantProps<
     typeof dropdownMenuSubContentVariants
   >;
 </script>

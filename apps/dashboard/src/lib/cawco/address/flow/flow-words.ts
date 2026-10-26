@@ -17,7 +17,7 @@ import { type AddressFlow, type Cause, PEER } from "./flow.svelte";
 /** Where the person is: a desk shows the QR; a phone opens the address itself. */
 export type Form = "desk" | "phone";
 
-export interface Press {
+interface Press {
   act: () => void;
   /** It opens a page of the network's own in a new tab. */
   away?: boolean;
@@ -38,10 +38,10 @@ export interface StateWords {
 }
 
 /** The machine CawCo's hub runs on, as the drawing names it. */
-export const HUB_MACHINE = "obelisk";
+const HUB_MACHINE = "obelisk";
 
 /** A failure's words: what happened, why and the way out, its buttons. */
-export function failureWords(
+function failureWords(
   flow: AddressFlow,
   cause: Cause
 ): {

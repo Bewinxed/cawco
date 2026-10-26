@@ -1,5 +1,1 @@
-export {
-  default as Root,
-  //
-  default as Switch,
-} from "./switch.svelte";
+export { default as Switch } from "./switch.svelte";

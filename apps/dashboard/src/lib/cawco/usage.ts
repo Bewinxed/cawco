@@ -89,7 +89,7 @@ export const totalTokensOf = (r: {
 /* ---- Limit windows (DESIGN.md, Limit bar) ------------------------------- */
 
 /** "5-hour", "Week", "Week · Fable", "Month". */
-export function windowLabel(w: LimitWindow): string {
+function windowLabel(w: LimitWindow): string {
   const base =
     { session: "5-hour", weekly: "Week", monthly: "Month" }[w.group] ?? w.kind;
   return w.scopeLabel ? `${base} · ${w.scopeLabel}` : base;
@@ -100,7 +100,7 @@ export function windowLabel(w: LimitWindow): string {
  * days, or the calendar month that ends at its reset. Null for a group no
  * provider has named, or a monthly window with no reset to count back from.
  */
-export function windowSpan(w: LimitWindow): number | null {
+function windowSpan(w: LimitWindow): number | null {
   if (w.group === "session") {
     return 5 * HOUR_MS;
   }
@@ -144,7 +144,7 @@ export function speakingReading<
 }
 
 /** "4h 38m", "50m", "3d 4h", "<1m": a span of time, to the minute. */
-export function duration(ms: number): string {
+function duration(ms: number): string {
   const totalMin = Math.max(0, Math.floor(ms / MINUTE_MS));
   const d = Math.floor(totalMin / (24 * 60));
   const h = Math.floor((totalMin % (24 * 60)) / 60);
@@ -345,12 +345,6 @@ export function limitRows(
       provider,
     }));
 }
-
-/** "max" → "Max": the plan as Claude Code's `subscriptionType` names it. */
-export const planName = (subscription: string | null): string | null =>
-  subscription
-    ? subscription.charAt(0).toUpperCase() + subscription.slice(1)
-    : null;
 
 /**
  * Why Claude's limits cannot be shown, and what fixes it: the one source of

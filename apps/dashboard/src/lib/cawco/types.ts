@@ -5,18 +5,14 @@
  */
 import type {
   BlockMetadata,
-  BlockType,
   DelegateEvent,
   SendState,
   TranscriptBlock,
 } from "@cawco/core";
-import type { SubagentState } from "#lib/utils/flow-types.js";
 
-export type JsonPrimitive = string | number | boolean | null;
+type JsonPrimitive = string | number | boolean | null;
 export type JsonValue =
   JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
-
-export type MessageType = BlockType;
 
 /**
  * One row of a transcript: a block the hub built, or one this tab drew itself
@@ -50,13 +46,3 @@ export interface MessageMetadata extends BlockMetadata {
 /** The two kinds a card renders directly; an answer only settles its ask. */
 export type DelegateAskEvent = Extract<DelegateEvent, { kind: "ask" }>;
 export type DelegateReportEvent = Extract<DelegateEvent, { kind: "report" }>;
-
-/**
- * One row of the session view: consecutive tool calls collapse into a group, a
- * Task call becomes the branch it spawned, everything else stands alone. Shared
- * because the transcript renders these and the in-app search reads them.
- */
-export type TranscriptGroup =
-  | { kind: "single"; message: Message; index: number }
-  | { kind: "tools"; messages: Message[]; index: number }
-  | { kind: "subagent"; branch: SubagentState; spawn: Message; index: number };

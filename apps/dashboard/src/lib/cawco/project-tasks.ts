@@ -34,9 +34,9 @@ import {
 } from "./hub-read";
 
 /** Who moves a task: you, the project's lead, a session, an approved action, a routine. */
-export type Mover = "you" | "lead" | "session" | "action" | "routine";
+type Mover = "you" | "lead" | "session" | "action" | "routine";
 
-export interface StageHooks {
+interface StageHooks {
   after?: string;
   afterMs?: number;
   by?: Mover;
@@ -50,7 +50,7 @@ export interface Stage {
   name: string;
 }
 
-export interface StageMove {
+interface StageMove {
   /** A stage, or `*` for any. */
   from: string;
   /** A stage, or `*` for any. */
@@ -126,7 +126,7 @@ export interface TaskAttempt {
  * What a task's newest finished attempt said as it finished (the hub's
  * `TaskResult`): its session's `finish_item` report of what it did.
  */
-export interface TaskResult {
+interface TaskResult {
   /** When the attempt finished, ms epoch. */
   at: number;
   headline: string | null;
@@ -182,7 +182,7 @@ export function reviewOf(
 }
 
 /** Where an attempt's work lands (`@cawco/core`'s `LandsMode`). */
-export type LandsMode = "main" | "branch" | "pr" | "none";
+type LandsMode = "main" | "branch" | "pr" | "none";
 
 /**
  * One wait of a task, its own or its whole's (the hub's `TaskWait`, settled
@@ -207,7 +207,7 @@ export interface TaskWait {
 }
 
 /** A card or pin a done task was built on that moved since (the hub's `BuiltOn`). */
-export interface BuiltOn {
+interface BuiltOn {
   href: string;
   label: string;
   since:
@@ -292,7 +292,7 @@ export interface TaskSummary extends TaskFlags, TaskTimes {
 }
 
 /** When a task was made and last changed, ms epoch, from its file's commits (the hub's `TaskTimes`). */
-export interface TaskTimes {
+interface TaskTimes {
   createdAt: number;
   updatedAt: number;
 }
@@ -359,7 +359,7 @@ export interface TaskView extends TaskFlags, TaskTimes {
 }
 
 /** Who wrote a comment or made a change (the hub's `TaskHistoryActor`). */
-export interface TaskActor {
+interface TaskActor {
   /** The session's instance id, or the approved action's; null when none. */
   id: string | null;
   /** The mover it was checked as (`you`, `lead`, `session`, …); null for a hand edit. */
@@ -377,7 +377,7 @@ export interface TaskComment {
 }
 
 /** What a commit did to a task's file (the hub's `TaskHistoryKind`). */
-export type TaskHistoryKind =
+type TaskHistoryKind =
   | "created"
   | "moved"
   | "changed"

@@ -82,7 +82,7 @@ export const keysLeft = (install: Install, name: string): string => {
  * installer's own undo once it ran, and the keys the add wrote there, which
  * no undo touches.
  */
-export const left = (install: Install, name: string): string => {
+const left = (install: Install, name: string): string => {
   const keys = keysLeft(install, name);
   if (installerRan(install)) {
     return keys

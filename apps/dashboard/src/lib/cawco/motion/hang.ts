@@ -220,7 +220,7 @@ export function hang(options: Hang): Attachment<HTMLElement> {
 }
 
 /** The clock a tab's hang grows and folds on: one run on the card, whose time each frame's shape is read at. */
-export const GROW = "hang-grow";
+const GROW = "hang-grow";
 
 /** Each growing card's drawing: `to` draws it there and holds it (a finger's pull), `again` draws it where it stands (a placement, a resize). */
 const growers = new WeakMap<

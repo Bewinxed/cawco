@@ -3,7 +3,7 @@ import type { Snippet } from "svelte";
 import type { ButtonProps } from "#lib/components/ui/button/index.js";
 import type { UseClipboard } from "#lib/hooks/use-clipboard.svelte.js";
 
-export type CopyButtonPropsWithoutHTML = WithChildren<
+type CopyButtonPropsWithoutHTML = WithChildren<
   Pick<ButtonProps, "size" | "variant"> & {
     text: string;
     icon?: Snippet<[]>;

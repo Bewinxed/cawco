@@ -7,7 +7,7 @@
       line from its start (its leaf stays, wrapped in a `<bdi>`) in the mono
       face at the label size. Read out but not drawn
       (`visible: false`) where the dialog's content names itself on screen. */
-  export const dialogTitleVariants = tv({
+  const dialogTitleVariants = tv({
     base: "text-title",
     variants: {
       lead: { glyph: "mark-line flex items-center gap-2" },
@@ -17,7 +17,7 @@
     defaultVariants: { visible: true },
   });
 
-  export type DialogTitleLooks = VariantProps<typeof dialogTitleVariants>;
+  type DialogTitleLooks = VariantProps<typeof dialogTitleVariants>;
 </script>
 
 <script lang="ts">

@@ -10,7 +10,7 @@
       place (the same modifiers, so `cn` keeps only these), and each state
       shows in all four of their combinations, the variant sort never
       choosing between them. */
-  export const checkboxVariants = tv({
+  const checkboxVariants = tv({
     variants: {
       reveal: {
         "card-pick":
@@ -19,7 +19,7 @@
     },
   });
 
-  export type CheckboxLooks = VariantProps<typeof checkboxVariants>;
+  type CheckboxLooks = VariantProps<typeof checkboxVariants>;
 
   /**
    * A tick that draws itself (DESIGN.md, Ticks and dots: "a checkbox tick

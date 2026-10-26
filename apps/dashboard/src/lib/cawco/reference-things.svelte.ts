@@ -25,7 +25,7 @@ export type ThingKind =
   "task" | "todo" | "plan" | "step" | "routine" | "project" | "machine";
 
 /** Where a press opens a thing: a page of the app, a session's plan (at a step), or the machines' list. */
-export type ThingPlace =
+type ThingPlace =
   { href: string } | { plan: string; step?: string } | { machines: string };
 
 /** A thing as its chip reads it. */

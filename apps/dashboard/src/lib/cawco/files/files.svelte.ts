@@ -155,7 +155,7 @@ export interface ArtifactCard {
 /* ── Attachments ──────────────────────────────────────────────────── */
 
 /** What opens an attachment: its picture in the lightbox, its text read there, or its file. */
-export type AttachmentOpen =
+type AttachmentOpen =
   | { kind: "image"; src: string; alt: string }
   | { kind: "text"; content: string }
   | { kind: "file"; href: string | null };
@@ -381,7 +381,7 @@ export function followFiles(instanceId: string | null): void {
  * its own agent, so the empty state's one action puts these words in the
  * session's composer, the caret after them, nothing sent.
  */
-export const ASK_FOR_A_PAGE = "Make a page that shows what we've done so far";
+const ASK_FOR_A_PAGE = "Make a page that shows what we've done so far";
 
 /** Puts the ask in the session's composer; false when its pane isn't standing. */
 export function askForAPage(instanceId: string): boolean {

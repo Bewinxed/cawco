@@ -1,5 +1,4 @@
 <script lang="ts" module>
-  import type { VariantProps } from "tailwind-variants";
   import { tv } from "#lib/utils.js";
 
   /**
@@ -16,8 +15,6 @@
   export const scrimVariants = tv({
     base: "bg-scrim backdrop-blur-(--scrim-blur) data-[leaving]:animate-kit-fade-out data-closed:animate-kit-fade-out data-open:animate-scrim-in data-[stacked]:bg-transparent data-[stacked]:backdrop-filter-none",
   });
-
-  export type ScrimLooks = VariantProps<typeof scrimVariants>;
 </script>
 
 <script lang="ts">

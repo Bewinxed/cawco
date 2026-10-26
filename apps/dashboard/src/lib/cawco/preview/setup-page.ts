@@ -4,7 +4,7 @@
  * send; the pane only tells it apart, to put the phone's sheet away once it
  * is sent.
  */
-export const SETUP_PAGE = "setup";
+const SETUP_PAGE = "setup";
 
 /** The artifact a panel shows, as the setup page is told apart. */
 interface Shown {

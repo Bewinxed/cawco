@@ -10,9 +10,7 @@ import {
   faviconUrl,
   fileChanges,
   type Renderer,
-  type ToolKindId,
   type ToolStatus,
-  toolKind,
 } from "@cawco/core/tool-presentation";
 import { type FileDiffMetadata, parsePatchFiles } from "@pierre/diffs";
 import type { Component } from "svelte";
@@ -41,7 +39,6 @@ import {
 } from "#lib/icons.js";
 
 export type ToolCallStatus = ToolStatus;
-export type FamilyId = ToolKindId;
 
 export interface ToolDescriptor {
   /** A short aside after the sentence: `background`, an MCP server's name. */
@@ -66,15 +63,6 @@ export interface ToolDescriptor {
   objectIsMono: boolean;
   /** The operator's tail: the first line the call printed. */
   secondLine?: string;
-}
-
-export interface ToolFamily {
-  color: string;
-  icon: Component;
-  id: FamilyId;
-  many: string;
-  /** What one call of this kind is, for a group's kind summary. */
-  one: string;
 }
 
 /**
@@ -126,22 +114,6 @@ const INKS: Record<string, string> = {
 
 const glyph = (name: string): Component => GLYPHS[name] ?? IconToolGeneric;
 const inkClass = (token: string): string => INKS[token] ?? "text-ink-muted";
-
-/** The one classifier: the sentence and the group header both dispatch on it. */
-export function familyId(toolName: string | undefined): FamilyId {
-  return toolKind(toolName).id;
-}
-
-export function toolFamily(toolName: string | undefined): ToolFamily {
-  const kind = toolKind(toolName);
-  return {
-    id: kind.id,
-    icon: glyph(kind.glyph),
-    color: inkClass(kind.ink),
-    one: kind.one,
-    many: kind.many,
-  };
-}
 
 /** The sentence a row reads as (@cawco/core `describeTool`). */
 export function describeTool(

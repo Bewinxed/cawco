@@ -4,11 +4,11 @@
 
   /** Its callers' looks: the rail's sections, whose own label separates
       them, pad a step on each side and a hairline above and below. */
-  export const sidebarGroupVariants = tv({
+  const sidebarGroupVariants = tv({
     variants: { pad: { rail: "px-2 py-space-1" } },
   });
 
-  export type SidebarGroupLooks = VariantProps<typeof sidebarGroupVariants>;
+  type SidebarGroupLooks = VariantProps<typeof sidebarGroupVariants>;
 </script>
 
 <script lang="ts">

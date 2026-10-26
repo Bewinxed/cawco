@@ -3,7 +3,7 @@
   import { tv } from "#lib/utils.js";
 
   /** Its callers' looks, each as they drew it. */
-  export const drawerContentVariants = tv({
+  const drawerContentVariants = tv({
     variants: {
       /** Its foot: none at all, a bottom sheet's safe-area foot included (its
           content keeps the safe area clear itself); a sheet with a footer of
@@ -45,7 +45,7 @@
     },
   });
 
-  export type DrawerContentLooks = VariantProps<typeof drawerContentVariants>;
+  type DrawerContentLooks = VariantProps<typeof drawerContentVariants>;
 
   /** The bottom sheet's 100×6 grabber (DESIGN.md, Drawer), above its one
       header; the kit dialog's sheet under the phone line wears it too. */

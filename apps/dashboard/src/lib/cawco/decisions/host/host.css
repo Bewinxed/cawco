@@ -38,7 +38,7 @@
   /* The page is its own document: it follows the reader's scheme until the
      overlay names the host's (`data-theme` and `color-scheme` on the root),
      and its scroller (Decisions.svelte's first row) moves only where a fold
-     rides it (Decision.svelte, motion/scroll-on), never by the browser's
+     rides it (Decision.svelte), never by the browser's
      scroll anchoring as a card folds above the reader's view (the
      transcript's precedent). */
   :root,

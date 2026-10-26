@@ -3,7 +3,7 @@
   import { tv } from "#lib/utils.js";
   import { tableColumn } from "./table.svelte";
 
-  export const tableHeadVariants = tv({
+  const tableHeadVariants = tv({
     base: "whitespace-nowrap px-space-3 text-start align-middle text-ink-strong text-label",
     variants: {
       variant: {
@@ -44,11 +44,9 @@
     },
   });
 
-  export type TableHeadVariant = VariantProps<
-    typeof tableHeadVariants
-  >["variant"];
-  export type TableHeadEdge = VariantProps<typeof tableHeadVariants>["edge"];
-  export type TableHeadFold = VariantProps<typeof tableHeadVariants>["fold"];
+  type TableHeadVariant = VariantProps<typeof tableHeadVariants>["variant"];
+  type TableHeadEdge = VariantProps<typeof tableHeadVariants>["edge"];
+  type TableHeadFold = VariantProps<typeof tableHeadVariants>["fold"];
 </script>
 
 <script lang="ts">

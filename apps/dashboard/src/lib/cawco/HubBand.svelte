@@ -1,5 +1,6 @@
 <script lang="ts" module>
   import type { ReloadHold } from "./reload.svelte";
+
   /**
    * What the band says, one state at a time: the only place the dashboard
    * speaks of its hub connection (JOURNEY.md: "a fleet error sits in the
@@ -15,7 +16,7 @@
    *   nothing more until it reloads (reload.svelte): what the reload waits
    *   on, and Reload to go now.
    */
-  export type BandState =
+  type BandState =
     | { kind: "updating"; until: number; version: string | null }
     | { kind: "lost" | "refused" | "retrying" }
     | { kind: "back"; updated: string | null | undefined }

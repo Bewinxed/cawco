@@ -12,13 +12,13 @@ import { type HarnessKind, harnessNamed } from "@cawco/core/harness";
 import { store, stored } from "./storage";
 import { workspace } from "./workspace/workspace.svelte";
 
-export const WORKING_SET_KEY = "cawco-working-set";
+const WORKING_SET_KEY = "cawco-working-set";
 const KEY = WORKING_SET_KEY;
 
 /** Past this, the coldest conversation that is not open is forgotten. */
 const LIMIT = 10;
 
-export interface Visit {
+interface Visit {
   /** Only eviction reads this: the entry that goes is the coldest one. */
   at: number;
   cwd?: string;

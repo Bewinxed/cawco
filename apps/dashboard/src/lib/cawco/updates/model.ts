@@ -139,8 +139,8 @@ export function releaseNotes(notes: string | undefined): ReleaseNotes | null {
 export const plural = (n: number, noun: string): string =>
   `${n} ${noun}${n === 1 ? "" : "s"}`;
 
-export type CellButton = "retry" | "error" | "cancel" | "install";
-export type CellIcon = "clock" | "download" | "spinner";
+type CellButton = "retry" | "error" | "cancel" | "install";
+type CellIcon = "clock" | "download" | "spinner";
 
 export interface Cell {
   buttons: CellButton[];
@@ -382,7 +382,7 @@ export const installable = (
 
 // ── the notice ───────────────────────────────────────────────────────────
 
-export type NoticeKind = 1 | 2 | 3 | 4 | 5 | 6 | 8 | 9;
+type NoticeKind = 1 | 2 | 3 | 4 | 5 | 6 | 8 | 9;
 
 /** What the hub refused of an install this tab asked for, or of its cancel. */
 export interface Refusal {
@@ -390,9 +390,9 @@ export interface Refusal {
   /** The refusal in the error formula's words. */
   reason: string;
 }
-export type LineState = "plain" | "done" | "busy" | "wait";
+type LineState = "plain" | "done" | "busy" | "wait";
 
-export interface NoticeLine {
+interface NoticeLine {
   state: LineState;
   text: string;
 }
@@ -445,7 +445,7 @@ const landingId = (machineId: string, landing: { at: number }): string =>
   `landed:${machineId}:${landing.at}`;
 
 /** The machines, with every landing someone has acknowledged taken off. */
-export function unseenLandings<T extends UpdateMachine>(
+function unseenLandings<T extends UpdateMachine>(
   machines: T[],
   seen: ReadonlySet<string>
 ): T[] {
@@ -515,7 +515,7 @@ function rolledBack({ machines, name }: Ctx): Notice | null {
 }
 
 /** A keeper restart's notice id: the restart itself, by its machine and when the wedge was called. */
-export const keeperRestartId = (machineId: string, at: number): string =>
+const keeperRestartId = (machineId: string, at: number): string =>
   `keeper:${machineId}:${at}`;
 
 /**

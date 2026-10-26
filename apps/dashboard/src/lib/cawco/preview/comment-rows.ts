@@ -8,7 +8,7 @@ import { pinName } from "@cawco/core/pin-name";
 import type { PendingFile } from "../transcript/composer-draft.svelte";
 
 /** The words a pin is found by (Find's engine, core find-match): its number, its words, where it stands, and whether it is open. */
-export const searchEntry = (pin: Pin): MatchEntry => ({
+const searchEntry = (pin: Pin): MatchEntry => ({
   asked: new Set(),
   fields: [
     ...field("id", String(pin.number)),

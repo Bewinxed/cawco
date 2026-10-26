@@ -2,7 +2,9 @@
   import { createContext } from "svelte";
 
   /** How a sheet's content closes its own sheet: a drag that lets it go. */
-  export const [closer, provideCloser] = createContext<() => void>();
+  const [closer, provideCloser] = createContext<() => void>();
+
+  export { closer };
 </script>
 
 <script lang="ts">

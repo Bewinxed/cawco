@@ -431,5 +431,3 @@ export function tabDropTarget(
     destroy: cleanup,
   };
 }
-
-export { combine };

@@ -38,7 +38,7 @@
   }
   // biome-ignore lint/suspicious/noExplicitAny: a library holds components of every prop shape
   export type OpenUIComponent = Component<OpenUIRenderProps<any>>;
-  export type OpenUILibrary = Library<OpenUIComponent>;
+  type OpenUILibrary = Library<OpenUIComponent>;
 
   /** Query()'s tools: a plain object of async functions by tool name, or an MCP client. */
   export type OpenUIToolProvider =

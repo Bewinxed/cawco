@@ -12,7 +12,7 @@
       control tier to a step the keyboard takes on its divider (a drag
       tracks the pointer 1:1). With reduced motion every share is taken at
       once. */
-  export const resizablePaneVariants = tv({
+  const resizablePaneVariants = tv({
     variants: {
       look: {
         split:
@@ -22,7 +22,7 @@
     },
   });
 
-  export type ResizablePaneLooks = VariantProps<typeof resizablePaneVariants>;
+  type ResizablePaneLooks = VariantProps<typeof resizablePaneVariants>;
 </script>
 
 <script lang="ts">

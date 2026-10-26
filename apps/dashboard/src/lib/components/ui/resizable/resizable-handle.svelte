@@ -13,7 +13,7 @@
       the rail's edge, Shell), so its hit area is the surface's first grip's
       width instead, from its first pixel: the grip keeps the pixels it
       covers, and a stroke begun a few pixels further in is the page's. */
-  export const resizableHandleVariants = tv({
+  const resizableHandleVariants = tv({
     variants: {
       look: {
         split:
@@ -23,9 +23,7 @@
     },
   });
 
-  export type ResizableHandleLooks = VariantProps<
-    typeof resizableHandleVariants
-  >;
+  type ResizableHandleLooks = VariantProps<typeof resizableHandleVariants>;
 </script>
 
 <script lang="ts">

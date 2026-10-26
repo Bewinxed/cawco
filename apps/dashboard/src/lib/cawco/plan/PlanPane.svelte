@@ -25,11 +25,11 @@
    * A task's to-dos and nothing else (an attempt that has written no steps
    * or spec): the card is titled by them, not "Plan" over a "To-dos" head.
    */
-  export const onlyTodos = (plan: SessionPlan | undefined): boolean =>
+  const onlyTodos = (plan: SessionPlan | undefined): boolean =>
     stepsTree(plan).length === 0 && !plan?.spec && todosTree(plan).length > 0;
 
   /** The plan's card title. */
-  export const planTitle = (plan: SessionPlan | undefined): string =>
+  const planTitle = (plan: SessionPlan | undefined): string =>
     onlyTodos(plan) ? planWords.todos : planWords.plan;
 </script>
 

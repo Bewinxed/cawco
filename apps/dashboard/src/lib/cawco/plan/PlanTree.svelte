@@ -14,7 +14,7 @@
    * to-dos), as the tree they are: each row hangs under the nearest row
    * before it that stands one level up.
    */
-  export function treeOf(
+  function treeOf(
     rows: {
       id: string;
       depth: number;

@@ -8,7 +8,7 @@
    * chips (ui/chip `chipsVariants`); `list`, one full-width row per option,
    * for options that carry a description under their label.
    */
-  export const optionGroupVariants = tv({
+  const optionGroupVariants = tv({
     base: chipsVariants(),
     variants: {
       layout: { chips: "", list: "grid grid-cols-1" },
@@ -16,9 +16,7 @@
     defaultVariants: { layout: "chips" },
   });
 
-  export type OptionGroupLayout = VariantProps<
-    typeof optionGroupVariants
-  >["layout"];
+  type OptionGroupLayout = VariantProps<typeof optionGroupVariants>["layout"];
 </script>
 
 <script lang="ts">

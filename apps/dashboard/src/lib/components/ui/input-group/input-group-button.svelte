@@ -17,7 +17,7 @@
     },
   });
 
-  export type InputGroupButtonSize = VariantProps<
+  type InputGroupButtonSize = VariantProps<
     typeof inputGroupButtonVariants
   >["size"];
 </script>

@@ -2,7 +2,7 @@
   import type { VariantProps } from "tailwind-variants";
   import { tv } from "#lib/utils.js";
 
-  export const tabsVariants = tv({
+  const tabsVariants = tv({
     base: "group/tabs flex gap-space-2 data-horizontal:flex-col",
     variants: {
       layout: {
@@ -13,7 +13,7 @@
     },
   });
 
-  export type TabsLayout = VariantProps<typeof tabsVariants>["layout"];
+  type TabsLayout = VariantProps<typeof tabsVariants>["layout"];
 </script>
 
 <script lang="ts">

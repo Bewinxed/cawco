@@ -31,7 +31,7 @@ import { cawco } from "../client.svelte";
 export const hueVar = (hue: AccountHue): string => `var(--account-${hue})`;
 
 /** The colours an account can take, in the order the swatches offer them. */
-export const SWATCHES: readonly AccountHue[] = words.swatches.map(
+const SWATCHES: readonly AccountHue[] = words.swatches.map(
   (swatch) => swatch.hue
 );
 
@@ -226,7 +226,7 @@ export interface MovedLogin {
  * An account's name where nothing around it says what it is: a key with no
  * nickname goes by four characters, so its provider and "key" lead.
  */
-export const namedForNotice = (account: Account): string =>
+const namedForNotice = (account: Account): string =>
   account.kind === "api_key" && !account.label
     ? `${account.provider === CLAUDE_PROVIDER ? "Anthropic" : providerName(account.provider)} key ${nameOf(account)}`
     : nameOf(account);

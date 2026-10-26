@@ -30,7 +30,7 @@ interface Opening {
  * (--ease-drawer): --dur-panel, longer for a long way (2.5ms a pixel), never
  * past 480ms, so a big change still reads as one quick glide.
  */
-export const tweenMs = (delta: number): number =>
+const tweenMs = (delta: number): number =>
   Math.min(480, Math.max(dur("--dur-panel"), Math.ceil(Math.abs(delta) * 2.5)));
 
 /**

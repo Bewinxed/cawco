@@ -22,7 +22,6 @@ export type {
   FindChange,
   FindConversation,
   FindCoverage,
-  FindField,
   FindKind,
   FindLiveState,
   FindMachine,

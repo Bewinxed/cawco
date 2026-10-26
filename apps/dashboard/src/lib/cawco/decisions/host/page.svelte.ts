@@ -56,7 +56,7 @@ export const served = $state<{
 }>({ files: {}, media: {} });
 
 /** The JSON in one of the page's script tags; `fallback` when it is missing or not JSON. */
-export const jsonIn = <T>(doc: Document, id: string, fallback: T): T => {
+const jsonIn = <T>(doc: Document, id: string, fallback: T): T => {
   try {
     return JSON.parse(doc.getElementById(id)?.textContent ?? "") as T;
   } catch {

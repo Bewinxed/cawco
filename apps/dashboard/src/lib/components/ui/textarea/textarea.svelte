@@ -7,7 +7,7 @@
       straight into a composer (no field of its own: the composer's shell is
       the field, DESIGN.md Inputs and fields, Field frame). A phone's 16px
       floor is the base layer's, for every field. */
-  export const textareaVariants = tv({
+  const textareaVariants = tv({
     variants: {
       face: { mono: "font-mono" },
       text: {
@@ -26,7 +26,7 @@
     },
   });
 
-  export type TextareaLooks = VariantProps<typeof textareaVariants>;
+  type TextareaLooks = VariantProps<typeof textareaVariants>;
 </script>
 
 <script lang="ts">

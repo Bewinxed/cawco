@@ -94,7 +94,7 @@ export const SUGGEST_PAUSE_MS = 1500;
  * the noun saying what it is for (impeccable's "…improve a frontend
  * interface"), and Jev matched on its verb list instead.
  */
-export const SUGGEST_DESC_CHARS = 300;
+const SUGGEST_DESC_CHARS = 300;
 
 /** Cut to {@link SUGGEST_DESC_CHARS} at a word boundary, with an ellipsis. */
 export function clip(text: string): string {

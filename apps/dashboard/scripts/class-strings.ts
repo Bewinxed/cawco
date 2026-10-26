@@ -5,8 +5,7 @@
  * holds, and any other string that reads as a class list (a constant, a
  * lookup table). A `.ts` module is read as a component's script, so both
  * kinds of file give one tree. `<style>` blocks, comments and identifiers
- * are never read. scripts/vocab-codemod.ts rewrites what this reads;
- * scripts/spacing-ratchet.ts counts it.
+ * are never read. scripts/spacing-ratchet.ts counts it.
  */
 import { join, relative } from "node:path";
 import { Glob } from "bun";
@@ -33,14 +32,14 @@ export const SPACING_UTILITY =
 
 // MARK: - A class
 
-export interface Parsed {
+interface Parsed {
   base: string;
   important: string;
   variants: string[];
 }
 
 /** A class's variants (split at top-level colons) and its utility. */
-export function parseClass(raw: string): Parsed {
+function parseClass(raw: string): Parsed {
   const variants: string[] = [];
   let depth = 0;
   let from = 0;
@@ -65,15 +64,9 @@ export function parseClass(raw: string): Parsed {
   return { base: utility, important: "", variants };
 }
 
-export const format = (
-  variants: string[],
-  base: string,
-  important: string
-): string => `${variants.map((v) => `${v}:`).join("")}${base}${important}`;
-
 // MARK: - Class strings in a file
 
-export interface Piece {
+interface Piece {
   /** May be absent while the context's other pieces stand (a ternary's branch, a `&&`'s right, a clsx key). */
   conditional: boolean;
   /** Every class string of one attribute (with its element's `class:` directives), one class call, or one loose string. */

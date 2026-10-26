@@ -3,11 +3,11 @@
   import { tv } from "#lib/utils.js";
 
   /** Its callers' looks: its glyph and words a menu item's gap apart. */
-  export const contextMenuSubTriggerVariants = tv({
+  const contextMenuSubTriggerVariants = tv({
     variants: { gap: { item: "gap-2.5" } },
   });
 
-  export type ContextMenuSubTriggerLooks = VariantProps<
+  type ContextMenuSubTriggerLooks = VariantProps<
     typeof contextMenuSubTriggerVariants
   >;
 </script>

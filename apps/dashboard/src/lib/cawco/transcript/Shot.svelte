@@ -63,7 +63,7 @@
     return null;
   }
 
-  export function dataImageSize(src: string): Size | null {
+  function dataImageSize(src: string): Size | null {
     const comma = src.indexOf(",");
     const b64 = src.slice(comma + 1, comma + 1 + HEAD - (HEAD % 4));
     const text = atob(b64);
@@ -94,7 +94,7 @@
    * text as a blob URL the `<track>` reads, or null when there is none.
    */
   const sidecars = new Map<string, Promise<string | null>>();
-  export function sidecarCaptions(url: string): Promise<string | null> {
+  function sidecarCaptions(url: string): Promise<string | null> {
     let found = sidecars.get(url);
     if (!found) {
       found = fetch(url)

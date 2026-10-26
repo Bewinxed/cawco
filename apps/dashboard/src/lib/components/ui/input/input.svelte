@@ -6,7 +6,7 @@
       typed exactly (a path, a command, a key), a text size, a number
       field, and how wide it may run. `box` is what sizes the field in its row (its
       area's, when it has one); `field` is the field's own look. */
-  export const inputVariants = tv({
+  const inputVariants = tv({
     slots: { box: "", field: "" },
     variants: {
       face: { mono: { field: "font-mono" } },
@@ -34,7 +34,7 @@
     },
   });
 
-  export type InputLooks = VariantProps<typeof inputVariants>;
+  type InputLooks = VariantProps<typeof inputVariants>;
 </script>
 
 <script lang="ts">

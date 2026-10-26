@@ -4,7 +4,7 @@
 
   /** Its callers' looks: a least width over the kit's; or a card of its
       own (a width, the card's corner and high shadow, its padding). */
-  export const contextMenuSubContentVariants = tv({
+  const contextMenuSubContentVariants = tv({
     variants: {
       min: { standard: "min-w-52" },
       width: { wide: "w-64" },
@@ -13,7 +13,7 @@
     },
   });
 
-  export type ContextMenuSubContentLooks = VariantProps<
+  type ContextMenuSubContentLooks = VariantProps<
     typeof contextMenuSubContentVariants
   >;
 </script>

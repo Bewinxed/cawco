@@ -7,7 +7,7 @@
       the list's own rule was) and any of which may be busy (`aria-busy`,
       at half). An artifact's row stands on the artifact row's measure
       (DESIGN.md, Files: "rows on the artifact row's measure (44px)"). */
-  export const dropdownMenuItemVariants = tv({
+  const dropdownMenuItemVariants = tv({
     variants: {
       marks: {
         "current-busy":
@@ -17,9 +17,7 @@
     },
   });
 
-  export type DropdownMenuItemLooks = VariantProps<
-    typeof dropdownMenuItemVariants
-  >;
+  type DropdownMenuItemLooks = VariantProps<typeof dropdownMenuItemVariants>;
 </script>
 
 <script lang="ts">

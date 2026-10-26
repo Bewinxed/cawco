@@ -75,7 +75,6 @@ const idleDetectorClass = (): IdleDetectorClass | undefined =>
 
 let front: string | null = null;
 let listening = false;
-let beating: ReturnType<typeof setInterval> | undefined;
 /** The last state the hub was told, so only a change (or a beat) posts. */
 let told: string | undefined;
 /** Idle Detection while it runs, what stops it, and since when it has said idle. */
@@ -199,7 +198,7 @@ const report = (beat = false, leaving = false): void => {
 };
 
 /** This browser may show desktop notifications. */
-export const notificationsAllowed = (): boolean =>
+const notificationsAllowed = (): boolean =>
   typeof Notification !== "undefined" && Notification.permission === "granted";
 
 /** An input on the page: said at once when it is the first since the load, or ends a quiet stretch. */
@@ -221,7 +220,7 @@ const listen = (): void => {
   window.addEventListener("pageshow", changed);
   window.addEventListener("pagehide", () => report(false, true));
   onInput(touched);
-  beating = setInterval(() => report(true), PRESENCE_BEAT_MS);
+  setInterval(() => report(true), PRESENCE_BEAT_MS);
   // Idle Detection runs again on every load once it is allowed.
   detectIdle().catch(() => undefined);
 };
@@ -239,16 +238,13 @@ export function startPresence(): void {
   report();
 }
 
-/** Whether this tab beats: for a check that the interval stands. */
-export const presenceBeating = (): boolean => beating !== undefined;
-
 /**
  * Whose site settings the person changes a blocked permission in: Chromium's
  * and Firefox's sit behind the icon left of the address, Safari's in its
  * Settings › Websites. Chromium is told by `navigator.userAgentData`, which
  * only Chromium has.
  */
-export type SettingsPlace = "chromium" | "firefox" | "safari" | "other";
+type SettingsPlace = "chromium" | "firefox" | "safari" | "other";
 
 const placeOf = (): SettingsPlace => {
   if ("userAgentData" in navigator) {
@@ -316,9 +312,6 @@ export const deskReportOn = (): boolean => stored("local", DESK_KEY) === "on";
 
 /** The person answered this browser's report, yes or no. */
 export const deskAnswered = (): boolean => stored("local", DESK_KEY) !== null;
-
-/** Whether Idle Detection runs in this tab now. */
-export const deskReporting = (): boolean => detector !== undefined;
 
 /** Stops Idle Detection: the hub hears no more of this computer from this tab. */
 const stopIdle = (): void => {
