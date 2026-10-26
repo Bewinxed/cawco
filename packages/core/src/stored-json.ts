@@ -107,7 +107,7 @@ const issueOf = (error: z.ZodError): string => z.prettifyError(error);
  * ({@link storedJson}) and by the stored-shape check over a whole database
  * (scripts/stored-json-check.ts).
  */
-export const checkStored = <S extends z.ZodType>(
+const checkStored = <S extends z.ZodType>(
   schema: S,
   value: unknown,
   place: { table: string; column: string; row?: string },

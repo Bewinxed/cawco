@@ -1,8 +1,8 @@
 <!--
   PinFloat's card (preview/PinFloat.svelte) with the owner's two asks for it,
   for the /dev/pin-goo preview only; the live PinFloat is untouched. Placing
-  it is PinFloat's own (`decide`, the plan), less the composer and the foot
-  sheet, which stay PinFloat's.
+  it is PinFloat's own (preview/pin-place.svelte.ts: `decide`, the plan), less the
+  composer and the foot sheet, which stay PinFloat's.
 
   1. It pours out of its pill (the owner: "with the same goo-out animation
      https://transitions.dev/detail.html?t=gooey-plus-menu"). The technique
@@ -40,9 +40,8 @@
      it where it stood.
 -->
 <script lang="ts">
-  import { type Snippet, tick, untrack } from "svelte";
+  import { type Snippet, untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import {
     dur,
     ease,
@@ -50,14 +49,18 @@
     numberOf,
   } from "#lib/cawco/motion/curves.svelte.js";
   import type { PopSide } from "#lib/cawco/motion/pop.svelte.js";
+  import {
+    type Box,
+    FLOAT_W,
+    FloatPlace,
+    fadeOut,
+    type Plan,
+    threadIn,
+    threadOut,
+    travelTo,
+    union,
+  } from "#lib/cawco/preview/pin-place.svelte.js";
   import { besideTop, stackedSpot } from "./hold";
-
-  interface Box {
-    h: number;
-    w: number;
-    x: number;
-    y: number;
-  }
 
   let {
     mark,
@@ -97,157 +100,28 @@
   let blurEl = $state<SVGFEGaussianBlurElement>();
   let matrixEl = $state<SVGFEColorMatrixElement>();
 
-  let width = $state(0);
-  let height = $state(0);
-  /** Its height with nothing capping it: its own, plus what its body and its thread's room hold past their boxes. */
-  let natural = $state(0);
   /** Poured out: the travel to a new spot only runs once it stands. */
   let opened = $state(false);
-  $effect(() => {
-    const el = float;
-    const inner = body;
-    if (!(el && inner)) {
-      return;
-    }
-    const rooms = [...el.querySelectorAll<HTMLElement>("[data-pin-room]")];
-    const read = () => {
-      const tall = el.offsetHeight;
-      const past = rooms.reduce(
-        (sum, one) => sum + one.scrollHeight - one.clientHeight,
-        inner.scrollHeight - inner.clientHeight
-      );
-      width = el.offsetWidth;
-      height = tall;
-      natural = tall + Math.max(0, past);
-    };
-    read();
-    tick().then(() => {
-      if (float !== el) {
-        return;
-      }
+  const placed = new FloatPlace(() => ({ mark, box, room }), {
+    body: () => body,
+    float: () => float,
+    placed: () => {
       pour();
       opened = true;
-    });
-    const watch = frameObserver(read);
-    watch.observe(el);
-    for (const one of rooms) {
-      for (const part of one.children) {
-        watch.observe(part);
-      }
-    }
-    return () => watch.disconnect();
+    },
   });
-  const FLOAT_W =
-    "min(var(--c-pin-card-reading-w), calc(100% - 2 * var(--space-2)))";
-  const gap = $derived(numberOf("--space-2") || 7);
-  const clear = $derived(gap + 4);
-
-  const union = (parts: Box[]): Box => {
-    const left = Math.min(...parts.map((one) => one.x));
-    const top = Math.min(...parts.map((one) => one.y));
-    return {
-      x: left,
-      y: top,
-      w: Math.max(...parts.map((one) => one.x + one.w)) - left,
-      h: Math.max(...parts.map((one) => one.y + one.h)) - top,
-    };
-  };
-
-  let last: { mark: Box; whole: Box } | null = null;
-  const seen = $derived.by(() => {
-    if (mark) {
-      last = { mark, whole: box ? union([mark, box]) : mark };
-    }
-    return last;
-  });
-
-  const shownOf = (whole: Box, at: Box): Box => {
-    const left = Math.max(0, whole.x);
-    const top = Math.max(0, whole.y);
-    const right = Math.min(room.w, whole.x + whole.w);
-    const bottom = Math.min(room.h, whole.y + whole.h);
-    return right > left && bottom > top
-      ? { x: left, y: top, w: right - left, h: bottom - top }
-      : at;
-  };
-
-  interface Plan {
-    along: "subject" | "pill" | "room";
-    max: number;
-    side: PopSide;
-  }
-  const decide = (at: { mark: Box; whole: Box } | null): Plan => {
-    const full = Math.max(0, room.h - 2 * gap);
-    const tall = Math.min(natural || height, full);
-    if (!at) {
-      return { along: "room", side: "bottom", max: full };
-    }
-    const pillAt = at.mark;
-    const subject = shownOf(at.whole, pillAt);
-    const fits = (about: Box): PopSide | null => {
-      if (about.x + about.w + clear + width <= room.w - gap) {
-        return "right";
-      }
-      return about.x - clear - width >= gap ? "left" : null;
-    };
-    const under = room.h - (subject.y + subject.h + clear) - gap;
-    const over = subject.y - clear - gap;
-    const nextTo = fits(subject);
-    if (nextTo) {
-      return { along: "subject", side: nextTo, max: full };
-    }
-    if (under >= tall) {
-      return { along: "subject", side: "bottom", max: under };
-    }
-    if (over >= tall) {
-      return { along: "subject", side: "top", max: over };
-    }
-    const alone = fits(pillAt);
-    if (alone) {
-      return { along: "pill", side: alone, max: full };
-    }
-    const belowPill = room.h - (pillAt.y + pillAt.h + clear) - gap;
-    const abovePill = pillAt.y - clear - gap;
-    return belowPill >= tall || belowPill >= abovePill
-      ? { along: "pill", side: "bottom", max: Math.max(0, belowPill) }
-      : { along: "pill", side: "top", max: Math.max(0, abovePill) };
-  };
-
-  let planFor = "";
-  let planHeld: Plan | null = null;
-  const plan = $derived.by(() => {
-    const at = seen;
-    const key = [
-      room.w,
-      room.h,
-      width,
-      Math.round(natural),
-      at ? `${at.mark.w}x${at.mark.h}` : "none",
-      at ? `${Math.round(at.whole.w)}x${Math.round(at.whole.h)}` : "",
-    ].join();
-    if (key !== planFor || !planHeld) {
-      planFor = key;
-      planHeld = untrack(() => decide(at));
-    }
-    return planHeld;
-  });
+  const seen = $derived(placed.seen);
+  const plan = $derived(placed.plan);
 
   /** The card's top beside its pill, held while the pill stays beside it, for the plan it was taken under. */
   let spot: { plan: Plan; side: PopSide; top: number } | null = null;
 
   const place = $derived.by(() => {
-    const tall = Math.min(natural || height, plan.max);
+    const { clear, gap, width } = placed;
+    const { corner, inX, inY, tall } = placed.frame(plan);
     const at = seen;
-    const inX = (x: number) => Math.max(gap, Math.min(x, room.w - width - gap));
-    const inY = (y: number) => Math.max(gap, Math.min(y, room.h - gap - tall));
     if (!at || plan.along === "room") {
-      return {
-        left: inX(room.w - width - gap),
-        top: gap,
-        side: plan.side,
-        max: plan.max,
-        jump: false,
-      };
+      return { ...corner, jump: false };
     }
     const pillAt = at.mark;
     const about = plan.along === "pill" ? pillAt : at.whole;
@@ -305,21 +179,7 @@
     if (!(moved && motionOk.current)) {
       return;
     }
-    const shift = getComputedStyle(el).translate;
-    const [dx = 0, dy = 0] =
-      shift === "none"
-        ? [0, 0]
-        : shift.split(" ").map((one) => Number.parseFloat(one));
-    travel?.cancel();
-    travel = el.animate(
-      [
-        {
-          translate: `${before.left - at.left + dx}px ${before.top - at.top + dy}px`,
-        },
-        { translate: "0px 0px" },
-      ],
-      { duration: dur("--dur-morph"), easing: ease("--ease-drawer") }
-    );
+    travel = travelTo(el, before, at, travel);
   });
 
   /** An `feFlood`'s colour, a token: a filter primitive's flood is no Tailwind colour. */
@@ -363,8 +223,8 @@
   const rest = (): Box & { r: number } => ({
     x: 1,
     y: 1,
-    w: Math.max(0, width - 2),
-    h: Math.max(0, height - 2),
+    w: Math.max(0, placed.width - 2),
+    h: Math.max(0, placed.height - 2),
     r: Math.max(0, (numberOf("--radius-lg") || 12) - 1),
   });
 
@@ -456,7 +316,7 @@
   let pouring = false;
   $effect(() => {
     // The region follows the card's size at rest.
-    if (width + height >= 0 && !pouring) {
+    if (placed.width + placed.height >= 0 && !pouring) {
       region(
         null,
         untrack(() => knob("--goo-blur"))
@@ -506,19 +366,7 @@
       ],
       { duration: length }
     );
-    // The thread waits two fifths of the pour, then comes up out of a blur as the shape lands.
-    inner.animate(
-      [
-        { opacity: 0, filter: "blur(var(--part-blur))" },
-        { opacity: 1, filter: "blur(0px)" },
-      ],
-      {
-        delay: length * 0.4,
-        duration: length * 0.6,
-        easing: ease("--ease-out"),
-        fill: "backwards",
-      }
-    );
+    threadIn(inner, length);
     run.finished.then(
       () => {
         pouring = false;
@@ -535,12 +383,7 @@
     const inner = body;
     const to = pillIn();
     if (!(card && inner && to && motionOk.current)) {
-      node.animate([{ opacity: 1 }, { opacity: 0 }], {
-        duration: dur("--dur-control"),
-        easing: ease("--ease-out"),
-        fill: "forwards",
-      });
-      return { duration: dur("--dur-control") };
+      return fadeOut(node);
     }
     const length = knob("--dur-goo-exit");
     const blur = applyGoo();
@@ -583,11 +426,7 @@
       ],
       { duration: length, fill: "forwards" }
     );
-    inner.animate([{ opacity: shown }, { opacity: 0 }], {
-      duration: length / 2,
-      easing: ease("--ease-out"),
-      fill: "forwards",
-    });
+    threadOut(inner, shown, length);
     return { duration: length };
   }
 
@@ -674,9 +513,9 @@
       <rect
         bind:this={cardBlob}
         class="fill-surface-raised"
-        height={Math.max(0, height - 2)}
+        height={Math.max(0, placed.height - 2)}
         rx={Math.max(0, (numberOf("--radius-lg") || 12) - 1)}
-        width={Math.max(0, width - 2)}
+        width={Math.max(0, placed.width - 2)}
         x="1"
         y="1"
       />

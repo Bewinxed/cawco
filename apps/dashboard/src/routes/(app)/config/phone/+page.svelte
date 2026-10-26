@@ -17,7 +17,6 @@
    * from the app; here each can be made quiet or removed, and sent a test.
    */
   const section = sectionOf("phone");
-  const HUE = section.hue;
 
   interface Device {
     id: string;
@@ -47,7 +46,7 @@
     try {
       const response = await fetch("/api/push");
       if (!response.ok) {
-        throw new Error(`the hub answered ${response.status}`);
+        throw await hubRefusal(response);
       }
       ({ devices } = (await response.json()) as { devices: Device[] });
       loaded = true;
@@ -129,12 +128,11 @@
 
 <SectionFrame
   problem={loaded ? null : readError}
-  purpose={section.purpose}
   ready={loaded}
-  title={section.label}
+  {section}
 >
   <div data-slot="group" class="flex flex-col gap-space-2">
-    <SectionHeader hue={HUE} icon={IconPhone} label="Devices">
+    <SectionHeader hue={section.hue} icon={IconPhone} label="Devices">
       {#snippet right()}
         <Button
           label="Send test push"

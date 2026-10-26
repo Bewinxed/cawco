@@ -41,9 +41,8 @@
 
 <SectionFrame
   problem={store.hooks.error}
-  purpose={section.purpose}
   ready={store.hooks.value !== null}
-  title={section.label}
+  {section}
 >
   {#snippet actions(down)}
     <Button

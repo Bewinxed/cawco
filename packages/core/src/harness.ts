@@ -2249,16 +2249,12 @@ export interface PlaceLfsRow {
 export type PlaceRepo =
   /** Already in a git repository, whose root is `root`: nothing was done. */
   | { state: "checkout"; root: string }
-  /**
-   * `made`: the repository was made and its first commit is `commit`;
-   * `plan`: a dry run (the agent's own, scripts/place-repo-plan.ts), and
-   * this is what that commit would take.
-   */
+  /** The repository was made and its first commit is `commit`. */
   | {
-      state: "made" | "plan";
+      state: "made";
       root: string;
-      /** The first commit's id; null for a dry run. */
-      commit: string | null;
+      /** The first commit's id. */
+      commit: string;
       /** Files the commit takes, its `.gitignore` among them. */
       files: number;
       bytes: number;

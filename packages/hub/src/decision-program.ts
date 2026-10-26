@@ -66,7 +66,7 @@ const TOKEN = { Type: 17, BuiltinCall: 35 } as const;
 const STATEMENT = /^([A-Za-z_$][\w$]*)\s*=/u;
 
 /** What a program is once checked: its text, what it says, and the components it drops. */
-export interface CheckedProgram {
+interface CheckedProgram {
   dropped: string[];
   program: string;
   read: ProgramRead;
@@ -458,7 +458,7 @@ const unclosedProblem = (text: string): string | null => {
  * reason: its size and code first, then the parser's mistakes, then its ids,
  * each Canvas's and Preview's resolved whole by `artifact` when given.
  */
-export const checkProgram = (
+const checkProgram = (
   raw: string,
   artifact?: ArtifactNamed
 ): CheckedProgram => {

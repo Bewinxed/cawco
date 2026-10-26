@@ -300,4 +300,4 @@ export const createSettling = (deps: SettlingDeps) => {
   };
 };
 
-export type Settling = ReturnType<typeof createSettling>;
+type Settling = ReturnType<typeof createSettling>;

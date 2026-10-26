@@ -26,12 +26,12 @@
   import { type Cards, rememberCard } from "./cards";
   import { hubDown } from "./hub.svelte";
   import SkeletonRows from "./SkeletonRows.svelte";
+  import type { ConfigSection } from "./sections";
   import { configStore } from "./store.svelte";
   import { unrestoredOn } from "./unrestored.svelte";
 
   let {
-    title,
-    purpose,
+    section,
     ready = true,
     problem = null,
     actions,
@@ -39,12 +39,12 @@
     children,
     settling = false,
   }: {
-    title: string;
     /**
-     * The section's one line under its title; absent or null where the rows
-     * say it (core `CONFIG_SECTIONS`, whose `purpose` every section passes).
+     * The section it frames (sections.ts): its label is the title, its
+     * purpose the one line under it, absent or null where the rows say it.
      */
-    purpose?: string | null;
+    section: Pick<ConfigSection, "label"> &
+      Partial<Pick<ConfigSection, "purpose">>;
     /** False until the section's rows have been read once. */
     ready?: boolean;
     problem?: string | null;
@@ -120,7 +120,7 @@
   const settled = $derived(ready && !problem && cawco.hub === "connected");
 </script>
 
-<svelte:head><title>{configureWords.documentTitle(title)}</title></svelte:head>
+<svelte:head><title>{configureWords.documentTitle(section.label)}</title></svelte:head>
 
 {#snippet fault(text: string)}
   <Alert.Root variant="destructive">
@@ -151,11 +151,11 @@
           data-slot="title"
           class="type-title tracking-title text-balance text-ink-strong"
         >
-          {title}
+          {section.label}
         </h1>
-        {#if purpose}
+        {#if section.purpose}
           <p class="flex flex-wrap items-center gap-space-2 text-pretty">
-            {purpose}
+            {section.purpose}
           </p>
         {/if}
       </div>

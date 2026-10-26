@@ -94,7 +94,7 @@ import { removeTree } from "./remove-tree";
  * it (`overlay`, Linux) or APFS clone (`copy`, macOS), or a repository's git
  * clone of its own (`clone`).
  */
-export const LayerFormSchema = z.enum(["overlay", "copy", "clone"]);
+const LayerFormSchema = z.enum(["overlay", "copy", "clone"]);
 export type LayerForm = z.infer<typeof LayerFormSchema>;
 
 /** One overlay of a Linux view: a filesystem at or under F, its upper and work dirs. */
@@ -104,14 +104,14 @@ const LayerMountSchema = z.object({
   upper: z.string(),
   work: z.string(),
 });
-export type LayerMount = z.infer<typeof LayerMountSchema>;
+type LayerMount = z.infer<typeof LayerMountSchema>;
 
 /**
  * A workspace's layer, as `layer.json` in its state dir records it: written
  * before anything of the copy is made (`made` false), and again once it is
  * whole.
  */
-export const LayerSchema = z.object({
+const LayerSchema = z.object({
   /** Copy: the folder's start, an APFS clone the change set is read against. Absent for a clone. */
   base: z.string().optional(),
   /** The folder the workspace was made from, at its real path; none on record for a clone. */

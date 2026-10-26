@@ -93,9 +93,8 @@
 
 <SectionFrame
   problem={store.fleet.error}
-  purpose={section.purpose}
   ready={store.fleet.value !== null}
-  title={section.label}
+  {section}
 >
   {#snippet actions(down)}
     <Button

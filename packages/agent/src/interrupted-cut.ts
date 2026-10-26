@@ -36,7 +36,7 @@ import { hostGit } from "./host-git";
 import { straysAmong } from "./stand-ins";
 
 /** A cut under way: the clone's path, the repository it is cut from, and the commit a cut again starts at (none for a first cut). */
-export const CutMarkSchema = z.object({
+const CutMarkSchema = z.object({
   at: WorkspaceCutSchema.nullable(),
   path: z.string(),
   source: z.string(),

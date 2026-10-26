@@ -53,25 +53,21 @@
   `--dur-control`.
 -->
 <script lang="ts">
-  import { type Snippet, tick, untrack } from "svelte";
+  import { type Snippet, untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
   import { popMotion } from "#lib/components/ui/popover/index.js";
-  import { frameObserver } from "../frame-observer";
+  import { dur, ease, easeOut, motionOk } from "../motion/curves.svelte";
+  import { popOut } from "../motion/pop.svelte";
   import {
-    dur,
-    ease,
-    easeOut,
-    motionOk,
-    numberOf,
-  } from "../motion/curves.svelte";
-  import { type PopSide, popOut } from "../motion/pop.svelte";
-
-  interface Box {
-    h: number;
-    w: number;
-    x: number;
-    y: number;
-  }
+    type Box,
+    FLOAT_W,
+    FloatPlace,
+    fadeOut,
+    type Plan,
+    threadIn,
+    threadOut,
+    travelTo,
+  } from "./pin-place.svelte";
 
   /** A pill's face: its fill and its edge, as tokens (PinMark's faces). */
   interface PinFace {
@@ -125,48 +121,19 @@
   let surface = $state<HTMLElement>();
   let body = $state<HTMLElement>();
 
-  let width = $state(0);
-  let height = $state(0);
-  /**
-   * Its height with nothing capping it: its own, plus what its body and its
-   * thread's room (PinCard `data-pin-room`) hold past their boxes. Where it
-   * stands is chosen by this, never by the cap that choice sets, so a cap
-   * never moves it.
-   */
-  let natural = $state(0);
   /** Placed: the composer's `data-state` goes from `closed` to `open`, and the card's surface grows. */
   let opened = $state(false);
-  // Its size as it mounts, then each change in the next frame
-  // (frameObserver): what it holds grows inside a ResizeObserver pass (the
-  // composer's field, a thread's entries), and a size written inside that
-  // pass would place it again there, a box the pass could no longer deliver.
-  // The room's contents are watched too: under a cap they grow inside a
-  // box that keeps its size.
-  $effect(() => {
-    const el = float;
-    const inner = body;
-    if (!(el && inner)) {
-      return;
-    }
-    const rooms = [...el.querySelectorAll<HTMLElement>("[data-pin-room]")];
-    const read = () => {
-      const tall = el.offsetHeight;
-      const past = rooms.reduce(
-        (sum, one) => sum + one.scrollHeight - one.clientHeight,
-        inner.scrollHeight - inner.clientHeight
-      );
-      width = el.offsetWidth;
-      height = tall;
-      natural = tall + Math.max(0, past);
-    };
-    read();
-    // Opened once the flush that places it has landed: the composer's
-    // closed style taken there, so the kit's transition starts from where
-    // it stands; the card's surface grown from the pill it stands beside.
-    tick().then(() => {
-      if (float !== el) {
-        return;
-      }
+  /**
+   * Its size, what it is about as last seen, and its plan (pin-place
+   * `FloatPlace`). Opened once the flush that places it has landed: the
+   * composer's closed style taken there, so the kit's transition starts
+   * from where it stands; the card's surface grown from the pill it stands
+   * beside.
+   */
+  const placed = new FloatPlace(() => ({ mark, box, room }), {
+    body: () => body,
+    float: () => float,
+    placed: (el) => {
       if (untrack(() => card)) {
         grow();
       } else {
@@ -174,137 +141,11 @@
         getComputedStyle(el).translate;
       }
       opened = true;
-    });
-    const watch = frameObserver(read);
-    watch.observe(el);
-    for (const one of rooms) {
-      for (const part of one.children) {
-        watch.observe(part);
-      }
-    }
-    return () => watch.disconnect();
+    },
   });
-  /** Its width: the reading card's, never past the well less `--space-2` each side. */
-  const FLOAT_W =
-    "min(var(--c-pin-card-reading-w), calc(100% - 2 * var(--space-2)))";
-  /** Its distance from the well's edges: `--space-2`. */
-  const gap = $derived(numberOf("--space-2") || 7);
-  /**
-   * Its distance from the pill's box: `--space-2` from the pill as drawn,
-   * past its focus ring (PinMark `data-focused`: a 2px outline 2px out), so
-   * nothing of the pill ever stands on it.
-   */
-  const clear = $derived(gap + 4);
-
-  /** Two boxes as one. */
-  const union = (parts: Box[]): Box => {
-    const left = Math.min(...parts.map((one) => one.x));
-    const top = Math.min(...parts.map((one) => one.y));
-    return {
-      x: left,
-      y: top,
-      w: Math.max(...parts.map((one) => one.x + one.w)) - left,
-      h: Math.max(...parts.map((one) => one.y + one.h)) - top,
-    };
-  };
-
-  /**
-   * The pill and what the comment is about as last seen on the page: the
-   * card keeps to them while the pill is out of view, so it never leaves
-   * for the well's corner as the pill scrolls away.
-   */
-  let last: { mark: Box; whole: Box } | null = null;
-  const seen = $derived.by(() => {
-    if (mark) {
-      last = { mark, whole: box ? union([mark, box]) : mark };
-    }
-    return last;
-  });
-
-  /**
-   * What the comment is about as the well shows it (cut to the well), for
-   * choosing where the card stands: the pill and its element's box, one box.
-   */
-  const shownOf = (whole: Box, pill: Box): Box => {
-    const left = Math.max(0, whole.x);
-    const top = Math.max(0, whole.y);
-    const right = Math.min(room.w, whole.x + whole.w);
-    const bottom = Math.min(room.h, whole.y + whole.h);
-    return right > left && bottom > top
-      ? { x: left, y: top, w: right - left, h: bottom - top }
-      : pill;
-  };
-
-  /** Where it stands: the side, what it stands beside, and its tallest. */
-  interface Plan {
-    along: "subject" | "pill" | "room";
-    max: number;
-    side: PopSide;
-  }
-  const decide = (at: { mark: Box; whole: Box } | null): Plan => {
-    const full = Math.max(0, room.h - 2 * gap);
-    /** Its height as it will stand beside the pill: what it holds, up to the well's. */
-    const tall = Math.min(natural || height, full);
-    if (!at) {
-      return { along: "room", side: "bottom", max: full };
-    }
-    const pill = at.mark;
-    const subject = shownOf(at.whole, pill);
-    const fits = (about: Box): PopSide | null => {
-      if (about.x + about.w + clear + width <= room.w - gap) {
-        return "right";
-      }
-      return about.x - clear - width >= gap ? "left" : null;
-    };
-    const under = room.h - (subject.y + subject.h + clear) - gap;
-    const over = subject.y - clear - gap;
-    const nextTo = fits(subject);
-    if (nextTo) {
-      return { along: "subject", side: nextTo, max: full };
-    }
-    if (under >= tall) {
-      return { along: "subject", side: "bottom", max: under };
-    }
-    if (over >= tall) {
-      return { along: "subject", side: "top", max: over };
-    }
-    const alone = fits(pill);
-    if (alone) {
-      return { along: "pill", side: alone, max: full };
-    }
-    const belowPill = room.h - (pill.y + pill.h + clear) - gap;
-    const abovePill = pill.y - clear - gap;
-    return belowPill >= tall || belowPill >= abovePill
-      ? { along: "pill", side: "bottom", max: Math.max(0, belowPill) }
-      : { along: "pill", side: "top", max: Math.max(0, abovePill) };
-  };
-
-  /**
-   * The plan, chosen again only when what it was chosen from changes size
-   * (the well, the card, what it holds, the pill or its element), never as
-   * the page under it scrolls.
-   */
-  let planFor = "";
-  let planHeld: Plan | null = null;
-  const plan = $derived.by(() => {
-    if (sheet) {
-      return null;
-    }
-    const at = seen;
-    const key = [
-      room.w,
-      room.h,
-      width,
-      Math.round(natural),
-      at ? `${at.mark.w}x${at.mark.h}` : "none",
-      at ? `${Math.round(at.whole.w)}x${Math.round(at.whole.h)}` : "",
-    ].join();
-    if (key !== planFor || !planHeld) {
-      planFor = key;
-      planHeld = untrack(() => decide(at));
-    }
-    return planHeld;
-  });
+  const seen = $derived(placed.seen);
+  /** None on the foot sheet, which stands full width at the well's foot. */
+  const plan = $derived(sheet ? null : placed.plan);
 
   /**
    * Where it stands now, from the plan and the pill as it stands: a
@@ -314,18 +155,11 @@
     if (!plan) {
       return null;
     }
-    const tall = Math.min(natural || height, plan.max);
+    const { clear, width } = placed;
+    const { corner, inX, inY, tall } = placed.frame(plan);
     const at = seen;
-    const inX = (x: number) => Math.max(gap, Math.min(x, room.w - width - gap));
-    const inY = (y: number) => Math.max(gap, Math.min(y, room.h - gap - tall));
     if (!at || plan.along === "room") {
-      return {
-        left: inX(room.w - width - gap),
-        top: gap,
-        side: plan.side,
-        max: plan.max,
-        origin: { x: width, y: 0 },
-      };
+      return { ...corner, origin: { x: width, y: 0 } };
     }
     const pill = at.mark;
     const about = plan.along === "pill" ? pill : at.whole;
@@ -374,22 +208,7 @@
     if (!(moved && motionOk.current)) {
       return;
     }
-    // Where it is drawn now, a travel in flight counted, is where it starts.
-    const shift = getComputedStyle(el).translate;
-    const [dx = 0, dy = 0] =
-      shift === "none"
-        ? [0, 0]
-        : shift.split(" ").map((one) => Number.parseFloat(one));
-    travel?.cancel();
-    travel = el.animate(
-      [
-        {
-          translate: `${before.left - at.left + dx}px ${before.top - at.top + dy}px`,
-        },
-        { translate: "0px 0px" },
-      ],
-      { duration: dur("--dur-morph"), easing: ease("--ease-drawer") }
-    );
+    travel = travelTo(el, before, at, travel);
   });
 
   /** A colour token as the page computes it now (its scheme's). */
@@ -462,20 +281,7 @@
     const to = surfaceShape(shape);
     const length = dur("--dur-pop");
     shape.animate([from, to], { duration: length, easing: ease("--ease-out") });
-    // The thread waits two fifths of the open, held hidden, then comes in
-    // over the rest as the shape lands.
-    inner.animate(
-      [
-        { opacity: 0, filter: "blur(var(--part-blur))" },
-        { opacity: 1, filter: "blur(0px)" },
-      ],
-      {
-        delay: length * 0.4,
-        duration: length * 0.6,
-        easing: ease("--ease-out"),
-        fill: "backwards",
-      }
-    );
+    threadIn(inner, length);
   }
 
   /** The kit's state for the composer's pop: none on the foot sheet nor the card. */
@@ -527,12 +333,7 @@
     const to = pillShape();
     const length = dur("--dur-exit");
     if (!(shape && inner && to && motionOk.current)) {
-      node.animate([{ opacity: 1 }, { opacity: 0 }], {
-        duration: dur("--dur-control"),
-        easing: ease("--ease-out"),
-        fill: "forwards",
-      });
-      return { duration: dur("--dur-control") };
+      return fadeOut(node);
     }
     // From where it is drawn: a close caught mid-open turns back there.
     const from = surfaceShape(shape);
@@ -545,12 +346,7 @@
       easing: ease("--ease-out"),
       fill: "forwards",
     });
-    // The thread is gone in the first half, before the shape is too small to hold it.
-    inner.animate([{ opacity: shown }, { opacity: 0 }], {
-      duration: length / 2,
-      easing: ease("--ease-out"),
-      fill: "forwards",
-    });
+    threadOut(inner, shown, length);
     return { duration: length };
   }
 </script>

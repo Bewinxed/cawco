@@ -18,9 +18,10 @@
  * owner's own `git status` there stays clean and a later `git add` takes no
  * key. When what is left to commit passes {@link PLACE_REPO_LIMIT_BYTES},
  * nothing is written and the place stays a folder, its heaviest folders
- * named. The plan is read through a scratch git dir outside the place, so a
- * dry run writes nothing in it; a real run then makes `.git`, stages exactly
- * the plan's files, scans what is staged once more, and commits as CawCo.
+ * named. The plan is read through a scratch git dir outside the place, so
+ * a refused place is left as it was; the run then makes `.git`, stages
+ * exactly the plan's files, scans what is staged once more, and commits as
+ * CawCo.
  * Nothing is pushed and no remote is added. A run that fails after
  * `git init` takes its `.git` and `.gitignore` change back.
  */
@@ -783,16 +784,10 @@ export const placeSettled = async (root: string): Promise<void> => {
 };
 
 /** {@link CONTROL_PLACE_REPO}. */
-export const placeRepo = (
-  path: unknown,
-  dryRun?: unknown
-): Promise<PlaceRepo> => {
+export const placeRepo = (path: unknown): Promise<PlaceRepo> => {
   // A place's path is absolute: the hub stores no other (db placePathOn).
   const root = String(path);
-  if (dryRun === true) {
-    return placeRepoNow(root, true);
-  }
-  return placeTurn(root, () => placeRepoNow(root, false));
+  return placeTurn(root, () => placeRepoNow(root));
 };
 
 /** This machine's cache folder: `XDG_CACHE_HOME`, else where the platform keeps one under the home folder. */
@@ -894,7 +889,7 @@ export const repoRoot = async (path: unknown): Promise<string | null> => {
   );
 };
 
-const placeRepoNow = async (root: string, dry: boolean): Promise<PlaceRepo> => {
+const placeRepoNow = async (root: string): Promise<PlaceRepo> => {
   const info = await stat(root).catch(() => undefined);
   if (!info?.isDirectory()) {
     throw new Error(
@@ -930,24 +925,6 @@ const placeRepoNow = async (root: string, dry: boolean): Promise<PlaceRepo> => {
     throw new Error(
       `${root} holds ${mb(plan.bytes)} its ignore rules leave in, past the ${mb(PLACE_REPO_LIMIT_BYTES)} a place's first commit takes, so it stays a folder and no workspace can be cut from it. Most of it is in ${heaviest(plan)}: name what is not the project's in its .gitignore, or make it a git repository yourself.`
     );
-  }
-  if (dry) {
-    const ignore = Buffer.byteLength(
-      gitignoreText(
-        await readFile(join(root, ".gitignore"), "utf8").catch(() => undefined),
-        plan.leftOut
-      )
-    );
-    return {
-      state: "plan",
-      root,
-      commit: null,
-      files: plan.staged.length + 1,
-      bytes: plan.bytes + ignore,
-      staged: [...plan.staged, ".gitignore"].sort(),
-      leftOut: plan.leftOut,
-      lfs: plan.lfs,
-    };
   }
   const made = await commitPlan(root, plan, git).catch((error: Error) => {
     throw new Error(

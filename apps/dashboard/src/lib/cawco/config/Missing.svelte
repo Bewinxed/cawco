@@ -9,7 +9,7 @@
   let { section, what }: { section: ConfigSection; what: string } = $props();
 </script>
 
-<SectionFrame purpose={null} title={section.label}>
+<SectionFrame section={{ label: section.label }}>
   <EmptyState
     icon={section.icon}
     line={words.goneLine}

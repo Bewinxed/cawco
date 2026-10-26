@@ -24,9 +24,8 @@
 </script>
 
 <SectionFrame
-  purpose={section.purpose}
   ready={cawco.accounts !== null}
-  title={section.label}
+  {section}
 >
   {#snippet actions(down)}
     <Button

@@ -93,9 +93,8 @@
 
 <SectionFrame
   problem={store.fleet.error}
-  purpose={section.purpose}
   ready={fleet !== null}
-  title={section.label}
+  {section}
 >
   {#snippet actions(down)}
     <NewMemoryPopover

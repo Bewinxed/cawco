@@ -58,10 +58,10 @@ export class SettleRefusal extends Error {
 }
 
 /** The file in the project's folder that declares its Who decides. */
-export const DECIDES_FILE = "decides.md";
+const DECIDES_FILE = "decides.md";
 
 /** What reading decides.md answers: the routes and advisor it gives, and its own paths; or every problem it has. */
-export type DecidesReading =
+type DecidesReading =
   | {
       advisor?: string;
       ok: true;
@@ -167,7 +167,7 @@ const marginLine = (read: BlockRead, text: string): void => {
 };
 
 /** decides.md's block as routes, its advisor and its paths, or every problem it has. */
-export const readDecides = (content: string): DecidesReading => {
+const readDecides = (content: string): DecidesReading => {
   const block = blockLines(content);
   if (!block) {
     return {

@@ -646,7 +646,7 @@
   >
 {/snippet}
 
-<SectionFrame title={words.title}>
+<SectionFrame section={{ label: words.title }}>
   {#snippet actions()}
     <Button
       disabled={busy}

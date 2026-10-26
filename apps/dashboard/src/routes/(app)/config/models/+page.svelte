@@ -334,9 +334,8 @@
 
 <SectionFrame
   problem={ready ? null : (openrouterError ?? jevError ?? watchError)}
-  purpose={section.purpose}
   {ready}
-  title={section.label}
+  {section}
 >
   <div data-slot="group" class="flex flex-col gap-space-2">
     <SectionHeader hue={HUE} icon={IconGlobe} label="OpenRouter">

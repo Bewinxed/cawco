@@ -88,9 +88,8 @@
 
 <SectionFrame
   problem={settings === null ? problem : null}
-  purpose={section.purpose}
   ready={settings !== null}
-  title={section.label}
+  {section}
 >
   <div data-slot="group" class="flex flex-col gap-space-2">
     <p

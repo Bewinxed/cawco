@@ -12,7 +12,7 @@
 {#if cawco.accounts !== null && cawco.accountProviders !== null}
   <AccountSetup />
 {:else}
-  <SectionFrame ready={false} title={accountsWords.setup.title}>
+  <SectionFrame ready={false} section={{ label: accountsWords.setup.title }}>
     <span></span>
   </SectionFrame>
 {/if}

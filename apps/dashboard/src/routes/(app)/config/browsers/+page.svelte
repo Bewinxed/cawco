@@ -67,9 +67,8 @@
 
 <SectionFrame
   problem={journey === undefined ? problem : null}
-  purpose={section.purpose}
   ready={journey !== undefined}
-  title={section.label}
+  {section}
 >
   <div class="flex min-w-0 flex-col" data-stream-relay>
     {#if journey}

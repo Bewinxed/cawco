@@ -183,7 +183,7 @@ export interface AfterLinks {
 }
 
 /** Who made a pick: the person, or who settled it for him (core decides.ts). */
-export type DecidedBy = "person" | SettledBy["by"];
+type DecidedBy = "person" | SettledBy["by"];
 
 /** What a pick records of who made it: by whom (and their session, when not the person), why, and its sources. */
 export interface PickRecord {

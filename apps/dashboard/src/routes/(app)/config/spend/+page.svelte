@@ -52,9 +52,8 @@
 
 <SectionFrame
   problem={onCap === null ? problem : null}
-  purpose={section.purpose}
   ready={onCap !== null}
-  title={section.label}
+  {section}
 >
   <div data-slot="group" class="flex flex-col gap-space-2">
     <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">

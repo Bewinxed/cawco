@@ -166,9 +166,8 @@
 
 <SectionFrame
   problem={loaded ? null : readError}
-  purpose={section.purpose}
   ready={loaded}
-  title={section.label}
+  {section}
 >
   <div data-slot="group" class="flex flex-col gap-space-2">
     <SectionHeader hue={HUE} icon={IconLock} label="Pairing" />

@@ -61,10 +61,9 @@
 
 <SectionFrame
   problem={store.types.error ?? store.projectTypes.error}
-  purpose={section.purpose}
   ready={store.types.value !== null}
   settling={store.projectTypes.loading}
-  title={section.label}
+  {section}
 >
   {#snippet actions(down)}
     <Button

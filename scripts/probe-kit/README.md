@@ -70,10 +70,6 @@ await house.at(page, "state name"); // at each state, once the spec has settled 
 house.report();                      // one PASS/FAIL line per rule over every state
 ```
 
-`settle(page)` (fonts in, then kit.ts `settle`: one-shot runs landed,
-loops paused at their start) gets a page ready for a read; a page still
-moving in the surface is the `settled` rule's finding.
-
 | Rule | Read by | What it reads |
 | --- | --- | --- |
 | `overflow` | `journeys/scan.ts` + impeccable `text-occlusion` | text past the screen, out of its control or box; a control out of the row, card or panel it is laid out in (`specs/web/scan-control-box`); text under a control or an opaque box |

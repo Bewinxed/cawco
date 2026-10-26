@@ -36,7 +36,7 @@ import type { Page } from "playwright-core";
 import { userLayerPath } from "../../packages/core/src/paths";
 import { capture, type Raster } from "./ink";
 import { scan } from "./journeys/scan";
-import { devtoolsPort, type Kit, settle as kitSettle, ROOT } from "./kit";
+import { devtoolsPort, type Kit, ROOT } from "./kit";
 
 export type HouseRule =
   | "overflow"
@@ -183,16 +183,6 @@ function impeccableBin(): string | null {
     process.env.IMPECCABLE ??
     userLayerPath("skills", "impeccable", "scripts", "impeccable");
   return existsSync(bin) ? bin : null;
-}
-
-/**
- * A page ready for a reading: its fonts in, then the kit's still clock
- * (kit.ts `settle`: every one-shot run landed, every loop paused at its
- * start).
- */
-export async function settle(page: Page): Promise<void> {
-  await page.evaluate(() => document.fonts.ready);
-  await kitSettle(page);
 }
 
 interface InPageArgs {

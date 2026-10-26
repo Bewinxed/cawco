@@ -164,10 +164,9 @@
 
 <SectionFrame
   problem={store.fleet.error}
-  purpose={section.purpose}
   ready={store.fleet.value !== null}
   settling={Object.keys(reading).length > 0}
-  title={section.label}
+  {section}
 >
   {#snippet actions(down)}
     <Button

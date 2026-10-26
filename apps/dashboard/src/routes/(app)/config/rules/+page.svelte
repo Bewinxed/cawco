@@ -70,9 +70,8 @@
 
 <SectionFrame
   problem={store.rules.error}
-  purpose={section.purpose}
   ready={store.rules.value !== null}
-  title={section.label}
+  {section}
 >
   {#snippet actions(down)}
     <Button

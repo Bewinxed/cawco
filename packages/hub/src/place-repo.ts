@@ -95,7 +95,7 @@ export const createPlaceRepos = ({ call, db, notice }: PlaceRepoDeps) => {
    */
   const noteMade = (
     place: PlaceRef,
-    made: Exclude<PlaceRepo, { state: "checkout" }>
+    made: Extract<PlaceRepo, { state: "made" }>
   ): void => {
     const leaf = made.root.split("/").filter(Boolean).at(-1) ?? made.root;
     const offer = made.lfs.length > 0 ? crypto.randomUUID() : undefined;
@@ -109,10 +109,10 @@ export const createPlaceRepos = ({ call, db, notice }: PlaceRepoDeps) => {
           kind: "repo",
           root: made.root,
           machineId: place.machineId,
-          commit: made.commit ?? null,
+          commit: made.commit,
           ...(offer ? { lfsOffer: offer } : {}),
         },
-        body: `${made.root} on ${machineName(place.machineId)} was a plain folder, so CawCo made it a git repository to cut workspaces from: one commit, ${made.commit?.slice(0, 9)}, of ${made.files} ${made.files === 1 ? "file" : "files"} (${(made.bytes / MB).toFixed(1)} MB). It goes to no outside remote; the project's workspaces reach it through the hub's own, as for any repository without one.\n\n${leftOutLines(made.leftOut)}${offer ? `\n\n${large} of them ${large === 1 ? "was" : "were"} left out for size alone, ${LARGE_FILE_BYTES / MB} MB or more: Git LFS can keep ${large === 1 ? "it" : "them"} instead, by pattern.` : ""}`,
+        body: `${made.root} on ${machineName(place.machineId)} was a plain folder, so CawCo made it a git repository to cut workspaces from: one commit, ${made.commit.slice(0, 9)}, of ${made.files} ${made.files === 1 ? "file" : "files"} (${(made.bytes / MB).toFixed(1)} MB). It goes to no outside remote; the project's workspaces reach it through the hub's own, as for any repository without one.\n\n${leftOutLines(made.leftOut)}${offer ? `\n\n${large} of them ${large === 1 ? "was" : "were"} left out for size alone, ${LARGE_FILE_BYTES / MB} MB or more: Git LFS can keep ${large === 1 ? "it" : "them"} instead, by pattern.` : ""}`,
       }
     );
     if (offer && threadId) {

@@ -17,7 +17,7 @@ import {
   ReleaseManifestSchema,
 } from "./stored-shapes";
 
-export const BinaryInstallationSchema = z.object({
+const BinaryInstallationSchema = z.object({
   /** Where this machine's dashboard answers, when it runs one. */
   dashboardUrl: z.string().optional(),
   hubUrl: z.string(),
@@ -111,7 +111,7 @@ export async function readRunningManifest(): Promise<ReleaseManifest> {
  * launches one from the previous build at any unit's start (a reboot, a
  * crash loop). Nothing but a decider acts on it.
  */
-export const TrialMarkerSchema = z.object({
+const TrialMarkerSchema = z.object({
   /** The hub database copy a rollback restores, when the schema changed. */
   dbBackup: z.string().optional(),
   dbPath: z.string().optional(),

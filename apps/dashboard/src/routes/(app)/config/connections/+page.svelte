@@ -1055,9 +1055,8 @@
 
 <SectionFrame
   problem={readError}
-  purpose={section.purpose}
   ready={loaded}
-  title={section.label}
+  {section}
 >
   {#snippet actions(blocked)}
     {#if rows.length > 0}

@@ -43,8 +43,6 @@ const BLOCK_START =
   "# cawco: the stand-ins it made for the workspace's denied paths";
 const BLOCK_END = "# cawco: end of stand-ins";
 
-const LEADING_SLASH = /^\//u;
-
 /**
  * The `info/exclude` of the checkout `dir` lies in, by its absolute path (the
  * common one for a linked worktree); undefined outside a checkout.
@@ -66,14 +64,8 @@ const excludeFileOf = async (clone: string): Promise<string> => {
   return exclude;
 };
 
-/** A clone's `info/exclude`: CawCo's block's paths (relative to the clone), and every other line. */
-export const readExclude = async (
-  exclude: string
-): Promise<{ readonly listed: string[]; readonly rest: string[] }> => {
-  const text = await Bun.file(exclude)
-    .text()
-    .catch(() => "");
-  const listed: string[] = [];
+/** The lines of an `info/exclude` outside CawCo's block. */
+const outsideBlock = (text: string): string[] => {
   const rest: string[] = [];
   let inside = false;
   for (const line of text.split("\n")) {
@@ -81,13 +73,11 @@ export const readExclude = async (
       inside = true;
     } else if (line === BLOCK_END) {
       inside = false;
-    } else if (inside) {
-      listed.push(line.replace(LEADING_SLASH, ""));
-    } else {
+    } else if (!inside) {
       rest.push(line);
     }
   }
-  return { listed, rest };
+  return rest;
 };
 
 /**
@@ -105,7 +95,7 @@ export const excludeStandIns = async (
   const before = await Bun.file(exclude)
     .text()
     .catch(() => "");
-  const kept = [...(await readExclude(exclude)).rest];
+  const kept = outsideBlock(before);
   while (kept.length > 0 && kept.at(-1) === "") {
     kept.pop();
   }

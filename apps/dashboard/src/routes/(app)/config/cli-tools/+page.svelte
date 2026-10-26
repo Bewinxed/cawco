@@ -18,9 +18,8 @@
 
 <SectionFrame
   problem={store.tools.error}
-  purpose={section.purpose}
   ready={store.tools.value !== null}
-  title={section.label}
+  {section}
 >
   {#if store.tools.value}
     <ToolMatrix

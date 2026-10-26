@@ -177,9 +177,8 @@
 <SectionFrame
   actions={resetAction}
   problem={ready ? null : updates.problem}
-  purpose={section.purpose}
   {ready}
-  title={section.label}
+  {section}
 >
   {#if policy}
     <div data-slot="group" class="flex flex-col gap-space-2">

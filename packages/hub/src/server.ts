@@ -1024,7 +1024,7 @@ type ControlResult = Extract<FramePayload, { kind: "control_result" }>;
  * 20261018 can be installed, though no app reads it; it goes in the change
  * that expires them (bash apps/apple/scripts/testflight.sh --expire 20261018).
  */
-export interface BridgedHeldPlace {
+interface BridgedHeldPlace {
   heldAt: string;
   holds: string;
   instanceId: string;
