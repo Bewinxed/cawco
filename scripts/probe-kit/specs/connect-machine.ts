@@ -96,7 +96,10 @@ import {
 import { join } from "node:path";
 import type { Page, Request } from "playwright-core";
 import type { AuthContext } from "ssh2";
-import type { InstallsRead } from "../../../packages/core/src/install";
+import type {
+  InstallSignIn,
+  InstallsRead,
+} from "../../../packages/core/src/install";
 import { listedPid, signal } from "../../../packages/core/src/signal";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { connectWords } from "../../../packages/core/src/words/connect";
@@ -230,7 +233,7 @@ const editDraft = (
     route: "ssh" | "command" | null;
     target: string;
     port: string;
-    signIn: "key" | "password" | "by-hand";
+    signIn: InstallSignIn;
     address: string | null;
   }>
 ) => {
@@ -252,7 +255,7 @@ const setDraft = (
     route: "ssh" | "command" | null;
     target?: string;
     port?: string;
-    signIn?: "key" | "password" | "by-hand";
+    signIn?: InstallSignIn;
   }
 ) =>
   editDraft(fleet, {

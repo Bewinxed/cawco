@@ -57,11 +57,11 @@ import {
   type Envelope,
   type InstanceRow,
   LEAD_GATED_TOOLS,
-  LEAD_SHELL_TOOLS,
   type NeutralMessage,
   type NeutralOrigin,
   type PermissionRequestFrame,
   type PermissionResult,
+  SHELL_TOOLS,
   type ThreadNote,
 } from "@cawco/core";
 import { GIT_VALUED_OPTIONS, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
@@ -117,7 +117,7 @@ const UNREAD_SHELLS: ReadonlySet<string> = new Set(["PowerShell"]);
 type CallKind = "shell" | "edit" | "tool";
 
 const kindOf = (tool: string): CallKind => {
-  if (LEAD_SHELL_TOOLS.has(tool)) {
+  if (SHELL_TOOLS.has(tool)) {
     return "shell";
   }
   return GATED.has(tool) ? "edit" : "tool";

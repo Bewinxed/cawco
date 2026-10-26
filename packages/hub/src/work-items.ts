@@ -51,6 +51,7 @@ import type {
   InputsAdmitted,
   InputsRead,
   InstanceRow,
+  InstanceStatus,
   LandsMode,
   NamedSpawn,
   NeutralOrigin,
@@ -4012,7 +4013,7 @@ export const createWorkItems = ({
   };
 
   /** Session statuses whose process may still run a command in its workspace. */
-  const ATTACHED: ReadonlySet<string> = new Set([
+  const ATTACHED: ReadonlySet<InstanceStatus> = new Set([
     "running",
     "starting",
     "unknown",

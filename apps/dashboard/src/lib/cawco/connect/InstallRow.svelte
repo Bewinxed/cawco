@@ -17,7 +17,12 @@
    * The machine it brings back (`returning`) keeps its own tile and name:
    * the row grows out of that machine's own (MachinesList).
    */
-  import { causeLine, type Install, installName } from "@cawco/core";
+  import {
+    causeLine,
+    type Install,
+    type InstallStep,
+    installName,
+  } from "@cawco/core";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   import {
     machineHue,
@@ -61,6 +66,14 @@
       : "New machine · by a command"
   );
 
+  /** An SSH install's own steps, from its key on: they read under "Installing · ". */
+  const INSTALLING_STEPS: ReadonlySet<InstallStep> = new Set([
+    "key",
+    "fetch",
+    "install",
+    "agent",
+  ]);
+
   /**
    * The step it is on, or how it ended: words that morph as they change (The
    * Steady Swap Rule). Over SSH, from its key on, the steps are the install's
@@ -73,8 +86,7 @@
     if (!current) {
       return "Starting";
     }
-    return install.route === "ssh" &&
-      ["key", "fetch", "install", "agent"].includes(current.step)
+    return install.route === "ssh" && INSTALLING_STEPS.has(current.step)
       ? `Installing · ${current.words}`
       : current.words;
   });

@@ -233,6 +233,7 @@
     "tools:check": "bun scripts/tool-presentation.ts --check"
   },
   "dependencies": {
+    "@cawco/jsonl-parser": "workspace:*",
     "@dagrejs/dagre": "^3.1.1",
     "@iconify-json/solar": "1.2.13",
     "@octokit/rest": "22.0.1",

@@ -29,6 +29,7 @@ const REPO = resolve(HUB, "../..");
 const INPUT_DIRS = [
   "packages/auth",
   "packages/core",
+  "packages/jsonl-parser/src",
   "packages/hub",
   "packages/agent/src",
   "apps/apple/Packages/CawCoKit/Sources/CawCoAPI",

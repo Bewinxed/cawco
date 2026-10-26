@@ -35,13 +35,13 @@ import {
   goneProblem,
   isSendControl,
   type MarkPictures,
-  PIN_MAPS,
   pinsProblem,
   SEND_CONTROLS,
   type SendBody,
   seenProblem,
 } from "@cawco/core/comments";
 import { ARTIFACT_GONE } from "@cawco/core/doc-link";
+import { MIRRORED_MAPS } from "@cawco/core/doc-maps";
 import { inkProblem } from "@cawco/core/ink";
 import { writeStateFile } from "@cawco/core/state-file";
 import type { ServerWebSocket } from "bun";
@@ -222,8 +222,14 @@ const filesProblem = (
     : null;
 };
 
-/** The maps a person's ink, pins (each in its parts, core `PIN_MAPS`), deleted pins and looks write, on any artifact (core ink.ts, comments.ts). */
-const INK_MAPS: string[] = ["ink", "moved", ...PIN_MAPS, "gone", "seen"];
+/**
+ * The maps a person's ink, pins (each in its parts, core `PIN_MAPS`), deleted
+ * pins and looks write, on any artifact (core ink.ts, comments.ts): every
+ * mirrored map but the decision state and the doc's meta.
+ */
+const INK_MAPS: string[] = MIRRORED_MAPS.filter(
+  (map) => map !== "state" && map !== "meta"
+);
 
 /** Why the ink, moved groups, pins, deleted pins and looks in `trial`, `doc` after a person's update, may not be kept; null when they may. */
 const inkMapsProblem = (doc: Doc, trial: Doc): string | null => {

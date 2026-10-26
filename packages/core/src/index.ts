@@ -1105,6 +1105,16 @@ export const ENDED_STATUSES: ReadonlySet<InstanceStatus> = new Set([
 ]);
 
 /**
+ * Statuses of a session that is over: ended ({@link ENDED_STATUSES}), or
+ * failed. Its process is gone or going, or its end is decided; whether a
+ * process still runs is its machine's custody to say.
+ */
+export const OVER_STATUSES: ReadonlySet<InstanceStatus> = new Set([
+  ...ENDED_STATUSES,
+  "error",
+]);
+
+/**
  * A continuation in a new session the hub is carrying, as every dashboard
  * follows it: the source files its open items (a person's Continue), is
  * summarised, then a new session starts seeded with the summary and those

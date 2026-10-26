@@ -605,6 +605,12 @@ const gated: Gated[] = [
   bun("scripts/claude-paths-check.ts", [...DASH, ...PKG]),
   bun("scripts/machine-paths-check.ts", [...DASH, ...PKG]),
   bun("scripts/signal-check.ts", ALL_FILES),
+  bun("scripts/duplicate-lists-check.ts", [
+    "packages/",
+    "apps/dashboard/",
+    "apps/cawrier/",
+    "scripts/",
+  ]),
   bun("scripts/apple-ops-check.ts", ["apps/apple/", ...PKG]),
   bun(
     "scripts/words-swift.ts",

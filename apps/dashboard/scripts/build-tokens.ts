@@ -42,6 +42,7 @@ import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import StyleDictionary from "style-dictionary";
 import type { TransformedToken } from "style-dictionary/types";
+import type { ViewTextRole } from "../../../packages/core/src/views";
 import {
   buildTokens,
   cssLeafName,
@@ -408,7 +409,9 @@ const theme = tailwindThemeCss(built.view, {
   // `--text-*` keys made them. A conversion from a component's <style>
   // writes `type-<role>` (for `font:`) or `text-size-<role>` (for
   // `font-size:`), never these.
-  markupRoles: ["meta", "label", "body", "title", "kpi"],
+  markupRoles: ["meta", "label", "body", "title", "kpi"] satisfies readonly (
+    ViewTextRole | "kpi"
+  )[],
   // What every use of a role sets beside its shorthand: a kpi figure is
   // always tabular (`num`). Title's tracking and code's ligatures off are
   // set by only some of their uses, which carry `tracking-title` and

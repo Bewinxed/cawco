@@ -20,7 +20,12 @@
 </script>
 
 <script lang="ts">
-  import { commonWords, threadWords, transcriptWords } from "@cawco/core";
+  import {
+    commonWords,
+    type ThreadStatus,
+    threadWords,
+    transcriptWords,
+  } from "@cawco/core";
   import type { Activity } from "@cawco/core/activity";
   import { Popover } from "bits-ui";
   /**
@@ -195,7 +200,7 @@
   }
 
   /** Which of Caw's files a thread's tab shows: what the thread is doing. */
-  function threadFace(id: string): "ready" | "working" | "needs-you" {
+  function threadFace(id: string): ThreadStatus {
     return cawco.threadOf(id)?.status ?? "ready";
   }
 

@@ -17,6 +17,7 @@ import {
   modelScope,
   type NeutralOrigin,
   namedAccount,
+  OVER_STATUSES,
   type PlacementStrategy,
   type RebalanceNotice,
   tokenWords,
@@ -1189,9 +1190,7 @@ const messageOf = (error: unknown): string =>
  * never runs again: no hold of its is kept and no reset resumes it.
  */
 const over = (row: LimitRow | undefined): boolean =>
-  !row ||
-  row.continuedInto !== null ||
-  ["stopping", "stopped", "discarded", "error"].includes(row.status);
+  !row || row.continuedInto !== null || OVER_STATUSES.has(row.status);
 
 /** The carry-on the hub sends at a reset: a turn the limit itself resumed. */
 const CARRY_ON_ORIGIN = "limit";

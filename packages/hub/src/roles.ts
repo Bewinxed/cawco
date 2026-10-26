@@ -43,8 +43,14 @@
  * call `memory_propose` (the lead's commits, the curator's waits for you),
  * and only the curator sorts the inbox.
  */
-import type { InstanceRow, MemoryRole, SessionRole } from "@cawco/core";
+import {
+  type InstanceRow,
+  type MemoryRole,
+  type SessionRole,
+  SPAWNING_TOOLS,
+} from "@cawco/core";
 import { ARTIFACT_TOOLS } from "./artifacts/tools";
+import { INGRESS_TOOLS } from "./ingress";
 import type { RoutineTool } from "./routines";
 import type { TaskTool } from "./task-tools";
 
@@ -134,16 +140,7 @@ const ROUTINE = [
  * A project's ingress (ingress.ts): its event routes and connector polls,
  * made and changed by the same roles as its routines, which they feed.
  */
-const INGRESS = [
-  "event_route_create",
-  "event_route_list",
-  "event_route_update",
-  "event_route_delete",
-  "connector_poll_create",
-  "connector_poll_list",
-  "connector_poll_update",
-  "connector_poll_delete",
-] as const;
+const INGRESS = [...INGRESS_TOOLS];
 
 /**
  * Approved actions (actions.ts): one exact call proposed for you to approve,
@@ -169,17 +166,12 @@ const DELEGATE_SESSION = [
   "forge_post",
   "list_delegate_types",
   "list_sessions",
-  "start_session",
-  "delegate",
-  "delegate_list",
   "wait_item",
   "finish_item",
-  "continue_session",
-  "stop_delegate",
-  "interrupt_delegate",
-  "answer_delegate",
-  "discard_workspace",
   "show_image",
+  // Every tool that starts, steers or ends another session but pausing a
+  // machine, which stops every turn on it: an orchestrator's alone.
+  ...[...SPAWNING_TOOLS].filter((tool) => tool !== "machine_pause"),
   ...ARTIFACT_TOOLS,
 ] as const;
 

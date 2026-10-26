@@ -12,6 +12,7 @@
  * Caw's setup card, and later the iOS app.
  */
 import { getDomain } from "tldts";
+import type { BrowserState } from "./browser";
 import { CAWCO_ENV, readEnv } from "./cawco-env";
 
 /**
@@ -71,9 +72,10 @@ export const STUN_SERVER = "stun:stun.cloudflare.com:3478";
 export const stunServer = (): string =>
   readEnv(CAWCO_ENV.stunServer) ?? STUN_SERVER;
 
+// A container's states as the browser's are, and `stopped`.
 /** The relay as its machine runs it. */
 export type StreamRelayState =
-  "pulling" | "starting" | "live" | "stopped" | "failed";
+  Extract<BrowserState, "pulling" | "starting" | "live" | "failed"> | "stopped";
 
 /** What the relay's machine has bound: its plain listener on UDP and TCP 3478, and its TLS listener on TCP 5349 while a certificate stands. */
 export interface RelayPorts {

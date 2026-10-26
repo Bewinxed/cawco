@@ -27,6 +27,7 @@ import {
   type StageKind,
   type TASK_FILE_STATES,
   TASK_MOVERS,
+  type TaskFileState,
   type TaskHistoryKind,
   type TaskMover,
 } from "@cawco/core";
@@ -282,7 +283,7 @@ export interface TaskFileFound {
   entry: FolderFileTimes;
   path: string;
   /** `live`: at the top of tasks/; `archived`: in tasks/archive/; `deleted`: its last commit deleted it. */
-  state: "live" | "archived" | "deleted";
+  state: TaskFileState;
 }
 
 const STATE_ORDER = { live: 0, archived: 1, deleted: 2 } as const;

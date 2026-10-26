@@ -1,4 +1,4 @@
-import { accountNameAmong, costForUsage } from "@cawco/core";
+import { accountNameAmong, costForUsage, OVER_STATUSES } from "@cawco/core";
 import { DAY_MS } from "@cawco/core/time";
 import type { LimitRow } from "./at-limit";
 import type { DbShape } from "./db";
@@ -231,10 +231,7 @@ export const createAdmission = (db: DbShape) => {
     for (const [id, charge] of charges) {
       const [row] = db.getInstancesByIds([id]);
       const window = sessionWindow(db, charge.accountId, now);
-      if (
-        !row ||
-        ["stopping", "stopped", "discarded", "error"].includes(row.status)
-      ) {
+      if (!row || OVER_STATUSES.has(row.status)) {
         release(id, "as the session is over");
         continue;
       }

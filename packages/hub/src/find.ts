@@ -29,6 +29,7 @@ import {
   artifactWords,
   FIND_KINDS,
   type FindAnswer,
+  type FindBy,
   type FindConversation,
   type FindCoverage,
   type FindKind,
@@ -1750,7 +1751,7 @@ export class FindRefusal extends Error {
 }
 
 /** `by=me` and its kin read into a moment's author; anything else is refused by the schema. */
-const AUTHOR_OF: Record<"me" | "agent" | "report" | "caw", MomentAuthor> = {
+const AUTHOR_OF: Record<FindBy, MomentAuthor> = {
   me: "owner",
   agent: "agent",
   report: "report",
@@ -1812,7 +1813,7 @@ const kindsOf = (raw: string | undefined): FindKind[] | undefined => {
 export const answerFind = async (
   find: Find,
   query: {
-    by?: "me" | "agent" | "report" | "caw";
+    by?: FindBy;
     cursor?: string;
     kinds?: string;
     limit?: string;

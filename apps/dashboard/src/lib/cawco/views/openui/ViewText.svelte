@@ -1,13 +1,12 @@
 <script lang="ts">
   /** Words in one of the house text roles; plain text only. */
+  import { VIEW_TEXT_ROLES } from "@cawco/core";
   import type { OpenUIRenderProps } from "./OpenUiRenderer.svelte";
 
   let { props }: OpenUIRenderProps<{ text: unknown; variant?: string }> =
     $props();
   const role = $derived(
-    ["title", "label", "body", "meta"].includes(String(props.variant))
-      ? String(props.variant)
-      : "body"
+    VIEW_TEXT_ROLES.find((one) => one === props.variant) ?? "body"
   );
 </script>
 

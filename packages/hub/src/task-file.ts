@@ -624,11 +624,18 @@ const readField = (
     fields.buildsFrom = readList(field, line, problems);
   } else if (LIST_FIELDS.has(field)) {
     fields[
-      field as "checks" | "outputs" | "context" | "owns" | "labels" | "accounts"
+      field as keyof Pick<
+        TaskFields,
+        "checks" | "outputs" | "context" | "owns" | "labels" | "accounts"
+      >
     ] = readList(field, line, problems);
   } else if (SCALAR_FIELDS.has(field)) {
-    fields[field as "stage" | "issue" | "type" | "group" | "rank"] =
-      scalarOf(line);
+    fields[
+      field as keyof Pick<
+        TaskFields,
+        "stage" | "issue" | "type" | "group" | "rank"
+      >
+    ] = scalarOf(line);
   } else if (field === "budget") {
     fields.budget = readBudget(line, problems);
   } else if (field === "lands") {

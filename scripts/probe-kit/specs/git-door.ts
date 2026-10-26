@@ -87,6 +87,7 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { UpstreamPosts } from "../../../packages/core/src/upstream-guard";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { serveGitHttp } from "../git-http";
 import type { Spec } from "../kit";
@@ -178,7 +179,7 @@ const spec: Spec = {
 
     const id = `gd${crypto.randomUUID().replaceAll("-", "").slice(0, 10)}`;
     const ref = { id, path: clone };
-    const writeRule = async (posts: "off" | "ask" | "on") => {
+    const writeRule = async (posts: UpstreamPosts) => {
       await mkdir(join(workspaceUpstreamRuleFile(id), ".."), {
         recursive: true,
       });

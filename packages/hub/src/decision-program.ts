@@ -26,7 +26,11 @@
  */
 
 import { type ProgramRead, readProgram } from "@cawco/core/decisions";
-import { AFTER_REF, DECISION_ID } from "@cawco/core/decisions-library";
+import {
+  AFTER_REF,
+  DECISION_ID,
+  type DecisionComponentName,
+} from "@cawco/core/decisions-library";
 import spec from "@cawco/core/decisions-spec";
 import { named, SANS_FAMILY, undrawn } from "@cawco/core/house-faces";
 import {
@@ -141,7 +145,12 @@ const UNDRAWN_PROPS = new Set([
   "align",
 ]);
 /** The components whose props a fault names by the prop alone ("its label"). */
-const CARD_PARTS = new Set(["Decisions", "Section", "Decision", "Option"]);
+const CARD_PARTS: ReadonlySet<string> = new Set<DecisionComponentName>([
+  "Decisions",
+  "Section",
+  "Decision",
+  "Option",
+]);
 const EXCERPT = 60;
 
 /** Where a string stands, as a fault names it: its card and option, or the page's title or a Section's. */

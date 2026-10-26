@@ -102,7 +102,7 @@ const GITHUB_EVENTS = [
   "issue_comment",
   "discussion",
   "discussion_comment",
-] as const;
+] as const satisfies readonly GitHubKind[];
 const ID = /^\/hooks\/([A-Za-z0-9_-]{22})$/u;
 const HEADER = /^[A-Za-z0-9-]{1,64}$/u;
 const HEX = /^[0-9a-f]{64}$/u;

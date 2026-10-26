@@ -1080,6 +1080,15 @@ export type SendMode = "turn" | "note";
 export type SendState =
   "pending" | "read" | "failed" | "replaced" | "cancelled";
 
+/** Every {@link SendState}. */
+export const SEND_STATES = everyOf<SendState>()([
+  "pending",
+  "read",
+  "failed",
+  "replaced",
+  "cancelled",
+]);
+
 /**
  * Why the hub would not hand a send to its session, as the facts the way
  * back is built from: every refusal the hub's input gate gives

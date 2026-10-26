@@ -28,6 +28,7 @@
  * lands (css-tricks, same page: "detect how much time has actually passed
  * between each frame").
  */
+import type { CawStatus } from "@cawco/core/threads";
 import { untrack } from "svelte";
 import needsYouStill from "#lib/assets/brand/tab-icon-needs-you.png";
 import needsYouWave from "#lib/assets/brand/tab-icon-needs-you-wave.png";
@@ -40,7 +41,7 @@ import { motionOk } from "../motion/curves.svelte";
 const PACE = 12;
 
 /** What the fleet is doing, as the icon tells it. */
-type Doing = "needs-you" | "working" | "sleeping";
+type Doing = Extract<CawStatus, "needs-you" | "working" | "sleeping">;
 
 /** Each state's still. */
 const STILL: Record<Doing, string> = {

@@ -26,7 +26,7 @@
  * The root's report lists how each delegate under it ended, nested as the
  * tree was; it goes to the root's parent as any report does.
  */
-import { type EndedBy, workWords } from "@cawco/core";
+import { type EndedBy, type InstanceStatus, workWords } from "@cawco/core";
 import type { DbShape, WorkItemRow } from "./db";
 import type { TreeStopRow } from "./db/tree-stops";
 import { handle } from "./presenters/words";
@@ -39,7 +39,7 @@ interface Reached {
 }
 
 /** Statuses of a session with no work item that may still run, and so is stopped with its tree. */
-const MAY_RUN: ReadonlySet<string> = new Set([
+const MAY_RUN: ReadonlySet<InstanceStatus> = new Set([
   "starting",
   "running",
   "sleeping",

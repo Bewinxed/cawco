@@ -1,0 +1,473 @@
+/**
+ * `bun run duplicate-lists:check`: a vocabulary is written once. Each list
+ * of string literals a module exports is its owner; any other place that
+ * spells most of that list again fails, naming the owner to import or to
+ * derive a subset from.
+ *
+ * Owners are read off the code, never listed: every exported string-literal
+ * array (`as const` or not, or inside `new Set([...])`) and every exported
+ * union type of string literals, in each package's `src/` and in
+ * `scripts/lib/`.
+ *
+ * Fails:
+ * - a literal array or union anywhere in the code this reads (TypeScript,
+ *   and Svelte's script blocks) that shares at least 4 values with an owner
+ *   (3 for a union), and at least 75% of the smaller of the two;
+ * - two owners that are one vocabulary (as much shared, and 75% of the
+ *   larger too): one must derive from the other.
+ *
+ * Checked against an owner, so never a copy and never an owner itself:
+ * a list typed by a named type (`satisfies readonly X[]`, `: readonly X[]`,
+ * `new Set<X>([...])`, `everyOf<X>()([...])`, or inside an object so
+ * typed), and the literal members of `Extract<X, …>`, `Exclude<X, …>`,
+ * `Pick<X, …>` or `Omit<X, …>`.
+ * A list built by spreading an owner counts only the values it adds. A
+ * literal indexed where it stands (`["Read", "Bash"][i]`) is a pick among
+ * words, not a list kept, and is not read.
+ *
+ * Lists that only happen to share words (CSS sides, alignments) are no
+ * failure: nothing here fails unless an exported owner holds those words.
+ */
+import { readFileSync } from "node:fs";
+import { availableParallelism } from "node:os";
+import { join } from "node:path";
+import {
+  isMainThread,
+  parentPort,
+  Worker,
+  workerData,
+} from "node:worker_threads";
+import { parseSync } from "oxc-parser";
+import { ROOT, repoFiles } from "./lib/repo-files";
+
+/** Where the code this reads lives. */
+const ROOTS = ["packages/", "apps/dashboard/", "apps/cawrier/", "scripts/"];
+const SOURCE = /\.(?:ts|tsx|mts|svelte)$/u;
+/** Not code a person keeps: fixtures, generated files, design previews, mocks, type declarations. */
+const SKIP =
+  /(?:^|\/)(?:fixtures?|__fixtures__|mocks?|__mocks__|design-previews|generated)\/|\.(?:generated|d)\.[mc]?ts$|\.mock\.ts$/u;
+/** Where exported lists are owners: each package's own source, and the scripts' shared modules. */
+const OWNER_SCOPE = /^(?:packages\/[^/]+\/src\/|scripts\/lib\/)/u;
+// Held by the stored-JSON item until its stragglers item frees it: read for owners, never as copies.
+const OWNERS_ONLY = /^packages\/hub\/src\/db\//u;
+const SCRIPT_BLOCK = /<script\b[^>]*>([\s\S]*?)<\/script>/gu;
+/** Type names that say nothing about which values a list holds. */
+const UNTYPED = new Set([
+  // `as const`, which oxc reads as a reference to a type named `const`.
+  "const",
+  "Array",
+  "ReadonlyArray",
+  "Set",
+  "ReadonlySet",
+  "Map",
+  "ReadonlyMap",
+  "Record",
+  "Readonly",
+  "Partial",
+]);
+/** Type functions whose literal arguments are checked against the type they are given: its members, or its keys. */
+const DERIVES = new Set(["Extract", "Exclude", "Pick", "Omit"]);
+
+interface List {
+  file: string;
+  /** `const` for an array, `type` for a union. */
+  form: "const" | "type";
+  line: number;
+  /** The exported name an owner goes by. */
+  name?: string;
+  /** Whether it holds more than its literals: a spread, or a named type in the union. */
+  open: boolean;
+  values: Set<string>;
+}
+
+// biome-ignore lint/suspicious/noExplicitAny: oxc's ESTree nodes, read by shape
+type Node = any;
+
+const stringOf = (node: Node): string | undefined => {
+  if (node?.type === "Literal" && typeof node.value === "string") {
+    return node.value;
+  }
+  if (node?.type === "TemplateLiteral" && node.expressions.length === 0) {
+    return node.quasis[0]?.value?.cooked;
+  }
+};
+
+/** Whether a type names a vocabulary: a type reference other than the containers. */
+const names = (type: Node): boolean => {
+  if (!type || typeof type !== "object") {
+    return false;
+  }
+  if (
+    type.type === "TSTypeReference" &&
+    type.typeName?.type === "Identifier" &&
+    !UNTYPED.has(type.typeName.name)
+  ) {
+    return true;
+  }
+  if (type.type === "TSTypeQuery" || type.type === "TSIndexedAccessType") {
+    return true;
+  }
+  for (const [key, value] of Object.entries(type)) {
+    if (key === "parent") {
+      continue;
+    }
+    if (Array.isArray(value) ? value.some(names) : names(value)) {
+      return true;
+    }
+  }
+  return false;
+};
+
+const WRAPPERS = new Set([
+  "TSAsExpression",
+  "TSSatisfiesExpression",
+  "ParenthesizedExpression",
+  "TSNonNullExpression",
+]);
+
+/** Nodes a list's type is read through: what holds a list does not type it. */
+const THROUGH = new Set([
+  ...WRAPPERS,
+  "Property",
+  "ObjectExpression",
+  "ArrayExpression",
+]);
+
+/** Whether a call gives the list `child` a named type: `f<X>([...])`, or `everyOf<X>()([...])`. */
+const callTypes = (call: Node, child: Node): boolean => {
+  const { arguments: given, callee, typeArguments } = call;
+  return (
+    given.includes(child) &&
+    (names(typeArguments) ||
+      (callee?.type === "CallExpression" && names(callee.typeArguments)))
+  );
+};
+
+/** What `node`, holding `child`, says of a list's type: it types it, it does not, or it is read through. */
+const typeAt = (node: Node, child: Node): "typed" | "untyped" | "through" => {
+  const typed = (yes: boolean) => (yes ? "typed" : "untyped");
+  switch (node.type) {
+    case "TSSatisfiesExpression":
+    case "TSAsExpression":
+      return names(node.typeAnnotation) ? "typed" : "through";
+    case "NewExpression":
+      return names(node.typeArguments) ? "typed" : "through";
+    case "CallExpression":
+      return typed(callTypes(node, child));
+    case "VariableDeclarator":
+      return typed(names(node.id?.typeAnnotation));
+    case "PropertyDefinition":
+      return typed(names(node.typeAnnotation));
+    default:
+      return THROUGH.has(node.type) ? "through" : "untyped";
+  }
+};
+
+/** Whether an array literal is checked against a named type where it stands. */
+const typedArray = (chain: Node[]): boolean => {
+  for (let at = chain.length - 2; at >= 0; at -= 1) {
+    const verdict = typeAt(chain[at], chain[at + 1]);
+    if (verdict !== "through") {
+      return verdict === "typed";
+    }
+  }
+  return false;
+};
+
+/** The exported name an array literal is the value of, when it is one. */
+const exportedConst = (chain: Node[]): string | undefined => {
+  for (let at = chain.length - 2; at >= 0; at -= 1) {
+    const node = chain[at];
+    if (WRAPPERS.has(node.type) || node.type === "NewExpression") {
+      continue;
+    }
+    if (
+      node.type === "VariableDeclarator" &&
+      chain[at - 1]?.type === "VariableDeclaration" &&
+      chain[at - 2]?.type === "ExportNamedDeclaration"
+    ) {
+      return node.id?.name;
+    }
+    return;
+  }
+};
+
+/** Each line's first offset in `text`, for a binary search. */
+const lineStarts = (text: string): number[] => {
+  const starts = [0];
+  for (let at = text.indexOf("\n"); at >= 0; at = text.indexOf("\n", at + 1)) {
+    starts.push(at + 1);
+  }
+  return starts;
+};
+
+/** The 1-based line `offset` is on. */
+const lineAt = (starts: readonly number[], offset: number): number => {
+  let low = 0;
+  let high = starts.length - 1;
+  while (low < high) {
+    const mid = Math.floor((low + high + 1) / 2);
+    if ((starts[mid] ?? 0) <= offset) {
+      low = mid;
+    } else {
+      high = mid - 1;
+    }
+  }
+  return low + 1;
+};
+
+/** An array literal's list, unless it is typed, a pick, or not all strings. */
+const arrayList = (
+  node: Node,
+  chain: Node[]
+): Omit<List, "file" | "line"> | undefined => {
+  const values = node.elements
+    .map((element: Node) => stringOf(element))
+    .filter((value: string | undefined) => value !== undefined);
+  const plain = node.elements.every(
+    (element: Node) =>
+      stringOf(element) !== undefined || element?.type === "SpreadElement"
+  );
+  const parent = chain.at(-2);
+  // `[...][i]`: a pick among words where it stands, never a list kept.
+  const picked =
+    parent?.type === "MemberExpression" &&
+    parent.computed &&
+    parent.object === node;
+  if (!plain || values.length < 3 || picked || typedArray(chain)) {
+    return;
+  }
+  return {
+    form: "const",
+    name: exportedConst(chain),
+    open: values.length < node.elements.length,
+    values: new Set(values),
+  };
+};
+
+/** A union type's list of literals, unless it is an argument of a type function that checks it. */
+const unionList = (
+  node: Node,
+  chain: Node[]
+): Omit<List, "file" | "line"> | undefined => {
+  const derived = chain.some(
+    (above) =>
+      above.type === "TSTypeReference" && DERIVES.has(above.typeName?.name)
+  );
+  const values = node.types
+    .filter((type: Node) => type.type === "TSLiteralType")
+    .map((type: Node) => stringOf(type.literal))
+    .filter((value: string | undefined) => value !== undefined);
+  if (derived || values.length < 3) {
+    return;
+  }
+  const alias = chain.at(-2);
+  const exported =
+    alias?.type === "TSTypeAliasDeclaration" &&
+    chain.at(-3)?.type === "ExportNamedDeclaration";
+  return {
+    form: "type",
+    name: exported ? alias.id.name : undefined,
+    open: values.length < node.types.length,
+    values: new Set(values),
+  };
+};
+
+/** A node's child nodes. */
+const childrenOf = (node: Node): Node[] =>
+  Object.entries(node).flatMap(([key, value]) => {
+    if (key === "parent" || !value || typeof value !== "object") {
+      return [];
+    }
+    const items = Array.isArray(value) ? value : [value];
+    return items.filter((item) => item && typeof item.type === "string");
+  });
+
+/** Every literal list in one program. */
+const listsIn = (
+  file: string,
+  program: Node,
+  starts: readonly number[],
+  offset: number
+): List[] => {
+  const found: List[] = [];
+  const chain: Node[] = [];
+  const visit = (node: Node): void => {
+    chain.push(node);
+    let list: Omit<List, "file" | "line"> | undefined;
+    if (node.type === "ArrayExpression") {
+      list = arrayList(node, chain);
+    } else if (node.type === "TSUnionType") {
+      list = unionList(node, chain);
+    }
+    if (list) {
+      found.push({ ...list, file, line: lineAt(starts, offset + node.start) });
+    }
+    for (const child of childrenOf(node)) {
+      visit(child);
+    }
+    chain.pop();
+  };
+  visit(program);
+  return found;
+};
+
+/** One file's lists, or why it could not be read. */
+const scan = (file: string): { lists: List[]; unread?: string } => {
+  const text = readFileSync(join(ROOT, file), "utf8");
+  const starts = lineStarts(text);
+  const blocks = file.endsWith(".svelte")
+    ? [...text.matchAll(SCRIPT_BLOCK)].map((match) => ({
+        source: match[1] ?? "",
+        offset: (match.index ?? 0) + match[0].indexOf(">") + 1,
+      }))
+    : [{ source: text, offset: 0 }];
+  const lists: List[] = [];
+  for (const { source, offset } of blocks) {
+    const tsx = file.endsWith(".tsx");
+    const parsed = parseSync(tsx ? "x.tsx" : "x.ts", source, {
+      lang: tsx ? "tsx" : "ts",
+    });
+    if (parsed.errors.length > 0) {
+      return { lists, unread: `${file}: ${parsed.errors[0]?.message}` };
+    }
+    lists.push(...listsIn(file, parsed.program, starts, offset));
+  }
+  return { lists };
+};
+
+// Parsing is most of the time: the files are shared out among threads.
+if (!isMainThread) {
+  parentPort?.postMessage((workerData as string[]).map(scan));
+  process.exit(0);
+}
+
+const started = performance.now();
+const files = repoFiles(ROOTS).filter(
+  (file) =>
+    SOURCE.test(file) &&
+    !SKIP.test(file) &&
+    file !== "scripts/duplicate-lists-check.ts"
+);
+const threads = Math.max(1, Math.min(8, availableParallelism()));
+const shares = Array.from({ length: threads }, (_, slot) =>
+  files.filter((_file, index) => index % threads === slot)
+);
+const scanned = (
+  await Promise.all(
+    shares.map(
+      (share) =>
+        new Promise<ReturnType<typeof scan>[]>((resolve, reject) => {
+          const worker = new Worker(import.meta.path, { workerData: share });
+          worker.once("message", resolve);
+          worker.once("error", reject);
+        })
+    )
+  )
+).flat();
+const lists = scanned.flatMap((one) => one.lists);
+const unparsed = scanned.flatMap((one) => (one.unread ? [one.unread] : []));
+
+/** Owners, db/** last: a copy names the owner it can import. */
+const owners = lists
+  .filter((list) => list.name && OWNER_SCOPE.test(list.file))
+  .sort(
+    (a, b) =>
+      Number(OWNERS_ONLY.test(a.file)) - Number(OWNERS_ONLY.test(b.file))
+  );
+const copies = lists.filter(
+  (list) =>
+    !((list.name && OWNER_SCOPE.test(list.file)) || OWNERS_ONLY.test(list.file))
+);
+
+/** Whether `inner` holds no value `outer` lacks. */
+const within = (inner: List, outer: List): boolean =>
+  [...inner.values].every((value) => outer.values.has(value));
+
+/**
+ * Whether list `a` repeats owner `b`. Either one holds the other (a subset
+ * spelled again, or a copy that grew): at least `least` shared values, 4
+ * for a list and 3 for a union (a copy's own form; two owners, either's). Or they overlap with values of their own on both sides (a copy
+ * that drifted): at least 4 shared, and 75% of the smaller. A list that
+ * holds more than its literals (a spread, a named type) is never the side
+ * held, as its literals are not all it is.
+ *
+ * Words that only coincide are told apart two ways. Two different state
+ * machines share their common words (`starting`, `running`, `failed`) and
+ * each keeps values of its own, so they meet neither rule. And a few words
+ * that also stand in a long table of an outside standard's names repeat
+ * none of it: shared values must be a quarter of the larger list, and
+ * `top`, `right`, `bottom`, `left` are 4 of the 460 CSS properties the
+ * overlay's NON_INHERITED lists.
+ */
+const repeats = (a: List, b: List, least: number): boolean => {
+  let shared = 0;
+  for (const value of a.values) {
+    if (b.values.has(value)) {
+      shared += 1;
+    }
+  }
+  if (shared / Math.max(a.values.size, b.values.size) < 0.25) {
+    return false;
+  }
+  const holds = (!a.open && within(a, b)) || (!b.open && within(b, a));
+  if (holds) {
+    return shared >= least;
+  }
+  return shared >= 4 && shared / Math.min(a.values.size, b.values.size) >= 0.75;
+};
+
+/**
+ * Whether two owners are one vocabulary written twice: they repeat each
+ * other, and the shared values are 75% of the larger as well. Two owners
+ * that only share a few words keep apart: an effort scale and a plan step's
+ * priority both say `low`, `medium` and `high`, and an approved action and a
+ * work item both end `done`, `failed` or `cancelled`, but neither is the
+ * other's subset by meaning.
+ */
+const sameVocabulary = (one: List, other: List): boolean => {
+  const shared = [...one.values].filter((value) => other.values.has(value));
+  return (
+    repeats(one, other, one.form === "type" || other.form === "type" ? 3 : 4) &&
+    shared.length / Math.max(one.values.size, other.values.size) >= 0.75
+  );
+};
+
+const at = (list: List) => `${list.file}:${list.line}`;
+const failures: string[] = [];
+for (const copy of copies) {
+  const owner = owners.find((one) =>
+    repeats(copy, one, copy.form === "type" ? 3 : 4)
+  );
+  if (owner) {
+    failures.push(
+      `${at(copy)} repeats ${owner.file}#${owner.name}; import it, or derive a subset (Extract<>, satisfies readonly X[], filter)`
+    );
+  }
+}
+for (const [index, one] of owners.entries()) {
+  for (const other of owners.slice(index + 1)) {
+    if (OWNERS_ONLY.test(one.file) || OWNERS_ONLY.test(other.file)) {
+      continue;
+    }
+    if (sameVocabulary(one, other)) {
+      failures.push(
+        `${at(other)} ${other.name} repeats ${one.file}#${one.name}; derive one from the other`
+      );
+    }
+  }
+}
+
+const took = Math.round(performance.now() - started);
+for (const line of [...unparsed, ...failures]) {
+  console.error(line);
+}
+if (unparsed.length > 0 || failures.length > 0) {
+  console.error(
+    `duplicate-lists: ${failures.length} repeated list(s), ${unparsed.length} file(s) unread, in ${took} ms`
+  );
+  process.exit(1);
+}
+console.log(
+  `duplicate-lists: ${owners.length} owners, ${lists.length - owners.length} other lists in ${files.length} files, none repeats an owner (${took} ms)`
+);

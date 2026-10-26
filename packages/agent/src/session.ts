@@ -133,6 +133,7 @@ import {
   resumeCursor,
   roomHeldSentence,
   SESSION_DIR_READ,
+  SHELL_TOOLS,
   VERIFY_SESSION_CREDENTIAL,
   WITHDRAW_PERMISSION,
   type WorkspaceRef,
@@ -417,7 +418,7 @@ const shellCallsOf = (
   let started = false;
   for (const block of message.message.content) {
     const command =
-      block.type === "tool_use" && SHELL_CALLS.has(block.name)
+      block.type === "tool_use" && SHELL_TOOLS.has(block.name)
         ? (block.input as { command?: unknown } | undefined)?.command
         : undefined;
     if (block.type === "tool_use" && typeof command === "string") {
@@ -429,14 +430,6 @@ const shellCallsOf = (
   }
   return started;
 };
-
-/** The shell tools of every harness: Claude Code's, pi's and OpenCode's. */
-const SHELL_CALLS: ReadonlySet<string> = new Set([
-  "Bash",
-  "PowerShell",
-  "bash",
-  "shell",
-]);
 
 const accountReading = (message: NeutralMessage): boolean =>
   message.type === "system" &&

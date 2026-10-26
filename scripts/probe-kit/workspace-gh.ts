@@ -25,6 +25,7 @@
  */
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { UpstreamPosts } from "../../packages/core/src/upstream-guard";
 import { githubStub } from "./forge-stubs";
 import type { Kit } from "./kit";
 import { standExecutor } from "./workspace-executor";
@@ -36,7 +37,7 @@ export interface WorkspaceGhAt {
   readonly clone: string;
   readonly id: string;
   readonly root: string;
-  readonly writeRule: (posts: "off" | "ask" | "on") => Promise<void>;
+  readonly writeRule: (posts: UpstreamPosts) => Promise<void>;
 }
 
 const HOST_TOKEN = "probe-host-gh-token";

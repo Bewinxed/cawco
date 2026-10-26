@@ -8,6 +8,7 @@
    * the chip's scale read, as a press held under the hand). A press here
    * goes nowhere; on its surface it puts the words in the composer.
    */
+  import type { Interaction } from "@cawco/core/stage";
   import type { Attachment } from "svelte/attachments";
   import { DECISIONS, LONG, MANY, ONE, THREE } from "./examples.js";
   import Suggestions, {
@@ -35,7 +36,7 @@
     placement?: SuggestionPlacement;
     set?: keyof typeof SETS;
     loading?: number;
-    state?: "rest" | "focus" | "pressed";
+    state?: Extract<Interaction, "rest" | "focus" | "pressed">;
   } = $props();
 
   const suggestions: readonly Suggestion[] = $derived(SETS[set]);

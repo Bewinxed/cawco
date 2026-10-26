@@ -257,7 +257,7 @@ const NOT_LASTING = [
   "secret",
   "untrusted",
   "duplicate",
-] as const;
+] as const satisfies readonly Verdict[];
 const VERDICTS: readonly Verdict[] = ["lasting", ...NOT_LASTING];
 
 /** A refusal with the status a route answers and the words a tool returns. */

@@ -609,7 +609,7 @@ export const createActions = ({
   const file = (
     row: ActionRow,
     end: {
-      state: "done" | "failed" | "unknown";
+      state: Extract<ActionState, "done" | "failed" | "unknown">;
       result?: string;
       error?: string;
     }

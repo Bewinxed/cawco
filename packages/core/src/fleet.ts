@@ -8,6 +8,7 @@
  */
 
 import { userLayerLabel } from "./claude-dirs";
+import { everyOf } from "./every-of";
 import type {
   HarnessKind,
   McpHttpServerConfig,
@@ -16,6 +17,7 @@ import type {
 } from "./harness";
 import type { FleetHarnessConfig } from "./harness-config";
 import type { FleetHook } from "./hooks";
+import type { ToolPlatform } from "./tools";
 import { configurePage } from "./words/configure";
 import { memoryWords } from "./words/memory";
 
@@ -115,7 +117,11 @@ export interface FleetMcpServer extends FleetPlacement {
 }
 
 /** The platforms an MCP server can be scoped to ({@link FleetMcpServer.platforms}). */
-export const MCP_PLATFORMS = ["darwin", "linux", "win32"] as const;
+export const MCP_PLATFORMS = everyOf<ToolPlatform>()([
+  "darwin",
+  "linux",
+  "win32",
+]);
 export type McpPlatform = (typeof MCP_PLATFORMS)[number];
 
 /** Whether a machine reporting `platform` is sent `server`: unscoped, or scoped to that platform. */

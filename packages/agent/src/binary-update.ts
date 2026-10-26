@@ -44,6 +44,7 @@ import {
   writeJsonAtomic,
 } from "@cawco/core/binary-installation";
 import {
+  type BinaryUpdatePhase,
   type BinaryUpdatePolicy,
   type BinaryUpdateState,
   hubWaitWords,
@@ -1480,7 +1481,7 @@ export class BinaryUpdater {
     const target = waitsForChannel ? "waiting-for-channel" : "none";
     // A finished install stays `installed` until the next update, except that a change of channel is what
     // the machine is now waiting on.
-    const settles = [
+    const settles: BinaryUpdatePhase[] = [
       "failed",
       "available",
       "downloading",

@@ -48,6 +48,7 @@ import type {
   HookDraft,
   IngestMark,
   InstanceRow,
+  InstanceStatus,
   LaunchAsk,
   LaunchGrant,
   MachineHarnessReport,
@@ -311,6 +312,7 @@ import {
   memoryScopeProblem,
   type NeutralSystemMessage,
   namedAccount,
+  OVER_STATUSES,
   PAIRING_REQUIRED,
   type PendingAccountSignin,
   PLACEMENT_STRATEGIES,
@@ -360,6 +362,7 @@ import {
   relaunchOf,
   reportMarker,
   ruleProblem,
+  SEND_STATES,
   SESSION_DIR_READ,
   STAGES_TEMPLATES,
   STREAM_SO_FAR,
@@ -1535,14 +1538,19 @@ const TOOL_INSTALL_MS = 300_000;
 /** How long an approved post may take its machine (agent upstream-posts.ts makes it within five minutes). */
 const UPSTREAM_POST_MS = 6 * 60_000;
 
-/**
- * Statuses a session's row holds once its process has ended, or once its end
- * is decided: whether a process still runs is its machine's custody to say.
- */
-const NO_PROCESS_STATUSES: ReadonlySet<string> = new Set([
+/** Statuses whose session's parked asks survive a hub start: a process may hold them, or a move's approval waits on its `moving` row. */
+const PARKS_ASKS: ReadonlySet<InstanceStatus> = new Set([
+  "running",
+  "starting",
+  "unknown",
+  "moving",
+]);
+
+/** Statuses a session is not running in: asleep, stopping, stopped or failed. */
+const AT_REST: ReadonlySet<InstanceStatus> = new Set([
+  "sleeping",
   "stopping",
   "stopped",
-  "discarded",
   "error",
 ]);
 
@@ -3991,10 +3999,7 @@ export const createServer = (
     // the move settles one no job waits on (moves.ts `resume`).
     // A post held for the person stays whatever its session is doing
     // (upstream-asks.ts): the hub makes it.
-    if (!(
-      outlivesSession(parked) ||
-      (row && ["running", "starting", "unknown", "moving"].includes(row.status))
-    )) {
+    if (!(outlivesSession(parked) || (row && PARKS_ASKS.has(row.status)))) {
       droppedAtStart.push(parked);
       pending.forget(parked.instanceId ?? "");
     }
@@ -7367,7 +7372,10 @@ export const createServer = (
     let rest = stored.slice(0, stored.length - own.length);
     const partners: SessionSendRow[] = [];
     const earlier = db
-      .sendsIn(instanceId, ["pending", "read", "failed", "replaced"])
+      .sendsIn(
+        instanceId,
+        SEND_STATES.filter((state) => state !== "cancelled")
+      )
       .filter(
         (send) =>
           send.harnessId === null &&
@@ -9352,13 +9360,7 @@ export const createServer = (
     if (
       isKeepAlive(message) ||
       !db.getInstancesByIds([instanceId])[0]?.forkedFrom ||
-      db.sendsIn(instanceId, [
-        "pending",
-        "read",
-        "failed",
-        "replaced",
-        "cancelled",
-      ]).length > 0
+      db.sendsIn(instanceId, [...SEND_STATES]).length > 0
     ) {
       return;
     }
@@ -9940,7 +9942,9 @@ export const createServer = (
   const pausedOrHeld = (
     row: InstanceRow,
     origin: SentMessage["origin"] | undefined
-  ): "paused" | "finishing" | "held" | "recut" | "blocked" | undefined => {
+  ):
+    | Extract<SendHold, "paused" | "finishing" | "held" | "recut" | "blocked">
+    | undefined => {
     if (machinePause.until(row.machineId) !== undefined) {
       return "paused";
     }
@@ -22149,9 +22153,7 @@ export const createServer = (
     | { refusal: string }
   > => {
     const move = askedMove(row, account);
-    const running = !["sleeping", "stopping", "stopped", "error"].includes(
-      row.status
-    );
+    const running = !AT_REST.has(row.status);
     // Read before the carry, which ends its process at rest.
     const live = processWorks(row);
     const stopped = stoppedNow(row.id);
@@ -24141,7 +24143,7 @@ export const createServer = (
         return;
       }
       if (
-        NO_PROCESS_STATUSES.has(row.status) &&
+        OVER_STATUSES.has(row.status) &&
         !lifecycle.holds(row.machineId, instanceId)
       ) {
         oweStop(instanceId, ITEM_OVER);

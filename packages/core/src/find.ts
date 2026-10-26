@@ -7,11 +7,14 @@
  * commit or a file.
  */
 
+import type { DocAuthor } from "@cawco/jsonl-parser";
 import type { CawStatus, ThreadStatus } from "./threads";
 import type { StageKind } from "./views";
 
+// The index's own words (jsonl-parser text.ts `DocAuthor`); an `Extract` of its
+// own, so the wire schema keeps naming it `TranscriptAuthor`.
 /** Who a transcript's words are (the index's `author`): only `owner` is "said by me". */
-export type TranscriptAuthor = "owner" | "agent" | "report" | "injected";
+export type TranscriptAuthor = Extract<DocAuthor, string>;
 
 /** What the hub asks each machine's transcript index (`searchTranscripts`). */
 export interface TranscriptQuery {

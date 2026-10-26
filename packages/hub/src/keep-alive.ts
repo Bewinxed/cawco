@@ -5,6 +5,7 @@ import {
   type KeepAlive,
   type NeutralResultMessage,
   type NeutralUserMessage,
+  OVER_STATUSES,
   promptCacheUsage,
   resolveRates,
   type SendPayload,
@@ -153,7 +154,7 @@ export const keepAliveResult = (
   if (ping && sent >= keepAliveCap({ ...row, cacheTtl: ttl })) {
     stopped = "stopped-cap";
   }
-  if (["stopping", "stopped", "discarded", "error"].includes(row.status)) {
+  if (OVER_STATUSES.has(row.status)) {
     stopped = null;
   }
   return {

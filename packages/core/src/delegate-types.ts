@@ -230,8 +230,8 @@ export const LEAD_GATED_TOOLS = {
   pi: ["bash", "edit", "write"],
 } as const satisfies Record<HarnessKind, readonly string[]>;
 
-/** Which of a lead's gated tools are shell, by any harness's name; the rest edit files. */
-export const LEAD_SHELL_TOOLS: ReadonlySet<string> = new Set([
+/** The shell tools, by every harness's name: what a lead's gate holds as shell (the rest edit files), and what a session's turn runs commands with. */
+export const SHELL_TOOLS: ReadonlySet<string> = new Set([
   "Bash",
   "PowerShell",
   "shell",

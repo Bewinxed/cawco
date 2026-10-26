@@ -79,6 +79,7 @@ import {
   STORY_FILE,
   type StageError,
   type StageFrame,
+  type StageFramework,
   type StageOpened,
   type StageState,
   type StageStatus,
@@ -107,7 +108,14 @@ import { type RenderAsk, type Rendered, renderCanvas } from "./stage-render";
 import { userBun } from "./user-bun";
 import { keepPlace, workspaceRefs } from "./workspace-records";
 
-type Framework = "svelte" | "vue" | "react" | "solid" | "preact";
+/** The package each framework a sheet mounts is installed as, in the order a project's are read. */
+const FRAMEWORK_PACKAGES: Record<StageFramework, string> = {
+  svelte: "svelte",
+  vue: "vue",
+  solid: "solid-js",
+  preact: "preact",
+  react: "react",
+};
 
 /** Where the host is written, in the toolchain root: git-excluded, never the project's. */
 const HOST_DIR = ".cawco/stage";
@@ -236,7 +244,7 @@ export class StageRefusal extends Error {}
 /** What a stage runs: the stage host on a sheet's toolchain root, or the command a workspace preview names. */
 type Runs =
   | {
-      readonly framework: Framework;
+      readonly framework: StageFramework;
       readonly kind: "sheet";
       readonly kit: boolean;
       readonly runtime: string;
@@ -574,9 +582,9 @@ function stageFor(
       ])
       .filter(Boolean)
   ) as Record<string, string>;
-  const framework = (
-    ["svelte", "vue", "solid-js", "preact", "react"] as const
-  ).find((name) => name in deps);
+  const framework = (Object.keys(FRAMEWORK_PACKAGES) as StageFramework[]).find(
+    (name) => FRAMEWORK_PACKAGES[name] in deps
+  );
   if (!framework) {
     throw new StageRefusal(
       `${dir}'s package.json names none of Svelte, Vue, React, Solid or Preact, the frameworks a sheet mounts. ${AS_PAGE}`
@@ -616,7 +624,7 @@ function stageFor(
     dir,
     runs: {
       kind: "sheet",
-      framework: framework === "solid-js" ? "solid" : framework,
+      framework,
       kit,
       runtime,
       toolchain,

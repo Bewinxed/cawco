@@ -13,6 +13,8 @@
  * {@link SHAPE_THRESHOLDS}.
  */
 
+import type { SKELETON_TYPES } from "./canvas";
+
 /** Every number the recogniser decides by, our own calls. */
 const SHAPE_THRESHOLDS = {
   /** Points the stroke is resampled to, evenly spaced along it. */
@@ -43,7 +45,13 @@ const SHAPE_THRESHOLDS = {
   minConfidence: 0.6,
 } as const;
 
-type ShapeType = "line" | "arrow" | "rectangle" | "ellipse" | "triangle";
+/** What a stroke is read as: a skeleton of the canvas's own, or a triangle. */
+type ShapeType =
+  | Extract<
+      (typeof SKELETON_TYPES)[number],
+      "line" | "arrow" | "rectangle" | "ellipse"
+    >
+  | "triangle";
 
 type Point = [x: number, y: number];
 

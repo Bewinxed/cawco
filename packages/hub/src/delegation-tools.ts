@@ -118,14 +118,19 @@ const accountParameter = () =>
       "The account the session runs on, by its label or id. Name one only when the user asks for that account; omitted, the hub places it by the fleet's routing."
     );
 
+/** What `forge_post` opens: an issue, a pull or merge request, or a comment. */
+const FORGE_POST_KINDS = ["issue", "pull_request", "comment"] as const;
+/** What a comment's `number` names. */
+const FORGE_POST_ON = ["issue", "pull_request"] as const;
+
 /** `forge_post`'s arguments as the one write they name, or a refusal saying what the kind needs. */
 const forgeWriteOf = (asked: {
   base?: string;
   body: string;
   head?: string;
-  kind: "issue" | "pull_request" | "comment";
+  kind: (typeof FORGE_POST_KINDS)[number];
   number?: number;
-  on?: "issue" | "pull_request";
+  on?: (typeof FORGE_POST_ON)[number];
   title?: string;
 }): ForgeWrite => {
   const { kind, body, title, head, base, number } = asked;
@@ -303,7 +308,7 @@ export function handoffTools(deps: HandoffDeps) {
       "Open an issue, a pull/merge request or a comment on a repository's forge, with your machine's own sign-in. Default: this project's repository. Push the head branch first.",
       {
         kind: z
-          .enum(["issue", "pull_request", "comment"])
+          .enum(FORGE_POST_KINDS)
           .describe(
             "issue: title, body. pull_request: title, body, head, base. comment: body, number, on."
           ),
@@ -319,7 +324,7 @@ export function handoffTools(deps: HandoffDeps) {
         base: z.string().trim().min(1).optional(),
         number: z.number().int().positive().optional(),
         on: z
-          .enum(["issue", "pull_request"])
+          .enum(FORGE_POST_ON)
           .optional()
           .describe("What number names; default issue."),
       },

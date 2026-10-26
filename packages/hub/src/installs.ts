@@ -43,6 +43,7 @@ import {
   type InstallProblem,
   type InstallSignIn,
   type InstallStarted,
+  type InstallState,
   type InstallStep,
   type InstallsFrame,
   type InstallsRead,
@@ -602,7 +603,7 @@ export const createInstalls = (deps: InstallsDeps) => {
 
   const end = (
     entry: Kept,
-    state: "failed" | "stopped" | "joined",
+    state: Extract<InstallState, "failed" | "stopped" | "joined">,
     problem: InstallProblem | null = null
   ): void => {
     const { install } = entry;

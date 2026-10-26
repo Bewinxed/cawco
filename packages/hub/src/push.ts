@@ -71,6 +71,7 @@
  * `CAWCO_CAWRIER_ORIGIN` points every push at a stand-in for a local run.
  */
 import {
+  type ActionState,
   type ArtifactNeed,
   artifactWords,
   BROWSER_ASK_TOOL,
@@ -2275,7 +2276,7 @@ export const createPush = ({
       id: string;
       projectId: string;
       said: string;
-      state: "proposed" | "failed" | "unknown";
+      state: Extract<ActionState, "proposed" | "failed" | "unknown">;
     }): void {
       const project = projectName(action.projectId);
       const { body, ask } = {
