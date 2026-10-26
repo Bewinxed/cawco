@@ -76,6 +76,7 @@ import {
   type TrackerView,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
+import type { Stage, TaskSummary } from "@cawco/core/task-views";
 import { Elysia, status, t } from "elysia";
 import { appServiceOf, type Connections } from "./connections";
 import type { TrackerCursor, TrackerSynced } from "./db/schema";
@@ -86,14 +87,7 @@ import type {
 } from "./db/trackers";
 import type { HubLifetimeShape } from "./lifetime";
 import { turnTaker } from "./project-folder";
-import type { Stage } from "./stages";
-import type {
-  TaskActor,
-  TaskPatch,
-  TaskSummary,
-  Tasks,
-  TaskView,
-} from "./tasks";
+import type { TaskActor, TaskPatch, Tasks, TaskView } from "./tasks";
 import {
   type Issue,
   type IssueComment,

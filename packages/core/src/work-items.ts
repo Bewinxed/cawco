@@ -10,6 +10,7 @@ export const WORK_ITEM_STATES = [
   "failed",
   "cancelled",
 ] as const;
+/** A work item's life. Only `starting` and `running` take messages. */
 export type WorkItemState = (typeof WORK_ITEM_STATES)[number];
 
 /** How an attempt or a delegate's work item ended. */

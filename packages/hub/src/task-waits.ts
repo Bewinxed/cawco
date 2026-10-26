@@ -28,11 +28,11 @@ import {
   type StageKind,
   taskLinkWords,
   taskTarget,
-  type WaitKind,
   type WaitTarget,
   waitHandle,
   waitTarget,
 } from "@cawco/core";
+import type { WaitState } from "@cawco/core/task-views";
 import type { WorkItemState } from "./db/schema";
 
 /** A pull request's or an Actions run's state, as the poller last read it. */
@@ -75,26 +75,6 @@ export interface WaitWorld {
         title: string;
       }
     | undefined;
-}
-
-/** One wait, settled or not, as every reader shows it. */
-export interface WaitState {
-  /** A task target dropped since (not as a duplicate): the wait is removed. */
-  dropped: boolean;
-  /** Why it is blocked for good until someone removes or re-points it (`closed unmerged`); null when it is not. */
-  flag: string | null;
-  /** Where it opens: its `cawco:` reference, or the pull request's or run's page. */
-  href: string;
-  kind: WaitKind;
-  /** What it is called: a task's title, a card's question, what a pin stands on, `PR #418`. */
-  label: string;
-  settled: boolean;
-  /** Where it stands, in a word or two: `doing`, `open`, `picked`, `merged`, `red`. */
-  state: string;
-  /** The wait as its file keeps it ({@link waitHandle}). */
-  target: string;
-  /** What it settled with, for a card (its pick) or a pin; null otherwise or while unsettled. */
-  value: string | null;
 }
 
 const flagged = (

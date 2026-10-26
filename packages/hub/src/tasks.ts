@@ -79,14 +79,24 @@ import {
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import type { TaskEdge } from "@cawco/core/task-edges";
+import type {
+  BuiltOn,
+  Stage,
+  StageMove,
+  StagesView,
+  StageView,
+  TaskAttempt,
+  TaskFlags,
+  TaskHistory,
+  TaskList,
+  TaskSummary,
+  TaskTimes,
+  TaskWait,
+  WaitState,
+} from "@cawco/core/task-views";
 import { Elysia, t } from "elysia";
 import type { TaskIndexRow, WorkItemRow } from "./db";
-import type {
-  Tracker,
-  WaitWitness,
-  WorkBudget,
-  WorkItemState,
-} from "./db/schema";
+import type { Tracker, WorkBudget } from "./db/schema";
 import {
   deleteFolderFile,
   type Exclusive,
@@ -125,11 +135,8 @@ import {
   readStages,
   ruledStages,
   STAGE_NAME,
-  type Stage,
-  type StageMove,
   type Stages,
   type StagesReading,
-  type StageView,
   stageNamed,
   startProblem,
   templateStages,
@@ -163,9 +170,6 @@ import {
   lifeOf,
   NO_STAGE,
   type TaskChange,
-  type TaskHistory,
-  type TaskHistoryActor,
-  type TaskLife,
   TRAILERS,
   taskFileIn,
 } from "./task-history";
@@ -176,7 +180,6 @@ import {
   unsettledFirst,
   type WaitReader,
   WaitRefusal,
-  type WaitState,
   type WaitWorld,
 } from "./task-waits";
 import { runsOf, skillTypes, templateTypes, typeFiles } from "./template-types";
@@ -256,35 +259,6 @@ export const sessionActor = (row: InstanceRow): TaskActor =>
         },
       };
 
-/** One attempt at a task: a work item whose task it is, as a task read shows it. */
-export interface TaskAttempt {
-  /** When it ended, ms epoch; null while it is live. */
-  endedAt: number | null;
-  /**
-   * How it ended when it did not land, in a sentence the task shows beside
-   * its Failed or Stopped badge: failed, the first line of what the hub
-   * reported (`It failed without a reason.` when nothing was); cancelled,
-   * `Stopped by <who>` (`Stopped` when the hub did not hear who). Null while
-   * live and once done.
-   */
-  endedHow: string | null;
-  /**
-   * What its session said it did, in one or two sentences: its
-   * `finish_item`'s headline. Null until an attempt finishes that way.
-   */
-  headline: string | null;
-  /** The session running it. */
-  instanceId: string;
-  /** What its session handed in (`task_result`); null while it has not. */
-  result: AttemptResult | null;
-  /** When it was filed, ms epoch. */
-  startedAt: number;
-  state: WorkItemState;
-  /** The cards and pins it was dispatched on, with the value each settled with then. */
-  waitedOn: WaitWitness[];
-  workItemId: string;
-}
-
 /**
  * What a task's newest finished attempt handed back, read whole on a task's
  * own read (never on the list: a report runs to pages): its session's report
@@ -299,66 +273,6 @@ export interface TaskResult {
   /** Its `finish_item`'s summary, in full (markdown). */
   report: string;
   workItemId: string;
-}
-
-/** One wait of a task, its own or inherited, as task-waits.ts settles it. */
-export interface TaskWait extends WaitState {
-  /** The `part_of` ancestor it is inherited from; null for the task's own. */
-  via: string | null;
-}
-
-/**
- * A card or pin a done task's attempt was dispatched on whose value moved
- * since: answered differently, or reopened. Nothing reopens on its own.
- */
-export interface BuiltOn {
-  href: string;
-  label: string;
-  since:
-    typeof taskLinkWords.decidedDifferently | typeof taskLinkWords.reopened;
-  target: string;
-}
-
-/** What a task's attempts and edges say about it, worked out on every read. */
-export interface TaskFlags {
-  /** Its attempts, newest first. */
-  attempts: TaskAttempt[];
-  /** A done task's cards and pins that moved since its attempt was dispatched on them. */
-  builtOn: BuiltOn[];
-  /** The ancestor whose live attempt coordinates it, holding it from the hub's dispatch; null when none. */
-  heldBy: string | null;
-  /**
-   * Its newest attempt failed, and it is not done or dropped since. The
-   * failure is its starter's business (the session that started it, or the
-   * lead for the dispatcher's), who hears the report: never the person's
-   * Needs you. It keeps the task off the dispatcher's frontier until someone
-   * starts or retries it.
-   */
-  lastAttemptFailed: boolean;
-  /**
-   * Its newest attempt was cancelled (stopped), and it is not done or dropped
-   * since: no failure, and off the frontier as a failed one is. Who stopped
-   * it is its attempt's `endedHow`.
-   */
-  lastAttemptStopped: boolean;
-  /** An attempt at it is starting or running. */
-  liveAttempt: boolean;
-  /** Its parts: the tasks `part_of` it, by id. */
-  parts: string[];
-  /** Its stage's `runs:` hook asked for an attempt, which waits for a slot under the project's max_attempts. */
-  queuedStart: boolean;
-  /**
-   * Ready: in a `todo` stage, every wait settled (its own and its `part_of`
-   * ancestors'), no live attempt, and no coordinator holding it. The one
-   * rule dispatch, the board and every tool answer read.
-   */
-  ready: boolean;
-  /** Why the hub could not start an attempt the last time it tried, while the task is unchanged since. */
-  startProblem: string | null;
-  /** The tasks that wait on it (`waits_on`), by id. */
-  unblocks: string[];
-  /** Every wait it has, its own and its `part_of` chain's, unsettled first. */
-  waits: TaskWait[];
 }
 
 /** Its waits that are not settled: what it still waits on. */
@@ -518,102 +432,6 @@ export interface TaskStore {
   readonly waitWorld: (
     projectId: string
   ) => Pick<WaitWorld, "card" | "github" | "pin" | "session">;
-}
-
-/**
- * When a task was made and last changed and by whom, and when it started,
- * completed or was dropped and why it closed: worked out from its file's
- * commits (task-history.ts) and never written into it. Made: the commit that
- * first added the file to the project folder. Changed: the last commit that
- * touched it, or, while the file holds an edit no commit has, when the hub
- * saw that edit. A file no commit has yet holds the time the hub saw it for
- * both, and no one for either.
- */
-export interface TaskTimes extends TaskLife {
-  /** When the commit that first added its file landed, ms epoch. */
-  createdAt: number;
-  /** Who made the commit that first added its file; null while no commit has it. */
-  createdBy: TaskHistoryActor | null;
-  /** When its file last changed, ms epoch: its last commit, or an edit no commit has yet. */
-  updatedAt: number;
-  /** Who made its last commit; null while its file holds an edit no commit has. */
-  updatedBy: TaskHistoryActor | null;
-}
-
-/** One task as a list shows it: the index's row, and what its attempts and edges say. */
-export interface TaskSummary extends TaskFlags, TaskTimes {
-  /** The task it repeats (`duplicate_of`); null when none. */
-  duplicateOf: string | null;
-  /** The fields its file carries beyond a task file's own that hold one scalar (`priority: high`), as written. */
-  fields: Record<string, string>;
-  /** The task or pin it was found in (`found_in`); null when none. */
-  foundIn: string | null;
-  id: string;
-  /** The kind of its stage; null when its stage is not one of the project's. */
-  kind: StageKind | null;
-  labels: string[];
-  /**
-   * It waits for you: its stage is of kind `you`, where only you move it on.
-   * An attempt that failed or was stopped is its starter's business, not
-   * yours. Derived on read, never stored.
-   */
-  needsYou: boolean;
-  number: number;
-  /** The project folder files its work produces (`outputs:`). */
-  outputs: string[];
-  /** The task it is a part of (`part_of`); null when none. */
-  partOf: string | null;
-  path: string;
-  /** What in the file could not be read, or a stage the project lacks, in a sentence; null when all is well. */
-  problem: string | null;
-  rank: string | null;
-  stage: string;
-  title: string;
-  /** Its agreed to-dos ticked, of all agreed (core `todoProgress`): offered ones are left out. */
-  todos: { done: number; total: number };
-  type: string | null;
-  /** What it waits on (`waits_on`), as its file keeps it. */
-  waitsOn: string[];
-}
-
-export interface TaskList {
-  /** Files in tasks/ the hub could not list as tasks, one sentence each. */
-  problems: string[];
-  /** What is wrong with stages.md, one sentence each; empty when it reads. */
-  stagesProblems: string[];
-  tasks: TaskSummary[];
-  tracker: Tracker;
-}
-
-/** A project's stages as the dashboard reads them. */
-export interface StagesView {
-  /**
-   * What an empty Decisions tab offers to ask Caw for: the project's open
-   * choices to lay out as a decision page (project-starters.ts), in that
-   * order; none while Jev is off.
-   */
-  decisionStarters: ProjectStarter[];
-  moves: StageMove[];
-  /** What is wrong with stages.md, one sentence each; stages, moves and views are empty while there is any. */
-  problems: string[];
-  /**
-   * What an empty Routines page offers to ask Caw for: what the project
-   * repeats or waits on, as routines (project-starters.ts), in that order;
-   * none while Jev is off.
-   */
-  routineStarters: ProjectStarter[];
-  /** `file`: the project's stages.md; `template`: it has none, and the code template stands in. */
-  source: "file" | "template";
-  stages: Stage[];
-  /**
-   * What an empty board and Caw's panel offer to say to him: written for the
-   * project from what it holds now (project-starters.ts), in that order;
-   * none while Jev is off.
-   */
-  starters: ProjectStarter[];
-  /** The template the stages are, word for word, if any. */
-  template: StagesTemplate | null;
-  views: StageView[];
 }
 
 /** A template the dashboard offers: its stages, and the stages.md it writes. */

@@ -21,7 +21,6 @@
  *   (`blocks.changed`), so a second screen shows it as it lands.
  */
 import {
-  BLOCK_BUILT_INS,
   BLOCK_ID,
   BLOCK_PAGES,
   BLOCK_WIDTHS,
@@ -29,6 +28,7 @@ import {
   type BlockPage,
   type BlockPlace,
   type ProposedBlock,
+  placesWithBuiltIns,
   viewBlock,
   viewOfBlock,
 } from "@cawco/core";
@@ -86,26 +86,19 @@ export const createBlocks = ({
     projectId: string,
     page: BlockPage,
     kept: Set<string>
-  ): BlockPlace[] => {
-    const stored = db.blocks
-      .ofProject(projectId)
-      .filter((row) => {
-        const view = viewOfBlock(row.block);
-        return row.page === page && (view === null || kept.has(view));
-      })
-      .map((row) => ({
-        block: row.block,
-        width: row.width,
-        hidden: row.hidden,
-      }));
-    const named = new Set(stored.map((place) => place.block));
-    return [
-      ...stored,
-      ...BLOCK_BUILT_INS[page]
-        .filter((own) => !named.has(own.block))
-        .map((own) => ({ block: own.block, width: own.width, hidden: false })),
-    ];
-  };
+  ): BlockPlace[] =>
+    placesWithBuiltIns(
+      page,
+      db.blocks
+        .ofProject(projectId)
+        .filter((row) => row.page === page)
+        .map((row) => ({
+          block: row.block,
+          width: row.width,
+          hidden: row.hidden,
+        })),
+      (view) => kept.has(view)
+    );
 
   return {
     /** The project's arrangement: every page it has arranged, and what is proposed. */

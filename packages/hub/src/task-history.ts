@@ -25,12 +25,12 @@
 
 import {
   type StageKind,
-  type TASK_FILE_STATES,
   TASK_MOVERS,
   type TaskFileState,
   type TaskHistoryKind,
   type TaskMover,
 } from "@cawco/core";
+import type { TaskHistoryEvent, TaskLife } from "@cawco/core/task-views";
 import type {
   FolderFileChange,
   FolderFileTimes,
@@ -96,59 +96,6 @@ export const AUTHOR = {
 } as const;
 
 const MOVER_NAMES: ReadonlySet<string> = new Set(TASK_MOVERS);
-
-/** Who made a change. */
-export interface TaskHistoryActor {
-  /** The session's instance id (a session, the lead), or the approved action's id; null when the commit names none. */
-  id: string | null;
-  /** The mover the change was checked as; null, unknown, for a commit with no `CawCo-Mover` trailer (a hand edit, folder_write, the folder editor, one made before the hub wrote trailers). */
-  mover: TaskMover | null;
-  /** The commit's author: you, Caw, the session's title as it was, hub, approved action. */
-  name: string;
-}
-
-/** One commit to a task's file, as its history shows it. */
-export interface TaskHistoryEvent {
-  actor: TaskHistoryActor;
-  /** When, ms epoch, by commit time. */
-  at: number;
-  /** The commit's sha. */
-  commit: string;
-  kind: TaskHistoryKind;
-  /** The file's path once the commit was made: a rename's or an archive's new path. */
-  path: string;
-  /** Why, when the change said: a close reason, the hub's cause (`attempt 5fd1e189 started`). */
-  reason: string | null;
-  /** The stage it went from and to; from is null for a new task. Null when the stage did not move. */
-  stage: { from: string | null; to: string } | null;
-  /** What changed, in the commit's words: `stage draft → review`, `update title`, `tick td-2`. */
-  what: string;
-}
-
-/** A task's history as the API answers it: every commit to its file, oldest first. */
-export interface TaskHistory {
-  events: TaskHistoryEvent[];
-  id: string;
-  /** Its file's path, or the last one it had. */
-  path: string;
-  // Indexed off the owner, not `TaskFileState`: the apps' schema names this field's enum.
-  /** `live`: on the board; `archived`: in tasks/archive/; `deleted`: its file deleted, its history kept. */
-  state: (typeof TASK_FILE_STATES)[number];
-}
-
-/** When a task started, completed, was dropped and was archived, and why it closed, from its commits. */
-export interface TaskLife {
-  /** When its file moved into tasks/archive/, ms epoch; null while it is not archived. */
-  archivedAt: number | null;
-  /** The reason given with the move into the done or dropped stage it is in; null when none or open. */
-  closeReason: string | null;
-  /** When it moved into the done stage it is in, ms epoch; null while it is not in one. */
-  completedAt: number | null;
-  /** When it moved into the dropped stage it is in, ms epoch; null while it is not in one. */
-  droppedAt: number | null;
-  /** When it first moved into a stage of kind active, ms epoch; null while it never has. */
-  startedAt: number | null;
-}
 
 /** The `CawCo-Stage` trailer's value, `from -> to`: the hub writes it, so it is read. */
 const STAGE_TRAILER = /^(\S+) -> (\S+)$/u;

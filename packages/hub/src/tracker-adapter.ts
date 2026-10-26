@@ -22,7 +22,7 @@
  *   both sides keep every byte (an H6 is seven or eight #s in the file).
  */
 import type { StageKind, TrackerTarget } from "@cawco/core";
-import type { Stage } from "./stages";
+import type { Stage } from "@cawco/core/task-views";
 
 /** Linear's six categories, which GitHub's states take too. */
 export type StateType =

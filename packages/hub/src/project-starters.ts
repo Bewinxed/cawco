@@ -56,6 +56,7 @@ import {
   type StarterPlace,
   type StartersChangedFrame,
 } from "@cawco/core";
+import type { TaskSummary } from "@cawco/core/task-views";
 import { DAY_MS } from "@cawco/core/time";
 import { Elysia, t } from "elysia";
 import type { DbShape, WorkItemRow } from "./db";
@@ -74,7 +75,7 @@ import {
   type StarterInputs,
   type StarterTask,
 } from "./starter-asks";
-import type { TaskEvent, TaskSummary, Tasks } from "./tasks";
+import type { TaskEvent, Tasks } from "./tasks";
 import { STARTERS_GAP_MS, STARTERS_QUIET_MS } from "./upstreams";
 
 /** Quiet before a project's starters are written: 60 s with no other ask. */

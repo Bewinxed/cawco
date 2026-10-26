@@ -20,9 +20,9 @@ import {
   type ResultArtifactKind,
   type SessionPlan,
 } from "@cawco/core";
+import type { AttemptStart } from "@cawco/core/task-views";
 import { z } from "zod";
 import { BUILD_TITLE } from "./design-offers";
-import type { AttemptStart } from "./dispatch";
 import type { DuplicateOutcome } from "./jev-tasks";
 import { tool } from "./mcp-tool";
 import type { WrittenStep } from "./plans";

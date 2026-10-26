@@ -14,6 +14,15 @@ import type { WaitKind } from "./wait-targets";
 import type { taskLinkWords } from "./words/task-links";
 import type { WorkItemState } from "./work-items";
 
+// Not exported: the hub's db schema.ts exports the stored one, of the same
+// name and shape, and the OpenAPI schema is named for it.
+/** One card or pin an attempt was dispatched on, and the value it settled with (`workItems.waitedOn`). */
+interface WaitWitness {
+  /** The wait as its task's file keeps it (wait-targets.ts). */
+  target: string;
+  value: string;
+}
+
 interface StageHooks {
   /** `after:` as written, like `48h`. */
   after?: string;
@@ -47,7 +56,7 @@ export interface StageView {
 export interface StagesView {
   /**
    * What an empty Decisions tab offers to ask Caw for: the project's open
-   * choices to lay out as a decision page (hub project-starters.ts), in that
+   * choices to lay out as a decision page (project-starters.ts), in that
    * order; none while Jev is off.
    */
   decisionStarters: ProjectStarter[];
@@ -56,8 +65,8 @@ export interface StagesView {
   problems: string[];
   /**
    * What an empty Routines page offers to ask Caw for: what the project
-   * repeats or waits on, as routines (hub project-starters.ts), in that
-   * order; none while Jev is off.
+   * repeats or waits on, as routines (project-starters.ts), in that order;
+   * none while Jev is off.
    */
   routineStarters: ProjectStarter[];
   /** `file`: the project's stages.md; `template`: it has none, and the code template stands in. */
@@ -65,8 +74,8 @@ export interface StagesView {
   stages: Stage[];
   /**
    * What an empty board and Caw's panel offer to say to him: written for the
-   * project from what it holds now (hub project-starters.ts), in that order;
-   * none while Jev is off. `starters.changed` brings a new set.
+   * project from what it holds now (project-starters.ts), in that order;
+   * none while Jev is off.
    */
   starters: ProjectStarter[];
   /** The template the stages are, word for word, if any. */
@@ -74,7 +83,7 @@ export interface StagesView {
   views: StageView[];
 }
 
-/** One attempt at a task (attempt): a work item whose task it is, as a task read shows it. */
+/** One attempt at a task: a work item whose task it is, as a task read shows it. */
 export interface TaskAttempt {
   /** When it ended, ms epoch; null while it is live. */
   endedAt: number | null;
@@ -98,15 +107,12 @@ export interface TaskAttempt {
   /** When it was filed, ms epoch. */
   startedAt: number;
   state: WorkItemState;
-  /** The cards and pins it was dispatched on (each wait as its task's file keeps it), with the value each settled with then (hub `WaitWitness`). */
-  waitedOn: { target: string; value: string }[];
+  /** The cards and pins it was dispatched on, with the value each settled with then. */
+  waitedOn: WaitWitness[];
   workItemId: string;
 }
 
-/**
- * One wait, settled or not, as every reader shows it (hub task-waits.ts): a
- * task, a decision card, a pin, a pull request, an Actions run or a session.
- */
+/** One wait, settled or not, as every reader shows it. */
 export interface WaitState {
   /** A task target dropped since (not as a duplicate): the wait is removed. */
   dropped: boolean;
@@ -120,13 +126,13 @@ export interface WaitState {
   settled: boolean;
   /** Where it stands, in a word or two: `doing`, `open`, `picked`, `merged`, `red`. */
   state: string;
-  /** The wait as its file keeps it: what a link write takes out. */
+  /** The wait as its file keeps it ({@link waitHandle}). */
   target: string;
   /** What it settled with, for a card (its pick) or a pin; null otherwise or while unsettled. */
   value: string | null;
 }
 
-/** One wait of a task, its own or inherited. */
+/** One wait of a task, its own or inherited, as task-waits.ts settles it. */
 export interface TaskWait extends WaitState {
   /** The `part_of` ancestor it is inherited from; null for the task's own. */
   via: string | null;
@@ -186,7 +192,7 @@ export interface TaskFlags {
   waits: TaskWait[];
 }
 
-/** Who made a change to a task, or wrote a comment on it. */
+/** Who made a change. */
 export interface TaskHistoryActor {
   /** The session's instance id (a session, the lead), or the approved action's id; null when the commit names none. */
   id: string | null;
@@ -210,7 +216,15 @@ export interface TaskLife {
   startedAt: number | null;
 }
 
-/** When a task was made and last changed, and by whom, from its file's commits. */
+/**
+ * When a task was made and last changed and by whom, and when it started,
+ * completed or was dropped and why it closed: worked out from its file's
+ * commits (task-history.ts) and never written into it. Made: the commit that
+ * first added the file to the project folder. Changed: the last commit that
+ * touched it, or, while the file holds an edit no commit has, when the hub
+ * saw that edit. A file no commit has yet holds the time the hub saw it for
+ * both, and no one for either.
+ */
 export interface TaskTimes extends TaskLife {
   /** When the commit that first added its file landed, ms epoch. */
   createdAt: number;

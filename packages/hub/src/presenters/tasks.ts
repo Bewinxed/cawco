@@ -25,19 +25,17 @@ import {
   taskLinkWords,
   todoLink,
 } from "@cawco/core";
-import type { AttemptStart } from "../dispatch";
+import type {
+  AttemptStart,
+  StagesView,
+  TaskHistoryEvent,
+  TaskList,
+  TaskWait,
+  WaitState,
+} from "@cawco/core/task-views";
 import type { DuplicateOutcome } from "../jev-tasks";
 import type { TaskComment } from "../task-file";
-import type { TaskHistoryEvent } from "../task-history";
-import type { WaitState } from "../task-waits";
-import type {
-  Closing,
-  LinkOutcome,
-  StagesView,
-  TaskList,
-  TaskView,
-  TaskWait,
-} from "../tasks";
+import type { Closing, LinkOutcome, TaskView } from "../tasks";
 import { ago, count, handle, lines, listed, quote, valueWords } from "./words";
 
 type TaskLine = TaskList["tasks"][number];

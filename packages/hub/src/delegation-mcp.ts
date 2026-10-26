@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { unwatchFile, watchFile } from "node:fs";
 import {
+  type AcceptResult,
   type Envelope,
   type HarnessKind,
   type InstanceRow,
@@ -14,6 +15,7 @@ import {
   PROJECT_SETTINGS,
 } from "@cawco/core/long-calls";
 import type { MachinePath } from "@cawco/core/machine-path";
+import type { AttemptStart } from "@cawco/core/task-views";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import {
@@ -43,14 +45,12 @@ import {
   loadsUpfront,
 } from "./delegation-tools";
 import type { DelegateList, DelegateListQuery } from "./delegation-tree";
-import type { AttemptStart } from "./dispatch";
 import type { FleetWatch } from "./fleet-watch";
 import { type createHubTools, DESIGN_VERDICT, HUB_TOOLS } from "./hub-tools";
 import { INGRESS_TOOLS, type Ingress } from "./ingress";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { MEMORY_TOOLS, type Memory } from "./memory";
 import {
-  type AcceptResult,
   mayMakeProject,
   PROJECT_FROM_SESSION,
   projectFromSessionTool,

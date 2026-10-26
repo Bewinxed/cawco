@@ -112,6 +112,7 @@ import {
   todoLink,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
+import type { AttemptStart, Stage, TaskSummary } from "@cawco/core/task-views";
 import { Elysia, status, t } from "elysia";
 import type { DbShape, PlaceRow, ProjectRow, WorkItemRow } from "./db";
 import type { Origin, WaitWitness, WorkBudget } from "./db/schema";
@@ -132,7 +133,6 @@ import {
 import type { HubLifetimeShape } from "./lifetime";
 import { FolderRefusal, type FolderRefusalStatus } from "./project-folder";
 import { fits, type MachineFacts, runsOnValue, runsOnWords } from "./runs-on";
-import type { Stage } from "./stages";
 import { criteriaOf, type TaskComment } from "./task-file";
 import {
   BUDGET,
@@ -140,7 +140,6 @@ import {
   onFrontier,
   type TaskActor,
   type TaskEvent,
-  type TaskSummary,
   type Tasks,
   type TaskView,
 } from "./tasks";
@@ -233,28 +232,6 @@ export interface DispatchDeps {
     projectId: string,
     type: string
   ) => LandsMode | undefined;
-}
-
-/**
- * An attempt as it started; or, `queued`, waiting for files a live item owns
- * (its ids null until it starts). Wire-pinned: installable app builds decode
- * these fields from `POST /api/projects/:id/tasks/:taskId/attempts`.
- */
-export interface AttemptStart {
-  instanceId: string | null;
-  /** Where its work lands. */
-  lands: LandsMode;
-  /** Whether it waits for files a live item owns, to start when they are free. */
-  queued: boolean;
-  /** The stage the task is in now. */
-  stage: string;
-  task: string;
-  /** What the starting session reads. */
-  text: string;
-  /** The delegate type it runs; null, the hub's default. */
-  type: string | null;
-  workItemId: string | null;
-  workspaceId: string | null;
 }
 
 /** A project's dispatch: its settings, and what the dispatcher would do now. */

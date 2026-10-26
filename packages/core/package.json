@@ -19,6 +19,7 @@
     "./bounded": "./src/bounded.ts",
     "./time": "./src/time.ts",
     "./json-rpc": "./src/json-rpc.ts",
+    "./task-views": "./src/task-views.ts",
     "./every-of": "./src/every-of.ts",
     "./jev": "./src/jev.ts",
     "./preview-reach": "./src/preview-reach.ts",

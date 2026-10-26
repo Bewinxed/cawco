@@ -17,9 +17,11 @@
  *   nothing and is said once in the log: the stages' moves bind the routine
  *   as they bind anyone (tasks.ts `move`, mover `routine`).
  */
+
+import type { Stage } from "@cawco/core/task-views";
 import type { HubLifetimeShape } from "./lifetime";
 import { hasProjectFolder } from "./project-folder";
-import { movesFrom, type Stage, type Stages } from "./stages";
+import { movesFrom, type Stages } from "./stages";
 import { routineActor, type TaskEvent, type Tasks } from "./tasks";
 
 /** The routine's id, in its commits' `CawCo-Actor: routine:waits`. */

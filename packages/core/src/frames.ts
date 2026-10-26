@@ -778,8 +778,11 @@ export interface ProjectOfferSummary {
   reason: ProjectOfferReason;
 }
 
-/** What "Create project" on an offer did (hub project-offers.ts): the project, and the plan items it filed as proposed tasks. */
-export interface ProjectOfferAccepted {
+// What "Create project" on an offer did (hub project-offers.ts): the
+// project, and the plan items it filed as proposed tasks. `AcceptResult` is
+// the OpenAPI schema's name, which the app's client is generated from, and
+// a doc comment here would become that schema's description.
+export interface AcceptResult {
   /** True when the session's folder joined a project that already had its repository. */
   joined: boolean;
   project: { id: string; name: string };
@@ -791,6 +794,9 @@ export interface ProjectOfferAccepted {
   tasks: { id: string; title: string }[];
   unfiled: { title: string; why: string }[];
 }
+
+/** What "Create project" on an offer did, as the dashboard names it. */
+export type ProjectOfferAccepted = AcceptResult;
 
 export interface ProjectOfferFrame {
   instanceId: string;

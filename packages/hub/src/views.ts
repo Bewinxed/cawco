@@ -38,6 +38,7 @@ import {
   type ViewToolName,
   viewTitle,
 } from "@cawco/core";
+import type { TaskSummary } from "@cawco/core/task-views";
 import { DAY_MS } from "@cawco/core/time";
 import { viewToolInput } from "@cawco/core/views-library";
 import { Elysia, t } from "elysia";
@@ -55,7 +56,7 @@ import {
   writeFolderFile,
 } from "./project-folder";
 import { nextRunsOf, slotLabel } from "./routines";
-import type { TaskSummary, Tasks } from "./tasks";
+import type { Tasks } from "./tasks";
 
 /** A view's name: what its file is called, and the tab it becomes. */
 const VIEW_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/u;

@@ -8,6 +8,7 @@
  */
 
 export const TRACKERS = ["cawco", "github", "linear"] as const;
+/** Where a project's tasks live: CawCo's files alone, or an outside tracker beside them (tracker.ts). */
 export type Tracker = (typeof TRACKERS)[number];
 /** A tracker that is an outside service. */
 export type IssueTracker = Exclude<Tracker, "cawco">;

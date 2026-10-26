@@ -20,6 +20,7 @@
  */
 
 import {
+  type AcceptResult,
   type CommandResult,
   type InstanceRow,
   machineCalled,
@@ -49,19 +50,6 @@ const PROPOSED_LABEL = "proposed";
 const TITLE_MAX = 200;
 /** A git read is local; past this the machine is not going to answer it. */
 const READ_MS = 10_000;
-
-export interface AcceptResult {
-  /** True when the session's folder joined a project that already had its repository. */
-  joined: boolean;
-  project: { id: string; name: string };
-  /** The sessions moved into it: this one, then its delegates. */
-  sessions: string[];
-  /** A new project's Setup thread, where its Caw sets it up; none when the folder joined one. */
-  setupThread?: ThreadSummary;
-  /** Plan items filed as proposed tasks, and the ones the project refused. */
-  tasks: { id: string; title: string }[];
-  unfiled: { title: string; why: string }[];
-}
 
 type InstanceShape = ReturnType<DbShape["listInstances"]>[number];
 

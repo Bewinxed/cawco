@@ -53,36 +53,8 @@ import {
   type StageKind,
   type StagesTemplate,
 } from "@cawco/core";
+import type { Stage, StageMove, StageView } from "@cawco/core/task-views";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
-
-interface StageHooks {
-  /** `after:` as written, like `48h`. */
-  after?: string;
-  /** `after:` in milliseconds. */
-  afterMs?: number;
-  by?: Mover;
-  runs?: string;
-  until?: string;
-}
-
-export interface Stage {
-  hooks: StageHooks;
-  kind: StageKind;
-  name: string;
-}
-
-export interface StageMove {
-  /** A stage, or `*` for any. */
-  from: string;
-  /** A stage, or `*` for any. */
-  to: string;
-  who: Mover[];
-}
-
-export interface StageView {
-  by: string | null;
-  name: string;
-}
 
 export interface Stages {
   moves: StageMove[];
