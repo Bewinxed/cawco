@@ -58,7 +58,7 @@
     type TrackerTarget,
     type TrackerView,
   } from "@cawco/core";
-  import { onMount } from "svelte";
+  import { onMount, type Snippet } from "svelte";
   import {
     addProjectPlace,
     cawco,
@@ -101,6 +101,7 @@
     lead,
     place,
     onclose,
+    afterChecks,
   }: {
     project: ProjectRow;
     /** The primary checkout's machine; null while it has none, or it left. */
@@ -109,6 +110,8 @@
     /** Where it lives, in the head's own words. */
     place: string;
     onclose: () => void;
+    /** Rows that stand under Merge checks. */
+    afterChecks?: Snippet;
   } = $props();
 
   const uid = $props.id();
@@ -1144,6 +1147,8 @@
         />
       </div>
     </div>
+
+    {@render afterChecks?.()}
 
     <!-- Tasks: where they live; a tracker is picked, then bound with Use. -->
     <div

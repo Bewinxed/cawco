@@ -333,6 +333,12 @@ const CONTAINERS = {
   // Labels (c-task-col-labels-w, 224px) from 878 + 224:
   "table-1102px": "1102px",
   "stop-tray": "420px",
+  // Who decides' rows (WhoDecidesTable): its four routes in full stand in
+  // one groove 340px wide, so under 352px a row shows them its narrow way;
+  // from 600px (a 244px name and example, space-4, the groove) the choices
+  // stand beside the kind.
+  "decides-full": "352px",
+  "decides-side": "600px",
   kinds: "480px",
   "decisions-520px": "520px",
   leaf: "620px",

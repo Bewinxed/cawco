@@ -50,6 +50,8 @@
   import { fold, landFold } from "../../motion/fold.svelte";
   import { morph } from "../../motion/morph.svelte";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
+  import DecidedBy from "./DecidedBy.svelte";
+  import { DECIDED_BY, type DecidedByShown } from "./decided-by.js";
   import {
     bridge,
     hearWidths,
@@ -306,6 +308,9 @@
     };
   });
 
+  /** Who decided it, where the page draws that (decided-by.ts). */
+  const decidedBy = getContext<DecidedByShown | undefined>(DECIDED_BY);
+
   const stored = $derived(picks.now[id]?.note ?? "");
   let note = $state("");
   let typing = false;
@@ -457,6 +462,12 @@
         {@render renderNode(props.options)}
       </div>
     </OptionGroup>
+    {#if decidedBy}
+      <DecidedBy
+        settled={picks.now[id]?.settled ?? null}
+        takenBack={decidedBy.takenBack(id)}
+      />
+    {/if}
     <div data-slot="note">
       <!-- A ghost's ink starts inside its box: it hangs back by its padding so its first letter stands on the card's text edge, as RelayJourney's ghosts do. -->
       <div bind:this={noteAdd}>

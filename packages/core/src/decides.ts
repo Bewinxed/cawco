@@ -156,3 +156,81 @@ export const settleYours = (
   where: "project" | "fleet"
 ): string =>
   `${kind ? DECISION_KIND_WORDS[kind].name : "A card with no kind"} is his ${where === "project" ? "on this project" : "in this fleet"}: only he picks it, and the card waits on him.`;
+
+/** Each route as Who decides names it: its segment's label, and in a line of the table's summary. */
+export const ROUTE_WORDS: Record<
+  DecidesRoute,
+  { label: string; line: string }
+> = {
+  you: { label: "You", line: "you" },
+  advisor: { label: "An advisor", line: "an advisor" },
+  practice: { label: "Common practice", line: "common practice" },
+  agent: { label: "The agent", line: "the agent" },
+};
+
+/** Each kind's route where the fleet's table says nothing, core's default. */
+export const fleetRoutes = (
+  fleet: FleetDecides
+): Record<DecisionKind, DecidesRoute> =>
+  Object.fromEntries(
+    DECISION_KINDS.map((kind) => [
+      kind,
+      fleet.routes[kind] ?? DEFAULT_ROUTES[kind],
+    ])
+  ) as Record<DecisionKind, DecidesRoute>;
+
+/**
+ * A table in one line, its kinds grouped by route in the routes' order:
+ * "Look and words, Behaviour, Scope: you · Approach, Rules and checks: an
+ * advisor · Tools and conventions: common practice".
+ */
+export const decidesSummary = (
+  routes: Record<DecisionKind, DecidesRoute>
+): string =>
+  DECIDES_ROUTES.flatMap((route) => {
+    const kinds = DECISION_KINDS.filter((kind) => routes[kind] === route);
+    return kinds.length > 0
+      ? [
+          `${kinds.map((kind) => DECISION_KIND_WORDS[kind].name).join(", ")}: ${ROUTE_WORDS[route].line}`,
+        ]
+      : [];
+  }).join(" · ");
+
+/** What a project's decides.md sets itself: the kinds it routes, its advisor, its own paths. */
+export interface DecidesOwn {
+  advisor: string | null;
+  routes: Partial<Record<DecisionKind, DecidesRoute>>;
+  yours: string[];
+}
+
+const DECIDES_FENCE = /^---\s*$/u;
+const DECIDES_LINES = /\r?\n/u;
+
+/**
+ * decides.md with `own` as its block (hub decides-file.ts reads it): the
+ * kinds it routes in the table's order, `Advisor:`, then `Yours:` and its
+ * paths. What stood after the block in `was` (notes for people) is kept; a
+ * file with no block takes one at its head.
+ */
+export const decidesFileOf = (own: DecidesOwn, was: string | null): string => {
+  const block = [
+    "---",
+    ...DECISION_KINDS.flatMap((kind) => {
+      const route = own.routes[kind];
+      return route ? [`${DECISION_KIND_WORDS[kind].name}: ${route}`] : [];
+    }),
+    ...(own.advisor ? [`Advisor: ${own.advisor}`] : []),
+    ...(own.yours.length > 0
+      ? ["Yours:", ...own.yours.map((path) => `  ${path}`)]
+      : []),
+    "---",
+  ].join("\n");
+  const lines = (was ?? "").split(DECIDES_LINES);
+  const start = lines.findIndex((line) => line.trim() !== "");
+  const end =
+    start >= 0 && DECIDES_FENCE.test(lines[start] ?? "")
+      ? lines.findIndex((line, at) => at > start && DECIDES_FENCE.test(line))
+      : -1;
+  const notes = (end >= 0 ? lines.slice(end + 1) : lines).join("\n").trim();
+  return notes ? `${block}\n${notes}\n` : `${block}\n`;
+};

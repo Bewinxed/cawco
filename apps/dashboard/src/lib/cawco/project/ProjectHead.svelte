@@ -59,7 +59,7 @@
     upstreamPostsWords,
   } from "@cawco/core/upstream-guard";
   import { mergeProps } from "bits-ui";
-  import { untrack } from "svelte";
+  import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
   import { cawco, editProject } from "#lib/cawco/client.svelte.js";
@@ -111,6 +111,7 @@
     onask,
     onfilter,
     onstages,
+    detailsAfterChecks,
   }: {
     /** Filter the tasks, from the menu on a phone, where the strip has no room for it. */
     onfilter: (anchor: HTMLElement) => void;
@@ -124,6 +125,8 @@
     onask: ((anchor: HTMLElement) => void) | null;
     /** Pick the project's stages, from the menu; null once it has its own. */
     onstages: ((anchor: HTMLElement) => void) | null;
+    /** Rows the details show under Merge checks (ProjectDetails). */
+    detailsAfterChecks?: Snippet;
   } = $props();
 
   const narrow = new MediaQuery("(max-width: 639px)");
@@ -639,7 +642,14 @@
 {/if}
 <!-- The project's details, under the head, from where its title starts. -->
 {#if details}
-  <ProjectDetails {lead} {machine} onclose={closeDetails} {place} {project} />
+  <ProjectDetails
+    afterChecks={detailsAfterChecks}
+    {lead}
+    {machine}
+    onclose={closeDetails}
+    {place}
+    {project}
+  />
 {/if}
 <!-- A forget asked from More, under the head, from where its title starts. -->
 <!-- The tray on the page's gutters: 25px in at the start (18 under the desk

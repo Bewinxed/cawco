@@ -961,8 +961,10 @@
       // The MCP server sign-in's return (its page: "Finishing sign-in").
       case "oauth":
         return "MCP sign-in";
-      // The motion benches (`vite dev` and the probe kit's bench build).
+      // The motion benches (`vite dev` and the probe kit's bench build), and
+      // the dev benches in the shell.
       case "motion":
+      case "dev":
         return "Bench";
       default:
         // Every route under the app's layout has its name above, and a path
