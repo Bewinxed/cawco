@@ -9,6 +9,7 @@ import {
   accountsWords,
   clockWords,
   configurePage,
+  dayWords,
   type HeldReason,
   keepsGoingOnExtraUsage,
   type LimitWindow,
@@ -27,7 +28,7 @@ import {
   WORK_IN_FLIGHT,
 } from "@cawco/core/binary-updates";
 import { detach } from "@cawco/core/detach";
-import { MINUTE_MS } from "@cawco/core/time";
+import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import {
   type Admission,
   type Ledger,
@@ -115,6 +116,13 @@ import { isLive } from "./work-items";
  * earliest reset and carries on then by itself; what it is sent meanwhile
  * waits at the hub and goes once it runs. While it is stopped, its tray chip
  * and `delegate_list` say so ({@link stall}).
+ *
+ * A hold carries on by itself only within its provider's cutoff (core
+ * `AtLimit.staleAfterHours`, a day by default): past its reset by more, or
+ * held that long on a refused sign-in, it goes stale ({@link goneStale}):
+ * nothing sends to it, wakes it or moves it, whatever looks at it (a recheck,
+ * a machine connecting, a hub's boot), until a person or its parent writes
+ * to it.
  */
 
 export type LimitRow = ReturnType<DbShape["getInstancesByIds"]>[number];
@@ -125,9 +133,19 @@ export type LimitRow = ReturnType<DbShape["getInstancesByIds"]>[number];
  * when it carries on (epoch ms): the reset it waits for.
  */
 export interface Stall {
+  /** Held past the cutoff: nothing carries it on until a person or its parent writes ({@link goneStale}). */
+  stale?: true;
   until?: number;
   words: string;
 }
+
+/**
+ * Who wrote to a held session, of those that carry on a stale hold
+ * ({@link goneStale}): a person or its parent (`word`), whose turn reads the
+ * carry-on with their message; or a Continue's filing turn (`continue`),
+ * after which its work goes on in a new session, so nothing is carried on.
+ */
+export type TakenUpBy = "word" | "continue";
 
 /** The message a session's last turn read: who sent it. */
 export interface Handed {
@@ -931,9 +949,16 @@ export interface AtLimitPorts {
   refusedMove: (row: LimitRow, move: AccountMove) => void;
   /**
    * Has `row` carry on, on the account it is on, where what `stopped` it
-   * left it: its account's limit, or a sign-in failure.
+   * left it: its account's limit, or a sign-in failure. `quiet`: the
+   * carry-on is a note its next turn reads and starts none, as the word of
+   * a person or its parent that took up its stale hold starts that turn.
    */
-  resume: (row: LimitRow, stopped: "limit" | "signin") => void;
+  resume: (row: LimitRow, stopped: "limit" | "signin", quiet: boolean) => void;
+  /**
+   * `row`'s hold went stale ({@link goneStale}): the person is told in Needs
+   * you, in these words, until they act on it (fleet-watch.ts `tellYou`).
+   */
+  stale: (row: LimitRow, title: string, body: string) => void;
   /**
    * What `row`'s last turn read: the newest message it was handed, who sent
    * it. Undefined when it was handed none.
@@ -941,6 +966,8 @@ export interface AtLimitPorts {
   startedBy: (row: LimitRow) => Handed | undefined;
   /** Takes the line `id` out of `row`'s transcript. */
   unnote: (row: Pick<LimitRow, "id">, id: string) => void;
+  /** `row`'s stale hold was taken up or ended: its Needs you notice goes. */
+  unstale: (row: Pick<LimitRow, "id">) => void;
   /**
    * Whether a person waits on `row`: a question or permission of it is
    * pending, or it is a top-level session whose last turn a person sent.
@@ -2086,7 +2113,8 @@ export const createAtLimit = (ports: AtLimitPorts) => {
    */
   const lookAtSignedOut = async (
     row: LimitRow,
-    current: Account
+    current: Account,
+    taken: TakenUpBy | undefined
   ): Promise<void> => {
     if (!signedIn(row, current)) {
       await act(row, current, "refused-credential");
@@ -2095,27 +2123,168 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       console.info(
         `[at-limit] ${ports.named(row)}: ${accountNameAmong(current, db.accounts.list())} is signed in again on its machine, so it carries on there.`
       );
-      ports.resume(row, "signin");
+      carriesOn(row, "signin", taken);
     }
   };
 
   /**
-   * One held session: past its own account's reset, it carries on where it
-   * is once it is between turns; past the moment another account frees, or
-   * before either, a decision moves it to an account that can take it (or
-   * holds it again). One held on its refused credential (`until` null)
-   * carries on where it is once its account is signed in there again, and
-   * until then moves as soon as another account can take it.
+   * `row`, its hold just dropped, carries on where what `stopped` it left
+   * it. Taken up past the cutoff ({@link takenUp}), the carry-on is a note
+   * the turn of the word that took it up reads, and what was kept for it
+   * goes now; for a Continue, nothing is carried on.
    */
-  const lookAt = async (held: LimitHold, now: number): Promise<void> => {
+  const carriesOn = (
+    row: LimitRow,
+    stopped: "limit" | "signin",
+    taken: TakenUpBy | undefined
+  ): void => {
+    if (taken !== "continue") {
+      ports.resume(row, stopped, taken === "word");
+    }
+    if (taken) {
+      ports.changed();
+    }
+  };
+
+  /** How long past its reset `current`'s provider still carries a hold on by itself, ms (core `AtLimit.staleAfterHours`). */
+  const cutoffOf = (current: Account): number =>
+    db.accounts.routing(current.provider).atLimit.staleAfterHours * HOUR_MS;
+
+  /**
+   * Whether `held` is past the cutoff at `now`: its reset passed more than
+   * the cutoff ago, or, held on a refused sign-in (no reset), it was held
+   * that long.
+   */
+  const pastCutoff = (
+    held: LimitHold,
+    current: Account,
+    now: number
+  ): boolean => now - (held.until ?? held.since ?? now) > cutoffOf(current);
+
+  /**
+   * THE RULE FOR A STALE HOLD: `row`, held past the cutoff, is never carried
+   * on by the hub: nothing is sent to it, nothing wakes it, nothing moves it.
+   * Its hold stays, keeping what it is sent at the hub, marked stale once:
+   * the person is told in Needs you, its parent reads it in `delegate_list`
+   * ({@link stall}), and the carry-on it would have been sent goes, as a
+   * note, with the turn a person's or its parent's word starts
+   * ({@link takenUp}). Continued with continue_session, stopped or discarded,
+   * its hold ends.
+   */
+  const goneStale = (
+    row: LimitRow,
+    current: Account,
+    held: LimitHold,
+    now: number
+  ): void => {
+    if (held.staleAt !== null) {
+      return;
+    }
+    db.atLimit.markStale(row.id, now);
+    later.delete(row.id);
+    waitEnded(row.id);
+    const from = accountNameAmong(current, db.accounts.list());
+    const hours = cutoffOf(current) / HOUR_MS;
+    const day = dayWords(held.since ?? now);
+    const why =
+      held.until === null
+        ? `its sign-in was refused on ${day}`
+        : `${from}'s limit reset on ${dayWords(held.until)} at ${clockWords(held.until)}`;
+    console.info(
+      `[at-limit] ${ports.named(row)}: ${why}, more than ${hours} hours ago, so its hold is stale and the hub no longer carries it on by itself: nothing is sent to it or wakes it. It waits in Needs you and its parent's delegate_list until a person or its parent writes to it, or it is continued, stopped or discarded.`
+    );
+    const words = accountsWords.staleNotice;
+    ports.stale(
+      row,
+      held.until === null
+        ? words.signedOutTitle(from, day)
+        : words.title(from, day),
+      words.body(hours)
+    );
+    ports.changed();
+  };
+
+  /**
+   * A person's or its parent's word, or a Continue, reached `row`, held
+   * past the cutoff ({@link goneStale}): its hold is theirs to take up now
+   * ({@link carriesOn}). Its notice goes; a hold on a refused sign-in counts
+   * its cutoff from now. Answers the hold as it stands.
+   */
+  const takenUp = (
+    row: LimitRow,
+    current: Account,
+    held: LimitHold,
+    now: number
+  ): LimitHold => {
+    ports.unstale(row);
+    console.info(
+      `[at-limit] ${ports.named(row)} was held past the cutoff and is written to by a person or its parent, or continued, so the hub takes its hold up again: a message's turn reads its carry-on, a Continue's filing turn goes on its own.`
+    );
+    if (held.until !== null) {
+      return held;
+    }
+    db.atLimit.putHold({
+      instanceId: row.id,
+      accountId: current.id,
+      until: null,
+      since: now,
+    });
+    return { ...held, since: now, staleAt: null };
+  };
+
+  /**
+   * One held session: past the cutoff, nothing is done to it
+   * ({@link goneStale}) unless `asked`: a person's or its parent's word, or a
+   * Continue, took it up ({@link takenUp}); else it is carried on
+   * ({@link carryHold}). One that runs no more has its hold dropped.
+   */
+  const lookAt = async (
+    held: LimitHold,
+    now: number,
+    asked: TakenUpBy | undefined
+  ): Promise<void> => {
     const row = rowOf(held.instanceId);
     const current = db.accounts.get(held.accountId);
     if (over(row) || !row || !current) {
       db.atLimit.dropHold(held.instanceId);
       later.delete(held.instanceId);
       waitEnded(held.instanceId);
+      if (held.staleAt !== null) {
+        ports.unstale({ id: held.instanceId });
+      }
       return;
     }
+    if (!pastCutoff(held, current, now)) {
+      await carryHold(row, current, held, now, undefined);
+    } else if (asked === undefined) {
+      goneStale(row, current, held, now);
+    } else {
+      await carryHold(
+        row,
+        current,
+        takenUp(row, current, held, now),
+        now,
+        asked
+      );
+    }
+  };
+
+  /**
+   * One held session carried on: past its own account's reset, it carries
+   * on where it is once it is between turns; past the moment another account
+   * frees, or before either, a decision moves it to an account that can take
+   * it (or holds it again). One held on its refused credential (`until` null)
+   * carries on where it is once its account is signed in there again, and
+   * until then moves as soon as another account can take it. `taken`: who
+   * took up its stale hold ({@link carriesOn}).
+   */
+  const carryHold = async (
+    row: LimitRow,
+    current: Account,
+    held: LimitHold,
+    now: number,
+    taken: TakenUpBy | undefined
+  ): Promise<void> => {
     // A person moved it: its hold ends at that move, not at its reset.
     if (ports.handMove(row)) {
       await act(
@@ -2126,7 +2295,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       return;
     }
     if (held.until === null) {
-      await lookAtSignedOut(row, current);
+      await lookAtSignedOut(row, current, taken);
       return;
     }
     if (stays(row, current)) {
@@ -2150,7 +2319,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       console.info(
         `[at-limit] ${ports.named(row)}: ${accountNameAmong(current, db.accounts.list())}'s limit has reset, so it carries on there, told to pick up where the limit stopped it.`
       );
-      ports.resume(row, "limit");
+      carriesOn(row, "limit", taken);
     }
   };
 
@@ -2194,7 +2363,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     const now = Date.now();
     landing.clear();
     for (const held of admissionOrder(db.atLimit.holds())) {
-      await lookAt(held, now);
+      await lookAt(held, now, undefined);
     }
   };
 
@@ -2217,7 +2386,8 @@ export const createAtLimit = (ports: AtLimitPorts) => {
    * Arms the next look: the earliest moment a held session's account frees
    * (its own reset, or another's that comes first), or a move waiting for
    * work held for later reaches its cap, else the recheck, while anything is
-   * held or two accounts could balance.
+   * held or two accounts could balance. A stale hold waits on no moment
+   * ({@link goneStale}).
    */
   const plan = (): void => {
     lifetime.cancel(timer);
@@ -2226,7 +2396,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       return;
     }
     const now = Date.now();
-    const holds = db.atLimit.holds();
+    const holds = db.atLimit.holds().filter((one) => one.staleAt === null);
     if (holds.length === 0 && rebalancer.pairs().length === 0) {
       return;
     }
@@ -2281,6 +2451,49 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     };
   };
 
+  /**
+   * A hold as its stalled words say it: held past the cutoff, carried on
+   * once written to ({@link goneStale}); on a refused sign-in; its move
+   * waiting for work in flight ({@link carryStall}); or until the earliest
+   * reset, its own account's or another's that frees first.
+   */
+  const heldStall = (held: LimitHold): Stall => {
+    const words = accountsWords.stalled;
+    const from = db.accounts.get(held.accountId);
+    const name = from
+      ? accountNameAmong(from, db.accounts.list())
+      : "its account";
+    if (held.staleAt !== null) {
+      const day = dayWords(held.since ?? held.staleAt);
+      return {
+        words:
+          held.until === null
+            ? words.staleSignedOut(name, day)
+            : words.stale(name, day),
+        stale: true,
+      };
+    }
+    if (held.until === null) {
+      return { words: words.signedOut(name) };
+    }
+    const carry = later.get(held.instanceId);
+    if (carry) {
+      return carryStall(name, carry, held.until);
+    }
+    const last = db.atLimit.events([held.instanceId]).at(-1)?.move;
+    const frees =
+      last?.kind === "waiting" && last.until === held.until
+        ? last.frees
+        : undefined;
+    const clock = clockWords(held.until);
+    return {
+      words: frees
+        ? words.waitingOn(name, frees.name, clock)
+        : words.waiting(name, clock),
+      until: held.until,
+    };
+  };
+
   rebalancer.accountsChanged();
 
   return {
@@ -2289,37 +2502,15 @@ export const createAtLimit = (ports: AtLimitPorts) => {
      * on its way to an account that can take it (now, or once its turn
      * ends), its move waiting for work in flight (by the cap at the latest:
      * {@link carryStall}), held until the earliest reset (`until`, epoch ms;
-     * its own account's, or another's that frees first and takes it), or
-     * held on a refused sign-in until an account can take it. Undefined
-     * while it runs.
+     * its own account's, or another's that frees first and takes it), held
+     * on a refused sign-in until an account can take it, or held past the
+     * cutoff (`stale`), carried on only once written to. Undefined while it
+     * runs.
      */
     stall(instanceId: string): Stall | undefined {
-      const words = accountsWords.stalled;
       const held = db.atLimit.hold(instanceId);
       if (held) {
-        const from = db.accounts.get(held.accountId);
-        const name = from
-          ? accountNameAmong(from, db.accounts.list())
-          : "its account";
-        if (held.until === null) {
-          return { words: words.signedOut(name) };
-        }
-        const carry = later.get(instanceId);
-        if (carry) {
-          return carryStall(name, carry, held.until);
-        }
-        const last = db.atLimit.events([instanceId]).at(-1)?.move;
-        const frees =
-          last?.kind === "waiting" && last.until === held.until
-            ? last.frees
-            : undefined;
-        const clock = clockWords(held.until);
-        return {
-          words: frees
-            ? words.waitingOn(name, frees.name, clock)
-            : words.waiting(name, clock),
-          until: held.until,
-        };
+        return heldStall(held);
       }
       const moving = towards.get(instanceId);
       if (!moving) {
@@ -2327,7 +2518,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       }
       const accounts = db.accounts.list();
       return {
-        words: words.moving(
+        words: accountsWords.stalled.moving(
           accountNameAmong(moving.from, accounts),
           accountNameAmong(moving.to, accounts)
         ),
@@ -2360,17 +2551,27 @@ export const createAtLimit = (ports: AtLimitPorts) => {
      * at its limit. The move a person asked is carried out, or the move this
      * controller decides goes, as at any look; `why` is
      * logged with it. Nothing for a session held by nothing, or being acted on.
+     * Past the cutoff it is carried on only when `asked`: the message is a
+     * person's or its parent's, or a Continue's ({@link goneStale}).
      */
-    async lookNow(instanceId: string, why: string): Promise<void> {
+    async lookNow(
+      instanceId: string,
+      why: string,
+      asked?: TakenUpBy
+    ): Promise<void> {
       const held = db.atLimit.hold(instanceId);
-      if (!held || acting.has(instanceId)) {
+      if (
+        !held ||
+        acting.has(instanceId) ||
+        (held.staleAt !== null && asked === undefined)
+      ) {
         return;
       }
       const row = rowOf(instanceId);
       console.info(
         `[at-limit] ${row ? ports.named(row) : instanceId} is looked at again now, not at the next recheck: ${why}.`
       );
-      await lookAt(held, Date.now());
+      await lookAt(held, Date.now(), asked);
       plan();
     },
     /**
@@ -2390,6 +2591,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       extraUsageSaid.delete(instanceId);
       const held = db.atLimit.hold(instanceId);
       db.atLimit.dropHold(instanceId);
+      if (held && held.staleAt !== null) {
+        ports.unstale({ id: instanceId });
+      }
       if (held || was) {
         console.info(
           `[at-limit] ${instanceId.slice(0, 8)} was continued in a new session, so its ${held ? `hold${held.until === null ? "" : ` until ${clockWords(held.until)}`}` : "look at its turn's end"} is dropped: nothing resumes it.`

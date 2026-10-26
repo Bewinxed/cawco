@@ -350,12 +350,21 @@ export interface AtLimit {
    * them.
    */
   prepareAtPct: number;
+  /**
+   * How long past its reset a held session is still carried on by itself
+   * (a sign-in hold, which has no reset, counts from when it was held).
+   * Older, its hold goes stale: nothing sends to it or wakes it until a
+   * person or its parent writes to it, and it waits in Needs you and in its
+   * parent's `delegate_list` (hub at-limit.ts `goneStale`).
+   */
+  staleAfterHours: number;
   waitMinutes: number;
 }
 
 export const DEFAULT_AT_LIMIT: AtLimit = {
   move: true,
   waitMinutes: 15,
+  staleAfterHours: 24,
   moveWholeUnderK: 200,
   prepareAtPct: 90,
   delegateWork: "move",
@@ -1370,6 +1379,10 @@ export const clockWords = (at: number): string =>
     minute: "2-digit",
     hour12: false,
   });
+
+/** A day as a line names it: "2 Oct". */
+export const dayWords = (at: number): string =>
+  new Date(at).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 
 /** "412k tokens"; a context never reported is "its whole context". */
 export const tokenWords = (tokens: number | null): string =>

@@ -2595,13 +2595,16 @@ export const accountBench = sqliteTable(
  * Sessions waiting out their account's limit: their last turn was refused,
  * and the hub sends them on when `until` comes (the reset), or sooner when
  * another account can take them. `until` null: no reset was named, and the
- * hub looks again on its own clock.
+ * hub looks again on its own clock. `staleAt`: when the hold went stale,
+ * held past the cutoff (core `AtLimit.staleAfterHours`): nothing carries it
+ * on until a person or its parent writes; null while it is carried on.
  */
 export const limitHolds = sqliteTable("limit_holds", {
   instanceId: text("instance_id").primaryKey(),
   /** The account at its limit. */
   accountId: text("account_id").notNull(),
   until: timestamp("until"),
+  staleAt: timestamp("stale_at"),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),

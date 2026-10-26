@@ -55,13 +55,17 @@ export interface DelegateNode {
    * While its account's limit (or a refused sign-in) has stopped it: "Stopped
    * at A's limit; continues on B", or "…; continues at 15:40" with `until`
    * that moment. It runs no turn until then; what is sent to it meanwhile
-   * waits at the hub and goes once it runs.
+   * waits at the hub and goes once it runs. Held past the cutoff, its state
+   * is `stale`: nothing carries it on until its parent or a person writes.
    */
   stalled?: { words: string; until?: string };
   /** When its session's first item started. */
   startedAt: string;
-  /** `stalled` while {@link stalled} says so: never `running` at its limit. */
-  state: WorkItemState | "stalled" | "waiting";
+  /**
+   * `stalled` while {@link stalled} says so: never `running` at its limit;
+   * `stale` once its hold is past the cutoff (at-limit.ts `goneStale`).
+   */
+  state: WorkItemState | "stalled" | "stale" | "waiting";
   title: string;
   waitingOn?: { reason: string; until?: string };
   workspaceId: string;
@@ -107,7 +111,7 @@ export interface DelegationTreeDeps {
   /** The session stopped at its account's limit, in words (at-limit.ts `stall`); undefined while it runs. */
   stalled: (
     instanceId: string
-  ) => { words: string; until?: number } | undefined;
+  ) => { stale?: true; words: string; until?: number } | undefined;
 }
 
 const firstLine = (text: string | null): string | undefined =>
@@ -246,7 +250,8 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
 
   /**
    * A live item whose session its account's limit stopped: `stalled` its
-   * state, with the words; nothing when it runs or the item is over.
+   * state (`stale` past the cutoff), with the words; nothing when it runs or
+   * the item is over.
    */
   const stalledOf = (
     item: WorkItemRow
@@ -259,7 +264,7 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
       return {};
     }
     return {
-      state: "stalled",
+      state: stall.stale ? "stale" : "stalled",
       stalled: {
         words: stall.words,
         ...(stall.until === undefined

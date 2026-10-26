@@ -46,6 +46,8 @@ const stateWords = (node: DelegateNode, now: number): string => {
       return node.stalled
         ? `stalled: ${node.stalled.words}${node.stalled.until ? ` (${ahead(node.stalled.until, now)})` : ""}`
         : "stalled";
+    case "stale":
+      return `stale: ${node.stalled?.words ?? "held at its limit past the cutoff, carried on once written to"}. handoff to it carries it on; continue_session continues it in a fresh conversation; stop_delegate lets it go`;
     case "starting":
     case "running":
       return `${node.state} for ${lasted(now - started)}`;
@@ -66,7 +68,8 @@ const nodeLines = (
     node.state === "starting" ||
     node.state === "running" ||
     node.state === "waiting" ||
-    node.state === "stalled";
+    node.state === "stalled" ||
+    node.state === "stale";
   const facts = [
     stateWords(node, now),
     ...(live && node.machine ? [`on ${node.machine}`] : []),

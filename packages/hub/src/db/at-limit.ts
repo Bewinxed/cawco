@@ -13,6 +13,12 @@ export interface LimitHold {
    * one (a hold put again after a move that didn't go keeps its start).
    */
   since?: number;
+  /**
+   * When it went stale, epoch ms: held past the cutoff (core
+   * `AtLimit.staleAfterHours`), nothing carries it on until a person or its
+   * parent writes. Null while it is carried on; every put clears it.
+   */
+  staleAt: number | null;
   /** When it goes on: the earliest moment an account takes it again; null when none was named. */
   until: number | null;
 }
@@ -60,6 +66,8 @@ export interface AtLimitDb {
   readonly forget: (instanceIds: string[]) => void;
   readonly hold: (instanceId: string) => LimitHold | undefined;
   readonly holds: () => LimitHold[];
+  /** Records that `instanceId`'s hold went stale at `at`. */
+  readonly markStale: (instanceId: string, at: number) => void;
   /** Moves a compaction on: its stage, the step whose turn ended, that it compacted, or its line as it now reads. */
   readonly patchCompaction: (
     instanceId: string,
@@ -71,7 +79,8 @@ export interface AtLimitDb {
   readonly putCompaction: (compaction: LimitCompaction) => void;
   /** Writes a line; one already written under its id is what it says now (a compaction's move line as it goes). */
   readonly putEvent: (event: LimitEvent) => void;
-  readonly putHold: (hold: LimitHold) => void;
+  /** Holds a session, its stale mark cleared: a put is a decision made now. */
+  readonly putHold: (hold: Omit<LimitHold, "staleAt">) => void;
   /**
    * The line of `instanceId`'s move waiting for work in flight, while it
    * waits ({@link waitsLine}): one per session, said again in its place.
@@ -94,6 +103,7 @@ const toHold = (row: HoldRow): LimitHold => ({
   accountId: row.accountId,
   until: row.until?.getTime() ?? null,
   since: row.createdAt.getTime(),
+  staleAt: row.staleAt?.getTime() ?? null,
 });
 
 const toCompaction = (
@@ -131,11 +141,18 @@ export const atLimitDb = (db: BunSQLiteDatabase): AtLimitDb => ({
     const values = {
       accountId,
       until: until === null ? null : new Date(until),
+      staleAt: null,
       ...(since === undefined ? {} : { createdAt: new Date(since) }),
     };
     db.insert(limitHolds)
       .values({ instanceId, ...values })
       .onConflictDoUpdate({ target: limitHolds.instanceId, set: values })
+      .run();
+  },
+  markStale: (instanceId, at) => {
+    db.update(limitHolds)
+      .set({ staleAt: new Date(at) })
+      .where(eq(limitHolds.instanceId, instanceId))
       .run();
   },
   dropHold: (instanceId) => {

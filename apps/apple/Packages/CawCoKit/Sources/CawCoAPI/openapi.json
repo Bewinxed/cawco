@@ -25336,6 +25336,10 @@
                         "minimum": 0,
                         "type": "integer"
                       },
+                      "staleAfterHours": {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
                       "prepareAtPct": {
                         "minimum": 0,
                         "maximum": 100,
@@ -30543,6 +30547,9 @@
               "prepareAtPct": {
                 "type": "number"
               },
+              "staleAfterHours": {
+                "type": "number"
+              },
               "waitMinutes": {
                 "type": "number"
               }
@@ -30552,6 +30559,7 @@
               "move",
               "moveWholeUnderK",
               "prepareAtPct",
+              "staleAfterHours",
               "waitMinutes"
             ]
           },
@@ -45915,6 +45923,11 @@
         "description": "A session stopped at its account's limit, as its tray chip and\n`delegate_list` say it (core `accountsWords.stalled`): the words, and\nwhen it carries on (epoch ms): the reset it waits for.",
         "type": "object",
         "properties": {
+          "stale": {
+            "description": "Held past the cutoff: nothing carries it on until a person or its parent writes ({@link goneStale}).",
+            "const": true,
+            "type": "boolean"
+          },
           "until": {
             "type": "number"
           },
@@ -51867,6 +51880,10 @@
             "description": "Read by nothing (the summary written ahead of the limit it timed is\ngone): sent at its default only because the TestFlight builds 20261015\nand 20261015.3 require it, which the hub's wire check holds to\n(packages/hub/scripts/openapi.ts). It goes in the change that expires\nthem.",
             "type": "number"
           },
+          "staleAfterHours": {
+            "description": "How long past its reset a held session is still carried on by itself\n(a sign-in hold, which has no reset, counts from when it was held).\nOlder, its hold goes stale: nothing sends to it or wakes it until a\nperson or its parent writes to it, and it waits in Needs you and in its\nparent's `delegate_list` (hub at-limit.ts `goneStale`).",
+            "type": "number"
+          },
           "waitMinutes": {
             "type": "number"
           }
@@ -51876,6 +51893,7 @@
           "move",
           "moveWholeUnderK",
           "prepareAtPct",
+          "staleAfterHours",
           "waitMinutes"
         ]
       },

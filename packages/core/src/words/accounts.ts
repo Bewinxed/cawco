@@ -325,6 +325,11 @@ export const accountsWords = {
       "It files its open items, then Claude Code’s own /compact runs. Stop either like any turn.",
     terms:
       "Moving a conversation between Claude subscriptions is subject to Anthropic’s terms",
+    /** The cutoff past which a held session is no longer carried on by itself (core `AtLimit.staleAfterHours`). */
+    stale: "Carry a stopped session on by itself up to",
+    staleHours: "hours after its reset",
+    staleAfter:
+      "Stopped longer, it waits in Needs you until you write to it or stop it.",
   },
 
   // ── A delegate stopped at its account's limit (DelegateTray, delegate_list) ─
@@ -359,6 +364,27 @@ export const accountsWords = {
     /** Claude Code refused its account's sign-in, and no other account can take it yet. */
     signedOut: (from: string) =>
       `Stopped: ${from}’s sign-in was refused; continues once an account can take it`,
+    /**
+     * Held past the cutoff (core `AtLimit.staleAfterHours`) since `day`
+     * ("2 Oct"): nothing carries it on until a person or its parent writes.
+     */
+    stale: (from: string, day: string) =>
+      `Stopped at ${from}’s limit since ${day}; carries on once written to`,
+    /** The same, held on a refused sign-in. */
+    staleSignedOut: (from: string, day: string) =>
+      `Stopped: ${from}’s sign-in was refused on ${day}; carries on once written to`,
+  },
+
+  // ── A session held past the cutoff, in Needs you (hub at-limit.ts `goneStale`) ─
+  staleNotice: {
+    /** Its line: what stopped it, and since when ("2 Oct"). */
+    title: (from: string, day: string) =>
+      `Stopped at ${from}’s limit since ${day}`,
+    signedOutTitle: (from: string, day: string) =>
+      `Stopped since ${day}: ${from}’s sign-in was refused`,
+    /** Why nothing carries it on, and what the person can do. */
+    body: (hours: number) =>
+      `It has waited more than ${hours} ${hours === 1 ? "hour" : "hours"}, so it isn’t carried on by itself. Write to it to carry on, or stop it. Its conversation is kept as it was.`,
   },
 
   // ── The strategy figures (figure.ts) ──────────────────────────────────

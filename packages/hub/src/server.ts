@@ -555,6 +555,7 @@ import {
   type Kept,
   refusedUntil,
   type Stall,
+  type TakenUpBy,
 } from "./at-limit";
 import { createBinaryUpdates } from "./binary-updates";
 import { blockRoutes, createBlocks } from "./blocks";
@@ -4598,6 +4599,35 @@ export const createServer = (
       row.status === "stopping" ||
       row.status === "stopped");
   /**
+   * Whether `origin` is a person's word (core `byPerson`) or `row`'s own
+   * parent's: the two that wake any session, and the only ones that carry
+   * on a stale hold at its limit (at-limit.ts `goneStale`).
+   */
+  const fromItsOwn = (
+    row: { parentInstanceId?: string | null },
+    origin: NeutralOrigin
+  ): boolean =>
+    byPerson(origin) ||
+    (origin.kind === "peer" &&
+      !!row.parentInstanceId &&
+      origin.fromSession === row.parentInstanceId);
+  /**
+   * Who of those that carry on a stale hold at its limit `origin` is
+   * (at-limit.ts `TakenUpBy`): a person or `row`'s parent, or a Continue's
+   * filing turn; undefined for anyone else.
+   */
+  const takenUpBy = (
+    row: { parentInstanceId?: string | null } | undefined,
+    origin: NeutralOrigin
+  ): TakenUpBy | undefined => {
+    if (row && fromItsOwn(row, origin)) {
+      return "word";
+    }
+    return origin.kind === "system" && origin.name === COMPACTION_ORIGIN
+      ? "continue"
+      : undefined;
+  };
+  /**
    * Whether a send from `origin` may start a turn in `row` when its process
    * is gone ({@link wakesForSend}). A stopped or stopping session, ended by
    * its person, its parent or the hub, is woken only by a person (their
@@ -4631,13 +4661,10 @@ export const createServer = (
       return false;
     }
     if (
-      byPerson(origin) ||
+      fromItsOwn(row, origin) ||
       // A person's Continue files the session's open items first, stopped
       // or not (open-items.ts).
-      (origin.kind === "system" && origin.name === COMPACTION_ORIGIN) ||
-      (origin.kind === "peer" &&
-        !!row.parentInstanceId &&
-        origin.fromSession === row.parentInstanceId)
+      (origin.kind === "system" && origin.name === COMPACTION_ORIGIN)
     ) {
       return true;
     }
@@ -9749,7 +9776,8 @@ export const createServer = (
       detach(
         atLimit.lookNow(
           instanceId,
-          "a message to it is held at its account's limit"
+          "a message to it is held at its account's limit",
+          takenUpBy(target, message.origin)
         ),
         "at-limit look"
       );
@@ -26901,10 +26929,16 @@ export const createServer = (
     );
   };
 
-  /** Has a session carry on where its account's limit, or a sign-in failure, stopped it. */
+  /**
+   * Has a session carry on where its account's limit, or a sign-in failure,
+   * stopped it. `quiet`: a note its next turn reads, starting none (the
+   * at-limit controller's `resume` of a stale hold a person's or its
+   * parent's word took up, whose own turn it rides).
+   */
   const carryOn = (
     row: { id: string; machineId: string },
-    stopped: "limit" | "signin"
+    stopped: "limit" | "signin",
+    quiet = false
   ): void => {
     deliverSend({
       verb: "send",
@@ -26922,6 +26956,7 @@ export const createServer = (
             name: LIMIT_ORIGIN,
             line: noticeWords.carryOn[stopped],
           },
+          ...(quiet ? { shouldQuery: false } : {}),
         },
       },
     } satisfies Envelope<SendPayload>);
@@ -28555,6 +28590,9 @@ export const createServer = (
       return what ? { ended: what } : {};
     },
     resume: carryOn,
+    // A stale hold's notice in Needs you, kept and gone as a held item's is.
+    stale: (row, title, body) => watch?.tellYou(row, title, body),
+    unstale: (row) => watch?.untell(row.id),
     // Rebalance's move of a session mid-turn waits for its turn's end, as a
     // person's does; its line is written once it lands.
     owe: (row, accountId, move, why) => {
@@ -33730,6 +33768,8 @@ export const createServer = (
               move: t.Boolean(),
               waitMinutes: t.Integer({ minimum: 0 }),
               moveWholeUnderK: t.Integer({ minimum: 0 }),
+              // Shipped apps send no cutoff: they keep the one saved.
+              staleAfterHours: t.Optional(t.Integer({ minimum: 1 })),
               // Read by nothing; shipped apps still send it (core AtLimit).
               prepareAtPct: t.Optional(t.Integer({ minimum: 0, maximum: 100 })),
             }),
@@ -33769,6 +33809,9 @@ export const createServer = (
             ...body,
             atLimit: {
               ...body.atLimit,
+              staleAfterHours:
+                body.atLimit.staleAfterHours ??
+                db.accounts.routing(params.provider).atLimit.staleAfterHours,
               // Kept for the shipped apps that read it (core AtLimit).
               prepareAtPct:
                 body.atLimit.prepareAtPct ?? DEFAULT_AT_LIMIT.prepareAtPct,

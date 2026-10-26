@@ -5,7 +5,8 @@
    * conversation then compacted there by Claude Code's own /compact after it
    * files its open items. The figure under the numbers plays that policy,
    * rebuilt as they change. Off, the numbers fold away with the figure and
-   * the terms.
+   * the terms. Under them, on or off, how long past its reset a stopped
+   * session is still carried on by itself (core `AtLimit.staleAfterHours`).
    */
   import { type Account, type AtLimit, accountsWords } from "@cawco/core";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
@@ -119,4 +120,25 @@
       {/if}
     </div>
   {/if}
+  <p
+    class="flex flex-wrap items-center gap-space-3 py-space-2 text-pretty text-ink-row"
+  >
+    <label for="{id}-stale">{words.stale}</label>
+    <Input
+      data-num
+      data-field
+      class="flex-none"
+      field="number"
+      id="{id}-stale"
+      inputmode="numeric"
+      min="1"
+      oninput={(event) => {
+        atLimit.staleAfterHours = Math.max(1, whole(event.currentTarget.value));
+      }}
+      type="number"
+      value={atLimit.staleAfterHours}
+    />
+    <span>{words.staleHours}</span>
+    <span class="type-meta text-ink-muted">{words.staleAfter}</span>
+  </p>
 </div>

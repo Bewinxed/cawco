@@ -596,8 +596,15 @@ public enum Words {
 
             public static let terms = "Moving a conversation between Claude subscriptions is subject to Anthropic’s terms"
 
+            /// The cutoff past which a held session is no longer carried on by itself (core `AtLimit.staleAfterHours`).
+            public static let stale = "Carry a stopped session on by itself up to"
+
+            public static let staleHours = "hours after its reset"
+
+            public static let staleAfter = "Stopped longer, it waits in Needs you until you write to it or stop it."
+
             /// Each word by the key it stands under, for a lookup by data value.
-            public static let byKey: [String: String] = ["head": head, "move": move, "wait": wait, "minutes": minutes, "over": over, "kTokens": kTokens, "compacts": compacts, "terms": terms]
+            public static let byKey: [String: String] = ["head": head, "move": move, "wait": wait, "minutes": minutes, "over": over, "kTokens": kTokens, "compacts": compacts, "terms": terms, "stale": stale, "staleHours": staleHours, "staleAfter": staleAfter]
         }
 
         public enum Stalled {
@@ -629,6 +636,32 @@ public enum Words {
             /// Claude Code refused its account's sign-in, and no other account can take it yet.
             public static func signedOut(from: String) -> String {
                 "Stopped: \(from)’s sign-in was refused; continues once an account can take it"
+            }
+
+            /// Held past the cutoff (core `AtLimit.staleAfterHours`) since `day` ("2 Oct"): nothing carries it on until a person or its parent writes.
+            public static func stale(from: String, day: String) -> String {
+                "Stopped at \(from)’s limit since \(day); carries on once written to"
+            }
+
+            /// The same, held on a refused sign-in.
+            public static func staleSignedOut(from: String, day: String) -> String {
+                "Stopped: \(from)’s sign-in was refused on \(day); carries on once written to"
+            }
+        }
+
+        public enum StaleNotice {
+            /// Its line: what stopped it, and since when ("2 Oct").
+            public static func title(from: String, day: String) -> String {
+                "Stopped at \(from)’s limit since \(day)"
+            }
+
+            public static func signedOutTitle(from: String, day: String) -> String {
+                "Stopped since \(day): \(from)’s sign-in was refused"
+            }
+
+            /// Why nothing carries it on, and what the person can do.
+            public static func body(hours: Int) -> String {
+                "It has waited more than \(hours) \(hours == 1 ? "hour" : "hours"), so it isn’t carried on by itself. Write to it to carry on, or stop it. Its conversation is kept as it was."
             }
         }
 
@@ -727,6 +760,8 @@ public enum Words {
                 public static let move = true
 
                 public static let waitMinutes = 15
+
+                public static let staleAfterHours = 24
 
                 public static let moveWholeUnderK = 200
 

@@ -11,6 +11,7 @@ import {
   type AccountReading,
   type AccountSetupStep,
   type AccountSignin,
+  DEFAULT_AT_LIMIT,
   defaultRouting,
   type HomeStore,
   type LimitWindow,
@@ -563,7 +564,8 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
                 ? { pinnedAccountId: row.delegatesPinned }
                 : {}),
             },
-            atLimit: row.atLimit,
+            // A policy saved before a setting existed reads its default.
+            atLimit: { ...DEFAULT_AT_LIMIT, ...row.atLimit },
           }
         : defaultRouting(provider);
     },
