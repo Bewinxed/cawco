@@ -3125,6 +3125,60 @@ export const createServer = (
   db.markAllAgentsOffline();
 
   /**
+   * The Ledger Protocol's hub half: per-session sequence, replay ring, and
+   * command acknowledgement. It borrows the relays below rather than reaching
+   * past them. Made first, before anything this server builds can publish or
+   * ask who follows a session (the board's first publish reads it, through
+   * preview.ts `holds`): every port is a function the hub's later parts
+   * answer, called only once a message arrives, never while this is made.
+   */
+  const streams = createStreamHub({
+    lifetime,
+    // A follower's plan whole (plans.ts), built below with the tasks it reads.
+    planSnapshot: (instanceId, send) => plans.snapshotTo(instanceId, send),
+    // A screen that follows a session uses its panel's preview: one that
+    // stands on no port now (its session slept and gave it up) takes one,
+    // told on the session's stream and the board.
+    followed: (instanceId) => {
+      const target = previewTargets.get(instanceId);
+      if (target && !previewListeners.bound(frameKey(instanceId, target))) {
+        publishPreview(instanceId, "open", target);
+        publishInstances("");
+      }
+    },
+    withdrawSend: async (machineId, instanceId, sendId) => {
+      const row = db.sendRecord(sendId);
+      const [instance] = db.getInstancesByIds([instanceId]);
+      if (
+        !row ||
+        row.instanceId !== instanceId ||
+        instance?.machineId !== machineId
+      ) {
+        throw new Error("That send does not belong to this session.");
+      }
+      if (row.state === "cancelled") {
+        return "withdrawn";
+      }
+      // A failed send the person removes (its row's Remove, or Edit taking
+      // its words back to the composer): no harness holds it, so the record
+      // alone says it is gone, and no screen draws it again.
+      if (row.state === "failed") {
+        changeSend(row, { state: "cancelled" });
+        return "withdrawn";
+      }
+      if (row.state !== "pending") {
+        return "started";
+      }
+      return await withdrawPending(row, machineId);
+    },
+    isMachineConnected: (machineId) => registry.agent(machineId) !== undefined,
+    machineAwayWords: (machineId) => commandAwayWords(machineId),
+    relaySend: (message) => relaySend(message),
+    relayControl: (envelope, dashboard) =>
+      relayControl(envelope, dashboard, false),
+  });
+
+  /**
    * This hub's run, one value per start: the streams number each session
    * from 1 again in every run, so a newest transcript page and every board
    * snapshot name it (`TranscriptPage.hubRun`, `InstancesFrame.hubRun`), and
@@ -22479,57 +22533,6 @@ export const createServer = (
       cutTurn(message.instanceId, turnCutWords.stop);
     }
   };
-
-  /**
-   * The Ledger Protocol's hub half: per-session sequence, replay ring, and
-   * command acknowledgement. It borrows the relays above rather than reaching
-   * past them.
-   */
-  const streams = createStreamHub({
-    lifetime,
-    // A follower's plan whole (plans.ts), built below with the tasks it reads.
-    planSnapshot: (instanceId, send) => plans.snapshotTo(instanceId, send),
-    // A screen that follows a session uses its panel's preview: one that
-    // stands on no port now (its session slept and gave it up) takes one,
-    // told on the session's stream and the board.
-    followed: (instanceId) => {
-      const target = previewTargets.get(instanceId);
-      if (target && !previewListeners.bound(frameKey(instanceId, target))) {
-        publishPreview(instanceId, "open", target);
-        publishInstances("");
-      }
-    },
-    withdrawSend: async (machineId, instanceId, sendId) => {
-      const row = db.sendRecord(sendId);
-      const [instance] = db.getInstancesByIds([instanceId]);
-      if (
-        !row ||
-        row.instanceId !== instanceId ||
-        instance?.machineId !== machineId
-      ) {
-        throw new Error("That send does not belong to this session.");
-      }
-      if (row.state === "cancelled") {
-        return "withdrawn";
-      }
-      // A failed send the person removes (its row's Remove, or Edit taking
-      // its words back to the composer): no harness holds it, so the record
-      // alone says it is gone, and no screen draws it again.
-      if (row.state === "failed") {
-        changeSend(row, { state: "cancelled" });
-        return "withdrawn";
-      }
-      if (row.state !== "pending") {
-        return "started";
-      }
-      return await withdrawPending(row, machineId);
-    },
-    isMachineConnected: (machineId) => registry.agent(machineId) !== undefined,
-    machineAwayWords: commandAwayWords,
-    relaySend,
-    relayControl: (envelope, dashboard) =>
-      relayControl(envelope, dashboard, false),
-  });
 
   /**
    * Forks the hub has started and not yet heard name their own conversation:
