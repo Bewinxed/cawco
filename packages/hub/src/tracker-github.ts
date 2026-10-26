@@ -256,10 +256,15 @@ export const githubRefusal = (
       `GitHub refused to ${what} on ${repo}: ${said}.${needs ? ` The connection needs ${needs.replaceAll("=", ": ")} on ${repo} (X-Accepted-GitHub-Permissions: ${needs}).` : ""}`
     );
   }
+  // GitHub answers a request it will not let this connection see the same
+  // as one for nothing: "GitHub uses a `404 Not Found` response instead of a
+  // `403 Forbidden` response to avoid confirming the existence of private
+  // repositories" (docs.github.com/en/rest/using-the-rest-api/
+  // troubleshooting-the-rest-api). Which of the two it was is not known here.
   if (status === 404) {
     return new TrackerRefusal(
       "scope",
-      `GitHub answered 404 to ${what} on ${repo}: the connection cannot see it. A GitHub App must be installed on ${repo}; a fine-grained token must list it among its repositories.`
+      `GitHub answered 404 to ${what} on ${repo}${said ? `: ${said}` : ""}. GitHub answers 404 both where nothing is at that name and where the connection may not see it: check that ${repo} is spelt as on GitHub, and that the connection's GitHub App is installed on it or its fine-grained token lists it.`
     );
   }
   return new TrackerRefusal(

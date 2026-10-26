@@ -153,6 +153,34 @@ const resolved = async (
   return gate(named, real, reach) ?? { real, info: await stat(real) };
 };
 
+/**
+ * Whether the file's mode bits alone keep this process from reading it: the
+ * owner's bits for its owner, the group's for a member, the others' else
+ * (inode(7), "The file mode"). Where they let it read and the read is still
+ * refused, something beside the mode said no (an ACL, a security module, a
+ * folder above it), which is not read here.
+ */
+const modeDeniesRead = (info: Stats): boolean => {
+  // The owner's, group's and others' digits of the mode, each 4 or more
+  // where it grants read.
+  const [owner = 0, group = 0, others = 0] = permissionDigits(info);
+  const uid = process.getuid?.();
+  if (uid === 0) {
+    return false;
+  }
+  if (uid === info.uid) {
+    return owner < 4;
+  }
+  if ((process.getgroups?.() ?? []).includes(info.gid)) {
+    return group < 4;
+  }
+  return others < 4;
+};
+
+/** A mode's permission digits as `ls -l` reads them: owner, group, others. */
+const permissionDigits = (info: Stats): number[] =>
+  (info.mode % 0o1000).toString(8).padStart(3, "0").split("").map(Number);
+
 /** A file `named` (at `real`) admitted under `name`, or why its permissions keep it. */
 const readableFile = async (
   named: string,
@@ -165,10 +193,12 @@ const readableFile = async (
     (error: NodeJS.ErrnoException) => error.code === "EACCES"
   );
   if (unreadable) {
-    return `${named} exists but its permissions don't let you read it; make it readable (chmod u+r), or copy it somewhere you can read and name the copy`;
+    const mode = `0${permissionDigits(info).join("")}`;
+    return modeDeniesRead(info)
+      ? `${named} exists but its mode (${mode}) does not let you read it; make it readable (chmod), or copy it somewhere you can read and name the copy`
+      : `${named} exists, and its mode (${mode}) lets you read it, but the system refused the read (access(2) said EACCES); copy it somewhere you can read and name the copy`;
   }
-  // biome-ignore lint/suspicious/noBitwiseOperators: a mode's permission bits
-  return { named, real, name, mode: info.mode & 0o777 };
+  return { named, real, name, mode: info.mode % 0o1000 };
 };
 
 /**

@@ -351,9 +351,9 @@ export const pushLfs = async (
  * `DefaultLoggingThrottle`), and a stalled connection ends itself sooner
  * (git-lfs's `lfs.activitytimeout`: "the maximum time, in seconds, that the
  * HTTP client will wait for the next tcp read or write … Default: 30
- * seconds", git-lfs-config(5)). What stays silent past this waits on
- * something nobody will give: a credential helper's prompt with no one at
- * the screen. On macOS, Apple's `git-credential-osxkeychain` first takes an
+ * seconds", git-lfs-config(5)). What stays silent past this is stopped
+ * whatever it waits on; one wait seen is a credential helper's prompt with
+ * no one at the screen. On macOS, Apple's `git-credential-osxkeychain` first takes an
  * exclusive lock on its own binary (`open(argv[0], O_EXLOCK)`), so one
  * waiting for a keychain prompt holds every other keychain lookup on the
  * machine until it ends: on 2026-10-24 the git-door probe's push of an LFS
@@ -378,9 +378,9 @@ export interface HostRun {
  * git-push(1); `GIT_LFS_FORCE_PROGRESS`, which forces git-lfs's "even when
  * standard output stream is not a terminal", git-lfs-config(5)), in a
  * process group of its own. When it says nothing for
- * {@link HOST_RUN_SILENCE_MS}, the whole group is stopped (the credential
- * helper it waits on included, and with it the lock that helper holds), and
- * its last words say why it ended. The door's own runs, and a held push made
+ * {@link HOST_RUN_SILENCE_MS}, the whole group is stopped (a credential
+ * helper it waits on included, and with it any lock that helper holds), and
+ * its last words say how long it was silent. The door's own runs, and a held push made
  * on approval (upstream-posts.ts `makeHeldPush`).
  */
 export const runOnHost = (
@@ -442,7 +442,7 @@ export const runOnHost = (
         code: silent ? 128 : (code ?? 128),
         out,
         err: silent
-          ? `${err}\ncawco: ${what} said nothing for ${HOST_RUN_SILENCE_MS / 1000} s and was stopped: it waited on something that never came, most likely a credential helper's prompt nobody was there to answer.`
+          ? `${err}\ncawco: ${what} said nothing on stdout or stderr for ${HOST_RUN_SILENCE_MS / 1000} s, so it was stopped, with every process it had started.`
           : err,
       });
     });

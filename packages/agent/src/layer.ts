@@ -706,11 +706,57 @@ const kernelBelowFloor = (): boolean => {
 /** The mounter's one line for a refused mount ({@link MOUNTER}). */
 const REFUSED = /^(\d+) (overlay|bind) (.+)$/u;
 
+/** A file's text, or "" where it cannot be read: an unread file names no fact. */
+const textOf = (path: string): string => {
+  try {
+    return readFileSync(path, "utf8");
+  } catch {
+    return "";
+  }
+};
+
+/** The `Seccomp:` line of /proc/self/status (proc(5)). */
+const SECCOMP_MODE = /^Seccomp:\s*(\d)/mu;
+/** overlayfs among modules.dep's modules, compressed or not. */
+const OVERLAY_MODULE = /(^|\/)overlay\.ko(\.[a-z]+)?:/mu;
+
 /**
- * The sentence for mount(2)'s `errno` at `at`: its cause and what fixes it.
- * The mounter is the process that joined, so it holds every capability in
- * the view's user namespace: EPERM is a kernel too old for an overlay of its
- * user's own, or else a security module's refusal.
+ * What this machine says of the mount's other gates, each read now and
+ * named only as read: the security modules its kernel runs ("A list of
+ * the active security modules can be found by reading
+ * /sys/kernel/security/lsm", docs.kernel.org/admin-guide/LSM) and whether a
+ * seccomp filter holds the agent (`Seccomp: 2` in /proc/self/status,
+ * proc(5)). The mounter is the agent's child and inherits its filter ("any
+ * child processes will be constrained to the same system call filters as
+ * the parent", man7.org seccomp(2)).
+ */
+const gatesRead = (): string[] => {
+  const facts: string[] = [];
+  const lsm = textOf("/sys/kernel/security/lsm").trim();
+  if (lsm) {
+    facts.push(
+      `its kernel runs the security modules ${lsm.split(",").join(", ")}`
+    );
+  }
+  const seccomp = SECCOMP_MODE.exec(textOf("/proc/self/status"))?.[1];
+  if (seccomp === "2") {
+    facts.push("a seccomp filter holds the agent and the mounter it starts");
+  }
+  return facts;
+};
+
+/**
+ * Whether this kernel can load overlayfs as a module: modules.dep names
+ * every module the running kernel was built with (modules.dep(5)).
+ */
+const overlayLoadable = (): boolean =>
+  OVERLAY_MODULE.test(textOf(join("/lib/modules", release(), "modules.dep")));
+
+/**
+ * The sentence for mount(2)'s `errno` at `at`: the call, the errno, the
+ * path and the kernel, then only what was read beside them. EPERM has
+ * several gates (a kernel before 5.11 for an overlay of the user's own, a
+ * security module, a seccomp filter); none is named as the cause.
  */
 const refusal = (at: string, code: number, overlay: boolean): string => {
   const errno =
@@ -718,16 +764,20 @@ const refusal = (at: string, code: number, overlay: boolean): string => {
     `errno ${code}`;
   const instead =
     "or delegate in a git repository, whose workspace is a clone of its own";
+  const call = `mount(2) of ${overlay ? "an overlay" : "a bind"} at ${at} in the view's user namespace said ${errno} on Linux ${release()}`;
   if (errno === "EPERM" && overlay && kernelBelowFloor()) {
-    return `${at} could not be layered: this machine runs Linux ${release()}, and a user's own overlay mount needs Linux ${USERNS_OVERLAY.join(".")} or later. Upgrade the kernel, ${instead}.`;
+    return `${at} could not be layered: ${call}, and Linux before ${USERNS_OVERLAY.join(".")} mounts no overlay of a user's own. Upgrade the kernel, ${instead}.`;
   }
   if (errno === "EPERM") {
-    return `${at} could not be mounted in the view: Linux ${release()} refused CawCo's mount in the view's user namespace, though the mounter held the capability to mount there: a security module (AppArmor, SELinux) or a seccomp filter on the agent denies mount(2) there. Allow the agent's user to mount in a user namespace of its own, ${instead}.`;
+    const facts = gatesRead();
+    return `${at} could not be mounted in the view: ${call}${facts.length > 0 ? `; ${facts.join(", and ")}` : ""}. Delegate in a git repository instead, whose workspace is a clone of its own.`;
   }
   if (errno === "ENODEV" && overlay) {
-    return `${at} could not be layered: this machine's kernel has no overlay filesystem. Load it with \`sudo modprobe overlay\` (and name \`overlay\` in /etc/modules-load.d to keep it), ${instead}.`;
+    return overlayLoadable()
+      ? `${at} could not be layered: ${call}, so the kernel has no overlay filesystem loaded, and it can load one. Load it with \`sudo modprobe overlay\` (and name \`overlay\` in /etc/modules-load.d to keep it), ${instead}.`
+      : `${at} could not be layered: ${call}, so the kernel has no overlay filesystem, and none is among its modules. Run a kernel built with overlayfs, ${instead}.`;
   }
-  return `${at} could not be mounted in the view: mount(2) said ${errno}.`;
+  return `${at} could not be mounted in the view: ${call}.`;
 };
 
 /**
