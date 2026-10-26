@@ -28,8 +28,8 @@
  * - its packages link into the cache, as above;
  * - B adds under {@link SECOND_CLONE_LIMIT_KB} to the disk, counted by
  *   unique inodes (`du` counts each inode once across all its paths): the
- *   manager's cache and A's `node_modules` before B's install, against the
- *   cache, A's and B's after it. A copied install adds about 2 GB for this
+ *   manager's parts of the cache ({@link Leg} `cache`) and A's
+ *   `node_modules` before B's install, against those, A's and B's after it. A copied install adds about 2 GB for this
  *   repository, about 115 MB for the pnpm project;
  *
  * A delegate's workspace retires once its turn ends with its item, its copy
@@ -178,8 +178,18 @@ interface Linked {
 
 /** One manager's leg: its project and how its clone's packages are read. */
 interface Leg {
-  /** The manager's part of the workspaces' cache, counted with each clone's `node_modules`. */
-  cache: string;
+  /**
+   * The manager's parts of the workspaces' cache, counted with each clone's
+   * `node_modules`: never the whole cache, whose other folders (npm's, xdg's)
+   * what else runs in the fleet writes at its own pace. In r392b A's session
+   * gave up on its playwriter MCP server after 60 s ("connection timed out
+   * after 60000ms") while `npx` still fetched it into npm's cache, and the
+   * cache held 118 MiB more at the second count than at the first: the same
+   * total r393w's held at both, where B's own share was 14 MiB (its
+   * `modules` folder, every file a hard link). The count failed B for what
+   * landed elsewhere meanwhile.
+   */
+  cache: readonly string[];
   linked: (fleet: Fleet, self: Delegated) => Promise<Linked>;
   /**
    * Linux, bun: the cache's folders each workspace's `node_modules` resolves
@@ -206,13 +216,24 @@ const nodeModulesOf = async (clone: string): Promise<string[]> =>
     .split("\0")
     .filter(Boolean);
 
-/** KiB on disk under each folder in `root`, one `du -sk` each: where a count grew. */
-const eachIn = async (root: string): Promise<Record<string, number>> => {
-  const names = await readdir(root).catch(() => [] as string[]);
+/** KiB on disk under each folder in `roots`, one `du -sk` each, by `<root>/<folder>`: where a count grew. */
+const eachIn = async (
+  roots: readonly string[]
+): Promise<Record<string, number>> => {
+  const paths = (
+    await Promise.all(
+      roots.map(async (root) =>
+        (await readdir(root).catch(() => [] as string[])).map((name) =>
+          join(root, name)
+        )
+      )
+    )
+  ).flat();
   const sizes = await Promise.all(
-    names.map(async (name) => {
-      const out = await Bun.$`du -sk ${join(root, name)}`.quiet().nothrow();
-      return [name, Number(out.stdout.toString().split("\t")[0])] as const;
+    paths.map(async (path) => {
+      const out = await Bun.$`du -sk ${path}`.quiet().nothrow();
+      const named = path.split("/").slice(-2).join("/");
+      return [named, Number(out.stdout.toString().split("\t")[0])] as const;
     })
   );
   return Object.fromEntries(sizes);
@@ -475,13 +496,13 @@ const runLeg = async (
   try {
     aDone = await installed(kit, fleet, leg, tagA, a);
     const aModules = await nodeModulesOf(ownWritesOf(fleet, a));
-    before = await unique([leg.cache, ...aModules]);
+    before = await unique([...leg.cache, ...aModules]);
     sizesBefore = await eachIn(leg.cache);
 
     b = await delegate(fleet, parent, repo, tagB);
     bDone = await installed(kit, fleet, leg, tagB, b);
     after = await unique([
-      leg.cache,
+      ...leg.cache,
       ...aModules,
       ...(await nodeModulesOf(ownWritesOf(fleet, b))),
     ]);
@@ -580,7 +601,12 @@ const run = async (kit: Kit) => {
   const bunLeg: Leg = {
     name: "bun",
     tags: ["A", "B"],
-    cache,
+    // bun's cache and its global store, and on Linux the workspaces'
+    // `node_modules` folders (agent workspace-modules.ts).
+    cache: [
+      join(cache, "bun"),
+      ...(process.platform === "linux" ? [join(cache, "modules")] : []),
+    ],
     linked: bunStoreOf(join(cache, "bun", "links")),
     ...(process.platform === "linux"
       ? { modulesIn: join(cache, "modules") }
@@ -599,7 +625,7 @@ const run = async (kit: Kit) => {
   const pnpmLeg: Leg = {
     name: "pnpm",
     tags: ["PA", "PB"],
-    cache: join(cache, "pnpm"),
+    cache: [join(cache, "pnpm")],
     linked: pnpmPackagesOf(pnpmStore),
   };
   const pnpmRepo = await makePnpmRepo(fleet);

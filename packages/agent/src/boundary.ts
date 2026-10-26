@@ -2068,15 +2068,13 @@ export const rearmHooks = async (): Promise<void> => {
     // biome-ignore lint/performance/noAwaitInLoops: waits for the first whole reading, however many it takes
     await readingMoved.promise;
   }
-  const now = Object.entries(armState.workspaces).flatMap(([id, arm]) =>
-    arm.kind === "later" ? [] : [id]
-  );
+  // Read once, as listed: a session launched meanwhile arms its workspace
+  // on its need, out of `later`, and that workspace is still this pass's.
+  const listed = Object.entries(armState.workspaces);
+  const now = listed.flatMap(([id, arm]) => (arm.kind === "later" ? [] : [id]));
+  const later = listed.length - now.length;
   await Promise.all(now.map((id) => rearming.get(id)));
-  const laterIds = Object.entries(armState.workspaces).flatMap(([id, arm]) =>
-    arm.kind === "later" ? [id] : []
-  );
-  const later = laterIds.length;
-  const retired = await closeLeftRetiring(laterIds);
+  const retired = await closeLeftRetiring(listed.map(([id]) => id));
   const ms = Date.now() - started;
   console.info(
     `[workspace] boundary hooks written for ${now.length} workspace(s) with a session or command in it, or a session's process with no boundary, in ${ms} ms; ${later} with nothing in them are armed when a session there starts; ${retired} older boundar${retired === 1 ? "y" : "ies"} an earlier agent left running, with nothing in ${retired === 1 ? "it" : "them"}, closed`
@@ -6267,12 +6265,15 @@ const lookSoon = (): void => {
 
 /**
  * At start-up: the older boundaries an earlier agent left running beside the
- * current one (or alone) in the workspaces armed later, each closed now if
- * nothing runs in it ({@link closeIdle}), one that still runs something left
- * to close once it ends. Answers how many were closed. Without it an older one
- * nothing ran in ran on until its workspace's quiet close: in r361 (2026-10-25)
- * fifteen idle workspaces held two boundaries for 10 min after a restart.
- * A workspace armed now is closed by its own arming ({@link rearmOne}).
+ * current one (or alone) in every workspace the start-up reading listed, each
+ * closed now if nothing runs in it ({@link closeIdle}), once the workspaces
+ * armed now are armed; one that still runs something is left to close once it
+ * ends. Answers how many were closed. Without it an older one nothing ran in
+ * ran on until its workspace's quiet close: in r361 (2026-10-25) fifteen idle
+ * workspaces held two boundaries for 10 min after a restart. A workspace a
+ * session launched meanwhile arms on its need is among them: in r393w R's
+ * killed session was launched again during the pass, which took R out of the
+ * workspaces armed later, and its older boundary closed a second after it.
  */
 const closeLeftRetiring = async (ids: readonly string[]): Promise<number> => {
   const counts = await Promise.all(
