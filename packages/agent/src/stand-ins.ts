@@ -176,7 +176,7 @@ const asMade = async ({ path, empty, found }: Found): Promise<boolean> => {
  * read then written in place, `crates/hook/src/hook_lib.rs`
  * `ensure_hook_git_excludes`).
  */
-export const listedFileOf = (id: string): string =>
+const listedFileOf = (id: string): string =>
   join(workspaceStateDir(id), "stand-ins.json");
 
 /** What {@link listedFileOf} holds: none listed when there is no record. */
