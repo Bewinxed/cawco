@@ -64,3 +64,31 @@ export interface ComposerBinding {
 
 /** The conversations drawn by their group's composer that can be written to, by id. */
 export const composerBindings = new SvelteMap<string, ComposerBinding>();
+
+/**
+ * What a group's composer takes from the binding it is lent, as Composer's
+ * props: every one but the group's own (where it stands, its tray, what it
+ * is showing).
+ */
+export const composerOf = (binding: ComposerBinding) => ({
+  agentName: binding.agentName,
+  ask: binding.ask,
+  busy: binding.busy,
+  commands: binding.commands,
+  draft: binding.draft,
+  faultAgain: binding.faultAgain,
+  mentionsFrom: binding.mentionsFrom,
+  onfoot: binding.onfoot,
+  onmenu: binding.onmenu,
+  onstop: binding.onstop,
+  onsubmit: binding.onsubmit,
+  paneVisible: binding.paneVisible,
+  perch: binding.perch,
+  placeholder: binding.placeholder,
+  planRing: binding.planRing,
+  recallOf: binding.recallOf,
+  sendAgain: binding.sendAgain,
+  sendError: binding.sendError,
+  sending: binding.sending,
+  suggest: binding.suggest,
+});

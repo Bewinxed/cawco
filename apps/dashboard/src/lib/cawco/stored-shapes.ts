@@ -144,7 +144,7 @@ import type {
 import type { Refusal as RefusalType } from "./updates/model";
 import type { KeptUpdates as KeptUpdatesType } from "./updates/updates.svelte";
 import type { Visit as VisitType } from "./working-set.svelte";
-import type { SessionContext as SessionContextType } from "./workspace/workspace.svelte";
+import type { SessionContext as SessionContextType } from "./workspace/tree";
 
 export const AtLimitShape = z.object({
   delegateWork: z.literal("move"),

@@ -22,8 +22,6 @@ import { artifactStopOf } from "@cawco/core/artifact-needs";
 import { detach } from "@cawco/core/detach";
 import { type HarnessKind, harnessNamed } from "@cawco/core/harness";
 import { SvelteSet } from "svelte/reactivity";
-import { z } from "zod";
-import { SessionContextSchema } from "#lib/cawco/stored-shapes.js";
 import { browser } from "$app/env";
 import { goto } from "$app/navigation";
 import { cawco } from "../client.svelte";
@@ -35,63 +33,31 @@ import { isThreadTab, threadIdOf } from "../thread-tabs";
 import { askOpenAt, carryOpenAt } from "../transcript/open-at.svelte";
 import { workingSet } from "../working-set.svelte";
 import { layoutPolicy } from "./layout-policy.svelte";
+import {
+  type BranchNode,
+  blankWorkspace,
+  isTree,
+  type LeafNode,
+  leavesOf,
+  type PaneNode,
+  parseWorkspace,
+  type SessionContext,
+  type WorkspaceV1,
+} from "./tree";
 
-/** A split: two or more children laid out along one axis. */
-export interface BranchNode {
-  dir: "h" | "v";
-  id: string;
-  kids: PaneNode[];
-  /** Percentages, one per child, summing to 100. Written by paneforge. */
-  sizes: number[];
-  t: "b";
-}
-
-/** A group of tabs with one showing — VS Code's editor group. */
-export interface LeafNode {
-  /** `null` is the fleet board: a leaf holding nothing is where you start. */
-  active: string | null;
-  id: string;
-  /**
-   * The tab in front and the tab it was opened from, while that holds: kept
-   * from the open until another tab is shown, so closing it goes back to
-   * where it came from (a browser's opener). Absent once forgotten.
-   */
-  opened?: { from: string; id: string } | null;
-  t: "l";
-  tabs: string[];
-}
-
-export type PaneNode = BranchNode | LeafNode;
-
-/** How a stored conversation is addressed: which machine, which folder, which harness. */
-export interface SessionContext {
-  cwd: string;
-  harness: HarnessKind;
-  machine: string;
-}
+export type {
+  BranchNode,
+  LeafNode,
+  PaneNode,
+  SessionContext,
+  WorkspaceV1,
+} from "./tree";
 
 /** A tab's address as it is handed over: machine and harness both named, or it is no address. */
 export interface AskedContext {
   cwd?: string;
   harness?: HarnessKind;
   machine?: string | null;
-}
-
-export interface WorkspaceV1 {
-  /**
-   * The address of every conversation the tree holds.
-   *
-   * This lives HERE, beside the ids that need it, rather than being looked
-   * up in the working set — which is a most-recently-used record with a cap
-   * on it, and evicts. The tree can hold more tabs than that cap remembers,
-   * so an evicted conversation came back addressed by id alone, resolved to
-   * a different session that happened to share it, and rendered as
-   * unreachable. Two records of one fact, one of them allowed to forget.
-   */
-  ctx?: Record<string, SessionContext>;
-  focusedLeaf: string;
-  root: PaneNode;
-  v: 1;
 }
 
 const KEY = "cawco-workspace";
@@ -119,17 +85,6 @@ const emptyLeaf = (): LeafNode => ({
   active: null,
 });
 
-/**
- * The tree the server draws when it was given none: the layout's own
- * (`(app)/+layout.server.ts` `blank`), under the same group id, so a page
- * drawn from it hydrates as the same group.
- */
-const unserved = (): WorkspaceV1 => ({
-  v: 1,
-  root: { t: "l", id: "p0", tabs: [], active: null },
-  focusedLeaf: "p0",
-  ctx: {},
-});
 /* ── Persistence ──────────────────────────────────────────────────────
    localStorage is the source, written on every mutation; the cookies are
    the copy the SERVER renders from, which only the server writes and reads
@@ -154,76 +109,7 @@ const unserved = (): WorkspaceV1 => ({
    then drew every reload in an older order and the client reshuffled it
    on hydration. The tree alone is ~45 bytes a tab. */
 
-/** Whether a parsed value is actually a tree, and not merely JSON. */
-function validate(node: unknown): node is PaneNode {
-  if (!node || typeof node !== "object") {
-    return false;
-  }
-  const n = node as Partial<BranchNode> & Partial<LeafNode>;
-  if (n.t === "l") {
-    return typeof n.id === "string" && Array.isArray(n.tabs);
-  }
-  if (n.t === "b") {
-    return (
-      typeof n.id === "string" &&
-      (n.dir === "h" || n.dir === "v") &&
-      Array.isArray(n.kids) &&
-      n.kids.length > 0 &&
-      n.kids.every(validate)
-    );
-  }
-  return false;
-}
-
-function parse(raw: string | null | undefined): WorkspaceV1 | null {
-  if (!raw) {
-    return null;
-  }
-  try {
-    const held: unknown = JSON.parse(raw);
-    if (typeof held !== "object" || held === null) {
-      return null;
-    }
-    const root: unknown = Reflect.get(held, "root");
-    const focusedLeaf: unknown = Reflect.get(held, "focusedLeaf");
-    const ctx: unknown = Reflect.get(held, "ctx");
-    if (
-      Reflect.get(held, "v") !== 1 ||
-      !validate(root) ||
-      typeof focusedLeaf !== "string"
-    ) {
-      return null;
-    }
-    return {
-      v: 1,
-      root,
-      focusedLeaf,
-      // Each session's context as the tab last kept it, those still its shape.
-      ...(typeof ctx === "object" && ctx !== null
-        ? {
-            ctx: z
-              .record(
-                z.string(),
-                SessionContextSchema.optional().catch(undefined)
-              )
-              .transform((all) =>
-                Object.fromEntries(
-                  Object.entries(all).filter(
-                    (entry): entry is [string, SessionContext] =>
-                      entry[1] !== undefined
-                  )
-                )
-              )
-              .parse(ctx),
-          }
-        : {}),
-    };
-  } catch {
-    return null;
-  }
-}
-
-const held = $state<WorkspaceV1>(unserved());
+const held = $state<WorkspaceV1>(blankWorkspace());
 
 /* ── Naming the tabs ──────────────────────────────────────────────────
    A tab kept from an earlier visit (the tree localStorage and the cookie
@@ -299,7 +185,7 @@ function restore(): void {
     return;
   }
   restored = true;
-  const kept = parse(storedIn("local", KEY));
+  const kept = parseWorkspace(storedIn("local", KEY));
   if (kept) {
     held.root = kept.root;
     held.focusedLeaf = kept.focusedLeaf;
@@ -347,17 +233,6 @@ const KEEP_AFTER_MS = 300;
 let keeping: ReturnType<typeof setTimeout> | undefined;
 
 /* ── Tree walking ─────────────────────────────────────────────────────── */
-
-function leavesOf(node: PaneNode, out: LeafNode[] = []): LeafNode[] {
-  if (node.t === "l") {
-    out.push(node);
-  } else {
-    for (const kid of node.kids) {
-      leavesOf(kid, out);
-    }
-  }
-  return out;
-}
 
 /**
  * The groups whose top edge is the workspace's top edge, left to right: the
@@ -421,6 +296,15 @@ function show(leaf: LeafNode, sessionId: string | null): void {
 }
 
 /** A tab that left a group takes the group's opener with it, as the tab opened or the one it came from. */
+/** A tab taken out of its group to stand in another: the group shows its first tab if it was in front. */
+function takeOut(leaf: LeafNode, sessionId: string): void {
+  leaf.tabs.splice(leaf.tabs.indexOf(sessionId), 1);
+  forget(leaf, sessionId);
+  if (leaf.active === sessionId) {
+    show(leaf, leaf.tabs[0] ?? null);
+  }
+}
+
 function forget(leaf: LeafNode, sessionId: string): void {
   if (leaf.opened?.id === sessionId || leaf.opened?.from === sessionId) {
     leaf.opened = null;
@@ -1025,11 +909,7 @@ export const workspace = {
       return;
     }
     if (from) {
-      from.tabs.splice(from.tabs.indexOf(sessionId), 1);
-      forget(from, sessionId);
-      if (from.active === sessionId) {
-        show(from, from.tabs[0] ?? null);
-      }
+      takeOut(from, sessionId);
     }
     const made: LeafNode = {
       t: "l",
@@ -1059,11 +939,7 @@ export const workspace = {
     }
     const from = leafHolding(sessionId);
     if (from) {
-      from.tabs.splice(from.tabs.indexOf(sessionId), 1);
-      forget(from, sessionId);
-      if (from.active === sessionId) {
-        show(from, from.tabs[0] ?? null);
-      }
+      takeOut(from, sessionId);
     }
     const at =
       index === undefined
@@ -1150,7 +1026,7 @@ export const workspace = {
         resolved.add(id);
       }
     }
-    const next = served && validate(served.root) ? served : unserved();
+    const next = served && isTree(served.root) ? served : blankWorkspace();
     held.root = next.root;
     held.focusedLeaf = next.focusedLeaf;
     held.ctx = next.ctx ?? {};

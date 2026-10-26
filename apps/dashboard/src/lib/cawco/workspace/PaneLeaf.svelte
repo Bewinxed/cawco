@@ -38,6 +38,7 @@
   import {
     type ComposerBinding,
     composerBindings,
+    composerOf,
   } from "./composer-dock.svelte";
   import { dropHint, paneDropTarget } from "./dnd.svelte";
   import { settling, slot } from "./dock.svelte";
@@ -522,30 +523,11 @@
       <RegionBoundary kept="Your draft is kept." region="composer">
         <Composer
           fleet={composerFleet}
-          agentName={lent.agentName}
-          ask={lent.ask}
-          busy={lent.busy}
-          commands={lent.commands}
-          draft={lent.draft}
+          {...composerOf(lent)}
           held={swipe.moving}
           {landing}
-          mentionsFrom={lent.mentionsFrom}
-          onfoot={lent.onfoot}
-          onmenu={lent.onmenu}
-          onstop={lent.onstop}
-          onsubmit={lent.onsubmit}
-          paneVisible={lent.paneVisible}
-          perch={lent.perch}
-          placeholder={lent.placeholder}
-          planRing={lent.planRing}
-          recallOf={lent.recallOf}
           {trayRows}
-          sendAgain={lent.sendAgain}
-          faultAgain={lent.faultAgain}
-          sendError={lent.sendError}
-          sending={lent.sending}
           showing={viewId}
-          suggest={lent.suggest}
           {switchDir}
         />
       </RegionBoundary>

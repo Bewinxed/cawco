@@ -5,9 +5,14 @@ import {
   type InstanceRow,
   type SessionPulse,
 } from "@cawco/core";
-import { z } from "zod";
 import { type HubRead, readHub } from "#lib/cawco/hub-read.js";
 import { type Pref, prefCookie } from "#lib/cawco/prefs.js";
+import {
+  blankWorkspace,
+  leavesOf,
+  parseContexts,
+  parseWorkspace,
+} from "#lib/cawco/workspace/tree.js";
 import {
   FOLD_BOXES_PREF,
   parseFoldBoxes,
@@ -30,9 +35,8 @@ const RAIL_MAX = 520;
  * The server's copy of the workspace localStorage keeps (workspace.svelte.ts,
  * Persistence): the whole tree or none, never a part. The first client render
  * draws from what this load gives it, so hydration keeps what was served.
- * Declared here rather than imported so the server never pulls the client
- * store (and its module-level `$state`) into a request. The shapes are that
- * module's.
+ * Read with the tree's own module (workspace/tree.ts), which the server
+ * imports without the client store and its module-level `$state`.
  */
 const WORKSPACE_KEY = "cawco-workspace";
 /** The addresses of what the tree holds, kept apart from it (workspace.svelte.ts, Persistence). */
@@ -66,123 +70,6 @@ function narrowOf(cookie: string | undefined, headers: Headers): boolean {
   }
   return PHONE_UA.test(headers.get("user-agent") ?? "");
 }
-
-interface LeafNode {
-  active: string | null;
-  id: string;
-  t: "l";
-  tabs: string[];
-}
-interface BranchNode {
-  dir: "h" | "v";
-  id: string;
-  kids: PaneNode[];
-  sizes: number[];
-  t: "b";
-}
-type PaneNode = LeafNode | BranchNode;
-const SessionContextSchema = z.object({
-  cwd: z.string(),
-  harness: z.string(),
-  machine: z.string().nullable(),
-});
-type SessionContext = z.infer<typeof SessionContextSchema>;
-/** Each session's kept context that is still its shape. */
-const CONTEXTS = z
-  .record(z.string(), SessionContextSchema.optional().catch(undefined))
-  .transform((all) =>
-    Object.fromEntries(
-      Object.entries(all).filter(
-        (entry): entry is [string, SessionContext] => entry[1] !== undefined
-      )
-    )
-  );
-export interface WorkspaceV1 {
-  ctx?: Record<string, SessionContext>;
-  focusedLeaf: string;
-  root: PaneNode;
-  v: 1;
-}
-
-function validate(node: unknown): node is PaneNode {
-  if (!node || typeof node !== "object") {
-    return false;
-  }
-  const n = node as Partial<BranchNode> & Partial<LeafNode>;
-  if (n.t === "l") {
-    return typeof n.id === "string" && Array.isArray(n.tabs);
-  }
-  if (n.t === "b") {
-    return (
-      typeof n.id === "string" &&
-      (n.dir === "h" || n.dir === "v") &&
-      Array.isArray(n.kids) &&
-      n.kids.length > 0 &&
-      n.kids.every(validate)
-    );
-  }
-  return false;
-}
-
-function parse(raw: string | null | undefined): WorkspaceV1 | null {
-  if (!raw) {
-    return null;
-  }
-  try {
-    const held: unknown = JSON.parse(raw);
-    if (typeof held !== "object" || held === null) {
-      return null;
-    }
-    const root: unknown = Reflect.get(held, "root");
-    const focusedLeaf: unknown = Reflect.get(held, "focusedLeaf");
-    const ctx: unknown = Reflect.get(held, "ctx");
-    if (
-      Reflect.get(held, "v") !== 1 ||
-      !validate(root) ||
-      typeof focusedLeaf !== "string"
-    ) {
-      return null;
-    }
-    return {
-      v: 1,
-      root,
-      focusedLeaf,
-      ...(typeof ctx === "object" && ctx !== null
-        ? { ctx: CONTEXTS.parse(ctx) }
-        : {}),
-    };
-  } catch {
-    return null;
-  }
-}
-
-function parseCtx(
-  raw: string | null | undefined
-): Record<string, SessionContext> {
-  try {
-    return CONTEXTS.catch({}).parse(JSON.parse(raw ?? "{}"));
-  } catch {
-    return {};
-  }
-}
-
-function leavesOf(node: PaneNode, out: LeafNode[] = []): LeafNode[] {
-  if (node.t === "l") {
-    out.push(node);
-  } else {
-    for (const kid of node.kids) {
-      leavesOf(kid, out);
-    }
-  }
-  return out;
-}
-
-const blank = (): WorkspaceV1 => ({
-  v: 1,
-  root: { t: "l", id: "p0", tabs: [], active: null },
-  focusedLeaf: "p0",
-  ctx: {},
-});
 
 /** The conversation the URL names, or '' on the board and everywhere else. */
 function currentId(pathname: string): string {
@@ -226,9 +113,9 @@ export const load: LayoutServerLoad = async ({
   // the first paint (fluid-tabs/fold-memory.ts).
   const foldBoxes = parseFoldBoxes(pref(FOLD_BOXES_PREF));
 
-  let workspace = parse(pref(WORKSPACE_KEY));
+  let workspace = parseWorkspace(pref(WORKSPACE_KEY));
   if (workspace) {
-    workspace.ctx = parseCtx(pref(WORKSPACE_CTX_KEY));
+    workspace.ctx = parseContexts(pref(WORKSPACE_CTX_KEY));
   }
 
   // Untrack URL access: a switch between conversations is a shallow pushState
@@ -238,7 +125,7 @@ export const load: LayoutServerLoad = async ({
   const pathname = untrack(() => url.pathname);
   const urlId = currentId(pathname);
   if (urlId) {
-    workspace ??= blank();
+    workspace ??= blankWorkspace();
     const leaves = leavesOf(workspace.root);
     const { focusedLeaf } = workspace;
     const leaf =

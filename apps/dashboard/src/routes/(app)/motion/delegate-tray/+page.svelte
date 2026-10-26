@@ -33,7 +33,10 @@
   import { askOpenAt } from "#lib/cawco/transcript/open-at.svelte.js";
   import { entered } from "#lib/cawco/transcript/tray.svelte.js";
   import type { Message } from "#lib/cawco/types.js";
-  import { composerBindings } from "#lib/cawco/workspace/composer-dock.svelte.js";
+  import {
+    composerBindings,
+    composerOf,
+  } from "#lib/cawco/workspace/composer-dock.svelte.js";
   import SessionDetails from "#lib/cawco/workspace/SessionDetails.svelte";
   import { page } from "$app/state";
 
@@ -366,26 +369,8 @@
       >
         <Composer
           fleet={composerFleet}
-          agentName={lent.agentName}
-          ask={lent.ask}
-          busy={lent.busy}
-          commands={lent.commands}
-          draft={lent.draft}
-          mentionsFrom={lent.mentionsFrom}
-          onfoot={lent.onfoot}
-          onmenu={lent.onmenu}
-          onstop={lent.onstop}
-          onsubmit={lent.onsubmit}
-          paneVisible={lent.paneVisible}
-          perch={lent.perch}
-          placeholder={lent.placeholder}
-          planRing={lent.planRing}
-          recallOf={lent.recallOf}
-          sendAgain={lent.sendAgain}
-          sendError={lent.sendError}
-          sending={lent.sending}
+          {...composerOf(lent)}
           showing={ID}
-          suggest={lent.suggest}
           trayRows={[
             { delegatesOf: lent.delegatesOf, id: ID, prompts: lent.prompts },
           ]}
