@@ -8,6 +8,8 @@
 </script>
 
 <script generics="Item extends RailItem" lang="ts">
+  import type { Snippet } from "svelte";
+  import { frameObserver, frameSize } from "#lib/cawco/frame-observer.js";
   /**
    * A designed radio group: a thumb that slides under the chosen item, and
    * one label that travels to whichever item is under the pointer or the
@@ -20,8 +22,7 @@
    * of any size work; both glide over --dur-morph on --ease-in-out (with
    * less motion they move at once and only the label's fade runs).
    */
-  import type { Snippet } from "svelte";
-  import { frameObserver, frameSize } from "#lib/cawco/frame-observer.js";
+  import { arrowStep } from "../roving";
 
   let {
     items,
@@ -162,16 +163,13 @@
   }
 
   function tabKey(event: KeyboardEvent) {
-    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[
-      event.key
-    ];
-    if (!step) {
-      return;
-    }
-    event.preventDefault();
     const enabled = items.filter((entry) => !entry.disabled);
-    const at = enabled.findIndex((entry) => entry.id === value);
-    const next = enabled[(at + step + enabled.length) % enabled.length];
+    const to = arrowStep(
+      event,
+      enabled.findIndex((entry) => entry.id === value),
+      enabled.length
+    );
+    const next = to === null ? undefined : enabled[to];
     if (next) {
       onpick(next.id);
       (event.currentTarget as HTMLElement)

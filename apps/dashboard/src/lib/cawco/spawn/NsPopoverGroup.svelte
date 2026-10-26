@@ -14,7 +14,7 @@
   import type { Snippet } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
-  import { dur, easeOut, numberOf } from "#lib/cawco/motion/curves.svelte.js";
+  import { dur, easeOut } from "#lib/cawco/motion/curves.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { pressable } from "#lib/components/ui/floating-presence.js";
   import {
@@ -24,25 +24,18 @@
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import PopoverRoot from "#lib/components/ui/popover/popover.svelte";
   import { cn } from "#lib/utils.js";
-  import { browser } from "$app/env";
   import {
     type PopoverMember,
     popoverGroup,
     popoverWidth,
     providePopoverGroup,
+    screenInset,
   } from "./popover-group.svelte";
 
   let { children }: { children: Snippet } = $props();
 
-  /**
-   * Its inset from the screen's edge, the kit popover's rule: the screen's
-   * margin on a phone, the pages' gutter past it. Read in the browser, where
-   * it opens.
-   */
-  const phone = new MediaQuery("(width < 640px)");
-  const inset = $derived(
-    browser ? numberOf(phone.current ? "--c-screen-margin" : "--space-5") : 0
-  );
+  /** Its inset from the screen's edge (`screenInset`). */
+  const inset = $derived(screenInset());
 
   const outer = popoverGroup();
   const group = outer ?? providePopoverGroup();

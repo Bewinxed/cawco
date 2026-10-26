@@ -13,7 +13,9 @@
     IconFolderGit as FolderGit,
     IconFolderOpen as FolderOpen,
   } from "#lib/icons.js";
-  import LocationSection from "./LocationSection.svelte";
+  import LocationSection, {
+    type LocationFields,
+  } from "./LocationSection.svelte";
   import NsPopover from "./NsPopover.svelte";
 
   let {
@@ -40,19 +42,7 @@
     oncommit: () => void;
     /** Where focus goes as the popover closes (NsPopover `onclosefocus`). */
     onclosefocus: () => boolean;
-    mode: "dir" | "repo";
-    onmode: (mode: "dir" | "repo") => void;
-    dir: string;
-    ondir: (dir: string) => void;
-    locked: boolean;
-    onoverride: () => void;
-    repo: string;
-    onrepo: (repo: string) => void;
-    machineId: string;
-    machineName: string;
-    reading: string;
-    informational: boolean;
-  } = $props();
+  } & LocationFields = $props();
 
   /** The last two segments are what tells two checkouts apart. */
   const short = (path: string) => {

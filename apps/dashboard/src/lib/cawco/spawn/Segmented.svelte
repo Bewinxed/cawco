@@ -1,6 +1,7 @@
 <script generics="T extends string" lang="ts">
-  /** Two-or-more tab segmented control with a sliding thumb (§1.5, §1.9). */
   import type { Snippet } from "svelte";
+  /** Two-or-more tab segmented control with a sliding thumb (§1.5, §1.9). */
+  import { arrowStep } from "../roving";
 
   let {
     items,
@@ -26,18 +27,14 @@
     )
   );
   function keydown(event: KeyboardEvent) {
-    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[
-      event.key
-    ];
-    if (!step) {
+    const to = arrowStep(event, index, items.length);
+    if (to === null) {
       return;
     }
-    event.preventDefault();
-    const next = items[(index + step + items.length) % items.length];
-    onchange(next.value);
+    onchange(items[to].value);
     (event.currentTarget as HTMLElement)
       .querySelectorAll<HTMLButtonElement>("button")
-      [(index + step + items.length) % items.length]?.focus();
+      [to]?.focus();
   }
 </script>
 

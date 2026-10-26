@@ -1705,6 +1705,28 @@
   function shownModel(draft: SessionDraft): string {
     return draft.usedModel === "default" ? "" : draft.usedModel;
   }
+  /**
+   * The run a start or a fork asks for, each pick only when there is one:
+   * its permission mode (none on a harness without modes), model and effort.
+   */
+  function runPicks(draft: SessionDraft) {
+    return {
+      ...(modeless || draft.permissionMode === null
+        ? {}
+        : { permissionMode: draft.permissionMode }),
+      ...(shownModel(draft) ? { model: shownModel(draft) } : {}),
+      ...(draft.effort ? { effort: draft.effort } : {}),
+    };
+  }
+  /** The prompt's images and attachments, each only when there are some. */
+  function extrasOf(draft: SessionDraft) {
+    return {
+      ...(draft.extras.images ? { images: draft.extras.images } : {}),
+      ...(draft.extras.attachments
+        ? { attachments: draft.extras.attachments }
+        : {}),
+    };
+  }
   /** A project a start on `target` belongs to: one with a place on that machine. */
   function attachable(
     id: string | undefined,
@@ -1739,11 +1761,7 @@
       prompt: draft.prompt,
       extras: draft.extras,
       harness: draft.harness,
-      ...(modeless || draft.permissionMode === null
-        ? {}
-        : { permissionMode: draft.permissionMode }),
-      ...(shownModel(draft) ? { model: shownModel(draft) } : {}),
-      ...(draft.effort ? { effort: draft.effort } : {}),
+      ...runPicks(draft),
       scratch: draft.scratch,
       bootstrap:
         draft.repo === undefined
@@ -1765,11 +1783,7 @@
   ): Promise<string> {
     const forked = await forkSession({
       ...source,
-      ...(modeless || draft.permissionMode === null
-        ? {}
-        : { permissionMode: draft.permissionMode }),
-      ...(shownModel(draft) ? { model: shownModel(draft) } : {}),
-      ...(draft.effort ? { effort: draft.effort } : {}),
+      ...runPicks(draft),
       prompt: draft.prompt,
       extras: draft.extras,
     });
@@ -1958,18 +1972,11 @@
         ...(ask.key ? { approved: ask.key } : {}),
         spawn: {
           harness: draft.harness,
-          ...(modeless || draft.permissionMode === null
-            ? {}
-            : { permissionMode: draft.permissionMode }),
-          ...(shownModel(draft) ? { model: shownModel(draft) } : {}),
-          ...(draft.effort ? { effort: draft.effort } : {}),
+          ...runPicks(draft),
           ...(draft.account ? { account: draft.account } : {}),
         },
         ...(draft.prompt.trim() ? { prompt: draft.prompt } : {}),
-        ...(draft.extras.images ? { images: draft.extras.images } : {}),
-        ...(draft.extras.attachments
-          ? { attachments: draft.extras.attachments }
-          : {}),
+        ...extrasOf(draft),
       });
     } catch (cause) {
       // What moving does changed since it was read: read it again, so the
@@ -2065,10 +2072,7 @@
       ...(draft.prompt.trim() ? { note: draft.prompt.trim() } : {}),
       // They ride the new session's opening message; the summariser reads
       // the note's words alone.
-      ...(draft.extras.images ? { images: draft.extras.images } : {}),
-      ...(draft.extras.attachments
-        ? { attachments: draft.extras.attachments }
-        : {}),
+      ...extrasOf(draft),
     });
     followJob(id, job);
     if (!draft.asks) {

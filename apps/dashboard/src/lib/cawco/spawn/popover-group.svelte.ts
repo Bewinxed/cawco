@@ -5,6 +5,19 @@
  * to the next retargets that surface rather than closing it and opening another.
  */
 import { getContext, type Snippet, setContext, untrack } from "svelte";
+import { MediaQuery } from "svelte/reactivity";
+import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
+import { browser } from "$app/env";
+
+const phone = new MediaQuery("(width < 640px)");
+
+/**
+ * A popover's inset from the screen's edge, the kit popover's rule: the
+ * screen's margin on a phone, the pages' gutter past it. Read in the
+ * browser, where it opens.
+ */
+export const screenInset = (): number =>
+  browser ? numberOf(phone.current ? "--c-screen-margin" : "--space-5") : 0;
 
 export interface PopoverMember {
   readonly align: "start" | "end" | "center";

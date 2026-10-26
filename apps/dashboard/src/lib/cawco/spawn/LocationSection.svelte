@@ -1,3 +1,22 @@
+<script lang="ts" module>
+  /** Where a session works, as the Location form edits it. */
+  export interface LocationFields {
+    dir: string;
+    informational?: boolean;
+    locked: boolean;
+    machineId: string;
+    machineName: string;
+    mode: "dir" | "repo";
+    ondir: (dir: string) => void;
+    onmode: (mode: "dir" | "repo") => void;
+    onoverride: () => void;
+    onrepo: (repo: string) => void;
+    /** Validation line under the field; empty when nothing to say. */
+    reading: string;
+    repo: string;
+  }
+</script>
+
 <script lang="ts">
   /**
    * Location (§1.5, §2.8): Existing files | Clone a repository, by its git
@@ -41,20 +60,7 @@
     informational = false,
     embedded = false,
     oncommit,
-  }: {
-    mode: "dir" | "repo";
-    onmode: (mode: "dir" | "repo") => void;
-    dir: string;
-    ondir: (dir: string) => void;
-    locked: boolean;
-    onoverride: () => void;
-    repo: string;
-    onrepo: (repo: string) => void;
-    machineId: string;
-    machineName: string;
-    /** Validation line under the field; empty when nothing to say. */
-    reading: string;
-    informational?: boolean;
+  }: LocationFields & {
     /** Inside the composer's location popover: no header, no reading line —
         the dialog shows the reading under the composer, where it stays in view. */
     embedded?: boolean;
