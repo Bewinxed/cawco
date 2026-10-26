@@ -1,10 +1,11 @@
 import type { ClaudeModelUsage } from "@cawco/core";
+import { DAY_MS } from "@cawco/core/time";
 import { and, asc, eq, gte, isNotNull, lte } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { instances, turnUsage } from "./schema";
 
 /** Two weeks: two weekly windows, enough to measure a rate across a reset. */
-export const TURN_USAGE_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
+export const TURN_USAGE_RETENTION_MS = 14 * DAY_MS;
 
 export type TurnUsageRow = typeof turnUsage.$inferSelect;
 

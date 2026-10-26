@@ -30,6 +30,7 @@ import type {
   HarnessReport,
   HookEvent,
   HookHandler,
+  InstanceStatus,
   McpPlatform,
   MemoryScope,
   NeutralUserMessage,
@@ -50,6 +51,7 @@ import type {
   SessionTooling,
   SkillFile,
   SpawnPayload,
+  StagesTemplate,
   StoppedCommands,
   ToolPolicy,
   ToolStatus,
@@ -81,6 +83,8 @@ import { ownIdentity } from "@cawco/core/process-identity";
 import { runtimeTree, standalone } from "@cawco/core/runtime";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import { nameStoredRowsFrom } from "@cawco/core/stored-json";
+import type { CapabilityKind } from "@cawco/core/suggest";
+import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import type { UpstreamPosts } from "@cawco/core/upstream-guard";
 import {
   and,
@@ -114,7 +118,6 @@ import { pluginVersion, skillName, skillVersion } from "../fleet-versions";
 import { sessionLabel } from "../labels";
 import { HubLifetime } from "../lifetime";
 import type { MoveState } from "../moves";
-import type { StagesTemplate } from "../stages";
 import { type AccountsDb, accountsDb } from "./accounts";
 import { type ActionsDb, actionsDb } from "./actions";
 import { type ArtifactsDb, artifactsDb, projectPage } from "./artifacts";
@@ -269,6 +272,18 @@ import { sendWords } from "./words";
 
 /** Ids looked up per statement (bound twice), well under SQLite's variable limit. */
 const SENDS_FOR_BATCH = 500;
+/**
+ * Statuses a live process can be wrongly filed under: a demotion while its
+ * machine was unreachable, a spawn never confirmed, a nap its daemon has
+ * since woken from. A machine's word that the process runs promotes them to
+ * `running`; `stopped` and `discarded` are decisions, never overwritten.
+ */
+const MISFILED_LIVE: InstanceStatus[] = [
+  "starting",
+  "unknown",
+  "sleeping",
+  "error",
+];
 const END_PRIORITY: Record<SessionEndIntent, number> = {
   stop: 0,
   discard: 1,
@@ -466,7 +481,7 @@ export interface SettledInstance {
 }
 
 /** How long a session that stopped moving stays in the listings the rails read. */
-const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
+const STALE_AFTER_MS = DAY_MS;
 
 /** A folder's trailing slashes, which {@link DbShape.projectHolding} reads past. */
 const TRAILING_SLASHES = /\/+$/u;
@@ -502,8 +517,6 @@ export const listedAt = (
   row.status === "running" ||
   (row.status === "sleeping" && sleepKeeps(row)) ||
   row.updatedAt.getTime() > now - STALE_AFTER_MS;
-/** The span of a usage bucket stored before quarters (`usage_buckets.span_ms`). */
-const HOUR_MS = 60 * 60 * 1000;
 
 export type AgentAuth = (typeof agents.$inferSelect)["auth"];
 
@@ -634,7 +647,7 @@ export interface DbShape {
   /** Adds counted capability uses, summing into any row already there. */
   readonly addCapabilityUsage: (
     rows: {
-      kind: "skill" | "tool" | "mcp";
+      kind: CapabilityKind;
       name: string;
       day: string;
       count: number;
@@ -3222,7 +3235,7 @@ const make = async (path: string): Promise<DbShape> => {
           "sleeping",
           "moving",
           "stopping",
-        ]),
+        ] satisfies InstanceStatus[]),
         gt(instances.updatedAt, new Date(Date.now() - STALE_AFTER_MS))
       )
     );
@@ -4934,7 +4947,10 @@ const make = async (path: string): Promise<DbShape> => {
           // The one place an end's status is filed: `stopping` until its
           // machine confirms the process gone ({@link confirmInstanceEnd}),
           // which files it `stopped` or `discarded`.
-          let status: "discarded" | "stopped" | "stopping" = "stopping";
+          let status: Extract<
+            InstanceStatus,
+            "discarded" | "stopped" | "stopping"
+          > = "stopping";
           if (row.status === "discarded") {
             status = "discarded";
           } else if (confirmedAt) {
@@ -5749,7 +5765,7 @@ const make = async (path: string): Promise<DbShape> => {
                     "starting",
                     "running",
                     "sleeping",
-                  ])
+                  ] satisfies InstanceStatus[])
                 )
               )
               .all()
@@ -6202,12 +6218,7 @@ const make = async (path: string): Promise<DbShape> => {
               // `stopped`/`discarded`: those are decisions, and a daemon still
               // holding a process the operator asked to end is a bug to fix on
               // the daemon, not a status to overwrite here.
-              inArray(instances.status, [
-                "starting",
-                "unknown",
-                "sleeping",
-                "error",
-              ]),
+              inArray(instances.status, MISFILED_LIVE),
               inArray(instances.id, liveIds)
             )
           )
@@ -6305,12 +6316,7 @@ const make = async (path: string): Promise<DbShape> => {
                   // that the beat lists has not moved, and writing it anyway
                   // would touch it every 15s, erasing the one column that says
                   // when a session last did something.
-                  inArray(instances.status, [
-                    "starting",
-                    "unknown",
-                    "sleeping",
-                    "error",
-                  ])
+                  inArray(instances.status, MISFILED_LIVE)
                 )
               )
               .returning({ id: instances.id })
@@ -6360,15 +6366,7 @@ const make = async (path: string): Promise<DbShape> => {
         .update(instances)
         .set({ status: "running", lastError: null, lastErrorKind: null })
         .where(
-          and(
-            eq(instances.id, id),
-            inArray(instances.status, [
-              "starting",
-              "unknown",
-              "sleeping",
-              "error",
-            ])
-          )
+          and(eq(instances.id, id), inArray(instances.status, MISFILED_LIVE))
         )
         .returning({ id: instances.id })
         .all().length > 0,

@@ -12,6 +12,7 @@ import type {
   ContinuationJob,
   DelegateAskStatus,
   DelegateEventKind,
+  DeviceKind,
   EffortLevel,
   Envelope,
   FleetScope,
@@ -20,6 +21,7 @@ import type {
   HarnessReport,
   HomeStore,
   HookEvent,
+  InstanceStatus,
   LandsMode,
   LimitWindow,
   MachineState,
@@ -40,8 +42,10 @@ import type {
   SendRefusal,
   SendState,
   SessionEffort,
+  SessionEndIntent,
   SigninState,
   SpawnPayload,
+  StagesTemplate,
   StarterGlyph,
   StarterOutcome,
   StarterPlace,
@@ -103,6 +107,8 @@ import {
   WorkspaceHoldingSchema,
 } from "@cawco/core/stored-shapes";
 import type { StreamRelayState } from "@cawco/core/stream-relay";
+import type { CapabilityKind } from "@cawco/core/suggest";
+import { HOUR_MS } from "@cawco/core/time";
 import { UPSTREAM_POSTS } from "@cawco/core/upstream-guard";
 import type { OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { sql } from "drizzle-orm";
@@ -483,7 +489,7 @@ export const projects = sqliteTable("projects", {
    * its starter skills are placed at every place of it (bundled-skills.ts).
    * Null: none.
    */
-  template: text("template").$type<import("../stages").StagesTemplate>(),
+  template: text("template").$type<StagesTemplate>(),
   /**
    * Review before done: only you move a task into a done stage, and an
    * attempt that lands sends its task to review (stages.ts `ruledStages`).
@@ -806,9 +812,7 @@ export const instances = sqliteTable("instances", {
   endRetryAt: timestamp("end_retry_at"),
   endAttempts: integer("end_attempts").notNull().default(0),
   /** The hub's decision, independent of process presence and attachment. */
-  endIntent: text("end_intent").$type<
-    "stop" | "discard" | "delete" | "delete-transcript"
-  >(),
+  endIntent: text("end_intent").$type<SessionEndIntent>(),
   endConfirmedAt: timestamp("end_confirmed_at"),
   /**
    * A start the hub accepted but did not forward because its machine was
@@ -1063,20 +1067,7 @@ export const instances = sqliteTable("instances", {
    * `sleeping` arrived by a one-time boot sweep over rows the old taxonomy had
    * to file under `error`.
    */
-  status: text("status")
-    .$type<
-      | "moving"
-      | "starting"
-      | "running"
-      | "sleeping"
-      | "stopping"
-      | "stopped"
-      | "discarded"
-      | "unknown"
-      | "error"
-    >()
-    .notNull()
-    .default("starting"),
+  status: text("status").$type<InstanceStatus>().notNull().default("starting"),
   /** Why the session died, for a dashboard that was not watching when it did. */
   lastError: text("last_error"),
   /** What `lastError` was, typed where it was found (core `LastErrorKind`); null when nothing typed it. */
@@ -1312,8 +1303,7 @@ export type Origin = "you" | "event";
 export type WorkOrigin = Origin | "kept";
 
 /** A work item's life. Only `starting` and `running` take messages. */
-export type WorkItemState =
-  "starting" | "running" | "done" | "failed" | "cancelled";
+export type WorkItemState = import("@cawco/core").WorkItemState;
 
 /**
  * Where a work item's landing stands ({@link workItems} `landingPhase`), kept
@@ -2347,7 +2337,7 @@ export const usageBuckets = sqliteTable(
     machineId: text("machine_id").notNull(),
     harness: text("harness").$type<"claude" | "opencode">().notNull(),
     start: integer("start").notNull(),
-    spanMs: integer("span_ms").notNull().default(3_600_000),
+    spanMs: integer("span_ms").notNull().default(HOUR_MS),
     firstTs: integer("first_ts").notNull(),
     lastTs: integer("last_ts").notNull(),
     sessionId: text("session_id").notNull(),
@@ -3324,7 +3314,7 @@ export const jevSettings = sqliteTable("jev_settings", {
 export const capabilityUsageDaily = sqliteTable(
   "capability_usage_daily",
   {
-    kind: text("kind").$type<"skill" | "tool" | "mcp">().notNull(),
+    kind: text("kind").$type<CapabilityKind>().notNull(),
     name: text("name").notNull(),
     /** Local date, `YYYY-MM-DD`. */
     day: text("day").notNull(),
@@ -3644,7 +3634,7 @@ export const ownerDevices = sqliteTable("owner_devices", {
   tokenHash: text("token_hash").notNull().unique(),
   /** "Chrome on Linux", "CawCo on iPhone". */
   name: text("name").notNull(),
-  kind: text("kind").$type<"browser" | "app" | "cli">().notNull(),
+  kind: text("kind").$type<DeviceKind>().notNull(),
   createdAt: timestamp("created_at").notNull(),
   lastUsedAt: timestamp("last_used_at"),
   /** The address it was last seen at. */
@@ -4836,7 +4826,7 @@ export const threadMessageTasks = sqliteTable(
  * a message to the project's Caw, or the project's memory curator
  * (memory.ts), a delegate in the `curator` role that only the hub makes.
  */
-export type RoutineTarget = "delegate" | "orchestrator" | "lead" | "curator";
+export type RoutineTarget = import("@cawco/core").RoutineTarget;
 
 /**
  * A routine (Projects spec §5.5, routines.ts): a prompt the hub runs on a
@@ -4913,8 +4903,7 @@ export const routines = sqliteTable(
  * starts when the runs before it end), being started, running, ended, or
  * skipped (nothing started).
  */
-export type RoutineRunState =
-  "queued" | "starting" | "running" | "ended" | "skipped";
+export type RoutineRunState = import("@cawco/core").RoutineRunState;
 
 /**
  * How a run ended, by its delegate's `finish_item` summary or Caw's
@@ -4922,7 +4911,7 @@ export type RoutineRunState =
  * notice), `failed` (`AUTOMATION_FAILED`, an item that failed, or Caw's turn
  * ending without a result), `cancelled` (someone stopped it).
  */
-export type RoutineOutcome = "silent" | "delivered" | "failed" | "cancelled";
+export type RoutineOutcome = import("@cawco/core").RoutineOutcome;
 
 /**
  * One run of a routine at one slot: a scheduled slot's time (ISO), `test:<created

@@ -18,6 +18,7 @@ import {
   type ModelInfo,
   type ProviderRouting,
 } from "@cawco/core";
+import { DAY_MS } from "@cawco/core/time";
 import { and, asc, eq, gt, gte, inArray, lte, max, ne, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
@@ -36,7 +37,7 @@ import {
 } from "./schema";
 
 /** 30 days — long enough to cover several weekly windows, short enough that the table stays small. */
-const LIMIT_HISTORY_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const LIMIT_HISTORY_RETENTION_MS = 30 * DAY_MS;
 
 /** What an account's editable settings may be patched with. */
 export type AccountPatch = Partial<

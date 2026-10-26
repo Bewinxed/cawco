@@ -1,0 +1,29 @@
+language js
+
+// A time unit has one owner: packages/core/src/time.ts (SECOND_MS,
+// MINUTE_MS, HOUR_MS, DAY_MS). Every other file imports it from
+// @cawco/core/time (by relative path in scripts/ and apps/cawrier), so a
+// const named for a unit, or an hour or a day written out in milliseconds,
+// is refused anywhere else. Minute and second literals (`60_000`) stay: most
+// are one-off timeouts.
+or {
+  `const $name = $value` as $hit where {
+    $filename <: not includes "packages/core/src/time.ts",
+    $name <: r"(?:SECOND|MINUTE|MIN|HOUR|DAY|WEEK)S?(?:_MS|_S)?",
+    $value <: r"[0-9_ *().A-Z]+",
+    register_diagnostic(span=$hit, message="A time unit comes from @cawco/core/time (MINUTE_MS, HOUR_MS, DAY_MS).")
+  },
+  JsNumberLiteralExpression() as $hit where {
+    $filename <: not includes "packages/core/src/time.ts",
+    $hit <: r"3_?600_?000|86_?400_?000|604_?800_?000",
+    register_diagnostic(span=$hit, message="A time unit comes from @cawco/core/time (MINUTE_MS, HOUR_MS, DAY_MS).")
+  },
+  `$left * $right` as $hit where {
+    $filename <: not includes "packages/core/src/time.ts",
+    or {
+      and { $right <: r"60_?000", $left <: r"(?s)(?:.*\*\s*)?60" },
+      and { $right <: r"1_?000", $left <: r"(?s)(?:.*\*\s*)?60\s*\*\s*60" }
+    },
+    register_diagnostic(span=$hit, message="A time unit comes from @cawco/core/time (MINUTE_MS, HOUR_MS, DAY_MS).")
+  }
+}

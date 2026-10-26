@@ -8,6 +8,7 @@
   // storedJson(schema), a record readRecord(file, schema), never a cast.
   "plugins": [
     "./scripts/lint/no-raw-deadline.grit",
+    "./scripts/lint/no-time-constants.grit",
     "./scripts/lint/no-system-path.grit",
     // A long-running process that fails ends, so its service manager starts
     // it again (packages/core/src/listeners.ts).

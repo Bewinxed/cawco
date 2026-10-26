@@ -94,9 +94,6 @@ export interface Stages {
 export type StagesReading =
   { ok: true; stages: Stages } | { ok: false; problems: string[] };
 
-// The db schema (hub/src/db) reads the type from here.
-export type { StagesTemplate } from "@cawco/core";
-
 /** A stage's name: lowercase, a letter first. */
 export const STAGE_NAME = /^[a-z][a-z0-9_-]{0,39}$/u;
 const TYPE_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/u;
