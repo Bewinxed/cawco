@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * A task's to-dos (WORDS.md: to-do), nested as the file nests them. A tick
+   * A task's to-dos (to-do), nested as the file nests them. A tick
    * shows at once and is written behind it; a tick the hub refuses goes back
    * with its reason. A to-do's words edit in place, and any to-do can take
    * one under it. Ticking every to-do does not finish a task: checks and

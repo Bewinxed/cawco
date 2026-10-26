@@ -410,7 +410,7 @@ const emptyChecks = async (on: OnCanvas) => {
   );
 };
 
-/** The two refusals, as WORDS.md's error formula has them (images.ts). */
+/** The two refusals, as DESIGN.md's error formula has them (images.ts). */
 const TOO_BIG =
   "That image is 5 MB, and a canvas image can be 4 MB at most, so it wasn't added. Shrink it, then paste it again.";
 const NOT_IMAGE =

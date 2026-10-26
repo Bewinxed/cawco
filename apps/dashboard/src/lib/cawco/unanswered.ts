@@ -4,7 +4,7 @@
  * sentence for both.
  *
  * A machine the hub holds a live link to is online, and a read it was slow
- * to answer says what didn't answer and when it is asked again (WORDS.md's
+ * to answer says what didn't answer and when it is asked again (DESIGN.md's
  * error formula: what happened, what happens next). "It may be offline" is
  * said only of a machine the hub has lost.
  */

@@ -93,7 +93,7 @@ Away from a desk, the operator uses the Caw&Co app on iPhone, iPad and Mac, or t
 - **artifact**: a document a session made that the person works in; **decision page**: a page of choices the person picks on
 - **paired device**: a browser, the app or a CLI the hub knows as the person's
 - **here / elsewhere / away**: the person's presence
-- WORDS.md holds the full table, its banned synonyms included
+- The words the product shows, these terms in use, live in `packages/core/src/words/**`
 
 **How state is shown (derived liveness in the UI):**
 - An empty surface claims "nothing" only while the hub connection is live. While connecting, disconnected or in error, the board keeps its last good rows, marks them stale, and suppresses the needs-you count instead of showing zero.
@@ -111,7 +111,7 @@ Away from a desk, the operator uses the Caw&Co app on iPhone, iPad and Mac, or t
 - **Button labels:** always [Verb]+[Object], from an allowlisted imperative-verb set.
 - **Terminology discipline:** one concept → one canonical term everywhere, enforced by lint.
 - **No humor** in error, warning, destructive-confirm, or permission-approval copy.
-- **Copy authority:** WORDS.md governs every user-facing string: the voice chart, tone map, terminology table, error formula, empty-state formulas and button-label rule.
+- **Copy authority:** every user-facing string lives in `packages/core/src/words/**`, written to DESIGN.md's Voice section (the voice, punctuation, contractions, error and empty-state formulas, button labels).
 - **Identity constraints (owner-stated):** every product icon is Solar's bold-duotone cut, and it stays; indigo is never a brand hue; the action is graphite, not a hue. DESIGN.md records how these are drawn.
 
 ## Evidence on Hand

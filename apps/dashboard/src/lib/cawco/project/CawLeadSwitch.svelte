@@ -4,7 +4,7 @@
    * component wherever it stands, CawPanel (⋯ › Caw settings…) and the
    * head's details tray (ProjectDetails), so its three ways off come with
    * it. Off, he acts only when you write to him: no event wakes him
-   * (WORDS.md, Caw on and off).
+   * (Caw on and off).
    *
    * Turning him off (The Stay In Context Rule): nothing he started runs,
    * and it just flips. Only his own turn an event started is in flight: one

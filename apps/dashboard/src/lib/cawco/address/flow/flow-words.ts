@@ -1,11 +1,11 @@
 /**
  * The flow's words, per state and form, as the report writes them (design
- * e791c712, §4.2 and §4.5) in the house voice (WORDS.md: impersonal second
+ * e791c712, §4.2 and §4.5) in the house voice (DESIGN.md, Voice: impersonal second
  * person, buttons a verb from the allowlist and its object, the error
  * formula for a failure). One place, so the desk tray, the phone's sheet,
  * the row and Settings say the same thing.
  *
- * Two of the report's buttons wait on WORDS.md's allowlist (its §4.10, the
+ * Two of the report's buttons wait on the button-verb allowlist (§4.10, the
  * owner's call): Start opens "Tailscale sign-in" rather than "Sign in to
  * Tailscale", and Headscale's refusal opens "the command" rather than
  * showing it.

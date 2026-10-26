@@ -1,5 +1,5 @@
 /**
- * A project is one identity with many places (WORDS.md: project, place). What
+ * A project is one identity with many places (project, place). What
  * makes two folders on two machines the same project is the repository they
  * are checkouts of: their `origin`, normalised (core upstream-guard.ts
  * `normaliseRemote`) so the forms git accepts for one repository compare

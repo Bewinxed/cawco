@@ -1,7 +1,7 @@
 /**
  * What the hub's connection says while an announced update restarts the hub
  * (`hub.restart`), for the dashboard's connection band (HubBand) and the
- * native app's status line alike (WORDS.md, "Error formula": a fleet error
+ * native app's status line alike (DESIGN.md, Voice, "Error formula": a fleet error
  * sits in the connection band). Calm: nothing failed and nothing is to be
  * pressed until the deadline passes.
  *

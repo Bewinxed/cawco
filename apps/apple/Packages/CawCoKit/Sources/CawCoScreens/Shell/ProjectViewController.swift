@@ -508,7 +508,7 @@ final class ProjectViewController: ObservedViewController {
         let machine = primary.flatMap { home in fleet.machines.first { $0.machineId == home.machineId } }
         osGlyph.isHidden = machine == nil
         osGlyph.glyph = Glyph.os(machine?.os ?? "")
-        // Where the project lives (WORDS.md: place): its machine and folder.
+        // Where the project lives (place): its machine and folder.
         place.text = primary.map { home in machine.map { "\($0.name) · \(home.path)" } ?? home.path } ?? "Its folder on the hub"
         let checkouts = project.places.filter { $0.kind != .hub }.count
         places.isHidden = checkouts <= 1

@@ -773,7 +773,7 @@ export interface Browsed {
 /** How long a show waits for a view to say it has the artifact on screen. The spec's number. */
 export const SHOWN_WAIT_MS = 10_000;
 
-/** No view of the session said it showed the artifact in time. WORDS.md's error formula. */
+/** No view of the session said it showed the artifact in time. DESIGN.md's error formula. */
 const NO_VIEW =
   "No open dashboard is showing this session. The artifact is in the session's panel and opens when one is.";
 
@@ -881,7 +881,7 @@ const pngSize = (png: Uint8Array): { width: number; height: number } | null => {
 /** A thumbnail's most bytes in each scheme: the pane's capture of a page, as `previewPng` takes it. */
 export const THUMBNAIL_BYTES = 3 * 1024 * 1024;
 
-/** A promote from a session outside a project. WORDS.md's error formula. */
+/** A promote from a session outside a project. DESIGN.md's error formula. */
 const NO_PROJECT =
   "This session belongs to no project, so there is nowhere to promote to.";
 
@@ -917,7 +917,7 @@ const promotedFolder = (name: string): string => {
 
 const TRAILING_DOT = /\.$/u;
 
-/** A promote git refused, in WORDS.md's error formula: what failed, and git's reason. */
+/** A promote git refused, in DESIGN.md's error formula: what failed, and git's reason. */
 const notCommitted = (name: string, error: FolderRefusal): ArtifactRefusal =>
   new ArtifactRefusal(
     error.status === 413 || error.status === 409 ? error.status : 503,
@@ -3481,7 +3481,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     );
   };
 
-  /** Why a view could not load the artifact, in WORDS.md's error formula: what failed, and why. */
+  /** Why a view could not load the artifact, in DESIGN.md's error formula: what failed, and why. */
   const notLoaded = (row: Placed, failure: ShownFailure): string => {
     const { source } = row;
     const machine = machineOf(row);

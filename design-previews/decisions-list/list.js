@@ -549,7 +549,7 @@ const failure = () => `<div class="dl" data-list-root data-open-count="0">
   </div>
 </div>`;
 
-/** First use: what goes here and its one action (WORDS.md, First-use empty), Caw on the axis of the block he heads. */
+/** First use: what goes here and its one action (DESIGN.md, Voice, First use), Caw on the axis of the block he heads. */
 const firstUse = () => `<div class="dl" data-list-root data-open-count="0">
   <div class="empty first" data-empty="first">
     <div class="caw-axis" data-caw>${cawStill("hero-thread", 80)}</div>

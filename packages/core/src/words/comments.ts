@@ -1,6 +1,6 @@
 /**
  * The comments' words on the web (DESIGN.md, Placing a comment, The Comments
- * rail, A thread beside its pin, How comments reach the session; WORDS.md).
+ * rail, A thread beside its pin, How comments reach the session).
  * The app keeps its own until its parity with the rail (words/artifacts.ts
  * holds the words both say). The dashboard renders them from here, and the probe kit
  * finds them by these same words (scripts/probe-words-check.ts refuses a

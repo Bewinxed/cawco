@@ -17,7 +17,7 @@ public enum Words {
         /// The place, as the sidebar and a page's title name it.
         public static let title = "Configure"
 
-        /// A Configure page named in a sentence ("Configure › Accounts"), with WORDS.md's arrow: everything that points the person at a page names it through here (configurePage, by its slug, on the web and the machines).
+        /// A Configure page named in a sentence ("Configure › Accounts"), with its arrow: everything that points the person at a page names it through here (configurePage, by its slug, on the web and the machines).
         public static func page(label: String) -> String {
             "Configure › \(label)"
         }

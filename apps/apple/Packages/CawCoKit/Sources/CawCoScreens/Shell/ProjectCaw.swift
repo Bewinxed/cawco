@@ -150,7 +150,7 @@ final class ProjectCawSeat: UIControl {
 /// Caw's panel (project/CawPanel.svelte): who he is and what he is doing in
 /// one sentence, the lead switch, the harness he runs on and his model, and
 /// the way to talk to him, on or off. Off, he acts only when you write to
-/// him (WORDS.md, Caw on and off).
+/// him (Caw on and off).
 final class ProjectCawPanel: KitPopoverController {
     private let lead: ProjectCawLead
     private let hub: HubConnection

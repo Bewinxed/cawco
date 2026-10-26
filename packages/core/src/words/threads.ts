@@ -1,6 +1,6 @@
 /**
  * The words for a thread with a project's Caw set aside and brought back
- * (WORDS.md, **archive**): the thread row's menu and the project's thread
+ * (**archive**): the thread row's menu and the project's thread
  * list. The dashboard's alone for now; the app takes them into its
  * generated words (scripts/words-swift.ts) when it archives threads too.
  */

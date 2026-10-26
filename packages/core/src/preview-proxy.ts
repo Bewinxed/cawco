@@ -190,7 +190,7 @@ export async function overlayResponse(
 }
 
 /**
- * What a proxy's own page says of each hop that did not answer (WORDS.md
+ * What a proxy's own page says of each hop that did not answer (DESIGN.md's
  * error formula: what happened, why, the way back); a preview of a workspace
  * no boundary runs is refused in its words too.
  */

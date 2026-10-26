@@ -3598,7 +3598,7 @@
 {/snippet}
 
 {#snippet controlBar()}
-  <!-- A browser's Take over, or Hand back while the person holds it (WORDS.md). -->
+  <!-- A browser's Take over, or Hand back while the person holds it (core `words/browser.ts`). -->
   {@const holding = !!browserRow?.takeover}
   <Button
     data-slot="browser-take"

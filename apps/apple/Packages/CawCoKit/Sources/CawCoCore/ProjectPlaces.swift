@@ -1,6 +1,6 @@
 public import CawCoAPI
 
-/// One of a project's places (WORDS.md: place), by its kind (`PlaceKind`):
+/// One of a project's places (place), by its kind (`PlaceKind`):
 /// - `checkout`: a folder on a machine; sessions start in one, the primary
 ///   names the project's folder line;
 /// - `hub`: the project's folder on the hub (`machineId` "hub", a path

@@ -94,7 +94,7 @@ const MACHINE_FAULT_WORDS: Record<MachineFault, [string, string]> = {
 };
 
 /**
- * Why a machine could not take a request, as the person reads it (WORDS.md's
+ * Why a machine could not take a request, as the person reads it (DESIGN.md's
  * error formula): the machine by its name, never its id; what to do. `name`
  * is its {@link machineCalled}, undefined when the hub doesn't know the machine.
  * `next: false`, the cause alone, for a reader that says its own next step

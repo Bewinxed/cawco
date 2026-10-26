@@ -8,7 +8,7 @@
  * address of the machine. These are the shapes every hop speaks: its ports, the
  * daemon's {@link RelayFrame}, the hub's commands, the guided journey that
  * brings a relay up ({@link RelayJourneyView}), and the words every place
- * that draws it says alike (WORDS.md `stream relay`): the dashboard's card,
+ * that draws it says alike: the dashboard's card,
  * Caw's setup card, and later the iOS app.
  */
 import { getDomain } from "tldts";
@@ -99,7 +99,7 @@ export interface RelayFrame {
   /** The relay's machine's own addresses, read as it goes live: where another fleet machine's browser reaches it without the internet. */
   reach?: RelayReach;
   state: StreamRelayState;
-  /** Why it is `failed`, in WORDS.md's error formula ({@link RELAY_FAILURES}). */
+  /** Why it is `failed`, in DESIGN.md's error formula ({@link RELAY_FAILURES}). */
   why?: string;
 }
 
@@ -526,7 +526,7 @@ const renewNext =
   "The hub asks again tomorrow, and the certificate standing serves until it ends.";
 
 /**
- * Every failure the relay's machine reports, in WORDS.md's error formula:
+ * Every failure the relay's machine reports, in DESIGN.md's error formula:
  * what happened, why, how to fix it, what happens next. The agent throws
  * these (agent browser/relay.ts) and the journey's steps say them, a
  * `command` in code type.
@@ -598,7 +598,7 @@ export const RELAY_FAILURES = {
 /**
  * The stream relay's words: the journey's card wherever it is drawn (a
  * take-over's stream place, Caw's Needs you, Settings › Browsers), Caw's
- * setup card, and the summary, alike (Readout register, WORDS.md). From the
+ * setup card, and the summary, alike (DESIGN.md, Voice). From the
  * journey design (relay-journey/journey-design.md) with the ports revision's
  * diff (journey-ports-revision.md).
  */

@@ -105,7 +105,7 @@ export function movingWords(instance: BoardRow): string | undefined {
 }
 
 /**
- * A session stopped at its account's limit, as an error says it (WORDS.md's
+ * A session stopped at its account's limit, as an error says it (DESIGN.md's
  * error formula): what happened and when it carries on, in the hub's words
  * (its row's `stalled`), then the way out while one is open, another
  * account signed in on its machine, which moves it now. Undefined while it

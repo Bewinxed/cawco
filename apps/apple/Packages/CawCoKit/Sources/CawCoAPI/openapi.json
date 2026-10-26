@@ -36438,7 +36438,7 @@
         ]
       },
       "ArtifactKind": {
-        "description": "The kinds of artifact (WORDS.md): HTML the agent wrote, a drawing, a dev\nserver or folder shown live, a sheet: a story file's stories, each a\nreal component mounted by the project's own toolchain (core `stage.ts`),\nand the project's browser, listed for every session of the project (or of\nthe machine, for the machine's browser). A browser's source is its key as\na page (`{ page: \"project:<id>\" }`): the hub holds it, no machine's\npreview listener serves it, and every installed app reads that shape.",
+        "description": "The kinds of artifact: HTML the agent wrote, a drawing, a dev\nserver or folder shown live, a sheet: a story file's stories, each a\nreal component mounted by the project's own toolchain (core `stage.ts`),\nand the project's browser, listed for every session of the project (or of\nthe machine, for the machine's browser). A browser's source is its key as\na page (`{ page: \"project:<id>\" }`): the hub holds it, no machine's\npreview listener serves it, and every installed app reads that shape.",
         "type": "string",
         "enum": [
           "browser",
@@ -41178,7 +41178,7 @@
         ]
       },
       "ViewAsked": {
-        "description": "\"Ask Caw to change it\" (`POST /api/projects/:id/views/:name/asks`): the\nthread your words and the view went to Caw in, and whether he is on. Off,\nhe still answers your words (WORDS.md: \"Off is never 'can't be\nmessaged'\"); the page says so.",
+        "description": "\"Ask Caw to change it\" (`POST /api/projects/:id/views/:name/asks`): the\nthread your words and the view went to Caw in, and whether he is on. Off,\nhe still answers your words (off is never \"can't be\nmessaged\"); the page says so.",
         "type": "object",
         "properties": {
           "caw": {
@@ -58987,7 +58987,7 @@
             "$ref": "#/components/schemas/StreamRelayState"
           },
           "why": {
-            "description": "Why it is `failed`, in WORDS.md's error formula ({@link RELAY_FAILURES}).",
+            "description": "Why it is `failed`, in DESIGN.md's error formula ({@link RELAY_FAILURES}).",
             "type": "string"
           }
         },

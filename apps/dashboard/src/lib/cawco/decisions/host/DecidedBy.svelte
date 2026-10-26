@@ -1,5 +1,5 @@
 <!--
-  Under a card settled for the person (core decides.ts; WORDS.md, decision):
+  Under a card settled for the person (core decides.ts):
   "Decided by the advisor · why · 2 sources", then each source as a link.
   Picked otherwise since, the card is his, and the line says whose pick he
   took back.

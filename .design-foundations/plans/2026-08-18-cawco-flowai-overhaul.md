@@ -1225,7 +1225,7 @@ the tool (workflow-conventions, the review-agent dual-blind protocol, the §5 do
 paraphrased — the reviewer now runs `scripts/detect.mjs` blind as Assessment B.
 
 ### Phase 7: Words (Gate: Standard)
-- [x] BUILD: `WORDS.md` (repo root) — voice chart (**Precise · Calm · Commanding · Honest**, each with
+- [x] BUILD: the words file (repo root; deleted 2026-10-26, its voice rules now in DESIGN.md's Voice) — voice chart (**Precise · Calm · Commanding · Honest**, each with
       in/out-of-range examples + punctuation/contraction/humor rules; explicitly rejects the
       "friendly, helpful, clear" anti-pattern), a 7-moment tone map, and a terminology table that
       resolves the tangle the plan flagged: **subagent** = in-session child branch, **delegate** = a
@@ -1243,7 +1243,7 @@ paraphrased — the reviewer now runs `scripts/detect.mjs` blind as Assessment B
 - [x] Committed
 Commit: `2f3e963`
 Summary: Every surface and state now has words governed by a voice chart, not per-string
-improvisation. The lasting artifact is WORDS.md + the terminology table that makes session/run/agent/
+improvisation. The lasting artifact was the words file + the terminology table that makes session/run/agent/
 subagent/delegate mean five distinct things everywhere, plus a machine gate (wordcheck) that keeps
 banned strings, blame framing, placeholder-only labels, non-Verb+Object buttons, and delegate/
 subagent conflation out. Accepted follow-ups: echo the typed query verbatim in the project-picker
@@ -1332,7 +1332,7 @@ coverage (zero hand-typed colour across every mock; DESIGN.md regenerates byte-f
 renders and reproduces byte-for-byte, and the per-phase gates (v5check 127, v5agentcheck 82,
 v5datacheck 77, wordcheck 35, v5workspacecheck 62, v5assistantcheck 28) hold. No unresolved Critical
 across the nine reviews. Artifacts present: DESIGN.md (locked) · JOURNEY.md (7 page specs + Assistant +
-Decision log) · WORDS.md (voice/tone/terminology) · 7 v5 mocks + their gates. Commit chain: `b4636a4`
+Decision log) · the words file (voice/tone/terminology; now DESIGN.md's Voice and core/words) · 7 v5 mocks + their gates. Commit chain: `b4636a4`
 (P3) → `04826ac` (P4) → `964f065` (P5+P4-fix) → `2b5a0e0` (P6) → `b86e351` (P7) → `45446c1`/`687ddf9`/
 `cc9d714` (P8) → `29be5d1`/`e190e83` (P9a) → `1e1ff0e` (P9b).
 

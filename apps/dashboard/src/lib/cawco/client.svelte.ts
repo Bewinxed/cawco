@@ -271,7 +271,7 @@ export type { InstanceRow } from "@cawco/core";
 export type { BoardRow } from "./links";
 
 /**
- * Where a project's files are (WORDS.md: place): a checkout on a machine, a
+ * Where a project's files are (place): a checkout on a machine, a
  * delegate's workspace while it lives or is held, or the project's folder on
  * the hub.
  */
@@ -4014,7 +4014,7 @@ export function holdDetails(sessionId: string): () => void {
 const REASON_STOP = /\.$/u;
 
 /**
- * A failed command in the error formula (WORDS.md): what did not happen, the
+ * A failed command in the error formula (DESIGN.md, Voice): what did not happen, the
  * hub's why, what stands meanwhile; the way on (Try again, or the control
  * itself) stands beside it. The operator's terms, never the wire's.
  */

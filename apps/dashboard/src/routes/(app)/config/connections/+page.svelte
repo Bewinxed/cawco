@@ -75,7 +75,7 @@
 
 <script lang="ts">
   /**
-   * Connections (WORDS.md: a signed-in outside service whose key the hub
+   * Connections (a signed-in outside service whose key the hub
    * holds; connections.ts on the hub): one row each, led by the service's
    * mark, with the account it signs in as and its state, both the hub's
    * word, and which projects may use it. A row that is not signed in carries

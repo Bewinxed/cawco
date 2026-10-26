@@ -114,7 +114,7 @@ const portRuns = (ports: number[]): string => {
   return runs.join(", ");
 };
 
-/** What the browser gets when the hub doesn't answer: WORDS.md's error formula. */
+/** What the browser gets when the hub doesn't answer: DESIGN.md's error formula. */
 const unreachable = (hub: string, cause: string): Response =>
   new Response(
     `The hub at ${hub} didn't answer (${cause}). This computer's CawCo agent carries localhost to it: check that the agent is connected, then reload.\n`,

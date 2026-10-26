@@ -151,7 +151,7 @@
   /** Its primary checkout; none while its one place is its folder on the hub. */
   const primary = $derived(checkoutOf(project));
   /**
-   * Where the project lives, its machine and folder (WORDS.md: place), said
+   * Where the project lives, its machine and folder (place), said
    * in the details it opens; the head draws it as a place, never its path.
    */
   const place = $derived.by(() => {

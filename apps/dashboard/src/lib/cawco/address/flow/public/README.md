@@ -34,7 +34,7 @@ cd apps/dashboard && bunx vite build --config scripts/address-preview.vite.ts
   preview-local value (`flow/proposed.ts`, `PROPOSED_QR`), labelled
   "proposed; the token moves to 160 if picked". With it the phone step stands
   tallest of the flow, as §4.8 has it.
-- **Two button words that need WORDS.md's allowlist.** The preview uses the
+- **Two button words that need the button-verb allowlist.** The preview uses the
   allowlisted wording; the owner picks:
 
   | Where | Allowlisted (drawn) | The report's (needs the verb added) |

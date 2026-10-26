@@ -18,7 +18,7 @@
    * each by its mark; Raw is what the hub holds, word for word, in a well
    * that scrolls and selects whole, with Copy where the clipboard exists.
    * Its foot ends the work: Stop while it sets up, Remove once live, each
-   * asked in place, its cost named before the press (WORDS.md, Destructive
+   * asked in place, its cost named before the press (DESIGN.md, Voice, destructive
    * confirm).
    *
    * `look`: Family's chevron row ("Details"), or RowFault's text link

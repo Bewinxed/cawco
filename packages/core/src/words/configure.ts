@@ -260,7 +260,7 @@ export const configureWords = {
   title: "Configure",
   /**
    * A Configure page named in a sentence ("Configure › Accounts"), with
-   * WORDS.md's arrow: everything that points the person at a page names it
+   * its arrow: everything that points the person at a page names it
    * through here (configurePage, by its slug, on the web and the machines).
    */
   page: (label: string) => `Configure › ${label}`,

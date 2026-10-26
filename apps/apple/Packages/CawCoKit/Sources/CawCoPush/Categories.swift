@@ -56,7 +56,7 @@ public enum PushCategory {
     /// A question's own category: `CAWCO_QUESTION.` and a hash of its options.
     private static let answeringPrefix = question + "."
 
-    /// "Approve" is the only label for the grant (WORDS.md). A permission
+    /// "Approve" is the only label for the grant (DESIGN.md, Voice). A permission
     /// offers Approve, Deny, "Other…" (a denial in the operator's words) and
     /// Open, in that order: a banner shows the first two. Every action but
     /// Open runs without opening the app, and only on an unlocked device

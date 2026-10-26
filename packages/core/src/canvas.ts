@@ -114,7 +114,7 @@ export const SKELETON_TYPES = [
   "frame",
 ] as const;
 
-/** The refusal when no screen can convert (WORDS.md's error formula). */
+/** The refusal when no screen can convert (DESIGN.md's error formula). */
 export const NO_SCREEN =
   "No screen is showing this canvas. Open it on a dashboard (artifact_show), then try again.";
 

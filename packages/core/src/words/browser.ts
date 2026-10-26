@@ -4,8 +4,7 @@ import { commonWords } from "./common";
  * A browser artifact's view in the panel (Projects spec §5.11, "The view"):
  * the band under the head (the page's origin and who has control), the
  * head's Take over and Hand back, and the states the well stands in when
- * it shows no stream. WORDS.md carries the terms (*browser*, *take over*,
- * *private*, *hand back*, *stream relay*, *local browser*).
+ * it shows no stream.
  */
 export const browserWords = {
   /** The view's label, for a screen reader. */
@@ -15,9 +14,9 @@ export const browserWords = {
   /** The band: who has control. */
   agentDriving: "The agent is driving",
   youHaveControl: "You have control",
-  /** The band's chip while you have control (WORDS.md, *private*). */
+  /** The band's chip while you have control. */
   private: "Private",
-  /** The band's line for a machine with no container runtime (WORDS.md, *local browser*). */
+  /** The band's line for a machine with no container runtime. */
   localLine:
     "This machine shows one page at a time until a container runtime is installed.",
   /** The head's buttons, and while they go. */

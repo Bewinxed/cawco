@@ -5,7 +5,7 @@
    * what came back word for word, in a well that selects whole, with Copy
    * where this page has a clipboard. Its foot ends the work, the only thing
    * that does: Stop while it sets up, Remove once live, each asked in place
-   * with its cost named before the press (WORDS.md, Destructive confirm).
+   * with its cost named before the press (DESIGN.md, Voice).
    *
    * `part`: the link alone (it stands in the actions' row on a desk), the
    * fold alone (under that row), or both, the link over its fold.

@@ -14,7 +14,7 @@
  * page asks for itself (a spawn) mints its sessions' ids before it asks, so a
  * reload that lands while the hub answers finds them on the board and sends
  * the first prompt that never went; one the board never lists, or one whose
- * answer the reload lost, is said as failed in the error formula (WORDS.md),
+ * answer the reload lost, is said as failed in the error formula (DESIGN.md, Voice),
  * with Reopen.
  */
 

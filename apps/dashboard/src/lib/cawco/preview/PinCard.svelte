@@ -261,7 +261,7 @@
 
   /** The card's one question: Delete, asked under its foot. */
   const asks = new Asker<AskHereRequest>();
-  /** What a delete takes with it, named before it runs (WORDS.md, destructive confirm). */
+  /** What a delete takes with it, named before it runs (DESIGN.md, Voice). */
   const deleteBody = $derived.by(() => {
     const parts = [
       "its thread",
@@ -588,7 +588,7 @@
   {#if sent && session}
     <!-- Who has the comment, as its status, never as a reply: "Sent to" the
          session's chip, and while the session is on it "· working on it"
-         with the live dot (WORDS.md, The comments' words). -->
+         with the live dot (core `words/comments.ts`). -->
     <p
       data-slot="sent-to"
       class="m-0 flex min-w-0 flex-wrap items-center gap-x-space-1 gap-y-0 text-ink-muted type-meta"

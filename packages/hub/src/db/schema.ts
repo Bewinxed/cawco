@@ -379,7 +379,7 @@ export const sshMachines = sqliteTable(
 );
 
 /**
- * A project: one identity for work across machines and folders (WORDS.md).
+ * A project: one identity for work across machines and folders.
  * Where its files are is its places (`project_places`); `machineId` and `cwd`
  * are its primary place, the one it was made from, and every client that
  * reads a project as one folder on one machine reads that one.
@@ -1290,7 +1290,7 @@ export interface WorkspaceFrom {
 
 /**
  * Who began a piece of work, or a turn of Caw's: `you`, the person's own
- * words; `event`, anything else (WORDS.md, Caw on / Caw off).
+ * words; `event`, anything else (Caw on / Caw off).
  */
 export type Origin = "you" | "event";
 
@@ -1418,7 +1418,7 @@ export const workItems = sqliteTable(
      */
     projectId: text("project_id"),
     /**
-     * Whose work it is (WORDS.md, Caw on / Caw off): `you` when it began with
+     * Whose work it is (Caw on / Caw off): `you` when it began with
      * the person's words, whoever carries it out (a session's ask, an attempt
      * you start, what Caw starts in a turn your words are in); `event` when it
      * began with an event (the dispatcher, a routine, what Caw starts in a turn

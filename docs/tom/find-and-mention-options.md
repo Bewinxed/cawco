@@ -1,6 +1,6 @@
 # Find and mention: three structures
 
-Source: `docs/tom/find-and-mention.md` (the TOM). Design law: `DESIGN.md`, tokens in `design/tokens/cawco.tokens.json`, copy in `WORDS.md`. I have not seen the current implementation and did not open it.
+Source: `docs/tom/find-and-mention.md` (the TOM). Design law: `DESIGN.md`, tokens in `design/tokens/cawco.tokens.json`, copy in DESIGN.md's Voice section and core/words. I have not seen the current implementation and did not open it.
 
 The TOM's ranking puts getting back into a conversation (T1) and naming one while writing (T2) first, then finding where something was decided (T3), then seeing what waits (T4). Everything below is organised around that order. Three structures follow, then the test I ran on each.
 
@@ -27,7 +27,7 @@ These are decided by the TOM, not by the structure, so all three options share t
 7. **Secrets never match and never appear.** Known key and token shapes are removed at index time and drawn as `••••` in any excerpt. Engine-level; no option can show them.
 8. **Caw's lead session is never a result or a target.** Threads stand for him everywhere.
 9. **The inserted reference is a chip.** It shows the kind glyph and the title in his words; it carries the resolvable handle (`<dir>#<id8>` for a conversation, the thread's own id for a thread, the hostname for a machine, `tsk-142` for a task, the artifact's or decision's id, a path or sha). In the sent text it serialises as `@Orchestrate cockpit fleet <cockpit#5a167bde>`, readable to him in the transcript and resolvable by the hub. Pressing the chip shows the handle. The hand-off resolver must accept this form and a thread's id (Open Q2 and Q3 answered this way; both change the resolver). (Rejected: a bare handle, unreadable; a bare title, unresolvable.)
-10. **The no-results line follows WORDS.md:** "No conversations for 'orchestrate fleat'", query verbatim, plus one alternative action. It appears only once the hub has answered (The Claim Of Nothing Rule).
+10. **The no-results line follows DESIGN.md's Voice:** "No conversations for 'orchestrate fleat'", query verbatim, plus one alternative action. It appears only once the hub has answered (The Claim Of Nothing Rule).
 11. **Surfaces follow DESIGN.md:** on the desk the finder hangs from the top bar's glass as the glass's card (non-modal, page live under it, ⌘K opens it at once with no slide, Escape returns focus). In the composer, the candidates stand in the composer grown upward out of its pill, as the recall wheel does, or in the slash/@ menu recipe where an option says so. Kind glyphs are Solar bold-duotone at 16 px; the session's state is glyph, word, then hue.
 
 Kind glyphs (Solar duotone; the table is a suggestion, the rule is one glyph per kind everywhere):

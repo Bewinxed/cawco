@@ -7,7 +7,7 @@
  * their rows here, so one session reads the same everywhere.
  *
  * Words are DESIGN.md's state words (Working, Needs you, Idle, Sleeping,
- * Stopped, Failed, Unreachable) and WORDS.md's nouns (session, delegate,
+ * Stopped, Failed, Unreachable) and core/words' nouns (session, delegate,
  * thread, task, routine, preview, decision, report, machine, project).
  */
 import type { ArtifactKind, StatusPair } from "@cawco/core";

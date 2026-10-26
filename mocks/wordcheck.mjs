@@ -2,7 +2,7 @@
 /**
  * Phase 7 "Words" gate — measures microcopy health over the BUILT mocks
  * (mocks/v2-fleet.html, v3-assistant.html, v4-transcript.html, v5-components.html,
- *  v5-agent.html, v5-data.html) and the companion specs WORDS.md / JOURNEY.md.
+ *  v5-agent.html, v5-data.html) and the companion specs DESIGN.md (Voice) / JOURNEY.md.
  *
  * Enforces the Phase-7 Done-When items that can be checked on strings:
  *   DW-7.4  banned strings absent (Oops / Are you sure / Invalid input / Click here /

@@ -1,6 +1,6 @@
 /**
  * The address tray's words, per state, from the advisor's wireframes
- * (design 6ddc57c4) in the house's voice (WORDS.md: impersonal second
+ * (design 6ddc57c4) in the house's voice (DESIGN.md, Voice: impersonal second
  * person, buttons as a verb and its object, the error formula for a
  * failure). One place for every direction, so the three differ in shape and
  * never in what they say.

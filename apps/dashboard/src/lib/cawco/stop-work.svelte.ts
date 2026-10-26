@@ -84,7 +84,7 @@ export interface StopJob {
   total: number;
 }
 
-/** What a tray says in each state; its kind's words (WORDS.md). */
+/** What a tray says in each state; its kind's words. */
 export interface StopWords {
   /** The second press: "Stop 3 mid-turn and forget". */
   armed: (n: number) => string;

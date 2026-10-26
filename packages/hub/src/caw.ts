@@ -3,7 +3,7 @@
  *
  * - **A setting per project**: on or off, and the harness Caw runs on. On by
  *   default for a project made with Caw; off for every project from before.
- * - **You can always talk to him** (WORDS.md, Caw on / Caw off): your
+ * - **You can always talk to him** (Caw on / Caw off): your
  *   message in a thread, your ask for a view and the project's setup start
  *   his session whether he is on or off. Only a reason he cannot start (no
  *   machine for him, {@link problemOf}) or the project's spend cap refuses
@@ -2738,7 +2738,7 @@ export const createCaw = ({
      * "Ask Caw to change it", on a kept view: a new thread with your words
      * as its first send, and Caw woken by `view-change` behind it with the
      * view's program. Your words wake him on or off, as they always do
-     * (WORDS.md: "Off is never 'can't be messaged'"); only a Caw who cannot
+     * (off is never "can't be messaged"); only a Caw who cannot
      * start, or the spend cap, refuses them, before they are kept. Answers
      * the thread, and whether he is on, which the page says.
      */

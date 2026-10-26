@@ -1155,7 +1155,7 @@ const SETTLE_TIMEOUT_MS = 5000;
 
 /**
  * Why a held child the hub no longer knows was stopped, in the error formula
- * (WORDS.md): what happened, why, what is safe, what starts it again. A
+ * (DESIGN.md, Voice): what happened, why, what is safe, what starts it again. A
  * person's message starts a failed session afresh, on a credential the hub
  * grants as it starts.
  */

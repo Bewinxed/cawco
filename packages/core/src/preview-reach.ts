@@ -283,7 +283,7 @@ export const previewsNeedWords = (
 };
 
 /**
- * What failed, in sentences (WORDS.md's error formula: what happened, why,
+ * What failed, in sentences (DESIGN.md's error formula: what happened, why,
  * the fix), each cause its own; the caller says what happens next. `need`:
  * {@link previewsNeedWords}, said where the way previews are reached is the
  * fix.

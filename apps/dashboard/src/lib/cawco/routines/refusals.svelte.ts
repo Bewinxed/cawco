@@ -2,7 +2,7 @@
  * What the hub refused of an act on a routine (Run now, Pause, Resume,
  * Keep, Delete), by routine: said under the routine's row in its words,
  * where the act was asked, and kept until the reader acts on it (DESIGN.md,
- * The Work Outlives Its Surface Rule; WORDS.md, "Kept until acted on").
+ * The Work Outlives Its Surface Rule; DESIGN.md, Voice, "Error formula").
  * Never a toast. Kept per tab in sessionStorage, so a reload says it again.
  */
 import { SvelteMap } from "svelte/reactivity";

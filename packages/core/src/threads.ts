@@ -17,7 +17,7 @@ import type { ItemEnd } from "./work-items";
 
 /**
  * Why Caw can't start when no machine is online, and how to fix it, in the
- * error formula's order (WORDS.md): the hub's refusal and his view's
+ * error formula's order (DESIGN.md, Voice): the hub's refusal and his view's
  * `problem`, his panel's alert, and an empty Routines or Event sources
  * page's reason. Its next step names no place and no writing, as it stands
  * where his composer may or may not.

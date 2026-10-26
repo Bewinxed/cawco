@@ -846,7 +846,7 @@ const NO_ROOM_GROUPS = [
 
 /**
  * Why nothing can start: no account it may run on has room now. In the
- * error formula (WORDS.md): what happened, then the way on (the account
+ * error formula (DESIGN.md, Voice): what happened, then the way on (the account
  * back first and when, in the words the account surfaces say a reset in, or
  * that no reading says when), then each account by why it has no room and
  * when it is back, the detail for whoever wants it.

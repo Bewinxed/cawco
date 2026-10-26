@@ -539,7 +539,7 @@ export interface DamagedRow {
   workspaceId?: string;
 }
 
-/** What a {@link DamagedRow} says to the person: what happened, and the way out (WORDS.md's error formula). */
+/** What a {@link DamagedRow} says to the person: what happened, and the way out (DESIGN.md's error formula). */
 export const damagedWords = (damaged: DamagedRow): string =>
   damaged.remedy === "archive"
     ? `This workspace's record is damaged: ${damaged.file} (${damaged.reason}). Archive workspace ${damaged.workspaceId ?? ""} to remove it. Every other workspace runs as before.`
@@ -558,7 +558,7 @@ export interface DamagedHubRecord {
 /** The hub features whose one record can be damaged and reset, by what the person calls them. */
 export type HubRecordFeature = "notices" | "update policy";
 
-/** What a damaged hub record says to the person, and its way out (WORDS.md's error formula). */
+/** What a damaged hub record says to the person, and its way out (DESIGN.md's error formula). */
 export const damagedHubRecordWords = (
   feature: HubRecordFeature,
   damaged: DamagedHubRecord

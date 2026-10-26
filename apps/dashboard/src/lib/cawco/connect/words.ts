@@ -1,5 +1,5 @@
 /**
- * Add machine's words (WORDS.md): the steps and checks come from core
+ * Add machine's words: the steps and checks come from core
  * (install.ts), the outcome's lines from here. A Problem is said in the
  * error formula, four lines: what happened, why, the fix and where it is
  * done (on the hub, on the machine, in its sshd settings), and what next and

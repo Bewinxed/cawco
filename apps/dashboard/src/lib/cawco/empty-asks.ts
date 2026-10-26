@@ -35,7 +35,7 @@ export const NO_SESSION_CAN_START =
 export const sessionCanStart = (): boolean =>
   !cawco.liveRead || cawco.onlineMachines.length > 0;
 
-/** "Ask" takes its object by name (WORDS.md): the form's own agent, as it opens. */
+/** "Ask" takes its object by name (DESIGN.md, Voice): the form's own agent, as it opens. */
 export const askLabel = (what: string): string =>
   `Ask ${accountsWords.harnesses[spawnPrefs.harness]} for ${what}`;
 

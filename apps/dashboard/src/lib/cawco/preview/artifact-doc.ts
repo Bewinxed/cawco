@@ -58,7 +58,7 @@ export const LINK_DOWN_MS = 15_000;
 
 /** A link of the comments' down past {@link LINK_DOWN_MS} (PreviewPane's `linkDown`): what happened, as the Comments control says it. */
 export const NOT_REACHING = "Comments aren't reaching the agent";
-/** …and in the Comments panel, with why as its own sentence (WORDS.md's error formula); Try again is the way on. */
+/** …and in the Comments panel, with why as its own sentence (DESIGN.md's error formula); Try again is the way on. */
 export const LINK_DROPPED = `${NOT_REACHING}. The link to the hub dropped.`;
 
 /** The doc as the pane reads it. */

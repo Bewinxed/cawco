@@ -8,7 +8,7 @@
 
 import type { RoutineTarget } from "./routine-kinds";
 
-/** The fixed kinds a stage belongs to (WORDS.md: kind). */
+/** The fixed kinds a stage belongs to (kind). */
 export const STAGE_KINDS = [
   "todo",
   "active",

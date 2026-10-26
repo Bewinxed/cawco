@@ -1,6 +1,6 @@
 /**
  * The way back from a send the hub refused (core `SendRefusal`), as its row
- * offers it: what happened and why, in the error formula's words (WORDS.md),
+ * offers it: what happened and why, in the error formula's words (DESIGN.md, Voice),
  * and the actions that recover from it, wired to what the dashboard already
  * does — the account's sign-in page, the session menu's move to another
  * account, the New session dialog, the session a newer work item runs in,

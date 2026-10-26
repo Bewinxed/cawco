@@ -30,4 +30,4 @@ permissions and questions from the lock screen.
   Do not introduce one-off colours, fonts, spacing, radii, shadows, curves or durations outside
   it; add a token to the JSON first. `.impeccable/design.json` carries its hex values, shadows,
   motion tokens and breakpoints.
-- **Product truth**: PRODUCT.md (users, principles, accessibility). **Copy**: WORDS.md.
+- **Product truth**: PRODUCT.md (users, principles, accessibility). **Copy**: the words the product shows live in `packages/core/src/words/**`, written to DESIGN.md's Voice section.

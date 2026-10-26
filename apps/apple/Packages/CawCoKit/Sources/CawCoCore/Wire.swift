@@ -81,7 +81,7 @@ public enum Wire {
     /// and a dump or a page of markup starts with one of `<{[`. A thrown
     /// error's label ("Error:", "TypeError:") is the runtime's name for the
     /// throw, not a word of the reason: it is taken off, so the sentence says
-    /// what happened (WORDS.md, "Error formula": "A technical code alone is
+    /// what happened (DESIGN.md, Voice, "Error formula": "A technical code alone is
     /// banned … the plain-language what-happened").
     static func reason(_ data: Data, status: Int) -> String {
         let line = (words(data) ?? "").split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ""

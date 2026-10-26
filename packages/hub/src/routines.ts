@@ -131,7 +131,7 @@ const PLACE_POLL_MS = 1000;
 const RUNS_SHOWN = 20;
 /** The longest delivered output a thread note carries. */
 const NOTE_MAX = 4000;
-/** A lead run's skip while Caw is off: a routine is Caw acting on his own (WORDS.md, Caw on / Caw off). */
+/** A lead run's skip while Caw is off: a routine is Caw acting on his own (Caw on / Caw off). */
 const CAW_OFF = "Caw is off, so only your words wake him";
 
 /** A run the inbox's mark started (memory.ts): slot `inbox:<time>`. */

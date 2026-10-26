@@ -45,7 +45,7 @@ const kindOf = (file: File) => {
   return file.type ? `A ${file.type} file` : "That file";
 };
 
-/** Why the canvas won't take `file` (WORDS.md's error formula); null when it takes it. */
+/** Why the canvas won't take `file` (DESIGN.md's error formula); null when it takes it. */
 export const refusalOf = (file: File): string | null => {
   if (!(file.type in CANVAS_IMAGE_TYPES)) {
     return `${kindOf(file)} isn't an image the canvas takes (${named}), so it wasn't added.`;

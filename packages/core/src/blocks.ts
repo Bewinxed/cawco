@@ -143,8 +143,8 @@ export interface ViewRemoved {
 /**
  * "Ask Caw to change it" (`POST /api/projects/:id/views/:name/asks`): the
  * thread your words and the view went to Caw in, and whether he is on. Off,
- * he still answers your words (WORDS.md: "Off is never 'can't be
- * messaged'"); the page says so.
+ * he still answers your words (off is never "can't be
+ * messaged"); the page says so.
  */
 export interface ViewAsked {
   caw: "on" | "off";

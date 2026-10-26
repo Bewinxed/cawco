@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * Who decides as a table (core decides.ts; WORDS.md, Who decides): one
+   * Who decides as a table (core decides.ts): one
    * row per kind, its name and its one-line example, and the segmented four
    * of its route (You · An advisor · Common practice · The agent), the
    * chosen one on the thumb. A project's table (`fleet` given) says

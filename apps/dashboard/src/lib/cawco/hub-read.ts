@@ -141,7 +141,7 @@ export async function hubRefusal(
 
 /**
  * A refused read as a sentence with its stop: the hub's words with their
- * status after them for support (WORDS.md, Error formula), or that it
+ * status after them for support (DESIGN.md, Voice, Error formula), or that it
  * didn't answer, which already names it.
  */
 export const failureSentence = ({ detail, status }: HubFailure): string =>
@@ -201,7 +201,7 @@ const NOT_PROSE = /^[<{[]/u;
 
 /**
  * A thrown error's label ("Error:", "TypeError:"): the runtime's name for the
- * throw, not a word of the reason (WORDS.md, "Error formula": a technical code
+ * throw, not a word of the reason (DESIGN.md, Voice, "Error formula": a technical code
  * is never the what-happened).
  */
 const ERROR_LABEL = /^[A-Za-z]*(?:[Ee]rror|[Ee]xception):\s*/u;
@@ -271,7 +271,7 @@ export function unreachable(error: unknown): boolean {
 }
 
 /**
- * A request that got no answer, as a person reads it (WORDS.md, "Error
+ * A request that got no answer, as a person reads it (DESIGN.md, Voice, "Error
  * formula"): what happened, why, and the way back. The browser's own words
  * ("Failed to fetch") are never the what-happened.
  */

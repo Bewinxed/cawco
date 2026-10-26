@@ -691,7 +691,7 @@ final class PinCard: UIView, UITextViewDelegate {
     }
 
     /// What a delete takes with it, named before it runs (PinCard.svelte
-    /// `deleteBody`; WORDS.md, destructive confirm).
+    /// `deleteBody`; DESIGN.md, Voice).
     private var deleteBody: String {
         let parts = [shownThread.isEmpty ? nil : "its thread", inked ? "the ink it stands on" : nil].compactMap(\.self)
         let taking = parts.isEmpty ? "It goes from the page. " : "It goes from the page with \(parts.joined(separator: " and ")). "

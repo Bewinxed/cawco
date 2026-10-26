@@ -186,7 +186,7 @@ const openingOf = (ask: SetupAsk): string => {
 
 const fleetCards = `- \`fleet-delegates\`: "Delegates instead of subagents" — sessions hand work to CawCo's delegates rather than their harness's own subagents. Options \`on\` labelled "Use delegates" (recommended) and \`off\` labelled "Keep subagents". It is the fleet's, asked once: say so on the card.`;
 
-/** The onboarding step's words, the dashboard's own step and this card alike (WORDS.md `upstream`). */
+/** The onboarding step's words, the dashboard's own step and this card alike (core `words/upstream-guard.ts`). */
 const upstreamCard = `- \`fleet-upstream\`: "Other people's repositories" — ${UPSTREAM_WORDS.risk} Options \`off\` labelled "${UPSTREAM_WORDS.keepOff}" (recommended), \`ask\` labelled "${UPSTREAM_WORDS.ask}" (each post waits for the person's approval) and \`on\` labelled "${UPSTREAM_WORDS.allow}". It is the fleet's, asked once, and each project can change it in its settings: say so on the card.`;
 
 /**
@@ -232,7 +232,7 @@ export const setupEvent = (ask: SetupAsk): string => {
       ask.placed
         ? "It was made from a folder, which is its place already: no card asks where its work happens. No routines, webhook relays or other cards."
         : "No routines, webhook relays or other cards.",
-      'Write the page in CawCo\'s voice (WORDS.md): sentence case, no "I", options named for what they do (never Yes or No), no folder paths inside sentences.',
+      'Write the page in CawCo\'s voice: sentence case, no "I", options named for what they do (never Yes or No), no folder paths inside sentences.',
     ].join("\n"),
     stagesText,
     `2. End your turn. When the person sends their picks you hear that the page has new responses; artifact_read() has them in full. CawCo has then already applied the fleet's choices and added the place they picked; do not write those. Write, with folder_write: stages.md (${ask.stages ? "its block" : "the template's block"} with the stage names they kept; it must read cleanly, or folder_write refuses it with the reason).${picked}${kept} AGENTS.md is the person's, so propose it with memory_propose({ path: "AGENTS.md", content, why, ask: true }): what the project is and how its work is done, from their words, in CawCo's voice, no folder or file paths inside its sentences. They approve it from Needs you.`,

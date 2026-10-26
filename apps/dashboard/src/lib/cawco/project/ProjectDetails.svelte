@@ -21,7 +21,7 @@
    * - Merge checks: the steps the hub runs before it merges work, read from
    *   the project folder's gate.md (`GET /api/projects/:id/gate`), with a
    *   link to edit the file.
-   * - Tasks: where they live (WORDS.md: tracker). CawCo's files alone, or
+   * - Tasks: where they live (tracker). CawCo's files alone, or
    *   GitHub Issues or Linear through a connection, on one repository or
    *   team: picked, then bound with Use. With GitHub, a GitHub Project too
    *   (the one linked to the repository first), and each stage's option of

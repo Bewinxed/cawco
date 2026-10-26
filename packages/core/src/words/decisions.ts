@@ -2,7 +2,7 @@ import { commonWords } from "./common";
 
 /**
  * What a project's Decisions tab says of its pages, for the dashboard and
- * the native app alike (WORDS.md; the decided record's copy): its figures,
+ * the native app alike (the decided record's copy): its figures,
  * its pills, a page's acts and a decided card's parts. Nothing here names a
  * card, an option or a page by its id.
  *

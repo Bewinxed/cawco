@@ -4,7 +4,7 @@ import Observation
 
 public typealias ConnectionView = Components.Schemas.ConnectionView
 
-/// The fleet's connections (WORDS.md: a signed-in outside service whose key
+/// The fleet's connections (a signed-in outside service whose key
 /// the hub holds; connections.ts on the hub), as Configure › Connections
 /// reads and changes them. Read when the section opens, after each change,
 /// and every two seconds while a sign-in is under way, until its row moves on.

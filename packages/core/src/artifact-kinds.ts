@@ -7,7 +7,7 @@ export const ARTIFACT_KINDS = [
   "browser",
 ] as const;
 /**
- * The kinds of artifact (WORDS.md): HTML the agent wrote, a drawing, a dev
+ * The kinds of artifact: HTML the agent wrote, a drawing, a dev
  * server or folder shown live, a sheet: a story file's stories, each a
  * real component mounted by the project's own toolchain (core `stage.ts`),
  * and the project's browser, listed for every session of the project (or of

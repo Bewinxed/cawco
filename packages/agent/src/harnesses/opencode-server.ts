@@ -244,7 +244,7 @@ const TRY_PROC = / from opencode-server-[\w-]+/u;
 
 /**
  * A failed start, said once for every caller that meets it, in the person's
- * words (WORDS.md's error formula: what happened, why, how to fix it, what
+ * words (DESIGN.md's error formula: what happened, why, how to fix it, what
  * happens next).
  */
 const startRefused = (error: unknown, whose: string): Error => {

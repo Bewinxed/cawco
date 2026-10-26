@@ -731,7 +731,7 @@
                       <!-- The exchange the call answered, unfolded as any
                            call's body: his words, then the reply, each by its
                            speaker's glyph (the rail's row line's: the person's
-                           user glyph, the agent's ghost; WORDS.md, Speakers),
+                           user glyph, the agent's ghost; core `words/comments.ts`),
                            in the fields body's well, its words at the row's
                            text column. Nothing in it is cut or capped. -->
                       <ol

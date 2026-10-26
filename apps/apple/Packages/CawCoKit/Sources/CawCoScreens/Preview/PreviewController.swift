@@ -1644,7 +1644,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
                     if pinsHold == .ready {
                         failed("Couldn't read the pins: \(error.localizedDescription)", of: "pins")
                     } else {
-                        // Never read: said once, in the list, with Try again (WORDS.md).
+                        // Never read: said once, in the list, with Try again (DESIGN.md, Voice).
                         held(.failed(Self.sentence(error.localizedDescription)))
                     }
                 }

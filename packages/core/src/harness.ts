@@ -509,7 +509,7 @@ export const CLI_OUTDATED = "cli_outdated";
 
 /**
  * CawCo stopped a session's process, and says why in `content`, in the
- * error formula (WORDS.md: what happened, why, what starts it again): the
+ * error formula (DESIGN.md, Voice: what happened, why, what starts it again): the
  * agent's frame, a line of the session's transcript. Drawn as an error
  * titled by its first sentence, the rest under it.
  */
@@ -1687,7 +1687,7 @@ export interface OpencodeRenewal {
 
 /**
  * What the home says of a machine's own OpenCode sign-in that does not work,
- * by WORDS.md's error formula: what (the provider's sign-in on the machine),
+ * by DESIGN.md's error formula: what (the provider's sign-in on the machine),
  * why (its refusal in the provider's words, or what the machine's check
  * found), and the fix that works on the OpenCode installed there, from its
  * integration's methods: sign in again where it offers OAuth; where it takes

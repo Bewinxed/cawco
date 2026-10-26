@@ -9927,7 +9927,7 @@ export const createServer = (
   };
 
   /**
-   * A send to a machine past its window, as the person reads it (WORDS.md's
+   * A send to a machine past its window, as the person reads it (DESIGN.md's
    * error formula): the machine by its name, never its id; what is safe;
    * what to do.
    */

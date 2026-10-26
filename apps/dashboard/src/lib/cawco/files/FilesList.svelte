@@ -112,7 +112,7 @@
 
   /**
    * The Empty Starts Work Rule, a session's own case: "Ask" takes its
-   * object by name (WORDS.md), the session's own agent by its harness, as
+   * object by name (DESIGN.md, Voice), the session's own agent by its harness, as
    * a sentence names it (core `accountsWords.harnesses`: Claude Code,
    * OpenCode, pi).
    */

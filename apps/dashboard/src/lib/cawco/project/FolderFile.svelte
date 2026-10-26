@@ -75,7 +75,7 @@
     data-folder-file={path}
   >
     {#if problem}
-      <!-- Plain, not alarmed (WORDS.md, no alarm inflation): the path
+      <!-- Plain, not alarmed (DESIGN.md, Voice: no alarm inflation): the path
            asked for is not there to show, and the hub says why. -->
       <Alert data-folder-file-refused>
         <AlertDescription>{problem}</AlertDescription>

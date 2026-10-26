@@ -6,7 +6,7 @@
  * the hub is a bare sentence, and every call throws it whole, so the caller
  * prints the hub's own words (a refused move names the moves that are open).
  *
- * Not to be confused with a session's own plan (WORDS.md: plan), which is
+ * Not to be confused with a session's own plan (plan), which is
  * the hub's too, held in the client by `plan.ts`.
  */
 import type {
@@ -103,7 +103,7 @@ export interface StagesTemplateView {
   stages: Stage[];
 }
 
-/** One try at a task (WORDS.md: attempt): a work item whose task it is. */
+/** One try at a task (attempt): a work item whose task it is. */
 export interface TaskAttempt {
   /** When it ended, ms epoch; null while it is live. */
   endedAt: number | null;
@@ -674,7 +674,7 @@ export const stageLabel = (name: string): string => {
   return words ? words[0].toUpperCase() + words.slice(1) : "No stage";
 };
 
-/** A kind as its quiet label says it (WORDS.md: kind; `you` is Needs you). */
+/** A kind as its quiet label says it (`you` is Needs you). */
 export const KIND_LABEL: Record<StageKind, string> = {
   todo: "to do",
   active: "active",
@@ -802,7 +802,7 @@ export async function readOutputText(
   return response.text();
 }
 
-/** A session's state on a task as a status word (WORDS.md: working / done / failed). */
+/** A session's state on a task as a status word (working / done / failed). */
 export const attemptWord = (state: WorkItemState): string =>
   ({
     starting: "Working",

@@ -771,7 +771,7 @@ export function startInk(deps: InkDeps): Ink {
     return { anchor, over: marked };
   };
 
-  /** Why a stroke may not be kept (WORDS.md's error formula), or null: the bounds the hub keeps. */
+  /** Why a stroke may not be kept (DESIGN.md's error formula), or null: the bounds the hub keeps. */
   const refusal = (
     points: Point[],
     open: InkGroup | undefined

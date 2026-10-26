@@ -1,6 +1,6 @@
 /**
  * Why a compaction failed, in the reader's words, and what to do about it
- * (WORDS.md, Error formula: what happened, why, how to fix it, what happens
+ * (DESIGN.md, Voice, Error formula: what happened, why, how to fix it, what happens
  * next). The line's heading says what happened; this is the rest.
  *
  * The harnesses say why in their own words: Claude Code's `compact_error` as
