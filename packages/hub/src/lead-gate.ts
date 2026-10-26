@@ -1237,7 +1237,7 @@ const noteFor = (row: LeadCallRow): ThreadNote | undefined => {
   }
 };
 
-/** A line a lead's place's guard said (agent boundary.ts `PLACE_GUARD`). */
+/** A line a lead's place's guard said (agent boundary.ts `placeGuard`). */
 const GUARD_LINE = /^cawco place-guard: .+$/gmu;
 
 /** What a call's result says its place's guard found: each line, without its tag. */

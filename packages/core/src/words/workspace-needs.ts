@@ -16,7 +16,7 @@ import { andList } from "./helpers";
 export const WORKSPACE_NEEDS_LEAD = "This machine is missing";
 
 export const workspaceNeedsWords = {
-  /** What happened: the tools it lacks, each group with what it is for (bubblewrap and socat the walls', git the checkout's). */
+  /** What happened: the tools it lacks, each group with what it is for (the walls', the checkout's). */
   missing: (walls: string, checkout: string) =>
     walls && checkout
       ? `${WORKSPACE_NEEDS_LEAD} ${walls}, which CawCo's workspace walls run on, and ${checkout}, which a workspace's checkout needs.`
@@ -28,6 +28,9 @@ export const workspaceNeedsWords = {
     `Install ${packages} with this machine's package manager.`,
   /** The row's copy control for the command. */
   copyCommand: "Copy install command",
+  /** A program CawCo runs that this machine lacks: what it is, what needs it, and where it was looked for. */
+  programMissing: (program: string, needs: string, dirs: string) =>
+    `${WORKSPACE_NEEDS_LEAD} ${program}, needed by ${needs}: it is in none of the folders of CawCo's PATH (${dirs}).`,
   /** One line of Show details: the folders a tool was looked for in. */
   lookedFor: (command: string, dirs: string) =>
     `${command}: not found in ${dirs}`,
@@ -83,3 +86,15 @@ export const workspaceNeedsDetails = (
       )
     )
     .join("\n");
+
+/** Why `program`, needed by `needs`, cannot run: no folder of CawCo's PATH, each in `dirs`, holds it. */
+export const systemProgramMissing = (
+  program: string,
+  needs: string,
+  dirs: readonly string[]
+): string =>
+  workspaceNeedsWords.programMissing(
+    program,
+    needs,
+    dirs.join(", ") || "it has none"
+  );

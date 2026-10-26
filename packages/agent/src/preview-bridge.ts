@@ -30,6 +30,7 @@ import { join } from "node:path";
 import { socketPathProblem } from "@cawco/core/paths";
 import { DOWN_WORDS } from "@cawco/core/preview-proxy";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
+import { startedPath, systemProgram } from "@cawco/core/workspace-needs";
 import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import type { Subprocess } from "bun";
 import {
@@ -45,9 +46,6 @@ export class WorkspaceDown extends Error {
     super(DOWN_WORDS.workspace);
   }
 }
-
-/** Where the agent's tools are found: the system's dirs alone. */
-const SYSTEM_PATH = "/usr/sbin:/usr/bin:/sbin:/bin";
 
 /**
  * How a bridge joins a sandbox's network, a perl program run as `perl -e JOIN
@@ -220,16 +218,6 @@ const netOf = (pid: number): string | undefined => {
 
 const PID = /^\d+$/u;
 
-const tool = (name: string): string => {
-  const found = Bun.which(name, { PATH: SYSTEM_PATH });
-  if (!found) {
-    throw new Error(
-      `${name} is not on this machine, so a workspace's server can't be previewed (install util-linux and perl).`
-    );
-  }
-  return found;
-};
-
 /** How long a stopped bridge's processes have to be gone. Our call: SIGKILL lands in milliseconds. */
 const BRIDGE_STOP_MS = 2000;
 
@@ -371,20 +359,20 @@ const open = async (instanceId: string, reach: Reach): Promise<string> => {
   const relay = bridgeRelay(socket, port);
   const proc = Bun.spawn(
     [
-      tool("setsid"),
-      tool("setpriv"),
+      systemProgram("setsid"),
+      systemProgram("setpriv"),
       "--pdeathsig",
       "KILL",
-      tool("perl"),
+      systemProgram("perl"),
       "-MFcntl=F_SETFD",
       "-e",
       JOIN,
       String(inner),
-      tool("nsenter"),
+      systemProgram("nsenter"),
       ...relay.command,
     ],
     {
-      env: { PATH: SYSTEM_PATH, ...relay.env },
+      env: { PATH: startedPath(), ...relay.env },
       stdin: "ignore",
       stdout: "ignore",
       stderr: "pipe",

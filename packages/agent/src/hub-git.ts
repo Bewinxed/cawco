@@ -74,6 +74,7 @@ import {
   normaliseRemote,
 } from "@cawco/core/upstream-guard";
 import type { GitPost, PushedRef } from "@cawco/core/upstream-post";
+import { systemProgram } from "@cawco/core/workspace-needs";
 import { hubOrigins } from "./git-credential";
 import { upstreamRule } from "./github-door";
 import { hostGh } from "./host-gh";
@@ -135,7 +136,7 @@ export const gitHelperDirOf = (id: string): string =>
  * Perl, as the boundary's runner already uses: no other tool is assumed
  * inside.
  */
-const helperScript = (): string => `#!/usr/bin/perl
+const helperScript = (): string => `#!${systemProgram("perl")}
 # CawCo: git's remote helper for the hub, through the workspace's git door.
 use strict;
 use warnings;
@@ -1512,7 +1513,7 @@ const doors = new Map<string, Server>();
  * agent (boundary.ts), so git over ssh could sign in nowhere; the clone's
  * own origin, over ssh too, goes through the door ({@link doorTarget}).
  */
-const SSH_REFUSAL = `#!/bin/sh
+const SSH_REFUSAL = `#!${systemProgram("sh")}
 # CawCo: git's ssh inside a workspace's boundary, which holds no ssh key.
 echo "cawco: git over ssh did not run here: a workspace holds no ssh key and reaches no key agent. This clone's own origin goes through CawCo's git door, which signs in with this machine's own credential; another repository is reached only as the project's choice on other people's repositories allows (under Ask me first, a push to its https://, ssh:// or git@host: URL waits for the owner)." >&2
 exit 128

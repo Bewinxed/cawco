@@ -160,6 +160,7 @@ import {
 } from "@cawco/core/upstream-post";
 import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
 import { announcingParts, clientLine } from "@cawco/core/wire";
+import { workspaceNeeds } from "@cawco/core/workspace-needs";
 import { setSectionMarker } from "@cawco/jsonl-parser";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Data, Duration, Effect, Fiber, Schedule } from "effect";
@@ -336,7 +337,6 @@ import {
   workspaceChanges,
   workspaceOutputs,
 } from "./workspace";
-import { workspaceNeeds } from "./workspace-needs";
 import { cloneHolding, workspaceRefs } from "./workspace-records";
 
 /** The hub's upstream rules, written into each workspace here; a failure is said in the log, never thrown at the socket. */

@@ -23,6 +23,7 @@ import { dirname, join } from "node:path";
 import { detach } from "@cawco/core/detach";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { placeStreamedFile } from "@cawco/core/state-file";
+import { startedPath } from "@cawco/core/workspace-needs";
 import { Elysia } from "elysia";
 import { HUB_DEBUG } from "./config";
 import { hidden } from "./hidden";
@@ -273,7 +274,7 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
   ): Record<string, string> => {
     const header = (name: string) => request.headers.get(name) ?? undefined;
     const env: Record<string, string> = {
-      PATH: process.env.PATH ?? "/usr/bin:/bin",
+      PATH: startedPath(),
       HOME: process.env.HOME ?? "/",
       ...GIT_LOCALE,
       GIT_PROJECT_ROOT: deps.root,

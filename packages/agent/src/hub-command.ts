@@ -28,6 +28,7 @@ import {
 } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
+import { systemProgram } from "@cawco/core/workspace-needs";
 import {
   agentCommandStarted,
   ensureBoundary,
@@ -243,7 +244,7 @@ const commandLine = async (
 ): Promise<[string, string[]]> =>
   isWorkspaceRef(workspace)
     ? [await boundaryExec(workspace, run), [cmd]]
-    : ["/bin/sh", ["-c", cmd]];
+    : [systemProgram("sh"), ["-c", cmd]];
 
 /**
  * The command's clock: its limit counts only the time no slot wait is open.
@@ -872,11 +873,11 @@ const onHost = async (
         }
         // In the copy as its layer holds it: a Linux view's, never the
         // person's folder beneath it (layer.ts).
-        const [file = "/bin/sh", ...args] = inCopySync(workspace.id, cwd, [
-          "/bin/sh",
-          "-c",
-          cmd,
-        ]).argv;
+        const [file = systemProgram("sh"), ...args] = inCopySync(
+          workspace.id,
+          cwd,
+          [systemProgram("sh"), "-c", cmd]
+        ).argv;
         return await spawned({
           file,
           args,

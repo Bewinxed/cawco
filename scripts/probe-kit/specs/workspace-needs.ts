@@ -7,10 +7,10 @@
  * words/workspace-needs.ts). Stage 2's `bare` rig proves it on a machine
  * with none of them; this proves it on stand-ins.
  *
- * - A: the one answer (`workspaceNeeds`) on stand-in places: no bwrap or
- *   socat on the system path and no git on PATH names all three with the
- *   install command of the package manager there (apt, dnf, pacman, apk;
- *   none known: the person's own); a Mac lacking git names git alone, by
+ * - A: the one answer (`workspaceNeeds`) on stand-in places: no bash,
+ *   bwrap, perl, socat or git on the PATH names all five with the install
+ *   command of the package manager there (apt, dnf, pacman, apk; none
+ *   known: the person's own); a Mac lacking git names git alone, by
  *   Homebrew; every tool there: nothing missing. The install command is
  *   the refusal's last line, alone; Show details names each folder looked
  *   in that is there, once.
@@ -30,11 +30,6 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, readdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import {
-  packageInstall,
-  type ToolPlaces,
-  workspaceNeeds,
-} from "../../../packages/agent/src/workspace-needs";
 import type { MachineCapability } from "../../../packages/core/src/capabilities";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import {
@@ -43,6 +38,11 @@ import {
   workspaceNeedsRefusal,
   workspaceNeedsWords,
 } from "../../../packages/core/src/words/workspace-needs";
+import {
+  packageInstall,
+  type ToolPlaces,
+  workspaceNeeds,
+} from "../../../packages/core/src/workspace-needs";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 
@@ -66,10 +66,9 @@ const standIns = async (dir: string, commands: string[]): Promise<string> => {
 /** A: the one answer on stand-in places. */
 const legA = async ({ check }: Kit, scratch: string): Promise<void> => {
   const none = await standIns(join(scratch, "none"), []);
-  const linux = (path: string, systemPath = none): ToolPlaces => ({
+  const linux = (path: string, wallsDir = none): ToolPlaces => ({
     platform: "linux",
-    path,
-    systemPath,
+    path: `${path}:${wallsDir}`,
   });
   const managers = [
     ["apt-get", "sudo apt-get update && sudo apt-get install -y"],
@@ -82,11 +81,11 @@ const legA = async ({ check }: Kit, scratch: string): Promise<void> => {
     const path = await standIns(join(scratch, manager), [manager]);
     const needs = workspaceNeeds(linux(path));
     const commands = (needs.missing ?? []).map((tool) => tool.command);
-    const command = `${line} bubblewrap socat git`;
+    const command = `${line} bash bubblewrap git perl socat`;
     check(
-      `A: with ${manager} and no bwrap, socat or git, the machine lacks all three and installs them with ${manager}`,
+      `A: with ${manager} and no bash, bwrap, git, perl or socat, the machine lacks all five and installs them with ${manager}`,
       !needs.available &&
-        commands.join(" ") === "bwrap socat git" &&
+        commands.join(" ") === "bash bwrap git perl socat" &&
         needs.installCommand === command &&
         needs.reason === workspaceNeedsRefusal(needs.missing ?? [], command),
       `${commands.join(" ")} | ${needs.installCommand} | ${needs.reason}`
@@ -94,9 +93,9 @@ const legA = async ({ check }: Kit, scratch: string): Promise<void> => {
     if (manager === "apt-get") {
       console.log(`  the refusal on apt: ${needs.reason}`);
       check(
-        "A: the refusal names bubblewrap and socat for the walls, git for the checkout, and the one install line alone as its last line",
+        "A: the refusal names bash, bubblewrap, perl and socat for the walls, git for the checkout, and the one install line alone as its last line",
         Boolean(
-          needs.reason?.includes("bubblewrap and socat, which") &&
+          needs.reason?.includes("bash, bubblewrap, perl and socat, which") &&
           needs.reason.includes(", and git, which") &&
           needs.reason.split("\n").at(-1) === command &&
           needs.reason.split("\n").length === 2
@@ -114,21 +113,14 @@ const legA = async ({ check }: Kit, scratch: string): Promise<void> => {
     unknown.reason ?? ""
   );
   const brew = await standIns(join(scratch, "brew"), ["brew"]);
-  const mac = workspaceNeeds({
-    platform: "darwin",
-    path: brew,
-    systemPath: none,
-  });
+  const mac = workspaceNeeds({ platform: "darwin", path: brew });
   check(
     "A: a Mac lacking git names git alone, installed by Homebrew",
     !mac.available &&
       (mac.missing ?? []).map((tool) => tool.command).join(" ") === "git" &&
       mac.installCommand === "brew install git" &&
-      packageInstall(["git"], {
-        platform: "darwin",
-        path: brew,
-        systemPath: none,
-      }) === "brew install git",
+      packageInstall(["git"], { platform: "darwin", path: brew }) ===
+        "brew install git",
     mac.reason ?? ""
   );
   // A PATH as a person's grows: a folder twice, folders that are not there.
@@ -144,7 +136,12 @@ const legA = async ({ check }: Kit, scratch: string): Promise<void> => {
     looked === `${apt}:${none}`,
     `${JSON.stringify(looked)} | ${workspaceNeedsDetails(grown.missing ?? [])}`
   );
-  const walls = await standIns(join(scratch, "walls"), ["bwrap", "socat"]);
+  const walls = await standIns(join(scratch, "walls"), [
+    "bwrap",
+    "socat",
+    "perl",
+    "bash",
+  ]);
   const gitHere = await standIns(join(scratch, "git"), ["git", "apt-get"]);
   const whole = workspaceNeeds(linux(gitHere, walls));
   const wallsOnly = workspaceNeeds(linux(none, walls), "walls");

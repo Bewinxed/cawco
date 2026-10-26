@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { AGENT_BUNDLE_EXECUTABLE } from "./agent-bundle";
 import { LAUNCHD_START_XML } from "./launchd";
 import { writeStateFile } from "./state-file";
+import { systemProgram } from "./workspace-needs";
 
 /**
  * The script the hub, dashboard, agent and session keeper units start through.
@@ -28,7 +29,7 @@ import { writeStateFile } from "./state-file";
  * has confirmed ({@link writeWrapper}): the script that recovers a trial is
  * always one a confirmed build wrote, never the build on trial.
  */
-export const BINARY_WRAPPER = `#!/bin/sh
+export const BINARY_WRAPPER = `#!${systemProgram("sh")}
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 TRIAL="$ROOT/trial.json"
 # A build's executable in its folder versions/<v>: on macOS inside its signed bundle, the only place it may run.
@@ -63,7 +64,7 @@ launch_decider() {
     {
       printf '<?xml version="1.0" encoding="UTF-8"?>\\n<plist version="1.0"><dict><key>Label</key><string>%s</string>' "$label"
       # Its start record first, as every launchd job CawCo writes (launchd.ts launchdProgram).
-      printf '<key>ProgramArguments</key><array><string>/bin/sh</string><string>-c</string><string>'
+      printf '<key>ProgramArguments</key><array><string>${systemProgram("sh")}</string><string>-c</string><string>'
       cat <<'CAWCO_LAUNCHD_START'
 ${LAUNCHD_START_XML}
 CAWCO_LAUNCHD_START

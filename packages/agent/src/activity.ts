@@ -53,6 +53,7 @@ import {
   type MachineState,
   presenceLogWords,
 } from "@cawco/core";
+import { systemProgram } from "@cawco/core/workspace-needs";
 import { Display, type Wl_interface } from "wayland-client";
 import coreProtocol from "wayland-client/protocol/wayland.json" with { type: "json" };
 import { resolveBin, toolEnv } from "./tools";
@@ -475,7 +476,7 @@ export const hearSleep = (
     return () => undefined;
   }
   const child = spawn(
-    "/bin/sh",
+    systemProgram("sh"),
     [
       "-c",
       TETHER,
@@ -576,7 +577,7 @@ const hearMacSleep = (
   listening: () => void
 ): (() => void) => {
   const child = spawn(
-    "/usr/bin/osascript",
+    systemProgram("osascript"),
     ["-l", "JavaScript", "-e", MAC_SLEEP],
     {
       // stdin is the agent's end of the pipe whose close ends the listener.
@@ -604,7 +605,7 @@ const hearMacSleep = (
 /** macOS: whether the console user's screen is locked, as `ioreg` lists IOConsoleUsers. */
 const macLocked = (): Promise<boolean | undefined> =>
   new Promise((resolve) => {
-    const child = spawn("/usr/sbin/ioreg", ["-n", "Root", "-d1"], {
+    const child = spawn(systemProgram("ioreg"), ["-n", "Root", "-d1"], {
       stdio: ["ignore", "pipe", "ignore"],
       timeout: CALL_MS,
     });

@@ -1030,7 +1030,8 @@ export const HOOK_TEMPLATES: {
       matcher: "Edit|Write",
       handler: { type: "command", statusMessage: "Formatting…" },
       script: [
-        "#!/bin/bash",
+        // biome-ignore lint/plugin/no-system-path: a script the person keeps, run on any machine: env is at /usr/bin/env on every OS (the FHS's /usr/bin, linked there by distros outside it, macOS's protected /usr), and finds bash on the PATH the hook runs with.
+        "#!/usr/bin/env bash",
         "# Runs after Claude edits a file. The event JSON arrives on stdin.",
         "set -euo pipefail",
         "",
@@ -1054,7 +1055,8 @@ export const HOOK_TEMPLATES: {
       matcher: "Bash",
       handler: { type: "command", async: true },
       script: [
-        "#!/bin/bash",
+        // biome-ignore lint/plugin/no-system-path: a script the person keeps, run on any machine: env is at /usr/bin/env on every OS (the FHS's /usr/bin, linked there by distros outside it, macOS's protected /usr), and finds bash on the PATH the hook runs with.
+        "#!/usr/bin/env bash",
         `# Appends the command Claude is about to run to ${userLayerLabel("command-log")}.`,
         "set -euo pipefail",
         "",
@@ -1074,7 +1076,8 @@ export const HOOK_TEMPLATES: {
       matcher: ".env|.envrc",
       handler: { type: "command", statusMessage: "Checking env files…" },
       script: [
-        "#!/bin/bash",
+        // biome-ignore lint/plugin/no-system-path: a script the person keeps, run on any machine: env is at /usr/bin/env on every OS (the FHS's /usr/bin, linked there by distros outside it, macOS's protected /usr), and finds bash on the PATH the hook runs with.
+        "#!/usr/bin/env bash",
         "# Fires when a watched env file changes. Exit 2 to tell Claude about it.",
         "set -euo pipefail",
         "",

@@ -25,6 +25,7 @@ import {
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
+import { startedPath } from "@cawco/core/workspace-needs";
 import type { Connections } from "./connections";
 import type { ProjectRow } from "./db";
 import type { PlaceRepos } from "./place-repo";
@@ -173,7 +174,7 @@ export const createRepoPublish = ({
         ],
         {
           env: {
-            PATH: process.env.PATH ?? "/usr/bin:/bin",
+            PATH: startedPath(),
             HOME: process.env.HOME ?? "/",
             ...GIT_LOCALE,
             GIT_TERMINAL_PROMPT: "0",

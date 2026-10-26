@@ -47,8 +47,8 @@
  * someone woke it.
  */
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
 import { type Pid, signalGroup, spawnedPid } from "@cawco/core/signal";
+import { findProgram } from "@cawco/core/workspace-needs";
 import { workspacesWithCommands } from "./boundary";
 import { commandsRunning } from "./hub-command";
 import { runsWorking } from "./leak-watch";
@@ -60,9 +60,6 @@ import { resolveBin, toolEnv } from "./tools";
  * comes well inside it.
  */
 const LOOK_MS = 10_000;
-
-/** macOS's own `caffeinate`, by its absolute path. */
-const CAFFEINATE = "/usr/bin/caffeinate";
 
 /** The most of the work's words logind's listing carries; the log line has them whole. */
 const WHY_MAX = 200;
@@ -80,9 +77,10 @@ interface Hold {
 /** The argv that holds idle sleep off while `why` runs, or why this machine has none. */
 const holdCommand = (why: string): string[] | { none: string } => {
   if (process.platform === "darwin") {
-    return existsSync(CAFFEINATE)
-      ? [CAFFEINATE, "-i", "-w", String(process.pid)]
-      : { none: `${CAFFEINATE} is not there` };
+    const caffeinate = findProgram("caffeinate");
+    return caffeinate
+      ? [caffeinate, "-i", "-w", String(process.pid)]
+      : { none: "caffeinate is not on CawCo's PATH" };
   }
   if (process.platform === "linux") {
     const inhibit = resolveBin("systemd-inhibit");

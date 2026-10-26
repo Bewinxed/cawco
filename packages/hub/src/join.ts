@@ -53,6 +53,7 @@ import {
 import { reachableLinks } from "@cawco/core/reachable-links";
 import { RELEASE_PUBLIC_KEY } from "@cawco/core/release-key";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { systemProgram } from "@cawco/core/workspace-needs";
 import { Elysia, t } from "elysia";
 import { DB_PATH, HUB_PORT } from "./config";
 import { INSTALL_CODE, type Installs } from "./installs";
@@ -207,14 +208,14 @@ export const installScript = (
  */
 const refusalScript = (said: string): string => {
   const line = `cawco: ${said} Nothing on this machine was changed.`;
-  return `#!/bin/sh\nprintf '%s\\n' '${line.replaceAll("'", "'\\''")}' >&2\nexit 1\n`;
+  return `#!${systemProgram("sh")}\nprintf '%s\\n' '${line.replaceAll("'", "'\\''")}' >&2\nexit 1\n`;
 };
 
 /**
  * What a command whose code no longer works runs on the machine: one line
  * saying so, and an exit that leaves the machine as it was.
  */
-const VOID_SCRIPT = `#!/bin/sh
+const VOID_SCRIPT = `#!${systemProgram("sh")}
 printf '%s\\n' "cawco: this command was stopped from the dashboard, so it installs nothing. Nothing on this machine was changed. Copy a new command there." >&2
 exit 1
 `;
@@ -249,7 +250,7 @@ export const LINE_BREAK = /[\r\n]/u;
  * up. `read -r` takes the line as it is and `printf '%s'` prints it as data,
  * so no character of it is ever read as shell.
  */
-const ASKPASS = `#!/bin/sh
+const ASKPASS = `#!${systemProgram("sh")}
 IFS= read -r password || exit 1
 printf '%s\\n' "$password"
 `;

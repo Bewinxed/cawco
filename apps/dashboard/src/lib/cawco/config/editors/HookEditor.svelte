@@ -641,7 +641,7 @@
               onblur={() => {
                 touched.script = true;
               }}
-              placeholder={"#!/bin/bash\nset -euo pipefail\n\n# The event JSON arrives on stdin."}
+              placeholder={"#!/usr/bin/env bash\nset -euo pipefail\n\n# The event JSON arrives on stdin."}
               rows={10}
               spellcheck="false"
               bind:value={draft.script}

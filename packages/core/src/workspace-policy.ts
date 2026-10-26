@@ -83,6 +83,7 @@ import {
   resolveDenied,
   resolveReal,
 } from "./workspace-judge";
+import { findProgram, startedPath } from "./workspace-needs";
 
 /**
  * What CawCo writes into a clone and keeps out of its status itself, by path
@@ -160,7 +161,7 @@ export const excludedPaths = (
  * lines): its policy denies what is there ({@link workspaceDenies},
  * {@link ownerOnlyIn}, {@link linkedIn}), its judge refuses protected config
  * by name (`protectConfig`), and its guard checks each command
- * (boundary.ts `PLACE_GUARD`). Every place's id ends {@link PLACE_SUFFIX},
+ * (boundary.ts `placeGuard`). Every place's id ends {@link PLACE_SUFFIX},
  * Caw's and a session's stage place alike. The suffix stays `-caw`, the one
  * it had when only Caw had a place, so the place records already on disk
  * still read as places.
@@ -666,7 +667,7 @@ const toolTreeOf = async (
  * entry deciding.
  */
 export const homeToolchains = async (home: string): Promise<string[]> => {
-  const dirs = (process.env.PATH ?? "")
+  const dirs = startedPath()
     .split(delimiter)
     .filter((entry) => entry.startsWith(`${home}/`));
   const commands = await Promise.all(
@@ -768,7 +769,7 @@ const venvBaseOf = async (landing: string): Promise<string | undefined> => {
   if (!real) {
     return;
   }
-  return real.endsWith("/bin") ? dirname(real) : real;
+  return basename(real) === "bin" ? dirname(real) : real;
 };
 
 /**
@@ -781,20 +782,44 @@ const venvBaseOf = async (landing: string): Promise<string | undefined> => {
  * §5b). The logs hold what services print, a crashed hub's tokens among it:
  * the journal, and rsyslog's copies of it in `/var/log` (`syslog`,
  * `auth.log`), which the `adm` group reads. Crash reports and core dumps hold
- * a crashed process's memory, a browser's cookies among it. `journalctl` and
- * `coredumpctl` do not run: with nothing to read they would still report
- * success, as if a workspace could read the journal and found it empty.
+ * a crashed process's memory, a browser's cookies among it.
  */
-const LINUX_HOST_PRIVATE = [
+const LINUX_HOST_PRIVATE_DIRS = [
   "/run",
   "/var/run",
   "/var/log",
   "/var/crash",
   "/var/lib/apport",
   "/var/lib/systemd/coredump",
-  "/usr/bin/journalctl",
-  "/usr/bin/coredumpctl",
 ];
+
+/**
+ * {@link LINUX_HOST_PRIVATE_DIRS}, and `journalctl` and `coredumpctl` where
+ * the agent's PATH finds them (core workspace-needs.ts): they do not run, as
+ * with nothing to read they would still report success, as if a workspace
+ * could read the journal and found it empty.
+ */
+const linuxHostPrivate = (): string[] => [
+  ...LINUX_HOST_PRIVATE_DIRS,
+  ...(["journalctl", "coredumpctl"] as const).flatMap(
+    (name) => findProgram(name) ?? []
+  ),
+];
+
+/**
+ * The dirs of the agent's PATH (core workspace-needs.ts) that lie under
+ * `roots`, as written: an OS may keep its programs under a dir a boundary
+ * hides (`/run`, the home dir), and a PATH dir may be a link to where they
+ * are. Opened by name, srt binds what each resolves to back at it, as it
+ * does an account's layers ({@link accountLayers}), so a command finds its
+ * programs where its PATH names them.
+ */
+const programDirsUnder = (roots: readonly string[]): string[] =>
+  startedPath()
+    .split(delimiter)
+    .filter(
+      (dir) => isAbsolute(dir) && roots.some((root) => within(dir, root))
+    );
 
 /**
  * {@link resolveDenied} for a path that may not resolve at all (a link loop,
@@ -818,7 +843,7 @@ export const resolveAsFar = (path: string): string => {
  * whoever asks. A credential store ({@link credentialStores}: logins, key
  * folders, the hub's own secrets), a file named as a secret
  * ({@link isSecretFileName}), and on Linux the host's runtime dirs and logs
- * ({@link LINUX_HOST_PRIVATE}). `opened` is what the caller's project opens
+ * ({@link linuxHostPrivate}). `opened` is what the caller's project opens
  * inside a store, as every boundary of the project opens it
  * ({@link projectFolderOf}): a path there, as named and as its real path, is
  * not in that store. Judged on the path as named and on its real path, so a
@@ -849,7 +874,7 @@ export const inputDenial = (
   if (paths.some((path) => isSecretFileName(basename(path)))) {
     return `${named} is named as a secret file (.env and its kind), which no workspace reads outside its own clone`;
   }
-  const host = process.platform === "darwin" ? "" : inside(LINUX_HOST_PRIVATE);
+  const host = process.platform === "darwin" ? "" : inside(linuxHostPrivate());
   return host
     ? `${named} is in ${host}, the host's sockets and logs, which no workspace reads; copy the lines the delegate needs into a file of your own and name that`
     : undefined;
@@ -1081,6 +1106,7 @@ export const workspacePolicy = async (
         : []),
     ]),
     ...(await accountLayers(workspace.id)),
+    ...(mac ? [] : programDirsUnder([home, ...LINUX_HOST_PRIVATE_DIRS])),
     ...(await projectFolder(workspace.id)),
     ...(await spillDirs(workspace.id)),
     ...(await linkedModules(workspace.id)),
@@ -1098,7 +1124,7 @@ export const workspacePolicy = async (
     resolveDenied(home),
     ...stores,
     ...ownerOnly,
-    ...(mac ? [] : denied(LINUX_HOST_PRIVATE)),
+    ...(mac ? [] : denied(linuxHostPrivate())),
   ]);
   return {
     home,

@@ -14,6 +14,7 @@ import type {
 import { DENIED_RESOLVED_ADDRESSES } from "@cawco/core/boundary-reach";
 import { BROWSER_PORTS, browserGatePort } from "@cawco/core/browser";
 import type { Policy } from "@cawco/core/workspace-judge";
+import { systemProgram } from "@cawco/core/workspace-needs";
 
 /**
  * Every port of {@link BROWSER_PORTS} (the machine's DevTools gate, and the
@@ -200,7 +201,9 @@ const bashWord = (text: string): string => `'${text.replaceAll("'", "'\\''")}'`;
  * namespace probe, `--version`) runs as it is. A command whose words this
  * cannot read starts no sandbox, in its own words.
  */
-export const readOnlyDeniesBwrap = (real: string): string => `#!/bin/bash
+export const readOnlyDeniesBwrap = (
+  real: string
+): string => `#!${systemProgram("bash")}
 set -u
 real=${bashWord(real)}
 words=("$@")
@@ -527,7 +530,7 @@ export const seatbeltProfile = (
     }),
     // Its contents are the workspace's to write; the scratch dir itself stays.
     `(deny file-write-unlink (literal ${sbString(policy.scratch)}))`,
-    '(deny process-exec (literal "/bin/launchctl"))',
+    `(deny process-exec (literal ${sbString(systemProgram("launchctl"))}))`,
     "(deny mach-lookup",
     ...KEYCHAIN_MACH_SERVICES.map(
       (service) => `  (global-name ${sbString(service)})`

@@ -79,6 +79,10 @@ import {
   writeStateFile,
 } from "@cawco/core/state-file";
 import {
+  refuseShortOfWorkspace,
+  systemProgram,
+} from "@cawco/core/workspace-needs";
+import {
   excludedPaths,
   IGNORED_STATUS,
   isPlace,
@@ -159,7 +163,6 @@ import { removeTree } from "./remove-tree";
 import { keeperChildren } from "./sessiond-client";
 import { noRepositoryAt, straysIn } from "./stand-ins";
 import { workspaceModulesRoot } from "./workspace-modules";
-import { refuseShortOfWorkspace } from "./workspace-needs";
 import { cloneHolding } from "./workspace-records";
 
 type Git = (root: string, ...args: string[]) => Promise<string>;
@@ -2037,7 +2040,7 @@ const cacheOfWorkspace = async (
     builds.map(async (build) => {
       const plutil = Bun.spawn(
         [
-          "/usr/bin/plutil",
+          systemProgram("plutil"),
           "-extract",
           "WorkspacePath",
           "raw",

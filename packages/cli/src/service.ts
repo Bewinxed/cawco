@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { dirname, join } from "node:path";
@@ -415,27 +415,73 @@ const hasIpv6Loopback = (): boolean => {
   }
 };
 
+/** One path element per line, as `/etc/paths` and its `.d` files hold them; none for a file that is not there. */
+const pathLines = (file: string): string[] => {
+  try {
+    return readFileSync(file, "utf8")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+};
+
 /**
- * The PATH the installing shell had. A launchd job otherwise inherits a nearly
- * empty one, and the daemon shells out to `git`, `gh` and `tailscale` — found
- * the hard way on a Mac where `node` was missing from the service's PATH and
- * the Claude Code shim would not start.
+ * The PATH the OS's service manager gives a service, where the OS keeps its
+ * own programs. On Linux, systemd's user manager's own environment ("In case
+ * of the user manager, a different path may be configured by the
+ * distribution", systemd.exec(5) `$PATH`). On macOS what a login shell's is built from: "default PATH …
+ * values are obtained from the files /etc/paths", then each file in
+ * `/etc/paths.d` is appended (path_helper(8)). Empty when neither answers.
+ */
+const managerPath = (): string[] => {
+  if (platform() === "darwin") {
+    const extra = (() => {
+      try {
+        return readdirSync("/etc/paths.d").sort();
+      } catch {
+        return [];
+      }
+    })();
+    return [
+      ...pathLines("/etc/paths"),
+      ...extra.flatMap((name) => pathLines(join("/etc/paths.d", name))),
+    ];
+  }
+  const shown = Bun.spawnSync(["systemctl", "--user", "show-environment"], {
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  const line = shown.stdout
+    .toString()
+    .split("\n")
+    .find((entry) => entry.startsWith("PATH="));
+  return line ? line.slice("PATH=".length).split(":").filter(Boolean) : [];
+};
+
+/**
+ * The PATH the installing shell had, then the service manager's own. A
+ * launchd job otherwise inherits a nearly empty one, and the daemon shells
+ * out to `git`, `gh` and `tailscale` — found the hard way on a Mac where
+ * `node` was missing from the service's PATH and the Claude Code shim would
+ * not start. Every system program CawCo runs is found on it (core
+ * workspace-needs.ts).
  */
 const servicePath = (): string => {
   const inherited = (process.env.PATH ?? "").split(":").filter(Boolean);
   // Installing over SSH inherits a thin PATH with no Homebrew, so a service
-  // installed remotely would lose git, gh and node. Union the usual homes with
-  // whatever the installing shell had, keeping the shell's order first.
-  // `~/.local/bin` is where Claude Code's own installer puts `claude`.
+  // installed remotely would lose git, gh and node. Union the usual homes and
+  // the OS's own with whatever the installing shell had, keeping the shell's
+  // order first. `~/.local/bin` is where Claude Code's own installer puts
+  // `claude`.
   const usual = [
     `${homedir()}/.local/bin`,
     `${homedir()}/.bun/bin`,
     "/opt/homebrew/bin",
     "/usr/local/bin",
-    "/usr/bin",
-    "/bin",
-    "/usr/sbin",
-    "/sbin",
+    ...managerPath(),
   ];
   return [...new Set([...inherited, ...usual])].join(":");
 };

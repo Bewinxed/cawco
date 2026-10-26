@@ -1,7 +1,7 @@
 /**
  * The agent's side of `log` inside a macOS workspace boundary. Seatbelt
  * refuses `log` outright inside a sandbox ("Cannot run while sandboxed"), so
- * each workspace's `log` shim asks the agent, which runs `/usr/bin/log`
+ * each workspace's `log` shim asks the agent, which runs macOS's `log`
  * outside the boundary and streams its output back: `log show` and `log
  * stream` only, read only ({@link logRefusal}, checked again here — a command
  * inside can ask without the shim).
@@ -15,6 +15,7 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { constants } from "node:os";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { systemProgram } from "@cawco/core/workspace-needs";
 import { LOG_FRAME, logFrame, logRefusal } from "./boundary-log-protocol";
 
 /** Where the shims reach the agent. */
@@ -23,7 +24,6 @@ export interface LogRelay {
   readonly token: string;
 }
 
-const LOG = "/usr/bin/log";
 const MAX_REQUEST_BYTES = 64 * 1024;
 
 const encoder = new TextEncoder();
@@ -115,7 +115,7 @@ const start = (): LogRelay => {
       }
       // `log stream` may say nothing for a long while.
       served.timeout(request, 0);
-      const proc = Bun.spawn([LOG, ...argv], {
+      const proc = Bun.spawn([systemProgram("log"), ...argv], {
         env: hostEnvironment(),
         stdin: "ignore",
         stdout: "pipe",

@@ -23,6 +23,7 @@ import {
 } from "./claude-dirs";
 import { hostEnvironment } from "./session-env";
 import { sessiondEndpoint } from "./sessiond";
+import { systemProgram } from "./workspace-needs";
 
 /**
  * Node-only paths shared across packages. Kept out of the main entry, which
@@ -1036,7 +1037,7 @@ export const darwinDeveloperBundle = async (): Promise<string[]> => {
   if (process.platform !== "darwin") {
     return [];
   }
-  const selected = await Bun.$`/usr/bin/xcode-select -p`
+  const selected = await Bun.$`${systemProgram("xcode-select")} -p`
     .env(hostEnvironment())
     .quiet()
     .nothrow();

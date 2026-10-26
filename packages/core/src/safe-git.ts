@@ -56,12 +56,17 @@ export const SAFE_GIT_FLAGS: readonly string[] = [
  */
 export const GIT_LOCALE: Readonly<Record<string, string>> = { LC_ALL: "C" };
 
-/** What git reads from its environment before any config, and {@link GIT_LOCALE}. */
+/**
+ * What git reads from its environment before any config, and {@link
+ * GIT_LOCALE}. Each program is named bare, found by the OS's own lookup on
+ * the PATH git runs with, as `true` is in every OS's; its answer, no
+ * password, is the same wherever it is.
+ */
 export const SAFE_GIT_ENV: Readonly<Record<string, string>> = {
   GIT_PAGER: "cat",
   GIT_EDITOR: "true",
   GIT_SEQUENCE_EDITOR: "true",
-  GIT_ASKPASS: "/usr/bin/true",
+  GIT_ASKPASS: "true",
   GIT_TERMINAL_PROMPT: "0",
   ...GIT_LOCALE,
 };

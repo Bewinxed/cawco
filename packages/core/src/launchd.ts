@@ -25,6 +25,7 @@ import { join } from "node:path";
 import { bootId } from "./process-identity";
 import { hostEnvironment } from "./session-env";
 import { isDamagedRecord, readRecord } from "./state-file";
+import { systemProgram } from "./workspace-needs";
 
 /** Every CawCo job's label: `dev.cawco.<name>`, `<name>` its service's. */
 const CAWCO_LABEL = /^dev\.cawco\.(.+)$/u;
@@ -207,7 +208,7 @@ export const launchdProgram = (
   label: string,
   argv: readonly string[]
 ): string[] => [
-  "/bin/sh",
+  systemProgram("sh"),
   "-c",
   START_SCRIPT,
   "cawco-launchd-start",

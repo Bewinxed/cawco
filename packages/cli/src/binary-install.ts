@@ -28,6 +28,7 @@ import type {
 import { writeWrapper } from "@cawco/core/binary-wrapper";
 import { machineId } from "@cawco/core/machine-id";
 import { runtimeVersion } from "@cawco/core/runtime";
+import { systemProgram } from "@cawco/core/workspace-needs";
 import { askYes, closeAsking } from "./ask";
 import { awaitJoined } from "./await-joined";
 import { keepJoinedHub } from "./joined-hub";
@@ -116,7 +117,7 @@ async function offerTools(ask: boolean): Promise<boolean> {
       // A folder of its own, for the installer script the command downloads
       // before it runs it (core ToolInstallMethod `command`), gone after.
       const dir = await mkdtemp(join(tmpdir(), "cawco-install-"));
-      const child = Bun.spawn(["/bin/sh", "-c", command], {
+      const child = Bun.spawn([systemProgram("sh"), "-c", command], {
         cwd: dir,
         stdio: ["inherit", "inherit", "inherit"],
       });

@@ -84,8 +84,8 @@ import { commandLine } from "@cawco/core/process-identity";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { listedPid, signal as signalPid } from "@cawco/core/signal";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
+import { startedPath, systemProgram } from "@cawco/core/workspace-needs";
 import { removeTree } from "./remove-tree";
-import { SYSTEM_PATH } from "./workspace-needs";
 
 /**
  * How a workspace holds its private copy on its machine: a folder's view of
@@ -233,12 +233,6 @@ export const folderSync = (id: string): boolean =>
   layerSync(id)?.kind === "folder";
 
 // ---------------------------------------------------------------- Linux view
-
-/** A program on the system PATH, where workspace-needs.ts looks. */
-const systemTool = (name: string): string =>
-  SYSTEM_PATH.split(":")
-    .map((dir) => join(dir, name))
-    .find((path) => existsSync(path)) ?? `/usr/bin/${name}`;
 
 /**
  * Filesystems whose files are a folder's own: each under F gets an overlay
@@ -568,6 +562,10 @@ export const ensureView = (id: string, layer: Layer): Promise<number> => {
 };
 
 const startView = async (id: string, layer: Layer): Promise<number> => {
+  // Each program the view runs on, found before anything of it is made.
+  const bwrap = systemProgram("bwrap");
+  const perl = systemProgram("perl");
+  systemProgram("nsenter");
   for (const mount of layer.mounts ?? []) {
     // biome-ignore lint/performance/noAwaitInLoops: a few layers, each two dirs
     await mkdir(mount.upper, { recursive: true, mode: 0o700 });
@@ -575,15 +573,15 @@ const startView = async (id: string, layer: Layer): Promise<number> => {
   }
   await makeStandIns(layer);
   await rm(viewFile(id), { force: true });
-  const env = { ...hostEnvironment(), PATH: SYSTEM_PATH };
+  const env = { ...hostEnvironment(), PATH: startedPath() };
   const holder = Bun.spawn(
     [
-      systemTool("bwrap"),
+      bwrap,
       "--dev-bind",
       "/",
       "/",
       "--",
-      "/bin/sh",
+      systemProgram("sh"),
       "-c",
       HOLDER,
       "cawco-view",
@@ -605,7 +603,7 @@ const startView = async (id: string, layer: Layer): Promise<number> => {
     const record = readViewRecord(id);
     if (record && nsOf(record.pid, "mnt") === record.mnt) {
       // biome-ignore lint/performance/noAwaitInLoops: once, as the holder names its namespaces
-      const said = await mountView(record, viewPlan(id, layer), env);
+      const said = await mountView(record, viewPlan(id, layer), env, perl);
       if (said !== undefined) {
         return await refuse(`was not mounted: ${said}`);
       }
@@ -745,7 +743,8 @@ const refusal = (at: string, code: number, overlay: boolean): string => {
 const mountView = async (
   record: ViewRecord,
   mounts: readonly ViewMount[],
-  env: Record<string, string>
+  env: Record<string, string>,
+  perl: string
 ): Promise<string | undefined> => {
   const numbers =
     process.arch === "x64" || process.arch === "arm64"
@@ -759,10 +758,6 @@ const mountView = async (
       ? ["bind", mount.bind]
       : ["overlay", mount.overlay, mount.standIns, mount.upper, mount.work]
   );
-  const perl = systemTool("perl");
-  if (!existsSync(perl)) {
-    return `${perl} is not there, and CawCo mounts a view with it: install perl`;
-  }
   const mounter = Bun.spawn(
     [
       perl,
@@ -833,14 +828,14 @@ export const viewArgv = (
   cwd: string,
   argv: readonly string[]
 ): string[] => [
-  systemTool("nsenter"),
+  systemProgram("nsenter"),
   "-t",
   String(pid),
   ...(nsOf(pid, "user") === nsOf(process.pid, "user") ? [] : ["-U"]),
   "-m",
   "--preserve-credentials",
   "--",
-  "/bin/sh",
+  systemProgram("sh"),
   "-c",
   VIEW_CD,
   "cawco-view",
@@ -950,7 +945,7 @@ const cloneInto = async (
   if (sources.length === 0) {
     return;
   }
-  const ran = await Bun.$`/bin/cp -c -R -p -- ${sources} ${into}`
+  const ran = await Bun.$`${systemProgram("cp")} -c -R -p -- ${sources} ${into}`
     .env(hostEnvironment())
     .quiet()
     .nothrow();

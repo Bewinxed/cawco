@@ -41,9 +41,9 @@ import { readWithin } from "@cawco/core/bounded";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
+import { refuseShortOfWorkspace } from "@cawco/core/workspace-needs";
 import type { Subprocess } from "bun";
 import { configEnv, LFS_FILTERS } from "./move";
-import { refuseShortOfWorkspace } from "./workspace-needs";
 
 /** Who the first commit is by: CawCo, at an address that takes no mail. */
 const AUTHOR = [

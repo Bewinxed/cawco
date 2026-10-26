@@ -33,7 +33,7 @@
  *   answers reaches the client as srt wrote it: a refusal by policy reads
  *   as srt's own 403.
  * - The sandbox half ({@link RELAY_STEP}), in the runner (boundary.ts
- *   `RUNNER`): socat on `127.0.0.1:` {@link RELAY_PORT} inside the sandbox's
+ *   `runnerText`): socat on `127.0.0.1:` {@link RELAY_PORT} inside the sandbox's
  *   own network namespace, as srt puts its own bridges there, to that
  *   socket; then srt's proxy URLs pointed at it.
  *
@@ -112,7 +112,7 @@ const LISTENING = `0100007F:${RELAY_PORT.toString(16).toUpperCase().padStart(4, 
 
 /**
  * The runner's step that bridges the relay into the sandbox, run before
- * it reads srt's environment for its commands (boundary.ts `RUNNER`); a
+ * it reads srt's environment for its commands (boundary.ts `runnerText`); a
  * runner that names no relay socket ({@link RELAY_SOCKET_ENV}: macOS, whose
  * Seatbelt boundary has no srt proxy) skips it. srt's own address is read
  * from its `HTTPS_PROXY`, and every HTTP proxy variable naming it, with or

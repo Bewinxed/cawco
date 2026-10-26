@@ -4,6 +4,7 @@ import { INSTALL_CODE_ENV } from "./install";
 import { INSTALL_STEP_PREFIX } from "./join";
 import { RELEASE_PUBLIC_KEY } from "./release-key";
 import { connectWords } from "./words/connect";
+import { systemProgram } from "./workspace-needs";
 
 /** What a hub's script installs: the hub it joins, the build it offers its fleet, and the command route's code. */
 export interface InstallJoin {
@@ -78,7 +79,7 @@ export const generateInstallScript = ({
       "No release public key is embedded: an installer cannot be generated before publishing is enabled. Set RELEASE_PUBLIC_KEY in packages/core/src/release-key.ts."
     );
   }
-  return `#!/bin/sh
+  return `#!${systemProgram("sh")}
 # ${hub ? "Adds this machine to a CawCo fleet." : "Installs this machine as your first CawCo hub, dashboard and agent."}
 set -eu
 umask 077
@@ -265,7 +266,7 @@ ${
 
   # The signature is checked with the system's own openssl. It is never skipped.
   if ! command -v openssl >/dev/null 2>&1; then
-    [ "$OS" = linux ] || fail "openssl is missing and this Mac should have one at /usr/bin/openssl. Install it, then run this again."
+    [ "$OS" = linux ] || fail "openssl is missing, though macOS ships one. Install it, then run this again."
     if command -v apt-get >/dev/null 2>&1; then
       INSTALL="apt-get install -y openssl"
     elif command -v dnf >/dev/null 2>&1; then

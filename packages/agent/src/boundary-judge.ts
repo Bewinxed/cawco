@@ -61,8 +61,19 @@ import { join } from "node:path";
 /** The judge's module; only its type is imported here, which Bun erases. */
 type Judge = typeof import("@cawco/core/workspace-judge");
 
-const [socket, hook, graceS, exec, prefix, claudeTmp, policyFile, build] =
-  process.argv.slice(2);
+/** CAT and RM: the agent's, as its PATH finds them (core workspace-needs.ts), for a rewrite's shell, whose PATH is the session's. */
+const [
+  socket,
+  hook,
+  graceS,
+  exec,
+  prefix,
+  claudeTmp,
+  policyFile,
+  cat,
+  rm,
+  build,
+] = process.argv.slice(2);
 if (!(
   socket &&
   hook &&
@@ -71,10 +82,12 @@ if (!(
   prefix &&
   claudeTmp &&
   policyFile &&
+  cat &&
+  rm &&
   build
 )) {
   throw new Error(
-    "usage: boundary-judge.ts SOCKET HOOK GRACE_S EXEC PREFIX CLAUDE_TMP POLICY BUILD"
+    "usage: boundary-judge.ts SOCKET HOOK GRACE_S EXEC PREFIX CLAUDE_TMP POLICY CAT RM BUILD"
   );
 }
 
@@ -115,13 +128,14 @@ const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
 /**
  * Shell call `call` of a CLI launched before the prefix, rewritten to run
  * inside the boundary through the executor, its directory carried back
- * (the module's doc), word for word as that build's judge rewrote it.
- * Allowed, as that build allowed it: the CLI judged its rules on this
- * rewrite all along, until it is relaunched.
+ * (the module's doc), as that build's judge rewrote it, its `cat` and
+ * `rm` the agent's (CAT, RM) where that build named `/bin`'s. Allowed,
+ * as that build allowed it: the CLI judged its rules on this rewrite all
+ * along, until it is relaunched.
  */
 const throughExecutor = (call: Record<string, unknown>): string => {
   const ended = quote(join(claudeTmp, `.cwd-${randomUUID()}`));
-  const command = `${quote(exec)} --session --cwd-out ${ended} ${quote(call.command as string)}; __cawco_status=$?; if [ -s ${ended} ]; then cd -- "$(/bin/cat ${ended})"; fi; /bin/rm -f ${ended}; (exit $__cawco_status)`;
+  const command = `${quote(exec)} --session --cwd-out ${ended} ${quote(call.command as string)}; __cawco_status=$?; if [ -s ${ended} ]; then cd -- "$(${quote(cat)} ${ended})"; fi; ${quote(rm)} -f ${ended}; (exit $__cawco_status)`;
   return `0\n${JSON.stringify({
     hookSpecificOutput: {
       hookEventName: "PreToolUse",

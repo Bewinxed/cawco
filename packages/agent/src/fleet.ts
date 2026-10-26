@@ -554,11 +554,12 @@ const reportMcp = async (
 
 /**
  * Where a `claude` ends up when it is not the one PATH answers with. Every
- * entry is a real installer's destination: the CLI's own local installer, bun's
- * and npm's global bins, homebrew's two prefixes, and the FHS one a package
- * manager uses. The list exists so a SECOND install can be reported — a machine
- * that has the version the operator just installed sitting behind a stale
- * symlink is the whole of the failure this reports.
+ * entry is a real installer's destination: the CLI's own local installer,
+ * bun's and npm's global bins and homebrew's two prefixes; a package
+ * manager's lands in a dir of the OS's own PATH, which {@link claudeInstalls}
+ * reads first. The list exists so a SECOND install can be reported — a
+ * machine that has the version the operator just installed sitting behind a
+ * stale symlink is the whole of the failure this reports.
  */
 const CLAUDE_ELSEWHERE = [
   LOCAL_CLAUDE,
@@ -567,7 +568,6 @@ const CLAUDE_ELSEWHERE = [
   expandHome("~/.npm-global/bin/claude"),
   "/opt/homebrew/bin/claude",
   "/usr/local/bin/claude",
-  "/usr/bin/claude",
 ];
 
 /**

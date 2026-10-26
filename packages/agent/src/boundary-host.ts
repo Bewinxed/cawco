@@ -80,6 +80,7 @@ import { mountedAnywhere, mountPointsOf } from "@cawco/core/mount-table";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { srtRefusedLine } from "@cawco/core/srt-refusal";
 import { writeStateFileSync } from "@cawco/core/state-file";
+import { startedPath, systemProgram } from "@cawco/core/workspace-needs";
 import type { Subprocess } from "bun";
 import {
   RELAY_SOCKET_ENV,
@@ -624,7 +625,9 @@ const inherited = [
   "CAWCO_PLACE",
 ];
 const runnerEnv = {
-  PATH: "/usr/sbin:/usr/bin:/sbin:/bin",
+  // This host's PATH as it started: the agent's own, which it was handed
+  // (boundary.ts `planFor`), where srt finds socat and bash too.
+  PATH: startedPath(),
   // The relay's socket, which the runner bridges into the sandbox (proxy-relay.ts `RELAY_STEP`).
   [RELAY_SOCKET_ENV]: relaySocket,
   ...Object.fromEntries(
@@ -655,7 +658,7 @@ const startSandbox = async (): Promise<Sandbox | Unstarted> => {
   try {
     wrapped = await SandboxManager.wrapWithSandbox(
       [
-        "/bin/bash",
+        systemProgram("bash"),
         "--norc",
         "--noprofile",
         "-c",
@@ -674,7 +677,7 @@ const startSandbox = async (): Promise<Sandbox | Unstarted> => {
     current = undefined;
     return await finish({ status: SRT_REFUSED_STATUS });
   }
-  const proc = Bun.spawn(["/bin/sh", "-c", `exec ${wrapped}`], {
+  const proc = Bun.spawn([systemProgram("sh"), "-c", `exec ${wrapped}`], {
     env: runnerEnv,
     stdin: "ignore",
     stdout: "pipe",

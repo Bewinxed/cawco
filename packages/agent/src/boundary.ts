@@ -27,7 +27,7 @@
  *   PR #598). `swift`, `xcodebuild` and `log` run through shims that keep them
  *   working inside ({@link writeShims}).
  *
- * Both run the same runner ({@link RUNNER}), which takes every command of the
+ * Both run the same runner ({@link runnerText}), which takes every command of the
  * workspace over a FIFO and runs it inside: one network namespace on Linux,
  * so a dev server one command starts answers the next. Commands go in
  * through one executor, `~/.cawco/workspaces/<id>/exec [--session [--cwd-out
@@ -186,6 +186,11 @@ import {
   PROTECTED_UNDER,
 } from "@cawco/core/workspace-judge";
 import {
+  startedPath,
+  systemProgram,
+  workspaceNeeds,
+} from "@cawco/core/workspace-needs";
+import {
   isPlace,
   workspaceDenies,
   workspacePolicy,
@@ -254,7 +259,6 @@ import {
   toolDoorOf,
 } from "./tool-door";
 import { linkWorkspaceModules } from "./workspace-modules";
-import { SYSTEM_PATH, workspaceNeeds } from "./workspace-needs";
 import { workspaceRecords } from "./workspace-records";
 import { GIT_MOVE, gitShim, shimPaths } from "./worktree-guard";
 
@@ -482,10 +486,11 @@ const HOOK_LIMIT_S = HOOK_TIMEOUT_S - 10;
 export const BOUNDARY_HOOK_SLOW = "cawco: the boundary hook took longer than";
 
 /**
- * The perl the hook runs on. The runner already runs every command of a
- * workspace through it, on Linux and macOS alike.
+ * The perl the hook runs on, as the agent's PATH finds it (core
+ * workspace-needs.ts). The runner already runs every command of a workspace
+ * through it, on Linux and macOS alike.
  */
-const PERL = "/usr/bin/perl";
+const perl = (): string => systemProgram("perl");
 
 /** `value` as a single-quoted perl string. */
 const perlQuote = (value: string): string =>
@@ -553,7 +558,7 @@ const hookScript = (
   id: string,
   hook: string,
   judge: JudgeAt
-): string => `#!${PERL} -T
+): string => `#!${perl()} -T
 # CawCo workspace ${id}: the PreToolUse hook its claude sessions run before each
 # tool call. It asks the workspace's judge and says what it answered. Any
 # status but 0 refuses the call (exit 2).
@@ -604,7 +609,10 @@ const claudePrefixOf = (id: string): string =>
  * --claude'` failed ENOENT), and hands each of them its command as one
  * argument.
  */
-const claudePrefixScript = (id: string, exec: string): string => `#!/bin/bash
+const claudePrefixScript = (
+  id: string,
+  exec: string
+): string => `#!${systemProgram("bash")}
 # CawCo workspace ${id}: the shell prefix its claude sessions run every shell
 # command through (CLAUDE_CODE_SHELL_PREFIX), inside the workspace's boundary.
 exec ${shellQuote(exec)} --claude "$1"
@@ -620,7 +628,7 @@ const HEX = /^[0-9a-f]+$/u;
  */
 const socketAddress = async (id: string, socket: string): Promise<string> => {
   const packed =
-    await Bun.$`${PERL} -MSocket -e ${'print unpack("H*", pack_sockaddr_un($ARGV[0]))'} ${socket}`
+    await Bun.$`${perl()} -MSocket -e ${'print unpack("H*", pack_sockaddr_un($ARGV[0]))'} ${socket}`
       .env(hostEnvironment())
       .quiet()
       .nothrow();
@@ -628,7 +636,7 @@ const socketAddress = async (id: string, socket: string): Promise<string> => {
   if (packed.exitCode !== 0 || !HEX.test(address)) {
     throw refusal(
       id,
-      `${PERL} could not pack its judge's socket address (${packed.stderr.toString().trim() || `status ${packed.exitCode}`})`
+      `${perl()} could not pack its judge's socket address (${packed.stderr.toString().trim() || `status ${packed.exitCode}`})`
     );
   }
   return address;
@@ -787,6 +795,8 @@ const judgeFor = async (
     claudePrefixOf(id),
     workspaceClaudeTmpDir(id),
     policy,
+    systemProgram("cat"),
+    systemProgram("rm"),
   ];
   // The keeper it runs on is part of its form: after a keeper handover, the
   // next arming starts the workspace's judge on the current keeper, beside the
@@ -832,7 +842,7 @@ const judgeFor = async (
         cwd: stateDir(id),
         env: {
           ...BUN_SCRIPT_ENV,
-          PATH: SYSTEM_PATH,
+          PATH: startedPath(),
         },
         workspace: true,
       });
@@ -1516,11 +1526,11 @@ const writeChromiumShim = async (id: string): Promise<void> => {
   await writeWhole(
     chromiumShimOf(id),
     chromium
-      ? `#!/bin/sh
+      ? `#!${systemProgram("sh")}
 # CawCo workspace ${id}: the machine's Chromium, without its own sandbox inside the boundary's.
 exec ${shellQuote(chromium)} --no-sandbox "$@"
 `
-      : `#!/bin/sh
+      : `#!${systemProgram("sh")}
 echo "${CHROMIUM_SHIM}: no Chrome or Chromium on this machine, nor Playwright's (bunx playwright install chromium)" >&2
 exit 1
 `,
@@ -1548,10 +1558,10 @@ const writeShims = async (id: string, runtime: string): Promise<void> => {
   await Promise.all([
     writeWhole(
       join(bin, "swift"),
-      `#!/bin/bash
+      `#!${systemProgram("bash")}
 # CawCo workspace ${id}: swift, with SwiftPM's own sandbox off inside the boundary's
 # and its caches and build dir in the workspaces' cache.
-swift=$(/usr/bin/xcrun --find swift) || exit 1
+swift=$(${systemProgram("xcrun")} --find swift) || exit 1
 case "\${1:-}" in
   build | test | run | package)
     command=$1
@@ -1559,7 +1569,7 @@ case "\${1:-}" in
     scratch=()
     case " $* " in
       *" --scratch-path"* | *" --build-path"*) ;;
-      *) scratch=(--scratch-path ${swiftpm}/build/"$(/sbin/md5 -q -s "$PWD")") ;;
+      *) scratch=(--scratch-path ${swiftpm}/build/"$(${systemProgram("md5")} -q -s "$PWD")") ;;
     esac
     exec "$swift" "$command" --disable-sandbox --cache-path ${swiftpm}/cache --security-path ${swiftpm}/security "\${scratch[@]}" "$@"
     ;;
@@ -1570,10 +1580,10 @@ exec "$swift" "$@"
     ),
     writeWhole(
       join(bin, "xcodebuild"),
-      `#!/bin/bash
+      `#!${systemProgram("bash")}
 # CawCo workspace ${id}: xcodebuild, with its package and macro sandboxes off inside the boundary's
 # and its DerivedData and package cache in the workspaces' cache.
-xcodebuild=$(/usr/bin/xcrun --find xcodebuild) || exit 1
+xcodebuild=$(${systemProgram("xcrun")} --find xcodebuild) || exit 1
 flags=
 builds=
 packages=
@@ -1614,7 +1624,7 @@ exec "$xcodebuild" -IDEPackageSupportDisableManifestSandbox=YES -IDEPackageSuppo
     rm(join(bin, "xcrun"), { force: true }),
     writeWhole(
       join(bin, "log"),
-      `#!/bin/sh
+      `#!${systemProgram("sh")}
 # CawCo workspace ${id}: log show and log stream, run by the agent outside the boundary.
 ${standalone ? "export BUN_BE_BUN=1\n" : ""}exec ${[runtime, client, String(port), token].map(shellQuote).join(" ")} "$@"
 `,
@@ -2200,7 +2210,7 @@ export const claudeBoundaryOptions = (boundary: Boundary | undefined) =>
                 hooks: [
                   {
                     type: "command" as const,
-                    command: PERL,
+                    command: perl(),
                     args: [...HOOK_ARGS, boundary.hook],
                     onFailure: "block" as const,
                     timeout: HOOK_TIMEOUT_S,
@@ -2298,7 +2308,7 @@ export const launchedHook = async (
   if (quotedArgs) {
     const args = JSON.parse(quotedArgs) as string[];
     const hook = args.at(-1);
-    return command === PERL &&
+    return command === perl() &&
       args.length === HOOK_ARGS.length + 1 &&
       HOOK_ARGS.every((arg, at) => args[at] === arg) &&
       hook?.endsWith("/hook")
@@ -3412,7 +3422,7 @@ const LAUNCH = [
  * the proxy's CONNECT ("socat … CONNECT other.probe.test:22: Bad Gateway"),
  * never saying why.
  */
-const RUNNER = `fifo=$1
+const runnerText = (): string => `fifo=$1
 ${RELAY_STEP}
 [ -n "\${HTTPS_PROXY:-}" ] && export YARN_HTTPS_PROXY=$HTTPS_PROXY
 [ -n "\${HTTP_PROXY:-}" ] && export YARN_HTTP_PROXY=$HTTP_PROXY
@@ -3433,7 +3443,7 @@ while :; do
     esac
     (
       printf '%s\\n' "$sandbox" > "$req/sandbox"
-      /usr/bin/perl -MPOSIX -e "$launch" /bin/bash --norc --noprofile -c 'set -- "$1" "$CAWCO_SEARCHABLE_PATH"; unset CAWCO_SEARCHABLE_PATH; if [ -p "$1/in" ]; then exec < <(exec cat "$1/in" 2>/dev/null); trap "kill $! 2>/dev/null" EXIT; fi; . "$1/env" >/dev/null 2>&1; export PATH="$2"; eval "$CAWCO_SANDBOX_ENV"; if [ -n "\${CAWCO_GIT_PARAMETERS:-}" ]; then export GIT_CONFIG_PARAMETERS="\${GIT_CONFIG_PARAMETERS:+$GIT_CONFIG_PARAMETERS }$CAWCO_GIT_PARAMETERS"; fi; cd "$(cat "$1/cwd")" || exit 1; eval "$(cat "$1/cmd")"; status=$?; pwd -P > "$1/cwd-out"; exit $status' cawco "$req" > >(exec cat > "$req/out") 2> >(exec cat > "$req/err") < /dev/null &
+      ${shellQuote(perl())} -MPOSIX -e "$launch" ${shellQuote(systemProgram("bash"))} --norc --noprofile -c 'set -- "$1" "$CAWCO_SEARCHABLE_PATH"; unset CAWCO_SEARCHABLE_PATH; if [ -p "$1/in" ]; then exec < <(exec cat "$1/in" 2>/dev/null); trap "kill $! 2>/dev/null" EXIT; fi; . "$1/env" >/dev/null 2>&1; export PATH="$2"; eval "$CAWCO_SANDBOX_ENV"; if [ -n "\${CAWCO_GIT_PARAMETERS:-}" ]; then export GIT_CONFIG_PARAMETERS="\${GIT_CONFIG_PARAMETERS:+$GIT_CONFIG_PARAMETERS }$CAWCO_GIT_PARAMETERS"; fi; cd "$(cat "$1/cwd")" || exit 1; eval "$(cat "$1/cmd")"; status=$?; pwd -P > "$1/cwd-out"; exit $status' cawco "$req" > >(exec cat > "$req/out") 2> >(exec cat > "$req/err") < /dev/null &
       echo $! > "$req/pid"
       wait $!
       echo $? > "$req/status"
@@ -3578,11 +3588,8 @@ const runtimePlaces = (id: string, allowRead: readonly string[]): string[] => {
   return allowRead.filter((path) => path.startsWith(`${runtime}/`));
 };
 
-/** The host's bwrap: the first on the system PATH, where workspace-needs.ts looks for it. */
-const hostBwrap = (): string =>
-  SYSTEM_PATH.split(":")
-    .map((dir) => join(dir, "bwrap"))
-    .find((path) => existsSync(path)) ?? "/usr/bin/bwrap";
+/** The host's bwrap: the first on the agent's PATH, where workspace-needs.ts looks for it. */
+const hostBwrap = (): string => systemProgram("bwrap");
 
 /**
  * The bwrap generation `gen` of workspace `id`'s srt runs (srt's `bwrapPath`,
@@ -3866,20 +3873,20 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
       ],
       ...formFrom([
         ["profile", profile],
-        ["runner", RUNNER],
+        ["runner", runnerText()],
         ["exec", exec],
-        ["place", isPlace(id) ? PLACE_GUARD : ""],
+        ["place", isPlace(id) ? placeGuard() : ""],
       ]),
       spec: {
-        command: "/usr/bin/sandbox-exec",
+        command: systemProgram("sandbox-exec"),
         args: [
           "-f",
           file,
-          "/bin/bash",
+          systemProgram("bash"),
           "--norc",
           "--noprofile",
           "-c",
-          RUNNER,
+          runnerText(),
           "cawco-boundary",
           fifoOf(id, gen),
         ],
@@ -3925,7 +3932,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
   return {
     files: [
       [files.settings, settings],
-      [files.runner, RUNNER],
+      [files.runner, runnerText()],
       [files.denies, denies],
       [bwrap, launcher, 0o755],
       [grantedOf(id, gen), granted],
@@ -3935,11 +3942,11 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
       ["settings", settings],
       [SYNCED_PART, await syncedPresence()],
       ["launcher", launcher],
-      ["runner", RUNNER],
+      ["runner", runnerText()],
       ["exec", exec],
       ["denies", denies],
       ["host", await hostText],
-      ["place", place ? `${policy.scratch}\0${PLACE_GUARD}` : ""],
+      ["place", place ? `${policy.scratch}\0${placeGuard()}` : ""],
     ]),
     spec: {
       command: runtime,
@@ -3967,12 +3974,12 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
         // The hub's preview origins, which the relay dials from here
         // (proxy-relay.ts): a file of the agent's that no sandbox reads.
         [HUB_PREVIEWS_ENV]: hubPreviewsPath(),
-        PATH: SYSTEM_PATH,
+        PATH: startedPath(),
         // A place is a person's own folder: srt resolves its own
         // mandatory names against the host's working directory and makes a
         // mount point for each one absent, so the host starts srt in the
         // place's scratch dir, never in the place (boundary-host.ts); and
-        // what each command leaves running goes with it (RUNNER).
+        // what each command leaves running goes with it (`runnerText`).
         ...(place
           ? { CAWCO_SANDBOX_CWD: policy.scratch, [PLACE_ENV]: "1" }
           : {}),
@@ -4027,8 +4034,7 @@ const PROTECTED_TESTS = [
  * line per finding (`cawco place-guard: …`) and exits 3 when it moved
  * anything; any other failure refuses the command.
  */
-export const PLACE_GUARD = String.raw`#!/usr/bin/perl
-use strict;
+export const placeGuard = (): string => String.raw`use strict;
 use warnings;
 use Cwd ();
 use Digest::SHA ();
@@ -4117,7 +4123,7 @@ sub move_aside {
   my ($path, $rel, $why) = @_;
   my $dest = "$aside/$rel";
   File::Path::make_path(File::Basename::dirname($dest));
-  rename($path, $dest) or system("/bin/mv", "--", $path, $dest) == 0 or die "cawco: $rel could not be moved aside: $!\n";
+  rename($path, $dest) or system(${perlQuote(systemProgram("mv"))}, "--", $path, $dest) == 0 or die "cawco: $rel could not be moved aside: $!\n";
   print STDERR "cawco place-guard: $rel $why, so it was moved to $dest and this command is refused.\n";
   $moved = 1;
 }
@@ -4174,16 +4180,16 @@ exit($moved ? 3 : 0);
 `;
 
 /**
- * The runner's word that its commands run in a place ({@link RUNNER}):
+ * The runner's word that its commands run in a place ({@link runnerText}):
  * nothing a command starts outlives it. Set once on the boundary as it
  * starts, by the build that starts it, and read by that boundary's own
  * runner and host, so an older boundary still running reads its own word.
  */
 const PLACE_ENV = "CAWCO_PLACE";
 
-/** A place's guard, written into the boundary's generation dir ({@link PLACE_GUARD}); none for a clone. */
+/** A place's guard, written into the boundary's generation dir ({@link placeGuard}); none for a clone. */
 const guardFiles = (id: string, gen: string): [string, string][] =>
-  isPlace(id) ? [[guardOf(id, gen), PLACE_GUARD]] : [];
+  isPlace(id) ? [[guardOf(id, gen), placeGuard()]] : [];
 
 const guardOf = (id: string, gen: string): string =>
   join(generationDir(id, gen), "place-guard.pl");
@@ -7315,14 +7321,15 @@ take() {
 /**
  * The executor: hands a command, the caller's directory and environment to
  * the workspace's runner over its FIFO, streams the output back and exits
- * with the command's status. It finds its own tools on {@link SYSTEM_PATH};
+ * with the command's status. It finds its own tools on the agent's PATH as
+ * it started (core workspace-needs.ts `startedPath`), written into it;
  * the command runs with its caller's PATH, behind the hub's git helper and,
  * on macOS, the toolchain shims.
  */
-/** A place's guard, looking before its command ({@link PLACE_GUARD}): a place it cannot look at runs no command. Nothing for a clone. */
+/** A place's guard, looking before its command ({@link placeGuard}): a place it cannot look at runs no command. Nothing for a clone. */
 const guardBefore = (id: string, held: Pick<Held, "gen" | "path">): string =>
   isPlace(id)
-    ? `if ! /usr/bin/perl ${shellQuote(guardOf(id, held.gen))} before "$req" ${shellQuote(held.path)} 2> "$req/guard-err"; then
+    ? `if ! ${shellQuote(perl())} ${shellQuote(guardOf(id, held.gen))} before "$req" ${shellQuote(held.path)} 2> "$req/guard-err"; then
   echo "cawco: this place's guard could not look at it before the command, so the command did not run: $(cat "$req/guard-err")" >&2
   rm -rf "$req"
   exit 126
@@ -7330,13 +7337,13 @@ fi
 `
     : "";
 
-/** A place's guard, judging what its command did ({@link PLACE_GUARD}): what it moved fails the command, and so does a guard that could not look. Nothing for a clone. */
+/** A place's guard, judging what its command did ({@link placeGuard}): what it moved fails the command, and so does a guard that could not look. Nothing for a clone. */
 const guardAfter = (
   id: string,
   held: Pick<Held, "gen" | "path" | "scratch">
 ): string =>
   isPlace(id)
-    ? `/usr/bin/perl ${shellQuote(guardOf(id, held.gen))} after "$req" ${shellQuote(held.path)} ${shellQuote(held.scratch)} ${shellQuote(workspacePolicyFile(id))} "$HOME" >&2
+    ? `${shellQuote(perl())} ${shellQuote(guardOf(id, held.gen))} after "$req" ${shellQuote(held.path)} ${shellQuote(held.scratch)} ${shellQuote(workspacePolicyFile(id))} "$HOME" >&2
 guarded=$?
 if [ "$guarded" = 3 ]; then status=1; elif [ "$guarded" != 0 ]; then echo "cawco: this place's guard could not check what the command changed, so the command is taken as failed." >&2; status=1; fi
 `
@@ -7374,7 +7381,7 @@ const claudeCwdTail = (id: string): string => {
  * or Monitor call, a shell-form hook, a stdio MCP server's start, and all of
  * it runs inside. The executor's stdin reaches the command (`$req/in`, a
  * FIFO the command reads through a pipe, as its output leaves through one:
- * {@link RUNNER}), since a hook reads its call there and a server its
+ * {@link runnerText}), since a hook reads its call there and a server its
  * requests. A command that ends in the CLI's working-directory tail
  * ({@link claudeCwdTail}) runs without it, shows the workspace's notice
  * first, as `--session` does, and on status 0 the directory it ended in is
@@ -7403,13 +7410,13 @@ const execScript = (
   // The PATH asked for: the launch keeps of it what the boundary lets a
   // command search ({@link LAUNCH}).
   const path = `printf '%s' ${shellQuote(helpers)}"$caller_path" > "$req/path"`;
-  return `#!/bin/bash
+  return `#!${systemProgram("bash")}
 # CawCo workspace ${id}: runs one shell command inside the workspace's boundary.
 # exec [--session [--cwd-out FILE] | --claude] COMMAND — a session's command
 # (--session) shows the workspace's notice first, and FILE gets the directory
 # it ended in; --claude is a claude session's shell prefix's.
 caller_path=$PATH
-PATH=${SYSTEM_PATH}
+PATH=${shellQuote(startedPath())}
 export PATH
 # This command is this generation's from here until it exits: the agent keeps
 # the generation running while the mark names a live executor.
@@ -7478,7 +7485,7 @@ ${path}
 mkfifo "$req/out" "$req/err"
 [ -z "$claude" ] || mkfifo "$req/in"
 # Cut off: the runner ends the command's group, in the sandbox's own pid
-# space, where the pid it wrote means that group (RUNNER's "cancel").
+# space, where the pid it wrote means that group (the runner's "cancel").
 trap 'p=$(cat "$req/pid" 2>/dev/null); [ -n "$p" ] && printf "cancel %s\\n" "$p" > "$fifo"; rm -rf "$req"; exit 143' TERM INT HUP
 ${guardBefore(id, held)}printf '%s\\n' "$req" > "$fifo"
 # This executor's stdin, to the command: an asynchronous command's own is
@@ -7488,7 +7495,7 @@ ${guardBefore(id, held)}printf '%s\\n' "$req" > "$fifo"
 # closed, so a server never saw its first request.
 if [ -n "$claude" ]; then
   { exec 3<&0; } 2>/dev/null || exec 3</dev/null
-  /usr/bin/perl -e 'while (sysread(STDIN, my $read, 65536)) { syswrite(STDOUT, $read) or last }' <&3 > "$req/in" 3<&- & feed=$!
+  ${shellQuote(perl())} -e 'while (sysread(STDIN, my $read, 65536)) { syswrite(STDOUT, $read) or last }' <&3 > "$req/in" 3<&- & feed=$!
   exec 3<&-
 fi
 cat "$req/out" & out=$!
@@ -7570,7 +7577,7 @@ export const executorUnsandboxed = async (
     place: placeOf(ref.id, gen),
     prefix: claudePrefixScript(ref.id, execAt),
     prefixAt: claudePrefixOf(ref.id),
-    runner: RUNNER,
+    runner: runnerText(),
     scratch: scratchOf(ref.id),
   };
 };
@@ -7878,7 +7885,7 @@ const linkedFiles = async (
 ): Promise<{ inode: string; file: string }[]> => {
   if (process.platform === "darwin") {
     const listed =
-      await Bun.$`/usr/bin/find ${root} -xdev -type f -links +1 -print0`
+      await Bun.$`${systemProgram("find")} ${root} -xdev -type f -links +1 -print0`
         .env(hostEnvironment())
         .quiet()
         .nothrow();
@@ -7892,7 +7899,7 @@ const linkedFiles = async (
     return found.flat();
   }
   const listed =
-    await Bun.$`/usr/bin/find ${root} -xdev -type f -links +1 -printf ${"%D %i %p\\0"}`
+    await Bun.$`${systemProgram("find")} ${root} -xdev -type f -links +1 -printf ${"%D %i %p\\0"}`
       .env(hostEnvironment())
       .quiet()
       .nothrow();
@@ -7915,7 +7922,7 @@ const linkedFiles = async (
  */
 const copyApart = async (file: string, copy: string): Promise<void> => {
   if (process.platform === "darwin") {
-    const cloned = await Bun.$`/bin/cp -c ${file} ${copy}`
+    const cloned = await Bun.$`${systemProgram("cp")} -c ${file} ${copy}`
       .env(hostEnvironment())
       .quiet()
       .nothrow();
@@ -8293,7 +8300,7 @@ const launch = async (
     await writeWhole(path, content, mode ?? 0o644);
   }
   const fifo = fifoOf(ref.id, gen);
-  const made = await Bun.$`/usr/bin/mkfifo ${fifo}`
+  const made = await Bun.$`${systemProgram("mkfifo")} ${fifo}`
     .env(hostEnvironment())
     .quiet()
     .nothrow();

@@ -62,6 +62,7 @@ import {
   spawnedPid,
 } from "@cawco/core/signal";
 import { workWords } from "@cawco/core/words/work";
+import { systemProgram } from "@cawco/core/workspace-needs";
 import {
   type ChildGroup,
   type Children,
@@ -846,7 +847,10 @@ export class SessiondServer {
     // With a cgroup of its own, the child starts in a shell that joins it and
     // execs the command in place (same pid): capped from its first instruction.
     const [command, argv] = group
-      ? ["/bin/sh", ["-c", JOIN_CHILDREN, group.procs, spec.command, ...args]]
+      ? [
+          systemProgram("sh"),
+          ["-c", JOIN_CHILDREN, group.procs, spec.command, ...args],
+        ]
       : [spec.command, args];
     const unmade = (): void => {
       if (group) {

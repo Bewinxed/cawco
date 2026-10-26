@@ -138,20 +138,32 @@ const PORT_LINE = /^\d+$/u;
 const LOOPBACK_HOST = /^(?:127\.[\d.]+|\[::1\]|::1|localhost)$/u;
 
 /**
+ * The machine's PATH with its login PATH after it: what `/etc/profile` sets,
+ * read in a subshell whose output goes nowhere. sshd hands a command a
+ * PATH of its build's (`--with-default-path`: `/usr/local/bin:/usr/bin` in
+ * Fedora's openssh.spec), which can lack the `sbin` an unmerged distro
+ * keeps `ss` in; the OS's login profile is where it adds the rest (on macOS
+ * `path_helper`, from `/etc/paths`). Kept after sshd's, so a profile that
+ * fails takes nothing away.
+ */
+const LOGIN_PATH =
+  'PATH="$PATH:$(. /etc/profile >/dev/null 2>&1; printf %s "$PATH")"';
+
+/**
  * The machine's command that prints the address of every listener on
  * `port`, one per line: `ss` on Linux, `lsof` on macOS. Its words hold no
  * single quote: it runs as `sh -c '<it>'` under whatever login shell the
  * machine's user has.
  */
 const listenersOn = (port: number): string =>
-  `PATH="$PATH:/usr/sbin:/sbin"; if command -v ss >/dev/null 2>&1; then ss -ltnH "sport = :${port}" | while read -r state recv send local rest; do echo "$local"; done; elif command -v lsof >/dev/null 2>&1; then lsof -nP -iTCP:${port} -sTCP:LISTEN -Fn | sed -n "s/^n//p"; else echo "this machine has neither ss nor lsof to read its listeners with" >&2; exit 3; fi`;
+  `${LOGIN_PATH}; if command -v ss >/dev/null 2>&1; then ss -ltnH "sport = :${port}" | while read -r state recv send local rest; do echo "$local"; done; elif command -v lsof >/dev/null 2>&1; then lsof -nP -iTCP:${port} -sTCP:LISTEN -Fn | sed -n "s/^n//p"; else echo "this machine has neither ss nor lsof to read its listeners with" >&2; exit 3; fi`;
 
 /**
  * The machine's shell words that set `pids` to each process listening on
  * `port`, as `ss -ltnp` or `lsof` lists it there for this user.
  */
 const listenersOf = (port: number): string =>
-  `PATH="$PATH:/usr/sbin:/sbin"; if command -v ss >/dev/null 2>&1; then pids=$(ss -ltnpH "sport = :${port}" | sed -n "s/.*pid=\\([0-9][0-9]*\\).*/\\1/p"); elif command -v lsof >/dev/null 2>&1; then pids=$(lsof -nP -iTCP:${port} -sTCP:LISTEN -Fp | sed -n "s/^p//p"); else echo "this machine has neither ss nor lsof to read its listeners with" >&2; exit 3; fi`;
+  `${LOGIN_PATH}; if command -v ss >/dev/null 2>&1; then pids=$(ss -ltnpH "sport = :${port}" | sed -n "s/.*pid=\\([0-9][0-9]*\\).*/\\1/p"); elif command -v lsof >/dev/null 2>&1; then pids=$(lsof -nP -iTCP:${port} -sTCP:LISTEN -Fp | sed -n "s/^p//p"); else echo "this machine has neither ss nor lsof to read its listeners with" >&2; exit 3; fi`;
 
 /**
  * The shell words for `$pid`'s start, in `ps -o lstart=`'s words with its

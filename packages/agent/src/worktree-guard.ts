@@ -18,6 +18,7 @@ import { realpath } from "node:fs/promises";
 import { relative } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
 import { HARNESS_CONFIG } from "@cawco/core/clone-denies";
+import { systemProgram } from "@cawco/core/workspace-needs";
 import { workspaceDenies } from "@cawco/core/workspace-policy";
 
 /**
@@ -266,7 +267,7 @@ export const gitShim = (
   clone: string,
   paths: ShimPaths
 ): { readonly git: string; readonly move: string } => ({
-  git: `#!/bin/sh
+  git: `#!${systemProgram("sh")}
 # CawCo workspace ${id}: git, its moves of the worktree judged on the paths the boundary keeps (${GIT_MOVE}).
 set -f
 self=${word(bin)}
@@ -296,12 +297,12 @@ for arg in "$@"; do
     ${VALUED.join(" | ")}) skip=1 ;;
     -*) ;;
     ${STILL.join(" | ")}) exec "$real" "$@" ;;
-    *) exec /bin/bash "$self/${GIT_MOVE}" "$real" "$@" ;;
+    *) exec ${word(systemProgram("bash"))} "$self/${GIT_MOVE}" "$real" "$@" ;;
   esac
 done
 exec "$real" "$@"
 `,
-  move: `#!/bin/bash
+  move: `#!${systemProgram("bash")}
 # CawCo workspace ${id}: a git move of the worktree, judged on the paths its boundary keeps from every command.
 real=$1
 shift

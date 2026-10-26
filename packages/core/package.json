@@ -199,7 +199,8 @@
     "./words/memory": "./src/words/memory.ts",
     "./words/offers": "./src/words/offers.ts",
     "./words/lfs": "./src/words/lfs.ts",
-    "./words/plan": "./src/words/plan.ts"
+    "./words/plan": "./src/words/plan.ts",
+    "./workspace-needs": "./src/workspace-needs.ts"
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",

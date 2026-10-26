@@ -22,6 +22,7 @@
  */
 import { readFileSync } from "node:fs";
 import { hostEnvironment } from "./session-env";
+import { systemProgram } from "./workspace-needs";
 
 /** The AppArmor profile that strips capabilities beneath bwrap. */
 export const NESTED_BOUNDARY_PROFILE = "/etc/apparmor.d/bwrap-userns-restrict";
@@ -73,12 +74,6 @@ export const isNestedBoundaryRefusal = (reason: string): boolean =>
   reason.includes(MARK) && reason.includes(NESTED_BOUNDARY_PROFILE);
 
 /**
- * macOS's sandbox-exec, which applies a Seatbelt profile to what it runs: a
- * workspace's boundary there (agent boundary.ts `planFor`).
- */
-export const SANDBOX_EXEC = "/usr/bin/sandbox-exec";
-
-/**
  * What sandbox-exec says, exiting 71 (`EX_OSERR`), when the process it runs
  * in is under a Seatbelt profile already: Seatbelt does not nest, so a
  * profile applied beneath another is refused whatever it allows
@@ -94,17 +89,17 @@ export const nestedSeatbeltReason = (): string =>
 /**
  * macOS: why no boundary can start here, when this process already runs
  * under a Seatbelt profile (a scratch fleet run from inside a workspace),
- * read by applying the most open profile there is to `/usr/bin/true` and
+ * read by applying the most open profile there is to `true` and
  * hearing sandbox-exec refuse it ({@link SEATBELT_REFUSED}); nothing when the
  * profile applies, or when sandbox-exec fails some other way (the boundary's
  * own start then says what). `sandboxExec` is the binary asked, sandbox-exec
  * unless a check names another.
  */
 export const nestedSeatbeltRefusal = (
-  sandboxExec: string = SANDBOX_EXEC
+  sandboxExec: string = systemProgram("sandbox-exec")
 ): string | undefined => {
   const tried = Bun.spawnSync(
-    [sandboxExec, "-p", "(version 1)(allow default)", "/usr/bin/true"],
+    [sandboxExec, "-p", "(version 1)(allow default)", systemProgram("true")],
     {
       env: hostEnvironment(),
       stdin: "ignore",

@@ -12,6 +12,7 @@ import type {
 } from "@cawco/core/capabilities";
 import { isPublicAddress } from "@cawco/core/public-address";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { packageInstall, workspaceNeeds } from "@cawco/core/workspace-needs";
 import { CLAUDE_NOT_INSTALLED, resolveClaudeExecutable } from "./auth";
 import { mediaForwarding } from "./browser/media-forwarding";
 import { routerAddress } from "./browser/relay-reach";
@@ -25,7 +26,6 @@ import { claudeHostVersion } from "./claude-version";
 import { opencodeBinary } from "./harnesses/opencode-client";
 import { probeStarted } from "./probe-count";
 import { installAdvice, resolveBin } from "./tools";
-import { packageInstall, workspaceNeeds } from "./workspace-needs";
 
 let sandboxable: boolean | undefined;
 

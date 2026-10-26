@@ -2,7 +2,12 @@
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "extends": ["ultracite/biome/core", "ultracite/biome/svelte"],
   // Law A: a read with a deadline goes through packages/core/src/bounded.ts.
-  "plugins": ["./scripts/lint/no-raw-deadline.grit"],
+  // A system program is found by the OS's own lookup, through
+  // packages/core/src/workspace-needs.ts, never by a path of our own.
+  "plugins": [
+    "./scripts/lint/no-raw-deadline.grit",
+    "./scripts/lint/no-system-path.grit",
+  ],
   // Design mock-ups and their build scratch, not shipped code.
   // jsonl-parser is publishable and linted/formatted by oxlint/oxfmt instead.
   // drizzle/meta is drizzle-kit generate output, and CawCoAPI/openapi.json is

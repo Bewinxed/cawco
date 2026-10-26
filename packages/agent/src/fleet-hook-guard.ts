@@ -22,10 +22,11 @@
 import { join } from "node:path";
 import type { HookCommandHandler, HookHandler } from "@cawco/core";
 import { fleetHooksDir } from "@cawco/core/paths";
+import { systemProgram } from "@cawco/core/workspace-needs";
 import { shellQuote } from "./boundary";
 
-/** The perl the guard runs on: the one every boundary's runner runs on (boundary.ts). */
-const PERL = "/usr/bin/perl";
+/** The perl the guard runs on: the one every boundary's runner runs on (boundary.ts), on the agent's PATH. */
+const perl = (): string => systemProgram("perl");
 
 /** Where the guard is written. */
 export const hookGuardFile = (): string =>
@@ -37,9 +38,8 @@ export const commandLineOf = (handler: HookCommandHandler): string =>
     ? [handler.command ?? "", ...handler.args].map(shellQuote).join(" ")
     : (handler.command ?? "");
 
-/** The guard's source. Core perl modules only: every boundary has them. */
-export const HOOK_GUARD_SOURCE = `#!/usr/bin/perl
-# CawCo's guard around a fleet hook (agent fleet-hook-guard.ts). Do not edit:
+/** The guard's source, run as `perl guard`, so it names no interpreter. Core perl modules only: every boundary has them. */
+export const HOOK_GUARD_SOURCE = `# CawCo's guard around a fleet hook (agent fleet-hook-guard.ts). Do not edit:
 # each fleet sync writes it again.
 #
 #   perl guard [--drop] '<command line>'   a command hook
@@ -59,7 +59,7 @@ my $url;
 if (@ARGV && $ARGV[0] eq "--http") { shift @ARGV; $url = shift @ARGV; }
 my $line = shift @ARGV // "";
 
-exec("/bin/sh", "-c", $line) or die "cawco: the fleet hook could not be started: $!\\n"
+exec("${systemProgram("sh")}", "-c", $line) or die "cawco: the fleet hook could not be started: $!\\n"
   if !$drop && !defined $url;
 
 my $pid = open(my $from, "-|") // die "cawco: the fleet hook could not be started: $!\\n";
@@ -68,7 +68,7 @@ if ($pid == 0) {
     exec("curl", "-sS", "-X", "POST", "-H", "Content-Type: application/json",
       "--data-binary", "\\@-", "-w", "\\n%{http_code}", $url);
   } else {
-    exec("/bin/sh", "-c", $line);
+    exec("${systemProgram("sh")}", "-c", $line);
   }
   die "cawco: the fleet hook could not be started: $!\\n";
 }
@@ -133,7 +133,7 @@ export const guardedHandler = (
     const { args: _args, command: _command, ...rest } = handler;
     return {
       ...rest,
-      command: [PERL, hookGuardFile(), ...flags, commandLineOf(handler)]
+      command: [perl(), hookGuardFile(), ...flags, commandLineOf(handler)]
         .map(shellQuote)
         .join(" "),
     };
@@ -143,7 +143,7 @@ export const guardedHandler = (
     return {
       ...rest,
       type: "command",
-      command: PERL,
+      command: perl(),
       args: [hookGuardFile(), ...flags, "--http", url],
     };
   }
