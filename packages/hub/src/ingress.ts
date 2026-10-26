@@ -218,7 +218,7 @@ export const inboxText = (rows: InboundEventRow[]): string => {
 };
 
 /** A value at a dot path (`fields.version`); the whole value for an empty path. */
-const at = (value: unknown, path: string): unknown =>
+export const valueAt = (value: unknown, path: string): unknown =>
   path
     .split(".")
     .filter(Boolean)
@@ -845,7 +845,7 @@ export const createIngress = ({
         throw new Error("its answer's text is not JSON", { cause: error });
       }
     }
-    const items = at(answer, poll.itemsPath);
+    const items = valueAt(answer, poll.itemsPath);
     if (!Array.isArray(items)) {
       throw new Error(
         `no list of items at “${poll.itemsPath || "(the whole answer)"}”`
@@ -866,8 +866,8 @@ export const createIngress = ({
     const seen = new Map<string, string>();
     const changed: { item: unknown; key: string }[] = [];
     for (const item of items) {
-      const itemId = keyPart(at(item, poll.idPath));
-      const version = keyPart(at(item, poll.versionPath));
+      const itemId = keyPart(valueAt(item, poll.idPath));
+      const version = keyPart(valueAt(item, poll.versionPath));
       if (itemId === undefined || version === undefined) {
         continue;
       }

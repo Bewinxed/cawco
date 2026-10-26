@@ -480,6 +480,31 @@ function ambiguous(
   );
 }
 
+/** No `what` answers to `target`: the refusal names every running session. */
+const noneMatch = (peers: Peer[], target: string, what: string): Error =>
+  new Error(
+    `No ${what} matches "${target}". Running now: ${peers.map((peer) => peer.label).join(", ") || "none are running"}.`
+  );
+
+/** `body` from session `from` (called `name`) into session `to`. */
+const peerSend = (
+  to: string,
+  from: string,
+  name: string,
+  body: string,
+  extra: { shouldQuery?: false } = {}
+): SendPayload => ({
+  instanceId: to,
+  message: {
+    type: "user",
+    uuid: crypto.randomUUID(),
+    message: { role: "user", content: body },
+    parent_tool_use_id: null,
+    origin: { kind: "peer", from, name, fromSession: from },
+    ...extra,
+  },
+});
+
 /** When a row last moved, for ordering: the most recent first. */
 const movedAt = (peer: Peer) =>
   peer.row.updatedAt ? new Date(peer.row.updatedAt).getTime() || 0 : 0;
@@ -515,11 +540,7 @@ function resolveHandoff(
     return candidates[0];
   }
   if (candidates.length === 0) {
-    const known =
-      peers.map((peer) => peer.label).join(", ") || "none are running";
-    throw new Error(
-      `No session, running or asleep, matches "${target}". Running now: ${known}.`
-    );
+    throw noneMatch(peers, target, "session, running or asleep,");
   }
   const sleeping = new Set(asleep);
   throw ambiguous(
@@ -604,11 +625,7 @@ function resolve(peers: Peer[], target: string): Peer {
     return candidates[0];
   }
   if (candidates.length === 0) {
-    const known =
-      peers.map((peer) => peer.label).join(", ") || "none are running";
-    throw new Error(
-      `No running session matches "${target}". Running now: ${known}.`
-    );
+    throw noneMatch(peers, target, "running session");
   }
   throw ambiguous(target, candidates);
 }
@@ -1119,6 +1136,31 @@ function resolveDelegate(
   }
 }
 
+/** A JSON POST to the hub's own API at `path`, with the caller's authorization when it has one. */
+const postToHub = (
+  path: string,
+  body: unknown,
+  authorization: string | undefined,
+  init: Parameters<typeof fetch>[1] = {}
+): Promise<Response> =>
+  fetch(`${hubHttpUrl()}${path}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(authorization ? { Authorization: authorization } : {}),
+    },
+    body: JSON.stringify(body),
+    ...init,
+  });
+
+/** The words a hub route answered; its refusal is thrown in its words. */
+const hubText = async (response: Response): Promise<string> => {
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+  return ((await response.json()) as { text: string }).text;
+};
+
 /**
  * A handoff's inputs, through the hub (work-items.ts `handInputs`): paths
  * admitted on `from`'s machine and what the hub holds by name, written into
@@ -1131,16 +1173,15 @@ async function handInputs(
   target: string,
   inputs: unknown[]
 ): Promise<{ from: string; name: string }[]> {
-  const response = await fetch(`${hubHttpUrl()}/api/work-items/inputs`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      ...(authorization ? { Authorization: authorization } : {}),
-    },
-    body: JSON.stringify({ from, instanceId: target, inputs }),
-    // Up to 64 MiB copied on one machine, or read on one and written on another.
-    timeout: false,
-  });
+  const response = await postToHub(
+    "/api/work-items/inputs",
+    { from, instanceId: target, inputs },
+    authorization,
+    {
+      // Up to 64 MiB copied on one machine, or read on one and written on another.
+      timeout: false,
+    }
+  );
   if (!response.ok) {
     throw new Error(await response.text());
   }
@@ -1526,10 +1567,7 @@ export const handoffActions = ({
     const response = await fetch(
       `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/open-items`
     );
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-    return ((await response.json()) as { text: string }).text;
+    return await hubText(response);
   },
   async continueSession(input) {
     const { rows, hosts } = fleetInstances(fleet);
@@ -1796,22 +1834,9 @@ export const handoffActions = ({
       `${handoffMarker(from, instanceId)}${message}`,
       landed
     );
-    const payload: SendPayload = {
-      instanceId: peer.row.id,
-      message: {
-        type: "user",
-        uuid: crypto.randomUUID(),
-        message: { role: "user", content: body },
-        parent_tool_use_id: null,
-        origin: {
-          kind: "peer",
-          from: instanceId,
-          name: from,
-          fromSession: instanceId,
-        },
-        shouldQuery: false,
-      },
-    };
+    const payload = peerSend(peer.row.id, instanceId, from, body, {
+      shouldQuery: false,
+    });
     // Delivered now, so the answer says what the hub did with it, not what
     // the roster suggested before it went.
     const delivery = await deliver({
@@ -1889,21 +1914,7 @@ export const handoffActions = ({
     // opening prompt as a peer message and render it as `user.peer` instead of
     // the reader's own words — the same marker `handoff()` already uses.
     const body = `${handoffMarker(from, instanceId)}${prompt}`;
-    const opening: SendPayload = {
-      instanceId: id,
-      message: {
-        type: "user",
-        uuid: crypto.randomUUID(),
-        message: { role: "user", content: body },
-        parent_tool_use_id: null,
-        origin: {
-          kind: "peer",
-          from: instanceId,
-          name: from,
-          fromSession: instanceId,
-        },
-      },
-    };
+    const opening = peerSend(id, instanceId, from, body);
     emit({ verb: "send", machineId, instanceId: id, payload: opening });
     const on = target
       ? ` on ${machineCalled(target.machineId, fleet.machines())}`
@@ -1928,21 +1939,20 @@ export const handoffActions = ({
     if (opts.workspace) {
       await checkCold(undefined, opts.workspace, instanceId, prompt);
     }
-    const response = await fetch(`${hubHttpUrl()}/api/work-items`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...(authorization ? { Authorization: authorization } : {}),
-      },
-      body: JSON.stringify({
+    const response = await postToHub(
+      "/api/work-items",
+      {
         ...request,
         machineId: target?.machineId,
         parentInstanceId: instanceId,
         prompt,
-      }),
-      // A fresh remote fetch and, on failure, its acknowledged discard take minutes.
-      timeout: false,
-    });
+      },
+      authorization,
+      {
+        // A fresh remote fetch and, on failure, its acknowledged discard take minutes.
+        timeout: false,
+      }
+    );
     if (!response.ok) {
       throw new Error(await response.text());
     }
@@ -1956,68 +1966,45 @@ export const handoffActions = ({
   },
 
   async finishItem(request) {
-    const response = await fetch(`${hubHttpUrl()}/api/work-items/finish`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...(authorization ? { Authorization: authorization } : {}),
-      },
-      body: JSON.stringify({ ...request, instanceId }),
-      // The landing gate may run for an hour (an iOS build behind others); Bun's fetch would drop a
-      // response silent for five minutes.
-      timeout: false,
-    });
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-    return ((await response.json()) as { text: string }).text;
+    const response = await postToHub(
+      "/api/work-items/finish",
+      { ...request, instanceId },
+      authorization,
+      {
+        // The landing gate may run for an hour (an iOS build behind others); Bun's fetch would drop a
+        // response silent for five minutes.
+        timeout: false,
+      }
+    );
+    return await hubText(response);
   },
 
   async waitItem(minutes, reason) {
-    const response = await fetch(`${hubHttpUrl()}/api/work-items/wait`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...(authorization ? { Authorization: authorization } : {}),
-      },
-      body: JSON.stringify({ instanceId, minutes, reason }),
-    });
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-    return ((await response.json()) as { text: string }).text;
+    return hubText(
+      await postToHub(
+        "/api/work-items/wait",
+        { instanceId, minutes, reason },
+        authorization
+      )
+    );
   },
 
   async discardWorkspace(workspace: string): Promise<string> {
-    const response = await fetch(
-      `${hubHttpUrl()}/api/workspaces/${encodeURIComponent(workspace.trim())}/discard`,
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          ...(authorization ? { Authorization: authorization } : {}),
-        },
-        body: JSON.stringify({ from: instanceId }),
-      }
+    return hubText(
+      await postToHub(
+        `/api/workspaces/${encodeURIComponent(workspace.trim())}/discard`,
+        { from: instanceId },
+        authorization
+      )
     );
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-    return ((await response.json()) as { text: string }).text;
   },
 
   async stopDelegate(asked: string): Promise<string> {
     // A queued delegate has no session yet: it is withdrawn from the queue.
-    const withdrawn = await fetch(
-      `${hubHttpUrl()}/api/work-items/queued/withdraw`,
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          ...(authorization ? { Authorization: authorization } : {}),
-        },
-        body: JSON.stringify({ from: instanceId, target: asked }),
-      }
+    const withdrawn = await postToHub(
+      "/api/work-items/queued/withdraw",
+      { from: instanceId, target: asked },
+      authorization
     );
     if (withdrawn.ok) {
       return ((await withdrawn.json()) as { text: string }).text;
@@ -2047,14 +2034,11 @@ export const handoffActions = ({
       forkOrigins()
     );
     // The hub walks its tree (tree-stops.ts): what is under it ends first.
-    const response = await fetch(`${hubHttpUrl()}/api/work-items/stop`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...(authorization ? { Authorization: authorization } : {}),
-      },
-      body: JSON.stringify({ from: instanceId, instanceId: peer.row.id }),
-    });
+    const response = await postToHub(
+      "/api/work-items/stop",
+      { from: instanceId, instanceId: peer.row.id },
+      authorization
+    );
     if (!response.ok) {
       throw new Error(await response.text());
     }
@@ -2123,27 +2107,20 @@ export const handoffActions = ({
         "Pass minutes to pause the machine, or resume: true to end its pause."
       );
     }
-    const path = `${hubHttpUrl()}/api/machines/${encodeURIComponent(found.machineId)}/${resume ? "resume" : "pause"}`;
-    const response = await fetch(path, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...(authorization ? { Authorization: authorization } : {}),
-      },
-      body: JSON.stringify(
-        resume
-          ? {}
-          : {
-              until: new Date(
-                Date.now() + (minutes ?? 0) * 60_000
-              ).toISOString(),
-              // Its own turn, when the machine is its own, is cut once this
-              // call is answered, never under it (hub machine-pause.ts
-              // `PauseCaller`).
-              ...(callId ? { call: callId } : {}),
-            }
-      ),
-    });
+    const path = `/api/machines/${encodeURIComponent(found.machineId)}/${resume ? "resume" : "pause"}`;
+    const response = await postToHub(
+      path,
+      resume
+        ? {}
+        : {
+            until: new Date(Date.now() + (minutes ?? 0) * 60_000).toISOString(),
+            // Its own turn, when the machine is its own, is cut once this
+            // call is answered, never under it (hub machine-pause.ts
+            // `PauseCaller`).
+            ...(callId ? { call: callId } : {}),
+          },
+      authorization
+    );
     if (!response.ok) {
       throw new Error(await response.text());
     }

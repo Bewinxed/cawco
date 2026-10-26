@@ -72,7 +72,7 @@ import type { RelayPatch, RelayRow } from "./db/relays";
 import { createFunnel, type Funnel, type FunnelState } from "./funnel";
 import { type GitHubKind, githubRepoOf, normalizeGitHub } from "./github";
 import { byHandle } from "./handles";
-import type { Ingress } from "./ingress";
+import { type Ingress, valueAt } from "./ingress";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { tool } from "./mcp-tool";
 import {
@@ -164,19 +164,6 @@ export interface RelayDeps {
   readonly ingest: Ingress["ingest"];
   readonly lifetime: HubLifetimeShape;
 }
-
-/** A value at a dot path. */
-const valueAt = (value: unknown, path: string): unknown =>
-  path
-    .split(".")
-    .filter(Boolean)
-    .reduce<unknown>(
-      (into, part) =>
-        into !== null && typeof into === "object"
-          ? (into as Record<string, unknown>)[part]
-          : undefined,
-      value
-    );
 
 const hmacHex = (secret: string, ...parts: (string | Uint8Array)[]) => {
   const mac = createHmac("sha256", secret);
@@ -1289,6 +1276,15 @@ export const RELAY_TOOLS: ReadonlySet<string> = new Set([
 
 const attempt = refusalAttempt(RelayRefusal);
 
+/** What a relay is made of, as the owner sends it to preview or make one. */
+const RELAY_FIELDS = t.Object({
+  provider: t.Union(RELAY_PROVIDERS.map((one) => t.Literal(one))),
+  connection: t.Optional(t.Nullable(t.String())),
+  signatureHeader: t.Optional(t.Nullable(t.String())),
+  timestampHeader: t.Optional(t.Nullable(t.String())),
+  idPath: t.Optional(t.Nullable(t.String())),
+});
+
 /**
  * The owner's routes for relays, on the hub API (never the receiver). Making
  * one here is the owner's own act; `cawco relay on` shows what goes public
@@ -1302,13 +1298,7 @@ export const relayRoutes = (relay: Relay) =>
     .post(
       "/api/projects/:id/relays/preview",
       {
-        body: t.Object({
-          provider: t.Union(RELAY_PROVIDERS.map((one) => t.Literal(one))),
-          connection: t.Optional(t.Nullable(t.String())),
-          signatureHeader: t.Optional(t.Nullable(t.String())),
-          timestampHeader: t.Optional(t.Nullable(t.String())),
-          idPath: t.Optional(t.Nullable(t.String())),
-        }),
+        body: RELAY_FIELDS,
       },
       ({ params, body }) =>
         attempt(() => ({
@@ -1320,13 +1310,7 @@ export const relayRoutes = (relay: Relay) =>
     .post(
       "/api/projects/:id/relays",
       {
-        body: t.Object({
-          provider: t.Union(RELAY_PROVIDERS.map((one) => t.Literal(one))),
-          connection: t.Optional(t.Nullable(t.String())),
-          signatureHeader: t.Optional(t.Nullable(t.String())),
-          timestampHeader: t.Optional(t.Nullable(t.String())),
-          idPath: t.Optional(t.Nullable(t.String())),
-        }),
+        body: RELAY_FIELDS,
       },
       ({ params, body }) =>
         attempt(() => relay.create({ ...body, projectId: params.id }, "owner"))
