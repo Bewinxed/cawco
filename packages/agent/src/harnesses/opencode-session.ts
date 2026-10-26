@@ -812,19 +812,31 @@ export class OpencodeSession implements HarnessSession {
   readonly #background = new Set<string>();
   /** A compaction is under way, by its message id. */
   #compacting: string | undefined;
-  #busy = false;
+  #busyValue = false;
+  get #busy(): boolean {
+    return this.#busyValue;
+  }
   /** Live turn transitions outrank status/history snapshots already in flight. */
   #turnRevision = 0;
   /** Busy since {@link reattachedMidTurn}, on the server's word alone, until {@link watchResumedTurn} has read the turn again. */
-  #reattachedBusy = false;
+  #reattachedBusyValue = false;
+  get #reattachedBusy(): boolean {
+    return this.#reattachedBusyValue;
+  }
   /** The last provider-retry note surfaced, so a repeating retry says it once. */
   #lastRetryNote = "";
   /** The message id of the prompt this process sent that the open turn answers. */
   #turnPrompt: string | undefined;
   /** The assistant message the turn ends on, as its `result` is keyed. */
   #completion: { uuid: string; timestamp?: string } | undefined;
-  #recoveringTurn = false;
-  #sleepAfterRecovery = false;
+  #recoveringTurnValue = false;
+  get #recoveringTurn(): boolean {
+    return this.#recoveringTurnValue;
+  }
+  #sleepAfterRecoveryValue = false;
+  get #sleepAfterRecovery(): boolean {
+    return this.#sleepAfterRecoveryValue;
+  }
   #open = false;
   /** The provider's usage-limit refusal the open turn ends on, once asked to stop. */
   #limitRefusal: string | undefined;
@@ -939,7 +951,6 @@ export class OpencodeSession implements HarnessSession {
 
   /** Dispatch custody, not an independent server-idle heuristic. */
   get turnInFlight(): boolean {
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: server events and dispatch methods update these fields outside this getter
     return this.#busy || this.#turnOpen;
   }
 
@@ -1189,7 +1200,7 @@ export class OpencodeSession implements HarnessSession {
       case "session.execution.started":
         this.#turnProvider = undefined;
         this.#turnRevision += 1;
-        this.#busy = true;
+        this.#busyValue = true;
         this.#turnOpen = true;
         this.#ctx.busy(true);
         // Sends a retiring server's hold kept while the session was idle join
@@ -1663,7 +1674,7 @@ export class OpencodeSession implements HarnessSession {
 
   #turnEnded(closing?: TurnClosing): void {
     this.#turnRevision += 1;
-    this.#busy = false;
+    this.#busyValue = false;
     this.#ctx.busy(false);
     if (this.#compacting) {
       this.#compacting = undefined;
@@ -1848,7 +1859,7 @@ export class OpencodeSession implements HarnessSession {
     const { message } = error;
     const atLimit = atProviderLimit(error);
     this.#turnRevision += 1;
-    this.#busy = true;
+    this.#busyValue = true;
     this.#turnOpen = true;
     this.#ctx.busy(true);
     const wait = ` — next attempt in ${Math.max(0, Math.round((next - Date.now()) / 1000))}s`;
@@ -1930,7 +1941,6 @@ export class OpencodeSession implements HarnessSession {
     this.#ctx.frame({
       type: "result",
       ...identity,
-      // biome-ignore lint/suspicious/noUnnecessaryConditions: history recovery sets this across calls to handle().
       ...(this.#recoveringTurn ? { recovered: true } : {}),
       subtype: result?.subtype ?? "success",
       is_error: result?.is_error ?? false,
@@ -2513,7 +2523,7 @@ export class OpencodeSession implements HarnessSession {
         return;
       }
       const reattachedBusy = this.#reattachedBusy;
-      this.#reattachedBusy = false;
+      this.#reattachedBusyValue = false;
       if (!running) {
         // Idle on the server, yet the hub is still owed this turn's end: it
         // ended while nothing here was subscribed.
@@ -2524,7 +2534,6 @@ export class OpencodeSession implements HarnessSession {
           }
         }
         if (
-          // biome-ignore lint/suspicious/noUnnecessaryConditions: sleepAfterRecovery() arms this before attachment.
           this.#sleepAfterRecovery &&
           !this.#busy &&
           this.#queue.length === 0
@@ -2533,15 +2542,14 @@ export class OpencodeSession implements HarnessSession {
           this.#ctx.closed?.();
           return;
         }
-        // biome-ignore lint/suspicious/noUnnecessaryConditions: #reattachedBusy is set by reattachedMidTurn() elsewhere
         if (reattachedBusy && this.#busy && this.#turnPrompt === undefined) {
-          this.#busy = false;
+          this.#busyValue = false;
           this.#ctx.busy(false);
         }
         return;
       }
       this.#turnRevision += 1;
-      this.#busy = true;
+      this.#busyValue = true;
       this.#turnOpen = true;
       this.#ctx.busy(true);
       this.#noteServerActivity();
@@ -2623,7 +2631,7 @@ export class OpencodeSession implements HarnessSession {
     }
     const after = rows.slice(asked + 1);
     this.#open = true;
-    this.#recoveringTurn = true;
+    this.#recoveringTurnValue = true;
     try {
       for (const row of after) {
         if (row.type === "assistant") {
@@ -2634,7 +2642,7 @@ export class OpencodeSession implements HarnessSession {
       if (ending === "cut") {
         // Cut, not ended: the hub hands this turn back on hearing it, so a
         // recovery handle stays to take it up rather than going to sleep.
-        this.#sleepAfterRecovery = false;
+        this.#sleepAfterRecoveryValue = false;
         this.#turnEnded({
           subtype: "error_during_execution",
           is_error: true,
@@ -2645,7 +2653,7 @@ export class OpencodeSession implements HarnessSession {
         this.#turnEnded(ending);
       }
     } finally {
-      this.#recoveringTurn = false;
+      this.#recoveringTurnValue = false;
     }
   }
 
@@ -2728,8 +2736,8 @@ export class OpencodeSession implements HarnessSession {
   /** Reattached while the server still runs this session's turn: busy from the moment it is handed back. */
   reattachedMidTurn(): void {
     this.#turnRevision += 1;
-    this.#reattachedBusy = true;
-    this.#busy = true;
+    this.#reattachedBusyValue = true;
+    this.#busyValue = true;
     this.#ctx.busy(true);
   }
 
@@ -2740,7 +2748,7 @@ export class OpencodeSession implements HarnessSession {
 
   /** A recovery handle ends normally once the server says its turn is idle. */
   sleepAfterRecovery(): void {
-    this.#sleepAfterRecovery = true;
+    this.#sleepAfterRecoveryValue = true;
   }
 
   /** Any server event is progress: re-arm the stall notice while a turn is open. */
@@ -2780,7 +2788,7 @@ export class OpencodeSession implements HarnessSession {
       images?: { mediaType: string; data: string }[];
     }
   ): void {
-    this.#sleepAfterRecovery = false;
+    this.#sleepAfterRecoveryValue = false;
     this.#turnRevision += 1;
     const { content } = message.message;
     let text =
@@ -2893,7 +2901,7 @@ export class OpencodeSession implements HarnessSession {
       } else {
         this.#turnOpen = false;
         this.#clearStallTimer();
-        this.#busy = false;
+        this.#busyValue = false;
       }
       this.#ctx.busy(this.#busy);
       this.#ctx.rejected(uuid, error);

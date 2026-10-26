@@ -323,7 +323,10 @@ export class TranscriptBuilder {
    * ({@link prepend}); until the oldest is in, a page that reaches the front
    * of what is held still names a cursor, and the hub reads on.
    */
-  private complete = true;
+  #complete = true;
+  private get complete(): boolean {
+    return this.#complete;
+  }
   /** The hub's lines that belong to rows not read yet ({@link placeLines}). */
   private pendingLines: HubLine[] = [];
   /**
@@ -453,7 +456,7 @@ export class TranscriptBuilder {
       this.rows = read;
       this.rowIds = new Set(read.map((row) => row.id));
       this.branches = branches;
-      this.complete = complete;
+      this.#complete = complete;
       ({ blocks: this.placed, queued: this.queued } = placeSends(
         this.rows,
         this.records
@@ -472,7 +475,7 @@ export class TranscriptBuilder {
     // the read's word.
     const front = read.length > 0 && this.rows[0]?.id === read[0].id;
     if (front) {
-      this.complete = complete;
+      this.#complete = complete;
     }
     return { events: this.flush(), placed, front };
   }
@@ -552,7 +555,7 @@ export class TranscriptBuilder {
     for (const row of older) {
       this.rowIds.add(row.id);
     }
-    this.complete = complete;
+    this.#complete = complete;
     this.replace(true);
     return { events: this.flush(), placed };
   }
@@ -566,7 +569,6 @@ export class TranscriptBuilder {
   holds(limit: number, before?: string): boolean {
     const end =
       before === undefined ? this.placed.length : this.indexOf(before);
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: complete is set by merge() and prepend() elsewhere in this class; the checker doesn't see that cross-method mutation
     return end >= 0 && (this.complete || end >= limit);
   }
 
@@ -1188,7 +1190,7 @@ export class TranscriptBuilder {
     this.rowIds = new Set(rows.map((row) => row.id));
     this.records = { ...records };
     this.reads = 1;
-    this.complete = true;
+    this.#complete = true;
     ({ blocks: this.placed, queued: this.queued } = placeSends(
       this.rows,
       this.records

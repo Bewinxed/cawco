@@ -993,7 +993,6 @@ function clearTimers(S) {
 
 /** The clock's seconds: the countdown, and how long ago the phone asked. */
 function tick(S, m) {
-  // biome-ignore lint/suspicious/noUnnecessaryConditions: the proof's stillClock() turns ticks off at run time
   if (!settings.ticks) {
     return;
   }

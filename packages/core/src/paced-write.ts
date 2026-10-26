@@ -27,7 +27,10 @@ export class PacedWriter {
   #head = 0;
   /** How much of the oldest message has been handed over. */
   #offset = 0;
-  #draining = false;
+  #drainingValue = false;
+  get #draining(): boolean {
+    return this.#drainingValue;
+  }
 
   constructor(to: Socket) {
     this.#to = to;
@@ -39,7 +42,6 @@ export class PacedWriter {
       return;
     }
     this.#queue.push(text);
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: set true when a write fills the socket and false at its drain; biome's inference sees only the initializer
     if (!this.#draining) {
       this.#pump();
     }
@@ -80,9 +82,9 @@ export class PacedWriter {
         }
       }
       if (!this.#to.write(piece)) {
-        this.#draining = true;
+        this.#drainingValue = true;
         this.#to.once("drain", () => {
-          this.#draining = false;
+          this.#drainingValue = false;
           this.#pump();
         });
         return;

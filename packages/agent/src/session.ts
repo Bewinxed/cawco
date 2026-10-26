@@ -1098,7 +1098,10 @@ export class SessionSupervisor {
   /** The machine's fleet syncs and reads, one after another ({@link #fleetTurn}). */
   #fleetQueue: Promise<unknown> = Promise.resolve();
   /** A fleet report the hub is owed and not yet read ({@link #reportFleet}). */
-  #fleetReportOwed = false;
+  #fleetReportOwedValue = false;
+  get #fleetReportOwed(): boolean {
+    return this.#fleetReportOwedValue;
+  }
   /**
    * The held children taken into custody whose turn is not decided yet: busy
    * until it is, as unknown is ({@link busyNow}).
@@ -1147,9 +1150,15 @@ export class SessionSupervisor {
   readonly #convergeIds = new Set<string>();
   #convergeRemoved = false;
   /** A person's Sync: the next converge takes every item, changed or not. */
-  #reconverge = false;
+  #reconvergeValue = false;
+  get #reconverge(): boolean {
+    return this.#reconvergeValue;
+  }
   /** A converge is queued and not yet begun: a delta meanwhile joins it ({@link #convergeSoon}). */
-  #convergeOwed = false;
+  #convergeOwedValue = false;
+  get #convergeOwed(): boolean {
+    return this.#convergeOwedValue;
+  }
   /** Each harness whose converge threw in the last pass, in its words: every item of that pass failed with it. */
   #harnessFailures = new Map<HarnessKind, string>();
   /** Each delta's write of the policy, begun as it arrived and awaited before its answer, by its request. */
@@ -5975,7 +5984,7 @@ export class SessionSupervisor {
       this.#keepProjectRows();
     }
     this.#convergeRemoved ||= applied.removed.length > 0;
-    this.#reconverge ||= delta.reconverge === true;
+    this.#reconvergeValue ||= delta.reconverge === true;
     const denied = this.#desired.deniedTools;
     if (denied && (applied.policy || delta.welcome)) {
       const write = applyFleetDenials(denied);
@@ -6194,22 +6203,19 @@ export class SessionSupervisor {
   #convergeSoon(): void {
     const owed =
       this.#convergeIds.size > 0 || this.#convergeRemoved || this.#reconverge;
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: set below and cleared by the queued converge, a later turn
     if (this.#convergeOwed || !owed) {
       return;
     }
-    this.#convergeOwed = true;
+    this.#convergeOwedValue = true;
     this.#fleetTurn(async () => {
-      this.#convergeOwed = false;
+      this.#convergeOwedValue = false;
       const held = new Set(this.#desired.ids());
-      const ids =
-        // biome-ignore lint/suspicious/noUnnecessaryConditions: set by a delta held after this converge was queued
-        (this.#reconverge ? [...held] : [...this.#convergeIds]).filter(
-          (id) => held.has(id) && id !== "policy"
-        );
+      const ids = (
+        this.#reconverge ? [...held] : [...this.#convergeIds]
+      ).filter((id) => held.has(id) && id !== "policy");
       this.#convergeIds.clear();
       this.#convergeRemoved = false;
-      this.#reconverge = false;
+      this.#reconvergeValue = false;
       const rev = this.#desired.rev ?? 0;
       this.#converging(
         rev,
@@ -6287,13 +6293,12 @@ export class SessionSupervisor {
    * turn is in the read it makes. Only the machine's agent reports for it.
    */
   #reportFleet(): void {
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: set below and cleared by the queued read, a later turn
     if (this.#fleetReportOwed) {
       return;
     }
-    this.#fleetReportOwed = true;
+    this.#fleetReportOwedValue = true;
     this.#fleetTurn(async () => {
-      this.#fleetReportOwed = false;
+      this.#fleetReportOwedValue = false;
       if (!(await isMachineAgent())) {
         return;
       }
@@ -6782,7 +6787,7 @@ export class SessionSupervisor {
         // A harness CLI installed here converges what the machine holds of
         // the fleet, as every harness already here did.
         if (harnesses().some((adapter) => adapter.kind === args[0])) {
-          this.#reconverge = true;
+          this.#reconvergeValue = true;
           this.#convergeSoon();
         }
         return installed;

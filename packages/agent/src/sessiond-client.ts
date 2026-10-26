@@ -545,7 +545,10 @@ export class SessiondClient {
   readonly #awaitingAnswer = new Map<string, Subscription[]>();
   /** Listeners already told their child is gone: a death reaches each once. */
   readonly #toldExit = new WeakSet<ProcListener>();
-  #closed = false;
+  #closedValue = false;
+  get #closed(): boolean {
+    return this.#closedValue;
+  }
   /** The keeper said it is draining: it starts nothing more ({@link retired}). */
   #draining = false;
   readonly onClose = new EventEmitter();
@@ -556,7 +559,7 @@ export class SessiondClient {
     socket.setEncoding("utf8");
     socket.on("data", (chunk: string) => this.#onData(chunk));
     socket.on("close", () => {
-      this.#closed = true;
+      this.#closedValue = true;
       openClients.delete(this);
       for (const release of this.#holds.values()) {
         release();
@@ -680,7 +683,6 @@ export class SessiondClient {
    * keeper listens now; the sessions already on this one keep it.
    */
   get retired(): boolean {
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: both become true at runtime (the socket's "close", a `draining` line); biome's inference sees only the initializers
     return this.#closed || this.#draining;
   }
 
@@ -829,7 +831,6 @@ export class SessiondClient {
   }
 
   #send(message: SessiondClientMessage): void {
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: #closed does become true at runtime (close()/the socket "close" handler) even though biome's inference sees only the field's initializer
     if (this.#closed) {
       throw new Error("[sessiond] connection is closed");
     }
@@ -1050,7 +1051,6 @@ export class SessiondClient {
   list(): Promise<SessiondWelcomeInfo> {
     // An ended connection failed its waiters as it closed: one queued now
     // would wait for a welcome that never comes.
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: set true at runtime by the socket's "close" and by close(); biome's inference sees only the initializer
     if (this.#closed) {
       return Promise.reject(keeperEnded("this listing was asked"));
     }
@@ -1061,7 +1061,7 @@ export class SessiondClient {
   }
 
   close(): void {
-    this.#closed = true;
+    this.#closedValue = true;
     this.#socket.destroy();
   }
 }

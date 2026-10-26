@@ -993,12 +993,17 @@ function withExtras(
 export class InputStream implements AsyncIterable<SDKUserMessage> {
   readonly #queue: SDKUserMessage[] = [];
   #waiting: ((result: IteratorResult<SDKUserMessage>) => void) | null = null;
-  #ended = false;
-  #closed = false;
+  #endedValue = false;
+  get #ended(): boolean {
+    return this.#endedValue;
+  }
+  #closedValue = false;
+  get #closed(): boolean {
+    return this.#closedValue;
+  }
 
   /** Hands one turn to the SDK, or keeps it for the SDK's next pull; none once {@link close}d. */
   push(message: SDKUserMessage): void {
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: #closed is set true by close() elsewhere in this class; the checker doesn't see that cross-method mutation
     if (this.#closed) {
       return;
     }
@@ -1018,12 +1023,12 @@ export class InputStream implements AsyncIterable<SDKUserMessage> {
    * and a control request still unanswered then is never answered.
    */
   close(): void {
-    this.#closed = true;
+    this.#closedValue = true;
   }
 
   end(): void {
-    this.#closed = true;
-    this.#ended = true;
+    this.#closedValue = true;
+    this.#endedValue = true;
     this.#waiting?.({ done: true, value: undefined });
     this.#waiting = null;
   }
@@ -1044,7 +1049,6 @@ export class InputStream implements AsyncIterable<SDKUserMessage> {
         if (queued) {
           return Promise.resolve({ done: false, value: queued });
         }
-        // biome-ignore lint/suspicious/noUnnecessaryConditions: #ended is set true by end() elsewhere in this class; the checker doesn't see that cross-method mutation
         if (this.#ended) {
           return Promise.resolve({ done: true, value: undefined });
         }
@@ -1136,24 +1140,35 @@ const runsTurn = (message: SDKMessage): boolean =>
 
 /** Whether a turn is in flight, and a way to wait for the one that is. */
 class Turn {
-  busy = false;
-  running = false;
+  #busy = false;
+  get busy(): boolean {
+    return this.#busy;
+  }
+  #running = false;
+  /** Whether the model has begun answering this turn (a frame only a running turn sends). */
+  get running(): boolean {
+    return this.#running;
+  }
   #ended = Promise.withResolvers<void>();
 
   start(): void {
-    this.busy = true;
+    this.#busy = true;
+  }
+
+  /** The model began answering. */
+  ran(): void {
+    this.#running = true;
   }
 
   end(): void {
-    this.busy = false;
-    this.running = false;
+    this.#busy = false;
+    this.#running = false;
     this.#ended.resolve();
     this.#ended = Promise.withResolvers<void>();
   }
 
   /** The end of the turn in flight, given `ms`: `unanswered` while it still runs after them. */
   settle(ms: number): Promise<Bounded<void>> {
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: busy is set true by start() elsewhere in this class; the checker doesn't see that cross-method mutation
     if (!this.busy) {
       return Promise.resolve({ kind: "answered", value: undefined });
     }
@@ -2732,7 +2747,7 @@ class ClaudeSession implements HarnessSession {
             this.#unread.delete(uuid);
           }
           if (lifecycle.state === "started") {
-            turn.running = true;
+            turn.ran();
             started = true;
           }
           this.#delivery.get(uuid)?.resolve();
@@ -2745,8 +2760,7 @@ class ClaudeSession implements HarnessSession {
         // model's first word: read, it is no longer anything to hand back,
         // and only the turn it opens keeps the process from being stopped.
         if (started || runsTurn(message)) {
-          turn.running = true;
-          // biome-ignore lint/suspicious/noUnnecessaryConditions: Turn.busy is mutated by Turn.start()/.end() elsewhere; the checker doesn't see that cross-class mutation
+          turn.ran();
           if (!turn.busy) {
             // One the CLI opened itself (a wake-up, a background task's
             // notice) is checked as it starts; a send was checked before it
@@ -3095,7 +3109,6 @@ class ClaudeSession implements HarnessSession {
     const failure = `boundary hook failed: ${(hook.stderr || hook.output || "").trim()}`;
     // A transcript can say so after its turn has ended: the session then
     // takes no further turn.
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: Turn.busy is mutated by Turn.start()/.end() elsewhere; the checker doesn't see that cross-class mutation
     if (!this.#turn.busy) {
       this.#refuse(
         new HeldProcessRefused(
@@ -3201,7 +3214,6 @@ class ClaudeSession implements HarnessSession {
 
   /** Installed by the supervisor: an attach that met no running turn asks for its relaunch now ({@link askRelaunch}). */
   attached(): void {
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: Turn.busy is mutated by Turn.start()/.end() elsewhere; the checker doesn't see that cross-class mutation
     if (!this.#turn.busy) {
       this.askRelaunch();
     }
@@ -3326,7 +3338,7 @@ class ClaudeSession implements HarnessSession {
    * from here, and busy as it was before the agent went away.
    */
   adoptTurn(): void {
-    this.#turn.running = true;
+    this.#turn.ran();
     this.#turn.start();
     this.#ctx.busy(true);
   }
@@ -3922,7 +3934,6 @@ class ClaudeSession implements HarnessSession {
       this.#delivery.get(uuid)?.resolve();
       this.#delivery.delete(uuid);
       this.#unread.delete(uuid);
-      // biome-ignore lint/suspicious/noUnnecessaryConditions: the pump and adoption set running for a turn in flight; the checker only sees its initial value here
       if (!this.#turn.running && this.#delivery.size === 0) {
         this.#turn.end();
         this.#ctx.busy(false);

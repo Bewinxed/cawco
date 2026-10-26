@@ -180,8 +180,14 @@ export class PiRemoteSession implements HarnessSession {
   readonly #epoch: string;
   readonly #recoveryHead: number;
   #seq: number;
-  #ready = false;
-  #busy = false;
+  #readyValue = false;
+  get #ready(): boolean {
+    return this.#readyValue;
+  }
+  #busyValue = false;
+  get #busy(): boolean {
+    return this.#busyValue;
+  }
   #exited = false;
   /** The gate form the host reports it started on ({@link PiHostState.gateForm}). */
   #hostForm: string | undefined;
@@ -237,7 +243,6 @@ export class PiRemoteSession implements HarnessSession {
             case "frame":
             case "permission":
             case "permission_resolved":
-              // biome-ignore lint/suspicious/noUnnecessaryConditions: attached() changes this after the supervisor installs the handle
               if (this.#ready) {
                 this.#inOrder(line.seq, event);
               } else {
@@ -361,7 +366,7 @@ export class PiRemoteSession implements HarnessSession {
   }
 
   #setBusy(active: boolean): void {
-    this.#busy = active;
+    this.#busyValue = active;
     if (this.sessionId) {
       if (active) {
         piOpenTurns.add(this.sessionId);
@@ -416,11 +421,10 @@ export class PiRemoteSession implements HarnessSession {
   }
 
   attached(): void {
-    this.#ready = true;
+    this.#readyValue = true;
     for (const { seq, event } of this.#early.splice(0)) {
       this.#inOrder(seq, event);
     }
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: #busy follows the host's busy events and snapshots (#setBusy), which biome's per-method inference does not see
     if (!this.#busy) {
       this.askRelaunch();
     }

@@ -310,7 +310,10 @@ export class SessiondServer {
   readonly #procs = new Map<string, Proc>();
   readonly #conns = new Set<Conn>();
   /** A survey's reading is still out: the clock does not start a second. */
-  #surveyInFlight = false;
+  #surveyInFlightValue = false;
+  get #surveyInFlight(): boolean {
+    return this.#surveyInFlightValue;
+  }
   /** The spawn in progress; the next waits for it ({@link #queueSpawn}). */
   #spawning: Promise<unknown> = Promise.resolve();
   /** Where each child's own cgroup is made, when the keeper has delegation. */
@@ -330,7 +333,10 @@ export class SessiondServer {
   /** The clock the children's groups are read on ({@link LIMIT_WATCH_MS}). */
   #watching: ReturnType<typeof setInterval> | undefined;
   /** A reading of the groups is still out: the clock does not start a second. */
-  #watchInFlight = false;
+  #watchInFlightValue = false;
+  get #watchInFlight(): boolean {
+    return this.#watchInFlightValue;
+  }
   /** The sweeps still giving an ended child's tree its grace ({@link #sweep}). */
   readonly #sweeps = new Set<ReturnType<typeof setTimeout>>();
   /** The clock every live child's tree is read on ({@link #survey}). */
@@ -344,7 +350,10 @@ export class SessiondServer {
    * Set once, when the drain starts: from then nothing new starts here and no
    * connection is accepted ({@link drain}).
    */
-  #draining = false;
+  #drainingValue = false;
+  get #draining(): boolean {
+    return this.#drainingValue;
+  }
   /** The listener's close, begun when the drain starts and awaited by {@link close}. */
   #listenerClosed: Promise<void> | undefined;
 
@@ -392,13 +401,12 @@ export class SessiondServer {
     this.#socketInode = (await stat(endpoint)).ino;
     this.#surveying = setInterval(() => {
       if (
-        // biome-ignore lint/suspicious/noUnnecessaryConditions: set true below and false in the reading's `finally`; biome's inference sees only the initializer
         this.#surveyInFlight ||
         ![...this.#procs.values()].some((proc) => proc.alive)
       ) {
         return;
       }
-      this.#surveyInFlight = true;
+      this.#surveyInFlightValue = true;
       processTable()
         // Read at the answer, not at the ask: a child that ended meanwhile
         // has its tree from this reading only if it is still alive.
@@ -415,16 +423,15 @@ export class SessiondServer {
           );
         })
         .finally(() => {
-          this.#surveyInFlight = false;
+          this.#surveyInFlightValue = false;
         });
     }, SURVEY_INTERVAL_MS);
     if (this.#children) {
       this.#watching = setInterval(() => {
-        // biome-ignore lint/suspicious/noUnnecessaryConditions: set true below and false in the reading's `finally`; biome's inference sees only the initializer
         if (this.#watchInFlight || this.#groups.size === 0) {
           return;
         }
-        this.#watchInFlight = true;
+        this.#watchInFlightValue = true;
         this.watchGroups()
           .catch((error: unknown) => {
             console.error(
@@ -432,7 +439,7 @@ export class SessiondServer {
             );
           })
           .finally(() => {
-            this.#watchInFlight = false;
+            this.#watchInFlightValue = false;
           });
       }, LIMIT_WATCH_MS);
     }
@@ -580,7 +587,6 @@ export class SessiondServer {
     socket.on("close", () => this.#conns.delete(conn));
     this.#send(conn, this.#welcomeOf());
     // A connection the listener took in just as the drain began.
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: set true by drain() at runtime; biome's inference sees only the initializer
     if (this.#draining) {
       this.#send(conn, { type: "draining" });
     }
@@ -782,7 +788,6 @@ export class SessiondServer {
   ): Promise<SessiondAck> {
     // Checked when the spawn's turn comes, not when it arrived: one queued
     // behind another as the drain began starts nothing either.
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: set true by drain() at runtime; biome's inference sees only the initializer
     if (this.#draining) {
       return ack(commandId, "failed", SESSIOND_DRAINING);
     }
@@ -1348,7 +1353,7 @@ export class SessiondServer {
    * connection to a keeper that was ending: none of them ever started.
    */
   async drain(graceMs = DRAIN_TIMEOUT_MS): Promise<void> {
-    this.#draining = true;
+    this.#drainingValue = true;
     this.#listenerClosed ??= this.#closeListener();
     for (const conn of this.#conns) {
       this.#send(conn, { type: "draining" });

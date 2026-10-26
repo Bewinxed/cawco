@@ -94,7 +94,10 @@ export class Outbox {
   /** Per session, the newest seq let go before the hub was known to have it: handed (`handed`), or never (`unsent`). */
   readonly #lost = new Map<string, { handed: number; unsent: number }>();
   /** The link is up and every kept frame that was due has gone. */
-  #ready = false;
+  #readyValue = false;
+  get #ready(): boolean {
+    return this.#readyValue;
+  }
   /** The hub process this agent last registered with. */
   #hubEpoch: string | undefined;
   readonly #send: (frame: OutboxFrame) => boolean;
@@ -118,7 +121,6 @@ export class Outbox {
     const { instanceId } = frame;
     const waiting = this.#waiting(instanceId);
     if (frame.message.type === "stream_event") {
-      // biome-ignore lint/suspicious/noUnnecessaryConditions: #ready is set true by linkUp(), a different method biome's per-method inference doesn't see
       if (this.#ready && !waiting) {
         this.#hand(frame);
       }
@@ -138,7 +140,6 @@ export class Outbox {
     list.push(kept);
     this.#kept.set(instanceId, list);
     this.#bytes += kept.bytes;
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: #ready is set true by linkUp(), a different method biome's per-method inference doesn't see
     if (this.#ready && !waiting) {
       kept.handed = this.#hand(stamped);
     }
@@ -147,7 +148,7 @@ export class Outbox {
 
   /** The socket is gone: what comes next waits for the next register. */
   linkDown(): void {
-    this.#ready = false;
+    this.#readyValue = false;
   }
 
   /**
@@ -166,7 +167,7 @@ export class Outbox {
       }
     }
     after();
-    this.#ready = true;
+    this.#readyValue = true;
   }
 
   /**
@@ -242,7 +243,7 @@ export class Outbox {
   #hand(frame: OutboxFrame): boolean {
     const handed = this.#send(frame);
     if (!handed) {
-      this.#ready = false;
+      this.#readyValue = false;
     }
     return handed;
   }

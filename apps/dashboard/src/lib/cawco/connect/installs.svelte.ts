@@ -132,7 +132,10 @@ class Connect {
    * started from, its line and code with it, until it stands on the install
    * (the hub has used the draft up meanwhile).
    */
-  #starting = false;
+  #startingValue = false;
+  get #starting(): boolean {
+    return this.#startingValue;
+  }
   /** Edits typed here, not yet sent. */
   #unsaved: Partial<DraftFields> = {};
   /** The edits of the save the hub hasn't answered: one at a time, so they land in the order typed. */
@@ -202,7 +205,6 @@ class Connect {
    * reach the hub, under this page's own until the hub has kept them.
    */
   #show(): void {
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: start() sets it across its awaits; the rule reads only the field's initial value
     if (this.#starting) {
       return;
     }
@@ -485,7 +487,7 @@ class Connect {
    * the draft stays.
    */
   async start(body: InstallStart, hold = 0): Promise<InstallStarted> {
-    this.#starting = true;
+    this.#startingValue = true;
     try {
       const response = await fetch("/api/installs", {
         method: "POST",
@@ -513,7 +515,7 @@ class Connect {
       }
       return started;
     } finally {
-      this.#starting = false;
+      this.#startingValue = false;
       this.#show();
     }
   }

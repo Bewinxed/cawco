@@ -1941,7 +1941,10 @@ export class OpencodeHarness implements Harness {
   readonly #views = new Map<string, ServerSlot>();
   #recorded: Promise<void> | null = null;
   /** An account's server being replaced or verified by the config watcher: one at a time. */
-  #accountApplying = false;
+  #accountApplyingValue = false;
+  get #accountApplying(): boolean {
+    return this.#accountApplyingValue;
+  }
   #accountCatalogs: Record<string, ModelInfo[]> | undefined;
   /** The 1.x servers ended and the 1.x database kept, once, before the first 2.0 server starts. */
   #cutover: Promise<void> | null = null;
@@ -2168,7 +2171,10 @@ export class OpencodeHarness implements Harness {
     string,
     { parent: OpencodeSession; callID: string; identity: ServerIdentity }
   >();
-  #disposed = false;
+  #disposedValue = false;
+  get #disposed(): boolean {
+    return this.#disposedValue;
+  }
   /**
    * The one subscription loop each server generation has, by the controller
    * that ends it. A loop runs only while it is the one on record here:
@@ -2292,7 +2298,10 @@ export class OpencodeHarness implements Harness {
   #checkingPublication = false;
   #retryConfigAt = 0;
   /** Whether this agent keeps the server converged; see {@link #readsThisConfig}. */
-  #converging = false;
+  #convergingValue = false;
+  get #converging(): boolean {
+    return this.#convergingValue;
+  }
 
   /**
    * Whether the server reads the OpenCode config this agent writes, in the
@@ -2436,7 +2445,6 @@ export class OpencodeHarness implements Harness {
     account: string | undefined,
     view?: string
   ): Promise<void> {
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: #converging is set in #prepareStart, a different method
     if (!this.#converging) {
       return;
     }
@@ -2881,11 +2889,10 @@ export class OpencodeHarness implements Harness {
 
   /** Every running account's server squared with the machine's config and binary, once the machine's own is. */
   async #convergeAccounts(): Promise<void> {
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: #accountApplying is held across this method's awaits
     if (this.#accountApplying || this.#applyGate || fenced()) {
       return;
     }
-    this.#accountApplying = true;
+    this.#accountApplyingValue = true;
     try {
       for (const slot of [
         ...this.#accounts.values(),
@@ -2918,7 +2925,7 @@ export class OpencodeHarness implements Harness {
         }
       }
     } finally {
-      this.#accountApplying = false;
+      this.#accountApplyingValue = false;
     }
   }
 
@@ -3157,7 +3164,6 @@ export class OpencodeHarness implements Harness {
   }
 
   async #handoffIdle(): Promise<void> {
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: #disposed is set by dispose()
     if (this.#disposed) {
       return;
     }
@@ -4151,7 +4157,7 @@ export class OpencodeHarness implements Harness {
       this.#desiredHash = await this.#hashConfig();
       this.#desiredVersion = version;
     }
-    this.#converging = true;
+    this.#convergingValue = true;
     this.#startConfigWatcher();
   }
 
@@ -4172,7 +4178,7 @@ export class OpencodeHarness implements Harness {
     if (!this.#ready) {
       // A spawn after a dispose is a revival: the adapter is a module
       // singleton, the server it attaches to outlived the teardown.
-      this.#disposed = false;
+      this.#disposedValue = false;
       this.#machine.starting = true;
       this.#ready = (async () => {
         await this.#prepareStart();
@@ -4202,9 +4208,8 @@ export class OpencodeHarness implements Harness {
           this.#verifiedProcId !== identity.procId &&
           (await isMachineAgent())
         ) {
-          this.#converging = await this.#readsThisConfig(client);
+          this.#convergingValue = await this.#readsThisConfig(client);
         }
-        // biome-ignore lint/suspicious/noUnnecessaryConditions: #converging is set just above, by an awaited read
         if (this.#converging && this.#verifiedProcId !== identity.procId) {
           const origin = `active generation ${identity.procId}/${identity.pid}`;
           const initialHash = await this.#hashConfig();
@@ -4299,7 +4304,6 @@ export class OpencodeHarness implements Harness {
           await askOpencode((options) => adopted.server.info(options)),
           "its server info"
         );
-        // biome-ignore lint/suspicious/noUnnecessaryConditions: #converging is set in #prepareStart
         if (this.#converging) {
           try {
             await this.#verifyApply(
@@ -4416,7 +4420,6 @@ export class OpencodeHarness implements Harness {
         );
         // As an account's (#ensureAccount): verified on the machine's binary
         // while the machine's config converges, else the watcher's to replace.
-        // biome-ignore lint/suspicious/noUnnecessaryConditions: #converging is set in #prepareStart
         if (this.#converging) {
           try {
             await this.#verifyApply(
@@ -4833,7 +4836,6 @@ export class OpencodeHarness implements Harness {
 
   /** Starts the generation's subscription, once; resolves when it is up. */
   #ensurePump(identity: ServerIdentity): Promise<void> {
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: #disposed is set by dispose()
     if (this.#disposed) {
       return Promise.reject(new Error("OpenCode adapter disposed"));
     }
@@ -4894,7 +4896,6 @@ export class OpencodeHarness implements Harness {
     caller: string
   ): Promise<boolean> {
     const used = (): boolean =>
-      // biome-ignore lint/suspicious/noUnnecessaryConditions: #disposed is set by dispose()
       this.#disposed ||
       !this.#generations().some(
         (generation) => generation.procId === identity.procId
@@ -5494,7 +5495,6 @@ export class OpencodeHarness implements Harness {
   ): Promise<OpencodeSession | undefined> {
     const deadline = Date.now() + RECOVERY_RETRY_BUDGET_MS;
     let attempt = 0;
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: dispose() terminates retrying recoveries during agent teardown
     while (!this.#disposed) {
       if (wave.round?.attempt !== attempt) {
         wave.round = {
@@ -6500,8 +6500,8 @@ export class OpencodeHarness implements Harness {
    */
   // biome-ignore lint/suspicious/useAwait: implements Harness.dispose's Promise<void> contract; this teardown is synchronous
   async dispose(): Promise<void> {
-    this.#disposed = true;
-    this.#converging = false;
+    this.#disposedValue = true;
+    this.#convergingValue = false;
     this.#lifetime.abort();
     this.#lifetime = new AbortController();
     this.#stopConfigWatcher();
@@ -6691,7 +6691,6 @@ export class OpencodeHarness implements Harness {
   async #configSettled(): Promise<FleetItemState | undefined> {
     // With no server running there is nothing to settle: the next one starts
     // on the config as written.
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: #converging is set in #prepareStart, a different method
     if (!(this.#converging && this.#client)) {
       return;
     }
@@ -6879,7 +6878,10 @@ export class OpencodeHarness implements Harness {
   }
 
   /** Whether the end of the passes' reads was said for the backoff running now ({@link #mendLater}). */
-  #passReadsSpentSaid = false;
+  #passReadsSpentSaidValue = false;
+  get #passReadsSpentSaid(): boolean {
+    return this.#passReadsSpentSaidValue;
+  }
 
   /**
    * Schedules the next pass ({@link #mendFleetMcp}): `restart` from the first
@@ -6891,13 +6893,12 @@ export class OpencodeHarness implements Harness {
    * generation change.
    */
   #mendLater(restart = false): void {
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: #disposed is set by dispose()
     if (this.#disposed || !this.#converging) {
       return;
     }
     if (restart) {
       this.#mendAttempt = 0;
-      this.#passReadsSpentSaid = false;
+      this.#passReadsSpentSaidValue = false;
       if (this.#mendTimer) {
         clearTimeout(this.#mendTimer);
         this.#mendTimer = null;
@@ -6907,9 +6908,8 @@ export class OpencodeHarness implements Harness {
       return;
     }
     if (this.#mendAttempt >= MCP_PASS_READS && this.#livePlaces().size === 0) {
-      // biome-ignore lint/suspicious/noUnnecessaryConditions: a restart, an earlier call, clears it
       if (!this.#passReadsSpentSaid) {
-        this.#passReadsSpentSaid = true;
+        this.#passReadsSpentSaidValue = true;
         console.info(
           `[opencode] fleet MCP pass: ${MCP_PASS_READS} passes read a fleet server unsettled and no session runs here; its reading stands until the fleet's servers or OpenCode's generation change`
         );
@@ -6944,7 +6944,6 @@ export class OpencodeHarness implements Harness {
    * a pass only starts failed servers where live sessions run.
    */
   async #mendFleetMcp(): Promise<void> {
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: #disposed is set by dispose()
     if (this.#disposed || !this.#converging) {
       return;
     }
