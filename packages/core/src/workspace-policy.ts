@@ -316,7 +316,7 @@ export const IGNORED_STATUS = [
   "--untracked-files=all",
 ] as const;
 
-const TRAILING_SLASH = /\/$/;
+const TRAILING_SLASH = /\/$/u;
 
 /**
  * The paths of `git check-ignore -v -z` output (`rules`: source, line,
@@ -493,7 +493,7 @@ const ignoredDirs = async (root: string): Promise<string[]> => {
 };
 
 /** `find -path`'s pattern for exactly `path`: its glob characters escaped. */
-const FIND_GLOB = /[\\*?[\]]/g;
+const FIND_GLOB = /[\\*?[\]]/gu;
 
 /** `find`'s test for any of `paths`, exactly; one that is never true for none. */
 const anyPath = (paths: readonly string[]): string[] =>
@@ -775,7 +775,7 @@ const within = (path: string, root: string): boolean =>
   path === root || path.startsWith(`${root}/`);
 
 /** A script's `#!` line, up to its interpreter's absolute path. */
-const SHEBANG = /^#![ \t]*(\/[^\s]+)/;
+const SHEBANG = /^#![ \t]*(\/[^\s]+)/u;
 /** How much of a command {@link interpreterOf} reads for its `#!` line. */
 const SHEBANG_BYTES = 512;
 
@@ -950,7 +950,7 @@ export const homeToolchains = async (home: string): Promise<string[]> => {
 };
 
 /** `pyvenv.cfg`'s `home = …` line: the dir of the interpreter a venv was made from. */
-const VENV_HOME = /^home\s*=\s*(.+?)\s*$/m;
+const VENV_HOME = /^home\s*=\s*(.+?)\s*$/mu;
 
 /**
  * The prefix of the Python a venv was made from, when `landing` is a command
@@ -1062,7 +1062,7 @@ export const inputDenial = (
 };
 
 /** An account id as the hub mints it: one path component, never `.` or `..`. */
-const ACCOUNT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+const ACCOUNT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/u;
 
 /**
  * The user layer's entries in the config dir of each Claude account a
@@ -1100,10 +1100,10 @@ const accountLayers = async (id: string): Promise<string[]> => {
 
 /** A Claude Code session id: a UUID, as CawCo mints it for a launch (`spill` in harnesses/claude.ts) and the CLI keeps it. */
 const SESSION_UUID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
 /** A CawCo instance id as one path component: never `.` or `..`. */
-const INSTANCE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+const INSTANCE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/u;
 
 /**
  * Whether `dir` is one session's spill folder: Claude Code's
@@ -1186,7 +1186,7 @@ export const workspaceSpills = async (id: string): Promise<string[]> => {
 };
 
 /** A project id as the hub mints and accepts it (hub project-folder.ts `PROJECT_ID`). */
-const PROJECT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+const PROJECT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/u;
 
 /**
  * The folder of the project the workspace's work belongs to

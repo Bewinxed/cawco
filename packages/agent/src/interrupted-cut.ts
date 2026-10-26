@@ -433,7 +433,7 @@ const blobId = async (
 };
 
 const LFS_POINTER =
-  /^version https:\/\/git-lfs\.github\.com\/spec\/v1\noid sha256:([0-9a-f]{64})\nsize (\d+)\n/;
+  /^version https:\/\/git-lfs\.github\.com\/spec\/v1\noid sha256:([0-9a-f]{64})\nsize (\d+)\n/u;
 /** The largest blob read as a possible LFS pointer: git-lfs's own limit for one. */
 const POINTER_MAX = 1024;
 

@@ -40,8 +40,8 @@ const ROOT = join(import.meta.dir, "..");
 /** The longest a spec may sleep: a few seconds of the product's own work, never an interval of it. */
 export const LIMIT_MS = 30_000;
 const SLEEPS = new Set(["sleep", "pause", "delay"]);
-const PRODUCT = /(?:^|\/)(?:packages|apps)\/|^@cawco\//;
-const TIMER_NAME = /_MS$/;
+const PRODUCT = /(?:^|\/)(?:packages|apps)\/|^@cawco\//u;
+const TIMER_NAME = /_MS$/u;
 
 const filesUnder = (dir: string): string[] =>
   readdirSync(dir).flatMap((name) => {

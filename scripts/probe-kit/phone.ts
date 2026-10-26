@@ -8,7 +8,7 @@
 import { until } from "../scratch-fleet";
 import type { KitFleet } from "./kit";
 
-const BURST_SENT = /\[notify\] push (needs-\S+): \d+ in one \(([^)]*)\)/;
+const BURST_SENT = /\[notify\] push (needs-\S+): \d+ in one \(([^)]*)\)/u;
 
 /** A push the stand-in Cawrier took: a visible one under its collapse id, its alert as the lock screen shows it. */
 interface Pushed {

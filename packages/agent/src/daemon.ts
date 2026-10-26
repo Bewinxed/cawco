@@ -223,6 +223,7 @@ import {
 import { buildInfo } from "./build";
 import { probeCapabilities } from "./capabilities";
 import { readConfig, writeConfig } from "./config";
+import { damagedRecords, sweepRecords } from "./damaged-records";
 import { convergeDeniedTools } from "./denied-tools";
 import { hubIdAt, rediscoverHub, toHttpBase, toWsUrl } from "./discovery";
 import { forgePost } from "./forges/forge";
@@ -236,6 +237,7 @@ import {
 } from "./harnesses/opencode";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { ghAccounts, ghAccountToken } from "./host-gh";
+import { cancelCommand, runHubCommand, setCommandQueue } from "./hub-command";
 import { serveHubCredential } from "./hub-git";
 import { carryHub, followHub, stopCarrying } from "./hub-loopback";
 import { keepHubPreviews } from "./hub-previews";
@@ -313,7 +315,24 @@ import {
 } from "./stage";
 import { setStageCloneSink } from "./stage-clone";
 import type { RenderAsk } from "./stage-render";
+import { onToolsMoved, probeTools } from "./tools";
 import { makeUpstreamPost } from "./upstream-posts";
+import { UsageScans } from "./usage/scans";
+import {
+  archiveWorkspace,
+  clearUnfinished,
+  clearUnmarkedHusks,
+  createWorkspace,
+  discardWorkspace,
+  workspaceApply,
+  workspaceAt,
+  workspaceBoundary,
+  workspaceBundle,
+  workspaceChanges,
+  workspaceOutputs,
+} from "./workspace";
+import { workspaceNeeds } from "./workspace-needs";
+import { cloneHolding, workspaceRefs } from "./workspace-records";
 
 /** The hub's upstream rules, written into each workspace here; a failure is said in the log, never thrown at the socket. */
 const takeUpstream = (
@@ -399,26 +418,6 @@ const takeSessionLimits = (
     "session limits record"
   );
 };
-
-import { damagedRecords, sweepRecords } from "./damaged-records";
-import { cancelCommand, runHubCommand, setCommandQueue } from "./hub-command";
-import { onToolsMoved, probeTools } from "./tools";
-import { UsageScans } from "./usage/scans";
-import {
-  archiveWorkspace,
-  clearUnfinished,
-  clearUnmarkedHusks,
-  createWorkspace,
-  discardWorkspace,
-  workspaceApply,
-  workspaceAt,
-  workspaceBoundary,
-  workspaceBundle,
-  workspaceChanges,
-  workspaceOutputs,
-} from "./workspace";
-import { workspaceNeeds } from "./workspace-needs";
-import { cloneHolding, workspaceRefs } from "./workspace-records";
 
 const DEFAULT_HUB_URL = `ws://localhost:${CAWCO_HUB_PORT}/ws`;
 const HEARTBEAT_INTERVAL = Duration.seconds(15);

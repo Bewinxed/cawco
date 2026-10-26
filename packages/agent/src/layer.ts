@@ -776,7 +776,7 @@ export const ownModules = (id: string): Promise<void> => {
 /** bubblewrap's `--overlay-src` and `--overlay`, which a Linux view is mounted by, came in bubblewrap 0.11.0. */
 const OVERLAY_BWRAP: readonly [number, number] = [0, 11];
 
-const BWRAP_VERSION = /bubblewrap (\d+)\.(\d+)/;
+const BWRAP_VERSION = /bubblewrap (\d+)\.(\d+)/u;
 
 /**
  * Refuses a Linux view of `folder` where this machine's bubblewrap is older

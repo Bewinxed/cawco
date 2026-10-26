@@ -75,7 +75,7 @@ const COMMIT =
 const HELD_TEXT = "held while the agent dies";
 /** How long a workspace takes to settle once its item ends: its session's sleep, then its machine's archive. */
 const SETTLE_MS = 120_000;
-const PID = /^\d+$/;
+const PID = /^\d+$/u;
 
 /** The handoffs to M, by mark: each reaching it has its shell report and its finish. */
 const SHORT = "PROBE-CUT-SHORT-1";
@@ -146,10 +146,10 @@ const reportTurn = (request: Seen, mark: Mark): Reply => {
     });
   }
   reports.set(mark, {
-    pwd: lastOf(request.all, new RegExp(`CUT-PWD-${n}=([^\\s\\\\"]+)`, "g")),
-    head: lastOf(request.all, new RegExp(`CUT-HEAD-${n}=([0-9a-f]{40})`, "g")),
-    status: lastOf(request.all, new RegExp(`CUT-STATUS-${n}=(\\d+)`, "g")),
-    hold: lastOf(request.all, new RegExp(`CUT-HOLD-${n}:([^\\n\\\\"]*)`, "g")),
+    pwd: lastOf(request.all, new RegExp(`CUT-PWD-${n}=([^\\s\\\\"]+)`, "gu")),
+    head: lastOf(request.all, new RegExp(`CUT-HEAD-${n}=([0-9a-f]{40})`, "gu")),
+    status: lastOf(request.all, new RegExp(`CUT-STATUS-${n}=(\\d+)`, "gu")),
+    hold: lastOf(request.all, new RegExp(`CUT-HOLD-${n}:([^\\n\\\\"]*)`, "gu")),
   });
   return finishing(request, mark);
 };

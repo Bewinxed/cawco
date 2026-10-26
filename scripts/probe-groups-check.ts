@@ -15,7 +15,7 @@ import { CUT_GROUPS, KEPT_GROUPS } from "./probe-kit/groups";
 
 const ROOT = join(import.meta.dir, "..");
 const SPECS = join(ROOT, "scripts/probe-kit/specs");
-const TS_FILE = /\.ts$/;
+const TS_FILE = /\.ts$/u;
 const APP = CUT_GROUPS.find((one) => one.group === "The iPhone and iPad app");
 
 const specsUnder = (dir: string): string[] =>
