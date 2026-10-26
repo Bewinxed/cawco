@@ -72,7 +72,7 @@ export type TrayPose =
 /** The poses the advisor named that no file holds yet. */
 export type PoseToDraw = "look-up" | "phone" | "shrug";
 
-export interface NetworkFacts {
+interface NetworkFacts {
   /** Its admin console's page for each thing an admin does. */
   consoles: { dns: string; machines: string; keys: string };
   /** Where its own sign-in or control lives. */
@@ -103,7 +103,7 @@ const REDO = {
 } as const;
 
 /** The three networks as this drawing's person has them. */
-export const NETWORKS: Record<Network, NetworkFacts> = {
+const NETWORKS: Record<Network, NetworkFacts> = {
   tailscale: {
     name: "Tailscale",
     domain: "heron-pike.ts.net",
