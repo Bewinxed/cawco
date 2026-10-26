@@ -1,5 +1,8 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
+  // knip.dev/reference/configuration: "Exit with non-zero code (1) if there are any configuration hints".
+  "treatConfigHintsAsErrors": true,
+  // includeEntryExports stays off for "." (probe specs under scripts/probe-kit/specs export what scripts/probe-kit/run.ts loads by path) and apps/dashboard (*.stories.ts export what packages/agent/src/stage-host/host.ts loads by path); each packages/* workspace turns it on.
   "workspaces": {
     ".": {
       "entry": [
@@ -195,6 +198,8 @@
       },
     },
     "packages/agent": {
+      // knip.dev/reference/configuration: "When a repository (or workspace) is self-contained or private, you may want to include entry files when reporting unused exports". This package is private and consumed only inside the repo, so its `exports` map is no public API.
+      "includeEntryExports": true,
       "entry": [
         // Spawned as plain Bun by the boundary: src/boundary.ts:3612; bundled for Linux at scripts/build-binary.ts:182.
         "src/boundary-host.ts",
@@ -224,6 +229,8 @@
       "ignoreDependencies": ["cloudflare"],
     },
     "packages/hub": {
+      // knip.dev/reference/configuration: "When a repository (or workspace) is self-contained or private, you may want to include entry files when reporting unused exports". This package is private and consumed only inside the repo, so its `exports` map is no public API.
+      "includeEntryExports": true,
       "entry": [
         // Spawned by the release: scripts/release.ts:836.
         "scripts/wire-frames.ts",
@@ -240,6 +247,30 @@
         // DialKit, vendored unchanged from its npm package (skills/decision-page/kit/vendor/dialkit/VERSION): a dependency's code, not ours.
         "!skills/decision-page/kit/vendor/**",
       ],
+    },
+    "packages/core": {
+      // knip.dev/reference/configuration: "When a repository (or workspace) is self-contained or private, you may want to include entry files when reporting unused exports". This package is private and consumed only inside the repo, so its `exports` map is no public API.
+      "includeEntryExports": true,
+    },
+    "packages/cli": {
+      // knip.dev/reference/configuration: "When a repository (or workspace) is self-contained or private, you may want to include entry files when reporting unused exports". This package is private and consumed only inside the repo, so its `exports` map is no public API.
+      "includeEntryExports": true,
+    },
+    "packages/sessiond": {
+      // knip.dev/reference/configuration: "When a repository (or workspace) is self-contained or private, you may want to include entry files when reporting unused exports". This package is private and consumed only inside the repo, so its `exports` map is no public API.
+      "includeEntryExports": true,
+    },
+    "packages/jsonl-parser": {
+      // knip.dev/reference/configuration: "When a repository (or workspace) is self-contained or private, you may want to include entry files when reporting unused exports". This package is private and consumed only inside the repo, so its `exports` map is no public API.
+      "includeEntryExports": true,
+    },
+    "packages/icons": {
+      // knip.dev/reference/configuration: "When a repository (or workspace) is self-contained or private, you may want to include entry files when reporting unused exports". This package is private and consumed only inside the repo, so its `exports` map is no public API.
+      "includeEntryExports": true,
+    },
+    "packages/auth": {
+      // knip.dev/reference/configuration: "When a repository (or workspace) is self-contained or private, you may want to include entry files when reporting unused exports". This package is private and consumed only inside the repo, so its `exports` map is no public API.
+      "includeEntryExports": true,
     },
     "site": {
       "entry": [
