@@ -217,6 +217,22 @@ import {
 } from "./page-changes";
 import { picturePath, thumbnailPath } from "./sync";
 
+/** The id of the one artifact among `rows` that `asked` names; thrown when it names none or several. */
+const artifactByHandle = (
+  asked: string,
+  rows: readonly { id: string; kind: string; name: string }[]
+): string =>
+  byHandle(
+    asked,
+    rows,
+    {
+      id: (row) => row.id,
+      names: (row) => [row.name],
+      said: (row) => `${row.name} (${row.kind} ${row.id.slice(0, 8)})`,
+    },
+    "artifact"
+  ).id;
+
 export class ArtifactRefusal extends Error {
   readonly status: 400 | 403 | 404 | 409 | 413 | 422 | 503 | 504;
   constructor(
@@ -1982,16 +1998,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     // A name that names none or several is a refusal of the call, never
     // the hub's own fault.
     try {
-      return byHandle(
-        asked,
-        [...seen.values()],
-        {
-          id: (row) => row.id,
-          names: (row) => [row.name],
-          said: (row) => `${row.name} (${row.kind} ${row.id.slice(0, 8)})`,
-        },
-        "artifact"
-      ).id;
+      return artifactByHandle(asked, [...seen.values()]);
     } catch (error) {
       // biome-ignore lint/style/useErrorCause: the cause rides ArtifactRefusal's third argument, after its status, which the rule does not read
       throw new ArtifactRefusal(
@@ -6124,17 +6131,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       try {
         const id = instanceId
           ? whole(sessionOf(instanceId), asked)
-          : byHandle(
-              asked,
-              db.ofProject(projectId),
-              {
-                id: (row) => row.id,
-                names: (row) => [row.name],
-                said: (row) =>
-                  `${row.name} (${row.kind} ${row.id.slice(0, 8)})`,
-              },
-              "artifact"
-            ).id;
+          : artifactByHandle(asked, db.ofProject(projectId));
         const page = db.get(id);
         return page
           ? { id: page.id, name: page.name }

@@ -3044,6 +3044,14 @@ export const createWorkItems = ({
    * hears its reports is told, once — {@link finish} moves only a live item.
    */
   const sessionFailed = (row: InstanceRow, reason: string): void => {
+    const failed = failLive(row, reason);
+    if (failed) {
+      console.log(`[work-items] ${failed}: its session failed: ${reason}`);
+    }
+  };
+
+  /** `row`'s item failed with `reason` and reported, when it is live: its id, else undefined. */
+  const failLive = (row: InstanceRow, reason: string): string | undefined => {
     const item = itemOf(row);
     if (!(item && LIVE.has(item.state))) {
       return;
@@ -3051,8 +3059,8 @@ export const createWorkItems = ({
     quiet.delete(item.id);
     clearWait(item);
     const ended = finish(item, { state: "failed", error: reason });
-    console.log(`[work-items] ${item.id}: its session failed: ${reason}`);
     report(row, `${reason}${reportLine(ended)}`, ended.state === "failed");
+    return item.id;
   };
 
   /**
@@ -3085,6 +3093,16 @@ export const createWorkItems = ({
     (!!row && (row.workItemId !== item.id || !!item.landingSince)) ||
     custodyPending(row?.machineId ?? standIn(item).machineId, item.instanceId);
 
+  /** The session rows of `items`, by id. */
+  const sessionRows = (
+    items: readonly WorkItemRow[]
+  ): Map<string, InstanceRow> =>
+    new Map(
+      db
+        .getInstancesByIds(items.map((item) => item.instanceId))
+        .map((row) => [row.id, row])
+    );
+
   const followSessions = (only?: ReadonlySet<string>): void => {
     const live = db
       .liveWorkItems()
@@ -3097,11 +3115,7 @@ export const createWorkItems = ({
     if (live.length === 0) {
       return;
     }
-    const rows = new Map(
-      db
-        .getInstancesByIds(live.map((item) => item.instanceId))
-        .map((row) => [row.id, row])
-    );
+    const rows = sessionRows(live);
     for (const item of live) {
       const row = rows.get(item.instanceId);
       if (leftToFollow(item, row)) {
@@ -3185,11 +3199,7 @@ export const createWorkItems = ({
     if (live.length === 0) {
       return;
     }
-    const rows = new Map(
-      db
-        .getInstancesByIds(live.map((item) => item.instanceId))
-        .map((row) => [row.id, row])
-    );
+    const rows = sessionRows(live);
     for (const item of live) {
       const row = rows.get(item.instanceId);
       if (row && !leftAsleep(item, row)) {
@@ -3248,24 +3258,7 @@ export const createWorkItems = ({
       );
       return;
     }
-    const sent = send({
-      verb: "send",
-      machineId: row.machineId,
-      instanceId: row.id,
-      payload: {
-        instanceId: row.id,
-        message: {
-          type: "user",
-          uuid: crypto.randomUUID(),
-          message: {
-            role: "user",
-            content: `${STILL_OPEN} ${FINISH_LINE}`,
-          },
-          parent_tool_use_id: null,
-          origin: WAKE_ORIGIN,
-        },
-      },
-    });
+    const sent = tell(row, `${STILL_OPEN} ${FINISH_LINE}`);
     if (sent.state === "failed") {
       sessionFailed(
         row,
@@ -3465,6 +3458,15 @@ export const createWorkItems = ({
       ? { projectId: item.projectId, taskId: item.taskId }
       : undefined;
 
+  /** The item's task, its plan and the task's to-dos, when it has a task with a plan and to-dos are kept. */
+  const taskPlan = async (item: WorkItemRow) => {
+    const task = taskOf(item);
+    const plan = task ? await planFor(item) : undefined;
+    return task && todos && plan?.length
+      ? { task, plan, ledger: todos }
+      : undefined;
+  };
+
   /**
    * Ticks each open to-do of the item's task whose id a completed plan item
    * carries as its id (`td-3`), and each open proposed to-do whose words one
@@ -3473,11 +3475,11 @@ export const createWorkItems = ({
    * the ledger and, when something is to tick, one commit.
    */
   const syncPlan = async (item: WorkItemRow): Promise<void> => {
-    const task = taskOf(item);
-    const plan = task ? await planFor(item) : undefined;
-    if (!(task && todos && plan?.length)) {
+    const planned = await taskPlan(item);
+    if (!planned) {
       return;
     }
+    const { task, plan, ledger } = planned;
     const done = plan.filter((entry) => entry.status === "completed");
     const completed = new Set(
       done.filter((entry) => PLAN_TODO.test(entry.id)).map((entry) => entry.id)
@@ -3490,7 +3492,7 @@ export const createWorkItems = ({
     if (completed.size === 0 && said.size === 0) {
       return;
     }
-    const open = (await todos.read(task.projectId, task.taskId)).filter(
+    const open = (await ledger.read(task.projectId, task.taskId)).filter(
       (todo) =>
         !todo.done &&
         todo.id &&
@@ -3498,7 +3500,7 @@ export const createWorkItems = ({
           (todo.proposed && said.has(planWords(todo.text))))
     );
     if (open.length > 0) {
-      await todos.write(
+      await ledger.write(
         task.projectId,
         task.taskId,
         { tick: open.map((todo) => todo.id as string) },
@@ -3525,14 +3527,14 @@ export const createWorkItems = ({
    * each, `(proposed)`, skipping words the task already has.
    */
   const proposeLeftovers = async (item: WorkItemRow): Promise<void> => {
-    const task = taskOf(item);
-    const plan = task ? await planFor(item) : undefined;
-    if (!(task && todos && plan?.length)) {
+    const planned = await taskPlan(item);
+    if (!planned) {
       return;
     }
+    const { task, plan, ledger } = planned;
     await syncPlan(item);
     const known = new Set(
-      (await todos.read(task.projectId, task.taskId)).map((todo) =>
+      (await ledger.read(task.projectId, task.taskId)).map((todo) =>
         planWords(todo.text)
       )
     );
@@ -3544,7 +3546,7 @@ export const createWorkItems = ({
       .filter((text) => text && !known.has(planWords(text)))
       .slice(0, PROPOSALS_LIMIT);
     if (left.length > 0) {
-      await todos.write(
+      await ledger.write(
         task.projectId,
         task.taskId,
         { add: [...new Set(left)].map((text) => ({ text, proposed: true })) },
@@ -3780,6 +3782,20 @@ export const createWorkItems = ({
       .workspacesCutFrom(id)
       .flatMap((cut) => (cut.cutFrom?.landed ? [cut.cutFrom.commit] : []));
 
+  /** A notice about `workspace` to the session its latest item reports to, as `words` writes it of that item. */
+  const workspaceNotice = (
+    workspace: WorkspaceRow,
+    words: (latest: WorkItemRow) => { headline: string; text: string }
+  ): void => {
+    const [latest] = db.workItemsIn(workspace.id);
+    const [row] = latest ? db.getInstancesByIds([latest.instanceId]) : [];
+    if (!(latest && row)) {
+      return;
+    }
+    const { text, headline } = words(latest);
+    report(row, text, false, true, headline);
+  };
+
   /**
    * Tells the session that started a workspace's work, its latest item's
    * parent, that the workspace was just held, through its report path as a
@@ -3789,38 +3805,28 @@ export const createWorkItems = ({
    * the owner's list, every one his to sort).
    */
   const heldNotice = (workspace: WorkspaceRow, work: HeldWork): void => {
-    const [latest] = db.workItemsIn(workspace.id);
-    const [row] = latest ? db.getInstancesByIds([latest.instanceId]) : [];
-    if (!(latest && row)) {
-      return;
-    }
-    if (work.refused) {
-      report(
-        row,
-        workWords.refusedNotice(
-          handle(workspace.id),
-          latest.title,
-          work.machine,
-          work.refused,
-          work.size,
-          workspace.path
-        ),
-        false,
-        true,
-        workWords.refusedHeadline(workspace.id.slice(0, 8))
-      );
-      return;
-    }
-    const named = work.excluded?.length
-      ? ` Kept out of git by its own excludes: ${work.excluded.join(", ")}.`
-      : "";
-    report(
-      row,
-      `Workspace ${handle(workspace.id)} of “${latest.title}” on ${work.machine} holds ${work.holds} (${work.size} at ${workspace.path}) that is nowhere else, so it was kept, not retired.${named} It is yours to decide: continue it (delegate with workspace: "${handle(workspace.id)}", or with from: "${handle(workspace.id)}" for a fresh delegate on its commits), or discard it (discard_workspace with workspace: "${handle(workspace.id)}"), which saves that work to a carry in ~/.cawco/carries on ${work.machine} and removes the clone.`,
-      false,
-      true,
-      `Workspace ${workspace.id.slice(0, 8)} holds ${work.holds}: continue it or discard it.`
-    );
+    workspaceNotice(workspace, (latest) => {
+      if (work.refused) {
+        return {
+          text: workWords.refusedNotice(
+            handle(workspace.id),
+            latest.title,
+            work.machine,
+            work.refused,
+            work.size,
+            workspace.path
+          ),
+          headline: workWords.refusedHeadline(workspace.id.slice(0, 8)),
+        };
+      }
+      const named = work.excluded?.length
+        ? ` Kept out of git by its own excludes: ${work.excluded.join(", ")}.`
+        : "";
+      return {
+        text: `Workspace ${handle(workspace.id)} of “${latest.title}” on ${work.machine} holds ${work.holds} (${work.size} at ${workspace.path}) that is nowhere else, so it was kept, not retired.${named} It is yours to decide: continue it (delegate with workspace: "${handle(workspace.id)}", or with from: "${handle(workspace.id)}" for a fresh delegate on its commits), or discard it (discard_workspace with workspace: "${handle(workspace.id)}"), which saves that work to a carry in ~/.cawco/carries on ${work.machine} and removes the clone.`,
+        headline: `Workspace ${workspace.id.slice(0, 8)} holds ${work.holds}: continue it or discard it.`,
+      };
+    });
   };
 
   /**
@@ -3869,25 +3875,21 @@ export const createWorkItems = ({
    * follow-up cuts the clone again with them ({@link recut}).
    */
   const carryNotice = (workspace: WorkspaceRow, carry: string): void => {
-    const [latest] = db.workItemsIn(workspace.id);
-    const [row] = latest ? db.getInstancesByIds([latest.instanceId]) : [];
-    if (!(latest && row)) {
-      return;
-    }
     const machine = machineName(workspace.machineId);
-    report(
-      row,
-      workWords.carriedNotice(
+    workspaceNotice(workspace, (latest) => ({
+      text: workWords.carriedNotice(
         handle(workspace.id),
         latest.title,
         carry,
         machine,
         workspace.path
       ),
-      false,
-      true,
-      workWords.carriedHeadline(workspace.id.slice(0, 8), carry, machine)
-    );
+      headline: workWords.carriedHeadline(
+        workspace.id.slice(0, 8),
+        carry,
+        machine
+      ),
+    }));
   };
 
   /**
@@ -6766,8 +6768,8 @@ export const createWorkItems = ({
     return undefined;
   };
 
-  /** A word from the hub about an item, to the item's session. */
-  const tell = (row: InstanceRow, content: string): void => {
+  /** A word from the hub about an item, to the item's session: how its send went. */
+  const tell = (row: InstanceRow, content: string) =>
     send({
       verb: "send",
       machineId: row.machineId,
@@ -6783,7 +6785,6 @@ export const createWorkItems = ({
         },
       },
     });
-  };
 
   /**
    * The one expiry path for a wait whose time has passed: a live timer, an
@@ -9867,14 +9868,7 @@ export const createWorkItems = ({
      * hears it. Nothing for an item that is no longer live.
      */
     retryPassed(row: InstanceRow, why: string): void {
-      const item = itemOf(row);
-      if (!(item && LIVE.has(item.state))) {
-        return;
-      }
-      quiet.delete(item.id);
-      clearWait(item);
-      const ended = finish(item, { state: "failed", error: why });
-      report(row, `${why}${reportLine(ended)}`, ended.state === "failed");
+      failLive(row, why);
     },
 
     /** The reports of `report`, as {@link WorkItemDeps.report} hands them on: a stop's own report (tree-stops.ts). */
