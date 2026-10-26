@@ -23,12 +23,7 @@
  * the stylesheet's parking places take over again.
  */
 import { flushSync } from "svelte";
-import {
-  integrate,
-  spring as play,
-  type Sample,
-  sampleAt,
-} from "../motion/spring";
+import { integrate, spring as play, type Sample } from "../motion/spring";
 import { catchSettle, gatherParked, type Parked } from "./parked";
 import { type LeafNode, workspace } from "./workspace.svelte";
 
@@ -134,16 +129,6 @@ export function createDeck(
     lifted = false;
   };
 
-  /** Where the settle is right now, read off the focused card's clock. */
-  const progress = (): Sample | null => {
-    const animation = animations[cards.findIndex((card) => card.delta === 0)];
-    const at = animation?.currentTime;
-    if (typeof at !== "number" || path.length === 0) {
-      return null;
-    }
-    return sampleAt(path, at / 1000);
-  };
-
   /** The neighbours of the focused group: above, itself, below. */
   const neighbours = () => {
     const leaves = getLeaves();
@@ -229,9 +214,10 @@ export function createDeck(
   }
 
   const caught = catchSettle({
+    animations: () => animations,
+    items: () => cards,
     land,
-    playing: () => animations.length > 0,
-    progress,
+    path: () => path,
     spring,
     stand: (x) => {
       offset = x;

@@ -1,4 +1,13 @@
 <script lang="ts">
+  import type { PulseFrame, SessionPulse } from "@cawco/core";
+  import { HOUR_MS } from "@cawco/core/time";
+  import { onMount, untrack } from "svelte";
+  import { blankSession } from "#lib/cawco/client.svelte.js";
+  import SessionPane from "#lib/cawco/SessionPane.svelte";
+  import type { Message } from "#lib/cawco/types.js";
+  import PaneTabs from "#lib/cawco/workspace/PaneTabs.svelte";
+  import type { LeafNode } from "#lib/cawco/workspace/workspace.svelte.js";
+  import { page } from "$app/state";
   /**
    * The transcript's head under the chosen tab, on a bench: the real
    * PaneTabs over the real SessionPanes, one per tab as a group holds them
@@ -20,15 +29,7 @@
    * own choice goes to the workspace, which holds no such group and would
    * navigate to the session.
    */
-  import type { PulseFrame, SessionPulse } from "@cawco/core";
-  import { HOUR_MS } from "@cawco/core/time";
-  import { onMount, untrack } from "svelte";
-  import { blankSession } from "#lib/cawco/client.svelte.js";
-  import SessionPane from "#lib/cawco/SessionPane.svelte";
-  import type { Message } from "#lib/cawco/types.js";
-  import PaneTabs from "#lib/cawco/workspace/PaneTabs.svelte";
-  import type { LeafNode } from "#lib/cawco/workspace/workspace.svelte.js";
-  import { page } from "$app/state";
+  import { benchClick, benchLeaf } from "../tab-bench";
 
   const ids = [
     "1a2b3c4d-0000-4000-8000-000000000001",
@@ -177,51 +178,15 @@
     });
   }
 
-  const first = untrack(() =>
-    Math.min(
-      ids.length - 1,
-      Math.max(0, Number(page.url.searchParams.get("at") ?? 1) || 0)
-    )
+  const leaf = $state<LeafNode>(
+    untrack(() => benchLeaf("head-tint", ids, page.url.searchParams.get("at")))
   );
-  const leaf = $state<LeafNode>({
-    id: "head-tint",
-    t: "l",
-    tabs: ids,
-    active: ids[first],
-  });
 
   /** Chooses a tab in the bench's group, as a click on it does. */
   function choose(id: string) {
     if (leaf.tabs.includes(id)) {
       leaf.active = id;
     }
-  }
-
-  /**
-   * A click that would choose a tab (its link, its empty details slot) or
-   * close one is the bench's: the strip's own would act on the workspace.
-   * The chosen tab's own click (its details card) is left to the strip.
-   */
-  function benchClick(event: MouseEvent) {
-    const target = event.target instanceof Element ? event.target : null;
-    const tab = target?.closest<HTMLElement>('[data-slot="tab"]');
-    const id = tab
-      ?.querySelector<HTMLElement>("[data-session-tab]")
-      ?.getAttribute("data-session-tab");
-    if (!(tab && id)) {
-      return;
-    }
-    if (target?.closest('[data-slot="tclose"]')) {
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
-    if (id === leaf.active) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    choose(id);
   }
 
   onMount(() => {
@@ -247,7 +212,7 @@
 <div
   class="@container/leaf fixed inset-0 z-(--layer-bench) flex flex-col bg-surface-shelf pt-space-7 text-ink-strong"
   data-head-tint
-  onclickcapture={benchClick}
+  onclickcapture={benchClick(leaf)}
 >
   <PaneTabs {leaf} />
   <!-- The group's panes (PaneLeaf `.stack`, `.pane`, `.pane-hidden`): every

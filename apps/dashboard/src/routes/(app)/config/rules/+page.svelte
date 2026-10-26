@@ -5,24 +5,16 @@
     ruleSentence,
     rulesWords,
   } from "@cawco/core";
-  import { deleteRule, notDeleted } from "#lib/cawco/config/deletes.js";
+  import { deleteRule } from "#lib/cawco/config/deletes.js";
+  import FleetStarters from "#lib/cawco/config/FleetStarters.svelte";
+  import RowActFaults from "#lib/cawco/config/RowActFaults.svelte";
   import RowList from "#lib/cawco/config/RowList.svelte";
+  import { RowActs } from "#lib/cawco/config/row-acts.svelte.js";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore, withStats } from "#lib/cawco/config/store.svelte.js";
-  import EmptyAsk from "#lib/cawco/EmptyAsk.svelte";
-  import {
-    askLabel,
-    askNewSession,
-    EMPTY_LINES,
-    FLEET_ASKS,
-    NO_SESSION_CAN_START,
-    sessionCanStart,
-  } from "#lib/cawco/empty-asks.js";
-  import { failureWords as message } from "#lib/cawco/hub-read.js";
-  import RowFault from "#lib/cawco/RowFault.svelte";
-  import { refusals } from "#lib/cawco/refusals.svelte.js";
+  import { EMPTY_LINES } from "#lib/cawco/empty-asks.js";
   import {
     createRule,
     draftOf,
@@ -61,60 +53,15 @@
     waitingOnly ? rules.filter((rule) => rule.stats.pending > 0) : rules
   );
 
-  let busy = $state<Record<string, boolean>>({});
-  let seeding = $state<string | null>(null);
-  /** The template whose last add was refused, and why: said under its row. */
-  let seedFailed = $state<{ title: string; reason: string } | null>(null);
-  /** Why a rule's switch did not take, by rule: said under its row. */
-  let toggleFailed = $state<Record<string, string>>({});
-  /** Where a delete the hub refused is said: under its row, kept through a reload (refusals.svelte.ts). */
-  const deleteKey = (id: string) => `delete:/config/rules:${id}`;
+  const acts = new RowActs<RuleRow>("/config/rules", {
+    toggle: (row, enabled) => saveRule(row.id, { ...draftOf(row), enabled }),
+    remove: (row) => deleteRule(store, row),
+  });
 
   const fired = (row: RuleRow) =>
     row.stats.totalFires === 0
       ? "Has not caught anything yet"
       : `Fired ${times(row.stats.totalFires)}, last ${since(row.stats.lastFiredAt)}`;
-
-  async function toggle(row: RuleRow, enabled: boolean) {
-    busy[row.id] = true;
-    delete toggleFailed[row.id];
-    try {
-      await saveRule(row.id, { ...draftOf(row), enabled });
-      row.enabled = enabled;
-    } catch (error) {
-      toggleFailed[row.id] = message(error);
-    } finally {
-      delete busy[row.id];
-    }
-  }
-
-  /** Delete: at once, with Undo in the toast (deletes.ts); a refusal is said under its row. */
-  async function remove(row: RuleRow) {
-    busy[row.id] = true;
-    refusals.delete(deleteKey(row.id));
-    try {
-      await deleteRule(store, row);
-    } catch (error) {
-      refusals.set(deleteKey(row.id), { reason: notDeleted(row.name, error) });
-    } finally {
-      delete busy[row.id];
-    }
-  }
-
-  async function useTemplate(template: (typeof RULE_TEMPLATES)[number]) {
-    seeding = template.title;
-    seedFailed = null;
-    try {
-      const saved = await createRule(template.draft);
-      // Its new row, marked, is the result.
-      store.rules.value = [withStats(saved), ...rules];
-      store.mark(saved.id);
-    } catch (error) {
-      seedFailed = { title: template.title, reason: message(error) };
-    } finally {
-      seeding = null;
-    }
-  }
 </script>
 
 <SectionFrame
@@ -154,59 +101,22 @@
   {/snippet}
 
   {#if rules.length === 0}
-    <!-- Its one action asks a new session for a rule (The Empty Starts Work
-         Rule); with no machine online it says why, the starters and "Or
-         write one from scratch" under it being the way by hand. -->
-    <EmptyState
-      icon={section.icon}
-      line={EMPTY_LINES.starters("rules", sessionCanStart())}
+    <FleetStarters
+      {acts}
+      add={async (starter) => {
+        const saved = await createRule(starter.draft);
+        // Its new row, marked, is the result.
+        store.rules.value = [withStats(saved), ...rules];
+        store.mark(saved.id);
+      }}
+      icon={IconRules}
+      kind="rules"
+      label={rulesWords.starterRules}
+      meta={(starter) => starter.blurb}
+      {section}
+      starters={RULE_TEMPLATES}
       title={rulesWords.nothingWatching}
-    >
-      {#snippet action()}
-        <EmptyAsk
-          canStart={sessionCanStart()}
-          label={askLabel(FLEET_ASKS.rules.what)}
-          onask={(anchor) => askNewSession(FLEET_ASKS.rules.words, anchor)}
-          reason={NO_SESSION_CAN_START}
-        />
-      {/snippet}
-    </EmptyState>
-    <RowList label={rulesWords.starterRules}>
-      {#each RULE_TEMPLATES as template (template.title)}
-        <SectionRow
-          hue={HUE}
-          icon={IconRules}
-          meta={template.blurb}
-          name={template.title}
-        >
-          {#snippet trailing()}
-            <Button
-              disabled={seeding !== null && seeding !== template.title}
-              failed={seedFailed?.title === template.title}
-              label="Add"
-              onclick={() => useTemplate(template)}
-              pending={seeding === template.title}
-              pendingLabel="Adding…"
-              size="sm"
-              variant="outline"
-            />
-          {/snippet}
-          {#snippet below()}
-            <RowFault
-              again={() => useTemplate(template)}
-              reason={seedFailed?.title === template.title
-                ? seedFailed.reason
-                : null}
-            />
-          {/snippet}
-        </SectionRow>
-      {/each}
-    </RowList>
-    <div>
-      <Button href="/config/rules/new" variant="outline">
-        Or write one from scratch
-      </Button>
-    </div>
+    />
   {:else if shown.length === 0}
     <!-- The filter's empty, not the list's: the rules are there, none is
          waiting, and nothing should be made to wait. Its action lifts the
@@ -235,7 +145,7 @@
               label: rulesWords.deleteRule,
               icon: IconTrash,
               destructive: true,
-              onselect: () => remove(row),
+              onselect: () => acts.remove(row),
             },
           ]}
           enabled={row.enabled}
@@ -245,8 +155,8 @@
           icon={IconRules}
           meta="{fired(row)} · {ruleSentence(row)}"
           name={row.name}
-          ontoggle={(next) => toggle(row, next)}
-          toggling={busy[row.id] === true}
+          ontoggle={(next) => acts.toggle(row, next)}
+          toggling={acts.busy[row.id] === true}
         >
           {#snippet badge()}
             {#if row.stats.pending > 0}
@@ -256,15 +166,7 @@
             {/if}
           {/snippet}
           {#snippet below()}
-            <RowFault
-              again={() => toggle(row, !row.enabled)}
-              reason={toggleFailed[row.id]}
-            />
-            <RowFault
-              again={() => remove(row)}
-              data-delete-refusal={row.id}
-              reason={refusals.reason(deleteKey(row.id))}
-            />
+            <RowActFaults {acts} {row} />
           {/snippet}
         </SectionRow>
       {/each}

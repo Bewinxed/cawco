@@ -1,31 +1,21 @@
 <script lang="ts">
   import { HOOK_TEMPLATES, hookSentence } from "@cawco/core";
   import { cawco } from "#lib/cawco/client.svelte.js";
-  import { deleteHook, notDeleted } from "#lib/cawco/config/deletes.js";
+  import { deleteHook } from "#lib/cawco/config/deletes.js";
+  import FleetStarters from "#lib/cawco/config/FleetStarters.svelte";
   import RolloutChip from "#lib/cawco/config/RolloutChip.svelte";
+  import RowActFaults from "#lib/cawco/config/RowActFaults.svelte";
   import RowFaults from "#lib/cawco/config/RowFaults.svelte";
   import RowList from "#lib/cawco/config/RowList.svelte";
+  import { RowActs } from "#lib/cawco/config/row-acts.svelte.js";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore } from "#lib/cawco/config/store.svelte.js";
-  import EmptyAsk from "#lib/cawco/EmptyAsk.svelte";
-  import {
-    askLabel,
-    askNewSession,
-    EMPTY_LINES,
-    FLEET_ASKS,
-    NO_SESSION_CAN_START,
-    sessionCanStart,
-  } from "#lib/cawco/empty-asks.js";
   import { draftOf, type FleetHook, saveHook } from "#lib/cawco/hooks.js";
-  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { newId } from "#lib/cawco/id.js";
-  import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
-  import { refusals } from "#lib/cawco/refusals.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { IconHook, IconPlus, IconTrash } from "#lib/icons.js";
 
   /**
@@ -39,55 +29,10 @@
 
   const hooks = $derived(store.hooks.value ?? []);
   const machines = $derived(orderMachines(cawco.machines));
-  let busy = $state<Record<string, boolean>>({});
-  let seeding = $state<string | null>(null);
-  /** The template whose last add was refused, and why: said under its row. */
-  let seedFailed = $state<{ title: string; reason: string } | null>(null);
-  /** Why a hook's switch did not take, by hook: said under its row. */
-  let toggleFailed = $state<Record<string, string>>({});
-  /** Where a delete the hub refused is said: under its row, kept through a reload (refusals.svelte.ts). */
-  const deleteKey = (id: string) => `delete:/config/hooks:${id}`;
-
-  async function toggle(row: FleetHook, enabled: boolean) {
-    busy[row.id] = true;
-    delete toggleFailed[row.id];
-    try {
-      await saveHook(row.id, { ...draftOf(row), enabled });
-      row.enabled = enabled;
-    } catch (error) {
-      toggleFailed[row.id] = message(error);
-    } finally {
-      delete busy[row.id];
-    }
-  }
-
-  /** Delete: at once, with Undo in the toast (deletes.ts); a refusal is said under its row. */
-  async function remove(row: FleetHook) {
-    busy[row.id] = true;
-    refusals.delete(deleteKey(row.id));
-    try {
-      await deleteHook(store, row);
-    } catch (error) {
-      refusals.set(deleteKey(row.id), { reason: notDeleted(row.name, error) });
-    } finally {
-      delete busy[row.id];
-    }
-  }
-
-  async function useTemplate(template: (typeof HOOK_TEMPLATES)[number]) {
-    seeding = template.title;
-    seedFailed = null;
-    try {
-      const saved = await saveHook(newId(), template.draft);
-      // Its new row, marked, with its rollout chip, is the result.
-      store.hooks.value = [saved, ...hooks];
-      store.mark(saved.id);
-    } catch (error) {
-      seedFailed = { title: template.title, reason: message(error) };
-    } finally {
-      seeding = null;
-    }
-  }
+  const acts = new RowActs<FleetHook>("/config/hooks", {
+    toggle: (row, enabled) => saveHook(row.id, { ...draftOf(row), enabled }),
+    remove: (row) => deleteHook(store, row),
+  });
 </script>
 
 <SectionFrame
@@ -108,62 +53,23 @@
   {/snippet}
 
   {#if hooks.length === 0}
-    <!-- Its one action asks a new session for a hook (The Empty Starts Work
-         Rule); with no machine online it says why, the starters and "Or
-         write one from scratch" under it being the way by hand. -->
-    <EmptyState
-      icon={section.icon}
-      line={EMPTY_LINES.starters("hooks", sessionCanStart())}
+    <FleetStarters
+      {acts}
+      add={async (starter) => {
+        const saved = await saveHook(newId(), starter.draft);
+        // Its new row, marked, with its rollout chip, is the result.
+        store.hooks.value = [saved, ...hooks];
+        store.mark(saved.id);
+      }}
+      icon={IconHook}
+      kind="hooks"
+      label="Starter hooks"
+      meta={(starter) =>
+        `${starter.blurb} ${hookSentence(starter.draft).replaceAll("`", "")}`}
+      {section}
+      starters={HOOK_TEMPLATES}
       title="Nothing runs yet"
-    >
-      {#snippet action()}
-        <EmptyAsk
-          canStart={sessionCanStart()}
-          label={askLabel(FLEET_ASKS.hooks.what)}
-          onask={(anchor) => askNewSession(FLEET_ASKS.hooks.words, anchor)}
-          reason={NO_SESSION_CAN_START}
-        />
-      {/snippet}
-    </EmptyState>
-    <RowList label="Starter hooks">
-      {#each HOOK_TEMPLATES as template (template.title)}
-        <SectionRow
-          hue={HUE}
-          icon={IconHook}
-          meta="{template.blurb} {hookSentence(template.draft).replaceAll(
-            '`',
-            ''
-          )}"
-          name={template.title}
-        >
-          {#snippet trailing()}
-            <Button
-              disabled={seeding !== null && seeding !== template.title}
-              failed={seedFailed?.title === template.title}
-              label="Add"
-              onclick={() => useTemplate(template)}
-              pending={seeding === template.title}
-              pendingLabel="Adding…"
-              size="sm"
-              variant="outline"
-            />
-          {/snippet}
-          {#snippet below()}
-            <RowFault
-              again={() => useTemplate(template)}
-              reason={seedFailed?.title === template.title
-                ? seedFailed.reason
-                : null}
-            />
-          {/snippet}
-        </SectionRow>
-      {/each}
-    </RowList>
-    <div>
-      <Button href="/config/hooks/new" variant="outline">
-        Or write one from scratch
-      </Button>
-    </div>
+    />
   {:else}
     <RowList label="Hooks">
       {#each hooks as row (row.id)}
@@ -173,7 +79,7 @@
               label: "Delete hook",
               icon: IconTrash,
               destructive: true,
-              onselect: () => remove(row),
+              onselect: () => acts.remove(row),
             },
           ]}
           enabled={row.enabled}
@@ -183,8 +89,8 @@
           icon={IconHook}
           meta="{row.event} · {hookSentence(row).replaceAll('`', '')}"
           name={row.name}
-          ontoggle={(next) => toggle(row, next)}
-          toggling={busy[row.id] === true}
+          ontoggle={(next) => acts.toggle(row, next)}
+          toggling={acts.busy[row.id] === true}
         >
           {#snippet rollout()}
             <RolloutChip
@@ -195,15 +101,7 @@
             />
           {/snippet}
           {#snippet below()}
-            <RowFault
-              again={() => toggle(row, !row.enabled)}
-              reason={toggleFailed[row.id]}
-            />
-            <RowFault
-              again={() => remove(row)}
-              data-delete-refusal={row.id}
-              reason={refusals.reason(deleteKey(row.id))}
-            />
+            <RowActFaults {acts} {row} />
             <RowFaults key={row.id} kind="hooks" {machines} />
           {/snippet}
         </SectionRow>

@@ -63,8 +63,7 @@
   });
 </script>
 
-<!-- Mounted by bits-ui's forceMount and drawn while its presence says so:
-     the page has its pointer back at the dismissal (floating-presence). -->
+<!-- Mounted and drawn as the popover is (floating-body). -->
 <DropdownMenuPortal {...portalProps}>
   <DropdownMenuPrimitive.Content
     {align}

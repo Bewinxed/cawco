@@ -13,7 +13,7 @@ import type {
   ProviderForecast,
   ProviderRouting,
 } from "@cawco/core";
-import { ACCOUNT_HUES } from "@cawco/core";
+import { ACCOUNT_HUES, pushCarry } from "@cawco/core";
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 
 /**
@@ -175,15 +175,8 @@ function relayOf(
   const reset = seeds.map((seed) => now + seed.fiveResets);
   const out: { i: number; until: number }[] = [];
   const spans: CarrySpan[] = [];
-  const push = (i: number | null, from: number, to: number) => {
-    const accountId = i === null ? null : `acc-${i}`;
-    const last = spans.at(-1);
-    if (last && last.accountId === accountId && last.to === from) {
-      last.to = to;
-    } else if (to > from) {
-      spans.push({ accountId, from, to });
-    }
-  };
+  const push = (i: number | null, from: number, to: number) =>
+    pushCarry(spans, i === null ? null : `acc-${i}`, from, to);
   let t = now;
   for (let step = 0; step < 64 && t < horizon; step += 1) {
     reset.forEach((at, i) => {

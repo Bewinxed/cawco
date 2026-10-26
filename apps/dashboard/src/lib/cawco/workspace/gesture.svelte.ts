@@ -35,13 +35,8 @@
 
 import { flushSync } from "svelte";
 import { frameObserver } from "#lib/cawco/frame-observer.js";
-import {
-  integrate,
-  spring as play,
-  type Sample,
-  sampleAt,
-} from "../motion/spring";
-import { catchSettle, gatherParked, type Parked } from "./parked";
+import { integrate, spring as play, type Sample } from "../motion/spring";
+import { catchSettle, gatherParked, type Parked, settleAt } from "./parked";
 import { workspace } from "./workspace.svelte";
 
 /** Travel before a drag is anything at all. */
@@ -254,14 +249,7 @@ export function createSwipe(
     width > 0 ? Math.min(1, Math.abs(offset) / width) : 0;
 
   /** Where the settle is right now, read off the active pane's clock. */
-  const progress = (): Sample | null => {
-    const animation = animations[panes.findIndex((pane) => pane.delta === 0)];
-    const at = animation?.currentTime;
-    if (typeof at !== "number" || path.length === 0) {
-      return null;
-    }
-    return sampleAt(path, at / 1000);
-  };
+  const progress = () => settleAt(panes, animations, path);
 
   /** The settle, played by the compositor: the path as keyframes, one set per pane, offset by its parking place. */
   function spring(velocity: number) {
@@ -313,9 +301,10 @@ export function createSwipe(
   }
 
   const caught = catchSettle({
+    animations: () => animations,
+    items: () => panes,
     land,
-    playing: () => animations.length > 0,
-    progress,
+    path: () => path,
     spring,
     stand: (x) => {
       offset = x;

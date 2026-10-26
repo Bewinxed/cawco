@@ -1,4 +1,13 @@
 <script lang="ts">
+  import type { InstanceRow, PulseFrame, SessionPulse } from "@cawco/core";
+  import { onMount, untrack } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
+  import WorkTabs from "#lib/cawco/home/WorkTabs.svelte";
+  import { workTab } from "#lib/cawco/home/work-tab.svelte.js";
+  import PaneTabs from "#lib/cawco/workspace/PaneTabs.svelte";
+  import type { LeafNode } from "#lib/cawco/workspace/workspace.svelte.js";
+  import { theme } from "#lib/theme.svelte.js";
+  import { page } from "$app/state";
   /**
    * Both folder strips on a bench, fed through the client's own state with
    * no hub, over everything the shell draws (its hub banner included):
@@ -25,15 +34,7 @@
    * own choice goes to the workspace, which holds no such group and would
    * navigate to the session.
    */
-  import type { InstanceRow, PulseFrame, SessionPulse } from "@cawco/core";
-  import { onMount, untrack } from "svelte";
-  import { MediaQuery } from "svelte/reactivity";
-  import WorkTabs from "#lib/cawco/home/WorkTabs.svelte";
-  import { workTab } from "#lib/cawco/home/work-tab.svelte.js";
-  import PaneTabs from "#lib/cawco/workspace/PaneTabs.svelte";
-  import type { LeafNode } from "#lib/cawco/workspace/workspace.svelte.js";
-  import { theme } from "#lib/theme.svelte.js";
-  import { page } from "$app/state";
+  import { benchClick, benchLeaf } from "../tab-bench";
 
   const ids = [
     "0f1e2d3c-0000-4000-8000-000000000001",
@@ -131,18 +132,11 @@
     page.url.searchParams.get("work") === "finished" ? "finished" : "working"
   );
 
-  const first = untrack(() =>
-    Math.min(
-      ids.length - 1,
-      Math.max(0, Number(page.url.searchParams.get("at") ?? 1) || 0)
+  const leaf = $state<LeafNode>(
+    untrack(() =>
+      benchLeaf("folder-proof", ids, page.url.searchParams.get("at"))
     )
   );
-  const leaf = $state<LeafNode>({
-    id: "folder-proof",
-    t: "l",
-    tabs: ids,
-    active: ids[first],
-  });
   /** The same tabs with the idle one chosen. */
   const idleLeaf = $state<LeafNode>({
     id: "folder-proof-idle",
@@ -198,35 +192,6 @@
       leaf.active = id;
     }
   }
-
-  /**
-   * A click that would choose a tab (its link, its empty details slot) or
-   * close one is the bench's: the strip's own would act on the workspace.
-   * The chosen tab's own click (its details card) is left to the strip.
-   */
-  const benchClick = (group: LeafNode) => (event: MouseEvent) => {
-    const target = event.target instanceof Element ? event.target : null;
-    const tab = target?.closest<HTMLElement>('[data-slot="tab"]');
-    const id = tab
-      ?.querySelector<HTMLElement>("[data-session-tab]")
-      ?.getAttribute("data-session-tab");
-    if (!(tab && id)) {
-      return;
-    }
-    if (target?.closest('[data-slot="tclose"]')) {
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
-    if (id === group.active) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    if (group.tabs.includes(id)) {
-      group.active = id;
-    }
-  };
 
   let workEl = $state<HTMLElement>();
   /** Chooses Working or Finished as a click on its tab does. */

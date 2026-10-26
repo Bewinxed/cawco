@@ -596,6 +596,25 @@ export interface CarrySpan {
 }
 
 /**
+ * Adds who carries over `from`..`to` to `spans`: it lengthens the last span
+ * when the same account carries on from where it ended, and an empty
+ * stretch adds nothing.
+ */
+export function pushCarry(
+  spans: CarrySpan[],
+  accountId: string | null,
+  from: number,
+  to: number
+): void {
+  const last = spans.at(-1);
+  if (last && last.accountId === accountId && last.to === from) {
+    last.to = to;
+  } else if (to > from) {
+    spans.push({ accountId, from, to });
+  }
+}
+
+/**
  * A provider's accounts as a forecast: each account's windows, and which
  * account carries a person's new sessions (`yours`) and a session's
  * (`delegates`) from now to the 5-hour horizon.

@@ -1098,8 +1098,8 @@
       >
         <Table.Header>
           <Table.Row variant="band">
-            <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             {@render leadHeads(words.columnState, words.columnRoutine)}
+            <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
               data-col-last
               class="z-2 w-c-routine-time-w"
@@ -1194,8 +1194,8 @@
       <Table.Root aria-label={words.sources} layout="ledger" stickyBand>
         <Table.Header>
           <Table.Row variant="band">
-            <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             {@render leadHeads(words.columnService, words.columnSource)}
+            <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
               data-col-last
               class="z-2 w-c-routine-time-w"
