@@ -16,13 +16,13 @@
  * An operator's own skill of the same name is theirs to keep: the fleet
  * payload sends theirs and leaves this one out.
  */
+
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { FleetSkillPayload, SkillFile } from "@cawco/core";
+import type { FleetSkillPayload, SkillFile, StagesTemplate } from "@cawco/core";
 import { hashFiles } from "@cawco/core/file-hash";
 import { runtimeTree, standalone } from "@cawco/core/runtime";
-import type { StagesTemplate } from "./stages";
 
 export const BUNDLED_SKILLS = [
   "show",

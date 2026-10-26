@@ -6,6 +6,8 @@
  * through the view tools below, which are hub routes.
  */
 
+import type { RoutineTarget } from "./routine-kinds";
+
 /** The fixed kinds a stage belongs to (WORDS.md: kind). */
 export const STAGE_KINDS = [
   "todo",
@@ -16,6 +18,29 @@ export const STAGE_KINDS = [
   "dropped",
 ] as const;
 export type StageKind = (typeof STAGE_KINDS)[number];
+
+/** The stages templates a project's stages.md may start from (hub stages.ts `templateText`), in the order they are offered. */
+export const STAGES_TEMPLATES = [
+  "code",
+  "launch",
+  "seo",
+  "brand",
+  "design",
+  "social",
+  "outreach",
+] as const;
+export type StagesTemplate = (typeof STAGES_TEMPLATES)[number];
+
+/** Who moves a task (stages.md): you, the project's lead, a session, an approved action, a routine. */
+export const MOVERS = ["you", "lead", "session", "action", "routine"] as const;
+export type Mover = (typeof MOVERS)[number];
+
+/**
+ * Who moves a task, as the hub checks and records it: a stages.md mover, or
+ * `hub`, the hub's own code (the dispatcher), which the file's moves do not bind.
+ */
+export const TASK_MOVERS = [...MOVERS, "hub"] as const;
+export type TaskMover = (typeof TASK_MOVERS)[number];
 
 /**
  * DESIGN.md's status pairs: each a `status-<pair>` fill and ink, the only
@@ -161,7 +186,7 @@ export interface ViewRoutine {
   /** Newest first. */
   runs: ViewRoutineRun[];
   /** A fresh delegate each run, a message to Caw, or the project's memory curator. */
-  target: "delegate" | "orchestrator" | "lead" | "curator";
+  target: RoutineTarget;
   timeZone: string;
 }
 

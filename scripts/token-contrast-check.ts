@@ -26,6 +26,7 @@
  */
 import { join } from "node:path";
 import Color from "colorjs.io";
+import { ACCOUNT_HUES } from "../packages/core/src/accounts";
 import { STATUS_PAIRS } from "../packages/core/src/views";
 import { buildTokens, evaluatorOf } from "../packages/hub/src/design-tokens";
 
@@ -68,15 +69,6 @@ const TOOLS = [
   "write",
   "skill",
   "plan",
-] as const;
-const ACCOUNTS = [
-  "amber",
-  "orange",
-  "green",
-  "cyan",
-  "blue",
-  "rose",
-  "violet",
 ] as const;
 const IDENTITY_HUES = [55, 85, 115, 145, 175, 205, 235, 265, 295, 330];
 const CODE_INKS = [
@@ -413,7 +405,7 @@ const PAIRS: Pair[] = [
     source: S.recall,
   })),
   // Accounts: disc, rim and week sector on the border-control track.
-  ...ACCOUNTS.flatMap((hue) => [
+  ...ACCOUNT_HUES.flatMap((hue) => [
     {
       label: `account-${hue} disc on border-control`,
       fg: `account-${hue}`,

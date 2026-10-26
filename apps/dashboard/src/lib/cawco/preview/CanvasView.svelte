@@ -9,12 +9,12 @@
    * goes to the session.
    */
   import { previewWords } from "@cawco/core";
+  import type { PreviewScheme } from "@cawco/core/comments";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { IconLayers } from "#lib/icons.js";
   import {
     CANVAS_SCHEMES,
     CANVAS_WIDTHS,
-    type CanvasScheme,
     type CanvasViewState,
     type CanvasWidth,
   } from "./canvas-view.svelte";
@@ -42,7 +42,7 @@
     <DropdownMenu.GroupHeading>Scheme</DropdownMenu.GroupHeading>
     <DropdownMenu.RadioGroup
       onValueChange={(value) =>
-        view.send({ ...view.chosen, scheme: value as CanvasScheme })}
+        view.send({ ...view.chosen, scheme: value as PreviewScheme })}
       value={view.chosen.scheme}
     >
       {#each CANVAS_SCHEMES as [value, words] (value)}

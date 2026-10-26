@@ -16,6 +16,7 @@ import {
   CLAUDE_PROVIDER,
   type HomeStore,
   LIMITED_PROVIDERS,
+  type NameableAccount,
   type PlacementStrategy,
   type ProviderChoice,
   type ProviderRouting,
@@ -50,8 +51,7 @@ const ELLIPSIS = /^…/u;
  * email is `…a1b2`).
  */
 export const nameOf = (
-  account: Pick<Account, "email" | "id" | "identity" | "label" | "provider"> &
-    Partial<Pick<Account, "kind">>
+  account: NameableAccount & Partial<Pick<Account, "kind">>
 ): string => {
   if (account.kind === "api_key" && !account.label && account.email) {
     return words.keyTail(account.email.replace(ELLIPSIS, "").slice(-4));

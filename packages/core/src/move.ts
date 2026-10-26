@@ -16,8 +16,16 @@
 
 import type { EffortLevel, HarnessKind, PermissionMode } from "./harness";
 
+/** Every {@link MoveStep}, in the order a job does them. */
+export const MOVE_JOB_STEPS = [
+  "approval",
+  "snapshot",
+  "clone",
+  "lfs",
+  "start",
+] as const;
 /** A stage the job does work in. */
-export type MoveStep = "approval" | "snapshot" | "clone" | "lfs" | "start";
+export type MoveStep = (typeof MOVE_JOB_STEPS)[number];
 
 /** Where a job stands: at one of its steps, or settled. */
 export type MoveStage = MoveStep | "started" | "failed" | "cancelled";

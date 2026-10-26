@@ -6,6 +6,7 @@
     workspaceNeedsReason,
     workspaceNeedsWords,
   } from "@cawco/core";
+  import type { BinaryUpdatePhase } from "@cawco/core/binary-updates";
   import { detach } from "@cawco/core/detach";
   import { Button } from "#lib/components/ui/button/index.js";
   /**
@@ -22,6 +23,7 @@
    * it as the install starts and the window parks into it.
    */
   import {
+    type MachinePresence,
     MachineRow,
     machineHue,
     machineIcon,
@@ -81,10 +83,7 @@
   const liveOn = (machineId: string): number =>
     cawco.runningRows.filter((row) => row.machineId === machineId).length;
   /** The row's dot: down, up but in trouble, or fine. */
-  function presenceOf(
-    up: boolean,
-    fault: string | undefined
-  ): "online" | "away" | "off" {
+  function presenceOf(up: boolean, fault: string | undefined): MachinePresence {
     if (!up) {
       return "off";
     }
@@ -130,7 +129,7 @@
    * Update cell's words, on the machine's word; one that failed says why
    * under the row, with Retry where a retry is the person's to make.
    */
-  const MOVING = new Set([
+  const MOVING = new Set<BinaryUpdatePhase>([
     "ready",
     "downloading",
     "installing",

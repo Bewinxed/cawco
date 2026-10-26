@@ -16,7 +16,7 @@
 import type { CanvasAuthor } from "@cawco/core/canvas";
 import { honourDeletions, splitWholePins } from "@cawco/core/comments";
 import { RESYNC_MS } from "@cawco/core/doc-link";
-import { mapsOf } from "@cawco/core/doc-maps";
+import { MIRRORED_MAPS, mapsOf } from "@cawco/core/doc-maps";
 import {
   type AbstractType,
   applyUpdate,
@@ -32,24 +32,13 @@ import type { HubLifetimeShape, HubTimer } from "../lifetime";
 
 /** The doc's top-level maps. */
 export const MAPS = [
-  "meta",
-  "state",
-  "ink",
-  "moved",
-  // A pin's parts, each its own key (core comments.ts `PIN_MAPS`).
-  "pins",
-  "places",
-  "resolves",
-  "looks",
-  "deliveries",
-  "entries",
-  // Deleted pins' tombstones (core comments.ts `goneOf`): a deletion no later write undoes.
-  "gone",
+  // What a page's overlay mirrors: the decision state, meta, ink, moved
+  // groups, a pin's parts, deleted pins' tombstones (core comments.ts
+  // `goneOf`) and the person's looks at what changed (`seenOf`).
+  ...MIRRORED_MAPS,
   "comments",
   "files",
   "requests",
-  // The person's looks at what the latest revision changed (core comments.ts `seenOf`).
-  "seen",
   // Each pin's lines of what changed for it, the hub's alone (core comments.ts `activityOf`).
   "activity",
 ] as const;

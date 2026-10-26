@@ -7,22 +7,25 @@
  * One per pane, read by both of its controls (CanvasView): the head's own
  * button and More's submenu.
  */
+import { PREVIEW_SCHEMES, type PreviewScheme } from "@cawco/core/comments";
 import { store, stored } from "../storage";
 
-export type CanvasScheme = "page" | "light" | "dark" | "both";
 export type CanvasWidth = "own" | "390" | "768" | "1280" | "all";
 export interface CanvasChosen {
   motion: "on" | "reduce";
-  scheme: CanvasScheme;
+  scheme: PreviewScheme;
   width: CanvasWidth;
 }
 
-export const CANVAS_SCHEMES: [CanvasScheme, string][] = [
-  ["page", "As the page"],
-  ["light", "Light"],
-  ["dark", "Dark"],
-  ["both", "Light and dark"],
-];
+const SCHEME_LABELS: Record<PreviewScheme, string> = {
+  page: "As the page",
+  light: "Light",
+  dark: "Dark",
+  both: "Light and dark",
+};
+export const CANVAS_SCHEMES: [PreviewScheme, string][] = PREVIEW_SCHEMES.map(
+  (scheme) => [scheme, SCHEME_LABELS[scheme]]
+);
 export const CANVAS_WIDTHS: [CanvasWidth, string][] = [
   ["own", "Each story's own"],
   ["390", "Phone, 390"],

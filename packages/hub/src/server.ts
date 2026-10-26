@@ -248,6 +248,7 @@ import {
   DEFAULT_AT_LIMIT,
   delegateAskText,
   deriveTitleFromFirstMessage,
+  EFFORT_LEVELS,
   EFFORT_NONE,
   EFFORT_READ,
   type EffortLevel,
@@ -360,7 +361,9 @@ import {
   reportMarker,
   ruleProblem,
   SESSION_DIR_READ,
+  STAGES_TEMPLATES,
   STREAM_SO_FAR,
+  type StagesTemplate,
   type StoppedCommands,
   type StreamHeartbeat,
   SUMMARISER_OUTPUT_RESERVE_TOKENS,
@@ -902,7 +905,7 @@ import {
   viaSshForward,
 } from "./ssh-door";
 import { createSshTunnels } from "./ssh-tunnels";
-import { type StagesTemplate, TEMPLATES, templateOf } from "./stages";
+import { templateOf } from "./stages";
 import { createStreamHub } from "./stream";
 import { createStreamRelay } from "./stream-relay";
 import { suggest } from "./suggest";
@@ -1776,15 +1779,7 @@ const continueBody = t.Object({
     model: t.Optional(t.String({ minLength: 1 })),
     machineId: t.Optional(t.String({ minLength: 1 })),
     cwd: t.Optional(t.String({ minLength: 1 })),
-    effort: t.Optional(
-      t.Union([
-        t.Literal("low"),
-        t.Literal("medium"),
-        t.Literal("high"),
-        t.Literal("xhigh"),
-        t.Literal("max"),
-      ])
-    ),
+    effort: t.Optional(t.Union(EFFORT_LEVELS.map((level) => t.Literal(level)))),
     // The mode the new session is asked to run in, and the one it takes when
     // none is asked (the caller's own). A harness with modes gets an
     // explicit mode, and with neither nothing starts; one with none (pi)
@@ -1840,15 +1835,7 @@ const moveBody = t.Object({
     // expired, then required (core move.ts MoveRequest).
     harness: t.Optional(harnessSchema),
     model: t.Optional(t.String({ minLength: 1 })),
-    effort: t.Optional(
-      t.Union([
-        t.Literal("low"),
-        t.Literal("medium"),
-        t.Literal("high"),
-        t.Literal("xhigh"),
-        t.Literal("max"),
-      ])
-    ),
+    effort: t.Optional(t.Union(EFFORT_LEVELS.map((level) => t.Literal(level)))),
     permissionMode: t.Optional(permissionModeSchema),
     account: t.Optional(t.String({ minLength: 1 })),
     title: t.Optional(t.String()),
@@ -32956,7 +32943,7 @@ export const createServer = (
             // leaves that project's setting as it is.
             caw: t.Optional(t.Boolean()),
             template: t.Optional(
-              t.Union(TEMPLATES.map((name) => t.Literal(name)))
+              t.Union(STAGES_TEMPLATES.map((name) => t.Literal(name)))
             ),
             prompt: t.Optional(t.String({ maxLength: 20_000 })),
             promptId: t.Optional(t.String({ minLength: 1, maxLength: 200 })),

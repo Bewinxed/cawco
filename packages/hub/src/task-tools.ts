@@ -13,7 +13,6 @@
 import {
   type InstanceRow,
   LANDS_MODES,
-  type LandsMode,
   PLAN_STEP_PRIORITIES,
   PLAN_STEP_STATUSES,
   type PlanWait,
@@ -195,7 +194,7 @@ const WAIT_TARGETS =
   "tsk-12; a card <page>#<card>; a pin <page>/<number>; a GitHub pull request or Actions run URL; a session handle like cockpit#5a167bde";
 const landsParameter = () =>
   z
-    .enum(LANDS_MODES as [LandsMode, ...LandsMode[]])
+    .enum(LANDS_MODES)
     .describe(
       "main, branch (cawco/<task>), pr (and a pull request) or none (outputs are the deliverable). Default: the project's."
     );

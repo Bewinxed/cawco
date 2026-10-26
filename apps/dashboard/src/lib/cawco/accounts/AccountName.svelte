@@ -7,7 +7,11 @@
    * the email drops under the nickname when there is no room, rather than
    * ending in an ellipsis.
    */
-  import { type Account, accountsWords } from "@cawco/core";
+  import {
+    type Account,
+    accountsWords,
+    type NameableAccount,
+  } from "@cawco/core";
   import { nameOf } from "./model.svelte";
 
   let {
@@ -15,8 +19,7 @@
     row = false,
     wrap = false,
   }: {
-    account: Pick<Account, "email" | "id" | "identity" | "label" | "provider"> &
-      Partial<Pick<Account, "kind">>;
+    account: NameableAccount & Partial<Pick<Account, "kind">>;
     row?: boolean;
     wrap?: boolean;
   } = $props();

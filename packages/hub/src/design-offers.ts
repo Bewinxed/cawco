@@ -21,14 +21,19 @@
  * to-do stage, naming the design-system skill. Nothing is built before the
  * person says Build.
  */
+
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { CommandResult, DesignOfferState, ThreadNote } from "@cawco/core";
+import type {
+  CommandResult,
+  DesignOfferState,
+  StagesTemplate,
+  ThreadNote,
+} from "@cawco/core";
 import { Elysia, t } from "elysia";
 import type { DbShape } from "./db";
 import { projectDesign } from "./landed";
 import { FolderRefusal, projectRoot, refused } from "./project-folder";
-import type { StagesTemplate } from "./stages";
 import type { TaskActor, TaskEvent, Tasks, TaskView } from "./tasks";
 
 /** The templates whose work calls for a design system. */

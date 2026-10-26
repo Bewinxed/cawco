@@ -11,7 +11,7 @@
  * advice. Effort is not only thinking depth — a lower level also buys fewer and
  * more consolidated tool calls, less preamble and terser confirmations.
  */
-import type { EffortLevel } from "@cawco/core";
+import { EFFORT_LEVELS, type EffortLevel } from "@cawco/core";
 
 export interface EffortLevelOption {
   /** `high` is what the API answers on when nothing asks for a level. */
@@ -21,36 +21,35 @@ export interface EffortLevelOption {
   value: EffortLevel;
 }
 
-export const EFFORT_LEVELS: EffortLevelOption[] = [
-  {
-    value: "low",
-    label: "low",
+/** What each level is for, in Anthropic's words, and which one the API answers on unasked. */
+const ABOUT: Record<
+  EffortLevel,
+  Pick<EffortLevelOption, "apiDefault" | "description">
+> = {
+  low: {
     description:
       "Short, scoped tasks and latency-sensitive workloads that are not intelligence-sensitive.",
   },
-  {
-    value: "medium",
-    label: "medium",
+  medium: {
     description:
       "Cost-sensitive use cases that need to reduce token usage while trading off intelligence.",
   },
-  {
-    value: "high",
-    label: "high",
+  high: {
     description:
       "Balances token usage and intelligence; the recommended minimum for most intelligence-sensitive work.",
     apiDefault: true,
   },
-  {
-    value: "xhigh",
-    label: "xhigh",
+  xhigh: {
     description:
       "The best setting for most coding and agentic use cases; the default in Claude Code.",
   },
-  {
-    value: "max",
-    label: "max",
+  max: {
     description:
       "Can deliver gains in some use cases but may show diminishing returns from increased token usage; can be prone to overthinking.",
   },
-];
+};
+
+/** Every level as the picker offers it, in core's order (`EFFORT_LEVELS`). */
+export const EFFORT_OPTIONS: EffortLevelOption[] = EFFORT_LEVELS.map(
+  (value) => ({ value, label: value, ...ABOUT[value] })
+);

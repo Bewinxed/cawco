@@ -12,7 +12,7 @@
  */
 import { machineLabel } from "@cawco/core/machine-names";
 import type { SessionPlan } from "@cawco/core/plan";
-import { referenceParts } from "@cawco/core/references";
+import { type ReferenceKind, referenceParts } from "@cawco/core/references";
 import { planWords } from "@cawco/core/words/plan";
 import { SvelteMap } from "svelte/reactivity";
 import { cawco } from "./client.svelte";
@@ -21,8 +21,10 @@ import { readTask, stageLabel, type TaskView } from "./project-tasks";
 import type { Routine } from "./routines/routines-api";
 
 /** The kinds this module names. */
-export type ThingKind =
-  "task" | "todo" | "plan" | "step" | "routine" | "project" | "machine";
+export type ThingKind = Extract<
+  ReferenceKind,
+  "task" | "todo" | "plan" | "step" | "routine" | "project" | "machine"
+>;
 
 /** Where a press opens a thing: a page of the app, a session's plan (at a step), or the machines' list. */
 type ThingPlace =

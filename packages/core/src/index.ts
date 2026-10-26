@@ -2,6 +2,7 @@
 // imports nothing (cawco-env.ts), re-exported here as every caller reads it,
 // and read here by the readers below it.
 import type { ACTIVITIES } from "./activity";
+import type { ArtifactKind } from "./artifact-kinds";
 import { CAWCO_ENV, readEnv } from "./cawco-env";
 import { CAWCO_MCP_DEFAULT_PORT, type FleetSyncReport } from "./fleet";
 import type { MachineHarnessReport } from "./harness";
@@ -17,6 +18,7 @@ export * from "./actions";
 // "Continue in new session": the size rules the hub and the dashboard share.
 export * from "./activity";
 export * from "./archive";
+export * from "./artifact-kinds";
 // What waits on the person among the artifacts: Needs you's artifact items.
 export * from "./artifact-needs";
 export * from "./ask-tools";
@@ -113,6 +115,7 @@ export * from "./ring";
 // Standing instructions the hub enforces on every session: a phrase to watch
 // for and a reply to send back. The matcher lives here so the hub and the
 // editor's test box decide identically.
+export * from "./routine-kinds";
 export * from "./rules";
 export * from "./scratch-tag";
 // What reads as a credential in text: a memory note's words, a file a place's first commit would take.
@@ -125,6 +128,7 @@ export * from "./stream";
 export * from "./stream-relay";
 // HTTPS on the hub machine's tailnet name: its state, and a preview's origin there.
 export * from "./tailnet-https";
+export * from "./task-history";
 // A project's threads with its Caw: rows, messages and their frames.
 export * from "./threads";
 // The tool catalog and its status/policy shapes (NEW.md §10).
@@ -1669,18 +1673,6 @@ export type PreviewSource =
     }
   | { dir: string; path?: string }
   | { page: string };
-
-/**
- * The kinds of artifact (WORDS.md): HTML the agent wrote, a drawing, a dev
- * server or folder shown live, a sheet: a story file's stories, each a
- * real component mounted by the project's own toolchain (core `stage.ts`),
- * and the project's browser, listed for every session of the project (or of
- * the machine, for the machine's browser). A browser's source is its key as
- * a page (`{ page: "project:<id>" }`): the hub holds it, no machine's
- * preview listener serves it, and every installed app reads that shape.
- */
-export type ArtifactKind =
-  "page" | "canvas" | "preview" | "component" | "browser";
 
 /** An artifact's name: lowercase letters, digits and dashes, like `onboarding`. */
 export const ARTIFACT_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/u;

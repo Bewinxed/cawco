@@ -45,12 +45,15 @@
  * stage: it is every task whose stage is of kind `you`, worked out on read.
  */
 
-import { STAGE_KINDS as KINDS, type StageKind } from "@cawco/core";
+import {
+  STAGE_KINDS as KINDS,
+  MOVERS,
+  type Mover,
+  STAGES_TEMPLATES,
+  type StageKind,
+  type StagesTemplate,
+} from "@cawco/core";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
-
-/** Who moves a task: you, the project's lead, a session, an approved action, a routine. */
-export const MOVERS = ["you", "lead", "session", "action", "routine"] as const;
-export type Mover = (typeof MOVERS)[number];
 
 export interface StageHooks {
   /** `after:` as written, like `48h`. */
@@ -91,16 +94,8 @@ export interface Stages {
 export type StagesReading =
   { ok: true; stages: Stages } | { ok: false; problems: string[] };
 
-export const TEMPLATES = [
-  "code",
-  "launch",
-  "seo",
-  "brand",
-  "design",
-  "social",
-  "outreach",
-] as const;
-export type StagesTemplate = (typeof TEMPLATES)[number];
+// The db schema (hub/src/db) reads the type from here.
+export type { StagesTemplate } from "@cawco/core";
 
 /** A stage's name: lowercase, a letter first. */
 export const STAGE_NAME = /^[a-z][a-z0-9_-]{0,39}$/u;
@@ -736,7 +731,7 @@ export const templateOf = (
   own: Stages
 ): { template: StagesTemplate } | { candidates: StagesTemplate[] } => {
   const kinds = own.stages.map((stage) => stage.kind).join(" ");
-  const candidates = TEMPLATES.filter((name) => {
+  const candidates = STAGES_TEMPLATES.filter((name) => {
     const template = templateStages(name);
     return (
       template.stages.map((stage) => stage.kind).join(" ") === kinds &&

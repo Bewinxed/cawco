@@ -201,7 +201,7 @@ export interface PageAnchor {
     file: string;
     state?: {
       interaction: Interaction;
-      scheme: "light" | "dark" | "page";
+      scheme: Exclude<PreviewScheme, "both">;
       width: number | null;
     };
     story: string;
@@ -1162,6 +1162,26 @@ export const unheardEntries = (pin: Pin): ThreadEntry[] => {
     (entry, i) => i > answered && entry.by === "person" && !entry.sentAt
   );
 };
+
+/**
+ * Where a pin's pill stands (DESIGN.md, A pin's pill): `provisional` while it
+ * is still being placed, `unsent` while the session has not heard it, `sent`
+ * once it has, `resolved` once it is settled.
+ */
+export const PIN_STATES = [
+  "provisional",
+  "unsent",
+  "sent",
+  "resolved",
+] as const;
+export type PinState = (typeof PIN_STATES)[number];
+
+/**
+ * The colour scheme a page or a component's stories are shown in: the
+ * page's own, light, dark, or both side by side.
+ */
+export const PREVIEW_SCHEMES = ["page", "light", "dark", "both"] as const;
+export type PreviewScheme = (typeof PREVIEW_SCHEMES)[number];
 
 /** Whether the session has heard of a pin at all: delivered or read, or answered in its thread. */
 const pinKnown = (pin: Pin): boolean =>

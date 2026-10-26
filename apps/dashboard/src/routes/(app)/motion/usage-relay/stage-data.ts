@@ -15,6 +15,7 @@ import type {
   ProviderForecast,
   ProviderRouting,
 } from "@cawco/core";
+import { ACCOUNT_HUES } from "@cawco/core";
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 
 /**
@@ -23,7 +24,7 @@ import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
  * and an existing account keeps its hue; the rings' shownHues tells them
  * apart.
  */
-const HUES = ["amber", "blue", "cyan", "green", "orange"] as const;
+const HUES = ACCOUNT_HUES.slice(0, 5);
 
 interface Seed {
   email: string;

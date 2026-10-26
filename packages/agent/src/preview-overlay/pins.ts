@@ -57,6 +57,7 @@ import {
   type PageAnchor,
   type Pin,
   type PinnedElement,
+  type PinState,
   pinUnsent,
   placeOf,
   placePin,
@@ -258,8 +259,6 @@ interface Pill {
   box: Box;
   tail: Tail;
 }
-
-type PillState = "provisional" | "unsent" | "sent" | "resolved";
 
 const round = (n: number) => Math.round(n * 10_000) / 10_000;
 
@@ -710,7 +709,7 @@ export function startPins(deps: PinsDeps): Pins {
     return { box: { x: Math.max(edge, left), y: top, w, h }, tail };
   };
 
-  const stateOf = (pin: Pin | null): PillState => {
+  const stateOf = (pin: Pin | null): PinState => {
     if (!pin) {
       return "provisional";
     }
@@ -757,19 +756,17 @@ export function startPins(deps: PinsDeps): Pins {
     ring.style.filter = `drop-shadow(0 1px 1px ${paint.shadow})`;
     ring.setAttribute("data-ring", "");
     g.append(ring);
-    const faces: Record<
-      PillState,
-      { edge: string; face: string; ink: string }
-    > = {
-      provisional: { edge: paint.action, face: paint.raised, ink: "" },
-      unsent: { edge: paint.action, face: paint.raised, ink: paint.action },
-      sent: { edge: paint.action, face: paint.action, ink: paint.onAction },
-      resolved: {
-        edge: paint.recessed,
-        face: paint.recessed,
-        ink: paint.muted,
-      },
-    };
+    const faces: Record<PinState, { edge: string; face: string; ink: string }> =
+      {
+        provisional: { edge: paint.action, face: paint.raised, ink: "" },
+        unsent: { edge: paint.action, face: paint.raised, ink: paint.action },
+        sent: { edge: paint.action, face: paint.action, ink: paint.onAction },
+        resolved: {
+          edge: paint.recessed,
+          face: paint.recessed,
+          ink: paint.muted,
+        },
+      };
     const look = faces[state];
     const face = pathEl(shapePath(box, corners(box.h, tail, 0)), look.edge);
     // The pill's own box, its tail corner on the pressed point.

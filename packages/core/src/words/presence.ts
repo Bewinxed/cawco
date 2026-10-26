@@ -7,6 +7,13 @@
  * them as a desktop notification. Nothing reports before the person's yes.
  * State words only: nothing says what the person did.
  */
+/**
+ * This device's report of whether the person is at this computer: on, off,
+ * blocked in the browser's site settings, or unavailable (no agent here and
+ * no Idle Detection).
+ */
+export type DeskState = "on" | "off" | "blocked" | "unavailable";
+
 export const presenceWords = {
   /** The dot's word and the menu's head while the person is here. */
   here: "Here",
@@ -47,7 +54,7 @@ export const presenceWords = {
   /** The menu's switch: this device says when you're at this computer (its CawCo agent, or this browser's Idle Detection). */
   atComputer: "Say when I'm at this computer",
   /** That switch's state word: on, off, blocked in the browser, or no Idle Detection here. */
-  atComputerState: (state: "on" | "off" | "blocked" | "unavailable") =>
+  atComputerState: (state: DeskState) =>
     state === "unavailable" ? "not available here" : state,
   setUp: "Set up this browser",
   /** The trigger's name, with the dot's word after it. */

@@ -56,14 +56,19 @@ import {
   type EndedBy,
   type InstanceRow,
   type IssueTracker,
+  LANDS_MODES,
   type LandsMode,
+  type Mover,
   markdownLink,
   type ProjectStarter,
   type ResultArtifact,
+  STAGES_TEMPLATES,
   STARTER_PLACES,
   type StageKind,
+  type StagesTemplate,
   type StarterPlace,
   type TaskIssueLink,
+  type TaskMover,
   taskLink,
   taskLinkWords,
   taskTarget,
@@ -115,7 +120,6 @@ import { type MachineFacts, runsOnValue } from "./runs-on";
 import {
   firstStage,
   isCodeTemplate,
-  type Mover,
   moveProblem,
   passesReview,
   readStages,
@@ -125,11 +129,9 @@ import {
   type StageMove,
   type Stages,
   type StagesReading,
-  type StagesTemplate,
   type StageView,
   stageNamed,
   startProblem,
-  TEMPLATES,
   templateStages,
   templateText,
 } from "./stages";
@@ -184,12 +186,6 @@ import {
   outputsFolder,
   ownsProblem,
 } from "./work-items";
-
-/**
- * Who moves a task: one of the movers stages.md names, or `hub`, the hub's
- * own code (the dispatcher), which the file's moves do not bind.
- */
-export type TaskMover = Mover | "hub";
 
 /** Who is changing a task: what stage moves they may make, and whom the commit is by. */
 export interface TaskActor {
@@ -1506,7 +1502,8 @@ const stagesView = (
   starters: starters.board,
   routineStarters: starters.routines,
   decisionStarters: starters.decisions,
-  template: TEMPLATES.find((name) => templateText(name) === content) ?? null,
+  template:
+    STAGES_TEMPLATES.find((name) => templateText(name) === content) ?? null,
   stages: reading.ok ? reading.stages.stages : [],
   moves: reading.ok ? reading.stages.moves : [],
   views: reading.ok ? reading.stages.views : [],
@@ -4623,7 +4620,7 @@ export const createTasks = (store: TaskStore) => {
 
     /** The stage templates a project can apply. */
     templates(): StagesTemplateView[] {
-      return TEMPLATES.map((name) => ({
+      return STAGES_TEMPLATES.map((name) => ({
         name,
         content: templateText(name),
         ...templateStages(name),
@@ -4689,14 +4686,9 @@ const KIND = t.Union([
   t.Literal("dropped"),
 ]);
 /** Every template `/api/stage-templates` lists is one a project may take. */
-const TEMPLATE = t.Union(TEMPLATES.map((name) => t.Literal(name)));
+const TEMPLATE = t.Union(STAGES_TEMPLATES.map((name) => t.Literal(name)));
 /** Where an attempt's work lands (`@cawco/core`'s `LandsMode`). */
-export const LANDS = t.Union([
-  t.Literal("main"),
-  t.Literal("branch"),
-  t.Literal("pr"),
-  t.Literal("none"),
-]);
+export const LANDS = t.Union(LANDS_MODES.map((mode) => t.Literal(mode)));
 /** What a work item may spend (`WorkBudget`): dollars, turns, minutes. */
 export const BUDGET = t.Object({
   usd: t.Optional(t.Number()),

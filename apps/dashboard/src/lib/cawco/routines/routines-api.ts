@@ -10,14 +10,12 @@ import {
   type ApprovedActionView,
   type ConnectionView,
   type RelayView,
+  type RoutineOutcome,
+  type RoutineRunState,
+  type RoutineTarget,
   routinesWords,
 } from "@cawco/core";
 import { json, send } from "#lib/cawco/project-tasks.js";
-
-/** How a run ended (routines.ts `RoutineOutcome`). */
-type RoutineOutcome = "silent" | "delivered" | "failed" | "cancelled";
-/** Where a run is (routines.ts `RoutineRunState`). */
-type RoutineRunState = "queued" | "starting" | "running" | "ended" | "skipped";
 
 /** One run, as the hub answers it (times in ms). */
 export interface RoutineRun {
@@ -53,7 +51,7 @@ export interface Routine {
   projectId: string | null;
   prompt: string;
   runs: RoutineRun[];
-  target: "delegate" | "orchestrator" | "lead" | "curator";
+  target: RoutineTarget;
   threadId: string | null;
   timeZone: string;
 }

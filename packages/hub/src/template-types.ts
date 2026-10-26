@@ -19,13 +19,9 @@
  * - brand: `brand`.
  * - design: `explorer`, `builder`.
  */
+import { STAGES_TEMPLATES, type StagesTemplate } from "@cawco/core";
 import { skillText, TEMPLATE_SKILLS } from "./bundled-skills";
-import {
-  type Stages,
-  type StagesTemplate,
-  TEMPLATES,
-  templateStages,
-} from "./stages";
+import { type Stages, templateStages } from "./stages";
 
 /** Every type a template stage runs, as its file: front matter and brief. */
 const TYPE_FILES: Record<string, string> = {
@@ -133,7 +129,7 @@ export const typeFiles = (
 
 // Every type a template supplies has its file, and every type a skill is
 // said to file is named in that skill's own words, or the hub does not start.
-for (const name of TEMPLATES) {
+for (const name of STAGES_TEMPLATES) {
   const missing = templateTypes(name).filter((type) => !TYPE_FILES[type]);
   if (missing.length > 0) {
     throw new Error(

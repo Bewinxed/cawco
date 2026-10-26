@@ -1,13 +1,10 @@
 <script lang="ts" module>
-  import type { Pin } from "@cawco/core/comments";
+  import type { Pin, PinState } from "@cawco/core/comments";
   import { pinUnsent } from "@cawco/core/comments";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
 
-  /** A comment's pill by where it stands (DESIGN.md, A pin's pill). */
-  export type PinMarkState = "provisional" | "unsent" | "sent" | "resolved";
-
   /** Where pin `pin` stands: hollow while the session hasn't heard it, filled once sent, recessed once resolved. */
-  export const markState = (pin: Pin): PinMarkState => {
+  export const markState = (pin: Pin): PinState => {
     if (pin.resolvedAt) {
       return "resolved";
     }
@@ -20,7 +17,7 @@
    * thread's card grows from and goes back into (PinFloat `face`).
    */
   export const markFace = (
-    state: PinMarkState
+    state: PinState
   ): { edge: `--${string}`; fill: `--${string}` } => {
     if (state === "sent") {
       return { fill: "--action-solid", edge: "--action-solid" };
@@ -61,7 +58,7 @@
     size = "regular",
   }: {
     number?: number | null;
-    state?: PinMarkState;
+    state?: PinState;
     tail?: "bottom-start" | "none";
     focused?: boolean;
     dot?: "live" | "unread" | null;

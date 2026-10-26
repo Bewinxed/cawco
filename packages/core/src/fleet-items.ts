@@ -64,7 +64,8 @@ const PROJECT_KINDS = {
   harnessConfig: "projectHarnessConfig",
 } as const satisfies Record<string, FleetItemKind>;
 
-type ProjectPart = keyof typeof PROJECT_KINDS;
+/** A project item's part: what follows `project:<id>/`, before its key. */
+export type ProjectPart = keyof typeof PROJECT_KINDS;
 
 const PROJECT = "project:";
 

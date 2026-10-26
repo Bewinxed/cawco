@@ -1879,7 +1879,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     const r = row(name);
     if (r.auth !== "bearer" && r.auth !== "header") {
       const instead: Record<
-        "none" | "oauth" | "app" | "gh" | "device",
+        Exclude<ConnectionAuth, "bearer" | "header">,
         string
       > = {
         none: "it takes none.",

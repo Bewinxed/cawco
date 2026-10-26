@@ -38,7 +38,7 @@
  */
 import {
   type InstanceRow,
-  type ProjectLands,
+  PROJECT_LANDS,
   type ProjectSettingChange,
   projectSettingWords,
   publishedWords,
@@ -57,7 +57,6 @@ import { runsOnValue } from "./runs-on";
 const GITHUB_REPO =
   /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}$/u;
 const REASON_LIMIT = 300;
-const LANDS: readonly ProjectLands[] = ["main", "branch", "pr"];
 
 /** A refusal in one sentence: the call's error. */
 const refuse = (message: string): never => {
@@ -104,7 +103,7 @@ const ASKED_CHANGE = z.object({
   ]),
   connection: z.string().optional(),
   github: z.string().optional().describe("owner/name"),
-  lands: z.enum(LANDS as [ProjectLands, ...ProjectLands[]]).optional(),
+  lands: z.enum(PROJECT_LANDS).optional(),
   runs_on: z.string().nullable().optional(),
   name: z.string().optional(),
   private: z.boolean().optional(),

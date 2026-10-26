@@ -26,7 +26,7 @@ import type {
   PersonView,
 } from "@cawco/core/notifications";
 import { PRESENCE_ONBOARDING_SKIPPED } from "@cawco/core/presence-onboarding";
-import { presenceWords } from "@cawco/core/words/presence";
+import { type DeskState, presenceWords } from "@cawco/core/words/presence";
 import { goto } from "$app/navigation";
 import { failureWords } from "./hub-read";
 import { conversationHref, type InstanceIndex } from "./links";
@@ -218,7 +218,7 @@ export const deskAsks = (): DeskAsk => {
  * on by the person), off, blocked in the browser's site settings, or
  * unavailable (no agent here and no Idle Detection: Safari, Firefox, Brave).
  */
-export const deskState = (): "on" | "off" | "blocked" | "unavailable" => {
+export const deskState = (): DeskState => {
   const source = deskSource();
   if (source === "agent") {
     return agentHere()?.counts ? "on" : "off";

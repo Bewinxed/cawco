@@ -65,7 +65,13 @@ import type {
   SessionRole,
   ThreadEvent,
 } from "@cawco/core";
-import { LANDS_MODES } from "@cawco/core";
+import {
+  LANDS_MODES,
+  MADE_ROUTINE_TARGETS,
+  type RoutineOutcome,
+  type RoutineRunState,
+  type RoutineTarget,
+} from "@cawco/core";
 import { standalone } from "@cawco/core/runtime";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import cronstrue from "cronstrue";
@@ -76,7 +82,7 @@ import type { Caw } from "./caw";
 import { HUB_DEBUG } from "./config";
 import type { DbShape, ProjectRow, SentMessageRow, WorkItemRow } from "./db";
 import type { Decide, RoutineRow, RoutineRunRow } from "./db/routines";
-import type { RoutineOutcome, RoutineTarget, WorkBudget } from "./db/schema";
+import type { WorkBudget } from "./db/schema";
 import { byHandle } from "./handles";
 import { eventData } from "./ingress";
 import type { JevAccess } from "./jev";
@@ -187,7 +193,7 @@ export interface RoutineRunView {
   reason: string | null;
   slot: string;
   startedAt: number;
-  state: RoutineRunRow["state"];
+  state: RoutineRunState;
   /** A lead run's thread: where its slot was noted and Caw woken; null for a delegate run. */
   threadId: string | null;
   usd: number | null;
@@ -2376,11 +2382,11 @@ export const createRoutines = ({
         {
           name: z.string().describe("3–6 plain words."),
           prompt: z.string().describe("What each run does."),
-          target: z.enum(["delegate", "orchestrator", "lead"]),
+          target: z.enum(MADE_ROUTINE_TARGETS),
           ...scheduleParameters,
           delegate_type: z.string().optional(),
           lands: z
-            .enum(LANDS_MODES as [LandsMode, ...LandsMode[]])
+            .enum(LANDS_MODES)
             .optional()
             .describe("Where a run's commits go; none when left out."),
           budget: z

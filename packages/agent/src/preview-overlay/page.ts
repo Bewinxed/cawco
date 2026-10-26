@@ -18,6 +18,7 @@ import {
   type PageAnchor,
   type Pin,
   type PinnedElement,
+  PREVIEW_SCHEMES,
   type PreviewMode,
   pinUnsent,
   previewMode,
@@ -2896,7 +2897,7 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       dispatchEvent(
         new CustomEvent("cawco:canvas-view", {
           detail: {
-            ...(["light", "dark", "both", "page"].includes(String(view.scheme))
+            ...(PREVIEW_SCHEMES.some((scheme) => scheme === view.scheme)
               ? { scheme: view.scheme }
               : {}),
             ...("widths" in view

@@ -13,6 +13,7 @@
  */
 import { type MemoryScope, scopeWords } from "./fleet";
 import { BROWSER_ASK_TOOL, CONNECT_ASK_TOOL } from "./frames";
+import type { LandsMode } from "./injected";
 import { commonEnds, editScript, linesOf } from "./line-diff";
 import { questionsOf } from "./question";
 import { DAY_MS } from "./time";
@@ -1210,8 +1211,13 @@ function upstreamPost(input: Record<string, unknown>): Presented {
 /** The tool name a project's Caw changes his own project's settings by (hub project-settings.ts). */
 export const PROJECT_SETTINGS_TOOL = "mcp__cawco__project_settings";
 
-/** Where a project's work lands, as a project setting can set it. */
-export type ProjectLands = "main" | "branch" | "pr";
+/** Where a project's work lands, as a project setting can set it: every way but `none`. */
+export const PROJECT_LANDS = [
+  "main",
+  "branch",
+  "pr",
+] as const satisfies readonly LandsMode[];
+export type ProjectLands = (typeof PROJECT_LANDS)[number];
 
 /**
  * One change `project_settings` makes, as the hub stores it on the ask and

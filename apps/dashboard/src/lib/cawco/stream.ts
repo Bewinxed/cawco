@@ -25,6 +25,7 @@
 
 import type {
   CommandAck,
+  CommandAckStage,
   CommandEnvelope,
   CommandKind,
   SessionStreamEvent,
@@ -33,6 +34,7 @@ import type {
   StreamDelta,
   StreamReset,
 } from "@cawco/core";
+import { COMMAND_ACK_STAGES } from "@cawco/core/stream";
 
 /** How long a submitted command may go unacknowledged before it is called off. */
 const COMMAND_ACK_TIMEOUT_MS = 15_000;
@@ -85,7 +87,8 @@ interface SessionCursor {
   warned: boolean;
 }
 
-type CommandStage = "submitted" | "accepted" | "applied" | "failed";
+/** Where a command is: sent, or the last stage its ack said. */
+type CommandStage = "submitted" | CommandAckStage;
 
 /**
  * The stage at which the PROTOCOL has said its last word about a command —
@@ -739,7 +742,7 @@ const isSettled = (record: CommandRecord): boolean =>
 
 /** Which stage may follow which. Terminal is terminal: a late ack cannot undo it. */
 const NEXT_STAGES: Record<CommandStage, Set<CommandStage>> = {
-  submitted: new Set<CommandStage>(["accepted", "applied", "failed"]),
+  submitted: new Set<CommandStage>(COMMAND_ACK_STAGES),
   accepted: new Set<CommandStage>(["applied", "failed"]),
   applied: new Set<CommandStage>(),
   failed: new Set<CommandStage>(),

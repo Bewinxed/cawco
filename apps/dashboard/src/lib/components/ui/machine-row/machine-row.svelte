@@ -7,6 +7,7 @@
    */
   import type { Component, Snippet } from "svelte";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
+  import type { MachinePresence } from "./index.js";
 
   let {
     icon: Icon,
@@ -21,8 +22,7 @@
     hue: string;
     name: string;
     meta: string;
-    /** `online` idle, `away` busy or partly there, `off` offline or absent. */
-    presence: "online" | "away" | "off";
+    presence: MachinePresence;
     /** Inverts the tile, for a chosen row. */
     ink?: boolean;
     trailing?: Snippet;

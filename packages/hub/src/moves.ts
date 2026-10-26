@@ -30,6 +30,7 @@ import {
   CONTROL_MOVE_SNAPSHOT,
   deriveTitleFromFirstMessage,
   type Envelope,
+  MOVE_JOB_STEPS,
   type MoveAsk,
   type MoveError,
   type MoveEstimate,
@@ -214,13 +215,7 @@ const MOVE_IT = "Move it";
 const DONT_MOVE = "Don't move";
 
 /** The stages a job does work in. */
-const WORKING = new Set<MoveStage>([
-  "approval",
-  "snapshot",
-  "clone",
-  "lfs",
-  "start",
-]);
+const WORKING = new Set<MoveStage>(MOVE_JOB_STEPS);
 
 const sizeWords = moveSize;
 

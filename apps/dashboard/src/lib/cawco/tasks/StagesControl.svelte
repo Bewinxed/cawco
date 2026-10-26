@@ -13,10 +13,10 @@
    * It is asked for from the project head's ⋯ (Pick stages…), and opens
    * from the control that asked (`anchor`).
    */
+  import type { StagesTemplate } from "@cawco/core";
   import {
     applyTemplate,
     readTemplates,
-    type StagesTemplate,
     type StagesTemplateView,
     type StagesView,
     stageLabel,

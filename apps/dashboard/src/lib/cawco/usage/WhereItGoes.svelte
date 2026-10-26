@@ -20,7 +20,12 @@
    * machine ran sessions of both. Each group's height is driven
    * (motion/relay-boxes) so an old row never overflows into the group below.
    */
-  import type { UsageSummary, UsageSummaryRow } from "@cawco/core";
+  import type {
+    HarnessKind,
+    UsageGroupBy,
+    UsageSummary,
+    UsageSummaryRow,
+  } from "@cawco/core";
   import { detach } from "@cawco/core/detach";
   import { flushSync } from "svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
@@ -49,8 +54,10 @@
   import { type SessionSpend, sessionsCsv } from "../session-export";
   import { compactNumber, money, totalTokensOf } from "../usage";
 
-  type Harness = "claude" | "opencode";
-  type Grouping = "session" | "model" | "machine";
+  /** The harnesses this panel reads spend for. */
+  type Harness = Extract<HarnessKind, "claude" | "opencode">;
+  /** The folds a reader picks between, in the order offered. */
+  type Grouping = Extract<UsageGroupBy, "session" | "model" | "machine">;
   const HARNESSES: Harness[] = ["claude", "opencode"];
   const GROUPINGS: Grouping[] = ["session", "model", "machine"];
 

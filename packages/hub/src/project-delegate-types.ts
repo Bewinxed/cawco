@@ -38,6 +38,8 @@ import {
   delegateTypeProblem,
   type FrontMatterLine,
   frontMatterBlock,
+  LANDS_MODES,
+  type LandsMode,
   SESSION_ROLES,
   type SessionRole,
 } from "@cawco/core";
@@ -51,10 +53,6 @@ import { listOf, scalarOf } from "./task-file";
  * is the project's Caw, a session the hub starts (caw.ts), never a type's.
  */
 const TYPE_ROLES = SESSION_ROLES.filter((role) => role !== "lead");
-
-/** Where a type's work goes: §5.3's `lands`, and `none` for drafts that are not commits. */
-export const DELEGATE_LANDS = ["main", "branch", "pr", "none"] as const;
-export type DelegateLands = (typeof DELEGATE_LANDS)[number];
 
 const BUDGET_PERIODS = ["attempt", "task", "day", "week", "month"] as const;
 
@@ -71,7 +69,7 @@ export type CatalogType = DelegateType & {
   budget?: DelegateBudget;
   /** The type's brief: the file's body. */
   brief?: string;
-  lands?: DelegateLands;
+  lands?: LandsMode;
   /** The file it was read from, inside the project folder. */
   path?: string;
   /** A project type that replaces a fleet type of the same name. */
@@ -187,8 +185,8 @@ const projectFieldsOf = (
     return `role is one of ${TYPE_ROLES.join(", ")}, not “${role}”`;
   }
   const lands = fields.scalar("lands");
-  if (!oneOf(lands, DELEGATE_LANDS)) {
-    return `lands is one of ${DELEGATE_LANDS.join(", ")}, not “${lands}”`;
+  if (!oneOf(lands, LANDS_MODES)) {
+    return `lands is one of ${LANDS_MODES.join(", ")}, not “${lands}”`;
   }
   const canDelegate = fields.scalar("can_delegate");
   if (!oneOf(canDelegate, ["true", "false"])) {
@@ -206,7 +204,7 @@ const projectFieldsOf = (
     ...(connections?.length ? { connections } : {}),
     ...(role ? { role: role as SessionRole } : {}),
     ...(budget && Object.keys(budget).length > 0 ? { budget } : {}),
-    ...(lands ? { lands: lands as DelegateLands } : {}),
+    ...(lands ? { lands: lands as LandsMode } : {}),
     ...(canDelegate ? { canDelegate: canDelegate === "true" } : {}),
   };
 };

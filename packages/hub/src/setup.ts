@@ -20,14 +20,15 @@
  * - `place`: the machine and folder its work happens in (`cawco.pickPlace`,
  *   stored as `{ machineId, label, path }`).
  */
-import type { ChoiceEntry } from "@cawco/core";
+
+import type { ChoiceEntry, StagesTemplate } from "@cawco/core";
 import {
   UPSTREAM_POSTS,
   UPSTREAM_WORDS,
   type UpstreamPosts,
 } from "@cawco/core/upstream-guard";
 import { relayCard, relayPickOf } from "./fleet-choices";
-import { type StagesTemplate, templateText } from "./stages";
+import { templateText } from "./stages";
 import { templateTypes } from "./template-types";
 
 /**

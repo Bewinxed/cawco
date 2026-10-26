@@ -8,6 +8,8 @@
  * (CawCoCore/Words.generated.swift), and `words:check` fails the typecheck
  * chain when that file is stale. So a word is changed here or nowhere.
  */
+import type { ConnectionAuth } from "../connections";
+
 export const connectionsWords = {
   list: "Connections",
   /** The header's menu, and the sign-in form it opens. */
@@ -139,7 +141,7 @@ export const connectionsWords = {
  * where it is picked, and what it takes, said under the pick.
  */
 export interface ConnectionWay {
-  auth: "oauth" | "bearer" | "app" | "gh" | "device";
+  auth: Exclude<ConnectionAuth, "none" | "header">;
   /** What the key is, said under its field. */
   key?: string;
   label: string;

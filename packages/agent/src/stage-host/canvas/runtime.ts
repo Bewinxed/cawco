@@ -43,6 +43,7 @@ import {
   type SectionPlan,
   type SectionRender,
   type SheetOnPage,
+  type StageErrorKind,
   type Story,
   sectionName,
 } from "@cawco/core/stage";
@@ -122,7 +123,7 @@ interface ViteError {
 interface SectionFailure {
   error: PageError;
   frame: string | null;
-  kind: "missing" | "compile" | "page";
+  kind: StageErrorKind;
 }
 
 /** Each failure's line, the error formula's what happened and what it means: the stage's words stand under Show details. */

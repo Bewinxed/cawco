@@ -74,6 +74,7 @@ import {
   frontMatterBlock,
   LANDS_MODES,
   type LandsMode,
+  TASK_MOVERS,
   type TaskTodo,
   waitHandle,
   waitTarget,
@@ -692,14 +693,7 @@ const isComments = (heading: string): boolean =>
 const COMMENT_HEADING = /^###\s+(.+)$/u;
 const COMMENT_SEPARATOR = " · ";
 const MIDDLE_DOT = /·/gu;
-const COMMENT_MOVERS: ReadonlySet<string> = new Set([
-  "you",
-  "lead",
-  "session",
-  "action",
-  "routine",
-  "hub",
-]);
+const COMMENT_MOVERS: ReadonlySet<string> = new Set(TASK_MOVERS);
 
 /** A comment heading's author and time; undefined when it is not one the hub wrote. */
 const commentHeading = (

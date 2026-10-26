@@ -49,15 +49,6 @@ export const PROGRAM_MAX = 128 * 1024;
 /** Where the host page's bundle is served on every preview origin (core decision-host.ts). */
 export const DECISION_ASSETS = "/__cawco/decision/";
 
-/** The Mermaid types `@excalidraw/mermaid-to-excalidraw` 2.2.2 draws as elements (its parseMermaid.ts); others become a picture. */
-export const CANVAS_DIAGRAMS = [
-  "flowchart",
-  "sequence",
-  "class",
-  "state",
-  "er",
-] as const;
-
 const MAX_PROBLEMS = 8;
 const parser = createParser(spec.schema as LibraryJSONSchema, spec.root);
 

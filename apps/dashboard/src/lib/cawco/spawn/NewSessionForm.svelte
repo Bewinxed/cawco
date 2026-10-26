@@ -89,7 +89,7 @@
     startContinuation,
   } from "../continue.svelte";
   import type { DraftContent } from "../draft-store";
-  import { EFFORT_LEVELS } from "../effort-levels";
+  import { EFFORT_OPTIONS } from "../effort-levels";
   import { type FleetSnapshot, inspectMachine } from "../fleet";
   import { newId } from "../id";
   import { conversationHref } from "../links";
@@ -588,7 +588,7 @@
       (model ? undefined : entries.find((row) => row.isDefault))
   );
   const stops = $derived(
-    EFFORT_LEVELS.map((stop) => ({
+    EFFORT_OPTIONS.map((stop) => ({
       ...stop,
       reachable:
         report?.capabilities.effort === true &&

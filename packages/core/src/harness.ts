@@ -179,6 +179,8 @@ export const offeredMode = (
   return offered;
 };
 
+/** Every {@link EffortLevel}, low to max: the one runtime list validators and pickers read. */
+export const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
 /**
  * How hard the model thinks, and how much it spends doing it: Claude Code's
  * effort scale, in its own order. Hand-written rather than tunnelled from the
@@ -191,16 +193,7 @@ export const offeredMode = (
  * spends tokens in all of those places. A harness with no such knob reports
  * `effort: false` rather than mapping onto this.
  */
-export type EffortLevel = "low" | "medium" | "high" | "xhigh" | "max";
-
-/** Every {@link EffortLevel}, low to max: the one runtime list validators and pickers read. */
-export const EFFORT_LEVELS: readonly EffortLevel[] = [
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-];
+export type EffortLevel = (typeof EFFORT_LEVELS)[number];
 
 /**
  * The effort a session actually sends, as its instance row records it: a level,

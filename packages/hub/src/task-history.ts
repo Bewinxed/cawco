@@ -23,13 +23,19 @@
  *   it; one the history never held still does.
  */
 
-import type { StageKind } from "@cawco/core";
+import {
+  type StageKind,
+  type TASK_FILE_STATES,
+  TASK_MOVERS,
+  type TaskHistoryKind,
+  type TaskMover,
+} from "@cawco/core";
 import type {
   FolderFileChange,
   FolderFileTimes,
   FolderTimes,
 } from "./project-folder";
-import { MOVERS, type Stages, stageNamed } from "./stages";
+import { type Stages, stageNamed } from "./stages";
 import { ARCHIVE_DIR, fileTaskNumber, taskId } from "./task-file";
 
 /** The trailers the hub writes under a task commit's subject. */
@@ -88,44 +94,17 @@ export const AUTHOR = {
   routine: "routine",
 } as const;
 
-/** Who moves a task, as the hub checks it: a stages.md mover or the hub. */
-export type HistoryMover = (typeof MOVERS)[number] | "hub";
-
-const MOVER_NAMES: ReadonlySet<string> = new Set<HistoryMover>([
-  ...MOVERS,
-  "hub",
-]);
+const MOVER_NAMES: ReadonlySet<string> = new Set(TASK_MOVERS);
 
 /** Who made a change. */
 export interface TaskHistoryActor {
   /** The session's instance id (a session, the lead), or the approved action's id; null when the commit names none. */
   id: string | null;
   /** The mover the change was checked as; null, unknown, for a commit with no `CawCo-Mover` trailer (a hand edit, folder_write, the folder editor, one made before the hub wrote trailers). */
-  mover: HistoryMover | null;
+  mover: TaskMover | null;
   /** The commit's author: you, Caw, the session's title as it was, hub, approved action. */
   name: string;
 }
-
-/**
- * `created`: its file added. `moved`: a stage move. `changed`: fields,
- * to-dos or edges, through the hub. `commented`: a comment added through the
- * hub. `edited`: its file changed by a commit the hub's task code did not
- * make (a hand edit, folder_write); the hub putting back what one wrote
- * around it is `changed`, in words that say so. `archived`: its file moved
- * into tasks/archive/, or added there (a merged project's archived task);
- * `unarchived`: back out of it. `renamed`, `deleted`:
- * its file.
- */
-export type TaskHistoryKind =
-  | "created"
-  | "moved"
-  | "changed"
-  | "commented"
-  | "edited"
-  | "archived"
-  | "unarchived"
-  | "renamed"
-  | "deleted";
 
 /** One commit to a task's file, as its history shows it. */
 export interface TaskHistoryEvent {
@@ -151,8 +130,9 @@ export interface TaskHistory {
   id: string;
   /** Its file's path, or the last one it had. */
   path: string;
+  // Indexed off the owner, not `TaskFileState`: the apps' schema names this field's enum.
   /** `live`: on the board; `archived`: in tasks/archive/; `deleted`: its file deleted, its history kept. */
-  state: "live" | "archived" | "deleted";
+  state: (typeof TASK_FILE_STATES)[number];
 }
 
 /** When a task started, completed, was dropped and was archived, and why it closed, from its commits. */
@@ -179,7 +159,7 @@ const stageName = (name: string): string | null =>
 const kindOf = (
   { change, commit, from, path }: FolderFileChange,
   moved: boolean,
-  mover: HistoryMover | null
+  mover: TaskMover | null
 ): TaskHistoryKind => {
   if (change === "added") {
     // Added straight into the archive (a merged project's archived task): it arrives archived.
@@ -208,8 +188,8 @@ const eventOf = (change: FolderFileChange): TaskHistoryEvent => {
   const { commit } = change;
   const { trailers } = commit;
   const trailed = trailers[TRAILERS.mover];
-  const mover: HistoryMover | null =
-    trailed && MOVER_NAMES.has(trailed) ? (trailed as HistoryMover) : null;
+  const mover: TaskMover | null =
+    trailed && MOVER_NAMES.has(trailed) ? (trailed as TaskMover) : null;
   const named = trailers[TRAILERS.actor] ?? "";
   const id =
     ACTION_ID.exec(named)?.[1] ??

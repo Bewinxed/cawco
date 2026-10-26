@@ -23,6 +23,7 @@ import {
   CLAUDE_READING_CURRENT_MS,
   type InstanceRow,
   type LimitWindow,
+  type NameableAccount,
   type ProviderForecast,
   type ProviderRouting,
   type WindowForecast,
@@ -153,7 +154,7 @@ function shownHues(
  */
 export const nameFields = (
   r: Pick<RingAccount, "email" | "id" | "name" | "nick">
-): Pick<Account, "email" | "id" | "identity" | "label" | "provider"> => ({
+): NameableAccount => ({
   id: r.id,
   email: r.nick ? r.email : r.name,
   identity: null,

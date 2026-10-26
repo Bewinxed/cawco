@@ -27,6 +27,7 @@
  *   page's row ("After: …", "Unlocks: …").
  */
 import type { ElementNode } from "@openuidev/lang-core";
+import type { DecisionComponentName } from "./decisions-library";
 import { decisionsWords } from "./words/decisions";
 
 /** One option of a card, as the page labelled it. */
@@ -232,11 +233,24 @@ export const decidedOf = (
 export const cardRef = (page: string, card: string): string =>
   `${page}#${card}`;
 
+/**
+ * The Mermaid types a Diagram opens as a canvas: what the converter draws as
+ * elements (`@excalidraw/mermaid-to-excalidraw`'s parseMermaid.ts), by Pele's
+ * names for them; it draws any other as a picture.
+ */
+export const CANVAS_DIAGRAMS = [
+  "flowchart",
+  "sequence",
+  "class",
+  "state",
+  "er",
+] as const;
+
 /** What a program says of itself: its title and intro, its cards and Sections, and the media it names. */
 export interface ProgramRead {
   /** The artifacts its Canvas and Preview pieces show, by id; a Preview's `width` its stories' own, px, when it says it. */
   artifacts: {
-    component: "Canvas" | "Preview";
+    component: Extract<DecisionComponentName, "Canvas" | "Preview">;
     id: string;
     width?: number;
   }[];
@@ -296,7 +310,7 @@ const cardOf = (
 
 /** A Canvas or Preview as the artifact it shows; a Preview's `width` its stories' own, px, when it says one. */
 const artifactOf = (
-  component: "Canvas" | "Preview",
+  component: Extract<DecisionComponentName, "Canvas" | "Preview">,
   props: Record<string, unknown>
 ): ProgramRead["artifacts"][number] => {
   const { width } = props;

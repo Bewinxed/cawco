@@ -58,6 +58,7 @@ import {
   CONTROL_SUPPORTED_COMMANDS,
   CONTROL_SUPPORTED_MODELS,
   configurePage,
+  EFFORT_LEVELS,
   EFFORT_READ,
   INSTALL_SESSION_CREDENTIAL,
   LEAD_GATED_TOOLS,
@@ -144,8 +145,6 @@ export const askOpencode = <T>(
  * Fires at most once per turn; any server event re-arms it.
  */
 const STALLED_TURN_MS = 3 * 60_000;
-
-const EFFORT_LEVELS: EffortLevel[] = ["low", "medium", "high", "xhigh", "max"];
 
 const BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 let lastIdMs = 0;

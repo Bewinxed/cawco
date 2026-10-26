@@ -7,6 +7,8 @@
  * (agent preview-overlay mirror.ts), which loads no Yjs into the page.
  */
 
+import { PIN_MAPS } from "./comments";
+
 /** What a map's watcher hears of one transaction: the keys it changed, and whether this view made it. */
 export interface MapChange {
   keysChanged: Set<string>;
@@ -46,12 +48,7 @@ export const MIRRORED_MAPS = [
   "meta",
   "ink",
   "moved",
-  "pins",
-  "places",
-  "resolves",
-  "looks",
-  "deliveries",
-  "entries",
+  ...PIN_MAPS,
   "gone",
   "seen",
 ] as const;

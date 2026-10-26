@@ -25,6 +25,7 @@ import { basename, join, resolve } from "node:path";
 import type { ChildLimit } from "./harness";
 import type { BuildInfo, SessionLimits } from "./index";
 import { darwinSocketRoot, SESSIOND_LINK, shortLink } from "./paths";
+import type { CommandAckStage } from "./stream";
 
 /**
  * Capability string a sessiond speaks, exchanged in `attach`/`welcome`
@@ -281,7 +282,7 @@ export interface SessiondLimit {
 export interface SessiondAck {
   commandId: string;
   reason?: string;
-  stage: "accepted" | "applied" | "failed";
+  stage: CommandAckStage;
   type: "ack";
 }
 

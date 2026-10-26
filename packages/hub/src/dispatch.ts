@@ -108,6 +108,7 @@ import {
   planWaitOf,
   type StageKind,
   sessionLink,
+  type TaskMover,
   taskLink,
   todoLink,
 } from "@cawco/core";
@@ -140,7 +141,6 @@ import {
   onFrontier,
   type TaskActor,
   type TaskEvent,
-  type TaskMover,
   type TaskSummary,
   type Tasks,
   type TaskView,

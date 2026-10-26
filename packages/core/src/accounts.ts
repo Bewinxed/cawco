@@ -168,16 +168,12 @@ export const providerChoices = (
   return [...claude, ...rest];
 };
 
-/** The colour an account is drawn in: the `--account-<name>` token. */
-export type AccountHue =
-  "amber" | "blue" | "cyan" | "green" | "orange" | "rose" | "violet";
-
 /**
  * Every account colour, in the order a new account takes the first one no
  * account wears: seven, so seven accounts (six Claude logins and the opencode
  * Go plan, say) are told apart at a glance.
  */
-export const ACCOUNT_HUES: readonly AccountHue[] = [
+export const ACCOUNT_HUES = [
   "amber",
   "blue",
   "cyan",
@@ -185,7 +181,9 @@ export const ACCOUNT_HUES: readonly AccountHue[] = [
   "orange",
   "rose",
   "violet",
-];
+] as const;
+/** The colour an account is drawn in: the `--account-<name>` token. */
+export type AccountHue = (typeof ACCOUNT_HUES)[number];
 
 /**
  * Who an account is: an email in an organization, the organization known by
@@ -1064,7 +1062,8 @@ export const accountNames = (
 ): Map<string, string> =>
   new Map(accounts.map((one) => [one.id, accountNameAmong(one, accounts)]));
 
-type NameableAccount = Pick<
+/** What an account is named by: its nickname, email, identity, id and provider. */
+export type NameableAccount = Pick<
   Account,
   "email" | "id" | "identity" | "label" | "provider"
 >;

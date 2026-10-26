@@ -8,6 +8,9 @@ import {
 
 export { default as MachineRow } from "./machine-row.svelte";
 
+/** A machine row's dot: `online` idle, `away` busy or partly there, `off` offline or absent. */
+export type MachinePresence = "online" | "away" | "off";
+
 /** The tile glyph for a machine, read off the OS string its daemon reports. */
 export function machineIcon(os: string): Component {
   const platform = os.trim().toLowerCase();

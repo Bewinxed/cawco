@@ -42,6 +42,15 @@ export const DECISION_COMPONENTS = [
 ] as const;
 export type DecisionComponentName = (typeof DECISION_COMPONENTS)[number];
 
+/** The pieces a card draws in a well (the dashboard's Well.svelte). */
+export const DECISION_WELLS = [
+  "Image",
+  "Diagram",
+  "Canvas",
+  "Preview",
+  "Dials",
+] as const satisfies readonly DecisionComponentName[];
+
 /** The component a decision page's `root` is. */
 export const DECISION_ROOT: DecisionComponentName = "Decisions";
 

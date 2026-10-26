@@ -9,7 +9,17 @@
  * Not to be confused with a session's own plan (WORDS.md: plan), which is
  * the hub's too, held in the client by `plan.ts`.
  */
-import type { StageKind, taskLinkWords, WorkItemState } from "@cawco/core";
+import type {
+  LandsMode,
+  Mover,
+  StageKind,
+  StagesTemplate,
+  TaskFileState,
+  TaskHistoryKind,
+  taskLinkWords,
+  WaitKind,
+  WorkItemState,
+} from "@cawco/core";
 import { type AttemptResult, outputArtifacts } from "@cawco/core/deliverables";
 import type { ProjectGate } from "@cawco/core/project-gate";
 import type {
@@ -32,9 +42,6 @@ import {
   noAnswer,
   unreachedAnswer,
 } from "./hub-read";
-
-/** Who moves a task: you, the project's lead, a session, an approved action, a routine. */
-type Mover = "you" | "lead" | "session" | "action" | "routine";
 
 interface StageHooks {
   after?: string;
@@ -90,10 +97,6 @@ export interface Starter {
   glyph: StarterGlyph;
   text: string;
 }
-
-/** The hub's stage templates (stages.ts `TEMPLATES`), in its order. */
-export type StagesTemplate =
-  "code" | "launch" | "seo" | "brand" | "design" | "social" | "outreach";
 
 export interface StagesTemplateView {
   name: StagesTemplate;
@@ -181,9 +184,6 @@ export function reviewOf(
   };
 }
 
-/** Where an attempt's work lands (`@cawco/core`'s `LandsMode`). */
-type LandsMode = "main" | "branch" | "pr" | "none";
-
 /**
  * One wait of a task, its own or its whole's (the hub's `TaskWait`, settled
  * by its one resolver, task-waits.ts): a task, a decision card, a pin, a
@@ -194,7 +194,7 @@ export interface TaskWait {
   flag: string | null;
   /** Where it opens: its `cawco:` reference, or the pull request's or run's page. */
   href: string;
-  kind: "task" | "card" | "pin" | "pr" | "run" | "session";
+  kind: WaitKind;
   /** A task's title, a card's question, what a pin stands on, `PR #418`. */
   label: string;
   settled: boolean;
@@ -376,18 +376,6 @@ export interface TaskComment {
   text: string;
 }
 
-/** What a commit did to a task's file (the hub's `TaskHistoryKind`). */
-type TaskHistoryKind =
-  | "created"
-  | "moved"
-  | "changed"
-  | "commented"
-  | "edited"
-  | "archived"
-  | "unarchived"
-  | "renamed"
-  | "deleted";
-
 /** One commit to a task's file (the hub's `TaskHistoryEvent`). */
 export interface TaskHistoryEvent {
   actor: TaskActor;
@@ -408,7 +396,7 @@ export interface TaskHistory {
   events: TaskHistoryEvent[];
   id: string;
   path: string;
-  state: "live" | "archived" | "deleted";
+  state: TaskFileState;
 }
 
 export interface TaskPatch {

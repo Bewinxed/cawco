@@ -13,6 +13,7 @@ import type { DelegateType } from "@cawco/core";
 import {
   DEFAULT_DELEGATE_TYPES,
   delegateTypeProblem,
+  EFFORT_LEVELS,
   HARNESSES,
 } from "@cawco/core";
 import { Elysia, t } from "elysia";
@@ -194,13 +195,7 @@ export const delegateTypesRoutes = (
           harness: t.Union(HARNESSES.map((harness) => t.Literal(harness))),
           model: t.String(),
           effort: t.Optional(
-            t.Union([
-              t.Literal("low"),
-              t.Literal("medium"),
-              t.Literal("high"),
-              t.Literal("xhigh"),
-              t.Literal("max"),
-            ])
+            t.Union(EFFORT_LEVELS.map((level) => t.Literal(level)))
           ),
           skills: t.Optional(t.Array(t.String())),
           denyTools: t.Optional(t.Array(t.String())),

@@ -39,6 +39,7 @@
   keyboard … is instant, as every keyboard action is").
 -->
 <script lang="ts">
+  import { DECISION_WELLS } from "@cawco/core/decisions-library";
   import { decisionsWords as words } from "@cawco/core/words/decisions";
   import { getContext, setContext, tick } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -189,14 +190,14 @@
     return () => sizes.disconnect();
   });
 
-  /** The pieces drawn in a well (Well.svelte), by the library's names for them. */
-  const WELLS = new Set(["Image", "Diagram", "Canvas", "Preview", "Dials"]);
   /** The card's media are two pictures: they may share the body's width. */
   const pictures = $derived(
     Array.isArray(props.media) &&
       props.media.length === 2 &&
       props.media.every((node) =>
-        WELLS.has((node as { typeName?: unknown } | null)?.typeName as string)
+        DECISION_WELLS.some(
+          (well) => well === (node as { typeName?: unknown } | null)?.typeName
+        )
       )
   );
 

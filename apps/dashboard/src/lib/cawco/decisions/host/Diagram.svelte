@@ -14,6 +14,7 @@
   (flowchart, sequence, class, state, ER); it draws any other as a picture.
 -->
 <script lang="ts">
+  import { CANVAS_DIAGRAMS } from "@cawco/core/decisions";
   import { Button } from "#lib/components/ui/button/index.js";
   import { hubRefusal } from "../../hub-read.js";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
@@ -25,14 +26,9 @@
     statementId,
   }: OpenUIRenderProps<{ mermaid: unknown; caption?: unknown }> = $props();
 
-  /** What the converter draws as elements (its parseMermaid.ts), by Pele's names for them. */
-  const CANVAS_TYPES = new Set([
-    "flowchart",
-    "sequence",
-    "class",
-    "state",
-    "er",
-  ]);
+  /** Whether the converter draws Mermaid type `named` as elements (core `CANVAS_DIAGRAMS`). */
+  const drawsAsCanvas = (named: string | null): boolean =>
+    CANVAS_DIAGRAMS.some((one) => one === named);
   const text = $derived(String(props.mermaid ?? ""));
   let box = $state<HTMLDivElement>();
   let type = $state<string | null>(null);
@@ -121,7 +117,7 @@
 </script>
 
 {#snippet open()}
-  {#if type && CANVAS_TYPES.has(type)}
+  {#if drawsAsCanvas(type)}
     <Button
       data-open-canvas
       disabled={opening}
@@ -133,7 +129,7 @@
 {/snippet}
 
 <Well
-  action={type && CANVAS_TYPES.has(type) ? open : undefined}
+  action={drawsAsCanvas(type) ? open : undefined}
   caption={props.caption ? String(props.caption) : undefined}
   picture={drawn ?? undefined}
   {said}

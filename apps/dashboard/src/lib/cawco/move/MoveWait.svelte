@@ -15,6 +15,7 @@
    * failed phase is drawn.
    */
   import {
+    MOVE_JOB_STEPS,
     type MoveJob,
     type MoveStep,
     moveSourceName,
@@ -61,13 +62,7 @@
 
   type Phase = "done" | "active" | "ahead" | "failed" | "stopped" | "asking";
 
-  const WORKING: ReadonlySet<string> = new Set([
-    "approval",
-    "snapshot",
-    "clone",
-    "lfs",
-    "start",
-  ]);
+  const WORKING: ReadonlySet<string> = new Set(MOVE_JOB_STEPS);
   const MOVE_IT = "Move it";
   const DONT_MOVE = "Don't move";
 

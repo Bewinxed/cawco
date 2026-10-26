@@ -8,6 +8,8 @@
  * read/write over fleet config — not session-scoped, not delegation-scoped.
  */
 import {
+  type ConnectionAuth,
+  EFFORT_LEVELS,
   type FleetMemory,
   type FleetMemoryDoc,
   type FleetPlugin,
@@ -45,6 +47,14 @@ import {
  * announcement of the outcome (fleet-fetches.ts).
  */
 const TIMEOUT_MS = 30_000;
+
+/** The connection auths the `connections` tool's `auth` field takes. */
+const MADE_AUTHS = [
+  "none",
+  "bearer",
+  "header",
+  "oauth",
+] as const satisfies readonly ConnectionAuth[];
 
 /** JSON helper — calls a hub route and returns the parsed response, or throws a sentence. */
 const api = async (
@@ -358,7 +368,7 @@ export function adminTools() {
           .optional()
           .describe("Model id for the harness. Required for put."),
         effort: z
-          .enum(["low", "medium", "high", "xhigh", "max"])
+          .enum(EFFORT_LEVELS)
           .optional()
           .describe("Reasoning effort. Optional for put."),
         skills: z
@@ -458,7 +468,7 @@ export function adminTools() {
         url: z.string().optional(),
         command: z.string().optional(),
         args: z.array(z.string()).optional(),
-        auth: z.enum(["none", "bearer", "header", "oauth"]).optional(),
+        auth: z.enum(MADE_AUTHS).optional(),
         header: z
           .string()
           .optional()

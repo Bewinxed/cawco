@@ -3,7 +3,6 @@ import {
   IMAGE_GENERATION_DESCRIPTION,
   IMAGE_QUALITIES,
   LANDS_MODES,
-  type LandsMode,
   REFERENCE_GUIDANCE,
   SESSION_CHOSEN_MODES,
   SPAWNING_TOOLS,
@@ -514,7 +513,7 @@ export function handoffTools(deps: HandoffDeps) {
           ),
         inputs: inputsParameter(),
         lands: z
-          .enum(LANDS_MODES as [LandsMode, ...LandsMode[]])
+          .enum(LANDS_MODES)
           .optional()
           .describe(
             "main (default): rebased onto the default branch after its merge checks pass. branch: pushed to cawco/<item>. pr: that, with a pull request. none: nothing pushed; name its deliverables in outputs. Work on a machine rather than a repository: host instead."

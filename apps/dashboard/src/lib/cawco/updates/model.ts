@@ -5,6 +5,7 @@
  */
 
 import {
+  type BinaryUpdatePhase,
   type BinaryUpdatePolicy,
   type BinaryUpdateState,
   holdPhrases,
@@ -605,7 +606,7 @@ function refusedHere({ input, name }: Ctx): Notice | null {
   };
 }
 
-const COMMANDED_PHASES: readonly string[] = [
+const COMMANDED_PHASES: readonly BinaryUpdatePhase[] = [
   "available",
   "downloading",
   "ready",

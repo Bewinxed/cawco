@@ -3,6 +3,7 @@
  * what the person typed, and the name the project takes from it.
  */
 
+import type { StagesTemplate } from "@cawco/core";
 import type { Component } from "svelte";
 import {
   IconChat,
@@ -13,9 +14,8 @@ import {
   IconToolCode,
 } from "#lib/icons.js";
 
-/** A template New project offers: the hub's stages template of the same name (stages.ts). */
-export type TemplateName =
-  "code" | "launch" | "seo" | "brand" | "design" | "social";
+/** A template New project offers: every stages template but outreach. */
+export type TemplateName = Exclude<StagesTemplate, "outreach">;
 
 export interface TemplateCard {
   /** The tile glyph's section hue. */

@@ -30,6 +30,11 @@
  * IndexedDB keeps nothing on the device. Where the page may start no worker
  * (a Content-Security-Policy that refuses one), the page keeps no doc.
  */
+
+import {
+  MADE_ARTIFACT_KINDS,
+  type MadeArtifactKind,
+} from "@cawco/core/artifact-kinds";
 import {
   CHOICE_LIMITS,
   type ChoiceChange,
@@ -57,8 +62,6 @@ import { Mirror } from "./mirror";
 /** The doc worker's bundle (doc-worker.ts), its text put in by the overlay's build (core preview-proxy.ts `bundleOverlay`). */
 declare const __CAWCO_DOC_WORKER__: string;
 
-const KINDS = new Set(["page", "canvas", "preview", "component"]);
-
 /** Where an artifact's doc is synced: the listener's path, under the dashboard's preview prefix in its frame. */
 const SYNC_PATH =
   /^\/(?:preview\/[^/]+\/[^/]+\/)?__cawco\/artifact\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/u;
@@ -67,7 +70,7 @@ export const NO_ARTIFACT = "This page has no artifact to keep its state in.";
 
 export interface ArtifactRef {
   id: string;
-  kind: "page" | "canvas" | "preview" | "component";
+  kind: MadeArtifactKind;
   name: string;
 }
 
@@ -639,12 +642,12 @@ export const artifact = {
   join: (artifactValue: unknown, sync: unknown): ArtifactRef | null => {
     const raw = artifactValue as Partial<ArtifactRef> | null | undefined;
     const path = typeof sync === "string" ? sync.match(SYNC_PATH) : null;
+    const kind = MADE_ARTIFACT_KINDS.find((one) => one === raw?.kind);
     if (!(
       raw &&
       typeof raw.id === "string" &&
       typeof raw.name === "string" &&
-      typeof raw.kind === "string" &&
-      KINDS.has(raw.kind) &&
+      kind &&
       path?.[1] === raw.id &&
       started()
     )) {
@@ -661,7 +664,7 @@ export const artifact = {
       tell({ type: "replace", generation: next });
       restart(next);
     }
-    joined = { id: raw.id, kind: raw.kind, name: raw.name.slice(0, 200) };
+    joined = { id: raw.id, kind, name: raw.name.slice(0, 200) };
     syncPath = sync as string;
     status = "joined";
     loadRefused(joined.id);

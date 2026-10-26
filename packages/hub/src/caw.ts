@@ -85,6 +85,8 @@ import {
   type RelayProvider,
   type SendPayload,
   type SpawnPayload,
+  STAGES_TEMPLATES,
+  type StagesTemplate,
   sessionLink,
   type ThreadAnswer,
   type ThreadEvent,
@@ -151,12 +153,7 @@ import {
   type SetupPart,
   setupEvent,
 } from "./setup";
-import {
-  readStages,
-  type StagesTemplate,
-  TEMPLATES,
-  templateText,
-} from "./stages";
+import { readStages, templateText } from "./stages";
 import type { TaskEvent, TaskView } from "./tasks";
 import type { Views } from "./views";
 
@@ -2191,7 +2188,9 @@ export const createCaw = ({
     if (content === undefined) {
       return db.project(projectId)?.template === "code" ? "code" : null;
     }
-    return TEMPLATES.find((name) => templateText(name) === content) ?? null;
+    return (
+      STAGES_TEMPLATES.find((name) => templateText(name) === content) ?? null
+    );
   };
 
   /** The lead session `actor` is, when it is its project's lead. */

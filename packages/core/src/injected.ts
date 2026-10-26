@@ -130,21 +130,15 @@ const afterMarker = (text: string, line: string): string => {
 const landLine = (base: string): string =>
   `The repository's default branch is ${base}. Land with \`git fetch origin && git rebase origin/${base} && git push origin HEAD:${base}\`. Compare against ${base} with \`git show origin/${base}:<path>\`.`;
 
+/** Every {@link LandsMode}, in the order a setting offers them. */
+export const LANDS_MODES = ["main", "branch", "pr", "none"] as const;
 /**
  * Where a work item's work goes once it finishes (hub/src/landing.ts):
  * `main` onto the repository's default branch, `branch` to a branch of its
  * own on origin, `pr` to that branch with a pull request, `none` nowhere (the
  * work is not commits; its outputs are the deliverable).
  */
-export type LandsMode = "main" | "branch" | "pr" | "none";
-
-/** Every {@link LandsMode}, in the order a setting offers them. */
-export const LANDS_MODES: readonly LandsMode[] = [
-  "main",
-  "branch",
-  "pr",
-  "none",
-];
+export type LandsMode = (typeof LANDS_MODES)[number];
 
 /** How a work item lands, and the files it hands in besides commits. */
 export interface WorkspaceLanding {

@@ -12,6 +12,7 @@ import {
   type FleetItemStatus,
   type FleetSyncReport,
 } from "@cawco/core";
+import { type ProjectPart, projectItemOf } from "@cawco/core/fleet-items";
 
 /** Whether a machine's own reported build is level with the hub's. */
 export type BuildConvergence = "unknown" | "current" | "behind";
@@ -139,11 +140,8 @@ export function syncNotice(
   }
 }
 
-/** A project's row as an item id (core fleet-items.ts): `project:<id>/<kind>:<key>`. */
-const PROJECT_ITEM = /^project:[^/]+\/([^:]+):(.*)$/u;
-
-/** A project row's kind in words, before its key. */
-const PROJECT_KIND_WORDS: Record<string, string> = {
+/** A project row's part in words, before its key. */
+const PROJECT_PART_WORDS: Record<Exclude<ProjectPart, "checkout">, string> = {
   skill: "skill",
   mcp: "MCP server",
   memory: "memory document",
@@ -153,14 +151,11 @@ const PROJECT_KIND_WORDS: Record<string, string> = {
 
 /** What a fleet item is, in words: "MCP server chrome-devtools", "skill show", "the memory". */
 function itemWords(id: string): string {
-  const project = PROJECT_ITEM.exec(id);
+  const project = projectItemOf(id);
   if (project) {
-    const [, kind = "", key = ""] = project;
-    if (kind === "checkout") {
-      return "the project's checkout";
-    }
-    const words = PROJECT_KIND_WORDS[kind];
-    return words ? `${words} ${key}` : id;
+    return project.part === "checkout"
+      ? "the project's checkout"
+      : `${PROJECT_PART_WORDS[project.part]} ${project.key}`;
   }
   const colon = id.indexOf(":");
   const kind = colon < 0 ? id : id.slice(0, colon);

@@ -4125,7 +4125,7 @@
    * stubs, which is exactly how the in-flight tool looked against the
    * completed calls above it.
    */
-  const NO_RAIL = new Set([
+  const NO_RAIL = new Set<Extract<Row, { kind: "single" }>["message"]["type"]>([
     "user",
     "assistant",
     "user.peer",

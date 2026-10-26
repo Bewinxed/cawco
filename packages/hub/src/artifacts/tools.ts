@@ -9,6 +9,7 @@ import {
   ARTIFACT_DOES,
   ARTIFACT_NAME,
   ASK_LIMIT,
+  MADE_ARTIFACT_KINDS,
   PREVIEW_START_PATH,
 } from "@cawco/core";
 import { CANVAS_LIMITS, SKELETON_TYPES } from "@cawco/core/canvas";
@@ -152,7 +153,7 @@ export const artifactCreate = {
     "Proof, references, a plan or finished work go in your words, not here. The same kind and name again replaces " +
     "it, picks kept.",
   input: {
-    kind: z.enum(["page", "component", "preview", "canvas"]),
+    kind: z.enum(MADE_ARTIFACT_KINDS),
     does,
     ask,
     name: z.string().regex(ARTIFACT_NAME).describe("Like onboarding."),
