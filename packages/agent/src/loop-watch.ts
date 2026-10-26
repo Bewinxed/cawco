@@ -140,8 +140,15 @@ const WATCHDOG_URL = new URL(
  * beat each tick writes, and a byte it sends the echo opened here comes
  * back only while this loop takes in sockets. Unreferenced, as the echo
  * is: neither keeps the agent from exiting.
+ *
+ * The daemon starts it once its MCP gateway listens, never before: the echo
+ * listens on a port the kernel picks from its ephemeral range, and Linux's
+ * (32768–60999) holds the gateway's fixed 43879 (core `mcpGatewayPort`).
+ * On 2026-10-26 an agent's echo took 43879 first, its gateway could not
+ * listen ("MCP gateway port 127.0.0.1:43879 is held by pid 473", its own
+ * pid) and it never registered.
  */
-const startWatchdog = (): void => {
+export const watchFromItsOwnThread = (): void => {
   const shared = new Float64Array(new SharedArrayBuffer(3 * 8));
   shared[BEAT] = Date.now();
   shared[SECTION] = -1;
@@ -168,13 +175,13 @@ const startWatchdog = (): void => {
  * Starts the watch: each stall of `lateMs` ({@link LATE_MS} unless a
  * probe asks finer) or more is one line through `say` once it ends, and one
  * that lasts, or a loop that runs its timers but takes in nothing, is said
- * while it lasts, from a thread of its own ({@link startWatchdog}).
+ * while it lasts, from a thread of its own once that is started
+ * ({@link watchFromItsOwnThread}).
  */
 export const watchLoop = (
   say: (line: string) => void,
   lateMs = LATE_MS
 ): (() => void) => {
-  startWatchdog();
   let expected = performance.now() + TICK_MS;
   let posted = "";
   const timer = setInterval(() => {

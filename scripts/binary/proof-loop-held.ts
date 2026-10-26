@@ -9,7 +9,11 @@
  * stage 1 proof (proof-stack.ts) holds it {@link SHORT_HOLD_MS}, as
  * `cawco proof-loop-held short`.
  */
-import { syncSection, watchLoop } from "../../packages/agent/src/loop-watch";
+import {
+  syncSection,
+  watchFromItsOwnThread,
+  watchLoop,
+} from "../../packages/agent/src/loop-watch";
 
 /** How long the loop is held: past the watch's second saying, at 30 s. */
 export const HOLD_MS = 35_000;
@@ -24,6 +28,7 @@ const AFTER_MS = 4000;
 
 export const holdLoop = (holdMs: number): void => {
   watchLoop((line) => console.warn(line));
+  watchFromItsOwnThread();
   setInterval(() => undefined, 1000);
   setTimeout(() => {
     syncSection(SECTION, () => {

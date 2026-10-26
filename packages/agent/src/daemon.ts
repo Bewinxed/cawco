@@ -246,7 +246,12 @@ import { admitInputs, copyInputs, readInputs, writeInputs } from "./inputs";
 import { KeeperWatchdog } from "./keeper-watchdog";
 import { type HeldProc, type KeeperReading, withKeepers } from "./keepers";
 import { endOrphanedSignIns, endSignIns } from "./login";
-import { phase, syncSection, watchLoop } from "./loop-watch";
+import {
+  phase,
+  syncSection,
+  watchFromItsOwnThread,
+  watchLoop,
+} from "./loop-watch";
 import { holdHubLink, isMachineAgent } from "./machine-agent";
 import { setAccountFreshener, startMcpGateway } from "./mcp-oauth";
 import { MEMORY_LOG_INTERVAL_MS, memoryLine } from "./memory";
@@ -3392,6 +3397,9 @@ export const startDaemon = (rediscover = false) =>
       Effect.promise(() => startMcpGateway(() => hubUrl)),
       (listener) => Effect.sync(() => listener.stop(true))
     );
+    // Only now: its echo's kernel-picked port could otherwise be the
+    // gateway's (loop-watch.ts `watchFromItsOwnThread`).
+    watchFromItsOwnThread();
     // The hub on this computer's loopback, started by each register (hub-loopback.ts `carryHub`).
     yield* Effect.addFinalizer(() => Effect.promise(() => stopCarrying()));
     const machineIdValue = yield* Effect.promise(() => machineId());
@@ -4083,11 +4091,12 @@ export const runDaemon = (rediscover = false): void => {
         Effect.logError(
           `[daemon] ${error instanceof Error ? error.message : String(error)}`
         ).pipe(
-          Effect.andThen(
-            Effect.sync(() => {
-              process.exitCode = 1;
-            })
-          )
+          // Ended here, not left to end: work begun before the failure keeps
+          // the process up with no hub connection, and its service manager
+          // starts it again only once it ends. On 2026-10-26 one whose
+          // gateway could not listen stayed up, never registering, until its
+          // rig gave up two minutes later.
+          Effect.andThen(Effect.sync(() => process.exit(1)))
         )
       )
     )
