@@ -38,6 +38,7 @@
 import { hostname, userInfo } from "node:os";
 import type { Bounded } from "@cawco/core/bounded";
 import { firstLine, type Heard, type Ran, runTailscale } from "./tailscale-cli";
+import { z } from "zod";
 
 /** The Funnel port the relay owns: one of the three Funnel allows, and nothing else of the hub's. */
 export const FUNNEL_PORT = 10_000;
@@ -56,11 +57,21 @@ export type FunnelState =
   | { reason: string; state: "wanted" };
 
 /** `tailscale funnel status --json`: Tailscale's ServeConfig (ipn/serve.go), the parts read here. */
-interface ServeConfig {
-  AllowFunnel?: Record<string, boolean>;
-  TCP?: Record<string, unknown>;
-  Web?: Record<string, { Handlers?: Record<string, { Proxy?: string }> }>;
-}
+const ServeConfigSchema = z.object({
+  AllowFunnel: z.record(z.string(), z.boolean()).optional(),
+  TCP: z.record(z.string(), z.unknown()).optional(),
+  Web: z
+    .record(
+      z.string(),
+      z.object({
+        Handlers: z
+          .record(z.string(), z.object({ Proxy: z.string().optional() }))
+          .optional(),
+      })
+    )
+    .optional(),
+});
+type ServeConfig = z.infer<typeof ServeConfigSchema>;
 
 /** What a state says, in a sentence. */
 export const wordsOf = (state: FunnelState): string => {
@@ -124,7 +135,7 @@ export const createFunnel = ({ bin = "tailscale" }: FunnelDeps = {}) => {
       };
     }
     try {
-      return (JSON.parse(ran.stdout) as ServeConfig | null) ?? {};
+      return ServeConfigSchema.nullable().parse(JSON.parse(ran.stdout)) ?? {};
     } catch {
       return {
         state: "wanted",

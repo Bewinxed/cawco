@@ -103,7 +103,7 @@ const install = async (
 
 /** A package's `package.json`, as far as its entry needs it. */
 const PackageJsonSchema = z.object({
-  exports: z.unknown(),
+  exports: z.unknown().optional(),
   main: z.string().optional(),
   module: z.string().optional(),
   version: z.string().optional(),
@@ -113,9 +113,7 @@ type PackageJson = z.infer<typeof PackageJsonSchema>;
 /** The file an ES module import of the package at `root` loads: its `exports["."]` (`import`, else `default`), `module`, `main`, else `index.js`. */
 const packageEntry = async (root: string): Promise<string> => {
   const pkg: PackageJson =
-    (await readRecord(join(root, "package.json"), PackageJsonSchema)) ?? {
-      exports: undefined,
-    };
+    (await readRecord(join(root, "package.json"), PackageJsonSchema)) ?? {};
   const dot =
     typeof pkg.exports === "string"
       ? pkg.exports

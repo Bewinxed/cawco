@@ -39,6 +39,7 @@
  */
 import { networkInterfaces } from "node:os";
 import { reachableLinks } from "@cawco/core/reachable-links";
+import { z } from "zod";
 
 const LINK_LOCAL_V4 = /^169\.254\./u;
 const LINK_LOCAL_V6 = /^fe[89ab]/iu;
@@ -94,11 +95,15 @@ const defaultRoute = async (): Promise<string | undefined> => {
   const [v4, v6] = await Promise.all(
     ["-4", "-6"].map(
       async (family) =>
-        JSON.parse(
-          (
-            await Bun.$`ip ${family} -json route show default`.quiet()
-          ).stdout.toString()
-        ) as { dev?: string }[]
+        z
+          .array(z.object({ dev: z.string().optional() }))
+          .parse(
+            JSON.parse(
+              (
+                await Bun.$`ip ${family} -json route show default`.quiet()
+              ).stdout.toString()
+            )
+          )
     )
   );
   return [...(v4 ?? []), ...(v6 ?? [])].find((route) => route.dev)?.dev;

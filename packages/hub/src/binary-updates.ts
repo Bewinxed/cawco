@@ -51,6 +51,8 @@ import { Elysia, t } from "elysia";
 import { hidden } from "./hidden";
 import { fenceHub, hubRestartReadiness } from "./restart-holds";
 import { BinaryUpdatePolicySchema } from "@cawco/core/stored-shapes";
+import { z } from "zod";
+import { parseRecord } from "@cawco/core/state-file";
 
 /** How long a discovered release is served before the host is asked again. */
 const RELEASE_TTL_MS = 15 * 60_000;
@@ -87,12 +89,15 @@ function databaseSchemaVersion(dbPath: string): number {
 /** The signed manifest and signature of the build this hub is running. */
 async function runningRelease(): Promise<LocatedRelease> {
   const manifest = await readRunningManifest();
-  const { signature } = JSON.parse(
-    readFileSync(
-      join(versionDirectory(manifest.version), "release.signature.json"),
-      "utf8"
-    )
-  ) as { signature: string };
+  const signatureFile = join(
+    versionDirectory(manifest.version),
+    "release.signature.json"
+  );
+  const { signature } = parseRecord(
+    signatureFile,
+    readFileSync(signatureFile, "utf8"),
+    z.object({ signature: z.string() })
+  );
   const installation = await readInstallation();
   return {
     manifest,

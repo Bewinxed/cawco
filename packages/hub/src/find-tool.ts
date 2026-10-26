@@ -172,11 +172,13 @@ const listedFrom = (cursor: string | undefined): ListedAt | undefined => {
     return;
   }
   try {
-    const read = JSON.parse(
-      Buffer.from(cursor, "base64url").toString("utf8")
-    ) as Partial<ListedAt>;
-    if (typeof read.at === "number" && typeof read.doc === "string") {
-      return { at: read.at, doc: read.doc };
+    const read = z
+      .object({ at: z.number(), doc: z.string() })
+      .safeParse(
+        JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"))
+      );
+    if (read.success) {
+      return read.data;
     }
   } catch {
     // Not a listing's cursor: refused below.

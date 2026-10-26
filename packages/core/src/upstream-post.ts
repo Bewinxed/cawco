@@ -301,7 +301,7 @@ const titled = (
 const mutationOf = (text: string | undefined): string | undefined => {
   try {
     const { query } = z
-      .object({ query: z.unknown() })
+      .object({ query: z.unknown().optional() })
       .catch({ query: undefined })
       .parse(JSON.parse(text ?? "{}"));
     return typeof query === "string"

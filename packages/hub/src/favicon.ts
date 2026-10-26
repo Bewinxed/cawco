@@ -29,6 +29,8 @@ import { DAY_MS } from "@cawco/core/time";
 import { faviconReachable } from "@cawco/core/tool-presentation";
 import { Elysia, t } from "elysia";
 import { DB_PATH } from "./config";
+import { z } from "zod";
+import { parseRecord } from "@cawco/core/state-file";
 
 const DIR = join(dirname(DB_PATH), "favicons");
 
@@ -314,10 +316,11 @@ const fetchIcon = async (host: string): Promise<Bounded<Icon | undefined>> => {
   return silent ?? { kind: "answered", value: undefined };
 };
 
-interface Meta {
-  at: number;
-  type: string | null;
-}
+const MetaSchema = z.object({
+  at: z.number(),
+  type: z.string().nullable(),
+});
+type Meta = z.infer<typeof MetaSchema>;
 
 const paths = (host: string) => {
   const key = createHash("sha256").update(host).digest("hex");
@@ -331,7 +334,7 @@ const cached = async (
 ): Promise<Icon | null | undefined> => {
   const { meta, image } = paths(host);
   try {
-    const stored = JSON.parse(await readFile(meta, "utf8")) as Meta;
+    const stored = parseRecord(meta, await readFile(meta, "utf8"), MetaSchema);
     const kept = stored.type ? ICON_KEPT_MS : MISS_KEPT_MS;
     if (!stale && Date.now() - stored.at > kept) {
       return undefined;

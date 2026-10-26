@@ -206,7 +206,7 @@ const takeJson = (body: GraphqlBody, text: string | undefined): void => {
   try {
     const parsed = z
       .object({
-        query: z.unknown(),
+        query: z.unknown().optional(),
         variables: z.record(z.string(), z.unknown()).optional(),
       })
       .catch({ query: undefined })

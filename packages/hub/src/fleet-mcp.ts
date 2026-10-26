@@ -22,6 +22,7 @@ import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
 import type { DbShape } from "./db";
 import { type Exchange, FleetMcpRelay } from "./fleet-mcp-relay";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import { z } from "zod";
 
 const SHARED_CLIENT_ID = `${CAWCO_OAUTH_URL}/client.json`;
 /**
@@ -89,9 +90,9 @@ const claimsOf = (idToken: unknown): Record<string, unknown> => {
   }
   const [, body] = idToken.split(".");
   try {
-    return JSON.parse(
-      Buffer.from(body ?? "", "base64url").toString("utf8")
-    ) as Record<string, unknown>;
+    return z
+      .record(z.string(), z.unknown())
+      .parse(JSON.parse(Buffer.from(body ?? "", "base64url").toString("utf8")));
   } catch {
     return {};
   }

@@ -640,7 +640,7 @@ export const createActions = ({
     const outcome = await connections.callOnce(
       row.connection,
       row.tool,
-      JSON.parse(row.args) as Record<string, unknown>,
+      z.record(z.string(), z.unknown()).parse(JSON.parse(row.args)),
       {
         "dev.cawco/idempotency-key": row.idempotencyKey,
         "idempotency-key": row.idempotencyKey,

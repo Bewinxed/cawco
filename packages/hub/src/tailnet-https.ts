@@ -53,6 +53,7 @@ import {
 import type { HubLifetimeShape } from "./lifetime";
 import { openTailnetDoor, type TailnetDoor } from "./tailnet-door";
 import { firstLine, runTailscale } from "./tailscale-cli";
+import { z } from "zod";
 
 /** How often the hub reads Tailscale's state and certificate again, for a renewal or a change. Our choice. */
 const CHECK_MS = 30_000;
@@ -65,19 +66,23 @@ const PEM_BLOCK = /-----BEGIN ([A-Z ]+)-----[\s\S]+?-----END \1-----/gu;
 const TRAILING_DOT = /\.$/u;
 
 /** `tailscale status --json`: ipnstate.Status, the parts read here. */
-interface Status {
-  BackendState?: string;
-  CertDomains?: string[] | null;
-  CurrentTailnet?: { MagicDNSEnabled?: boolean } | null;
-  Self?: { DNSName?: string; TailscaleIPs?: string[] | null } | null;
+const StatusSchema = z.object({
+  BackendState: z.string().optional(),
+  CertDomains: z.array(z.string()).nullish(),
+  CurrentTailnet: z.object({ MagicDNSEnabled: z.boolean().optional() }).nullish(),
+  Self: z
+    .object({
+      DNSName: z.string().optional(),
+      TailscaleIPs: z.array(z.string()).nullish(),
+    })
+    .nullish(),
   /** Whether tailscaled uses a TUN device; false under `--tun=userspace-networking`. */
-  TUN?: boolean;
-}
+  TUN: z.boolean().optional(),
+});
+type Status = z.infer<typeof StatusSchema>;
 
 /** `tailscale debug prefs`: ipn.Prefs, the part read here. */
-interface Prefs {
-  OperatorUser?: string;
-}
+const PrefsSchema = z.object({ OperatorUser: z.string().optional() });
 
 /** A certificate and its key, as Bun's `tls` takes them. */
 interface Pair {
@@ -213,7 +218,7 @@ export const createTailnetHttps = ({
       return { reading: { state: "absent" } };
     }
     try {
-      return { status: JSON.parse(ran.stdout) as Status };
+      return { status: StatusSchema.parse(JSON.parse(ran.stdout)) };
     } catch {
       return {
         reading: {
@@ -242,7 +247,7 @@ export const createTailnetHttps = ({
       return null;
     }
     try {
-      const prefs = JSON.parse(asked.value.stdout) as Prefs;
+      const prefs = PrefsSchema.parse(JSON.parse(asked.value.stdout));
       return prefs.OperatorUser === user
         ? { step: "operator", done: true }
         : operatorStep;

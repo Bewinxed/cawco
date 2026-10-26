@@ -958,7 +958,7 @@ const isSpillDir = (id: string, dir: string): boolean => {
 const linkedModules = async (id: string): Promise<string[]> => {
   const layer = await readRecord(
     join(workspacesDir(), id, "layer.json"),
-    z.object({ folder: z.unknown(), form: z.unknown() })
+    z.object({ folder: z.unknown().optional(), form: z.unknown().optional() })
   ).catch(() => undefined);
   if (!(
     layer?.form === "copy" &&

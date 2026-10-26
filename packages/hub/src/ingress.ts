@@ -199,11 +199,18 @@ export const eventData = (row: InboundEventRow): string =>
     event: JSON.parse(row.payload) as unknown,
   })}\n</inbound-event>`;
 
+/** What the inbox shows of a stored event, whose payload may be cut ({@link storedPayload}). */
+const INBOX_SHOWS = z.object({
+  actor: z.string().nullable().optional(),
+  title: z.string().nullable().optional(),
+  url: z.string().nullable().optional(),
+});
+
 /** The lead's inbox as one wake carries it: newest {@link INBOX_SHOWN}, the rest counted. */
 export const inboxText = (rows: InboundEventRow[]): string => {
   const shown = rows.slice(-INBOX_SHOWN);
   const lines = shown.map((row) => {
-    const event = JSON.parse(row.payload) as Partial<InboundEvent>;
+    const event = INBOX_SHOWS.parse(JSON.parse(row.payload));
     return {
       source: row.source,
       key: row.deliveryKey,

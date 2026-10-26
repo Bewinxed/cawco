@@ -60,6 +60,7 @@ import { DB_PATH, HUB_PORT } from "./config";
 import { INSTALL_CODE, type Installs } from "./installs";
 import { localHubName } from "./mdns";
 import { CONNECT_S } from "./ssh-tunnels";
+import { z } from "zod";
 
 /** How long a short command gets to answer. Our choice. */
 const OUTPUT_MS = 3000;
@@ -122,7 +123,11 @@ export const joinAddresses = async (): Promise<JoinAddress[]> => {
     found.push({ label: "Tailscale", url: url(tailscaleIp) });
   }
   const dnsName = status
-    ? (JSON.parse(status) as { Self?: { DNSName?: string } }).Self?.DNSName
+    ? z
+        .object({
+          Self: z.object({ DNSName: z.string().optional() }).nullish(),
+        })
+        .parse(JSON.parse(status)).Self?.DNSName
     : undefined;
   if (dnsName) {
     found.push({

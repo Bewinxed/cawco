@@ -91,6 +91,7 @@ import {
 import { DAY_MS } from "@cawco/core/time";
 import type { PreviewPassesDb, PreviewPassRow } from "./db/preview-passes";
 import { hubSecrets } from "./secret-box";
+import { z } from "zod";
 
 /** How long a ticket stands: a client spends it at once, in the load it was asked for. */
 export const TICKET_MS = 60_000;
@@ -129,34 +130,38 @@ const sha256 = (value: string): string =>
   createHash("sha256").update(value).digest("hex");
 
 /** What every ticket's body holds. */
-interface BaseBody {
+const BaseBodySchema = z.object({
   /** When it stops standing, ms epoch. */
-  e: number;
+  e: z.number(),
   /** When it was minted, ms epoch. */
-  i: number;
+  i: z.number(),
   /** Its one-time name. */
-  n: string;
-}
+  n: z.string(),
+});
+type BaseBody = z.infer<typeof BaseBodySchema>;
 
 /** The person's ticket. */
-interface TicketBody extends BaseBody {
+const TicketBodySchema = BaseBodySchema.extend({
   /** The paired device it was given to; null on a trusted hub, which pairs none. */
-  d: string | null;
-}
+  d: z.string().nullable(),
+});
+type TicketBody = z.infer<typeof TicketBodySchema>;
 
 /** A session's ticket (`artifact_browse`). */
-interface SessionTicketBody extends BaseBody {
+const SessionTicketBodySchema = BaseBodySchema.extend({
   /** The session it was given to. */
-  a: string;
+  a: z.string(),
   /** The origins (their keys) its pass opens. */
-  s: string[];
-}
+  s: z.array(z.string()),
+});
+type SessionTicketBody = z.infer<typeof SessionTicketBodySchema>;
 
 /** `ticket`'s body when the hub signed it as `kind`; null otherwise. */
-const opened = <T extends BaseBody>(
+const opened = <S extends z.ZodType<BaseBody>>(
   ticket: string,
-  kind: TicketKind
-): T | null => {
+  kind: TicketKind,
+  schema: S
+): z.output<S> | null => {
   const dot = ticket.indexOf(".");
   if (dot < 1) {
     return null;
@@ -168,7 +173,9 @@ const opened = <T extends BaseBody>(
     return null;
   }
   try {
-    return JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as T;
+    return schema.parse(
+      JSON.parse(Buffer.from(body, "base64url").toString("utf8"))
+    );
   } catch {
     return null;
   }
@@ -236,8 +243,10 @@ const spendTicket = (
   | { deviceId: string | null }
   | { session: SessionTicketBody }
   | { refused: TicketRefusal } => {
-  const person = opened<TicketBody>(ticket, "ticket");
-  const session = person ? null : opened<SessionTicketBody>(ticket, "session");
+  const person = opened(ticket, "ticket", TicketBodySchema);
+  const session = person
+    ? null
+    : opened(ticket, "session", SessionTicketBodySchema);
   const body = person ?? session;
   if (!body) {
     return { refused: "forged" };

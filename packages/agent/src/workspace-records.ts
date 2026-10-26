@@ -55,7 +55,7 @@ const pathOf = async (
       // biome-ignore lint/performance/noAwaitInLoops: the first of the records that names the clone
       const record = await readRecord(
         join(workspacesDir(), id, name),
-        z.object({ path: z.unknown() })
+        z.object({ path: z.unknown().optional() })
       );
       if (typeof record?.path === "string") {
         return record.path;

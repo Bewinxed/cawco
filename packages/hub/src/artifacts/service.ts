@@ -214,6 +214,8 @@ import {
   sceneChanges,
 } from "./page-changes";
 import { picturePath, thumbnailPath } from "./sync";
+import { ArtifactThumbnailSchema } from "@cawco/core/stored-shapes";
+import { parseRecord } from "@cawco/core/state-file";
 
 export class ArtifactRefusal extends Error {
   readonly status: 400 | 403 | 404 | 409 | 413 | 422 | 503 | 504;
@@ -1794,9 +1796,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (!thumbnails.has(id)) {
       let kept: ArtifactThumbnail | null = null;
       try {
-        kept = JSON.parse(
-          readFileSync(thumbnailPath(deps.root, id, "json"), "utf8")
-        ) as ArtifactThumbnail;
+        const file = thumbnailPath(deps.root, id, "json");
+        kept = parseRecord(
+          file,
+          readFileSync(file, "utf8"),
+          ArtifactThumbnailSchema
+        );
       } catch {
         kept = null;
       }

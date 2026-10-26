@@ -31,7 +31,10 @@
  * marks those a stopped hub was running as interrupted.
  */
 import { createHash } from "node:crypto";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import {
+  type CallToolResult,
+  CallToolResultSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 import type { ToolCallKeysDb } from "./db/tool-call-keys";
 import { INTERRUPTED_CALL } from "./tool-call-keys";
 
@@ -108,7 +111,9 @@ export const createCallKeys = ({ db }: { db: ToolCallKeysDb }) => {
           console.info(
             `[call-keys] ${name} from ${instanceId} sent again once answered: its first answer, not run again`
           );
-          return JSON.parse(decoder.decode(row.body)) as CallToolResult;
+          return CallToolResultSchema.parse(
+            JSON.parse(decoder.decode(row.body))
+          );
         }
         return {
           isError: true,

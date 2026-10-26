@@ -100,6 +100,7 @@ import type { OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import {
   type CallToolResult,
+  CallToolResultSchema,
   ErrorCode,
   McpError,
   type Tool,
@@ -1502,7 +1503,9 @@ export const createConnections = (deps: ConnectionsDeps) => {
     }
     const text = JSON.stringify(result);
     const clean = scrub(r, text);
-    return clean === text ? result : (JSON.parse(clean) as CallToolResult);
+    return clean === text
+      ? result
+      : CallToolResultSchema.parse(JSON.parse(clean));
   };
 
   /**
@@ -1564,7 +1567,10 @@ export const createConnections = (deps: ConnectionsDeps) => {
       const clean = scrub(r, text);
       return {
         kind: "answered",
-        result: clean === text ? result : (JSON.parse(clean) as CallToolResult),
+        result:
+          clean === text
+            ? result
+            : CallToolResultSchema.parse(JSON.parse(clean)),
       };
     } catch (error) {
       const words = error instanceof Error ? error.message : String(error);

@@ -179,6 +179,8 @@ import { redactSecrets } from "./secret-filter";
 import { listOf, scalarOf } from "./task-file";
 import { readsWeb, type WebContext } from "./web-reads";
 import { isRoutineParent } from "./work-items";
+import { ProposalSchema } from "./db/stored-shapes";
+import { parseRecord } from "@cawco/core/state-file";
 
 export const AGENTS_FILE = "AGENTS.md";
 const MEMORY_DIR = "memory";
@@ -861,9 +863,12 @@ const proposalsOf = async (projectId: string): Promise<Proposal[]> => {
   const read = await Promise.all(
     names.map(async (name) => {
       try {
-        const parsed = JSON.parse(
-          await fileOr(projectId, `${PROPOSALS_DIR}/${name}`)
-        ) as Proposal;
+        const path = `${PROPOSALS_DIR}/${name}`;
+        const parsed = parseRecord(
+          path,
+          await fileOr(projectId, path),
+          ProposalSchema
+        );
         if (wholeProposal(parsed)) {
           return parsed;
         }
@@ -3534,10 +3539,9 @@ export const createMemory = ({
           const path = `${PROPOSALS_DIR}/${name}`;
           let kept: Record<string, unknown>;
           try {
-            kept = JSON.parse(await fileOr(project.id, path)) as Record<
-              string,
-              unknown
-            >;
+            kept = z
+              .record(z.string(), z.unknown())
+              .parse(JSON.parse(await fileOr(project.id, path)));
           } catch {
             // Not JSON: proposalsOf says so as it reads the folder.
             return;

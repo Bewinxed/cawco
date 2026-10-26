@@ -52,6 +52,10 @@ import type {
   PreparedContinuation as PreparedContinuationType,
 } from "../continuation";
 import type { InstallsRecord as InstallsRecordType } from "../installs";
+import type {
+  ProposalFile as ProposalFileType,
+  Proposal as ProposalType,
+} from "../memory";
 import type { MoveState as MoveStateType } from "../moves";
 import type {
   ConnectionAppSecret as ConnectionAppSecretType,
@@ -338,6 +342,28 @@ export const InstallsRecordSchema = z.object({
   ),
 });
 
+export const ProposalFileSchema = z.object({
+  before: z.string(),
+  content: z.string(),
+  path: z.string(),
+});
+
+export const ProposalSchema = z.object({
+  base: z.string(),
+  by: z.string(),
+  files: z.array(ProposalFileSchema),
+  id: z.string(),
+  kind: z.enum(["archive", "rewrite"]).optional(),
+  notes: z.array(z.string()),
+  projectId: z.string(),
+  session: z.string(),
+  threadId: z.string().optional(),
+  time: z.string(),
+  toolUseId: z.string().optional(),
+  why: z.string(),
+  withdraws: z.string().optional(),
+});
+
 /**
  * Each property, through every level, as a plain object type. `readonly`
  * goes: it says what code may do with a value, not what a record holds.
@@ -407,7 +433,11 @@ export const proved: [
   Same<z.output<typeof WorkLandingSchema>, WorkLandingType>,
   Same<z.output<typeof WorkspaceFromSchema>, WorkspaceFromType>,
   Same<z.output<typeof InstallsRecordSchema>, InstallsRecordType>,
+  Same<z.output<typeof ProposalFileSchema>, ProposalFileType>,
+  Same<z.output<typeof ProposalSchema>, ProposalType>,
 ] = [
+  true,
+  true,
   true,
   true,
   true,

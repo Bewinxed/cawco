@@ -217,7 +217,7 @@ const isCheckout = (dir: string): boolean => {
     existsSync(manifest) &&
     Boolean(
       z
-        .object({ workspaces: z.unknown() })
+        .object({ workspaces: z.unknown().optional() })
         .parse(JSON.parse(readFileSync(manifest, "utf8"))).workspaces
     )
   );

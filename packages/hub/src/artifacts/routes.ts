@@ -18,7 +18,7 @@ import { COMMENT_LIMITS } from "@cawco/core/comments";
 import {
   CANVAS_SPEC_LIMITS,
   DESIGN_MAP_LIMITS,
-  interactionOf,
+  INTERACTIONS,
   SERVE_COMMAND_LIMIT,
   STORY_FILE,
   type StoryOp,
@@ -40,31 +40,27 @@ import {
 } from "./service";
 import { PNG_SIGNATURE } from "./sync";
 import { ARGS_LIMIT, PATCH_LIMIT, STORY_NAME, WORKSPACE_ID } from "./tools";
+import { z } from "zod";
 
 /** A read's frame, from its JSON; refused with the shape when it is none. */
+const STATE_ASK = z.object({
+  interaction: z.enum(INTERACTIONS).optional(),
+  scheme: z.enum(["light", "dark"]).optional(),
+  story: z.string().regex(STORY_NAME),
+  width: z.number().positive().optional(),
+});
 const stateOf = (text: string): StateAsk => {
-  let value: Partial<StateAsk> | null = null;
+  let value: unknown;
   try {
-    value = JSON.parse(text) as Partial<StateAsk>;
+    value = JSON.parse(text);
   } catch {
     value = null;
   }
-  if (
-    !(
-      value &&
-      typeof value.story === "string" &&
-      STORY_NAME.test(value.story)
-    ) ||
-    (value.interaction !== undefined && !interactionOf(value.interaction)) ||
-    (value.scheme !== undefined &&
-      value.scheme !== "light" &&
-      value.scheme !== "dark") ||
-    (value.width !== undefined &&
-      !(typeof value.width === "number" && value.width > 0))
-  ) {
+  const read = STATE_ASK.safeParse(value);
+  if (!read.success) {
     throw new ArtifactRefusal(400, SHAPES.read as string);
   }
-  return value as StateAsk;
+  return read.data;
 };
 
 const refused = (error: unknown) => {

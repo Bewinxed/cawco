@@ -136,6 +136,7 @@ import type {
 } from "./hooks";
 import type {
   AgentRow as AgentRowType,
+  ArtifactThumbnail as ArtifactThumbnailType,
   BuildInfo as BuildInfoType,
   DelegateAskStatus as DelegateAskStatusType,
   DelegateEventPayload as DelegateEventPayloadType,
@@ -992,6 +993,13 @@ export const CanvasSpecSchema = z.object({
   edges: z.array(CanvasEdgeSchema).optional(),
   group: z.record(z.string(), z.string()).optional(),
   name: z.string().optional(),
+});
+
+export const ArtifactThumbnailSchema = z.object({
+  at: z.string(),
+  height: z.number(),
+  single: z.boolean(),
+  width: z.number(),
 });
 
 export const CompactStageSchema = z.enum([
@@ -2130,6 +2138,7 @@ export const proved: [
   Same<z.output<typeof CanvasDialSchema>, CanvasDialType>,
   Same<z.output<typeof CanvasEdgeSchema>, CanvasEdgeType>,
   Same<z.output<typeof CanvasSpecSchema>, CanvasSpecType>,
+  Same<z.output<typeof ArtifactThumbnailSchema>, ArtifactThumbnailType>,
   Same<z.output<typeof CompactStageSchema>, CompactStageType>,
   Same<z.output<typeof AccountHueSchema>, AccountHueType>,
   Same<z.output<typeof NamedAccountSchema>, NamedAccountType>,
@@ -2237,6 +2246,7 @@ export const proved: [
   Same<z.output<typeof InstallMarkSchema>, InstallMarkType>,
   Same<z.output<typeof InstallSchema>, InstallType>,
 ] = [
+  true,
   true,
   true,
   true,

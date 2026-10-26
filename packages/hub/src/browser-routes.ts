@@ -55,6 +55,7 @@ import type { ArtifactRow } from "./db/artifacts";
 import { hidden } from "./hidden";
 import type { Caller } from "./hub-auth";
 import type { RelayCall } from "./stream-relay";
+import { z } from "zod";
 
 /** How long a viewer's stream relay credential lasts (Projects spec item 4). */
 export const VIEWER_RELAY_TTL_MS = 12 * HOUR_MS;
@@ -155,19 +156,22 @@ export const withIceServers = (
   if (!text.includes('"signal/provide"')) {
     return text;
   }
-  let message: { event?: unknown; payload?: unknown };
+  let parsed: unknown;
   try {
-    message = JSON.parse(text) as typeof message;
+    parsed = JSON.parse(text);
   } catch {
     return text;
   }
-  if (
-    message.event !== "signal/provide" ||
-    typeof message.payload !== "object" ||
-    message.payload === null
-  ) {
+  const read = z
+    .looseObject({
+      event: z.literal("signal/provide"),
+      payload: z.looseObject({}),
+    })
+    .safeParse(parsed);
+  if (!read.success) {
     return text;
   }
+  const message = read.data;
   return JSON.stringify({
     ...message,
     payload: { ...message.payload, iceservers: servers },

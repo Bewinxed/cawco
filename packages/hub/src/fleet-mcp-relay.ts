@@ -2,6 +2,7 @@ import { readWithin } from "@cawco/core/bounded";
 import { HOP_BY_HOP_HEADERS } from "@cawco/core/hop-headers";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
 
 /**
  * The fleet's sessions on one signed-in MCP server, as the upstream sees
@@ -104,13 +105,14 @@ export interface KeptSessions {
   touch: (id: string) => void;
 }
 
-interface Message {
-  error?: unknown;
-  id?: number | string | null;
-  method?: string;
-  params?: Record<string, unknown>;
-  result?: Record<string, unknown>;
-}
+const MessageSchema = z.object({
+  error: z.unknown().optional(),
+  id: z.union([z.number(), z.string()]).nullable().optional(),
+  method: z.string().optional(),
+  params: z.record(z.string(), z.unknown()).optional(),
+  result: z.record(z.string(), z.unknown()).optional(),
+});
+type Message = z.infer<typeof MessageSchema>;
 
 /** The upstream's own answer to a request the hub made for every session: relayed to whoever asked. */
 class Refused extends Error {
@@ -225,7 +227,9 @@ const namedWait = (headers: Headers): number | undefined => {
 
 const parse = (text: string): Message | Message[] | undefined => {
   try {
-    return JSON.parse(text) as Message | Message[];
+    return z
+      .union([MessageSchema, z.array(MessageSchema)])
+      .parse(JSON.parse(text));
   } catch {
     return undefined;
   }
