@@ -45,7 +45,6 @@ import {
   machineLabel,
   noteText,
   type PlanStep,
-  type PlanWait,
   type PreviewAddress,
   type PreviewSource,
   pinLink,
@@ -935,44 +934,6 @@ const routeOf = (id: string) => `/__cawco/artifact/${id}`;
 /** The doc's `state`, read as entries. */
 const stateOf = (doc: Doc): Record<string, ChoiceEntry> =>
   doc.getMap("state").toJSON() as Record<string, ChoiceEntry>;
-
-/**
- * What the person still owes on one decision page a build names (work-items
- * `buildsFrom`): its cards with no pick, and its cards with an open pin,
- * each card one the build names (every card, when it names the page whole).
- */
-export interface PageOwed {
-  artifactId: string;
-  cards: {
-    id: string;
-    /** Its open pins, by number. */
-    pins: number[];
-    question: string;
-    unpicked: boolean;
-  }[];
-  /** The page's title, else its name. */
-  title: string;
-}
-
-/**
- * Whether `pin` stands on decision card `choice`: its selector starts at the
- * card's own identity (Decision.svelte's `id="decision-<id>"`, its note's
- * ids under it, or `data-cawco-choice`), as the overlay names an element
- * inside the card (agent preview-overlay page.ts `selectorOf`).
- */
-const pinOnChoice = (pin: Pin, choice: string): boolean => {
-  if (!("selector" in pin.anchor)) {
-    return false;
-  }
-  const { selector } = pin.anchor;
-  const id = cssEscape(choice);
-  return [
-    `#decision-${id}`,
-    `#decision-${id}-note`,
-    `#decision-${id}-note-label`,
-    `[data-cawco-choice="${id}"]`,
-  ].some((own) => selector === own || selector.startsWith(`${own} `));
-};
 
 /** A source common practice cites: a web link. */
 const WEB_SOURCE = /^https:\/\/\S+$/u;
@@ -5299,36 +5260,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * One page a build names as what it builds from, as `instance` writes it:
-   * `<page>` or `<page>#<card>`, the page by its name, handle or id
-   * ({@link whole}). Refused in words when it is not a page to pick on, or
-   * names a card the page does not ask.
-   */
-  const buildWait = (instance: InstanceRow, one: string): PlanWait => {
-    const at = one.indexOf("#");
-    const pageName = (at < 0 ? one : one.slice(0, at)).trim();
-    const card = at < 0 ? "" : one.slice(at + 1).trim();
-    const page = db.get(whole(instance, pageName));
-    if (!(page?.kind === "page" && page.does === "pick")) {
-      throw new ArtifactRefusal(
-        400,
-        `buildsFrom “${one}” names ${page ? `${page.name}, a ${page.kind} that asks no picks` : "no artifact"}: name a decision page (does: pick), optionally #card.`
-      );
-    }
-    if (!card) {
-      return { artifactId: page.id };
-    }
-    const asked = choicesAsked(page);
-    if (!asked.some((choice) => choice.id === card)) {
-      throw new ArtifactRefusal(
-        400,
-        `buildsFrom “${one}”: ${page.name} has no card “${card}”. Its cards: ${asked.map((choice) => choice.id).join(", ") || "none"}.`
-      );
-    }
-    return { artifactId: page.id, card };
-  };
-
-  /**
    * A page or preview put in the owner's panel: the one of that kind and
    * name it has, its source moved and its revision with it, or a new one;
    * the maker becomes its maker either way. A maker's re-create of one the
@@ -6124,69 +6055,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       whole(sessionOf(instanceId), asked),
 
     /**
-     * The decision pages a build session `instanceId` starts names as what it
-     * builds from (`delegate`'s and a task's `buildsFrom`): each `<page>` or
-     * `<page>#<card>`, the page by its name, handle or id as {@link whole}
-     * reads it. Refused in words when one is not a page to pick on, or names
-     * a card the page does not ask.
-     */
-    buildsFrom: (
-      instanceId: string,
-      written: readonly string[]
-    ): PlanWait[] => {
-      const instance = sessionOf(instanceId);
-      const waits = written.map((one) => buildWait(instance, one));
-      return [
-        ...new Map(
-          waits.map((wait) => [`${wait.artifactId}#${wait.card ?? ""}`, wait])
-        ).values(),
-      ];
-    },
-
-    /**
-     * The decision pages session `instanceId` can name that `text` mentions:
-     * by whole id, by handle, by name, or by link. What `delegate` warns of
-     * when a brief mentions a page it does not name in `buildsFrom`.
-     */
-    pagesIn: (
-      instanceId: string,
-      text: string
-    ): { id: string; name: string }[] => {
-      const instance = sessionOf(instanceId);
-      const holders = holdersInTree(instance);
-      const rows = new Map<string, ArtifactRow>();
-      for (const row of [
-        ...answerable(instance, holders),
-        ...ofTree(instance, holders),
-        ...(instance.projectId ? db.ofProject(instance.projectId) : []),
-      ]) {
-        if (row.kind === "page" && row.does === "pick") {
-          rows.set(row.id, row);
-        }
-      }
-      const said = text.toLowerCase();
-      const token = (word: string) =>
-        new RegExp(
-          `(^|[^a-z0-9-])${word.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}($|[^a-z0-9-])`,
-          "u"
-        ).test(said);
-      return [...rows.values()]
-        .filter(
-          (row) =>
-            said.includes(row.id) ||
-            token(row.id.slice(0, 8)) ||
-            token(row.name.toLowerCase())
-        )
-        .map((row) => ({ id: row.id, name: row.name }));
-    },
-
-    /**
-     * What the person still owes on the pages `from` names (a build's
-     * `buildsFrom`): each named card, or every card of a page named whole,
-     * with no pick (core `pickMade`) or with an open pin on it. A page since
-     * removed owes nothing. Empty: the build may land.
-     */
-    /**
      * Card `card` of page `artifactId` as a wait reads it (task-waits.ts
      * `settled`): its question, whether the page asks it, and the pick it
      * holds (core `pickMade`) as its value, the options picked or the value
@@ -6297,53 +6165,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         .filter((one) => one.at >= since)
         .sort((a, b) => b.at - a.at);
       return newest && { artifactId: newest.artifactId, number: newest.number };
-    },
-
-    owedOn: (from: readonly PlanWait[]): PageOwed[] => {
-      const owed: PageOwed[] = [];
-      for (const [id, waits] of Map.groupBy(from, (wait) => wait.artifactId)) {
-        const page = db.get(id);
-        if (page?.kind !== "page") {
-          continue;
-        }
-        const onlyCards = waits.every((wait) => wait.card)
-          ? new Set(waits.map((wait) => wait.card))
-          : null;
-        const doc = docs.doc(id);
-        const state = stateOf(doc);
-        const open = [...readPins(doc).values()].filter(
-          (pin) => !pin.resolvedAt
-        );
-        const cards = choicesAsked(page).flatMap(({ card, id: choice }) => {
-          if (onlyCards && !onlyCards.has(choice)) {
-            return [];
-          }
-          const unpicked = !pickMade(card, state[choice]);
-          const pins = open
-            .filter((pin) => pinOnChoice(pin, choice))
-            .map((pin) => pin.number)
-            .sort((a, b) => a - b);
-          return unpicked || pins.length > 0
-            ? [
-                {
-                  id: choice,
-                  question: card?.question ?? choice,
-                  unpicked,
-                  pins,
-                },
-              ]
-            : [];
-        });
-        if (cards.length > 0) {
-          const program = programOf(page);
-          owed.push({
-            artifactId: id,
-            title: (program && readKept(program).title) || page.name,
-            cards,
-          });
-        }
-      }
-      return owed;
     },
 
     /** Every artifact the session holds, newest first: its panel's menu, where each stays reachable. */

@@ -275,7 +275,6 @@
       stalled: null,
       title: work.title,
       state: failed ? "failed" : work.state,
-      buildsFrom: [],
       createdAt,
       endedAt: failed ? createdAt + (20 + i) * 60_000 : null,
       dismissedAt: null,

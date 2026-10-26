@@ -632,8 +632,6 @@ export interface TaskView extends TaskFlags, TaskTimes {
   accounts: string[];
   /** What an attempt may spend before the hub stops it; null: the project's default. */
   budget: WorkBudget | null;
-  /** The decision pages its attempts build from (`builds_from`), each `<artifact id>` or `<artifact id>#<card>`. */
-  buildsFrom: string[];
   checks: string[];
   /** Its `## Comments`, oldest first: each written by the hub with who and when. */
   comments: TaskComment[];
@@ -692,8 +690,6 @@ export interface TaskView extends TaskFlags, TaskTimes {
 export interface TaskDraft {
   acceptance?: string;
   budget?: WorkBudget;
-  /** The decision pages its attempts build from, resolved (core `planWaitRef`). */
-  buildsFrom?: string[];
   checks?: string[];
   /** Project folder files its attempt's brief carries, like knowledge/brand.md. */
   context?: string[];
@@ -779,8 +775,6 @@ export interface TaskPatch {
   acceptance?: string;
   /** What an attempt may spend; null: the project's default. */
   budget?: WorkBudget | null;
-  /** The decision pages its attempts build from, resolved (core `planWaitRef`); [] takes them out. */
-  buildsFrom?: string[];
   checks?: string[];
   context?: string[];
   description?: string;
@@ -1009,13 +1003,12 @@ const ownsOf = (owns: string[]): string[] => {
   return items("owns", owns);
 };
 
-/** A draft's group, owned files, pages and budget as its file's fields. */
+/** A draft's group, owned files and budget as its file's fields. */
 const limitsOf = (
   draft: TaskDraft
-): Pick<TaskFields, "budget" | "buildsFrom" | "group" | "owns"> => ({
+): Pick<TaskFields, "budget" | "group" | "owns"> => ({
   group: draft.group ? oneLine("group", draft.group, 64) : null,
   owns: ownsOf(draft.owns ?? []),
-  buildsFrom: items("builds_from", draft.buildsFrom ?? []),
   budget: draft.budget ? budgetOf(draft.budget) : null,
 });
 
@@ -1273,7 +1266,6 @@ const viewOf = (
   runsOn: parsed.fields.runsOn,
   group: parsed.fields.group,
   owns: parsed.fields.owns,
-  buildsFrom: parsed.fields.buildsFrom,
   budget: parsed.fields.budget,
   rank: parsed.fields.rank,
   labels: parsed.fields.labels,
@@ -1415,10 +1407,6 @@ const applyPatch = (doc: TaskDoc, patch: TaskPatch): string => {
   if (patch.owns !== undefined) {
     const owns = ownsOf(patch.owns);
     set("owns", () => doc.setField("owns", owns));
-  }
-  if (patch.buildsFrom !== undefined) {
-    const pages = items("builds_from", patch.buildsFrom);
-    set("builds_from", () => doc.setField("builds_from", pages));
   }
   for (const field of [
     "checks",
@@ -4774,8 +4762,6 @@ export const taskRoutes = (tasks: Tasks) =>
           runsOn: t.Optional(t.String()),
           group: t.Optional(t.String()),
           owns: t.Optional(t.Array(t.String())),
-          // Each `<artifact id>` or `<artifact id>#<card>` (core `planWaitRef`).
-          buildsFrom: t.Optional(t.Array(t.String())),
           budget: t.Optional(BUDGET),
           rank: t.Optional(t.String()),
           labels: t.Optional(t.Array(t.String())),
@@ -4846,8 +4832,6 @@ export const taskRoutes = (tasks: Tasks) =>
           runsOn: t.Optional(t.Nullable(t.String())),
           group: t.Optional(t.Nullable(t.String())),
           owns: t.Optional(t.Array(t.String())),
-          // Each `<artifact id>` or `<artifact id>#<card>` (core `planWaitRef`); [] takes them out.
-          buildsFrom: t.Optional(t.Array(t.String())),
           budget: t.Optional(t.Nullable(BUDGET)),
           checks: t.Optional(t.Array(t.String())),
           outputs: t.Optional(t.Array(t.String())),

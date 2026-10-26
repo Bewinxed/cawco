@@ -191,7 +191,6 @@ import type {
   PlanStepPriority as PlanStepPriorityType,
   PlanStepStatus as PlanStepStatusType,
   PlanStep as PlanStepType,
-  PlanWait as PlanWaitType,
 } from "./plan";
 import { PLAN_STEP_PRIORITIES, PLAN_STEP_STATUSES } from "./plan";
 import type {
@@ -1861,12 +1860,6 @@ export const PlanStepShape = z.object({
 });
 export const PlanStepSchema: z.ZodType<PlanStepType> = PlanStepShape;
 
-export const PlanWaitShape = z.object({
-  artifactId: z.string(),
-  card: z.string().optional(),
-});
-export const PlanWaitSchema: z.ZodType<PlanWaitType> = PlanWaitShape;
-
 export const RelayPortNameShape = z.enum(["udp 3478", "tcp 3478", "tls 5349"]);
 export const RelayPortNameSchema: z.ZodType<RelayPortNameType> =
   RelayPortNameShape;
@@ -2631,7 +2624,6 @@ export const proved: [
   Same<z.output<typeof PlanStepPriorityShape>, PlanStepPriorityType>,
   Same<z.output<typeof PlanStepStatusShape>, PlanStepStatusType>,
   Same<z.output<typeof PlanStepShape>, PlanStepType>,
-  Same<z.output<typeof PlanWaitShape>, PlanWaitType>,
   Same<z.output<typeof RelayPortNameShape>, RelayPortNameType>,
   Same<z.output<typeof RelayPortHealthShape>, RelayPortHealthType>,
   Same<z.output<typeof RelayPortsShape>, RelayPortsType>,
@@ -2692,7 +2684,6 @@ export const proved: [
   Same<z.output<typeof InstallShape>, InstallType>,
   Same<z.output<typeof NeutralSessionInfoShape>, NeutralSessionInfoType>,
 ] = [
-  true,
   true,
   true,
   true,

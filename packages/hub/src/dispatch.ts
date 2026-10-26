@@ -105,7 +105,6 @@ import {
   machinesCalled,
   markdownLink,
   POST_OUTPUT_RULE,
-  planWaitOf,
   type StageKind,
   sessionLink,
   type TaskMover,
@@ -418,19 +417,13 @@ const witnessesOf = (task: TaskView): WaitWitness[] =>
       : []
   );
 
-/** What of a task an attempt's work item carries as it is: outputs, group, owned files, the pages it builds from, budget. */
+/** What of a task an attempt's work item carries as it is: outputs, group, owned files, budget. */
 const taskLimits = (
   task: TaskView
-): Pick<
-  WorkItemRequest,
-  "budget" | "buildsFrom" | "group" | "outputs" | "owns"
-> => ({
+): Pick<WorkItemRequest, "budget" | "group" | "outputs" | "owns"> => ({
   ...(task.outputs.length > 0 ? { outputs: task.outputs } : {}),
   ...(task.group ? { group: task.group } : {}),
   ...(task.owns.length > 0 ? { owns: task.owns } : {}),
-  ...(task.buildsFrom.length > 0
-    ? { buildsFrom: task.buildsFrom.map(planWaitOf) }
-    : {}),
   ...(task.budget ? { budget: task.budget } : {}),
 });
 

@@ -157,12 +157,17 @@ import type { TailnetServing } from "./tailnet-https";
  *    and the thread routes that took and read its messages are gone. A
  *    page built for 30 would read a thread no hub serves, so it reloads
  *    first.
+ * 32: a work item's summary and a task no longer name the decision pages
+ *    they build from: work that depends on a decision waits on its card
+ *    before it starts (a task's `waitsOn`), and nothing is held at its
+ *    landing. A page built for 31 reads a field the hub no longer sends, so
+ *    it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 31;
+export const WIRE_PROTOCOL = 32;
 
 /**
  * What a session's stream carries: the changes each frame made to its

@@ -15,8 +15,6 @@ import {
   LANDS_MODES,
   PLAN_STEP_PRIORITIES,
   PLAN_STEP_STATUSES,
-  type PlanWait,
-  planWaitRef,
   RESULT_ARTIFACT_KINDS,
   type ResultArtifact,
   type ResultArtifactKind,
@@ -71,8 +69,6 @@ export interface TaskToolContext {
   actor: InstanceRow;
   /** The whole id of the artifact the actor names by its name, handle or id (artifacts/service.ts `named`). */
   artifactNamed?: (asked: string) => string;
-  /** The decision pages the actor names for a task's `builds_from`, resolved and checked (artifacts/service.ts `buildsFrom`). */
-  buildsFrom?: (written: string[]) => PlanWait[];
   /**
    * Files "Build the design system" in the hub's words (design-offers.ts
    * `fileBuild`): a `task_create` with that title gives only its stage.
@@ -214,20 +210,6 @@ const fieldsParameter = () =>
 /** An artifact named where no session can resolve it (discovery): as given. */
 const same = (asked: string): string => asked;
 
-/** A task's `builds_from` as its file keeps it: each page resolved, `<artifact id>` or `<artifact id>#<card>`. */
-const pagesOf = (
-  written: string[] | undefined,
-  resolve: ((written: string[]) => PlanWait[]) | undefined
-): string[] | undefined => {
-  if (written === undefined || written.length === 0) {
-    return written;
-  }
-  if (!resolve) {
-    throw new Error("Discovery cannot execute tools");
-  }
-  return resolve(written).map(planWaitRef);
-};
-
 /** A step as `todo_write` takes it: ACP's entry, its id and depth optional. */
 const stepParameter = () =>
   z.object({
@@ -303,14 +285,6 @@ export const ownsParameter = () =>
     .array(z.string())
     .describe(
       "Globs from the repository's root, like ['src/theme/**']: two live items whose globs overlap in one repository never run at once; the later waits."
-    );
-
-/** The decision pages a build builds from: `delegate`'s and the task tools' one shape. */
-export const buildsFromParameter = () =>
-  z
-    .array(z.string().trim().min(1))
-    .describe(
-      "Decision pages it builds from: a page's name or handle, or <page>#<card> for one card. It lands on main only once every card named (each card of a page named whole) is picked and has no open pin; until then its commits wait on cawco/<item> and its report says what it waits for."
     );
 
 /** A group of work items under one parent: `delegate`'s and the task tools' one shape. */
@@ -477,12 +451,11 @@ export function taskTools(context: TaskToolContext | undefined) {
         runs_on: runsOnParameter().optional(),
         group: groupParameter().optional(),
         owns: ownsParameter().optional(),
-        builds_from: buildsFromParameter().optional(),
         budget: budgetParameter().optional(),
         labels: lines(),
         fields: fieldsParameter(),
       },
-      async ({ waits_on, part_of, runs_on, builds_from, ...draft }, format) => {
+      async ({ waits_on, part_of, runs_on, ...draft }, format) => {
         const { projectId, tasks, actor } = scope();
         // The design system's build carries the hub's words, never the filer's.
         if (draft.title.trim() === BUILD_TITLE && context?.designBuild) {
@@ -496,7 +469,6 @@ export function taskTools(context: TaskToolContext | undefined) {
             partOf: part_of,
             ...(context?.foundIn ? { foundIn: context.foundIn } : {}),
             runsOn: runs_on,
-            buildsFrom: pagesOf(builds_from, context?.buildsFrom),
           },
           actor
         );
@@ -542,17 +514,12 @@ export function taskTools(context: TaskToolContext | undefined) {
         runs_on: runsOnParameter().nullable().optional(),
         group: groupParameter().nullable().optional(),
         owns: ownsParameter().optional(),
-        builds_from: buildsFromParameter().optional(),
         budget: budgetParameter().nullable().optional(),
         labels: lines(),
         fields: fieldsParameter(),
       },
-      async ({ id, stage, reason, runs_on, builds_from, ...rest }, format) => {
-        const patch = {
-          ...rest,
-          runsOn: runs_on,
-          buildsFrom: pagesOf(builds_from, context?.buildsFrom),
-        };
+      async ({ id, stage, reason, runs_on, ...rest }, format) => {
+        const patch = { ...rest, runsOn: runs_on };
         const { projectId, tasks, actor } = scope();
         if (reason !== undefined && stage === undefined) {
           throw new Error(

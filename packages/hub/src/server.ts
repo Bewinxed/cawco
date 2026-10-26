@@ -979,7 +979,6 @@ import {
   type Unlanded,
   WAIT_ITEM_LIMIT,
   WorkItemRefusal,
-  type WorkItemRequest,
   type WorkItemStart,
 } from "./work-items";
 import { createWorkspaceRetire } from "./workspace-retire";
@@ -3204,9 +3203,6 @@ export interface ServerOptions {
    */
   background?: boolean;
 }
-
-/** A brief that says it works from a decision page (server `unlinkedWarning`). */
-const DECISION_PAGE_WORDS = /decision[ -]page/iu;
 
 /** What `POST /api/work-items` answers: the item started, its session and workspace; or queued for owned files, with neither yet. */
 const delegated = (
@@ -13988,8 +13984,6 @@ export const createServer = (
       if (by === "person") {
         artifacts.personMarked(id);
       }
-      // A build held for the person's picks on it may land now.
-      workItems.picksMoved(id);
       // A task or a plan step waiting on a card or pin of it may settle now.
       waitPageMoved(id);
     },
@@ -14331,13 +14325,9 @@ export const createServer = (
       }
     },
     // A preview gone holds the workspace it showed no longer.
-    // A page gone owes no picks: a build held for it lands.
     removed: (row) => {
       if (row.kind === "preview" && row.machineId) {
         workItems.settleShown(row.machineId);
-      }
-      if (row.kind === "page") {
-        workItems.picksMoved(row.id);
       }
     },
     browse: (instance, row) => browseAt(instance, row),
@@ -24163,7 +24153,6 @@ export const createServer = (
     leadTurn: (instanceId) => lead?.turnOrigin(instanceId),
     modelRefusal: opencodeModelRefusal,
     online: (machineId) => Boolean(registry.agent(machineId)),
-    owedOn: (from) => artifacts.owedOn(from),
     // A routine run's turn makes the sessions it starts the run's (memory.ts).
     spawnedUnder: (instanceId, parentId) =>
       memoryWatch.spawned(instanceId, parentId),
@@ -24327,61 +24316,6 @@ export const createServer = (
     finishOver: (instanceId) => releaseOwed({ instanceId }),
     workspaceChanged: (workspace) => publishInstances(workspace.machineId),
   });
-  /** Each session's pages it was warned of building from unlinked ({@link unlinkedWarning}): `<session>#<page>`. In memory: once per hub run. */
-  const warnedUnlinked = new Set<string>();
-  /**
-   * What `delegate` adds when its brief mentions a decision page the session
-   * can name (artifacts/service.ts `pagesIn`), or says "decision page", and
-   * the item builds from none (`buildsFrom`): such a build would land on main
-   * whatever the person picks. Once per session and page; nothing otherwise.
-   */
-  const unlinkedWarning = (
-    parentId: string,
-    brief: string
-  ): string | undefined => {
-    const pages = artifacts
-      .pagesIn(parentId, brief)
-      .filter((page) => !warnedUnlinked.has(`${parentId}#${page.id}`));
-    const generic = `${parentId}#`;
-    if (pages.length === 0) {
-      if (
-        !DECISION_PAGE_WORDS.test(brief) ||
-        warnedUnlinked.has(generic) ||
-        artifacts.pagesIn(parentId, brief).length > 0
-      ) {
-        return;
-      }
-      warnedUnlinked.add(generic);
-      return "Not linked: this brief mentions a decision page and buildsFrom is empty, so this build lands on main without waiting for the person's picks. If it builds from a page, stop it and delegate it again with buildsFrom naming the page (its name, or name#card for one card): the hub then holds its landing until those cards are picked.";
-    }
-    for (const page of pages) {
-      warnedUnlinked.add(`${parentId}#${page.id}`);
-    }
-    const [first] = pages;
-    return `Not linked: this brief names the decision page${pages.length > 1 ? "s" : ""} ${pages.map((page) => artifactLink(page.id, page.name)).join(", ")} and buildsFrom is empty, so this build lands on main without waiting for the person's picks there. If it builds from ${pages.length > 1 ? "them" : "it"}, stop it and delegate it again with buildsFrom: ["${first.name}"] (or "${first.name}#<card>" for one card): the hub then holds its landing until those cards are picked.`;
-  };
-  /**
-   * `POST /api/work-items` past its credential: the pages it builds from
-   * resolved for its parent (artifacts/service.ts `buildsFrom`), the item
-   * delegated, and its answer with the {@link unlinkedWarning} when it names
-   * none, a follow-up's taken pages counting.
-   */
-  const delegateLinked = async (
-    asked: Omit<WorkItemRequest, "buildsFrom"> & { buildsFrom?: string[] }
-  ): Promise<DelegateResult> => {
-    const buildsFrom = asked.buildsFrom?.length
-      ? artifacts.buildsFrom(asked.parentInstanceId, asked.buildsFrom)
-      : undefined;
-    const started = await workItems.delegate({ ...asked, buildsFrom });
-    const answer = delegated(started, asked.title);
-    const linked = "queued" in started ? buildsFrom : started.item.buildsFrom;
-    const warning = linked?.length
-      ? undefined
-      : unlinkedWarning(asked.parentInstanceId, asked.prompt);
-    return warning
-      ? { ...answer, text: `${answer.text}\n\n${warning}` }
-      : answer;
-  };
   // A stop walks a session's tree (tree-stops.ts): each session's end asked
   // once nothing under it is left, its item's final state once its machine
   // confirms it.
@@ -26460,8 +26394,6 @@ export const createServer = (
       projectOffers.accept(actor.id, sessionActor(actor)),
     writePlan: (actor, written) => changesOfPlans.written(actor, written),
     artifactNamed: (instanceId, asked) => artifacts.named(instanceId, asked),
-    buildsFrom: (instanceId, written) =>
-      artifacts.buildsFrom(instanceId, written),
     delegationTree: (actor, query) => delegationTree.read(actor, query),
     cawTools: (actor, toolUseId) => caw.tools(actor, toolUseId),
     routineTools: (actor, toolUseId) => routines.tools(actor, toolUseId),
@@ -33238,8 +33170,6 @@ export const createServer = (
             group: t.Optional(t.String()),
             owns: t.Optional(t.Array(t.String())),
             budget: t.Optional(BUDGET),
-            // Each `<page>` or `<page>#<card>`, resolved for the parent (artifacts/service.ts `buildsFrom`).
-            buildsFrom: t.Optional(t.Array(t.String())),
           }),
           // A 400 that says which field is missing or malformed, in words:
           // a delegate without a title is refused, never named from its brief.
@@ -33289,20 +33219,18 @@ export const createServer = (
             );
           }
           try {
-            return await delegateLinked({
+            const started = await workItems.delegate({
               ...body,
               ...(await delegateTypeFor(body)),
             });
+            return delegated(started, body.title);
           } catch (error) {
             const message =
               error instanceof Error ? error.message : String(error);
             // Anything that is not the hub's own refusal is the machine's:
             // offline, or git turning the checkout down.
             return status(
-              error instanceof WorkItemRefusal ||
-                error instanceof ArtifactRefusal
-                ? error.status
-                : 502,
+              error instanceof WorkItemRefusal ? error.status : 502,
               message
             );
           }

@@ -78,7 +78,6 @@ import {
 } from "./presenters/sessions";
 import {
   budgetParameter,
-  buildsFromParameter,
   groupParameter,
   ownsParameter,
   type TaskTool,
@@ -459,7 +458,6 @@ export function handoffTools(deps: HandoffDeps) {
         "Prefer `type` (list_delegate_types) over harness and model. Prefer this over start_session when the work must report back, and over handoff for new standalone work (set cwd for another repository).\n\n" +
         "Its commands run in a boundary: they write only its clone, its scratch dir and the workspaces' cache; no credential store, SSH key, key agent or service manager; another machine only through a delegate there. " +
         "When the machine itself is the subject (an audit, containment, ops on its services, containers or network), set `host`: the delegate runs on that machine with no clone and no boundary, as a session started there does, lands nothing, and still reports back. " +
-        "A build of what a decision page decides names that page in `buildsFrom`: it then lands on main only once the person has picked there. " +
         "To follow up, handoff to the delegate or delegate with its `workspace`; to finish an ended delegate's commits in a fresh session, delegate with `from`. Prefer a fresh delegate unless the old session is warm and holds context the task needs.",
       {
         prompt: z
@@ -542,7 +540,6 @@ export function handoffTools(deps: HandoffDeps) {
         group: groupParameter().optional(),
         owns: ownsParameter().optional(),
         budget: budgetParameter().optional(),
-        buildsFrom: buildsFromParameter().optional(),
       },
       ({
         prompt,
@@ -565,7 +562,6 @@ export function handoffTools(deps: HandoffDeps) {
         group,
         owns,
         budget,
-        buildsFrom,
       }) =>
         actions.delegate(prompt, {
           title,
@@ -587,7 +583,6 @@ export function handoffTools(deps: HandoffDeps) {
           group,
           owns,
           budget,
-          buildsFrom,
         }),
       delegateWords
     ),

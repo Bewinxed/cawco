@@ -452,7 +452,7 @@ export type PresenceSaid =
   | { kind: "elsewhere" }
   | { kind: "away"; since: string | null };
 
-/** A plan step waiting on the person's pick on a page (core plan.ts `PlanWait`), by its chip. */
+/** A plan step waiting on the person's pick on a page (core plan.ts `PlanStep` `waitsOn`), by its chip. */
 export interface AwayWait {
   /** The page's artifact id and name: its `cawco:artifact` chip. */
   artifact: { id: string; name: string };

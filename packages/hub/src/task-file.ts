@@ -18,7 +18,6 @@
  * runs_on: apple
  * group: theme
  * owns: [src/theme/**]
- * builds_from: [<artifact id>, <artifact id>#<card>]
  * budget: {usd: 2, turns: 40, minutes: 30}
  * rank: a0V
  * labels: [ui]
@@ -98,7 +97,6 @@ export const TASK_FIELDS = [
   "runs_on",
   "group",
   "owns",
-  "builds_from",
   "budget",
   "rank",
   "labels",
@@ -114,12 +112,6 @@ export interface TaskFields {
   accounts: string[];
   /** What an attempt may spend before the hub stops it; null: the project's default. */
   budget: WorkBudget | null;
-  /**
-   * The decision pages its attempts build from, each `<artifact id>` or
-   * `<artifact id>#<card>` (core `planWaitRef`): an attempt lands on main
-   * only once the person has picked there (work-items.ts `holdForPicks`).
-   */
-  buildsFrom: string[];
   checks: string[];
   /** Project folder files its attempt's brief carries (memory.ts `contextFor`): the lead's pick, `knowledge/…`. */
   context: string[];
@@ -400,7 +392,6 @@ const FIELD_KEYS = {
   runs_on: "runsOn",
   group: "group",
   owns: "owns",
-  builds_from: "buildsFrom",
   budget: "budget",
   rank: "rank",
   labels: "labels",
@@ -457,7 +448,6 @@ const emptyFields = (): TaskFields => ({
   runsOn: null,
   group: null,
   owns: [],
-  buildsFrom: [],
   budget: null,
   rank: null,
   labels: [],
@@ -593,7 +583,6 @@ const LIST_FIELDS: ReadonlySet<string> = new Set([
   "outputs",
   "context",
   "owns",
-  "builds_from",
   "labels",
   "accounts",
 ] satisfies readonly TaskField[]);
@@ -620,8 +609,6 @@ const readField = (
     fields.foundIn = readFoundIn(line, problems);
   } else if (field === "duplicate_of") {
     fields.duplicateOf = readEdge(field, line, problems);
-  } else if (field === "builds_from") {
-    fields.buildsFrom = readList(field, line, problems);
   } else if (LIST_FIELDS.has(field)) {
     fields[
       field as keyof Pick<

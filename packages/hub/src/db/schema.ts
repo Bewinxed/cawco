@@ -31,7 +31,6 @@ import type {
   MoveStage,
   OnCap,
   PermissionMode,
-  PlanWait,
   PresenceClient,
   RoutineMadeEvent,
   RuleMatchKind,
@@ -89,7 +88,6 @@ import {
   OpenCodeGoLimitsSchema,
   PlaceLfsRowSchema,
   PlanStepSchema,
-  PlanWaitSchema,
   RelayPortHealthSchema,
   RelayPortsSchema,
   RelayReachSchema,
@@ -1313,17 +1311,13 @@ export type WorkItemState = import("@cawco/core").WorkItemState;
  * - `completing`: its `finish_item` stored while work it delegated is still
  *   live; it lands once every item it delegated, queued ones included, has
  *   ended (work-items.ts `completeIfDrained`).
- * - `held`: its `finish_item` stored and its commits pushed to its own
- *   branch while a decision page it builds from ({@link workItems}
- *   `buildsFrom`) still waits on the person's picks; it lands on main once
- *   they are in (work-items.ts `releaseHeld`).
  * - `gating`: its landing gate runs on its tree (at finish_item, or on top
  *   of its base); each step that passed is kept ({@link GatePass}), so a
  *   gate a restart cut runs from the step it was on.
  * - `turn`: in its turn to land, rebased again, the steps the rebase moved
  *   run again, then the push.
  */
-export type LandingPhase = "completing" | "held" | "gating" | "turn";
+export type LandingPhase = "completing" | "gating" | "turn";
 
 /**
  * What a live work item's session cannot be started again without, found
@@ -1462,28 +1456,6 @@ export const workItems = sqliteTable(
      * finishes; one missing sends it back to its session. Null: none.
      */
     outputs: storedJson(z.array(z.string()))("outputs"),
-    /**
-     * The decision pages it builds from (`delegate`'s and a task's
-     * `buildsFrom`): each a page, or one card of it, as a plan step's wait
-     * names one (core {@link PlanWait}). While any of them has a card with no
-     * pick, or an open pin on a named card, its landing on main is held
-     * (work-items.ts `holdForPicks`). Null: none.
-     * A follow-up in its workspace that names none takes its pages.
-     */
-    buildsFrom: storedJson(z.array(PlanWaitSchema))("builds_from"),
-    /**
-     * The commit the hub pushed to its own branch (`cawco/<task or item>`)
-     * as it held its landing for the person's picks (work-items.ts
-     * `holdForPicks`), and when, epoch ms: kept past its end, so the next
-     * push there, its own or a later attempt's at its task, replaces it as
-     * the hub's own. Null: never held.
-     */
-    heldPush: storedJson(
-      z.object({
-        at: z.number(),
-        sha: z.string(),
-      })
-    )("held_push"),
     /**
      * What an attempt at a task was dispatched on (dispatch.ts): each card
      * or pin its task waited on, its own or its parts' chain's, and the
