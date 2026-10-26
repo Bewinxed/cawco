@@ -10,6 +10,7 @@
 import {
   type ConnectionAuth,
   EFFORT_LEVELS,
+  type FleetHook,
   type FleetMemory,
   type FleetMemoryDoc,
   type FleetPlugin,
@@ -19,12 +20,14 @@ import {
   MCP_PLATFORMS,
   MEMORY_ROLES,
   type MemoryScope,
-  scopeKey,
+  type RuleRow,
+  scoped,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { CLAUDE_JSON_LABEL, userLayerLabel } from "@cawco/core/claude-dirs";
 import { z } from "zod";
 import { landedFetch } from "./fleet-fetches";
+import { byHandle } from "./handles";
 import { hubHttpUrl, selfFetch } from "./hub-self";
 import { type Presenter, tool } from "./mcp-tool";
 import {
@@ -195,6 +198,79 @@ const wholeHash = async (
   return kept?.startsWith(asked) ? kept : asked;
 };
 
+/** A row an admin read lists by id, name and the handle it shows. */
+interface Listed {
+  id: string;
+  name: string;
+}
+
+/**
+ * The row `asked` names among `rows`: its whole id, the handle a read shows
+ * (handles.ts), or its name. Refused in one sentence naming the matches
+ * when ambiguous, or what there is when none.
+ */
+const listedNamed = <T extends Listed>(
+  asked: string,
+  rows: readonly T[],
+  what: string
+): T =>
+  byHandle(
+    asked,
+    rows,
+    {
+      id: (row) => row.id,
+      names: (row) => [row.name],
+      said: (row) => `${row.name} (${row.id.slice(0, 8)})`,
+    },
+    what
+  );
+
+/** The whole ids of the projects `asked` names, each by id, handle or name. */
+const projectIdsOf = async (asked: readonly string[]): Promise<string[]> => {
+  if (asked.length === 0) {
+    return [];
+  }
+  const projects = (await api("GET", "/api/projects")) as Listed[];
+  return asked.map((one) => listedNamed(one, projects, "project").id);
+};
+
+/** {@link projectIdsOf} for one project field: null, undefined and blank go on as given. */
+const projectIdOf = async <T extends string | null | undefined>(
+  asked: T
+): Promise<T | string> =>
+  asked ? ((await projectIdsOf([asked]))[0] ?? asked) : asked;
+
+/** The memory scope `scope` names, its projects by whole id. */
+const scopeWithProjects = async (
+  scope: MemoryScope | undefined
+): Promise<MemoryScope | undefined> =>
+  scope?.projectIds
+    ? { ...scope, projectIds: await projectIdsOf(scope.projectIds) }
+    : scope;
+
+/**
+ * Whether a document's scope has every field `filter` gives: the same role,
+ * model and briefer, and every delegate type and project listed. An empty
+ * filter matches the unscoped documents.
+ */
+const scopeHas = (
+  scope: MemoryScope | undefined,
+  filter: MemoryScope
+): boolean => {
+  if (!scoped(filter)) {
+    return !scoped(scope);
+  }
+  const lists = (given: string[] | undefined, held: string[] | undefined) =>
+    (given ?? []).every((one) => (held ?? []).includes(one));
+  return (
+    (filter.role === undefined || filter.role === scope?.role) &&
+    (filter.model === undefined || filter.model === scope?.model) &&
+    (filter.briefer === undefined || filter.briefer === scope?.briefer) &&
+    lists(filter.delegateTypes, scope?.delegateTypes) &&
+    lists(filter.projectIds, scope?.projectIds)
+  );
+};
+
 /** What a session is told to have the owner run to give a connection its key. */
 const setKeyCommand = (name: string): string =>
   `Run on a machine joined to this hub: cawco connections set-key ${name}`;
@@ -332,7 +408,9 @@ const harnessConfigHandler =
       ...fieldsGiven({ settings, enabled }),
       ...(module === undefined ? {} : { module, package: null }),
       ...(pkg === undefined ? {} : { package: pkg, module: null }),
-      ...(projectId === undefined ? {} : { projectId }),
+      ...(projectId === undefined
+        ? {}
+        : { projectId: await projectIdOf(projectId) }),
     });
   };
 
@@ -507,8 +585,13 @@ export function adminTools() {
           action: _action,
           name: _name,
           origin: _origin,
-          ...fields
+          projects,
+          ...rest
         } = args;
+        const fields = {
+          ...rest,
+          ...(projects ? { projects: await projectIdsOf(projects) } : {}),
+        };
         if (action === "create") {
           return await api("POST", "/api/connections", {
             name,
@@ -588,7 +671,9 @@ export function adminTools() {
             (await api("PUT", `/api/fleet/skills/${encodeURIComponent(name)}`, {
               source,
               enabled: true,
-              ...(projectId === undefined ? {} : { projectId }),
+              ...(projectId === undefined
+                ? {}
+                : { projectId: await projectIdOf(projectId) }),
             })) as FleetSkillMeta
         );
       },
@@ -743,7 +828,9 @@ export function adminTools() {
         return await api("PUT", `/api/fleet/mcp/${encodeURIComponent(name)}`, {
           config,
           ...(enabled === undefined ? {} : { enabled }),
-          ...(projectId === undefined ? {} : { projectId }),
+          ...(projectId === undefined
+            ? {}
+            : { projectId: await projectIdOf(projectId) }),
           ...(platforms === undefined ? {} : { platforms }),
           ...(shared === undefined ? {} : { shared }),
         });
@@ -838,20 +925,33 @@ export function adminTools() {
           };
           return { templates: data.templates ?? [] };
         }
-        if (action === "remove") {
-          if (!args.id) {
-            throw new Error("id is required to remove a rule");
+        // The rule an id names: whole, or the handle the list shows.
+        const ruleNamed = async (
+          asked: string | undefined
+        ): Promise<RuleRow> => {
+          if (!asked) {
+            throw new Error(`id is required to ${action} a rule`);
           }
-          return await api(
-            "DELETE",
-            `/api/rules/${encodeURIComponent(args.id)}`
-          );
+          const { rules } = (await api("GET", "/api/rules")) as {
+            rules: RuleRow[];
+          };
+          return listedNamed(asked, rules, "rule");
+        };
+        if (action === "remove") {
+          const { id } = await ruleNamed(args.id);
+          return await api("DELETE", `/api/rules/${encodeURIComponent(id)}`);
         }
 
-        // Only the fields the call names.
-        const { action: _verb, id, ...named } = args;
+        // Only the fields the call names; a project by its whole id.
+        const { action: _verb, id, scope, ...named } = args;
         const given = Object.fromEntries(
-          Object.entries(named).filter(([, value]) => value !== undefined)
+          Object.entries({
+            ...named,
+            scope: scope && {
+              ...scope,
+              projectId: await projectIdOf(scope.projectId),
+            },
+          }).filter(([, value]) => value !== undefined)
         );
 
         if (action === "create") {
@@ -872,24 +972,14 @@ export function adminTools() {
         }
         // update: the route replaces the whole rule, so the given fields are
         // laid over the rule as it is stored; every other field stays.
-        if (!id) {
-          throw new Error("id is required to update a rule");
-        }
-        const { rules } = (await api("GET", "/api/rules")) as {
-          rules: (Record<string, unknown> & { id: string })[];
-        };
-        const stored = rules.find((rule) => rule.id === id);
-        if (!stored) {
-          throw new Error(`there is no rule ${id} to update`);
-        }
         const {
-          id: _id,
+          id: storedId,
           createdAt: _createdAt,
           stats: _stats,
           orphaned: _orphaned,
           ...current
-        } = stored;
-        return await api("PUT", `/api/rules/${encodeURIComponent(id)}`, {
+        } = (await ruleNamed(id)) as RuleRow & { orphaned?: unknown };
+        return await api("PUT", `/api/rules/${encodeURIComponent(storedId)}`, {
           ...current,
           ...given,
         });
@@ -961,20 +1051,27 @@ export function adminTools() {
         if (action === "list") {
           return await api("GET", "/api/fleet/hooks");
         }
-        if (action === "remove") {
-          if (!args.id) {
-            throw new Error("id is required to remove a hook");
+        // The hook an id names: whole, or the handle the list shows.
+        const hookNamed = async (
+          asked: string | undefined
+        ): Promise<string> => {
+          if (!asked) {
+            throw new Error(`id is required to ${action} a hook`);
           }
+          const { hooks } = (await api("GET", "/api/fleet/hooks")) as {
+            hooks: FleetHook[];
+          };
+          return listedNamed(asked, hooks, "hook").id;
+        };
+        if (action === "remove") {
           return await api(
             "DELETE",
-            `/api/fleet/hooks/${encodeURIComponent(args.id)}`
+            `/api/fleet/hooks/${encodeURIComponent(await hookNamed(args.id))}`
           );
         }
 
-        const id = action === "create" ? crypto.randomUUID() : args.id;
-        if (!id) {
-          throw new Error("id is required to update a hook");
-        }
+        const id =
+          action === "create" ? crypto.randomUUID() : await hookNamed(args.id);
 
         // Only the fields given: the hub merges an update over the stored hook
         // and validates the result, so `update {id, enabled: false}` touches
@@ -986,7 +1083,10 @@ export function adminTools() {
           ...fields,
           ...(projectId === undefined
             ? {}
-            : { scope: projectId ? "project" : null, projectId }),
+            : {
+                scope: projectId ? "project" : null,
+                projectId: await projectIdOf(projectId),
+              }),
         };
         const body =
           action === "create"
@@ -1128,9 +1228,10 @@ export function adminTools() {
             memoryDocs?: { scope?: MemoryScope }[];
           };
           const docs = fleet.memoryDocs ?? [];
+          const filter = await scopeWithProjects(scope);
           return {
-            docs: scope
-              ? docs.filter((doc) => scopeKey(doc.scope) === scopeKey(scope))
+            docs: filter
+              ? docs.filter((doc) => scopeHas(doc.scope, filter))
               : docs,
           };
         }
@@ -1160,7 +1261,7 @@ export function adminTools() {
               await api("PUT", "/api/fleet/memory/docs", {
                 path,
                 content,
-                ...(scope ? { scope } : {}),
+                ...(scope ? { scope: await scopeWithProjects(scope) } : {}),
                 ...(expectedHash
                   ? { expectedHash: await wholeHash(expectedHash, path) }
                   : {}),
