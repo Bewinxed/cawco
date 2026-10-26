@@ -66,6 +66,12 @@
     practice: "Practice",
     agent: "Agent",
   };
+  /** A kind's route picked in its group or its menu: told only when it changed. */
+  function choose(kind: DecisionKind, next: string) {
+    if (next && next !== routes[kind]) {
+      onchange(kind, next as DecidesRoute);
+    }
+  }
 </script>
 
 <!-- biome-ignore-start lint/a11y/noRedundantRoles : WebKit drops list semantics when list styles are removed; an explicit role="list" keeps them (scottohara.me/blog/2019/01/12/lists-and-safari.html) -->
@@ -112,14 +118,7 @@
             aria-labelledby="{uid}-kind-{at}"
             data-pending={pending?.kind === kind ? "" : undefined}
             type="single"
-            bind:value={
-              () => shown,
-              (next) => {
-                if (next && next !== routes[kind]) {
-                  onchange(kind, next as DecidesRoute);
-                }
-              }
-            }
+            bind:value={() => shown, (next) => choose(kind, next)}
           >
             {#each DECIDES_ROUTES as route (route)}
               <ToggleGroup.Item
@@ -143,14 +142,7 @@
               aria-labelledby="{uid}-kind-{at}"
               class="w-full"
               data-pending={pending?.kind === kind ? "" : undefined}
-              bind:value={
-                () => shown,
-                (next) => {
-                  if (next && next !== routes[kind]) {
-                    onchange(kind, next as DecidesRoute);
-                  }
-                }
-              }
+              bind:value={() => shown, (next) => choose(kind, next)}
             >
               {#each DECIDES_ROUTES as route (route)}
                 <NativeSelect.Option value={route}

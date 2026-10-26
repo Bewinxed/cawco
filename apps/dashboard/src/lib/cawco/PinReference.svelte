@@ -15,9 +15,8 @@
   import { pinName } from "@cawco/core/pin-name";
   import { Portal } from "bits-ui";
   import { untrack } from "svelte";
-  import { MediaQuery } from "svelte/reactivity";
   import { pinNamed } from "./artifact-names.svelte";
-  import { dur } from "./motion/curves.svelte";
+  import { chipPeek } from "./chip-peek.svelte";
   import PinMark, { markState } from "./preview/PinMark.svelte";
   import PinPeek from "./preview/PinPeek.svelte";
   import ReferenceChip from "./ReferenceChip.svelte";
@@ -38,35 +37,15 @@
   const words = untrack(() => (pin ? pinName(pin) : label));
   const unread = $derived(!!pin && newAnswer(pin));
 
-  /*
-   * Resting a mouse on it peeks its thread (PinPeek, the pill's own peek on
-   * the page) under it, after `--dur-peek`: what it stands on, its first
-   * words, the agent's last line. Never under a finger, where a press opens
-   * it; the chip's own name carries its state for a screen reader.
-   */
+  /* Resting a mouse on it peeks its thread (PinPeek, the pill's own peek on
+     the page): what it stands on, its first words, the agent's last line. */
   let chip = $state<HTMLButtonElement>();
-  let peekAt = $state<{ h: number; w: number; x: number; y: number } | null>(
-    null
+  // Under the chip, as the pill's peek stands beside its pill.
+  const peek = chipPeek(
+    () => chip,
+    () => !!pin,
+    (r) => ({ x: r.left, y: r.bottom, w: 0, h: r.height })
   );
-  let peekTimer: ReturnType<typeof setTimeout> | undefined;
-  const fine = new MediaQuery("(hover: hover) and (pointer: fine)");
-  function rest() {
-    clearTimeout(peekTimer);
-    if (!(fine.current && pin && chip)) {
-      return;
-    }
-    const at = chip;
-    peekTimer = setTimeout(() => {
-      const r = at.getBoundingClientRect();
-      // Under the chip, as the pill's peek stands beside its pill.
-      peekAt = { x: r.left, y: r.bottom, w: 0, h: r.height };
-    }, dur("--dur-peek"));
-  }
-  function leave() {
-    clearTimeout(peekTimer);
-    peekAt = null;
-  }
-  $effect(() => () => clearTimeout(peekTimer));
 
   /** Its name, by its state (the design's words). */
   const title = $derived.by(() => {
@@ -89,10 +68,10 @@
   data-pin-chip={id}
   data-state={pin ? markState(pin) : undefined}
   data-unread={unread || undefined}
-  onblur={leave}
-  onpointerenter={rest}
-  onpointerleave={leave}
-  onpress={leave}
+  onblur={peek.leave}
+  onpointerenter={peek.rest}
+  onpointerleave={peek.leave}
+  onpress={peek.leave}
   refKey="ref:{id}:pin"
   {words}
   bind:ref={chip}
@@ -109,13 +88,13 @@
     </span>
   {/snippet}
 </ReferenceChip><Portal>
-  {#if peekAt && pin}
+  {#if peek.at && pin}
     <!-- The viewport is its room: a transcript's rows clip what stands inside them. -->
     <div
       class="pointer-events-none fixed inset-0 z-(--layer-float)"
       data-slot="pin-chip-peek"
     >
-      <PinPeek mark={peekAt} {pin} room={{ w: innerWidth, h: innerHeight }} />
+      <PinPeek mark={peek.at} {pin} room={{ w: innerWidth, h: innerHeight }} />
     </div>
   {/if}
 </Portal>

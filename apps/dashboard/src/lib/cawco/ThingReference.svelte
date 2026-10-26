@@ -13,9 +13,9 @@
    * at the task or to-do, the session's plan at the step, the machines.
    */
   import { Portal } from "bits-ui";
-  import { MediaQuery } from "svelte/reactivity";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
-  import { dur, numberOf } from "./motion/curves.svelte";
+  import { chipPeek } from "./chip-peek.svelte";
+  import { numberOf } from "./motion/curves.svelte";
   import { REFERENCE_LOOKS } from "./reference-looks";
   import { openThing } from "./reference-open.svelte";
   import { type ThingKind, thingNamed } from "./reference-things.svelte";
@@ -32,31 +32,19 @@
   const name = $derived(thing?.state ? `${words}, ${thing.state}` : words);
 
   let chip = $state<HTMLButtonElement>();
-  let peekAt = $state<{ x: number; y: number } | null>(null);
-  let peekTimer: ReturnType<typeof setTimeout> | undefined;
-  const fine = new MediaQuery("(hover: hover) and (pointer: fine)");
-  function rest() {
-    clearTimeout(peekTimer);
-    if (!(fine.current && thing && chip)) {
-      return;
-    }
-    const at = chip;
-    peekTimer = setTimeout(() => {
-      const r = at.getBoundingClientRect();
-      // Inside the viewport: a chip near its end side peeks back from it.
+  // Inside the viewport: a chip near its end side peeks back from it.
+  const peek = chipPeek(
+    () => chip,
+    () => !!thing,
+    (r) => {
       const room = numberOf("--c-pin-card-w") || 280;
       const inset = numberOf("--space-2") || 8;
-      peekAt = {
+      return {
         x: Math.max(inset, Math.min(r.left, innerWidth - room - inset)),
         y: r.bottom,
       };
-    }, dur("--dur-peek"));
-  }
-  function leave() {
-    clearTimeout(peekTimer);
-    peekAt = null;
-  }
-  $effect(() => () => clearTimeout(peekTimer));
+    }
+  );
 </script>
 
 <button
@@ -67,15 +55,15 @@
   })}
   data-reference-chip={kind}
   data-reference-id={id}
-  onblur={leave}
+  onblur={peek.leave}
   onclick={() => {
-    leave();
+    peek.leave();
     if (thing) {
       openThing(thing);
     }
   }}
-  onpointerenter={rest}
-  onpointerleave={leave}
+  onpointerenter={peek.rest}
+  onpointerleave={peek.leave}
   type="button"
   bind:this={chip}
 >
@@ -97,7 +85,7 @@
     >
   {/if}
 </button><Portal>
-  {#if peekAt && thing}
+  {#if peek.at && thing}
     <!-- The viewport is its room: a transcript's rows clip what stands inside them. -->
     <div
       class="pointer-events-none fixed inset-0 z-(--layer-float)"
@@ -106,8 +94,8 @@
       <div
         aria-hidden="true"
         class="absolute start-(--peek-x) top-(--peek-y) flex flex-col gap-space-1 max-w-c-pin-card-w mt-space-1 px-space-2 py-space-1 border border-border-control rounded-sm bg-surface-raised shadow-tile motion-safe:animate-arrive"
-        style:--peek-x="{peekAt.x}px"
-        style:--peek-y="{peekAt.y}px"
+        style:--peek-x="{peek.at.x}px"
+        style:--peek-y="{peek.at.y}px"
       >
         <span class="type-label text-ink-strong text-pretty wrap-anywhere"
           >{thing.label}</span

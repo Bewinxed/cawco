@@ -74,7 +74,7 @@ export interface StagesView {
   views: StageView[];
 }
 
-/** One attempt at a task (WORDS.md: attempt): a work item whose task it is, as a task read shows it. */
+/** One attempt at a task (attempt): a work item whose task it is, as a task read shows it. */
 export interface TaskAttempt {
   /** When it ended, ms epoch; null while it is live. */
   endedAt: number | null;

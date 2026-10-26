@@ -10,9 +10,9 @@
  * mounts only while `present`, so it is the newest surface whenever it
  * opens.
  *
- *   // the Root wrapper
- *   const complete = rootPresence(() => shown);
- *   <X.Root onOpenChangeComplete={(value) => { complete(value); theirs?.(value); }}>
+ *   // the Root wrapper (overlayRoot)
+ *   const root = overlayRoot(() => open, (value) => { open = value; }, () => theirs);
+ *   <X.Root bind:open={root.get, root.set} onOpenChangeComplete={root.complete}>
  *   // the Portal wrapper
  *   const root = presence();
  *   {#if root.present}<X.Portal … />{/if}
@@ -27,7 +27,7 @@ const [presence, providePresence] = createContext<{
 export { presence };
 
 /** Provides the overlay's presence to its Portal; answers its Root's `onOpenChangeComplete`. */
-export function rootPresence(shown: () => boolean): (open: boolean) => void {
+function rootPresence(shown: () => boolean): (open: boolean) => void {
   // Closed and its exit played: true until it first opens, and again once
   // each close completes.
   let settled = $state(true);
