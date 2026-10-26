@@ -1,28 +1,29 @@
 <!--
-  A design preview, not the product: a `comment_reply` or
-  `comment_resolve` call's row as the owner asked for it (10-25, 10-26),
-  drawn from the real parts so its states can be judged before
-  ToolGroup changes. The row is a tool call's: its line (the call's own
-  glyph, verb and server badge, ToolGroup's line), folded; under it one
-  chip naming the comment ("Your comment on comment-sizing · answered",
-  the pin's pill as its mark). The chip opens the thread in the house hover
-  panel (HoverPanel) beside it: what it is on and "Open where it is", then
-  the pin's own thread card (PinCard: his comment, every reply, its
-  resolve, the reply composer). On a phone the thread opens either under
-  the chip in the same panel or as the well's foot sheet (PinFloat
-  `sheet`), the one choice the owner makes here (`anchor`). The row's
-  chevron opens the exchange inline, as any tool call opens its body:
+  A design preview, not the product: a `comment_reply` or `comment_resolve`
+  call's row as the owner asked for it (10-25, 10-26), live on the dev
+  bench (/dev/comment-chip) before ToolGroup changes. The row is a tool
+  call's: its line (the call's glyph, verb and server badge, ToolGroup's
+  line), folded; under it one chip naming the comment ("Your comment on
+  comment-sizing · answered", the pin's pill as its mark). Pressing the
+  chip, or resting a mouse on it, opens the thread in the house hover panel
+  (HoverPanel, portalled as SessionReference's is) beside it: what it is on
+  and Open where it is, then the pin's thread card (PinCard `fromChip`: his
+  comment, every reply, Resolve or Reopen, the reply composer). On a phone
+  the thread opens under the chip in the same panel, or as the well's foot
+  sheet (PinFloat `sheet`): the owner's one choice here (`anchor`). The
+  row's chevron opens the exchange inline, as any tool call opens its body:
   ToolGroup's exchange well, his words and the reply up to this call.
 
-  The panel stands inside the frame (no portal; the frame is its
-  containing block), so a canvas of many frames draws each one open
-  beside its own chip.
+  The thread is this bench's own copy: a reply sent lands in it, Resolve
+  and Reopen change it, and nothing reaches the hub.
 -->
 <script lang="ts">
   import type { ArtifactKind } from "@cawco/core/artifact-kinds";
   import type { Pin } from "@cawco/core/comments";
   import { pinName } from "@cawco/core/pin-name";
-  import { tick, untrack } from "svelte";
+  import { Portal } from "bits-ui";
+  import { untrack } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
   import {
     describeTool,
     type ToolDescriptor,
@@ -40,27 +41,22 @@
     IconUser,
     IconWindow,
   } from "#lib/icons.js";
-  import { frameSize } from "../../frame-observer";
   import HoverPanel from "../../HoverPanel.svelte";
+  import { newId } from "../../id";
   import { dur } from "../../motion/curves.svelte";
   import { pressOutside } from "../../press-outside";
+  import PinCard from "../../preview/PinCard.svelte";
   import PinFloat from "../../preview/PinFloat.svelte";
   import PinMark, { markState } from "../../preview/PinMark.svelte";
   import { ComposerDraft } from "../composer-draft.svelte";
 
-  type Shown = "row" | "thread" | "typing" | "expanded" | "open-where";
-
   let {
-    pin,
+    pin: given,
     artifact,
     agentName,
     call = "reply",
     reply = "",
-    shown = "row",
-    pointer = "fine",
     anchor = "popover",
-    draft = "",
-    height = 240,
   }: {
     /** His comment, its thread as it stands now. */
     pin: Pin;
@@ -72,19 +68,16 @@
     call?: "reply" | "resolve";
     /** The call's own words (its `text`); none for a resolve that said nothing. */
     reply?: string;
-    /** What stands open: the folded row, its thread, a reply being written, the row unfolded, or the thread with Open where it is in focus. */
-    shown?: Shown;
-    /** A mouse (`fine`: resting on the chip opens it too) or a finger (`touch`: a tap opens it). */
-    pointer?: "fine" | "touch";
     /** Where a phone's thread opens: under its chip, or as the foot sheet. */
     anchor?: "popover" | "sheet";
-    /** Words already in the reply. */
-    draft?: string;
-    /** The frame's height, px: room for what opens. */
-    height?: number;
   } = $props();
 
+  /** The live hub this pin's page lives on: where Open where it is goes. */
+  const HUB = "https://outpost.bewinxed.com";
+
   const panelId = $props.id();
+  /** The thread as this bench holds it: replies and resolves land here. */
+  let pin = $state(untrack(() => structuredClone($state.snapshot(given))));
 
   /** The call as the harness recorded it: ToolGroup's line describes it from these. */
   const line: ToolDescriptor = $derived(
@@ -117,93 +110,74 @@
   };
   const KindGlyph = $derived(GLYPHS[artifact.kind] ?? IconWindow);
 
-  let root = $state<HTMLDivElement>();
+  /** A phone: under 640px, the product's phone line. */
+  const narrow = new MediaQuery("(width < 640px)");
+  /** A mouse: resting on the chip opens it too. */
+  const fine = new MediaQuery("(hover: hover) and (pointer: fine)");
+  const sheet = $derived(narrow.current && anchor === "sheet");
+
   let chip = $state<HTMLButtonElement>();
-  let open = $state(untrack(() => shown !== "row" && shown !== "expanded"));
-  let expanded = $state(untrack(() => shown === "expanded"));
-  /** Where the panel stands in the frame, px, unscaled. */
-  let place = $state({ x: 0, y: 0, origin: 0, span: 0, room: 0 });
+  let open = $state(false);
+  let expanded = $state(false);
+  /** Where the panel stands in the viewport, px. */
+  let place = $state({ x: 0, y: 0, origin: 0, span: 0, room: "" });
+  /** Desk: as tall as the thread needs, up to the sheet's cap, pulled up to stand whole. */
+  const DESK_ROOM =
+    "min(var(--c-sheet-max-h), calc(100dvh - 2 * var(--hover-panel-inset)))";
 
   const replyDraft = new ComposerDraft({ byReference: true });
-  $effect(() => {
-    const words = draft;
-    untrack(() => {
-      replyDraft.text = words;
-    });
-  });
 
-  /** A phone's frame: 640px and narrower, as the product's phone line. */
-  let width = $state(0);
-  const phone = $derived(width > 0 && width < 640);
-  const sheet = $derived(phone && anchor === "sheet");
+  /** A token's length in px, as the root computes it. */
+  const px = (name: string): number =>
+    Number.parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue(name)
+    );
 
   /**
-   * The panel's place in the frame. Beside the chip at its right, level
-   * with it (ChipPanel's stand), pulled back inside the frame where the room
+   * The panel's place. Beside the chip at its right, level with it
+   * (ChipPanel's stand), pulled back inside the viewport where the room
    * there is narrower than the panel can grow; on a phone, under the chip,
-   * the frame's width less its insets.
+   * the viewport's width less its insets.
    */
   function stand(): void {
-    if (!(root && chip)) {
+    if (!chip) {
       return;
     }
-    const frame = root.getBoundingClientRect();
-    const scale = frame.width / root.offsetWidth || 1;
     const box = chip.getBoundingClientRect();
-    const top = (box.top - frame.top) / scale;
-    const right = (box.right - frame.left) / scale;
-    const bottom = (box.bottom - frame.top) / scale;
-    const css = getComputedStyle(root);
-    const inset = Number.parseFloat(
-      css.getPropertyValue("--hover-panel-inset")
-    );
-    const most = Number.parseFloat(css.getPropertyValue("--hover-panel-max"));
-    const span = root.offsetWidth - 2 * inset;
-    const widest = Math.min(most, span);
-    if (phone) {
-      const y = Math.round(bottom + inset / 2);
+    const inset = px("--hover-panel-inset");
+    const span = innerWidth - 2 * inset;
+    if (narrow.current) {
+      // Under the chip, never over it: the room below it, the viewport's foot less its inset.
+      const y = Math.round(box.bottom + 4);
       place = {
         x: inset,
         y,
         origin: 0,
         span,
-        room: root.offsetHeight - y - inset,
+        room: `${innerHeight - y - inset}px`,
       };
       return;
     }
-    const y = Math.round(top);
+    const widest = Math.min(px("--hover-panel-max"), span);
     place = {
       x: Math.round(
-        Math.max(inset, Math.min(right + 4, root.offsetWidth - widest - inset))
+        Math.max(inset, Math.min(box.right + 4, innerWidth - widest - inset))
       ),
-      y,
-      origin: Math.round((bottom - top) / 2),
+      y: Math.round(box.top),
+      origin: Math.round(box.height / 2),
       span,
-      room: root.offsetHeight - y - inset,
+      room: DESK_ROOM,
     };
   }
 
-  /** The frame's width, read in the next frame as it changes. */
-  const sized = frameSize<HTMLDivElement>((node) => {
-    width = node.offsetWidth;
-    if (untrack(() => open)) {
-      stand();
-    }
-  });
-
-  // Open from its args: placed once the frame has its width.
+  // While it stands open: a press outside it and the chip, or Escape, puts it
+  // away; scrolling keeps it at its chip, and a chip scrolled out of view
+  // puts it away (ChipPanel's rules).
   $effect(() => {
-    if (open && width > 0 && chip) {
-      untrack(stand);
-    }
-  });
-
-  // A press outside the panel and the chip, or Escape, puts it away.
-  $effect(() => {
-    if (!(open && root)) {
+    if (!open) {
       return;
     }
-    const panel = root.querySelector(`[id="${CSS.escape(panelId)}"]`);
+    const panel = document.getElementById(sheet ? `${panelId}-sheet` : panelId);
     const stop = panel
       ? pressOutside(panel, (event) => {
           if (!(event.target instanceof Node && chip?.contains(event.target))) {
@@ -218,37 +192,57 @@
         chip?.focus();
       }
     };
+    let frame = 0;
+    const follow = (event: Event) => {
+      if (
+        frame ||
+        sheet ||
+        (event.target instanceof Node && panel?.contains(event.target))
+      ) {
+        return;
+      }
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const box = chip?.getBoundingClientRect();
+        if (!box || box.bottom <= 0 || box.top >= innerHeight) {
+          open = false;
+          return;
+        }
+        stand();
+      });
+    };
     window.addEventListener("keydown", key);
+    window.addEventListener("scroll", follow, { capture: true, passive: true });
+    window.addEventListener("resize", follow);
     return () => {
       stop();
       window.removeEventListener("keydown", key);
+      window.removeEventListener("scroll", follow, { capture: true });
+      window.removeEventListener("resize", follow);
+      cancelAnimationFrame(frame);
     };
   });
 
-  async function press(event: MouseEvent): Promise<void> {
+  function press(): void {
     clearTimeout(restTimer);
     if (open) {
       open = false;
       return;
     }
+    // A phone's thread under its chip: the chip goes to the top first, so the
+    // thread has the screen's height under it.
+    if (narrow.current && !sheet && chip) {
+      chip.scrollIntoView({ block: "start", behavior: "instant" });
+    }
     stand();
     open = true;
-    // Opened from the keys, focus goes in with it.
-    if (event.detail === 0) {
-      await tick();
-      root
-        ?.querySelector<HTMLElement>(
-          `[id="${CSS.escape(panelId)}"] [data-open-where]`
-        )
-        ?.focus();
-    }
   }
 
-  /* Resting a mouse on the chip opens it after --dur-peek (a finger taps). */
+  /* Resting a mouse on the chip opens it after --dur-peek; a finger taps. */
   let restTimer: ReturnType<typeof setTimeout> | undefined;
   function rest(): void {
     clearTimeout(restTimer);
-    if (pointer !== "fine" || open) {
+    if (!fine.current || open) {
       return;
     }
     restTimer = setTimeout(() => {
@@ -258,18 +252,24 @@
   }
   $effect(() => () => clearTimeout(restTimer));
 
-  // The thread with Open where it is in focus: the act under the keyboard's ring.
-  $effect(() => {
-    if (shown !== "open-where" || !open || place.span === 0 || !root) {
-      return;
-    }
-    const at = root;
-    tick().then(() =>
-      at
-        .querySelector<HTMLElement>("[data-open-where]")
-        ?.focus({ preventScroll: true, focusVisible: true } as FocusOptions)
-    );
-  });
+  /** A reply sent here lands in the thread, his own entry, sent; on a resolved thread it reopens it. */
+  function answer(text: string): void {
+    const at = new Date().toISOString();
+    pin.thread.push({
+      id: newId(),
+      by: "person",
+      text,
+      at,
+      sentAt: at,
+    });
+    pin.resolvedAt = undefined;
+    pin.resolvedBy = undefined;
+    replyDraft.text = "";
+  }
+  function resolve(resolved: boolean): void {
+    pin.resolvedAt = resolved ? new Date().toISOString() : undefined;
+    pin.resolvedBy = resolved ? "person" : undefined;
+  }
 </script>
 
 {#snippet where()}
@@ -286,163 +286,162 @@
     </span>
     <Button
       data-open-where
+      href={`${HUB}/artifact/${encodeURIComponent(artifact.id)}?pin=${pin.number}`}
       icon={IconArrowUpRight}
       label="Open where it is"
       pad="none"
+      rel="noopener"
       size="sm"
+      target="_blank"
       variant="link"
     />
   </div>
 {/snippet}
 
 {#snippet thread()}
-  {#await import("../../preview/PinCard.svelte") then { default: PinCard }}
-    <PinCard
-      {agentName}
-      draft={replyDraft}
-      link={`https://outpost.bewinxed.com/a/${artifact.id}?pin=${pin.number}`}
-      marked={false}
-      name={pinName(pin)}
-      onclose={() => {
-        open = false;
-        chip?.focus();
-      }}
-      ondelete={() => Promise.resolve()}
-      onfind={() => undefined}
-      onplace={() => undefined}
-      onreply={() => undefined}
-      onresolve={() => undefined}
-      onretry={() => undefined}
-      parent={null}
-      {pin}
-      problem={null}
-    />
-  {/await}
+  <PinCard
+    {agentName}
+    draft={replyDraft}
+    fromChip
+    link={`${HUB}/artifact/${encodeURIComponent(artifact.id)}?pin=${pin.number}`}
+    marked={false}
+    name={pinName(pin)}
+    onclose={() => {
+      open = false;
+      chip?.focus();
+    }}
+    ondelete={() => Promise.resolve()}
+    onfind={() => undefined}
+    onplace={() => undefined}
+    onreply={answer}
+    onresolve={resolve}
+    onretry={() => undefined}
+    parent={null}
+    {pin}
+    problem={null}
+  />
 {/snippet}
 
-<div
-  bind:this={root}
-  {@attach sized}
-  class="tx-columns relative min-h-(--frame-h) transform-gpu overflow-clip bg-surface-page py-space-4"
-  data-slot="comment-call-fixture"
-  style:--frame-h="{height}px"
->
-  <div data-slot="tools" data-tx-rail class="rail-row mt-0">
-    <div data-slot="row">
-      <!-- The call's line: a tool call's, folded; its chevron opens the exchange. -->
-      <button
-        aria-controls="{panelId}-exchange"
-        aria-expanded={expanded}
-        data-slot="trow"
-        class="select-none group/trow rail-line press-tint w-full min-h-(--tx-line) coarse:min-h-(--tx-line-touch) text-size-label font-medium text-ink-strong bg-transparent border-none border-current rounded-xs p-0 m-0 text-start"
-        data-state={expanded ? "open" : "closed"}
-        onclick={() => {
-          expanded = !expanded;
-        }}
-        type="button"
+<div data-slot="row">
+  <!-- The call's line: a tool call's, folded; its chevron opens the exchange. -->
+  <button
+    aria-controls="{panelId}-exchange"
+    aria-expanded={expanded}
+    data-slot="trow"
+    class="select-none group/trow rail-line press-tint w-full min-h-(--tx-line) coarse:min-h-(--tx-line-touch) text-size-label font-medium text-ink-strong bg-transparent border-none border-current rounded-xs p-0 m-0 text-start"
+    data-state={expanded ? "open" : "closed"}
+    onclick={() => {
+      expanded = !expanded;
+    }}
+    type="button"
+  >
+    <span data-slot="rail-cell" class="rail-cell">
+      <span
+        data-slot="glyph"
+        class="col-start-1 row-start-1 grid place-items-center {line.color}"
+        ><Icon class="size-icon-md block" /></span
       >
-        <span data-slot="rail-cell" class="rail-cell">
+    </span>
+    <span
+      class="font-medium text-ink-strong text-size-label flex-1 min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+      >{line.label}</span
+    >
+    {#if line.chip}
+      <Badge class="flex-none" data-box kind="meta" variant="secondary"
+        ><span>{line.chip}</span></Badge
+      >
+    {/if}
+    <span
+      data-slot="chev"
+      class="flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out group-state-open/trow:rotate-90"
+      data-box><IconChevronRight class="size-icon-md block" /></span
+    >
+  </button>
+  <!-- The comment it answered: one chip, which opens its thread. -->
+  <p
+    data-slot="call-chips"
+    class="flex flex-wrap items-baseline gap-x-space-1 gap-y-space-1 m-0 ms-(--x-hang) mt-space-1 mb-space-2 text-size-label"
+  >
+    <button
+      aria-controls={sheet ? `${panelId}-sheet` : panelId}
+      aria-expanded={open}
+      aria-haspopup="dialog"
+      aria-label={`${chipLabel}, ${stateWord}`}
+      class={chipVariants({ variant: "inline", class: "scroll-mt-space-3" })}
+      data-pin-chip={`${artifact.id}/${pin.number}`}
+      data-state={markState(pin)}
+      onclick={press}
+      onpointerenter={rest}
+      onpointerleave={() => clearTimeout(restTimer)}
+      type="button"
+      bind:this={chip}
+    >
+      <span data-slot="mark" class="inline-flex flex-none" data-box>
+        <PinMark number={pin.number} size="inline" state={markState(pin)} />
+      </span>
+      <span data-slot="label">{chipLabel}</span>
+      <span class="flex-none text-ink-muted" data-slot="state"
+        >· {stateWord}</span
+      >
+    </button>
+  </p>
+  {#if expanded}
+    <!-- Unfolded, the exchange whole: ToolGroup's well, his words and the
+         reply up to this call, each by its speaker's glyph. -->
+    <ol
+      id="{panelId}-exchange"
+      data-slot="pin-exchange"
+      class="flex flex-col gap-space-3 m-0 mt-space-1 mb-space-3 ms-(--fields-start) p-space-3 list-none rounded-sm bg-surface-recess"
+      style:--fields-start={"calc(var(--x-hang) - var(--space-3))"}
+    >
+      {#each exchange as said (said.id)}
+        {@const Speaker = said.by === "agent" ? IconAgent : IconUser}
+        <li
+          data-slot="exchange-entry"
+          class="flex items-start gap-space-2 min-w-0 text-size-body leading-body"
+          data-by={said.by}
+        >
+          <span class="sr-only"
+            >{said.by === "agent" ? "Agent: " : "You: "}</span
+          >
           <span
-            data-slot="glyph"
-            class="col-start-1 row-start-1 grid place-items-center {line.color}"
-            ><Icon class="size-icon-md block" /></span
+            aria-hidden="true"
+            class="mark-cell text-ink-muted data-you:text-brand-ink"
+            data-box
+            data-you={said.by === "person" || undefined}
+            ><Speaker class="size-icon-sm" /></span
           >
-        </span>
-        <span
-          class="font-medium text-ink-strong text-size-label flex-1 min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-          >{line.label}</span
-        >
-        {#if line.chip}
-          <Badge class="flex-none" data-box kind="meta" variant="secondary"
-            ><span>{line.chip}</span></Badge
+          <div
+            class="flex flex-col gap-space-1 flex-1 min-w-0 wrap-anywhere text-pretty"
           >
-        {/if}
-        <span
-          data-slot="chev"
-          class="flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out group-state-open/trow:rotate-90"
-          data-box><IconChevronRight class="size-icon-md block" /></span
-        >
-      </button>
-      <!-- The comment it answered: one chip, which opens its thread. -->
-      <p
-        data-slot="call-chips"
-        class="flex flex-wrap items-baseline gap-x-space-1 gap-y-space-1 m-0 ms-(--x-hang) mt-space-1 mb-space-2 text-size-label"
-      >
-        <button
-          aria-controls={panelId}
-          aria-expanded={open}
-          aria-haspopup="dialog"
-          aria-label={`${chipLabel}, ${stateWord}`}
-          class={chipVariants({ variant: "inline" })}
-          data-pin-chip={`${artifact.id}/${pin.number}`}
-          data-state={markState(pin)}
-          onclick={press}
-          onpointerenter={rest}
-          onpointerleave={() => clearTimeout(restTimer)}
-          type="button"
-          bind:this={chip}
-        >
-          <span data-slot="mark" class="inline-flex flex-none" data-box>
-            <PinMark number={pin.number} size="inline" state={markState(pin)} />
-          </span>
-          <span data-slot="label">{chipLabel}</span>
-          <span class="flex-none text-ink-muted" data-slot="state"
-            >· {stateWord}</span
-          >
-        </button>
-      </p>
-      {#if expanded}
-        <!-- Unfolded, the exchange whole: ToolGroup's well, his words and the
-             reply up to this call, each by its speaker's glyph. -->
-        <ol
-          id="{panelId}-exchange"
-          data-slot="pin-exchange"
-          class="flex flex-col gap-space-3 m-0 mt-space-1 mb-space-3 ms-(--fields-start) p-space-3 list-none rounded-sm bg-surface-recess"
-          style:--fields-start={"calc(var(--x-hang) - var(--space-3))"}
-        >
-          {#each exchange as said (said.id)}
-            {@const Speaker = said.by === "agent" ? IconAgent : IconUser}
-            <li
-              data-slot="exchange-entry"
-              class="flex items-start gap-space-2 min-w-0 text-size-body leading-body"
-              data-by={said.by}
-            >
-              <span class="sr-only"
-                >{said.by === "agent" ? "Agent: " : "You: "}</span
-              >
-              <span
-                aria-hidden="true"
-                class="mark-cell text-ink-muted data-you:text-brand-ink"
-                data-box
-                data-you={said.by === "person" || undefined}
-                ><Speaker class="size-icon-sm" /></span
-              >
-              <div
-                class="flex flex-col gap-space-1 flex-1 min-w-0 wrap-anywhere text-pretty"
-              >
-                <ToolProse source={said.text} />
-              </div>
-            </li>
-          {/each}
-        </ol>
-      {/if}
-    </div>
-  </div>
-
+            <ToolProse source={said.text} />
+          </div>
+        </li>
+      {/each}
+    </ol>
+  {/if}
+</div>
+<Portal>
   {#if sheet}
     {#if open}
-      <!-- A phone, the sheet: the well's foot sheet the thread takes in a preview (PinFloat). -->
-      <PinFloat
-        label={chipLabel}
-        mark={null}
-        pin={pin.number}
-        room={{ w: width, h: height }}
-        sheet
-        slot="pin-card"
+      <!-- A phone, the sheet: the well's foot sheet a preview's thread takes (PinFloat). -->
+      <div
+        class="pointer-events-none fixed inset-0 z-(--layer-float)"
+        data-slot="thread-sheet-room"
+        id="{panelId}-sheet"
       >
-        {@render where()}
-        {@render thread()}
-      </PinFloat>
+        <PinFloat
+          label={chipLabel}
+          mark={null}
+          pin={pin.number}
+          room={{ w: innerWidth, h: innerHeight }}
+          sheet
+          slot="pin-card"
+        >
+          {@render where()}
+          {@render thread()}
+        </PinFloat>
+      </div>
     {/if}
   {:else}
     <HoverPanel
@@ -454,13 +453,13 @@
       }}
       role="dialog"
       side="right"
-      style="--x: {place.x}px; --y: {place.y}px; --origin: {place.origin}px; --room: {place.room}px; --span: {place.span}px"
+      style="--x: {place.x}px; --y: {place.y}px; --origin: {place.origin}px; --room: {place.room}; --span: {place.span}px"
     >
       {#snippet children()}
         <div
           class="flex min-h-0 min-w-0 w-(--thread-w) max-h-(--thread-h) flex-col gap-space-2"
           data-slot="thread-panel"
-          style:--thread-h="calc({place.room}px - 2 * var(--space-3) - 2px)"
+          style:--thread-h="calc(var(--room) - 2 * var(--space-3) - 2px)"
           style:--thread-w="calc(min(var(--hover-panel-max), {place.span}px) - 2
           * var(--space-3) - 2px)"
         >
@@ -470,4 +469,4 @@
       {/snippet}
     </HoverPanel>
   {/if}
-</div>
+</Portal>

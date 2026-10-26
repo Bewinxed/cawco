@@ -88,7 +88,14 @@
     onfind,
     ondraft,
     changes,
+    fromChip = false,
   }: {
+    /**
+     * Opened from its chip in a conversation (the transcript's popover): its
+     * head keeps Resolve or Reopen and Close, without Delete comment and ⋯,
+     * and a thread of his comment and one reply opens at his comment.
+     */
+    fromChip?: boolean;
     /** What changed on the page for this comment, as its change lines under the reply (ChangeLines). */
     changes?: Snippet<[Pin]>;
     pin: Pin;
@@ -142,7 +149,11 @@
     const newest = holder.querySelector<HTMLElement>(
       '[data-slot="thread"] > li:last-child'
     );
-    holder.scrollTop = newest ? newest.offsetTop : holder.scrollHeight;
+    if (fromChip && pin.thread.length <= 2) {
+      holder.scrollTop = 0;
+    } else {
+      holder.scrollTop = newest ? newest.offsetTop : holder.scrollHeight;
+    }
     placed = holder.scrollTop;
   };
   // The thread opens at its newest entry's first line, so a long reply reads
@@ -401,19 +412,21 @@
           variant="ghost"
         />
       {/if}
-      <!-- One press asks, in the card itself (DESIGN.md, A thread beside its pin). -->
-      <Button
-        aria-label={said.deleteComment}
-        data-slot="delete"
-        icon={IconTrash}
-        onclick={askDelete}
-        size="icon-sm"
-        title={said.deleteComment}
-        variant="ghost"
-      />
-      <span class="flex flex-none">
-        <RowMenu actions={moreActions} label={`comment ${pin.number}`} />
-      </span>
+      {#if !fromChip}
+        <!-- One press asks, in the card itself (DESIGN.md, A thread beside its pin). -->
+        <Button
+          aria-label={said.deleteComment}
+          data-slot="delete"
+          icon={IconTrash}
+          onclick={askDelete}
+          size="icon-sm"
+          title={said.deleteComment}
+          variant="ghost"
+        />
+        <span class="flex flex-none">
+          <RowMenu actions={moreActions} label={`comment ${pin.number}`} />
+        </span>
+      {/if}
       <Button
         aria-label={said.close}
         icon={IconClose}
