@@ -19,7 +19,7 @@
     numberOf,
   } from "#lib/cawco/motion/curves.svelte.js";
   import type { CawPose } from "./Caw.svelte";
-  import { cawPose } from "./caw-still.svelte";
+  import { cawPose, copyStill, whenDrawn } from "./caw-still.svelte";
 
   let {
     pose,
@@ -37,9 +37,7 @@
     const file = pose;
     const still = cawPose(file, size);
     const put = (picture: HTMLCanvasElement) => {
-      canvas.width = still.backing;
-      canvas.height = still.backing;
-      canvas.getContext("2d")?.drawImage(picture, 0, 0);
+      copyStill(canvas, still, picture);
       if (landed) {
         return;
       }
@@ -58,19 +56,7 @@
       put(still.picture);
       return;
     }
-    let here = true;
-    still.drawn
-      .then((picture) => {
-        if (here) {
-          put(picture);
-        }
-      })
-      .catch((error: unknown) => {
-        console.error(`Caw ${file} did not draw`, error);
-      });
-    return () => {
-      here = false;
-    };
+    return whenDrawn(still, file, put);
   }
 </script>
 

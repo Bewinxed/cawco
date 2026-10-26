@@ -3,6 +3,12 @@
   import type { Rive } from "@rive-app/canvas";
   import riveWasm from "@rive-app/canvas/rive.wasm?url";
   import rests from "../../../../../../assets/mascot/loops/rests.json";
+  import {
+    ARTBOARD,
+    BOX,
+    drawArtboard,
+    type RiveRuntime,
+  } from "./caw-artboard";
 
   /**
    * A New project template card's Caw, with the template's prop: a rest,
@@ -96,9 +102,6 @@
    */
   export const PREFETCHES = [riveWasm, fileUrl("loading")];
 
-  /** The files' 592 px artboard and the 512 px still box in it, at (43, 40). */
-  export const ARTBOARD = 592;
-  export const BOX = { x: 43, y: 40, side: 512 } as const;
   /**
    * The action-safe margin, a share of the artboard's side in from each
    * edge, that a template pose's ink sits inside (EBU R95's 3.5%,
@@ -148,11 +151,6 @@
     rest: () => void;
   }
 
-  type RiveRuntime = Awaited<
-    ReturnType<
-      (typeof import("@rive-app/canvas"))["RuntimeLoader"]["awaitInstance"]
-    >
-  >;
   type RiveFile = Awaited<ReturnType<RiveRuntime["load"]>>;
   /**
    * Each file a stage draws from, parsed once and kept for every stage after
@@ -206,19 +204,7 @@
       maxX: box.x + (ARTBOARD - BOX.x) * unit,
       maxY: box.y + (ARTBOARD - BOX.y) * unit,
     };
-    const draw = () => {
-      renderer.clear();
-      renderer.save();
-      renderer.align(
-        rive.Fit.contain,
-        rive.Alignment.center,
-        frame,
-        artboard.bounds
-      );
-      artboard.draw(renderer);
-      renderer.restore();
-      renderer.flush();
-    };
+    const draw = () => drawArtboard(rive, renderer, artboard, frame);
     return {
       rest() {
         // With less motion the file holds his still; a second of its clock

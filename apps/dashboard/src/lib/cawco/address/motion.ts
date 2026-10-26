@@ -10,6 +10,8 @@
  *   ease-out; with less motion a fade over --dur-morph.
  * - `depart`: the content it replaces: lifted out of the flow where it
  *   stands (so it never pushes what arrives) and faded over --dur-exit.
+ * - `cawLeave`: Caw's leaving drawing (the mascot's Leaving contract): out
+ *   of the flow where it stands, fading to --leave-scale over --dur-fade.
  * - `openFrom` / `closeTo`: the source (the Needs you row, Settings' Set up)
  *   becoming the tray and the tray going back into it.
  */
@@ -50,6 +52,18 @@ export function depart(node: HTMLElement): TransitionConfig {
     duration: dur("--dur-exit"),
     easing: easeOut,
     css: (t: number) => `opacity: ${t}`,
+  });
+}
+
+export function cawLeave(node: HTMLElement): TransitionConfig {
+  if (!(node.checkVisibility() && motionOk.current)) {
+    return { duration: 0 };
+  }
+  const scale = numberOf("--leave-scale");
+  return lifting(node, pinned(node), {
+    duration: dur("--dur-fade"),
+    easing: easeOut,
+    css: (t: number) => `opacity: ${t}; scale: ${scale + (1 - scale) * t}`,
   });
 }
 

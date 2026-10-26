@@ -48,7 +48,12 @@
    * empty.
    */
   import type { CawFile } from "./Caw.svelte";
-  import { CAW_STILL_BLEED, cawStill } from "./caw-still.svelte";
+  import {
+    CAW_STILL_BLEED,
+    cawStill,
+    copyStill,
+    whenDrawn,
+  } from "./caw-still.svelte";
 
   let {
     status,
@@ -63,9 +68,7 @@
     const file = status;
     const still = cawStill(file, size);
     const put = (picture: HTMLCanvasElement) => {
-      canvas.width = still.backing;
-      canvas.height = still.backing;
-      canvas.getContext("2d")?.drawImage(picture, 0, 0);
+      copyStill(canvas, still, picture);
     };
     const { picture: ready } = still;
     if (ready) {
@@ -77,19 +80,7 @@
         }
       };
     }
-    let here = true;
-    still.drawn
-      .then((picture) => {
-        if (here) {
-          put(picture);
-        }
-      })
-      .catch((error: unknown) => {
-        console.error(`Caw ${file} did not draw`, error);
-      });
-    return () => {
-      here = false;
-    };
+    return whenDrawn(still, file, put);
   }
 </script>
 

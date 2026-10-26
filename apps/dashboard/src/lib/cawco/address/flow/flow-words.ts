@@ -11,31 +11,9 @@
  * showing it.
  */
 import { dateOf, EXPIRES, type Fact } from "../tray.svelte";
+import type { Form, Press, StateWords } from "../words";
 import { HEADSCALE_USER } from "../words";
 import { type AddressFlow, type Cause, PEER } from "./flow.svelte";
-
-/** Where the person is: a desk shows the QR; a phone opens the address itself. */
-export type Form = "desk" | "phone";
-
-interface Press {
-  act: () => void;
-  /** It opens a page of the network's own in a new tab. */
-  away?: boolean;
-  disabled?: boolean;
-  label: string;
-  /** A failure's way out: an outline button, small on a desk, never the coral one. */
-  quiet?: boolean;
-}
-
-/** What one state says and offers, in the order the tray stands it. */
-export interface StateWords {
-  lines: string[];
-  /** The live line under the state's object: what it waits on, or what landed. */
-  meta?: { text: string; live: boolean; action?: Press };
-  primary?: Press;
-  secondary?: Press;
-  title: string;
-}
 
 /** The machine CawCo's hub runs on, as the drawing names it. */
 const HUB_MACHINE = "obelisk";

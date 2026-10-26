@@ -26,21 +26,29 @@ import {
 export const HEADSCALE_USER = "bewinxed";
 
 /** A press the tray offers: its words, what it does, whether it opens another page. */
-interface Press {
+export interface Press {
   act: () => void;
   /** It opens a page of the network's own in a new tab. */
   away?: boolean;
   /** It waits on something first (the key not yet pasted). */
   disabled?: boolean;
   label: string;
+  /** A failure's way out: an outline button, small on a desk, never the coral one. */
+  quiet?: boolean;
+}
+
+/** The live line under the state's object: what it waits on, or what landed. */
+export interface Meta {
+  action?: Press;
+  live: boolean;
+  text: string;
 }
 
 /** What one state says and offers, in the order a tray stands it. */
 export interface StateWords {
   /** The one line, or two short paragraphs. */
   lines: string[];
-  /** The live line under the state's object: what it waits on. */
-  meta?: { text: string; live: boolean; action?: Press };
+  meta?: Meta;
   primary?: Press;
   secondary?: Press;
   title: string;
@@ -48,6 +56,13 @@ export interface StateWords {
 
 /** Where the person is: a phone opens the address itself, a desk shows the QR. */
 export type Form = "desk" | "phone";
+
+/** A tray direction's props: the tray, where it stands, and its box. */
+export interface TrayProps {
+  form: Form;
+  ref?: HTMLElement | null;
+  tray: AddressTray;
+}
 
 /** The failed state's words for each cause: what happened, the way out, its button. */
 export function failureWords(

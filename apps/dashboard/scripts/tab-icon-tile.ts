@@ -8,15 +8,13 @@
  * It runs in the page tab-icon-art.ts opens, ahead of time: a tab shows only
  * the pictures made here.
  */
-import type { RuntimeLoader } from "@rive-app/canvas";
+import {
+  ARTBOARD,
+  BOX,
+  drawArtboard,
+  type RiveRuntime,
+} from "../src/lib/cawco/home/caw-artboard";
 import { FPS, type Shot } from "./tab-icon-shots";
-
-/** Rive's low-level runtime, as the dashboard's own package loads it. */
-type RiveRuntime = Awaited<ReturnType<typeof RuntimeLoader.awaitInstance>>;
-
-/** The files' 592 px artboard and the 512 px still box in it, at (43, 40). */
-const ARTBOARD = 592;
-const BOX = { x: 43, y: 40 };
 
 /** The side a tab draws its icon at, in CSS px: what `tab-icon-r` is given at. */
 export const TAB_ICON = 16;
@@ -101,17 +99,7 @@ export async function openTile(
         loop.apply(1);
       }
       artboard.advance(0);
-      renderer.clear();
-      renderer.save();
-      renderer.align(
-        rive.Fit.contain,
-        rive.Alignment.center,
-        frame,
-        artboard.bounds
-      );
-      artboard.draw(renderer);
-      renderer.restore();
-      renderer.flush();
+      drawArtboard(rive, renderer, artboard, frame);
       rive.resolveAnimationFrame();
 
       context.clearRect(0, 0, side, side);

@@ -26,6 +26,15 @@
 </script>
 
 <script lang="ts">
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import {
+    IconChevronRight,
+    IconExternal,
+    IconLock,
+    IconSuccess,
+  } from "#lib/icons.js";
+  import AddressList from "./AddressList.svelte";
   /**
    * The one object a state of the address tray holds (the advisor's
    * anatomy): the network drawn with the device CawCo adds; the admin's
@@ -37,16 +46,7 @@
    * has a clipboard (https or localhost); at the plain word the command
    * selects whole on a press instead.
    */
-  import CopyBox from "#lib/cawco/CopyBox.svelte";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import { Input } from "#lib/components/ui/input/index.js";
-  import {
-    IconChevronRight,
-    IconExternal,
-    IconLock,
-    IconSuccess,
-  } from "#lib/icons.js";
-  import AddressList from "./AddressList.svelte";
+  import AdminCommand from "./AdminCommand.svelte";
   import ExpiryLine from "./ExpiryLine.svelte";
   import NetworkStrip from "./NetworkStrip.svelte";
   import PhoneQr from "./PhoneQr.svelte";
@@ -76,16 +76,7 @@
         >hskey-auth-7f3a9c2e</code
       >
     </p>
-    {#if tray.overHttps}
-      <div class="flex min-w-0 *:min-w-0 *:flex-auto">
-        <CopyBox label="Command for your admin" text={command} wrap />
-      </div>
-    {:else}
-      <code
-        class="block min-w-0 rounded-md border border-border-control bg-surface-hover px-space-3 py-space-2 type-code whitespace-pre-wrap text-ink-strong select-all"
-        >{command}</code
-      >
-    {/if}
+    <AdminCommand {command} copy={tray.overHttps} />
   </div>
 {:else if tray.step === "key"}
   <div class="grid min-w-0 gap-space-1" data-slot="key-field">

@@ -21,22 +21,15 @@
    * README.md, Contract).
    */
   import Caw, {
-    ARTBOARD,
-    BOX,
     type CawFile,
     LEDGE_LINE,
     stageCaw,
   } from "#lib/cawco/home/Caw.svelte";
+  import { ARTBOARD, BOX } from "#lib/cawco/home/caw-artboard.js";
   import { deviceRatio } from "#lib/cawco/home/device-ratio.svelte.js";
-  import {
-    dur,
-    easeOut,
-    lifting,
-    motionOk,
-    numberOf,
-    pinned,
-  } from "#lib/cawco/motion/curves.svelte.js";
+  import { motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { theme } from "#lib/theme.svelte.js";
+  import { cawLeave } from "./motion";
   import { TRAY_STATUSES, type TrayPose } from "./tray.svelte";
 
   let {
@@ -89,19 +82,6 @@
     if (at < files.length - 1) {
       at += 1;
     }
-  }
-
-  /** The one leaving: out of the flow where it stands, fading to --leave-scale. */
-  function leave(node: HTMLElement) {
-    if (!(node.checkVisibility() && motionOk.current)) {
-      return { duration: 0 };
-    }
-    const scale = numberOf("--leave-scale");
-    return lifting(node, pinned(node), {
-      duration: dur("--dur-fade"),
-      easing: easeOut,
-      css: (t: number) => `opacity: ${t}; scale: ${scale + (1 - scale) * t}`,
-    });
   }
 
   /** A file that is no status, on its own canvas: its enter once, then its last drawing held. */
@@ -160,7 +140,7 @@
       class="absolute inset-x-0 bottom-0 flex h-(--height) justify-center data-behind:clip-path-(--behind-clip)"
       data-behind={(ledge && family === "status") || undefined}
       style:--behind-clip={"inset(-100vh -100vw 0)"}
-      out:leave
+      out:cawLeave
     >
       {#if family === "peek"}
         <Caw

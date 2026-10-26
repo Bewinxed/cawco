@@ -12,7 +12,6 @@
    * (or the phone that opened it, in its place), the secure address, and
    * Done's address with its three marks. Every icon is the glyph alone.
    */
-  import CopyBox from "#lib/cawco/CopyBox.svelte";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import CopyButton from "#lib/components/ui/copy-button/copy-button.svelte";
@@ -26,12 +25,14 @@
     IconPhone,
     IconSuccess,
   } from "#lib/icons.js";
+  import AdminCommand from "../AdminCommand.svelte";
   import { arrive, depart } from "../motion";
   import PhoneQr from "../PhoneQr.svelte";
   import Words from "../Words.svelte";
+  import type { Form } from "../words";
   import { HEADSCALE_USER } from "../words";
   import { type AddressFlow, PEER } from "./flow.svelte";
-  import { doneMarks, type Form } from "./flow-words";
+  import { doneMarks } from "./flow-words";
   import { PROPOSED_QR } from "./proposed";
 
   let { flow, form }: { flow: AddressFlow; form: Form } = $props();
@@ -62,16 +63,7 @@
   </div>
 {:else if flow.step === "admin"}
   <div class="grid min-w-0" data-slot="admin-command">
-    {#if clipboard}
-      <div class="flex min-w-0 *:min-w-0 *:flex-auto">
-        <CopyBox label="Command for your admin" text={command} wrap />
-      </div>
-    {:else}
-      <code
-        class="block min-w-0 rounded-md border border-border-control bg-surface-hover px-space-3 py-space-2 type-code whitespace-pre-wrap text-ink-strong select-all"
-        >{command}</code
-      >
-    {/if}
+    <AdminCommand {command} copy={clipboard} />
   </div>
 {:else if flow.step === "answers"}
   <p

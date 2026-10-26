@@ -13,9 +13,7 @@
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import CopyButton from "#lib/components/ui/copy-button/copy-button.svelte";
-  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
-  import { IconNeutral, IconNotYet, IconSuccess } from "#lib/icons.js";
-  import Words from "../Words.svelte";
+  import FactList from "../FactList.svelte";
   import { hasClipboard } from "./FlowObject.svelte";
   import type { AddressFlow } from "./flow.svelte";
   import { factsFor, rawFor } from "./flow-words";
@@ -51,34 +49,7 @@
       class="grid min-w-0 gap-space-3 pt-space-2 text-start"
       transition:unfold
     >
-      <!-- biome-ignore-start lint/a11y/noRedundantRoles : WebKit drops a list's semantics once its markers are styled away (VoiceOver reads no list). -->
-      <ul class="m-0 grid list-none gap-space-2 p-0" role="list">
-        <!-- biome-ignore-end lint/a11y/noRedundantRoles: the list above -->
-        {#each factsFor(flow) as fact (fact.text)}
-          <li class="mark-line flex min-w-0 items-start gap-space-2 type-body">
-            <span class="mark-cell w-icon-md">
-              {#if fact.mark === "yes"}
-                <IconSuccess
-                  aria-label="Yes"
-                  class="size-icon-md text-status-done-ink"
-                />
-              {:else if fact.mark === "no"}
-                <IconNeutral
-                  aria-label="No"
-                  class="size-icon-md text-ink-muted"
-                />
-              {:else if fact.mark === "wait"}
-                <LiveDot />
-              {:else}
-                <IconNotYet class="size-icon-md text-ink-subtle" />
-              {/if}
-            </span>
-            <span class="mark-text min-w-0 text-ink-strong"
-              ><Words text={fact.text} /></span
-            >
-          </li>
-        {/each}
-      </ul>
+      <FactList cell="w-icon-md" facts={factsFor(flow)} />
       {#if failed}
         <div class="grid min-w-0 gap-space-1">
           <span class="type-label text-ink-muted">What came back</span>

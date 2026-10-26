@@ -23,23 +23,20 @@
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { grabberVariants } from "#lib/components/ui/drawer/drawer-content.svelte";
-  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
-  import {
-    IconChevronLeft,
-    IconClose,
-    IconExternal,
-    IconSuccess,
-  } from "#lib/icons.js";
+  import { IconChevronLeft, IconClose } from "#lib/icons.js";
   import Confetti from "../Confetti.svelte";
   import { arrive, depart } from "../motion";
+  import TrayMeta from "../TrayMeta.svelte";
+  import TrayPress from "../TrayPress.svelte";
+  import TraySurface from "../TraySurface.svelte";
   import Words from "../Words.svelte";
+  import type { Form } from "../words";
   import CawStill from "./CawStill.svelte";
   import FlowDetails from "./FlowDetails.svelte";
   import FlowObject from "./FlowObject.svelte";
   import type { AddressFlow } from "./flow.svelte";
-  import { type Form, stateWords } from "./flow-words";
+  import { stateWords } from "./flow-words";
 
   let {
     flow,
@@ -88,212 +85,153 @@
   data-tray="address"
   {@attach (node) => morph({ ms: dur("--dur-pop"), followUnfolds: true })(node)}
 >
-  <div
-    style:--tray-pad="calc(var(--radius-modal) - var(--radius-lg))"
-    class={[
-      "relative min-w-0",
-      form === "desk"
-        ? "rounded-modal bg-surface-recess p-(--tray-pad) shadow-overlay"
-        : "rounded-t-lg border-t border-border-hairline bg-surface-raised shadow-drawer",
-    ]}
-    data-slot="surface"
-  >
-    <div
-      class={[
-        "relative grid min-w-0 gap-space-4 bg-surface-raised",
-        form === "desk"
-          ? "rounded-lg p-space-5"
-          : "max-h-(--sheet-room) overflow-y-auto overscroll-contain rounded-t-lg px-space-4 pb-safe-space-4",
-      ]}
-      data-slot="body"
-    >
-      {#if form === "phone"}
-        <div aria-hidden="true" class={grabberVariants()}></div>
-      {/if}
-      <div class="grid min-w-0 gap-space-3" data-tray-content>
-        <div class="grid min-w-0 gap-space-2" data-slot="lead">
-          <!-- Caw on the axis: the head row's sides are equal, so his centre
+  <TraySurface class="gap-space-4" deskPad="p-space-5" {form}>
+    <div class="grid min-w-0 gap-space-3" data-tray-content>
+      <div class="grid min-w-0 gap-space-2" data-slot="lead">
+        <!-- Caw on the axis: the head row's sides are equal, so his centre
              is the tray's, with ‹ or nothing before him and × after. -->
-          <div
-            class="grid grid-cols-(--head-cols) items-start"
-            data-slot="head"
-            style:--head-cols="minmax(0, 1fr) auto minmax(0, 1fr)"
-          >
-            <span class="col-1 row-1 flex justify-start">
-              {#if flow.back}
-                <Button
-                  aria-label="Back"
-                  class="-ms-space-2"
-                  icon={IconChevronLeft}
-                  onclick={() => flow.goBack()}
-                  size="icon-sm"
-                  variant="ghost"
-                />
-              {/if}
-            </span>
-            <!-- A failure grows him to 80 on the same top: no band opens under ×. -->
-            <span class="col-2 row-1 flex justify-center">
-              <CawStill big={failed} pose={flow.pose} />
-            </span>
-            <span class="col-3 row-1 flex justify-end">
+        <div
+          class="grid grid-cols-(--head-cols) items-start"
+          data-slot="head"
+          style:--head-cols="minmax(0, 1fr) auto minmax(0, 1fr)"
+        >
+          <span class="col-1 row-1 flex justify-start">
+            {#if flow.back}
               <Button
-                aria-label="Close"
-                class="-me-space-2"
-                icon={IconClose}
-                onclick={onpark}
+                aria-label="Back"
+                class="-ms-space-2"
+                icon={IconChevronLeft}
+                onclick={() => flow.goBack()}
                 size="icon-sm"
                 variant="ghost"
               />
-            </span>
-          </div>
-          <h2
-            id={titleId}
-            class="m-0 min-w-0 text-start type-title tracking-title text-balance text-ink-strong"
-            data-slot="title"
+            {/if}
+          </span>
+          <!-- A failure grows him to 80 on the same top: no band opens under ×. -->
+          <span class="col-2 row-1 flex justify-center">
+            <CawStill big={failed} pose={flow.pose} />
+          </span>
+          <span class="col-3 row-1 flex justify-end">
+            <Button
+              aria-label="Close"
+              class="-me-space-2"
+              icon={IconClose}
+              onclick={onpark}
+              size="icon-sm"
+              variant="ghost"
+            />
+          </span>
+        </div>
+        <h2
+          id={titleId}
+          class="m-0 min-w-0 text-start type-title tracking-title text-balance text-ink-strong"
+          data-slot="title"
+        >
+          <MorphText text={words.title} wrap />
+        </h2>
+      </div>
+      <div class="relative grid min-w-0">
+        {#key body}
+          <div
+            class="grid min-w-0 gap-space-3 text-start"
+            data-slot="state"
+            in:arrive
+            out:depart
           >
-            <MorphText text={words.title} wrap />
-          </h2>
-        </div>
-        <div class="relative grid min-w-0">
-          {#key body}
-            <div
-              class="grid min-w-0 gap-space-3 text-start"
-              data-slot="state"
-              in:arrive
-              out:depart
-            >
-              {#each words.lines as line (line)}
-                <p class="m-0 type-body text-pretty text-ink-muted">
-                  <Words text={line} />
-                </p>
-              {/each}
-              <FlowObject {flow} {form} />
-              {#if words.meta}
-                <p
-                  class="mark-line m-0 flex min-w-0 items-start gap-x-space-2 type-meta text-ink-muted"
-                  data-slot="meta"
-                  {@attach reflow()}
-                >
-                  <span class="mark-cell">
-                    {#if words.meta.live}
-                      <LiveDot />
-                    {:else}
-                      <span class="grid" data-flip="pop">
-                        <IconSuccess
-                          aria-hidden="true"
-                          class="size-icon-sm text-status-done-ink"
-                        />
-                      </span>
-                    {/if}
-                  </span>
-                  <!-- The words wrap beside their mark, never off it: the mark stands on their first line. -->
-                  <span class="mark-text min-w-0 flex-1"
-                    ><MorphText text={words.meta.text} wrap /></span
-                  >
-                  {#if words.meta.action}
-                    <Button
-                      data-box
-                      label={words.meta.action.label}
-                      onclick={words.meta.action.act}
-                      size="xs"
-                      variant="link"
-                    />
-                  {/if}
-                </p>
-              {/if}
-            </div>
-          {/key}
-        </div>
-        {#if form === "phone"}
-          <FlowDetails bind:open={details} {flow} foldId={detailsId} />
-        {/if}
-        <!-- The tray's foot: its actions and, on a desk, the details fold
+            {#each words.lines as line (line)}
+              <p class="m-0 type-body text-pretty text-ink-muted">
+                <Words text={line} />
+              </p>
+            {/each}
+            <FlowObject {flow} {form} />
+            {#if words.meta}
+              <!-- The words wrap beside their mark, never off it: the mark stands on their first line. -->
+              <TrayMeta
+                data-slot="meta"
+                meta={words.meta}
+                wrap
+                {@attach reflow()}
+              />
+            {/if}
+          </div>
+        {/key}
+      </div>
+      {#if form === "phone"}
+        <FlowDetails bind:open={details} {flow} foldId={detailsId} />
+      {/if}
+      <!-- The tray's foot: its actions and, on a desk, the details fold
              under them, in one box with no gap of the column's, so the fold
              carries its own room and folds all of it away. -->
-        <div class="grid min-w-0" data-slot="foot">
-          {#if primary || (form === "desk" && !failed)}
-            <div
-              class={[
-                form === "desk"
-                  ? "flex flex-wrap items-center gap-space-2"
-                  : "grid gap-space-2",
-                form === "desk" && "justify-end",
-              ]}
-              data-slot="actions"
-            >
-              {#if form === "desk" && !failed}
-                <span class="me-auto flex">
-                  <FlowDetails
-                    bind:open={details}
-                    {flow}
-                    foldId={detailsId}
-                    part="link"
-                  />
-                </span>
-              {/if}
-              <!-- The buttons as one group: they wrap together, never apart. -->
-              <span
-                class={form === "desk"
-                  ? "ms-auto flex flex-wrap justify-end gap-space-2"
-                  : "contents"}
-                data-slot="buttons"
-              >
-                {#if words.secondary}
-                  <Button
-                    data-icon={words.secondary.away ? "inline-end" : undefined}
-                    onclick={words.secondary.act}
-                    size={form === "phone" ? "lg" : "default"}
-                    variant="outline"
-                  >
-                    <MorphText text={words.secondary.label} />
-                    {#if words.secondary.away}
-                      <IconExternal aria-hidden="true" />
-                    {/if}
-                  </Button>
-                {/if}
-                {#if primary}
-                  <!-- A failure's way out is quiet: one small outline button, no coral (§4.5). -->
-                  <Button
-                    data-icon={primary.away ? "inline-end" : undefined}
-                    data-tray-primary
-                    disabled={primary.disabled}
-                    onclick={primary.act}
-                    size={primarySize}
-                    variant={primary.quiet ? "outline" : "default"}
-                  >
-                    <MorphText text={primary.label} />
-                    {#if primary.away}
-                      <IconExternal aria-hidden="true" />
-                    {/if}
-                  </Button>
-                {/if}
+      <div class="grid min-w-0" data-slot="foot">
+        {#if primary || (form === "desk" && !failed)}
+          <div
+            class={[
+              form === "desk"
+                ? "flex flex-wrap items-center gap-space-2"
+                : "grid gap-space-2",
+              form === "desk" && "justify-end",
+            ]}
+            data-slot="actions"
+          >
+            {#if form === "desk" && !failed}
+              <span class="me-auto flex">
+                <FlowDetails
+                  bind:open={details}
+                  {flow}
+                  foldId={detailsId}
+                  part="link"
+                />
               </span>
-            </div>
-          {/if}
-          <!-- On a desk, Show details stands in the actions' row, its fold under
+            {/if}
+            <!-- The buttons as one group: they wrap together, never apart. -->
+            <span
+              class={form === "desk"
+                ? "ms-auto flex flex-wrap justify-end gap-space-2"
+                : "contents"}
+              data-slot="buttons"
+            >
+              {#if words.secondary}
+                <TrayPress
+                  press={words.secondary}
+                  size={form === "phone" ? "lg" : "default"}
+                  variant="outline"
+                />
+              {/if}
+              {#if primary}
+                <!-- A failure's way out is quiet: one small outline button, no coral (§4.5). -->
+                <TrayPress
+                  press={primary}
+                  primary
+                  size={primarySize}
+                  variant={primary.quiet ? "outline" : "default"}
+                />
+              {/if}
+            </span>
+          </div>
+        {/if}
+        <!-- On a desk, Show details stands in the actions' row, its fold under
                it; a failure's stands on its own row under its way out (§4.5). -->
-          {#if form === "desk" && failed}
-            <div class="grid min-w-0 pt-space-3">
-              <FlowDetails
-                bind:open={details}
-                {flow}
-                foldId={detailsId}
-                part="both"
-              />
-            </div>
-          {:else if form === "desk"}
+        {#if form === "desk" && failed}
+          <div class="grid min-w-0 pt-space-3">
             <FlowDetails
               bind:open={details}
               {flow}
               foldId={detailsId}
-              part="fold"
+              part="both"
             />
-          {/if}
-        </div>
+          </div>
+        {:else if form === "desk"}
+          <FlowDetails
+            bind:open={details}
+            {flow}
+            foldId={detailsId}
+            part="fold"
+          />
+        {/if}
       </div>
-      {#if flow.firstLive && flow.step === "done"}
-        <Confetti />
-      {/if}
     </div>
-  </div>
+    {#if flow.firstLive && flow.step === "done"}
+      <Confetti />
+    {/if}
+  </TraySurface>
 </section>

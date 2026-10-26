@@ -9,13 +9,12 @@
  */
 import { theme } from "#lib/theme.svelte.js";
 import {
-  ARTBOARD,
-  BOX,
   type CawBox,
   type CawFile,
   type CawPose,
   stageCaw,
 } from "./Caw.svelte";
+import { ARTBOARD, BOX } from "./caw-artboard";
 import { deviceRatio } from "./device-ratio.svelte";
 
 /**
@@ -51,6 +50,41 @@ export interface CawStill {
   drawn: Promise<HTMLCanvasElement>;
   /** The picture, if it is drawn already: a place can paint it in this frame. */
   picture: HTMLCanvasElement | undefined;
+}
+
+/** Copies the still's drawn picture onto `canvas`, at its backing size. */
+export function copyStill(
+  canvas: HTMLCanvasElement,
+  still: CawStill,
+  picture: HTMLCanvasElement
+): void {
+  canvas.width = still.backing;
+  canvas.height = still.backing;
+  canvas.getContext("2d")?.drawImage(picture, 0, 0);
+}
+
+/**
+ * Hands `file`'s still to `put` once it is drawn; the stop returned drops a
+ * picture that lands after it.
+ */
+export function whenDrawn(
+  still: CawStill,
+  file: CawFile,
+  put: (picture: HTMLCanvasElement) => void
+): () => void {
+  let here = true;
+  still.drawn
+    .then((picture) => {
+      if (here) {
+        put(picture);
+      }
+    })
+    .catch((error: unknown) => {
+      console.error(`Caw ${file} did not draw`, error);
+    });
+  return () => {
+    here = false;
+  };
 }
 
 /**

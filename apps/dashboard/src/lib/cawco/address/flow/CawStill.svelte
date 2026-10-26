@@ -15,12 +15,11 @@
     CURVE,
     dur,
     easeOut,
-    lifting,
     motionOk,
     numberOf,
-    pinned,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { theme } from "#lib/theme.svelte.js";
+  import { cawLeave } from "../motion";
   import type { Pose } from "./flow.svelte";
 
   let { pose, big = false }: { pose: Pose; big?: boolean } = $props();
@@ -67,19 +66,6 @@
     wasBig = now;
   });
 
-  /** The pose leaving: out of the flow where it stands, fading to --leave-scale. */
-  function leave(node: HTMLElement) {
-    if (!(node.checkVisibility() && motionOk.current)) {
-      return { duration: 0 };
-    }
-    const scale = numberOf("--leave-scale");
-    return lifting(node, pinned(node), {
-      duration: dur("--dur-fade"),
-      easing: easeOut,
-      css: (t: number) => `opacity: ${t}; scale: ${scale + (1 - scale) * t}`,
-    });
-  }
-
   /** The next pose: from --leave-scale over --dur-pop. */
   function enter(_node: HTMLElement) {
     if (!motionOk.current) {
@@ -115,7 +101,7 @@
       draggable="false"
       {src}
       in:enter
-      out:leave
+      out:cawLeave
     />
   {/key}
 </div>

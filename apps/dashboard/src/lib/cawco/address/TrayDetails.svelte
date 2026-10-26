@@ -7,14 +7,10 @@
     Tabs,
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
-  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
-  import {
-    IconChevronDown,
-    IconNeutral,
-    IconNotYet,
-    IconSuccess,
-  } from "#lib/icons.js";
+  import { IconChevronDown } from "#lib/icons.js";
+  import FactList from "./FactList.svelte";
   import type { AddressTray, Fact } from "./tray.svelte";
+
   /**
    * The particulars, one press away (gradual revelation): a fold that
    * opens inside the tray under its actions (`unfold`), holding Facts and
@@ -28,7 +24,6 @@
    * `look`: Family's chevron row ("Details"), or RowFault's text link
    * ("Show details" / "Hide details").
    */
-  import Words from "./Words.svelte";
 
   let {
     tray,
@@ -107,36 +102,7 @@
         </TabsList>
       </Tabs>
       {#if tab === "facts"}
-        <!-- biome-ignore-start lint/a11y/noRedundantRoles : WebKit drops a list's semantics once its markers are styled away (VoiceOver reads no list). -->
-        <ul class="m-0 grid list-none gap-space-2 p-0" role="list">
-          <!-- biome-ignore-end lint/a11y/noRedundantRoles: the list above -->
-          {#each facts as fact (fact.text)}
-            <li
-              class="mark-line flex min-w-0 items-start gap-space-2 type-body"
-            >
-              <span class="mark-cell grid size-icon-md place-items-center">
-                {#if fact.mark === "yes"}
-                  <IconSuccess
-                    aria-label="Yes"
-                    class="size-icon-md text-status-done-ink"
-                  />
-                {:else if fact.mark === "no"}
-                  <IconNeutral
-                    aria-label="No"
-                    class="size-icon-md text-ink-muted"
-                  />
-                {:else if fact.mark === "wait"}
-                  <LiveDot />
-                {:else}
-                  <IconNotYet class="size-icon-md text-ink-subtle" />
-                {/if}
-              </span>
-              <span class="mark-text min-w-0 text-ink-strong"
-                ><Words text={fact.text} /></span
-              >
-            </li>
-          {/each}
-        </ul>
+        <FactList cell="grid size-icon-md place-items-center" {facts} />
       {:else}
         <div class="grid min-w-0 gap-space-1">
           <pre
