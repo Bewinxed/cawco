@@ -31,6 +31,14 @@ import type { DocMap } from "@cawco/core/doc-maps";
 import type { InkGroup } from "@cawco/core/ink";
 import { pinName } from "@cawco/core/pin-name";
 import { shellShortcutOf } from "@cawco/core/shell-shortcuts";
+import {
+  type Anchorable,
+  anchorable,
+  anchorName,
+  nameOff,
+  nameOn,
+  onAnchor,
+} from "./anchor-names";
 import { artifact, type Link, NO_ARTIFACT, type State } from "./artifact";
 import { here, mark, markOf } from "./boot";
 import { type Changes, startChanges } from "./changes";
@@ -151,6 +159,18 @@ label.className = "label";
 highlight.hidden = true;
 label.hidden = true;
 shadow.append(sheet, layer, highlight, label);
+/**
+ * The One Target's anchor: the target of this page's document takes it,
+ * and the highlight stands on it (anchor-names.ts), through the document's
+ * own rule on its part, the one way a box in a shadow root takes a name of
+ * the document's. The rule stands in the host's own children, which a
+ * morph keeps (`kept`).
+ */
+const TARGET_ANCHOR = anchorName();
+const TARGET_PART = "cawco-target";
+const anchoring = document.createElement("style");
+anchoring.textContent = `cawco-overlay::part(${TARGET_PART}) { ${onAnchor(TARGET_ANCHOR)} }`;
+host.append(anchoring);
 document.documentElement.append(host);
 
 const chrome = inkChrome(shadow);
@@ -283,6 +303,7 @@ function paint() {
   // The label names what rests under the pointer; a chosen target carries none.
   label.hidden = !(target && commenting() && !chosen);
   if (!target) {
+    anchorTarget(null);
     return;
   }
   const rect = outlineOver(target);
@@ -293,6 +314,11 @@ function paint() {
     return;
   }
   label.textContent = labelOf(target);
+  // The label stays at a measured place, drawn again with every move of the
+  // pointer it follows: above its target, held inside the viewport. An
+  // anchored label held no such place: the anchor's scroll compensation
+  // moves it after layout, past any clamp, and Chromium and Firefox left it
+  // above the viewport's top.
   label.style.left = `${Math.max(0, Math.min(rect.x, innerWidth - label.offsetWidth))}px`;
   label.style.top = `${Math.max(0, rect.y - label.offsetHeight)}px`;
 }
@@ -304,22 +330,54 @@ const CORNERS = [
   "borderBottomLeftRadius",
 ] as const;
 
+/** The element of this page's document the highlight stands on by its anchor; none while it stands at a measured box, or nowhere. */
+let targetOn: Anchorable | null = null;
+
+/** The highlight's anchor moved to `el`, or let go of. */
+function anchorTarget(el: Anchorable | null) {
+  if (el === targetOn) {
+    return;
+  }
+  if (targetOn) {
+    nameOff(targetOn, TARGET_ANCHOR);
+  }
+  targetOn = el;
+  if (el) {
+    nameOn(el, TARGET_ANCHOR);
+  }
+  highlight.part.toggle(TARGET_PART, !!el);
+}
+
 /**
- * Lays the highlight over `el`, in the top viewport's px, its corners
- * concentric with `el`'s: each corner takes `el`'s own computed radius
- * (scaled as a frame or a transform draws it), `--radius-xs` its floor, so a
- * square block is never a hard square; the line, at offset 0 on the border
- * box, follows those corners exactly. The page as a whole (its root or body)
- * keeps the sheet's own corners. Returns the box.
+ * Lays the highlight over `el`, its corners concentric with `el`'s: each
+ * corner takes `el`'s own computed radius (scaled as a frame or a transform
+ * draws it), `--radius-xs` its floor, so a square block is never a hard
+ * square; the line, at offset 0 on the border box, follows those corners
+ * exactly. The page as a whole (its root or body) keeps the sheet's own
+ * corners. Returns the box, in the top viewport's px.
+ *
+ * An element of this page's document (an embed's stand-in among them) is
+ * the highlight's anchor, so it stays on it as the page loads, lays out and
+ * scrolls. One of a same-origin frame's document is out of reach of this
+ * document's names: the highlight stands at its box, measured through the
+ * frames, and is laid again as they scroll, resize and load
+ * (`framesChanged`).
  */
 function outlineOver(el: Element): DOMRect {
   const rect = rectOf(el);
-  Object.assign(highlight.style, {
-    left: `${rect.x}px`,
-    top: `${rect.y}px`,
-    width: `${rect.width}px`,
-    height: `${rect.height}px`,
-  });
+  const anchored = anchorable(el);
+  anchorTarget(anchored ? el : null);
+  Object.assign(
+    highlight.style,
+    anchored
+      ? { left: "", top: "", width: "", height: "" }
+      : {
+          left: `${rect.x}px`,
+          top: `${rect.y}px`,
+          width: `${rect.width}px`,
+          height: `${rect.height}px`,
+        }
+  );
   const doc = el.ownerDocument;
   if (el === doc.body || el === doc.documentElement) {
     for (const corner of CORNERS) {

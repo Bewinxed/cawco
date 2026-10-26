@@ -7,18 +7,11 @@
  * much, so it follows the element's shape and never covers what it says;
  * in the page's own document as the pins are, never taking a press.
  *
- * A ring stands on its element by CSS anchor positioning, never at a box
- * measured here: the element takes the ring's name (`anchor-name`, inline,
- * after any names of its own) and the ring's edges are the element's own
- * (`anchor()` on its default anchor, `position-anchor`), so the browser lays
- * it out with the element through every image and font that loads, every
- * resize and every scroll, the page's own scroller's (a decision page's
- * `page-scroll`) as much as the window's (css-anchor-position-1 §3.3: a box
- * "compensating for scroll" moves with its default anchor). A box measured
- * once and placed in the document's px stood where the element was then:
- * a decision page scrolls inside its first row, so neither its pictures
- * loading nor its scrolling ever moved the document, nor the rings. The
- * ring hides while its element is scrolled out of its scroller
+ * A ring stands on its element by CSS anchor positioning (anchor-names.ts),
+ * never at a box measured here. A box measured once and placed in the
+ * document's px stood where the element was then: a decision page scrolls
+ * inside its first row (`page-scroll`), so neither its pictures loading nor
+ * its scrolling ever moved the document, nor the rings. The ring hides while its element is scrolled out of its scroller
  * (`position-visibility: anchors-visible`). A ring the host stops naming
  * fades off over `--dur-fade`, on its element until it goes. Coral is the target's alone (DESIGN.md, The One Target
  * Rule): a ring is never coral.
@@ -38,6 +31,14 @@
  * (`cawco:change-pressed`).
  */
 import { type PageAnchor, readPins } from "@cawco/core/comments";
+import {
+  type Anchorable,
+  anchorable,
+  anchorName,
+  nameOff,
+  nameOn,
+  onAnchor,
+} from "./anchor-names";
 import { artifact } from "./artifact";
 import type { InkChrome } from "./radial";
 
@@ -65,38 +66,19 @@ export interface Changes {
   step: (anchor: string, flash: boolean) => void;
 }
 
+/** A ring: its box, the anchor name it stands on, and the element holding that name now. */
+interface Ring {
+  box: HTMLDivElement;
+  el: Anchorable | null;
+  name: string;
+}
+
 /** One stop of the host's tag, as this page orders them: the changes there, their element, and the pin standing with them. */
 interface Stop {
   anchors: string[];
   el: Element | null;
   pin: string | null;
 }
-
-/** An element that takes an inline style: what a ring can name as its anchor. */
-type Styled = Element & ElementCSSInlineStyle;
-
-const styled = (el: Element | null): el is Styled =>
-  el instanceof HTMLElement ||
-  el instanceof SVGElement ||
-  el instanceof MathMLElement;
-
-/** A ring: its box, the anchor name it stands on (`--cawco-change-N`), and the element holding that name now. */
-interface Ring {
-  box: HTMLDivElement;
-  el: Styled | null;
-  name: string;
-}
-
-/** An element rings stand on: its own inline `anchor-name` before them, the names it has of its own, the rings', and the value it was last given. */
-interface Hold {
-  given: string;
-  inline: string;
-  own: string[];
-  rings: Set<string>;
-}
-
-/** A list of anchor names, as `anchor-name` computes one, between its names. */
-const NAME_LIST = /\s*,\s*/u;
 
 /** The element an anchor names in the page; null when it names none, or names it wrongly. */
 const elementOf = (anchor: string): Element | null => {
@@ -111,15 +93,7 @@ export function startChanges(deps: ChangesDeps): Changes {
   const layer = document.createElement("div");
   layer.setAttribute("data-cawco-changes", "");
   layer.setAttribute("aria-hidden", "true");
-  // No box of its own: each ring is fixed, its containing block the
-  // viewport, which holds every element a ring can anchor to (a positioned
-  // layer would be the rings' containing block, with no element of the page
-  // inside it: css-anchor-position-1, "acceptable anchor element"). Fixed,
-  // not absolute: Chromium moves an absolute ring with the window's scroll
-  // and not with a fixed element it stands on, and Firefox takes no fixed
-  // element as an absolute ring's anchor at all; a fixed ring stands on an
-  // element in the flow, in a scroller or fixed, in Chromium, WebKit and
-  // Firefox alike.
+  // No box of its own: each ring is fixed, its containing block the viewport (anchor-names.ts).
   layer.style.cssText = "display:contents";
   document.documentElement.append(layer);
 
@@ -129,75 +103,11 @@ export function startChanges(deps: ChangesDeps): Changes {
   let lastSaid = "";
   /** Each ring drawn, by anchor. */
   const drawn = new Map<string, Ring>();
-  /** Rings made since the page loaded: each takes the next name. */
-  let made = 0;
-  /** Each element a ring stands on: its own inline `anchor-name` before, its own names, the rings' names, and what it was last given. */
-  const held = new Map<Styled, Hold>();
-
-  /** `el`'s `anchor-name` written: its own names, then its rings'. */
-  function give(el: Styled, hold: Hold) {
-    el.style.setProperty(
-      "anchor-name",
-      [...hold.own, ...hold.rings].join(", ")
-    );
-    hold.given = el.style.getPropertyValue("anchor-name");
-  }
-
-  // The page wrote the element's style again (a morph, its framework): its rings' names are given back at once.
-  const restyled = new MutationObserver((records) => {
-    for (const { target } of records) {
-      const hold = held.get(target as Styled);
-      if (
-        hold &&
-        (target as Styled).style.getPropertyValue("anchor-name") !== hold.given
-      ) {
-        give(target as Styled, hold);
-      }
-    }
-  });
-
-  /** Ring `name` stands on `el`. */
-  function take(el: Styled, name: string) {
-    let hold = held.get(el);
-    if (!hold) {
-      const own = getComputedStyle(el).getPropertyValue("anchor-name").trim();
-      hold = {
-        inline: el.style.getPropertyValue("anchor-name"),
-        own: own === "" || own === "none" ? [] : own.split(NAME_LIST),
-        rings: new Set(),
-        given: "",
-      };
-      held.set(el, hold);
-      restyled.observe(el, { attributes: true, attributeFilter: ["style"] });
-    }
-    hold.rings.add(name);
-    give(el, hold);
-  }
-
-  /** Ring `name` stands on `el` no more; with no ring left, it has its own `anchor-name` back. */
-  function free(el: Styled, name: string) {
-    const hold = held.get(el);
-    if (!hold) {
-      return;
-    }
-    hold.rings.delete(name);
-    if (hold.rings.size > 0) {
-      give(el, hold);
-      return;
-    }
-    held.delete(el);
-    if (hold.inline) {
-      el.style.setProperty("anchor-name", hold.inline);
-    } else {
-      el.style.removeProperty("anchor-name");
-    }
-  }
-
   /** Ring `ring` taken off the page at once. */
   function drop(ring: Ring) {
     ring.box.remove();
     if (ring.el) {
-      free(ring.el, ring.name);
+      nameOff(ring.el, ring.name);
     }
   }
   /** Rings drawn since the page loaded: one is pinged as it first stands. */
@@ -291,11 +201,10 @@ export function startChanges(deps: ChangesDeps): Changes {
     if (had) {
       return { ring: had, fresh: false };
     }
-    made += 1;
     const ring: Ring = {
       box: document.createElement("div"),
       el: null,
-      name: `--cawco-change-${made}`,
+      name: anchorName(),
     };
     ring.box.setAttribute("data-change", anchor);
     const halo = document.createElement("div");
@@ -333,9 +242,9 @@ export function startChanges(deps: ChangesDeps): Changes {
   function stand(
     anchor: string,
     { colour, line, out }: { colour: string; line: number; out: number }
-  ): Styled | null {
+  ): Anchorable | null {
     const found = elementOf(anchor);
-    const el = styled(found) ? found : null;
+    const el = anchorable(found) ? found : null;
     const box = el?.getBoundingClientRect();
     if (!(el && box && box.width > 0 && box.height > 0)) {
       const gone = drawn.get(anchor);
@@ -348,14 +257,14 @@ export function startChanges(deps: ChangesDeps): Changes {
     const { ring, fresh } = ringFor(anchor);
     if (ring.el !== el) {
       if (ring.el) {
-        free(ring.el, ring.name);
+        nameOff(ring.el, ring.name);
       }
       ring.el = el;
-      take(el, ring.name);
+      nameOn(el, ring.name);
     }
     const radius = radiusOf(el) + out;
     // Its edges are its element's, `out` beyond them; it hides while its element is scrolled out of its scroller.
-    ring.box.style.cssText = `position:fixed;z-index:2147483645;box-sizing:border-box;margin:0;pointer-events:none;position-anchor:${ring.name};position-visibility:anchors-visible;top:calc(anchor(top) - ${out}px);right:calc(anchor(right) - ${out}px);bottom:calc(anchor(bottom) - ${out}px);left:calc(anchor(left) - ${out}px);border:${line}px solid ${colour};border-radius:${radius}px`;
+    ring.box.style.cssText = `${onAnchor(ring.name, out)};position-visibility:anchors-visible;z-index:2147483645;box-sizing:border-box;margin:0;pointer-events:none;border:${line}px solid ${colour};border-radius:${radius}px`;
     (ring.box.firstElementChild as HTMLDivElement).style.cssText =
       `position:absolute;inset:-${line}px;border-radius:${radius}px;opacity:0;pointer-events:none`;
     if (fresh && !landed.has(anchor)) {
