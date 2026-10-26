@@ -225,6 +225,20 @@
   const ago = (at: number) => formatDistanceToNow(new Date(at));
 </script>
 
+{#snippet who(name: string)}
+  <span data-slot="who" class="type-label text-size-inherit text-ink-strong"
+    >{name}</span
+  >
+{/snippet}
+
+{#snippet when(at: number)}
+  <time
+    class="type-meta whitespace-nowrap text-ink-subtle"
+    datetime={new Date(at).toISOString()}
+    title={new Date(at).toLocaleString()}>{ago(at)}</time
+  >
+{/snippet}
+
 {#snippet line(each: Line)}
   {#if each.kind === "comment"}
     <li
@@ -232,15 +246,8 @@
       class="flex flex-col gap-space-1 rounded-md bg-surface-recess px-space-3 py-space-2"
     >
       <span class="flex items-baseline gap-space-2 type-meta"
-        ><span
-          data-slot="who"
-          class="type-label text-size-inherit text-ink-strong">{each.who}</span
-        >
-        <time
-          class="type-meta whitespace-nowrap text-ink-subtle"
-          datetime={new Date(each.at).toISOString()}
-          title={new Date(each.at).toLocaleString()}>{ago(each.at)}</time
-        ></span
+        >{@render who(each.who)}
+        {@render when(each.at)}</span
       >
       <div
         data-slot="comment-text"
@@ -263,17 +270,10 @@
         /></span
       >
       <span data-slot="what" class="min-w-0 wrap-anywhere"
-        ><span
-          data-slot="who"
-          class="type-label text-size-inherit text-ink-strong">{each.who}</span
-        >
+        >{@render who(each.who)}
         {each.text}</span
       >
-      <time
-        class="type-meta whitespace-nowrap text-ink-subtle"
-        datetime={new Date(each.at).toISOString()}
-        title={new Date(each.at).toLocaleString()}>{ago(each.at)}</time
-      >
+      {@render when(each.at)}
     </li>
   {/if}
 {/snippet}

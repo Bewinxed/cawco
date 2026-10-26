@@ -1,21 +1,4 @@
 <script lang="ts">
-  /**
-   * The table view: the same tasks as a ledger — id, title, stage, labels,
-   * to-dos, and when the task was created and last updated — in stage order,
-   * then the board's own order inside a stage, until Created or Updated is
-   * picked to sort by (newest first, then oldest, then back to stage order).
-   * Labels and To-dos stand only while some task has one: a column of blanks
-   * says nothing; Created stands only while the ledger is 900px wide or
-   * more, so the title keeps its room. The rows and columns are TanStack Table's (PRD §5.2); the
-   * markup is the ledger's. The header is the ledger's band; a row is the
-   * task's link, and opens its drawer in place. Under 640px each row becomes
-   * the board's two-line card: the title, then id · stage · to-dos · updated.
-   *
-   * With `onpick`, each row leads with its tick for a bulk change, Shift
-   * ticking the rows between it and the last one ticked, in the order the
-   * ledger shows them; the head's tick picks every row shown, or none. The
-   * tick stands over the row's link, so a press on it never opens the task.
-   */
   import {
     createSortedRowModel,
     createTable,
@@ -34,6 +17,25 @@
   import * as Table from "#lib/components/ui/table/index.js";
   import { IconChevronDown, IconChevronUp, IconNeedsYou } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
+  /**
+   * The table view: the same tasks as a ledger — id, title, stage, labels,
+   * to-dos, and when the task was created and last updated — in stage order,
+   * then the board's own order inside a stage, until Created or Updated is
+   * picked to sort by (newest first, then oldest, then back to stage order).
+   * Labels and To-dos stand only while some task has one: a column of blanks
+   * says nothing; Created stands only while the ledger is 900px wide or
+   * more, so the title keeps its room. The rows and columns are TanStack Table's (PRD §5.2); the
+   * markup is the ledger's. The header is the ledger's band; a row is the
+   * task's link, and opens its drawer in place. Under 640px each row becomes
+   * the board's two-line card: the title, then id · stage · to-dos · updated.
+   *
+   * With `onpick`, each row leads with its tick for a bulk change, Shift
+   * ticking the rows between it and the last one ticked, in the order the
+   * ledger shows them; the head's tick picks every row shown, or none. The
+   * tick stands over the row's link, so a press on it never opens the task.
+   */
+  import { clock } from "../home/home-state.svelte";
+  import TodoCount from "./TodoCount.svelte";
 
   let {
     stages,
@@ -194,15 +196,6 @@
     }
     return sorted === "desc" ? "descending" : undefined;
   };
-
-  /** Re-read once a minute, so an age does not go stale on an open page. */
-  let now = $state(Date.now());
-  $effect(() => {
-    const timer = setInterval(() => {
-      now = Date.now();
-    }, 60_000);
-    return () => clearInterval(timer);
-  });
 
   function open(event: MouseEvent, id: string) {
     if (
@@ -378,16 +371,7 @@
                 </span>
               {:else if cell.column.id === "todos"}
                 {#if task.todos.total > 0}
-                  <span class="inline-flex items-center gap-space-1 mark-line">
-                    <TaskRing
-                      done={task.todos.done}
-                      size="sm"
-                      total={task.todos.total}
-                    />
-                    <span data-slot="num" class="num"
-                      >{task.todos.done}/{task.todos.total}</span
-                    >
-                  </span>
+                  <TodoCount todos={task.todos} />
                 {/if}
               {:else}
                 {@const at =
@@ -399,7 +383,7 @@
                   class="num"
                   datetime={new Date(at).toISOString()}
                   title={new Date(at).toLocaleString()}
-                  >{formatAgeShort(at, now)}</time
+                  >{formatAgeShort(at, clock.now)}</time
                 >
               {/if}
             </Table.Cell>

@@ -28,8 +28,8 @@ import {
   type ProviderRouting,
   type WindowForecast,
 } from "@cawco/core";
-import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
-import { readMeter } from "../usage";
+import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
+import { dayTime, readMeter } from "../usage";
 
 /** How far the carry answer looks ahead: one 5-hour window. */
 export const HORIZON_MS = 5 * HOUR_MS;
@@ -209,25 +209,6 @@ export function fmt(ms: number): string {
   }
   return `${Math.floor(m / 1440)}d ${Math.floor((m % 1440) / 60)}h`;
 }
-
-const WEEKDAY_TIME = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
-const DATE_TIME = new Intl.DateTimeFormat(undefined, {
-  day: "numeric",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
-/** A week's reset as a day and a time ("Tue 09:00"), the date past a week. */
-const dayTime = (at: number, now: number): string =>
-  (at - now < 7 * DAY_MS ? WEEKDAY_TIME : DATE_TIME)
-    .format(at)
-    .replace(",", "");
 
 /** A count of sessions in words, its figure set as one: "2 sessions". */
 const sessionsSaid = (n: number): Part[] => [

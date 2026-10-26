@@ -32,6 +32,7 @@
   } from "#lib/icons.js";
   import { dragTask } from "./board-dnd.svelte.js";
   import { actionsOf, asksOf, taskProject } from "./needs.svelte";
+  import TodoCount from "./TodoCount.svelte";
 
   let {
     task,
@@ -190,15 +191,10 @@
       class="mt-space-1 flex flex-wrap items-center gap-x-space-2 gap-y-space-1 type-meta text-ink-muted group-data-picked/task:text-selected-ink"
     >
       {#if task.todos.total > 0}
-        <span
-          class="mark-line inline-flex items-center gap-space-1"
+        <TodoCount
           title="{task.todos.done} of {task.todos.total} to-dos done"
-        >
-          <TaskRing done={task.todos.done} size="sm" total={task.todos.total} />
-          <span data-slot="num" class="num"
-            >{task.todos.done}/{task.todos.total}</span
-          >
-        </span>
+          todos={task.todos}
+        />
       {/if}
       {#if waitsOn.length > 0}
         <span

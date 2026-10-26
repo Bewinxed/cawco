@@ -207,6 +207,12 @@ const DATE_TIME = new Intl.DateTimeFormat(undefined, {
 export const dateTimeText = (at: number): string =>
   DATE_TIME.format(at).replace(",", "");
 
+/** A moment as a weekday and a time ("Tue 09:00") inside the next seven days, its date past them, where a weekday alone would name the wrong week. */
+export const dayTime = (at: number, now: number): string =>
+  (at - now < 7 * DAY_MS ? WEEKDAY_TIME : DATE_TIME)
+    .format(at)
+    .replace(",", "");
+
 /**
  * A reset: "in 4h 38m" under a day away, "Thu 09:00" inside the next seven
  * days, and "17 Oct 08:49" past them, where a weekday alone would name the
@@ -221,8 +227,7 @@ export function resetLabel(resetsAt: string, now: number): string {
   if (left < DAY_MS) {
     return `in ${duration(left)}`;
   }
-  const format = left < 7 * DAY_MS ? WEEKDAY_TIME : DATE_TIME;
-  return format.format(at).replace(",", "");
+  return dayTime(at, now);
 }
 
 /** How a window reads: its colour step, and whether it gets a glyph. */

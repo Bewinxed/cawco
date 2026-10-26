@@ -1,14 +1,4 @@
 <script lang="ts">
-  /**
-   * One project's spend (fable-lead-switch.md §2): five tiles — today, this
-   * month, its Caw's share this month, its budget (its spend cap for a day
-   * or a month, what reaching it does, and the way to set it), and what one
-   * attempt may spend — then
-   * a ledger: Caw's threads with how often each woke him, and each task's
-   * attempts with what they cost and how the newest stands. Rows open the
-   * thread or the task. A thread's dollars are the turns it woke: each
-   * turn's share of the lead session's cost, booked by the hub.
-   */
   import type { CapPeriod, OnCap, ProjectSpend } from "@cawco/core";
   import {
     cawco,
@@ -39,6 +29,17 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import * as Table from "#lib/components/ui/table/index.js";
   import { formatAgeShort } from "#lib/utils/time.js";
+  /**
+   * One project's spend (fable-lead-switch.md §2): five tiles — today, this
+   * month, its Caw's share this month, its budget (its spend cap for a day
+   * or a month, what reaching it does, and the way to set it), and what one
+   * attempt may spend — then
+   * a ledger: Caw's threads with how often each woke him, and each task's
+   * attempts with what they cost and how the newest stands. Rows open the
+   * thread or the task. A thread's dollars are the turns it woke: each
+   * turn's share of the lead session's cost, booked by the hub.
+   */
+  import { clock } from "../home/home-state.svelte";
 
   let {
     projectId,
@@ -198,13 +199,6 @@
     }
   }
 
-  let now = $state(Date.now());
-  $effect(() => {
-    const timer = setInterval(() => {
-      now = Date.now();
-    }, 60_000);
-    return () => clearInterval(timer);
-  });
   const STATE_WORD: Record<string, string> = {
     done: "landed",
     failed: "failed",
@@ -213,6 +207,31 @@
     starting: "working",
   };
 </script>
+
+{#snippet band(title: string, count: string, last: string)}
+  <!-- A ledger section's title row: what it lists, its count, its spend
+       and its last word. -->
+  <Table.Header section>
+    <Table.Row variant="band">
+      <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
+      <Table.Head variant="band" scope="col">{title}</Table.Head>
+      <Table.Head class="w-c-ledger-count-w" variant="band" scope="col"
+        >{count}</Table.Head
+      >
+      <Table.Head edge="end" class="w-c-ledger-usd-w" variant="band" scope="col"
+        >Spent</Table.Head
+      >
+      <Table.Head
+        data-col-last
+        edge="end"
+        class="w-c-ledger-when-w"
+        variant="band"
+        scope="col">{last}</Table.Head
+      >
+      <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
+    </Table.Row>
+  </Table.Header>
+{/snippet}
 
 <section
   aria-label="{projectName}'s spend"
@@ -467,31 +486,7 @@
             style="--card-cols: minmax(0, 1fr) auto auto"
           >
             {#if spend.threads.length > 0 || spend.caw.unthreadedMonthUsd > 0}
-              <Table.Header section>
-                <Table.Row variant="band">
-                  <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
-                  <Table.Head variant="band" scope="col">Caw</Table.Head>
-                  <Table.Head
-                    class="w-c-ledger-count-w"
-                    variant="band"
-                    scope="col">Wakes</Table.Head
-                  >
-                  <Table.Head
-                    edge="end"
-                    class="w-c-ledger-usd-w"
-                    variant="band"
-                    scope="col">Spent</Table.Head
-                  >
-                  <Table.Head
-                    data-col-last
-                    edge="end"
-                    class="w-c-ledger-when-w"
-                    variant="band"
-                    scope="col">Last</Table.Head
-                  >
-                  <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
-                </Table.Row>
-              </Table.Header>
+              {@render band("Caw", "Wakes", "Last")}
               <Table.Body>
                 {#each spend.threads as thread (thread.id)}
                   <Table.Row
@@ -529,7 +524,7 @@
                       edge="end"
                       variant="ledger-stacks"
                       class="w-c-ledger-when-w"
-                      >{formatAgeShort(thread.lastAt, now)}</Table.Cell
+                      >{formatAgeShort(thread.lastAt, clock.now)}</Table.Cell
                     >
                   </Table.Row>
                 {/each}
@@ -570,31 +565,7 @@
               </Table.Body>
             {/if}
             {#if spend.attempts.length > 0}
-              <Table.Header section>
-                <Table.Row variant="band">
-                  <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
-                  <Table.Head variant="band" scope="col">Attempts</Table.Head>
-                  <Table.Head
-                    class="w-c-ledger-count-w"
-                    variant="band"
-                    scope="col">Tries</Table.Head
-                  >
-                  <Table.Head
-                    edge="end"
-                    class="w-c-ledger-usd-w"
-                    variant="band"
-                    scope="col">Spent</Table.Head
-                  >
-                  <Table.Head
-                    data-col-last
-                    edge="end"
-                    class="w-c-ledger-when-w"
-                    variant="band"
-                    scope="col">Now</Table.Head
-                  >
-                  <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
-                </Table.Row>
-              </Table.Header>
+              {@render band("Attempts", "Tries", "Now")}
               <Table.Body>
                 {#each spend.attempts as attempt (attempt.taskId)}
                   <Table.Row
