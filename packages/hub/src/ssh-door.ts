@@ -26,9 +26,9 @@
  * answer's bytes untouched: the agent's hub loopback carries the hub the
  * same way (agent hub-loopback.ts).
  */
-import { randomBytes, timingSafeEqual } from "node:crypto";
 import {
   causeOf,
+  forwardRequest,
   type PreviewSocket,
   previewFailed,
   previewWebSocket,
@@ -37,6 +37,7 @@ import {
 } from "@cawco/core/preview-proxy";
 import type { Server } from "bun";
 import { HUB_PORT } from "./config";
+import { processSecret } from "./hub-self";
 import type { HubLifetimeShape } from "./lifetime";
 
 /** The header that says a request came in through a machine's SSH forward. */
@@ -57,17 +58,10 @@ export const SSH_RECORD_HEADER = "x-cawco-ssh-record";
 
 const HOP = "ssh door";
 
-const secret = randomBytes(32).toString("base64url");
+const mark = processSecret();
 
 /** Whether `value` is this process's own forward mark. */
-export const viaSshForward = (value: string | null | undefined): boolean => {
-  if (!value) {
-    return false;
-  }
-  const given = Buffer.from(value);
-  const held = Buffer.from(secret);
-  return given.length === held.length && timingSafeEqual(given, held);
-};
+export const viaSshForward = mark.is;
 
 /**
  * The host an SSH target names, as the person typed it: `user@host` without
@@ -88,7 +82,7 @@ const marked = (from: Headers, address: string, record: string): Headers => {
   const headers = proxyHeaders(from);
   headers.set(CLIENT_ADDRESS_HEADER, address);
   headers.set(SSH_RECORD_HEADER, record);
-  headers.set(SSH_FORWARD_HEADER, secret);
+  headers.set(SSH_FORWARD_HEADER, mark.value);
   return headers;
 };
 
@@ -135,13 +129,11 @@ export const createSshDoor = (lifetime: HubLifetimeShape): SshDoor => {
             : new Response("WebSocket upgrade failed", { status: 400 });
         }
         try {
-          const answer = await fetch(`http://${hub}${at}`, {
-            method: request.method,
-            headers,
-            body: request.body,
-            redirect: "manual",
-            decompress: false,
-          });
+          const answer = await forwardRequest(
+            `http://${hub}${at}`,
+            request,
+            headers
+          );
           return new Response(answer.body, {
             status: answer.status,
             statusText: answer.statusText,

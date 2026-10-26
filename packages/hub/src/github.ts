@@ -89,13 +89,18 @@ const label = z.union([z.string(), z.object({ name: z.string() })]);
 const labelsOf = (labels: z.infer<typeof label>[] | null | undefined) =>
   (labels ?? []).map((one) => (typeof one === "string" ? one : one.name));
 
-const pull = z.object({
+/** What a pull request, an issue and a discussion each carry as REST answers them. */
+const posted = {
   number: z.number().int(),
   html_url: z.string(),
   title: z.string(),
   body: z.string().nullish(),
   user,
   labels: z.array(label).nullish(),
+};
+
+const pull = z.object({
+  ...posted,
   head: z.object({ ref: z.string() }),
   base: z.object({ repo: z.object({ full_name: z.string() }) }),
   created_at: z.string(),
@@ -105,12 +110,7 @@ const pull = z.object({
 });
 
 const issue = z.object({
-  number: z.number().int(),
-  html_url: z.string(),
-  title: z.string(),
-  body: z.string().nullish(),
-  user,
-  labels: z.array(label).nullish(),
+  ...posted,
   state: z.string(),
   repository_url: z.string(),
   created_at: z.string(),
@@ -173,12 +173,7 @@ const discussionNode = z.object({
 
 /** A discussion as a webhook carries it (REST's shape). */
 const discussionHook = z.object({
-  number: z.number().int(),
-  html_url: z.string(),
-  title: z.string(),
-  body: z.string().nullish(),
-  user,
-  labels: z.array(label).nullish(),
+  ...posted,
   created_at: z.string(),
 });
 

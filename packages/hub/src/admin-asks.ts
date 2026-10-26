@@ -29,6 +29,7 @@ import type {
   PermissionResult,
   SourceFacts,
 } from "@cawco/core";
+import { parkedToolAsk } from "./parked-ask";
 
 const ADMIN_WRITE = /^admin_[a-z_]+_write$/u;
 
@@ -209,25 +210,14 @@ export const createAdminAsks = ({
         waiting.set(requestId, { name, resolve, reject });
       });
       const threadId = threadOf(actor);
-      park({
-        verb: "frames",
-        machineId: actor.machineId,
-        instanceId: actor.id,
-        requestId,
-        payload: {
-          kind: "permission_request",
-          instanceId: actor.id,
-          requestId,
-          harness: actor.harness,
-          requestKind: "tool",
-          toolName: `mcp__cawco__${name}`,
-          input,
+      park(
+        parkedToolAsk(actor, requestId, `mcp__cawco__${name}`, input, {
           adminWrite: name,
           ...(facts ? { sourceFacts: facts } : {}),
           ...(threadId ? { threadId } : {}),
           ...(toolUseId ? { toolUseId } : {}),
-        },
-      });
+        })
+      );
       console.log(
         `[admin-asks] ${actor.id} asks the person to approve ${name} (${requestId})`
       );

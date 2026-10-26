@@ -30,6 +30,7 @@ import { CONNECT_ASK_TOOL, connectAnsweredWords } from "@cawco/core";
 import { z } from "zod";
 import type { AskFacts } from "./fleet-mcp";
 import { tool } from "./mcp-tool";
+import { parkedToolAsk, refuseSecondAsk } from "./parked-ask";
 
 /** The session tools connect asks give, by name: what a call is routed by (delegation-mcp.ts). */
 export const CONNECT_TOOLS: ReadonlySet<string> = new Set(["connect_ask"]);
@@ -98,9 +99,6 @@ export const createConnectAsks = (deps: ConnectAsksDeps) => {
   /** Calls waiting on the person, by the ask's request id. */
   const waiting = new Map<string, Waiter>();
 
-  const openOf = (instanceId: string): string | undefined =>
-    [...waiting].find(([, waiter]) => waiter.instanceId === instanceId)?.[0];
-
   const asks = {
     /** Parks `actor`'s connect ask and waits for the person's answer. */
     async ask(
@@ -118,12 +116,7 @@ export const createConnectAsks = (deps: ConnectAsksDeps) => {
           access: facts.held,
         };
       }
-      const open = openOf(actor.id);
-      if (open) {
-        throw new Error(
-          `This session already has a connect ask open (${open}); its answer comes back to that call.`
-        );
-      }
+      refuseSecondAsk(waiting, actor.id, "connect");
       const requestId = crypto.randomUUID();
       const ask: ConnectAskFrame = {
         access: accessOf(
@@ -144,23 +137,18 @@ export const createConnectAsks = (deps: ConnectAsksDeps) => {
           server,
         });
       });
-      deps.park({
-        verb: "frames",
-        machineId: actor.machineId,
-        instanceId: actor.id,
-        requestId,
-        payload: {
-          kind: "permission_request",
-          instanceId: actor.id,
+      deps.park(
+        parkedToolAsk(
+          actor,
           requestId,
-          harness: actor.harness,
-          requestKind: "tool",
-          toolName: CONNECT_ASK_TOOL,
-          input: { reason: input.reason, server, access: ask.access },
-          connectAsk: ask,
-          ...(toolUseId ? { toolUseId } : {}),
-        },
-      });
+          CONNECT_ASK_TOOL,
+          { reason: input.reason, server, access: ask.access },
+          {
+            connectAsk: ask,
+            ...(toolUseId ? { toolUseId } : {}),
+          }
+        )
+      );
       console.log(
         `[connect] ${actor.id} asks the person to connect ${server}${ask.again ? " again" : ""} (${requestId})`
       );

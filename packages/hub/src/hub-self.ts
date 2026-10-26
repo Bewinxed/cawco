@@ -26,17 +26,29 @@ export const hubHttpUrl = (): string => {
 /** The header a self-call carries. */
 export const HUB_SELF_HEADER = "x-cawco-hub-self";
 
-const secret = randomBytes(32).toString("base64url");
+/**
+ * A secret this process makes as it starts and keeps in memory: `value` to
+ * send, and `is`, whether a value given back is it (in constant time).
+ */
+export const processSecret = () => {
+  const value = randomBytes(32).toString("base64url");
+  const held = Buffer.from(value);
+  return {
+    value,
+    is: (given: string | null | undefined): boolean => {
+      if (!given) {
+        return false;
+      }
+      const bytes = Buffer.from(given);
+      return bytes.length === held.length && timingSafeEqual(bytes, held);
+    },
+  };
+};
+
+const secret = processSecret();
 
 /** Whether `value` is this process's own secret. */
-export const isHubSelf = (value: string | null | undefined): boolean => {
-  if (!value) {
-    return false;
-  }
-  const given = Buffer.from(value);
-  const held = Buffer.from(secret);
-  return given.length === held.length && timingSafeEqual(given, held);
-};
+export const isHubSelf = secret.is;
 
 /** `fetch`, to this hub's own origin only, as the hub. */
 export const selfFetch = (
@@ -52,6 +64,6 @@ export const selfFetch = (
     );
   }
   const headers = new Headers(init.headers);
-  headers.set(HUB_SELF_HEADER, secret);
+  headers.set(HUB_SELF_HEADER, secret.value);
   return fetch(target, { ...init, headers });
 };

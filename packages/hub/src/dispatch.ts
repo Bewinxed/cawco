@@ -2216,19 +2216,27 @@ const answer = (error: unknown) => {
   return status(code, message);
 };
 
+/** Runs a route's work, a failure answered with its status. */
+const answered = async <T>(work: () => T | Promise<T>) => {
+  try {
+    return await work();
+  } catch (error) {
+    return answer(error);
+  }
+};
+
+/** Who starts an attempt by hand: the session it reports to, when one does. */
+const ATTEMPT_FROM = t.Object({ parentInstanceId: t.Optional(t.String()) });
+
 /**
  * The dashboard's routes for a project's dispatch, and for starting an
  * attempt at a task by hand.
  */
 export const dispatchRoutes = (dispatcher: Dispatcher) =>
   new Elysia()
-    .get("/api/projects/:id/dispatch", async ({ params }) => {
-      try {
-        return await dispatcher.view(params.id);
-      } catch (error) {
-        return answer(error);
-      }
-    })
+    .get("/api/projects/:id/dispatch", ({ params }) =>
+      answered(() => dispatcher.view(params.id))
+    )
     // Where a project's work lands is changed with its other details
     // (`PATCH /api/projects/:id`, project-edit.ts), which every dashboard hears.
     .patch(
@@ -2242,50 +2250,29 @@ export const dispatchRoutes = (dispatcher: Dispatcher) =>
           runsOn: t.Optional(t.Nullable(t.String())),
         }),
       },
-      async ({ params, body }) => {
-        try {
-          return await dispatcher.configure(params.id, body);
-        } catch (error) {
-          return answer(error);
-        }
-      }
+      ({ params, body }) =>
+        answered(() => dispatcher.configure(params.id, body))
     )
     .post(
       "/api/projects/:id/tasks/:taskId/attempts",
-      {
-        body: t.Object({ parentInstanceId: t.Optional(t.String()) }),
-      },
-      async ({ params, body, request, server }) => {
+      { body: ATTEMPT_FROM },
+      ({ params, body, request, server }) => {
         // A workspace is cut on a machine; that can take a while.
         server?.timeout(request, 0);
-        try {
-          return await dispatcher.startFor(
-            params.id,
-            params.taskId,
-            body.parentInstanceId
-          );
-        } catch (error) {
-          return answer(error);
-        }
+        return answered(() =>
+          dispatcher.startFor(params.id, params.taskId, body.parentInstanceId)
+        );
       }
     )
     // A fresh attempt at a task whose last one failed, in that attempt's
     // workspace when its clone is still there.
     .post(
       "/api/projects/:id/tasks/:taskId/retry",
-      {
-        body: t.Object({ parentInstanceId: t.Optional(t.String()) }),
-      },
-      async ({ params, body, request, server }) => {
+      { body: ATTEMPT_FROM },
+      ({ params, body, request, server }) => {
         server?.timeout(request, 0);
-        try {
-          return await dispatcher.retryFor(
-            params.id,
-            params.taskId,
-            body.parentInstanceId
-          );
-        } catch (error) {
-          return answer(error);
-        }
+        return answered(() =>
+          dispatcher.retryFor(params.id, params.taskId, body.parentInstanceId)
+        );
       }
     );

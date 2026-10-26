@@ -20,6 +20,7 @@ import { BROWSER_ASK_TOOL, type BrowserAskFrame } from "@cawco/core";
 import type { BrowserKey } from "@cawco/core/browser";
 import { z } from "zod";
 import { tool } from "./mcp-tool";
+import { parkedToolAsk, refuseSecondAsk } from "./parked-ask";
 
 /** The session tools browsers give, by name: what a call is routed by (delegation-mcp.ts). */
 export const BROWSER_TOOLS: ReadonlySet<string> = new Set(["browser_ask"]);
@@ -86,9 +87,6 @@ export const createBrowserAsks = (deps: BrowserAsksDeps) => {
   /** Calls waiting on the person, by the ask's request id. */
   const waiting = new Map<string, Waiter>();
 
-  const openOf = (instanceId: string): string | undefined =>
-    [...waiting].find(([, waiter]) => waiter.instanceId === instanceId)?.[0];
-
   const asks = {
     /** Parks `actor`'s browser ask and waits for the person's answer. */
     async ask(
@@ -96,12 +94,7 @@ export const createBrowserAsks = (deps: BrowserAsksDeps) => {
       input: { origin: string; reason: string },
       toolUseId?: string
     ): Promise<BrowserAskAnswer> {
-      const open = openOf(actor.id);
-      if (open) {
-        throw new Error(
-          `This session already has a browser ask open (${open}); its answer comes back to that call.`
-        );
-      }
+      refuseSecondAsk(waiting, actor.id, "browser");
       const { key, machineId, artifactId } = deps.browserFor(actor);
       const requestId = crypto.randomUUID();
       const ask: BrowserAskFrame = {
@@ -120,23 +113,12 @@ export const createBrowserAsks = (deps: BrowserAsksDeps) => {
           taken: false,
         });
       });
-      deps.park({
-        verb: "frames",
-        machineId: actor.machineId,
-        instanceId: actor.id,
-        requestId,
-        payload: {
-          kind: "permission_request",
-          instanceId: actor.id,
-          requestId,
-          harness: actor.harness,
-          requestKind: "tool",
-          toolName: BROWSER_ASK_TOOL,
-          input,
+      deps.park(
+        parkedToolAsk(actor, requestId, BROWSER_ASK_TOOL, input, {
           browserAsk: ask,
           ...(toolUseId ? { toolUseId } : {}),
-        },
-      });
+        })
+      );
       console.log(
         `[browser] ${actor.id} asks the person to take over ${key} on ${input.origin} (${requestId})`
       );

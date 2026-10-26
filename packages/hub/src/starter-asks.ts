@@ -408,6 +408,24 @@ const threadSubject = (thread: StarterInputs["threads"][number]): Subject => {
   };
 };
 
+/** A thread as a subject with the one ask `key`: `say` words it from the thread's title. */
+const threadAsk = (
+  thread: StarterInputs["threads"][number],
+  key: string,
+  ask: Omit<Ask, "sources" | "text"> & { say: (title: string) => string }
+): Subject => ({
+  at: `threads["${thread.id}"]`,
+  asks: {
+    [key]: {
+      about: ask.about,
+      glyph: ask.glyph,
+      text: text(ask.say, thread.title),
+      reason: ask.reason,
+      sources: [{ kind: "thread", ref: thread.id }],
+    },
+  },
+});
+
 /** A routine whose last run failed: find why, and fix it. */
 const routineSubject = (
   failure: StarterInputs["failures"][number]
@@ -687,23 +705,17 @@ const routineSubjects = (inputs: StarterInputs): Map<string, Subject> => {
     });
   }
   for (const thread of inputs.threads.filter((each) => each.last)) {
-    subjects.set(`thread:${thread.id}`, {
-      at: `threads["${thread.id}"]`,
-      asks: {
-        repeat: {
-          about:
-            "The person asks this again and again (another thread asks the same, or it asks for something recurring): make it a routine.",
-          glyph: "routine",
-          text: text(
-            (title) => `Every Monday, do what “${title}” asked`,
-            thread.title
-          ),
-          reason:
-            "This conversation asks for work that comes back again and again.",
-          sources: [{ kind: "thread", ref: thread.id }],
-        },
-      },
-    });
+    subjects.set(
+      `thread:${thread.id}`,
+      threadAsk(thread, "repeat", {
+        about:
+          "The person asks this again and again (another thread asks the same, or it asks for something recurring): make it a routine.",
+        glyph: "routine",
+        say: (title) => `Every Monday, do what “${title}” asked`,
+        reason:
+          "This conversation asks for work that comes back again and again.",
+      })
+    );
   }
   for (const failure of inputs.failures) {
     if (failure.kind !== "attempt") {
@@ -788,22 +800,16 @@ const decisionSubjects = (inputs: StarterInputs): Map<string, Subject> => {
     });
   }
   for (const thread of inputs.threads.filter((each) => each.last)) {
-    subjects.set(`thread:${thread.id}`, {
-      at: `threads["${thread.id}"]`,
-      asks: {
-        options: {
-          about:
-            "Its last words lay out two or more proposals for the person to choose between.",
-          glyph: "explore",
-          text: text(
-            (title) => `Lay out the options in “${title}” as a decision page`,
-            thread.title
-          ),
-          reason: "Its last answer lays out options for you to choose between.",
-          sources: [{ kind: "thread", ref: thread.id }],
-        },
-      },
-    });
+    subjects.set(
+      `thread:${thread.id}`,
+      threadAsk(thread, "options", {
+        about:
+          "Its last words lay out two or more proposals for the person to choose between.",
+        glyph: "explore",
+        say: (title) => `Lay out the options in “${title}” as a decision page`,
+        reason: "Its last answer lays out options for you to choose between.",
+      })
+    );
   }
   for (const path of inputs.drafts) {
     const name = draftName(path);

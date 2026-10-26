@@ -503,6 +503,20 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
     }
   };
 
+  /** An LFS object route's caller; refused without a credential, or with `status` and `words` when `oid` is no object id. */
+  const objectCaller = (
+    request: Request,
+    oid: string,
+    status: number,
+    words: string
+  ): string | Response => {
+    const user = caller(request);
+    if (!user) {
+      return lfsError(401, "This remote takes a CawCo credential.");
+    }
+    return OID.test(oid) ? user : lfsError(status, words);
+  };
+
   /** `[git]` and `[lfs]` log lines name the caller and that it authenticated, never the credential. */
   const logLfs = (
     request: Request,
@@ -598,12 +612,9 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
         }
       )
       .get("/git/:repo/info/lfs/objects/:oid", opts, ({ params, request }) => {
-        const user = caller(request);
-        if (!user) {
-          return lfsError(401, "This remote takes a CawCo credential.");
-        }
-        if (!OID.test(params.oid)) {
-          return lfsError(404, "Not an object.");
+        const user = objectCaller(request, params.oid, 404, "Not an object.");
+        if (user instanceof Response) {
+          return user;
         }
         const range = request.headers.get("range");
         // One line per object is a debug line; the batch above is the log's.
@@ -618,12 +629,14 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
         return download(params.oid, request);
       })
       .put("/git/:repo/info/lfs/objects/:oid", opts, ({ params, request }) => {
-        const user = caller(request);
-        if (!user) {
-          return lfsError(401, "This remote takes a CawCo credential.");
-        }
-        if (!OID.test(params.oid)) {
-          return lfsError(422, "Not an object id.");
+        const user = objectCaller(
+          request,
+          params.oid,
+          422,
+          "Not an object id."
+        );
+        if (user instanceof Response) {
+          return user;
         }
         if (HUB_DEBUG) {
           logLfs(request, user, `object ${params.oid.slice(0, 12)}`);

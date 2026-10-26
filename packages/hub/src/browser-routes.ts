@@ -643,21 +643,20 @@ const viewOf = (ws: {
   };
 };
 
+/** A view's socket for `kind`, relayed through `stream`. */
+const streamSocket = (stream: BrowserStream, kind: "api" | "cdp") => ({
+  open: (ws: Parameters<typeof viewOf>[0]) => stream.open(viewOf(ws), kind),
+  message: (ws: Parameters<typeof viewOf>[0], sent: unknown) =>
+    stream.message(viewOf(ws), sent),
+  close: (ws: Parameters<typeof viewOf>[0], code?: number, reason?: string) =>
+    stream.close(viewOf(ws), code ?? 1000, reason ?? ""),
+});
+
 /** The view's three routes (see the head of this file). */
 export const browserStreamRoutes = (stream: BrowserStream) =>
   new Elysia()
-    .ws(`${BASE}/:instance/:artifact/api/ws`, {
-      open: (ws) => stream.open(viewOf(ws), "api"),
-      message: (ws, sent) => stream.message(viewOf(ws), sent),
-      close: (ws, code, reason) =>
-        stream.close(viewOf(ws), code ?? 1000, reason ?? ""),
-    })
-    .ws(`${BASE}/:instance/:artifact/cdp`, {
-      open: (ws) => stream.open(viewOf(ws), "cdp"),
-      message: (ws, sent) => stream.message(viewOf(ws), sent),
-      close: (ws, code, reason) =>
-        stream.close(viewOf(ws), code ?? 1000, reason ?? ""),
-    })
+    .ws(`${BASE}/:instance/:artifact/api/ws`, streamSocket(stream, "api"))
+    .ws(`${BASE}/:instance/:artifact/cdp`, streamSocket(stream, "cdp"))
     .all(
       `${BASE}/:instance/:artifact/api/*`,
       // Bodies stream on to neko; neko's own REST is no route of the hub's API.

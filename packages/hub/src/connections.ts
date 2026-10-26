@@ -775,15 +775,15 @@ export const createConnections = (deps: ConnectionsDeps) => {
   };
 
   /**
-   * A `device` connection's access token, refreshed with its refresh token
-   * when near its end ("`client_secret` … Required unless the token was
-   * generated using the device flow", docs.github.com): the new pair is kept
-   * at once, since "Once you use a refresh token, that refresh token and the
-   * old access token will no longer work". A token without an end (expiring
-   * tokens off on the app) is sent as it is.
+   * `r`'s access token, or, near its end, the one `refresh` gets with its
+   * refresh token: one refresh at a time per connection, shared by every
+   * caller meanwhile.
    */
-  const deviceAccess = (r: ConnectionRow): Promise<string> => {
-    const { tokens } = opened(r);
+  const accessRefreshed = (
+    r: ConnectionRow,
+    tokens: ConnectionSecret["tokens"],
+    refresh: (refreshToken: string | undefined) => Promise<string>
+  ): Promise<string> => {
     if (!tokens) {
       return Promise.reject(
         new ConnectionProblem(
@@ -801,8 +801,23 @@ export const createConnections = (deps: ConnectionsDeps) => {
     if (under !== undefined) {
       return under;
     }
-    const refreshToken = tokens.refresh_token;
-    const refresh = (async () => {
+    const refreshed = refresh(tokens.refresh_token);
+    refreshing.set(r.id, refreshed);
+    const done = () => refreshing.delete(r.id);
+    refreshed.then(done, done);
+    return refreshed;
+  };
+
+  /**
+   * A `device` connection's access token, refreshed with its refresh token
+   * when near its end ("`client_secret` … Required unless the token was
+   * generated using the device flow", docs.github.com): the new pair is kept
+   * at once, since "Once you use a refresh token, that refresh token and the
+   * old access token will no longer work". A token without an end (expiring
+   * tokens off on the app) is sent as it is.
+   */
+  const deviceAccess = (r: ConnectionRow): Promise<string> =>
+    accessRefreshed(r, opened(r).tokens, async (refreshToken) => {
       const answer = refreshToken
         ? await postToGitHub<GitHubTokenAnswer>("/login/oauth/access_token", {
             client_id: GITHUB_DEVICE_CLIENT_ID,
@@ -820,12 +835,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       keepTokens(r.id, answer as OAuthTokens);
       drop(r.id);
       return answer.access_token;
-    })();
-    refreshing.set(r.id, refresh);
-    const done = () => refreshing.delete(r.id);
-    refresh.then(done, done);
-    return refresh;
-  };
+    });
 
   /**
    * A Linear app's access token, refreshed when it is near its end. Linear
@@ -843,25 +853,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
         )
       );
     }
-    if (!tokens) {
-      return Promise.reject(
-        new ConnectionProblem(
-          `${r.name} is not signed in: ${r.reason ?? connectionsWords.saidSignIn}`
-        )
-      );
-    }
-    if (
-      !r.tokensExpireAt ||
-      r.tokensExpireAt.getTime() > Date.now() + LINEAR_REFRESH_EARLY_MS
-    ) {
-      return Promise.resolve(tokens.access_token);
-    }
-    const under = refreshing.get(r.id);
-    if (under !== undefined) {
-      return under;
-    }
-    const refreshToken = tokens.refresh_token;
-    const refresh = (async () => {
+    return accessRefreshed(r, tokens, async (refreshToken) => {
       if (!refreshToken) {
         setState(r, "needs-sign-in", "Its sign-in ran out. Sign in again.");
         return problem(`${r.name}'s sign-in ran out. Sign in again.`);
@@ -893,11 +885,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
           `${r.name}: Linear refused to refresh its sign-in (${said}). Sign in again.`
         );
       }
-    })();
-    refreshing.set(r.id, refresh);
-    const done = () => refreshing.delete(r.id);
-    refresh.then(done, done);
-    return refresh;
+    });
   };
 
   /** Each app, gh or code connection's MCP client's token, when it runs out, ms: the client is let go before. */
@@ -1654,11 +1642,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     if (connectionToolsFor(roleOf(actor)) === "none") {
       return [];
     }
-    const names = new Set([
-      ...deps.typeConnections(actor),
-      ...(actor.projectId ? db.namesForProject(actor.projectId) : []),
-    ]);
-    return [...names].filter((name) => db.byName(name) !== undefined);
+    return proposable(actor);
   };
 
   /**

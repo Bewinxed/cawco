@@ -45,6 +45,7 @@ import type {
 import { detach } from "@cawco/core/detach";
 import {
   causeOf,
+  forwardRequest,
   type PreviewSocket,
   previewWebSocket,
   proxyHeaders,
@@ -668,13 +669,11 @@ export const dashboardRelay =
             : new Response("WebSocket upgrade failed", { status: 400 });
         }
         try {
-          const answer = await fetch(`http://${upstream}`, {
-            method: request.method,
-            headers,
-            body: request.body,
-            redirect: "manual",
-            decompress: false,
-          });
+          const answer = await forwardRequest(
+            `http://${upstream}`,
+            request,
+            headers
+          );
           return new Response(answer.body, {
             status: answer.status,
             statusText: answer.statusText,

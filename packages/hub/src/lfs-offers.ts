@@ -21,7 +21,7 @@ import {
 import { Elysia, t } from "elysia";
 import type { DbShape } from "./db";
 import type { LfsOfferRow } from "./db/lfs-offers";
-import { FolderRefusal, refused } from "./project-folder";
+import { FolderRefusal, folderAttempt } from "./project-folder";
 
 const MB = 1024 * 1024;
 
@@ -133,33 +133,15 @@ export const lfsOfferRoutes = (offers: LfsOffers) =>
     .get(
       "/api/lfs-offers/:id",
       { params: t.Object({ id: t.String() }) },
-      ({ params }) => {
-        try {
-          return offers.state(params.id);
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      ({ params }) => folderAttempt(() => offers.state(params.id))
     )
     .post(
       "/api/lfs-offers/:id/dismiss",
       { params: t.Object({ id: t.String() }) },
-      ({ params }) => {
-        try {
-          return offers.dismiss(params.id);
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      ({ params }) => folderAttempt(() => offers.dismiss(params.id))
     )
     .post(
       "/api/lfs-offers/:id/track",
       { params: t.Object({ id: t.String() }) },
-      async ({ params }) => {
-        try {
-          return await offers.track(params.id);
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      ({ params }) => folderAttempt(() => offers.track(params.id))
     );

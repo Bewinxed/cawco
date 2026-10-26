@@ -711,18 +711,32 @@ const asText = (bytes: Uint8Array): string | undefined => {
   }
 };
 
+/** The file or folder at `rawPath` in a project's folder, to read; refused with `unnamed` when it names none. */
+const statToRead = async (
+  projectId: string,
+  rawPath: string,
+  unnamed: string
+) => {
+  const rel = folderPath(rawPath);
+  if (!rel) {
+    throw new FolderRefusal(400, unnamed);
+  }
+  const root = await forReading(projectId);
+  const real = await readable(root, rel);
+  const info = await stat(real).catch(notFound(rel));
+  return { rel, real, info };
+};
+
 /** One text file, whole: up to {@link FOLDER_FILE_LIMIT}; a binary file is refused. */
 export const readFolderFile = async (
   projectId: string,
   rawPath: string
 ): Promise<FolderFile> => {
-  const rel = folderPath(rawPath);
-  if (!rel) {
-    throw new FolderRefusal(400, "Name a file to read, like AGENTS.md.");
-  }
-  const root = await forReading(projectId);
-  const real = await readable(root, rel);
-  const info = await stat(real).catch(notFound(rel));
+  const { rel, real, info } = await statToRead(
+    projectId,
+    rawPath,
+    "Name a file to read, like AGENTS.md."
+  );
   if (info.isDirectory()) {
     throw new FolderRefusal(
       409,
@@ -812,13 +826,11 @@ export const folderFileRaw = async (
   rawPath: string,
   limit = FOLDER_RAW_LIMIT
 ): Promise<{ path: string; real: string; size: number }> => {
-  const rel = folderPath(rawPath);
-  if (!rel) {
-    throw new FolderRefusal(400, "Name a file, like media/cover.png.");
-  }
-  const root = await forReading(projectId);
-  const real = await readable(root, rel);
-  const info = await stat(real).catch(notFound(rel));
+  const { rel, real, info } = await statToRead(
+    projectId,
+    rawPath,
+    "Name a file, like media/cover.png."
+  );
   if (info.isDirectory()) {
     throw new FolderRefusal(409, `${rel} is a folder, not a file.`);
   }
@@ -987,26 +999,10 @@ export const writeFolderFile = async (
   const root = projectRoot(projectId);
   return await inTurn(projectId, async () => {
     await prepare(projectId, root);
-    const abs = await writable(root, rel);
-    const before = await lstatIfThere(abs);
-    if (before?.isDirectory()) {
-      throw new FolderRefusal(
-        409,
-        `${rel} is a folder, so a file cannot be written there.`
-      );
-    }
+    const { abs, there: before } = await fileToWrite(root, rel);
     const message = asked ?? `${before ? "Update" : "Add"} ${rel}`;
     const previous = before?.isFile() ? await readFile(abs) : undefined;
-    await mkdir(dirname(abs), { recursive: true }).catch((error: unknown) => {
-      const { code } = error as NodeJS.ErrnoException;
-      if (code === "EEXIST" || code === "ENOTDIR") {
-        throw new FolderRefusal(
-          409,
-          `A file sits where ${dirname(rel)} would be a folder, so ${rel} cannot be written.`
-        );
-      }
-      throw error;
-    });
+    await parentFolder(abs, rel);
     const { exclusive } = options;
     if (exclusive) {
       await claimed(abs, rel, exclusive);
@@ -1073,6 +1069,32 @@ const toWrite = (
   return writes;
 };
 
+/** Where `rel` is written under `root`, and what is there now; refused when a folder is. */
+const fileToWrite = async (root: string, rel: string) => {
+  const abs = await writable(root, rel);
+  const there = await lstatIfThere(abs);
+  if (there?.isDirectory()) {
+    throw new FolderRefusal(
+      409,
+      `${rel} is a folder, so a file cannot be written there.`
+    );
+  }
+  return { abs, there };
+};
+
+/** Makes the folder `rel` (at `abs`) is written in; refused when a file sits where it would be. */
+const parentFolder = (abs: string, rel: string) =>
+  mkdir(dirname(abs), { recursive: true }).catch((error: unknown) => {
+    const { code } = error as NodeJS.ErrnoException;
+    if (code === "EEXIST" || code === "ENOTDIR") {
+      throw new FolderRefusal(
+        409,
+        `A file sits where ${dirname(rel)} would be a folder, so ${rel} cannot be written.`
+      );
+    }
+    throw error;
+  });
+
 /**
  * Puts `bytes` at `rel` (its folders made as needed), atomically, keeping in
  * `before` what the path held first so a failed commit can put it back.
@@ -1087,29 +1109,13 @@ const putFile = async (
   before: Map<string, Buffer | undefined>,
   exclusive?: Exclusive
 ): Promise<void> => {
-  const abs = await writable(root, rel);
-  const there = await lstatIfThere(abs);
-  if (there?.isDirectory()) {
-    throw new FolderRefusal(
-      409,
-      `${rel} is a folder, so a file cannot be written there.`
-    );
-  }
+  const { abs, there } = await fileToWrite(root, rel);
   if (exclusive) {
     await claimed(abs, rel, exclusive);
   } else if (!before.has(abs)) {
     before.set(abs, there?.isFile() ? await readFile(abs) : undefined);
   }
-  await mkdir(dirname(abs), { recursive: true }).catch((error: unknown) => {
-    const { code } = error as NodeJS.ErrnoException;
-    if (code === "EEXIST" || code === "ENOTDIR") {
-      throw new FolderRefusal(
-        409,
-        `A file sits where ${dirname(rel)} would be a folder, so ${rel} cannot be written.`
-      );
-    }
-    throw error;
-  });
+  await parentFolder(abs, rel);
   if (exclusive) {
     await placeOnly(root, bytes, abs, rel, exclusive);
     before.set(abs, undefined);
@@ -1841,6 +1847,15 @@ export const refused = (error: unknown) => {
     return status(error.status, error.message);
   }
   throw error;
+};
+
+/** Runs a route's work, a folder refusal answered as {@link refused}. */
+export const folderAttempt = async <T>(work: () => T | Promise<T>) => {
+  try {
+    return await work();
+  } catch (error) {
+    return refused(error);
+  }
 };
 
 /**

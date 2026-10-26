@@ -836,6 +836,23 @@ export function versionAssets(
 export const RELAY_HEADER = "x-cawco-relay";
 
 /**
+ * `request` sent on to `url` with `headers`, its body streamed: a redirect
+ * and a compressed body come back as they are, for the caller to relay.
+ */
+export const forwardRequest = (
+  url: string,
+  request: Request,
+  headers: Headers
+): Promise<Response> =>
+  fetch(url, {
+    method: request.method,
+    headers,
+    body: request.body,
+    redirect: "manual",
+    decompress: false,
+  });
+
+/**
  * The machine's listener marks an answer that came from the preview's own
  * port (its stage or server), never one of its own (`downResponse`, a
  * sleeping stage's cover): the hub's relay reads it, so a stage the hub

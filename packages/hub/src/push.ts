@@ -1338,6 +1338,32 @@ export const createPush = ({
   });
 
   /**
+   * A push about session `row`: who it is and `said` where the lock screen
+   * shows it, `text`'s first line (else `said`) sealed, under `collapseId`.
+   */
+  const sessionNotification = (
+    row: InstanceRow,
+    said: string,
+    text: string | undefined,
+    collapseId: string
+  ): Notification => {
+    const project = projectName(row.projectId);
+    return {
+      shown: alertOf(sessionName(row.id) ?? "A session", project, said),
+      sealed: alertOf(boardTitle(row), project, firstLine(text) ?? said),
+      category: PUSH_CATEGORIES.turn,
+      collapseId,
+      threadId: row.projectId ?? row.id,
+      data: {
+        kind: "turn",
+        instanceId: row.id,
+        machineId: row.machineId,
+        projectId: row.projectId ?? null,
+      },
+    };
+  };
+
+  /**
    * An item that needs you joins the open burst, or opens one; the burst
    * goes out {@link QUIET_MS} after its last arrival, at most
    * {@link BURST_MS} after its first. An ask goes out at once. With `once`,
@@ -1900,35 +1926,24 @@ export const createPush = ({
           );
           return;
         }
-        const project = projectName(row.projectId);
         arrive(
           {
             ask: false,
+
             instanceId,
+
             landedAt: endedAt,
+
             still: () => unseenSince(instanceId, endedAt),
-            notification: {
-              shown: alertOf(
-                sessionName(instanceId) ?? "A session",
-                project,
-                TURN_ENDED
-              ),
-              sealed: alertOf(
-                boardTitle(row),
-                project,
-                firstLine(reply) ?? TURN_ENDED
-              ),
-              category: PUSH_CATEGORIES.turn,
-              collapseId: turnCollapseId(instanceId),
-              threadId: row.projectId ?? instanceId,
-              data: {
-                kind: "turn",
-                instanceId,
-                machineId: row.machineId,
-                projectId: row.projectId ?? null,
-              },
-            },
+
+            notification: sessionNotification(
+              row,
+              TURN_ENDED,
+              reply,
+              turnCollapseId(instanceId)
+            ),
           },
+
           false
         );
       });
@@ -2177,35 +2192,24 @@ export const createPush = ({
       if (!row) {
         return;
       }
-      const project = projectName(row.projectId);
       arrive(
         {
           ask: false,
+
           instanceId,
+
           landedAt: new Date(),
+
           still: () => true,
-          notification: {
-            shown: alertOf(
-              sessionName(instanceId) ?? "A session",
-              project,
-              SENT_YOU
-            ),
-            sealed: alertOf(
-              boardTitle(row),
-              project,
-              firstLine(text) ?? SENT_YOU
-            ),
-            category: PUSH_CATEGORIES.turn,
-            collapseId: messageCollapseId(instanceId),
-            threadId: row.projectId ?? instanceId,
-            data: {
-              kind: "turn",
-              instanceId,
-              machineId: row.machineId,
-              projectId: row.projectId ?? null,
-            },
-          },
+
+          notification: sessionNotification(
+            row,
+            SENT_YOU,
+            text,
+            messageCollapseId(instanceId)
+          ),
         },
+
         false
       );
       console.log(`[push] message from ${instanceId}`);
@@ -2230,35 +2234,24 @@ export const createPush = ({
       ) {
         return;
       }
-      const project = projectName(row.projectId);
       arrive(
         {
           ask: false,
+
           instanceId,
+
           landedAt: new Date(),
+
           still: () => true,
-          notification: {
-            shown: alertOf(
-              sessionName(instanceId) ?? "A session",
-              project,
-              FAILED
-            ),
-            sealed: alertOf(
-              boardTitle(row),
-              project,
-              firstLine(reason) ?? FAILED
-            ),
-            category: PUSH_CATEGORIES.turn,
-            collapseId: turnCollapseId(instanceId),
-            threadId: row.projectId ?? instanceId,
-            data: {
-              kind: "turn",
-              instanceId,
-              machineId: row.machineId,
-              projectId: row.projectId ?? null,
-            },
-          },
+
+          notification: sessionNotification(
+            row,
+            FAILED,
+            reason,
+            turnCollapseId(instanceId)
+          ),
         },
+
         false
       );
       console.log(`[push] session ${instanceId}: failed`);

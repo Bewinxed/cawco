@@ -33,7 +33,7 @@ import type {
 import { Elysia, t } from "elysia";
 import type { DbShape } from "./db";
 import { projectDesign } from "./landed";
-import { FolderRefusal, projectRoot, refused } from "./project-folder";
+import { FolderRefusal, folderAttempt, projectRoot } from "./project-folder";
 import type { TaskActor, TaskEvent, Tasks, TaskView } from "./tasks";
 
 /** The templates whose work calls for a design system. */
@@ -304,33 +304,15 @@ export const designOfferRoutes = (offers: DesignOffers, you: TaskActor) =>
     .get(
       "/api/projects/:id/design-offer",
       { params: t.Object({ id: t.String() }) },
-      ({ params }) => {
-        try {
-          return offers.state(params.id);
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      ({ params }) => folderAttempt(() => offers.state(params.id))
     )
     .post(
       "/api/projects/:id/design-offer/dismiss",
       { params: t.Object({ id: t.String() }) },
-      ({ params }) => {
-        try {
-          return offers.dismiss(params.id);
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      ({ params }) => folderAttempt(() => offers.dismiss(params.id))
     )
     .post(
       "/api/projects/:id/design-offer/build",
       { params: t.Object({ id: t.String() }) },
-      async ({ params }) => {
-        try {
-          return await offers.build(params.id, you);
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      ({ params }) => folderAttempt(() => offers.build(params.id, you))
     );

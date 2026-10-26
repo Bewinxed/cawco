@@ -103,6 +103,22 @@ const shapedCredentials = async (text: string): Promise<Range[]> => {
   return messages.map(({ range }) => range);
 };
 
+/** `ranges` in order, those that overlap or touch as one. */
+const mergedRanges = (
+  ranges: readonly Range[]
+): [start: number, end: number][] => {
+  const merged: [number, number][] = [];
+  for (const [start, end] of ranges.toSorted((a, b) => a[0] - b[0])) {
+    const last = merged.at(-1);
+    if (last && start <= last[1]) {
+      last[1] = Math.max(last[1], end);
+    } else {
+      merged.push([start, end]);
+    }
+  }
+  return merged;
+};
+
 /**
  * Where every secret found (module header) stands in `text`, in order,
  * overlapping finds as one: the one recognizer both the agent's redaction
@@ -114,23 +130,13 @@ export const secretRanges = async (
   if (!text.trim()) {
     return [];
   }
-  const ranges = [
-    ...(await shapedCredentials(text)),
-    ...typedCredentials(text),
-    ...setCredentials(text),
-  ]
-    .filter(([start, end]) => end > start)
-    .sort((a, b) => a[0] - b[0]);
-  const merged: [number, number][] = [];
-  for (const [start, end] of ranges) {
-    const last = merged.at(-1);
-    if (last && start <= last[1]) {
-      last[1] = Math.max(last[1], end);
-    } else {
-      merged.push([start, end]);
-    }
-  }
-  return merged;
+  return mergedRanges(
+    [
+      ...(await shapedCredentials(text)),
+      ...typedCredentials(text),
+      ...setCredentials(text),
+    ].filter(([start, end]) => end > start)
+  );
 };
 
 /**
@@ -193,17 +199,5 @@ export const outOfSentenceRanges = async (
       return passwordShaped(word) ? [[start, start + word.length]] : [];
     }
   );
-  const found = [...(await secretRanges(text)), ...shaped].sort(
-    (a, b) => a[0] - b[0]
-  );
-  const merged: [number, number][] = [];
-  for (const [start, end] of found) {
-    const last = merged.at(-1);
-    if (last && start <= last[1]) {
-      last[1] = Math.max(last[1], end);
-    } else {
-      merged.push([start, end]);
-    }
-  }
-  return merged;
+  return mergedRanges([...(await secretRanges(text)), ...shaped]);
 };

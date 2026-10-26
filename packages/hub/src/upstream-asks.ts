@@ -30,6 +30,7 @@ import {
   UPSTREAM_POST_TOOL,
   type UpstreamPost,
 } from "@cawco/core/upstream-post";
+import { parkedToolAsk } from "./parked-ask";
 
 /** What an upstream ask's payload carries for the hub, beside what the card shows. */
 export interface HeldPost {
@@ -156,23 +157,18 @@ export const createUpstreamAsks = (deps: UpstreamAsksDeps) => {
       }
       const requestId = crypto.randomUUID();
       const threadId = deps.threadOf(actor);
-      deps.park({
-        verb: "frames",
-        machineId: actor.machineId,
-        instanceId: actor.id,
-        requestId,
-        payload: {
-          kind: "permission_request",
-          instanceId: actor.id,
+      deps.park(
+        parkedToolAsk(
+          actor,
           requestId,
-          harness: actor.harness,
-          requestKind: "tool",
-          toolName: UPSTREAM_POST_TOOL,
-          input: { ...describePost(held.post, held.repo, account) },
-          upstreamPost: held,
-          ...(threadId ? { threadId } : {}),
-        },
-      });
+          UPSTREAM_POST_TOOL,
+          { ...describePost(held.post, held.repo, account) },
+          {
+            upstreamPost: held,
+            ...(threadId ? { threadId } : {}),
+          }
+        )
+      );
       console.log(
         `[upstream-asks] ${actor.id} asks the person to approve ${held.what} to ${held.repo} (${requestId})`
       );
