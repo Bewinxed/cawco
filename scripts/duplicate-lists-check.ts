@@ -146,7 +146,8 @@ const callTypes = (call: Node, child: Node): boolean => {
 /** What `node`, holding `child`, says of a list's type: it types it, it does not, or it is read through. */
 const typeAt = (node: Node, child: Node): "typed" | "untyped" | "through" => {
   const typed = (yes: boolean) => (yes ? "typed" : "untyped");
-  switch (node.type) {
+  const type: string = node.type;
+  switch (type) {
     case "TSSatisfiesExpression":
     case "TSAsExpression":
       return names(node.typeAnnotation) ? "typed" : "through";
@@ -159,7 +160,7 @@ const typeAt = (node: Node, child: Node): "typed" | "untyped" | "through" => {
     case "PropertyDefinition":
       return typed(names(node.typeAnnotation));
     default:
-      return THROUGH.has(node.type) ? "through" : "untyped";
+      return THROUGH.has(type) ? "through" : "untyped";
   }
 };
 

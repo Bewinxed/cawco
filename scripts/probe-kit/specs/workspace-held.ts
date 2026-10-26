@@ -189,7 +189,8 @@ const respond = (request: Seen): Reply => {
       });
     case "U":
       return uTurn(request);
-    default:
+    case "X":
+    case "Q":
       return finishOnce(request, tag, 0, finished(tag));
   }
 };

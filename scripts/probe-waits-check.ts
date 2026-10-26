@@ -70,24 +70,18 @@ const both = (
 ): Length =>
   left !== undefined && right !== undefined ? op(left, right) : undefined;
 
-/** `left <op> right`'s longest: `at + WAIT_MS - Date.now()` waits up to WAIT_MS, so an unknown term adds nothing and takes nothing off. */
-const binaryLength = (
-  kind: ts.SyntaxKind,
-  left: Length,
-  right: Length
-): Length => {
-  switch (kind) {
-    case ts.SyntaxKind.AsteriskToken:
-      return both(left, right, (a, b) => a * b);
-    case ts.SyntaxKind.SlashToken:
-      return right === 0 ? undefined : both(left, right, (a, b) => a / b);
-    case ts.SyntaxKind.PlusToken:
-      return left === undefined ? right : left + (right ?? 0);
-    case ts.SyntaxKind.MinusToken:
-      return both(left, right, (a, b) => a - b) ?? left;
-    default:
-      return;
-  }
+/** `left <op> right`'s longest, by its operator: `at + WAIT_MS - Date.now()` waits up to WAIT_MS, so an unknown term adds nothing and takes nothing off. Any other operator has no length. */
+const BINARY: Partial<
+  Record<ts.SyntaxKind, (left: Length, right: Length) => Length>
+> = {
+  [ts.SyntaxKind.AsteriskToken]: (left, right) =>
+    both(left, right, (a, b) => a * b),
+  [ts.SyntaxKind.SlashToken]: (left, right) =>
+    right === 0 ? undefined : both(left, right, (a, b) => a / b),
+  [ts.SyntaxKind.PlusToken]: (left, right) =>
+    left === undefined ? right : left + (right ?? 0),
+  [ts.SyntaxKind.MinusToken]: (left, right) =>
+    both(left, right, (a, b) => a - b) ?? left,
 };
 
 const MATH: Partial<Record<string, (known: number[]) => number>> = {
@@ -110,8 +104,7 @@ const lengthOf = (node: ts.Node, scope: Scope): Length => {
     return lengthOf(node.expression, scope);
   }
   if (ts.isBinaryExpression(node)) {
-    return binaryLength(
-      node.operatorToken.kind,
+    return BINARY[node.operatorToken.kind]?.(
       lengthOf(node.left, scope),
       lengthOf(node.right, scope)
     );

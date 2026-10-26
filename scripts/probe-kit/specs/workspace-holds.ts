@@ -301,7 +301,13 @@ const respond = (request: Seen): Reply => {
     case "L":
     case "T":
       return finishOnce(request, tag, 0, blocked(tag));
-    default:
+    case "N":
+    case "X":
+    case "S":
+    case "R":
+    case "D":
+    case "U":
+    case "O":
       return finishOnce(request, tag, 0, done(tag));
   }
 };

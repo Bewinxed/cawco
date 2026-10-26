@@ -244,7 +244,20 @@ const obeyHub = (world: World, side: Side, command: HandoverCommand): void => {
         throw new Broken("Law C: an ask was published before it was parked");
       }
       return;
-    default:
+    // The agent's own commands: obeyAgent's, no law of the hub's.
+    case "announce":
+    case "arm":
+    case "arm-listed":
+    case "arm-read":
+    case "custody-complete":
+    case "hold":
+    case "read-keeper":
+    case "register":
+    case "register-lapsed":
+    case "release-owed":
+    case "say":
+    case "settle":
+    case "start":
       return;
   }
 };
@@ -354,8 +367,18 @@ const obeyAgent = (
       }
       run(protocol, world, "agent", { kind: "armed", id: command.id });
       return;
-    default:
-      // say, release-owed, custody-complete, arm-listed: nothing the world keeps.
+    // Nothing the world keeps.
+    case "say":
+    case "release-owed":
+    case "custody-complete":
+    case "arm-listed":
+      return;
+    // The hub's commands: obeyHub's.
+    case "wake":
+    case "send-verdict":
+    case "fail-owed":
+    case "park":
+    case "publish":
       return;
   }
 };

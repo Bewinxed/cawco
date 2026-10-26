@@ -8,7 +8,8 @@
  *
  * The rules: the switch check (scripts/lint/switch-exhaustiveness.ts) over
  * the dashboard's and every package's `.ts`, `.svelte.ts` and `.svelte`
- * files, and the design rules (scripts/lint/design) over the dashboard's
+ * files, every script's (scripts/, each package's and the dashboard's
+ * scripts/), cawrier's and the site's, and the design rules (scripts/lint/design) over the dashboard's
  * `src`, each with the fixtures that prove it (scripts/lint/fixtures). The
  * files are those git tracks or would track, narrowed to the list
  * `CAWCO_CHECK_FILES` names (one repository path a line) when it is set.
@@ -22,10 +23,12 @@ import "@golar/svelte";
 import { defineConfig } from "golar/unstable";
 import { switchExhaustiveness } from "./scripts/lint/switch-exhaustiveness.ts";
 
-/** The switches the rule must report, outside the product's tree (scripts/check.ts). */
-const SWITCH_FIXTURES = "scripts/lint/fixtures/*.ts";
+/** The planted mistakes, read by their own globs below and never as product code. */
+const LINT_FIXTURES = "scripts/lint/fixtures/";
+/** The switches the rule must report (scripts/check.ts). */
+const SWITCH_FIXTURES = `${LINT_FIXTURES}*.ts`;
 /** The planted mistakes each design rule must report (scripts/check.ts). */
-const DESIGN_FIXTURES = "scripts/lint/fixtures/design/*.{svelte,ts}";
+const DESIGN_FIXTURES = `${LINT_FIXTURES}design/*.{svelte,ts}`;
 
 const tracked = (...globs: string[]): string[] =>
   execFileSync(
@@ -62,10 +65,15 @@ const switched = within(
   tracked(
     "apps/dashboard/src/**/*.ts",
     "apps/dashboard/src/**/*.svelte",
+    "apps/dashboard/scripts/**/*.ts",
+    "apps/cawrier/src/**/*.ts",
     "packages/*/src/**/*.ts",
-    "packages/*/src/**/*.tsx"
+    "packages/*/src/**/*.tsx",
+    "packages/*/scripts/**/*.ts",
+    "scripts/**/*.ts",
+    "site/src/**/*.ts"
   )
-);
+).filter((path) => !path.startsWith(LINT_FIXTURES));
 const designed = within(
   tracked("apps/dashboard/src/**/*.ts", "apps/dashboard/src/**/*.svelte")
 );

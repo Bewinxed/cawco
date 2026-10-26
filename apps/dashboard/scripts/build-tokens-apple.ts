@@ -468,6 +468,9 @@ function declare(token: TransformedToken, tokens: Tokens): Declaration[] {
       return [
         one(`public static let ${name} = ${gradient(raw, tokens, where)}`),
       ];
+    case undefined:
+      throw new Error(`${where}: no $type, so no Apple mapping`);
+    // A $type off the token JSON outside the union.
     default:
       throw new Error(`${where}: $type "${token.$type}" has no Apple mapping`);
   }

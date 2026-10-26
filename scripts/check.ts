@@ -442,8 +442,9 @@ const RULES_READ = [
   ...under("scripts/lint/", "patches/", "apps/dashboard/src/app.css"),
   ...files.filter((p) => DASHBOARD_CSS.test(p)),
 ];
+// The files golar.config.ts lints: its globs, as one pattern.
 const LINTED =
-  /^(?:apps\/dashboard\/src\/.*\.(?:ts|svelte)|packages\/[^/]+\/src\/.*\.(?:ts|tsx|svelte))$/u;
+  /^(?:apps\/dashboard\/src\/.*\.(?:ts|svelte)|apps\/dashboard\/scripts\/.*\.ts|apps\/cawrier\/src\/.*\.ts|packages\/[^/]+\/src\/.*\.(?:ts|tsx|svelte)|packages\/[^/]+\/scripts\/.*\.ts|scripts\/.*\.ts|site\/src\/.*\.ts)$/u;
 const linted = [...reached].filter((p) => LINTED.test(p) && present.has(p));
 {
   const key = await keyOf([...linted, ...RULES_READ], everything ? "all" : "");

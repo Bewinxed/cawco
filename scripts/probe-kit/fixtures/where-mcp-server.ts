@@ -100,6 +100,13 @@ const take = async (message: Message): Promise<void> => {
       });
       return;
     }
+    // An id without a method is no request (JSON-RPC 2.0's Invalid Request).
+    case undefined:
+      send({
+        id: message.id,
+        error: { code: -32_600, message: "no method" },
+      });
+      return;
     default:
       send({
         id: message.id,

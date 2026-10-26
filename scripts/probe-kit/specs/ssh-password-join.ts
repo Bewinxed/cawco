@@ -483,8 +483,12 @@ async function run(kit: Kit): Promise<void> {
       case "publickey":
         answer(keyAccepted(authorized, ctx, () => signedIn.push("publickey")));
         break;
-      default:
+      // Neither is a way this target signs in. ssh2 refuses any other
+      // method before it asks (node_modules/ssh2/lib/server.js USERAUTH_REQUEST).
+      case "hostbased":
+      case "none":
         answer(false);
+        break;
     }
   };
   const { port, server } = await serveTarget({

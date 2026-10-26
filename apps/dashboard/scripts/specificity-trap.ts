@@ -360,7 +360,14 @@ function simpleWeight(n: SelNode): Weight {
       }
       return [0, 1, 0];
     }
-    default:
+    // `*`, `&`, combinators and the rest weigh nothing of their own.
+    case "universal":
+    case "nesting":
+    case "combinator":
+    case "comment":
+    case "root":
+    case "selector":
+    case "string":
       return [0, 0, 0];
   }
 }
