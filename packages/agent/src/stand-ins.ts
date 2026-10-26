@@ -51,9 +51,10 @@ import { type CloneDeny, cloneDenies } from "@cawco/core/clone-denies";
 import { isGitDir } from "@cawco/core/git-dir";
 import { mountedAnywhere } from "@cawco/core/mount-table";
 import { projectClaudeDir, workspaceStateDir } from "@cawco/core/paths";
-import { writeStateFile } from "@cawco/core/state-file";
+import { parseRecord, writeStateFile } from "@cawco/core/state-file";
 import { isPlace } from "@cawco/core/workspace-policy";
 import { excludeStandIns, gitIn, infoExcludeOf } from "./checkout-exclude";
+import { z } from "zod";
 
 /**
  * A mount point a sandbox left on the host, as the host tests it
@@ -181,7 +182,9 @@ export const listedFileOf = (id: string): string =>
 /** What {@link listedFileOf} holds: none listed when there is no record. */
 const listedOf = async (id: string): Promise<string[]> => {
   const text = await readFile(listedFileOf(id), "utf8").catch(() => undefined);
-  return text === undefined ? [] : (JSON.parse(text) as string[]);
+  return text === undefined
+    ? []
+    : parseRecord(listedFileOf(id), text, z.array(z.string()));
 };
 
 /** Each workspace's listing under way ({@link listStandIns}), by its id: one at a time. */

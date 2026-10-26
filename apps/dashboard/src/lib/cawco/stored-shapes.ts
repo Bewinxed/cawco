@@ -4,7 +4,6 @@
  * output is proved below to be its type exactly.
  */
 import type {
-  ArtifactKind as ArtifactKindType,
   PreviewSource as PreviewSourceType,
   SendPayload as SendPayloadType,
 } from "@cawco/core";
@@ -13,6 +12,8 @@ import type {
   PlacementStrategy as PlacementStrategyType,
   StrategyChoice as StrategyChoiceType,
 } from "@cawco/core/accounts";
+import type { ArtifactKind as ArtifactKindType } from "@cawco/core/artifact-kinds";
+import { ARTIFACT_KINDS } from "@cawco/core/artifact-kinds";
 import type {
   FileAttachment as FileAttachmentType,
   SendAttachment as SendAttachmentType,
@@ -27,8 +28,10 @@ import type {
 } from "@cawco/core/browser";
 import type {
   CommentAttachment as CommentAttachmentType,
+  PreviewScheme as PreviewSchemeType,
   ThreadEntry as ThreadEntryType,
 } from "@cawco/core/comments";
+import { PREVIEW_SCHEMES } from "@cawco/core/comments";
 import type {
   ArtifactSessionFrame as ArtifactSessionFrameType,
   BrowserAskFrame as BrowserAskFrameType,
@@ -99,7 +102,6 @@ import type {
 import type { ArtifactSessionHeard as ArtifactSessionHeardType } from "./preview/artifact-session.svelte";
 import type {
   CanvasChosen as CanvasChosenType,
-  CanvasScheme as CanvasSchemeType,
   CanvasWidth as CanvasWidthType,
 } from "./preview/canvas-view.svelte";
 import type { CalledArtifact as CalledArtifactType } from "./preview/source";
@@ -447,13 +449,7 @@ export const ListedBrowserShape = z.object({
 export const ListedBrowserSchema: z.ZodType<ListedBrowserType> =
   ListedBrowserShape;
 
-export const ArtifactKindShape = z.enum([
-  "page",
-  "canvas",
-  "preview",
-  "component",
-  "browser",
-]);
+export const ArtifactKindShape = z.enum(ARTIFACT_KINDS);
 export const ArtifactKindSchema: z.ZodType<ArtifactKindType> =
   ArtifactKindShape;
 
@@ -600,16 +596,16 @@ export const ArtifactSessionHeardShape = z.union([
 export const ArtifactSessionHeardSchema: z.ZodType<ArtifactSessionHeardType> =
   ArtifactSessionHeardShape;
 
-export const CanvasSchemeShape = z.enum(["page", "light", "dark", "both"]);
-export const CanvasSchemeSchema: z.ZodType<CanvasSchemeType> =
-  CanvasSchemeShape;
+export const PreviewSchemeShape = z.enum(PREVIEW_SCHEMES);
+export const PreviewSchemeSchema: z.ZodType<PreviewSchemeType> =
+  PreviewSchemeShape;
 
 export const CanvasWidthShape = z.enum(["own", "390", "768", "1280", "all"]);
 export const CanvasWidthSchema: z.ZodType<CanvasWidthType> = CanvasWidthShape;
 
 export const CanvasChosenShape = z.object({
   motion: z.enum(["on", "reduce"]),
-  scheme: CanvasSchemeShape,
+  scheme: PreviewSchemeShape,
   width: CanvasWidthShape,
 });
 export const CanvasChosenSchema: z.ZodType<CanvasChosenType> =
@@ -1151,7 +1147,7 @@ export const proved: [
   Same<z.output<typeof PreviewFrameShape>, PreviewFrameType>,
   Same<z.output<typeof ArtifactSessionFrameShape>, ArtifactSessionFrameType>,
   Same<z.output<typeof ArtifactSessionHeardShape>, ArtifactSessionHeardType>,
-  Same<z.output<typeof CanvasSchemeShape>, CanvasSchemeType>,
+  Same<z.output<typeof PreviewSchemeShape>, PreviewSchemeType>,
   Same<z.output<typeof CanvasWidthShape>, CanvasWidthType>,
   Same<z.output<typeof CanvasChosenShape>, CanvasChosenType>,
   Same<z.output<typeof CalledArtifactShape>, CalledArtifactType>,

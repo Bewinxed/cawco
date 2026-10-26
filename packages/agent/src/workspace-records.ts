@@ -52,7 +52,6 @@ const pathOf = async (
   let damage: DamagedRecord | undefined;
   for (const name of ["create.json", "boundary.json", "place.json"]) {
     try {
-      // biome-ignore lint/performance/noAwaitInLoops: the first of the records that names the clone
       const record = await readRecord(
         join(workspacesDir(), id, name),
         z.object({ path: z.unknown().optional() })

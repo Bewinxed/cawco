@@ -21,6 +21,7 @@ import type {
   NamedAccount as NamedAccountType,
   WaitReason as WaitReasonType,
 } from "./accounts";
+import { ACCOUNT_HUES } from "./accounts";
 import type {
   FileAttachment as FileAttachmentType,
   SendAttachment as SendAttachmentType,
@@ -183,6 +184,7 @@ import type {
   MoveStep as MoveStepType,
   NamedMoveRequest as NamedMoveRequestType,
 } from "./move";
+import { MOVE_JOB_STEPS } from "./move";
 import type { PairingOffAnswer as PairingOffAnswerType } from "./paths";
 import type {
   PlanComment as PlanCommentType,
@@ -212,7 +214,11 @@ import type {
   StageErrorKind as StageErrorKindType,
   StageError as StageErrorType,
 } from "./stage";
-import type { IngestMark as IngestMarkType } from "./stream";
+import type {
+  CommandAckStage as CommandAckStageType,
+  IngestMark as IngestMarkType,
+} from "./stream";
+import { COMMAND_ACK_STAGES } from "./stream";
 import type {
   RelayPortHealth as RelayPortHealthType,
   RelayPortName as RelayPortNameType,
@@ -656,10 +662,14 @@ export const SessiondLimitShape = z.object({
 export const SessiondLimitSchema: z.ZodType<SessiondLimitType> =
   SessiondLimitShape;
 
+export const CommandAckStageShape = z.enum(COMMAND_ACK_STAGES);
+export const CommandAckStageSchema: z.ZodType<CommandAckStageType> =
+  CommandAckStageShape;
+
 export const SessiondAckShape = z.object({
   commandId: z.string(),
   reason: z.string().optional(),
-  stage: z.enum(["accepted", "applied", "failed"]),
+  stage: CommandAckStageShape,
   type: z.literal("ack"),
 });
 export const SessiondAckSchema: z.ZodType<SessiondAckType> = SessiondAckShape;
@@ -1268,15 +1278,7 @@ export const CompactStageShape = z.enum([
 export const CompactStageSchema: z.ZodType<CompactStageType> =
   CompactStageShape;
 
-export const AccountHueShape = z.enum([
-  "amber",
-  "blue",
-  "cyan",
-  "green",
-  "orange",
-  "rose",
-  "violet",
-]);
+export const AccountHueShape = z.enum(ACCOUNT_HUES);
 export const AccountHueSchema: z.ZodType<AccountHueType> = AccountHueShape;
 
 export const NamedAccountShape = z.object({
@@ -2220,13 +2222,7 @@ export const MoveAskShape = z.object({
 });
 export const MoveAskSchema: z.ZodType<MoveAskType> = MoveAskShape;
 
-export const MoveStepShape = z.enum([
-  "approval",
-  "snapshot",
-  "clone",
-  "lfs",
-  "start",
-]);
+export const MoveStepShape = z.enum(MOVE_JOB_STEPS);
 export const MoveStepSchema: z.ZodType<MoveStepType> = MoveStepShape;
 
 export const MoveErrorShape = z.object({
@@ -2526,6 +2522,7 @@ export const proved: [
   Same<z.output<typeof SessiondLineShape>, SessiondLineType>,
   Same<z.output<typeof ChildLimitShape>, ChildLimitType>,
   Same<z.output<typeof SessiondLimitShape>, SessiondLimitType>,
+  Same<z.output<typeof CommandAckStageShape>, CommandAckStageType>,
   Same<z.output<typeof SessiondAckShape>, SessiondAckType>,
   Same<z.output<typeof SessiondServerMessageShape>, SessiondServerMessageType>,
   Same<z.output<typeof StageErrorKindShape>, StageErrorKindType>,
@@ -2685,6 +2682,7 @@ export const proved: [
   Same<z.output<typeof InstallShape>, InstallType>,
   Same<z.output<typeof NeutralSessionInfoShape>, NeutralSessionInfoType>,
 ] = [
+  true,
   true,
   true,
   true,
