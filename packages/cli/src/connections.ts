@@ -17,7 +17,7 @@ import {
   type ConnectionView,
   readEnv,
 } from "@cawco/core";
-import { OwnerApprovalError, ownerFetch } from "./owner";
+import { ownerAsk } from "./owner";
 
 export class ConnectionKeyError extends Error {}
 
@@ -119,36 +119,20 @@ export const setConnectionKey = async (
   if (!key) {
     throw new ConnectionKeyError("no key was given; nothing was sent");
   }
-  const answer = await ownerFetch(
-    `${hub}/api/connections/${encodeURIComponent(name)}/key`,
+  const response = await ownerAsk(
+    hub,
+    `/api/connections/${encodeURIComponent(name)}/key`,
     {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ key }),
     },
     `cawco connections ${name}`,
-    90_000
-  ).catch((error: unknown) => {
-    if (error instanceof OwnerApprovalError) {
-      throw new ConnectionKeyError(error.message);
-    }
-    throw new ConnectionKeyError(
-      `${hub} could not be reached: ${error instanceof Error ? error.message : String(error)}`
-    );
-  });
-  switch (answer.kind) {
-    case "unanswered":
-      throw new ConnectionKeyError(
-        `${hub} did not answer within ${Math.round(answer.after / 1000)}s, so whether it took the key for ${name} is not known. Run this again to set it.`
-      );
-    case "answered":
-      break;
-    default: {
-      const unhandled: never = answer;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
-  }
-  const response = answer.value;
+    90_000,
+    ConnectionKeyError,
+    (seconds) =>
+      `${hub} did not answer within ${seconds}s, so whether it took the key for ${name} is not known. Run this again to set it.`
+  );
   const { said } = response;
   if (!response.ok) {
     throw new ConnectionKeyError(

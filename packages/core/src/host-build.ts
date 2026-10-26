@@ -9,6 +9,9 @@
  * binary serves both prebuilt and never starts the thread.
  */
 
+import { mkdir, rm } from "node:fs/promises";
+import { join } from "node:path";
+
 /** Which host a build is of. */
 export type HostName = "decision" | "canvas";
 
@@ -73,4 +76,19 @@ export const hostFiles = (host: HostName): Promise<Map<string, Blob>> => {
   });
   built.set(host, building);
   return building;
+};
+
+/**
+ * A release build's host files written to `outdir`, emptied first: an
+ * earlier build's chunks are not this one's.
+ */
+export const writeHostFiles = async (
+  outdir: string,
+  files: Map<string, Blob>
+): Promise<void> => {
+  await rm(outdir, { recursive: true, force: true });
+  await mkdir(outdir, { recursive: true });
+  await Promise.all(
+    [...files].map(([name, file]) => Bun.write(join(outdir, name), file))
+  );
 };

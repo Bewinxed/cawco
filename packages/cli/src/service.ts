@@ -549,6 +549,13 @@ const asMachine: Fetcher = async (url, init) => {
 const probeJson = <T>(url: string): Promise<Bounded<Said<T>>> =>
   probe(url, jsonBody<T>(), {}, asMachine);
 
+/** The HTTP status `url` answers with, its body left unread. */
+const probeStatus = (url: string): Promise<Bounded<number>> =>
+  probe(url, async (response) => {
+    await response.body?.cancel();
+    return response.status;
+  });
+
 const probeHub = async (): Promise<string> => {
   const url = `${hubOrigin()}/health`;
   const health = await probeJson<{ version: string }>(url);
@@ -569,10 +576,7 @@ const probeHub = async (): Promise<string> => {
 const probeDashboard = async (): Promise<string> => {
   const { host, port } = dashboardAddress();
   const url = `http://${host}:${port}/`;
-  const answer = await probe(url, async (response) => {
-    await response.body?.cancel();
-    return response.status;
-  });
+  const answer = await probeStatus(url);
   switch (answer.kind) {
     case "unanswered":
       return noAnswer(url, answer);
@@ -600,13 +604,14 @@ const joinedHub = async (): Promise<string | undefined> => {
 
 /**
  * This machine's own row at its hub, as this machine (core machine-key.ts):
- * the row, `null` when the hub answered it knows no such machine (404). The
- * fleet's list is the person's (hub hub-auth.ts).
+ * the row, `null` when the hub answered it knows no such machine (404), or
+ * what was said instead of an answer. The fleet's list is the person's (hub
+ * hub-auth.ts).
  */
-const ownRow = async (hub: string): Promise<Bounded<Said<AgentRow | null>>> => {
+const ownRow = async (hub: string): Promise<AgentRow | null | string> => {
   const { machineId } = await import("@cawco/core/machine-id");
   const row = jsonBody<AgentRow>();
-  return probe(
+  const self = await probe(
     `${hub}/api/agents/${encodeURIComponent(await machineId())}`,
     async (response): Promise<Said<AgentRow | null>> => {
       if (response.status === 404) {
@@ -618,6 +623,18 @@ const ownRow = async (hub: string): Promise<Bounded<Said<AgentRow | null>>> => {
     {},
     asMachine
   );
+  switch (self.kind) {
+    case "unanswered":
+      return noAnswer(hub, self);
+    case "answered":
+      return self.value.ok
+        ? self.value.value
+        : `${hub} answered ${self.value.said} for this machine's row`;
+    default: {
+      const unhandled: never = self;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
 };
 
 const probeAgent = async (): Promise<string | undefined> => {
@@ -626,21 +643,12 @@ const probeAgent = async (): Promise<string | undefined> => {
     return undefined;
   }
   const self = await ownRow(hub);
-  switch (self.kind) {
-    case "unanswered":
-      return noAnswer(hub, self);
-    case "answered":
-      if (!self.value.ok) {
-        return `${hub} answered ${self.value.said} for this machine's row`;
-      }
-      return self.value.value
-        ? `registered with ${hub} as ${self.value.value.hostname} (${self.value.value.status})`
-        : `not registered with ${hub}`;
-    default: {
-      const unhandled: never = self;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
+  if (typeof self === "string") {
+    return self;
   }
+  return self
+    ? `registered with ${hub} as ${self.hostname} (${self.status})`
+    : `not registered with ${hub}`;
 };
 
 /**
@@ -733,31 +741,19 @@ export const awaitFirstMachineReady = async (
       "agent",
       async () => {
         const self = await ownRow(hub);
-        switch (self.kind) {
-          case "unanswered":
-            return noAnswer(hub, self);
-          case "answered":
-            if (!self.value.ok) {
-              return `${hub} answered ${self.value.said} for this machine's row`;
-            }
-            return self.value.value?.status === "online"
-              ? undefined
-              : `this machine's row is ${self.value.value?.status ?? "not there yet"}`;
-          default: {
-            const unhandled: never = self;
-            throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-          }
+        if (typeof self === "string") {
+          return self;
         }
+        return self?.status === "online"
+          ? undefined
+          : `this machine's row is ${self?.status ?? "not there yet"}`;
       },
     ],
     [
       "dashboard",
       async () => {
         const url = dashboardUrl();
-        const answer = await probe(url, async (response) => {
-          await response.body?.cancel();
-          return response.status;
-        });
+        const answer = await probeStatus(url);
         switch (answer.kind) {
           case "unanswered":
             return noAnswer(url, answer);

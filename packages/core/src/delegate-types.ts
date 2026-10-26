@@ -321,27 +321,32 @@ const OPENCODE_UNSAFE = /[^A-Za-z0-9_-]/gu;
 const LOWERCASE_START = /^[a-z]/u;
 
 /**
- * OpenCode's tool ids for a denied-tool list. A Claude name with an OpenCode
- * equivalent maps to it; `mcp__server__tool` becomes OpenCode's
- * `server_tool` (a bare `mcp__server` or `mcp__server__*` every tool of
- * it); a name already in OpenCode's lowercase form passes through. Anything
- * else is `unmapped`: OpenCode has no tool by that name to deny.
+ * A harness's tool ids for a denied-tool list: a Claude name through
+ * `equivalents`; `mcp__server__tool` through `mcpId`, with each character
+ * `unsafe` matches as `_` (a bare `mcp__server` or `mcp__server__*` is every
+ * tool of it, `*`); a lowercase name as it is, already the harness's form.
+ * Anything else is `unmapped`.
  */
-export const opencodeToolsFor = (
-  names: readonly string[]
+const harnessToolsFor = (
+  names: readonly string[],
+  equivalents: Record<string, readonly string[]>,
+  unsafe: RegExp,
+  mcpId: (server: string, tool: string) => string
 ): { tools: string[]; unmapped: string[] } => {
   const tools = new Set<string>();
   const unmapped: string[] = [];
   for (const name of names) {
     const mcp = CLAUDE_MCP_TOOL.exec(name);
     if (mcp) {
-      const server = mcp[1].replace(OPENCODE_UNSAFE, "_");
       const tool = mcp[2] ?? "*";
       tools.add(
-        `${server}_${tool === "*" ? "*" : tool.replace(OPENCODE_UNSAFE, "_")}`
+        mcpId(
+          mcp[1].replace(unsafe, "_"),
+          tool === "*" ? "*" : tool.replace(unsafe, "_")
+        )
       );
-    } else if (OPENCODE_EQUIVALENTS[name]) {
-      for (const id of OPENCODE_EQUIVALENTS[name]) {
+    } else if (equivalents[name]) {
+      for (const id of equivalents[name]) {
         tools.add(id);
       }
     } else if (LOWERCASE_START.test(name)) {
@@ -352,6 +357,23 @@ export const opencodeToolsFor = (
   }
   return { tools: [...tools], unmapped };
 };
+
+/**
+ * OpenCode's tool ids for a denied-tool list. A Claude name with an OpenCode
+ * equivalent maps to it; `mcp__server__tool` becomes OpenCode's
+ * `server_tool` (a bare `mcp__server` or `mcp__server__*` every tool of
+ * it); a name already in OpenCode's lowercase form passes through. Anything
+ * else is `unmapped`: OpenCode has no tool by that name to deny.
+ */
+export const opencodeToolsFor = (
+  names: readonly string[]
+): { tools: string[]; unmapped: string[] } =>
+  harnessToolsFor(
+    names,
+    OPENCODE_EQUIVALENTS,
+    OPENCODE_UNSAFE,
+    (server, tool) => `${server}_${tool}`
+  );
 
 /**
  * Claude Code's tool names as pi's (1.3.0): its built-ins `read`, `bash`,
@@ -400,29 +422,13 @@ const PI_MCP_UNSAFE = /[^A-Za-z0-9_]/gu;
  */
 export const piToolsFor = (
   names: readonly string[]
-): { tools: string[]; unmapped: string[] } => {
-  const tools = new Set<string>();
-  const unmapped: string[] = [];
-  for (const name of names) {
-    const mcp = CLAUDE_MCP_TOOL.exec(name);
-    if (mcp) {
-      const server = mcp[1].replace(PI_MCP_UNSAFE, "_");
-      const tool = mcp[2] ?? "*";
-      tools.add(
-        `mcp__${server}__${tool === "*" ? "*" : tool.replace(PI_MCP_UNSAFE, "_")}`
-      );
-    } else if (PI_EQUIVALENTS[name]) {
-      for (const id of PI_EQUIVALENTS[name]) {
-        tools.add(id);
-      }
-    } else if (LOWERCASE_START.test(name)) {
-      tools.add(name);
-    } else {
-      unmapped.push(name);
-    }
-  }
-  return { tools: [...tools], unmapped };
-};
+): { tools: string[]; unmapped: string[] } =>
+  harnessToolsFor(
+    names,
+    PI_EQUIVALENTS,
+    PI_MCP_UNSAFE,
+    (server, tool) => `mcp__${server}__${tool}`
+  );
 
 /**
  * Why `harness` cannot carry this denied-tool list, in a sentence, or nothing

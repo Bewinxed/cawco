@@ -24,14 +24,14 @@
  * every decision page names, so a page in a tab of its own asks the origin
  * for no `/favicon.ico` it doesn't serve.
  */
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { dirname, join, normalize, resolve } from "node:path";
 import { SveltePlugin } from "bun-plugin-svelte";
 import { agentReact } from "./agent-react";
 import { refuseSchemeLowering } from "./bundle-css-guard";
 import { bundled } from "./bundled";
 import { unlayeredRules } from "./css-layers";
-import { hostFiles } from "./host-build";
+import { hostFiles, writeHostFiles } from "./host-build";
 import { houseFaceSheet } from "./house-faces";
 import { compileSheets, pageFiles } from "./page-css";
 import { embeddedFile, standalone } from "./runtime";
@@ -339,12 +339,7 @@ export async function decisionHostAssets(
   outdir: string,
   filesUnder: (dir: string, prefix: string) => Promise<[string, string][]>
 ): Promise<[string, string][]> {
-  await rm(outdir, { recursive: true, force: true });
-  await mkdir(outdir, { recursive: true });
-  const files = await buildHostFiles();
-  await Promise.all(
-    [...files].map(([name, file]) => Bun.write(join(outdir, name), file))
-  );
+  await writeHostFiles(outdir, await buildHostFiles());
   return filesUnder(outdir, "decision");
 }
 

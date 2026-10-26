@@ -10,7 +10,7 @@
  */
 import { CAWCO_ENV, readEnv } from "@cawco/core";
 import { ConnectionKeyError, pipedKey, typedKey } from "./connections";
-import { OwnerApprovalError, ownerFetch } from "./owner";
+import { ownerAsk } from "./owner";
 
 /** What `GET /api/jev` answers with. */
 interface JevView {
@@ -33,35 +33,19 @@ const callHub = async (
   init: RequestInit,
   refused: string
 ): Promise<JevView> => {
-  const answer = await ownerFetch(
-    `${hub}/api/jev/typesafe-key`,
+  const { ok, said, status } = await ownerAsk(
+    hub,
+    "/api/jev/typesafe-key",
     init,
     "cawco jev",
-    30_000
-  ).catch((error: unknown) => {
-    if (error instanceof OwnerApprovalError) {
-      throw new ConnectionKeyError(error.message);
-    }
+    30_000,
+    ConnectionKeyError,
+    (seconds) =>
+      `${hub} did not answer within ${seconds}s, so what it did with the TypeSafe key is not known`
+  );
+  if (!ok) {
     throw new ConnectionKeyError(
-      `${hub} could not be reached: ${error instanceof Error ? error.message : String(error)}`
-    );
-  });
-  switch (answer.kind) {
-    case "unanswered":
-      throw new ConnectionKeyError(
-        `${hub} did not answer within ${Math.round(answer.after / 1000)}s, so what it did with the TypeSafe key is not known`
-      );
-    case "answered":
-      break;
-    default: {
-      const unhandled: never = answer;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
-  }
-  const { said } = answer.value;
-  if (!answer.value.ok) {
-    throw new ConnectionKeyError(
-      `${hub} ${refused} (${answer.value.status}): ${said.slice(0, 300)}`
+      `${hub} ${refused} (${status}): ${said.slice(0, 300)}`
     );
   }
   return JSON.parse(said) as JevView;

@@ -165,3 +165,40 @@ export const ownerFetch = async (
     }
   }
 };
+
+/**
+ * `ownerFetch` of `path` on the hub at `hub` (its http base) for a command
+ * that stops on any failure: the person's no, a hub that could not be
+ * reached and one that did not answer each throw a `Fail` with a sentence for
+ * the person; `unanswered` says the last from the seconds waited.
+ */
+export const ownerAsk = async (
+  hub: string,
+  path: string,
+  init: RequestInit,
+  command: string,
+  ms: number,
+  Fail: new (message: string) => Error,
+  unanswered: (seconds: number) => string
+): Promise<OwnerAnswer> => {
+  const answer = await ownerFetch(`${hub}${path}`, init, command, ms).catch(
+    (error: unknown) => {
+      if (error instanceof OwnerApprovalError) {
+        throw new Fail(error.message);
+      }
+      throw new Fail(
+        `${hub} could not be reached: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  );
+  switch (answer.kind) {
+    case "unanswered":
+      throw new Fail(unanswered(Math.round(answer.after / 1000)));
+    case "answered":
+      return answer.value;
+    default: {
+      const unhandled: never = answer;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+};

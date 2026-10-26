@@ -16,7 +16,7 @@
  */
 import { CAWCO_ENV, type RelayView, readEnv } from "@cawco/core";
 import { ConnectionKeyError, pipedKey, typedKey } from "./connections";
-import { OwnerApprovalError, ownerFetch } from "./owner";
+import { ownerAsk } from "./owner";
 import { callTool, toolDoor } from "./tools";
 
 class RelayError extends Error {}
@@ -57,8 +57,9 @@ const call = async (
   if (!hub) {
     throw new RelayError("no hub found");
   }
-  const answer = await ownerFetch(
-    `${hub}${path}`,
+  const { ok, said, status } = await ownerAsk(
+    hub,
+    path,
     {
       method,
       ...(body === undefined
@@ -70,30 +71,13 @@ const call = async (
     },
     "cawco relay",
     // Opening a relay waits on Tailscale and on GitHub's ping.
-    180_000
-  ).catch((error: unknown) => {
-    if (error instanceof OwnerApprovalError) {
-      throw new RelayError(error.message);
-    }
-    throw new RelayError(
-      `${hub} could not be reached: ${error instanceof Error ? error.message : String(error)}`
-    );
-  });
-  switch (answer.kind) {
-    case "unanswered":
-      throw new RelayError(
-        `${hub} did not answer ${method} ${path} within ${Math.round(answer.after / 1000)}s, so what it did is not known`
-      );
-    case "answered":
-      break;
-    default: {
-      const unhandled: never = answer;
-      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-    }
-  }
-  const { said } = answer.value;
-  if (!answer.value.ok) {
-    throw new RelayError(`${answer.value.status}: ${said.slice(0, 500)}`);
+    180_000,
+    RelayError,
+    (seconds) =>
+      `${hub} did not answer ${method} ${path} within ${seconds}s, so what it did is not known`
+  );
+  if (!ok) {
+    throw new RelayError(`${status}: ${said.slice(0, 500)}`);
   }
   return said ? (JSON.parse(said) as unknown) : undefined;
 };

@@ -59,6 +59,7 @@
 
 import { humanSize } from "./attachments";
 import type { DocMap, MapDoc } from "./doc-maps";
+import { fnv1a } from "./fnv1a";
 import type { PreviewElement } from "./index";
 import type { InkGroup } from "./ink";
 import type { Interaction } from "./stage";
@@ -1130,16 +1131,8 @@ export function goneProblem(
 }
 
 /** FNV-1a, 32 bits, as hex: a short fingerprint, the same in the hub and a page. */
-const fingerprint = (text: string): string => {
-  let hash = 0x81_1c_9d_c5;
-  for (let i = 0; i < text.length; i += 1) {
-    // biome-ignore lint/suspicious/noBitwiseOperators: FNV-1a's xor
-    hash ^= text.charCodeAt(i);
-    hash = Math.imul(hash, 0x01_00_01_93);
-  }
-  // biome-ignore lint/suspicious/noBitwiseOperators: as unsigned
-  return (hash >>> 0).toString(16).padStart(8, "0");
-};
+const fingerprint = (text: string): string =>
+  fnv1a(text).toString(16).padStart(8, "0");
 
 /**
  * What of a pin is the person's to say, as a fingerprint: whether it stands

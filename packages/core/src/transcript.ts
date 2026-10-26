@@ -13,6 +13,8 @@
  * send drawn in its place (`placeSends`), the sends still waiting, the live
  * tail, and the facts the session has stated.
  */
+
+import { fnv1a } from "./fnv1a";
 import {
   type NeutralMessage,
   type SendRecord,
@@ -86,17 +88,8 @@ const blankFacts = (): TranscriptFacts => ({
 });
 
 /** FNV-1a over a frame's JSON: the id of a block whose frame carries no uuid. */
-const frameHash = (frame: unknown): string => {
-  const text = JSON.stringify(frame);
-  let hash = 0x81_1c_9d_c5;
-  for (let i = 0; i < text.length; i += 1) {
-    // biome-ignore lint/suspicious/noBitwiseOperators: FNV-1a is defined on bits
-    hash ^= text.charCodeAt(i);
-    hash = Math.imul(hash, 0x01_00_01_93);
-  }
-  // biome-ignore lint/suspicious/noBitwiseOperators: the unsigned 32-bit value
-  return (hash >>> 0).toString(36);
-};
+const frameHash = (frame: unknown): string =>
+  fnv1a(JSON.stringify(frame)).toString(36);
 
 /**
  * A block onto a branch's transcript unless one with its id is already there:
@@ -436,14 +429,7 @@ export class TranscriptBuilder {
       ),
       ...pending,
     ];
-    for (const entry of entries) {
-      this.seeded.add(entry.uuid);
-    }
-    for (const [uuid, record] of Object.entries(records)) {
-      if (newer(this.records[uuid], record)) {
-        this.records = { ...this.records, [uuid]: record };
-      }
-    }
+    this.hold(entries, records);
     const init = read.findLast((row) => row.type === "system.init");
     const commands = {
       ...this.facts.commands,
@@ -519,14 +505,7 @@ export class TranscriptBuilder {
       this.rowIds
     );
     this.pendingLines = pending;
-    for (const entry of entries) {
-      this.seeded.add(entry.uuid);
-    }
-    for (const [uuid, record] of Object.entries(records)) {
-      if (newer(this.records[uuid], record)) {
-        this.records = { ...this.records, [uuid]: record };
-      }
-    }
+    this.hold(entries, records);
     for (const [toolUseId, branch] of branches) {
       if (!this.branches.has(toolUseId)) {
         this.branches.set(toolUseId, branch);
@@ -579,6 +558,21 @@ export class TranscriptBuilder {
    * (the first run, before any held row, at the front). `cut`: held rows
    * after the last one the read names, and that it lacks, go.
    */
+  /** A read's entries, seeded, and its send records where newer than those held. */
+  private hold(
+    entries: SessionMessage[],
+    records: Record<string, SendRecord>
+  ): void {
+    for (const entry of entries) {
+      this.seeded.add(entry.uuid);
+    }
+    for (const [uuid, record] of Object.entries(records)) {
+      if (newer(this.records[uuid], record)) {
+        this.records = { ...this.records, [uuid]: record };
+      }
+    }
+  }
+
   private mergeRows(read: TranscriptBlock[], cut: boolean): void {
     const fresh = new Map(read.map((row) => [row.id, row]));
     const runs = new Map<string | null, TranscriptBlock[]>();

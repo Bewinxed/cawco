@@ -173,7 +173,7 @@ export async function readSpans(
   path: string,
   spans: readonly Span[],
 ): Promise<(TranscriptRecord | undefined)[]> {
-  const out = new Array<TranscriptRecord | undefined>(spans.length);
+  const out = Array.from(spans, (): TranscriptRecord | undefined => undefined);
   if (spans.length === 0) {
     return out;
   }

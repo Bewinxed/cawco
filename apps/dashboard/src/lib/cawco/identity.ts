@@ -15,21 +15,11 @@
  * `--identity-h` and tunes lightness per appearance.
  */
 
+import { fnv1a } from "@cawco/core/fnv1a";
+
 /** Ten identity hues (oklch). No hue below 40: a red folder reads as alarm. */
 export const HUES = [55, 85, 115, 145, 175, 205, 235, 265, 295, 330] as const;
 
-/** FNV-1a — tiny, stable, good spread on short path strings. */
-function hash(key: string): number {
-  let h = 0x81_1c_9d_c5;
-  for (let i = 0; i < key.length; i += 1) {
-    // biome-ignore lint/suspicious/noBitwiseOperators: FNV-1a is defined in terms of XOR and unsigned shift, not booleans
-    h ^= key.charCodeAt(i);
-    h = Math.imul(h, 0x01_00_01_93);
-  }
-  // biome-ignore lint/suspicious/noBitwiseOperators: >>> 0 coerces the FNV hash to an unsigned 32-bit int
-  return h >>> 0;
-}
-
 export function identityHue(key: string): number {
-  return HUES[hash(key) % HUES.length];
+  return HUES[fnv1a(key) % HUES.length];
 }

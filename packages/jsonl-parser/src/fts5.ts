@@ -1321,17 +1321,13 @@ export class TranscriptIndex {
       params.push(id);
     }
     if (options.sessions !== undefined) {
-      // Filtered after the FTS match, as the author is: a session no row
-      // names has no id, and none of them leaves no hits.
-      const ids = options.sessions.flatMap((session) => {
-        const id = this.#strings.get(session);
-        return id === undefined ? [] : [id];
-      });
-      if (ids.length === 0) {
+      // Filtered after the FTS match, as the author is.
+      const ids = this.#sessionIds(options.sessions);
+      if (ids === null) {
         return [];
       }
       filters += " AND d.session IN (SELECT value FROM json_each(?))";
-      params.push(JSON.stringify(ids));
+      params.push(ids);
     }
     if (options.before !== undefined) {
       // Filtered after the FTS match, as the author is; ISO times compare
@@ -1381,6 +1377,19 @@ export class TranscriptIndex {
       .slice(0, limit);
   }
 
+  /**
+   * The ids of `sessions` as a JSON list for `json_each`: null when no row
+   * names any of them (a session no row names has no id), which leaves no
+   * hits.
+   */
+  #sessionIds(sessions: readonly string[]): string | null {
+    const ids = sessions.flatMap((session) => {
+      const id = this.#strings.get(session);
+      return id === undefined ? [] : [id];
+    });
+    return ids.length === 0 ? null : JSON.stringify(ids);
+  }
+
   /** Every column of words of each of `ids`: a listing's context is the start of them. */
   #words(
     ids: number[],
@@ -1428,15 +1437,12 @@ export class TranscriptIndex {
       params.push(options.before);
     }
     if (options.sessions !== undefined) {
-      const ids = options.sessions.flatMap((session) => {
-        const id = this.#strings.get(session);
-        return id === undefined ? [] : [id];
-      });
-      if (ids.length === 0) {
+      const ids = this.#sessionIds(options.sessions);
+      if (ids === null) {
         return [];
       }
       filters += " AND d.session IN (SELECT value FROM json_each(?))";
-      params.push(JSON.stringify(ids));
+      params.push(ids);
     }
     const ids = (
       this.db

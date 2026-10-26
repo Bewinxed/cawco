@@ -11,7 +11,7 @@
  *
  * It can't be pointed inside the network: a host must be a public name (the
  * zones `faviconReachable` excludes are refused), every address it resolves
- * to must be public unicast and the socket connects to the very addresses
+ * to must be a public destination (core public-address.ts) and the socket connects to the very addresses
  * checked, and each redirect hop is held to the same rules.
  * Only raster images it recognises by their bytes are served (never SVG, which
  * could carry script), under a sandboxing CSP.
@@ -23,6 +23,7 @@ import { get as httpsGet } from "node:https";
 import type { LookupFunction } from "node:net";
 import { dirname, join } from "node:path";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { isPublicDestination } from "@cawco/core/public-address";
 import { writeStateFile } from "@cawco/core/state-file";
 import { DAY_MS } from "@cawco/core/time";
 import { faviconReachable } from "@cawco/core/tool-presentation";
@@ -42,7 +43,6 @@ const MAX_HOPS = 3;
 const HOST =
   /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,62}$/u;
 
-const HEXTET = /^[0-9a-f]{1,4}$/iu;
 const LINK_TAG = /<link\b[^>]*>/giu;
 const SPACES = /\s+/u;
 const TRAILING_DOT = /\.$/u;
@@ -50,104 +50,6 @@ const TRAILING_DOT = /\.$/u;
 /** Whether `host` names a public site this hub may ask for its icon. */
 const publicName = (host: string): boolean =>
   HOST.test(host) && faviconReachable(host);
-
-const v4Number = (ip: string): number | undefined => {
-  const parts = ip.split(".").map(Number);
-  return parts.length === 4 &&
-    parts.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)
-    ? parts.reduce((sum, part) => sum * 256 + part, 0)
-    : undefined;
-};
-
-/** IPv4 ranges that are not the public internet (RFC 6890 and kin). */
-const V4_RESERVED: [string, number][] = [
-  ["0.0.0.0", 8],
-  ["10.0.0.0", 8],
-  ["100.64.0.0", 10],
-  ["127.0.0.0", 8],
-  ["169.254.0.0", 16],
-  ["172.16.0.0", 12],
-  ["192.0.0.0", 24],
-  ["192.0.2.0", 24],
-  ["192.88.99.0", 24],
-  ["192.168.0.0", 16],
-  ["198.18.0.0", 15],
-  ["198.51.100.0", 24],
-  ["203.0.113.0", 24],
-  ["224.0.0.0", 4],
-  ["240.0.0.0", 4],
-];
-
-const publicV4 = (ip: string): boolean => {
-  const n = v4Number(ip);
-  if (n === undefined) {
-    return false;
-  }
-  return !V4_RESERVED.some(([base, bits]) => {
-    const size = 2 ** (32 - bits);
-    const start = v4Number(base) ?? 0;
-    return n >= start && n < start + size;
-  });
-};
-
-/** The eight 16-bit groups of an IPv6 address; undefined when it is not one. */
-const v6Groups = (raw: string): number[] | undefined => {
-  const ip = raw.split("%")[0] ?? "";
-  const [head = "", tail, extra] = ip.split("::");
-  if (extra !== undefined) {
-    return undefined;
-  }
-  const side = (part: string): number[] | undefined => {
-    if (part === "") {
-      return [];
-    }
-    const groups: number[] = [];
-    for (const piece of part.split(":")) {
-      const v4 = piece.includes(".") ? v4Number(piece) : undefined;
-      if (v4 !== undefined) {
-        groups.push(Math.floor(v4 / 65_536), v4 % 65_536);
-      } else if (HEXTET.test(piece)) {
-        groups.push(Number.parseInt(piece, 16));
-      } else {
-        return undefined;
-      }
-    }
-    return groups;
-  };
-  const left = side(head);
-  const right = tail === undefined ? [] : side(tail);
-  if (!(left && right)) {
-    return undefined;
-  }
-  const fill = 8 - left.length - right.length;
-  if (tail === undefined ? fill !== 0 : fill < 1) {
-    return undefined;
-  }
-  return [...left, ...new Array<number>(fill).fill(0), ...right];
-};
-
-/** Public IPv6 is global unicast (2000::/3), less documentation, Teredo and 6to4, which tunnel to anywhere. */
-const publicV6 = (ip: string): boolean => {
-  const g = v6Groups(ip);
-  if (!g) {
-    return false;
-  }
-  const [a = 0, b = 0, c = 0, d = 0, e = 0, f = 0, h = 0, i = 0] = g;
-  if (a === 0 && b === 0 && c === 0 && d === 0 && e === 0 && f === 0xff_ff) {
-    const octets = [h / 256, h % 256, i / 256, i % 256].map(Math.floor);
-    return publicV4(octets.join("."));
-  }
-  return (
-    a >= 0x20_00 &&
-    a < 0x40_00 &&
-    !(a === 0x20_01 && b === 0x0d_b8) &&
-    !(a === 0x20_01 && b === 0) &&
-    a !== 0x20_02
-  );
-};
-
-const publicAddress = (address: string, family: number): boolean =>
-  family === 6 ? publicV6(address) : publicV4(address);
 
 /**
  * The resolver every connection uses: it answers only when every address the
@@ -163,7 +65,7 @@ const publicLookup: LookupFunction = (hostname, options, callback) => {
     const list = addresses as LookupAddress[];
     if (
       list.length === 0 ||
-      !list.every(({ address, family }) => publicAddress(address, family))
+      !list.every(({ address }) => isPublicDestination(address))
     ) {
       const refused = Object.assign(
         new Error(`${hostname} resolves inside the network`),

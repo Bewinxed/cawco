@@ -14,13 +14,12 @@
  * gives the overlay), `/canvas/<file>` the bundle's files (`host.css` the
  * stylesheet) and fonts.
  */
-import { mkdir, rm } from "node:fs/promises";
 import { dirname, join, normalize } from "node:path";
 import { agentReact } from "./agent-react";
 import { refuseSchemeLowering } from "./bundle-css-guard";
 import { bundled } from "./bundled";
 import { HOST_PLUGINS } from "./canvas-host-plugins";
-import { hostFiles } from "./host-build";
+import { hostFiles, writeHostFiles } from "./host-build";
 import { compileSheets, pageFiles } from "./page-css";
 import { embeddedFile, standalone } from "./runtime";
 
@@ -113,14 +112,7 @@ export async function canvasHostAssets(
   outdir: string,
   filesUnder: (dir: string, prefix: string) => Promise<[string, string][]>
 ): Promise<[string, string][]> {
-  // An earlier build's chunks are not this one's.
-  await rm(outdir, { recursive: true, force: true });
-  await mkdir(outdir, { recursive: true });
-  await Promise.all(
-    [...(await buildCanvasHost())].map(([name, file]) =>
-      Bun.write(join(outdir, name), file)
-    )
-  );
+  await writeHostFiles(outdir, await buildCanvasHost());
   return [
     ["canvas/index.html", join(HOST_DIR, "index.html")],
     ...(await filesUnder(outdir, "canvas/files")),

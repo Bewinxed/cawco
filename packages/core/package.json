@@ -88,6 +88,7 @@
     "./ink": "./src/ink.ts",
     "./shapes": "./src/shapes.ts",
     "./comments": "./src/comments.ts",
+    "./fnv1a": "./src/fnv1a.ts",
     "./pin-name": "./src/pin-name.ts",
     "./doc-link": "./src/doc-link.ts",
     "./doc-maps": "./src/doc-maps.ts",

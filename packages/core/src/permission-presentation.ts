@@ -1064,26 +1064,35 @@ export const MEMORY_PROPOSAL_TOOL = "mcp__cawco__memory_propose";
 export const DELEGATE_TYPE_PROPOSAL_TOOL = "mcp__cawco__delegate_type_proposal";
 
 /**
- * A memory proposal (Projects spec §5.4): a change to the project's AGENTS.md
- * or its knowledge files, as the curator, Jev's sort, the hub's archive or
- * withdrawal, or Caw proposed it, citing the inbox notes it comes from; and
- * Caw's delegate type (§5.1, "a file diff you approve"), drawn the same. The
- * hub puts each file as it stood (`before`) beside its proposed text
- * (`content`) as it parks it: a fact moving between files is one card.
+ * A proposal's `files`, each a path, the file as it stood (`before`) and its
+ * proposed text under `proposed`: the well-formed ones, each drawn as a
+ * change, and their lines added and removed together.
  */
-function memoryProposal(input: Record<string, unknown>): Presented {
+function proposedFiles(
+  input: Record<string, unknown>,
+  proposed: "after" | "content"
+): {
+  changes: PermissionChange[];
+  files: { before: string; path: string }[];
+  stat: LineStat;
+} {
   const files = Array.isArray(input.files)
     ? input.files.filter(
-        (file): file is { before: string; content: string; path: string } =>
+        (
+          file
+        ): file is { before: string; path: string } & Record<
+          typeof proposed,
+          string
+        > =>
           typeof file === "object" &&
           file !== null &&
           typeof (file as { path?: unknown }).path === "string" &&
           typeof (file as { before?: unknown }).before === "string" &&
-          typeof (file as { content?: unknown }).content === "string"
+          typeof (file as Record<string, unknown>)[proposed] === "string"
       )
     : [];
   const made = files.map((file) =>
-    changeOf(file.path, file.before, file.content)
+    changeOf(file.path, file.before, file[proposed])
   );
   const stat = made.reduce<LineStat>(
     (sum, each) => ({
@@ -1093,6 +1102,19 @@ function memoryProposal(input: Record<string, unknown>): Presented {
     }),
     { added: 0, removed: 0, sections: [] }
   );
+  return { files, changes: made.map((each) => each.change), stat };
+}
+
+/**
+ * A memory proposal (Projects spec §5.4): a change to the project's AGENTS.md
+ * or its knowledge files, as the curator, Jev's sort, the hub's archive or
+ * withdrawal, or Caw proposed it, citing the inbox notes it comes from; and
+ * Caw's delegate type (§5.1, "a file diff you approve"), drawn the same. The
+ * hub puts each file as it stood (`before`) beside its proposed text
+ * (`content`) as it parks it: a fact moving between files is one card.
+ */
+function memoryProposal(input: Record<string, unknown>): Presented {
+  const { files, changes, stat } = proposedFiles(input, "content");
   const notes = Array.isArray(input.notes)
     ? input.notes.filter((note): note is string => typeof note === "string")
     : [];
@@ -1105,7 +1127,7 @@ function memoryProposal(input: Record<string, unknown>): Presented {
   return {
     summary,
     detail: statWords(stat),
-    changes: made.map((each) => each.change),
+    changes,
     fields: [
       ...fieldsOf(input, ["files", "notes", "project"]),
       ...(notes.length > 0
@@ -1129,34 +1151,14 @@ export const DESIGN_PROPOSAL_TOOL = "mcp__cawco__design_proposal";
  * proposal's card draws its file.
  */
 function designProposal(input: Record<string, unknown>): Presented {
-  const files = Array.isArray(input.files)
-    ? input.files.filter(
-        (file): file is { after: string; before: string; path: string } =>
-          typeof file === "object" &&
-          file !== null &&
-          typeof (file as { path?: unknown }).path === "string" &&
-          typeof (file as { before?: unknown }).before === "string" &&
-          typeof (file as { after?: unknown }).after === "string"
-      )
-    : [];
-  const made = files.map((file) =>
-    changeOf(file.path, file.before, file.after)
-  );
-  const stat = made.reduce<LineStat>(
-    (sum, each) => ({
-      added: sum.added + each.stat.added,
-      removed: sum.removed + each.stat.removed,
-      sections: [],
-    }),
-    { added: 0, removed: 0, sections: [] }
-  );
+  const { files, changes, stat } = proposedFiles(input, "after");
   return {
     summary:
       files.length === 1
         ? `Change ${files[0]?.path}`
         : `Change ${plural(files.length, "design system file")}`,
     detail: statWords(stat),
-    changes: made.map((each) => each.change),
+    changes,
     fields: fieldsOf(input, ["files", "project"]),
   };
 }
