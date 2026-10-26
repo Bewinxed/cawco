@@ -364,8 +364,6 @@ final class PaywallHeroView: UIView {
 
 #if DEBUG
 extension PaywallHeroView {
-    /// For the paywall probe: the film has played to its end and the cards are coming.
-    var probeCardsShown: Bool { cardsShown }
 
     /// For the paywall probe: where the film is, and Caw's climb box.
     var probeState: [String: Any] {

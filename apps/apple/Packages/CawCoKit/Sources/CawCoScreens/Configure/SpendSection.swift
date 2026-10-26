@@ -17,8 +17,6 @@ final class SpendSectionController: ConfigSectionController {
 
     #if DEBUG
     func probeChoose(_ value: String) { choose(value) }
-    var probeChosen: String? { onCap }
-    var probeWriting: Bool { writing }
     #endif
 
     override func viewDidLoad() {

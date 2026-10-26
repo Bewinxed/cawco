@@ -106,15 +106,6 @@ final class MemorySectionController: ConfigSectionController {
         navigationController?.pushViewController(MemoryEditorController(section: section, context: context, path: path), animated: true)
     }
 
-    #if DEBUG
-    /// A new document made as New document makes it, then opened.
-    func probeCreate(_ path: String) {
-        Task { @MainActor [weak self] in
-            guard let self, case .written = try await FleetMemory.create(path, hub: hub) else { return }
-            open(path)
-        }
-    }
-    #endif
 
     /// Delete: at once, with Undo in the toast.
     private func remove(_ path: String) {

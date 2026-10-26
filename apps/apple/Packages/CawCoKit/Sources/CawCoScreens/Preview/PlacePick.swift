@@ -142,9 +142,6 @@ final class PlacePickView: UIView {
             machineSelect.setValue(rows.isEmpty ? Words.PlacePick.noMachines : Words.PlacePick.chooseMachine, placeholder: true)
         }
         browse.isHidden = machine == nil
-        #if DEBUG
-        PreviewProbe.say("place pick machine=\(machine.map { "\($0.machineId):\($0.name)" } ?? "-") online=\(rows.map(\.machineId).joined(separator: ","))")
-        #endif
     }
 
     private func clearProblem() {
@@ -169,15 +166,6 @@ final class PlacePickView: UIView {
         onPick(Place(machineId: machine.machineId, label: Naming.machineLabel(machine.hostname), path: folder))
     }
 
-    #if DEBUG
-    /// `-place-pick <machineId> <path>`: the machine chosen from the select, the folder typed and Use this place pressed, as the person's would.
-    func pickForProbe(machineId: String, path: String) {
-        chosen = machineId
-        paintMachines()
-        folderField.text = path
-        submit()
-    }
-    #endif
 }
 
 /// The picker presented: in a pane, over the whole of the preview's well,

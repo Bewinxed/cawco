@@ -140,12 +140,6 @@ final class RowStore {
     /// batches, as sorting every row held by when it was used, for each row
     /// built, was a tenth of a fling's main thread.
     static let slack = 48
-    #if DEBUG
-    /// Rows stood at an exact height, to be measured once the list is at rest (`verify`).
-    private var unverified: [(id: String, print: String, kind: String, view: Weak, height: CGFloat, width: CGFloat)] = []
-    private var verified = Set<String>()
-    struct Weak { weak var view: UIView? }
-    #endif
 
     init(env: RowEnv) { self.env = env }
 
@@ -173,10 +167,6 @@ final class RowStore {
             if entry.print != item.print || widthChanged {
                 if widthChanged { (view as? FitsWidth)?.fitWidth = width }
                 if entry.print != item.print {
-                    #if DEBUG
-                    let start = CACurrentMediaTime()
-                    defer { Pace.rowSet(V.self, made: 0, configured: CACurrentMediaTime() - start) }
-                    #endif
                     view.configure(item)
                     Pace.row()
                 }
@@ -189,11 +179,6 @@ final class RowStore {
             return view
         }
         let view: V
-        #if DEBUG
-        let start = CACurrentMediaTime()
-        var madeAt = start
-        defer { Pace.rowSet(V.self, made: madeAt - start, configured: CACurrentMediaTime() - madeAt) }
-        #endif
         if let kept = spare[ObjectIdentifier(V.self)]?.popLast() as? V {
             refill()
             (kept as? any Recycled)?.recycle()
@@ -202,18 +187,9 @@ final class RowStore {
             // texts out at a size they are not to have.
             kept.frame = .zero
             view = kept
-            #if DEBUG
-            Pace.madeRow(spare: true)
-            #endif
         } else {
             view = make(V.self)
-            #if DEBUG
-            Pace.madeRow(spare: false)
-            #endif
         }
-        #if DEBUG
-        madeAt = CACurrentMediaTime()
-        #endif
         (view as? FitsWidth)?.fitWidth = width
         view.configure(item)
         Pace.row()
@@ -299,9 +275,6 @@ final class RowStore {
         view.frame = CGRect(x: 0, y: 0, width: width, height: height)
         view.layoutIfNeeded()
         entries[item.id]?.height = height
-        #if DEBUG
-        verifyLater(item.id, print: item.print, kind: String(describing: type), view: view, height: height, width: width)
-        #endif
         return true
     }
 
@@ -310,29 +283,12 @@ final class RowStore {
         // screen, or one prepared to come on it (a prefetched cell).
         guard !isReady(item, width: width), entries[item.id]?.view.superview == nil else { return false }
         func build<V: RowContent>(_ type: V.Type) -> UIView { row(type, for: item, width: width) }
-        #if DEBUG
-        let fresh = entries[item.id] == nil
-        var marks = [CACurrentMediaTime()]
-        defer {
-            if Pace.probing, marks.count == 5 { Pace.warmed(String(describing: type), fresh: fresh, marks: marks) }
-        }
-        #endif
         let view = build(type)
-        #if DEBUG
-        marks.append(CACurrentMediaTime())
-        #endif
         if let row = view as? any FrameRow {
             // Its height asked of it, then laid out once there.
             let height = row.height(for: width)
-            #if DEBUG
-            marks.append(CACurrentMediaTime())
-            marks.append(CACurrentMediaTime())
-            #endif
             view.frame = CGRect(x: 0, y: 0, width: width, height: height)
             view.layoutIfNeeded()
-            #if DEBUG
-            marks.append(CACurrentMediaTime())
-            #endif
             entries[item.id]?.height = height
             return true
         }
@@ -348,63 +304,16 @@ final class RowStore {
         // every text learns it, then measured.
         view.frame = CGRect(x: 0, y: 0, width: width, height: max(view.bounds.height, 1))
         view.layoutIfNeeded()
-        #if DEBUG
-        marks.append(CACurrentMediaTime())
-        #endif
         let size = view.systemLayoutSizeFitting(CGSize(width: width, height: 0), withHorizontalFittingPriority: .required,
                                                 verticalFittingPriority: .fittingSizeLevel)
-        #if DEBUG
-        marks.append(CACurrentMediaTime())
-        #endif
         // Laid out where it will stand, so the cell that shows it finds its
         // text views at their size and lays nothing out again.
         view.frame = CGRect(x: 0, y: 0, width: width, height: size.height)
         view.layoutIfNeeded()
-        #if DEBUG
-        marks.append(CACurrentMediaTime())
-        #endif
         entries[item.id]?.height = size.height
         return true
     }
 
-    #if DEBUG
-    /// The row view the store keeps for `id` (TranscriptView `probeBounds`).
-    func heldView(for id: String) -> UIView? { entries[id]?.view }
-
-    /// A row stood at an exact height, measured as its view lays out once the
-    /// list is at rest (`verify`): any difference is a drift (probe-kit spec
-    /// `ios-scroll-up`, which must count none).
-    func verifyLater(_ id: String, print: String, kind: String, view: UIView, height: CGFloat, width: CGFloat) {
-        guard Pace.probing, !verified.contains(id) else { return }
-        unverified.append((id, print, kind, Weak(view: view), height, width))
-    }
-
-    /// Measures rows stood at exact heights until `deadline`; whether any are left.
-    @discardableResult
-    func verify(until deadline: Double) -> Bool {
-        while !unverified.isEmpty, CACurrentMediaTime() < deadline {
-            let next = unverified.removeLast()
-            // Only a view that still stands for the row it was stood for: a
-            // row view let go of stands for another row since (`spare`).
-            guard !verified.contains(next.id), let view = next.view.view, let entry = entries[next.id],
-                  entry.view === view, entry.print == next.print else { continue }
-            verified.insert(next.id)
-            let real: CGFloat
-            if let row = view as? any FrameRow {
-                real = row.height(for: next.width)
-            } else {
-                // A row out of every cell stands at its width only by a constraint (`stand`).
-                let standing = view.superview == nil ? view.widthAnchor.constraint(equalToConstant: next.width) : nil
-                standing?.isActive = true
-                real = view.systemLayoutSizeFitting(CGSize(width: next.width, height: 0), withHorizontalFittingPriority: .required,
-                                                    verticalFittingPriority: .fittingSizeLevel).height
-                standing?.isActive = false
-            }
-            Pace.heightChecked(next.kind, id: next.id, exact: next.height, real: real)
-        }
-        return !unverified.isEmpty
-    }
-    #endif
 
     /// The row's height for `item` at `width`, when it is known.
     func height(_ id: String, print: String, width: CGFloat) -> CGFloat? {
@@ -595,9 +504,6 @@ final class HostCell<Content: RowContent>: UICollectionViewCell, ItemCell {
             (view.superview?.superview as? any RowHost)?.lost(view)
             view.removeFromSuperview()
             row = view
-            #if DEBUG
-            if Pace.probing, view is PieceView { Pace.pieceStood(view) }
-            #endif
             contentView.addSubview(view)
             top = nil
             if !(view is any FrameRow) {
@@ -685,10 +591,6 @@ final class HostCell<Content: RowContent>: UICollectionViewCell, ItemCell {
         let width = attributes.size.width
         // A row whose exact height the layout gave (RowLayout) stands at it: nothing is measured.
         if fresh, ((superview as? UICollectionView)?.collectionViewLayout as? RowLayout)?.isExact(attributes.indexPath) == true {
-            #if DEBUG
-            if first, let shown, let row { store?.verifyLater(shown.id, print: shown.print, kind: String(describing: Content.self), view: row,
-                                                       height: attributes.size.height - margin, width: width) }
-            #endif
             return attributes
         }
         if fresh, let shown, let height = store?.height(shown.id, print: shown.print, width: width) {

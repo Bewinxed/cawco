@@ -208,7 +208,6 @@ final class BlockPageView: UIView, UIDragInteractionDelegate, UIDropInteractionD
             guard let self else { return }
             // Said where the blocks now stand: the new order, never with the frames of the old one.
             window?.layoutIfNeeded()
-            BlocksProbe.page(self)
         }
         #endif
         return true
@@ -382,9 +381,6 @@ final class BlockPageView: UIView, UIDragInteractionDelegate, UIDropInteractionD
     private func write(_ work: @escaping @MainActor () async -> Bool) {
         Task { @MainActor in
             _ = await work()
-            #if DEBUG
-            BlocksProbe.page(self)
-            #endif
             laid = ""
             layoutGrid(animated: true)
         }
@@ -406,13 +402,6 @@ final class BlockPageView: UIView, UIDragInteractionDelegate, UIDropInteractionD
         return box
     }
 
-    #if DEBUG
-    /// Each shown block's id, span and centre of its ⋯, in order, for the probe.
-    var probeBlocks: [(id: String, span: Int, more: String)] {
-        let order = blocks.placesOf(page).filter { !$0.hidden }.map(\.block)
-        return order.compactMap { id in frames[id].map { (id, $0.span, ViewsProbe.centre($0.moreButton)) } }
-    }
-    #endif
 }
 
 /// Which edge of a block a drop takes.
@@ -723,21 +712,3 @@ final class BlockFrameView: UIView {
     }
 }
 
-#if DEBUG
-/// `-views-probe`: a page of blocks, said in the log for scripts/probe-kit/specs/ios-views.ts (leg c).
-@MainActor
-enum BlocksProbe {
-    private static var said: [BlockPage: String] = [:]
-
-    /// Said again only when what stands where changed.
-    static func page(_ view: BlockPageView) {
-        guard ViewsProbe.on, view.window != nil else { return }
-        view.superview?.layoutIfNeeded()
-        let blocks = view.probeBlocks.map { "\($0.id)/\($0.span)@\($0.more)" }.joined(separator: ";")
-        let line = "blocks page=\(view.page.rawValue) blocks=\(blocks)"
-        guard said[view.page] != line else { return }
-        said[view.page] = line
-        ViewsProbe.say(line)
-    }
-}
-#endif

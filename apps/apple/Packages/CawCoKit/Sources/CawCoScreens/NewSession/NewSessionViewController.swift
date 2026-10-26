@@ -1101,57 +1101,14 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     }
 
     #if DEBUG
-    /// A simulator pass's `-new-session-machines`: the machines picker, open
-    /// once the move is read; `-new-session-step`: Move & start pressed once it can be.
-    private var probeMachines = ProcessInfo.processInfo.arguments.contains("-new-session-machines")
-    private var probeStep = ProcessInfo.processInfo.arguments.contains("-new-session-step")
-    /// `-new-session-location <path>`: moving, the destination unlocked and
-    /// typed as `path`, its popover open; `-new-session-location-shut` leaves it shut.
-    private var probeLocation: String? = {
-        let arguments = ProcessInfo.processInfo.arguments
-        guard let at = arguments.firstIndex(of: "-new-session-location"), arguments.indices.contains(at + 1) else { return nil }
-        return arguments[at + 1]
-    }()
 
     /// What the pass last logged, so each change of the form is said once.
     private var probeSaid = ""
 
-    private func probeForm() {
-        // What it opened on, too: `-form-starts` (scripts/probe-kit/specs/ios-form-starts.ts) reads the prefill and the mode.
-        let said = "form: step \(moveStep) · start \"\(startLabel)\" \(cantStart ? "disabled" : "enabled") · heading \"\(heading.text ?? "")\" · reading \"\(readingText)\""
-            + " · crumb \"\(crumb.text ?? "")\" · machines \(machineIds.joined(separator: ",")) · cwd \(path) · project \(projectId ?? "-")"
-            + " · spinOff \(spinOff) · harness \(harness) · mode \(permissionMode ?? "-")"
-        let arguments = ProcessInfo.processInfo.arguments
-        if said != probeSaid, arguments.contains("-new-session") || arguments.contains("-form-starts") {
-            probeSaid = said
-            Logger(subsystem: "dev.cawco.app", category: "Probe").notice("\(said, privacy: .public)")
-        }
-        guard moving, view.window != nil else { return }
-        if let path = probeLocation {
-            probeLocation = nil
-            moveEditing = true
-            moveAt = path
-            requestRefresh()
-            if !ProcessInfo.processInfo.arguments.contains("-new-session-location-shut") {
-                DispatchQueue.main.async { [weak self] in self?.toggle(.location) }
-            }
-        }
-        if probeMachines {
-            probeMachines = false
-            DispatchQueue.main.async { [weak self] in self?.toggle(.machines) }
-        }
-        if probeStep, !moveStep {
-            probeStep = false
-            DispatchQueue.main.async { [weak self] in self?.submit() }
-        }
-    }
     #endif
 
     private func paint() {
         guard layoutCompact != nil else { return }
-        #if DEBUG
-        probeForm()
-        #endif
         readPlacement()
         let picked = machineItems.filter { machineIds.contains($0.id) }
         machinesChip.show(Glyph.machineServer.image, tint: Palette.hueCyan500,

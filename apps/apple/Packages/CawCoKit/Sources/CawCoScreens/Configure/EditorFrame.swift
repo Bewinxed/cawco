@@ -256,9 +256,6 @@ class ConfigEditorController: ObservedViewController {
     }
 
     #if DEBUG
-    /// The probe's presses, through what the buttons run.
-    func probeRunSave() { runSave() }
-    func probeRunDelete() { runDelete() }
     func probeConfirm() { question.probeConfirm() }
     /// The commit row as it draws now, and the question over it.
     var probeFooter: String {
@@ -267,18 +264,6 @@ class ConfigEditorController: ObservedViewController {
         return "[\(save)\(saveButton.isEnabled ? "" : " (disabled)")]" + asked
     }
 
-    /// Where Delete stands as drawn: the header's ⋯ menu and its items, or the commit row's button.
-    var probeDelete: String {
-        if !headMenu.isHidden, headMenu.window != nil, let deleteLabel {
-            // What the menu lists as it opens: its items are made then, not held.
-            let items = headMenuItems(deleteLabel).compactMap { ($0 as? UIAction)?.title }
-            return "header menu: " + items.joined(separator: ", ")
-        }
-        if let deleteButton, !deleteButton.isHidden, deleteButton.window != nil {
-            return "commit row: [\(deleteButton.configuration?.attributedTitle.map { String($0.characters) } ?? "")]"
-        }
-        return "none"
-    }
     #endif
 
     private func runSave() {

@@ -213,9 +213,6 @@ final class GlassCard: UIView, UIGestureRecognizerDelegate {
     /// height over `durMorph`.
     func place(animated: Bool = false, then done: @escaping () -> Void = {}) {
         guard let host = superview, let glass, glass.window != nil, let showing else { return done() }
-        #if DEBUG
-        ProbeCounts.panelPlaces += 1
-        #endif
         let spot = placement(of: showing, in: host, under: glass)
         logHang(spot, glass: glass)
         // The content at its new size and laid out whole first, as a morph lays

@@ -122,9 +122,6 @@ final class ViewAskController: KitPopoverController {
         super.init(chromeless: true)
         ask.submit = { [weak self] text, id in
             let thread = try await hub.threads.requestView(projectId: projectId, text: text, id: id)
-            #if DEBUG
-            ViewsProbe.say("views asked \(thread.id)")
-            #endif
             self?.dismiss(animated: true)
         }
         ask.onHeight = { [weak self] in self?.fit() }
@@ -149,9 +146,6 @@ final class ViewAskController: KitPopoverController {
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         ask.focus()
-        #if DEBUG
-        ViewsProbe.say("views ask open")
-        #endif
     }
 
     /// `min(cPanelW, 100vw − 2 × space-3)` wide, as tall as what the Composer stands, and `space-4` under it.

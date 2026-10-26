@@ -57,9 +57,6 @@ final class ProjectViewPane: UIView {
         page.onLoaded = { [weak self] in
             guard let self else { return }
             Motion.easeOut.animator(Motion.durControl) { self.cover.alpha = 0 }.startAnimation()
-            #if DEBUG
-            startReading()
-            #endif
         }
         page.onFailed = { [weak self] reason in self?.failed(reason) }
     }
@@ -112,9 +109,6 @@ final class ProjectViewPane: UIView {
         // The pages under their heading, each one tap: the web's submenu, as a short list reads on a touch screen.
         viewMore.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] done in
             guard let self, let name = view?.name else { return done([]) }
-            #if DEBUG
-            ViewsProbe.say("views menu open view=\(name)")
-            #endif
             done([UIMenu(title: Words.Blocks.placeOnPage, options: .displayInline, children: BlockPage.allCases.map { target in
                 UIAction(title: target.title, image: Glyph.dataLayers.image) { [weak self] _ in self?.place(name, target) }
             })])
@@ -220,9 +214,6 @@ final class ProjectViewPane: UIView {
             place()
         }
         if arriving { load(again: false) }
-        #if DEBUG
-        sayPane()
-        #endif
     }
 
     private func paintActs() {
@@ -246,9 +237,6 @@ final class ProjectViewPane: UIView {
         failure.label.text = Words.Views.didntOpen(reason: reason)
         failure.isHidden = false
         UIAccessibility.post(notification: .announcement, argument: failure.label.text)
-        #if DEBUG
-        ViewsProbe.say("views failed \(reason)")
-        #endif
     }
 
     // MARK: Keep and Discard
@@ -265,16 +253,10 @@ final class ProjectViewPane: UIView {
             guard let self else { return }
             do {
                 try await keeping ? keep(name) : discard(name)
-                #if DEBUG
-                ViewsProbe.say("views \(keeping ? "keep" : "discard") \(name) ok")
-                #endif
             } catch {
                 refusal.label.text = error.localizedDescription
                 refusal.isHidden = false
                 UIAccessibility.post(notification: .announcement, argument: error.localizedDescription)
-                #if DEBUG
-                ViewsProbe.say("views \(keeping ? "keep" : "discard") \(name) refused: \(error.localizedDescription)")
-                #endif
             }
             guard self.view?.name == name else { return }
             self.keeping = false
@@ -286,110 +268,14 @@ final class ProjectViewPane: UIView {
     #if DEBUG
     // MARK: The simulator probe (scripts/probe-kit/specs/ios-views.ts)
 
-    /// The bar as it stands: whether it shows, its words, and where Keep and
-    /// Discard are in the window; a kept view's ⋯.
-    private func sayPane() {
-        guard ViewsProbe.on, let view else { return }
-        layoutIfNeeded()
-        let bar = self.bar.isHidden ? "none" : "\(barLine.text ?? "")|keep=\(ViewsProbe.centre(keepButton))|discard=\(ViewsProbe.centre(discardButton))"
-        let more = viewHead.isHidden ? "none" : ViewsProbe.centre(viewMore)
-        ViewsProbe.say("views pane name=\(view.name) draft=\(view.draft) bar=\(bar) more=\(more)")
-    }
 
     private var reading: Timer?
     private var read = ""
 
-    /// While the probe runs and the pane is on screen, the page's words and
-    /// its first task's link, in the window's points, each time they change.
-    private func startReading() {
-        guard ViewsProbe.on, reading == nil else { return }
-        reading = Timer.scheduledTimer(withTimeInterval: 0.7, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.readPage() }
-        }
-    }
 
     private func readPage() {
         guard window != nil, !isHidden, let name = view?.name else { return }
-        web.evaluateJavaScript(ViewsProbe.pageScript) { [weak self] value, _ in
-            guard let self, let text = value as? String, let data = text.data(using: .utf8),
-                  let page = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
-            var task = "none"
-            if let at = page["task"] as? [Double], at.count == 3 {
-                let point = web.convert(CGPoint(x: at[1], y: at[2]), to: nil)
-                task = "\(Int(at[0]))@\(Int(point.x.rounded())),\(Int(point.y.rounded()))"
-            }
-            let words = ((page["text"] as? String) ?? "").split(whereSeparator: \.isNewline).joined(separator: " | ")
-            let line = "views page name=\(name) href=\(page["href"] as? String ?? "") task=\(task) text=\(words.prefix(600))"
-            guard line != read else { return }
-            read = line
-            ViewsProbe.say(line)
-        }
     }
     #endif
 }
 
-#if DEBUG
-/// `-views-probe`: the project page's strip, its ⋯ menu's view list, a view's
-/// pane and its page, said in the log for scripts/probe-kit/specs/ios-views.ts.
-enum ViewsProbe {
-    static let on = ProcessInfo.processInfo.arguments.contains("-views-probe")
-    static let log = Logger(subsystem: "dev.cawco.app", category: "ViewsProbe")
-
-    static func say(_ line: String) {
-        guard on else { return }
-        log.notice("\(line, privacy: .public)")
-    }
-
-    /// A view's centre in the window's points, where a simulator touch lands.
-    static func centre(_ view: UIView) -> String {
-        let box = view.convert(view.bounds, to: nil)
-        return "\(Int(box.midX.rounded())),\(Int(box.midY.rounded()))"
-    }
-
-    /// What a touch at a view's centre lands on: `self` when the view or one
-    /// inside it takes it, else the taker and every holder up to the window
-    /// by type (a web view with its frame in the window and its address).
-    static func hit(_ view: UIView) -> String {
-        guard let window = view.window else { return "none" }
-        let box = view.convert(view.bounds, to: nil)
-        let point = CGPoint(x: box.midX, y: box.midY)
-        guard let taker = window.hitTest(point, with: nil) else { return "nothing" }
-        if taker.isDescendant(of: view) { return "self" }
-        let took = sequence(first: taker, next: \.superview).map { holder in
-            let name = String(describing: type(of: holder))
-            guard let web = holder as? WKWebView else { return name }
-            let at = web.convert(web.bounds, to: nil).integral
-            return "\(name)[\(Int(at.minX)),\(Int(at.minY)) \(Int(at.width))x\(Int(at.height)) \(web.url?.absoluteString ?? "no url") hidden=\(web.isHidden)]"
-        }.joined(separator: "<")
-        // The holders of the view that turn the touch away, and why.
-        let refused = sequence(first: view, next: \.superview).compactMap { holder -> String? in
-            var why: [String] = []
-            if holder.isHidden { why.append("hidden") }
-            if holder.alpha < 0.01 { why.append("alpha") }
-            if !holder.isUserInteractionEnabled { why.append("touch-off") }
-            let inside = holder.convert(point, from: nil)
-            if !holder.point(inside: inside, with: nil) {
-                let at = holder.convert(holder.bounds, to: nil).integral
-                why.append("outside[\(Int(at.minX)),\(Int(at.minY)) \(Int(at.width))x\(Int(at.height))]")
-            }
-            return why.isEmpty ? nil : "\(type(of: holder)):\(why.joined(separator: ","))"
-        }.joined(separator: " ")
-        return "\(took) refused-by=\(refused.isEmpty ? "none" : refused)"
-    }
-
-    /// The route's words, its address, and its first task link's centre in
-    /// the page's viewport (with how many task links there are).
-    static let pageScript = """
-    (() => {
-      const main = document.querySelector("main[data-view-alone]");
-      const links = main ? [...main.querySelectorAll('a[href*="task="]')] : [];
-      const box = links[0]?.getBoundingClientRect();
-      return JSON.stringify({
-        href: location.pathname,
-        text: main ? main.innerText : "",
-        task: box ? [links.length, box.x + box.width / 2, box.y + box.height / 2] : null,
-      });
-    })()
-    """
-}
-#endif

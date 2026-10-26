@@ -28,9 +28,6 @@ public enum LocalNetwork {
     /// the local network: a TCP connection to its host and port, held until it
     /// is ready (allowed), waiting (its path says why), or `settle` passes.
     public static func denied(_ url: URL) async -> Bool {
-        #if DEBUG
-        if debugDenied { return true }
-        #endif
         guard let host = url.host(), let port = NWEndpoint.Port(rawValue: UInt16(url.port ?? (url.scheme == "https" ? 443 : 80))) else {
             return false
         }
@@ -117,23 +114,4 @@ public enum LocalNetwork {
         #endif
     }
 
-    #if DEBUG
-    /// The simulator cannot enforce Local Network privacy (HubDiscovery's
-    /// `--discovery-policy-denied` says the same of the search): launched
-    /// with `--hub-local-network-denied`, the hub socket and every read fail
-    /// as a refused path fails them, and the path's word is refused, until a
-    /// pass posts `dev.cawco.debug.local-network-allowed` (notifyutil), which
-    /// is access allowed in Settings (`allowOnDebugSignal`).
-    private static let debugState = Mutex(ProcessInfo.processInfo.arguments.contains("--hub-local-network-denied"))
-
-    static var debugDenied: Bool { debugState.withLock { $0 } }
-
-    /// Hears the pass's "allowed": registered once, at launch.
-    public static func allowOnDebugSignal() {
-        var token: Int32 = 0
-        notify_register_dispatch("dev.cawco.debug.local-network-allowed", &token, .main) { _ in
-            debugState.withLock { $0 = false }
-        }
-    }
-    #endif
 }

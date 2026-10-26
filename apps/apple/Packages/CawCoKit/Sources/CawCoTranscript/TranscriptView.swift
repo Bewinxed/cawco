@@ -161,12 +161,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private var behindAtFoot: NSLayoutConstraint?
     private var behindOverLatest: NSLayoutConstraint?
     private let signposter = OSSignposter(subsystem: "dev.cawco.app", category: "Transcript")
-    #if DEBUG
-    /// The rows a blank was said for (`probeBlanks`), each said once.
-    private var blankSaid = Set<String>()
-    /// What each row's `probe bounds` line was last said for: its print and its cell's size.
-    private var boundsSaid: [String: String] = [:]
-    #endif
 
     /// The list's layout (RowLayout): each row at its exact height when one
     /// is known (`rowHeight`), and asked where the list stands when rows join it.
@@ -265,12 +259,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         // The frame keeps to the foreground (`away`).
         NotificationCenter.default.addObserver(self, selector: #selector(sceneLeft(_:)), name: UIScene.didEnterBackgroundNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(sceneReturned(_:)), name: UIScene.willEnterForegroundNotification, object: nil)
-        #if DEBUG
-        if Pace.probing {
-            Pace.afterCommit.append { [weak self] in self?.probeBlanks() }
-            Pace.afterCommit.append { [weak self] in self?.probeBounds() }
-        }
-        #endif
         // Only the type size: the words are set in faces at it. Light and dark
         // are not this view's: the rendered words carry the colour sets, which
         // resolve as they draw, and each row that paints a colour of its own
@@ -1093,18 +1081,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             if !tailText.isEmpty || sources.isEmpty {
                 sources.append(.init(text: tailText, joinsAbove: splitter.tailContinues))
             }
-            #if DEBUG
-            let start = CACurrentMediaTime()
-            #endif
             let pieces = builder.pieces(id: liveKey, sources: sources, grouped: grouped, date: nil, streaming: true)
-            #if DEBUG
-            let piecesAt = CACurrentMediaTime()
-            #endif
             out += measuredTail(pieces)
-            #if DEBUG
-            Pace.tailBuilt(pieces: piecesAt - start, measured: CACurrentMediaTime() - piecesAt, count: pieces.count,
-                           characters: sources.reduce(0) { $0 + $1.text.count })
-            #endif
             rail = false
         }
         if let (name, glance) = tool {
@@ -1311,14 +1289,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         // out of the reply the reader was watching stream. What it owes is
         // drawn before the first frame it shows in (`drawOwed`).
         let inSight = inView
-        #if DEBUG
-        Pace.inFrame = true
-        defer { Pace.inFrame = false }
-        if inSight {
-            Pace.tick(link, scrolling: collection.isDragging || collection.isDecelerating)
-            Pace.streaming = transcript?.tail?.busy == true
-        }
-        #endif
         let yielding = !inSight && PagingScrollView.anyPaging
         if dirty {
             if inSight || (!caughtUp && !yielding && Pace.taken < Self.budget / 2) {
@@ -1336,9 +1306,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             collection.layoutIfNeeded()
             commit(fresh: false)
             committed = true
-            #if DEBUG
-            if Self.feedOne { break }
-            #endif
         }
         restoreIfReady()
         stepReveals(now)
@@ -1374,9 +1341,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         #if DEBUG
         // Exact heights are checked against their views while the list rests,
         // never in a frame it scrolls in (probe-kit spec `ios-scroll-up`).
-        if Pace.probing, !collection.isDragging, !collection.isDecelerating, store.verify(until: CACurrentMediaTime() + 0.004) {
-            warming = true
-        }
         #endif
         let took = CACurrentMediaTime() - now
         Pace.spent(took, in: env.sessionId, items: items.count, cells: collection.visibleCells.count)
@@ -1461,7 +1425,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         link?.isPaused = true
         #if DEBUG
         ranAway = 0
-        Self.probeLog.notice("transcript went to the background")
         #endif
     }
 
@@ -1470,7 +1433,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         away = false
         #if DEBUG
         let ran = ranAway
-        Self.probeLog.notice("transcript came forward: \(ran) frame(s) ran in the background")
         #endif
         wake()
     }
@@ -1684,21 +1646,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         }
         /// The sections the update is applied to alone (below); nil: every one.
         var scope: [Int]?
-        #if DEBUG
-        let snapshotAt = CACurrentMediaTime()
-        var madeAt = snapshotAt
-        let layoutBefore = Pace.turnTime(.layout)
-        let rowsBuilt = { Pace.turnTime(.build) + Pace.turnTime(.frameBuild) }
-        let rowsMeasured = { Pace.turnTime(.measure) + Pace.turnTime(.frameMeasure) }
-        let builtBefore = rowsBuilt(), measuredBefore = rowsMeasured()
-        defer {
-            let end = CACurrentMediaTime()
-            // Said from 4 ms, so a commit near the gate's 8 is read before and after a change to it.
-            if Pace.probing, end - began >= 0.004 {
-                Self.dockLog.notice("probe commit \((end - began) * 1000, format: .fixed(precision: 1)) ms: build \((builtAt - began) * 1000, format: .fixed(precision: 1)), rows looked at \((snapshotAt - builtAt) * 1000, format: .fixed(precision: 1)), snapshot made \((madeAt - snapshotAt) * 1000, format: .fixed(precision: 1)), applied \((end - madeAt) * 1000, format: .fixed(precision: 1)) (the layout preparing \((Pace.turnTime(.layout) - layoutBefore) * 1000, format: .fixed(precision: 1)), rows built \((rowsBuilt() - builtBefore) * 1000, format: .fixed(precision: 1)), rows measured \((rowsMeasured() - measuredBefore) * 1000, format: .fixed(precision: 1)) of it);\(built.count) items, \(quiet ? "quiet" : "whole", privacy: .public), \(scope.map { "\($0.count) section(s)" } ?? "every section", privacy: .public), \(changed.count) reconfigured")
-            }
-        }
-        #endif
         // Counted from the row the list counted from before (RowIndex `origin`).
         // Quiet, the settled rows are the ones held: only the tail is indexed again.
         let next = quiet ? before.with(tail: section.tail)
@@ -1716,14 +1663,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         // 20261015.3's crash, `_validateReloadUpdateThrowingIfNeeded` under
         // `reconfigureItems`); a row the update takes out is drawn anew when
         // it joins again, from the print kept for it.
-        #if DEBUG
-        let outside = changed.filter { !next.holds($0) }
-        if !outside.isEmpty {
-            // Whole: the update is the whole snapshot, which reconfigures what is left in `changed`.
-            let whole = !(next.sectionIdentifiers == before.sectionIdentifiers && before.sectionIdentifiers.count == collection.numberOfSections && next.count > 0)
-            Self.probeLog.notice("transcript update leaves \(outside.count) redrawn row(s) out of the list (\(whole ? "whole" : "by section", privacy: .public)): \(outside.prefix(3).joined(separator: ","), privacy: .public)")
-        }
-        #endif
         changed.removeAll { !next.holds($0) }
         // The sections this update changes, where it leaves the others as
         // they are: those from the first row that changed (the tail's first,
@@ -1746,9 +1685,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             }
             snapshot.reconfigureItems(changed)
         }
-        #if DEBUG
-        madeAt = CACurrentMediaTime()
-        #endif
         // The keep-place anchor below is read off the rows as they stand
         // (`before`); everything the update and the layout ask from here is the new rows'.
         rows = next
@@ -1807,7 +1743,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
                 #if DEBUG
                 let box = convert(bounds, to: nil)
                 let count = rows.count
-                Self.probeLog.notice("transcript landed rows=\(count) frame=\(Double(box.minX)),\(Double(box.minY)),\(Double(box.width)),\(Double(box.height))")
                 #endif
             }
             guard follow else { return }
@@ -1985,9 +1920,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         layout.hold = nil
     }
 
-    #if DEBUG
-    public func scrollViewDidEndDecelerating(_: UIScrollView) { sayRest() }
-    #endif
 
     /// A drag let go past the rows' foot, in the blank room a fold left
     /// (`slack`), comes to rest at the foot rather than in the blank.
@@ -1997,9 +1929,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     }
 
     public func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
-        #if DEBUG
-        if !decelerate { sayRest() }
-        #endif
         guard !decelerate, slack > 0, scrollView.contentOffset.y > realFoot + 0.5 else { return }
         gliding = true
         settlingFoot = true
@@ -2471,13 +2400,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private static let dockLog = Logger(subsystem: "dev.cawco.app", category: "Transcript")
 
     #if DEBUG
-    /// The list's word on its updates and its first screen, for a simulator
-    /// pass to read (probe-kit spec `ios-chat-opens`).
-    private static let probeLog = Logger(subsystem: "dev.cawco.app", category: "Probe")
-    /// `-transcript-feed-one`: a first screen takes one row a frame, as on a
-    /// phone whose rows cost a frame each, so it fills over many frames while
-    /// the session changes under it.
-    private static let feedOne = ProcessInfo.processInfo.arguments.contains("-transcript-feed-one")
     /// Frames that ran while the window's scene was in the background, since it last went there.
     private var ranAway = 0
     #endif
@@ -2621,165 +2543,6 @@ extension TranscriptView: RevealDriver {
 
 #if DEBUG
 /// What a simulator pass reads of the list's own screen (probe-kit spec
-/// `ios-scroll-up`, the app launched with `-probe-pace`).
-extension TranscriptView {
-    /// Where the list came to rest: at the conversation's top or not,
-    /// whether a page before the first row is left to read, the rows it holds.
-    fileprivate func sayRest() {
-        let top = collection.contentOffset.y <= -collection.adjustedContentInset.top + 1
-        let first = collection.indexPathsForVisibleItems.min().flatMap { rows.id(at: $0) } ?? "-"
-        Self.dockLog.notice("probe rest \(self.env.sessionId.prefix(8), privacy: .public): top=\(top ? 1 : 0) older=\(self.transcript?.cursor != nil ? 1 : 0) rows=\(self.rowCount) first=\(first, privacy: .public) offset=\(Double(self.collection.contentOffset.y), format: .fixed(precision: 0)) height=\(Double(self.collection.contentSize.height), format: .fixed(precision: 0))")
-    }
-
-    /// Run after each turn's commit (`Pace.afterCommit`): every row on the
-    /// screen draws inside its cell, and is the row of the item its cell
-    /// shows (probe-kit spec `ios-table-height`). Said once a row, print and
-    /// cell size: how far its views reach past the cell (`over`, 0 inside;
-    /// clipped where a view between clips), the view that reaches furthest,
-    /// the pictures it shows, and whether the cell holds another row than
-    /// the one the store keeps for its item (`stale`). Its tables are said
-    /// too (`tableSaid`).
-    fileprivate func probeBounds() {
-        guard inView, landed, !collection.isHidden else { return }
-        for cell in collection.visibleCells where !cell.isHidden {
-            guard let path = collection.indexPath(for: cell), let id = rows.id(at: path), let item = items[id],
-                  let row = cell.contentView.subviews.first(where: { !$0.isHidden }) else { continue }
-            let key = "\(item.print)|\(Int(cell.bounds.width))|\(Int(cell.bounds.height))"
-            guard boundsSaid[id] != key else { continue }
-            boundsSaid[id] = key
-            var over = 0.0
-            var furthest = "none"
-            var pictures = 0
-            var tables: [TableBlock] = []
-            func walk(_ view: UIView, clip: CGRect) {
-                guard !view.isHidden, view.alpha > 0.01 else { return }
-                if view is ShotView { pictures += 1 }
-                if let table = view as? TableBlock { tables.append(table) }
-                let drawn = view.convert(view.bounds, to: cell).intersection(clip)
-                if !drawn.isNull, drawn.width > 0, drawn.height > 0 {
-                    let past = max(cell.bounds.minY - drawn.minY, drawn.maxY - cell.bounds.maxY, 0)
-                    if past > over {
-                        over = past
-                        furthest = String(describing: type(of: view))
-                    }
-                }
-                // A text view's words stand in its own frame: what it holds are
-                // TextKit's drawing surfaces, padded past the words on purpose
-                // (ProseFragment `renderingSurfaceBounds`).
-                guard !(view is UITextView) else { return }
-                let inner = view.clipsToBounds ? clip.intersection(view.convert(view.bounds, to: cell)) : clip
-                guard !inner.isNull else { return }
-                for sub in view.subviews { walk(sub, clip: inner) }
-            }
-            walk(row, clip: .infinite)
-            let stale = store.heldView(for: id).map { $0 !== row } ?? true
-            let said = tables.map { " table " + Self.tableSaid($0, in: cell) }.joined()
-            Self.dockLog.notice("probe bounds \(id, privacy: .public) row=\(String(describing: type(of: row)), privacy: .public) cell=\(Double(cell.bounds.height), format: .fixed(precision: 2)) over=\(over, format: .fixed(precision: 2)) furthest=\(furthest, privacy: .public) pictures=\(pictures) stale=\(stale ? 1 : 0) tables=\(tables.count)\(said, privacy: .public)")
-        }
-    }
-
-    /// A table as it stands in `cell`, in the cell's space (its row's `probe bounds`, after `table`):
-    /// its frame, each row's frame and its tallest cell's words laid out at
-    /// the cell's width, and where what follows it starts: the block under it
-    /// in its piece, or the cell's foot, past which the next row stands.
-    private static func tableSaid(_ table: TableBlock, in cell: UIView) -> String {
-        let frame = table.convert(table.bounds, to: cell)
-        let rows = table.probeRows().map { row in
-            let rect = table.convert(row.frame, to: cell)
-            return String(format: "%.2f+%.2f/%.2f", rect.minY, rect.height, row.text)
-        }.joined(separator: ",")
-        let below = table.superview?.subviews
-            .filter { !$0.isHidden && $0 !== table && $0.frame.minY > table.frame.minY + 0.5 }
-            .map { $0.convert($0.bounds, to: cell).minY }.min()
-        let next = below.map { String(format: "%.2f block", $0) } ?? String(format: "%.2f end", cell.bounds.maxY)
-        return String(format: "w=%.1f table=%.2f+%.2f rows=[", cell.bounds.width, frame.minY, frame.height) + rows + "] next=" + next
-    }
-
-    /// Run after each turn's commit (`Pace.afterCommit`): whether the screen
-    /// it committed shows a visible row blank where its words should be. Blank
-    /// is a stretch of the list's view no cell covers; a cell with no row in
-    /// it; or a text with words in sight that stands 0pt tall, shows more than
-    /// a line of its own view past its words, or whose lines in sight are not
-    /// laid out or not in its viewport (TextKit 2 draws only what its
-    /// viewport holds). A row fading in as a live arrival is not blank: that
-    /// is drawn so. Every turn with one counts a blank frame, and each row is
-    /// said once, with why.
-    fileprivate func probeBlanks() {
-        guard inView, landed, fed == nil, !collection.isHidden, collection.alpha > 0.99 else { return }
-        let seen = visibleBox.intersection(CGRect(origin: .zero, size: collection.contentSize))
-        guard !seen.isNull, seen.height > 1 else { return }
-        Pace.checkedScreen()
-        var found: [(why: String, id: String)] = []
-        let cells = collection.visibleCells.filter { !$0.isHidden && $0.frame.intersects(seen) }.sorted { $0.frame.minY < $1.frame.minY }
-        var reach = seen.minY
-        for cell in cells {
-            if cell.frame.minY - reach > 1 { found.append(("no cell over \(Int(reach))…\(Int(cell.frame.minY))", "gap@\(Int(reach))")) }
-            reach = max(reach, cell.frame.maxY)
-        }
-        if seen.maxY - reach > 1 { found.append(("no cell over \(Int(reach))…\(Int(seen.maxY))", "gap@\(Int(reach))")) }
-        for cell in cells where cell.contentView.alpha > 0.99 {
-            let id = collection.indexPath(for: cell).flatMap { rows.id(at: $0) } ?? "?"
-            guard let row = cell.contentView.subviews.first(where: { !$0.isHidden }) else {
-                found.append(("no row in its cell", id))
-                continue
-            }
-            for text in Self.texts(in: row) {
-                if let why = Self.blank(text, cell: cell, in: seen, of: collection) {
-                    found.append((why, id))
-                    break
-                }
-            }
-        }
-        for (why, id) in found {
-            let fresh = blankSaid.insert(id).inserted
-            Pace.blank(fresh: fresh)
-            guard fresh else { continue }
-            Self.dockLog.notice("probe blank \(self.env.sessionId.prefix(8), privacy: .public): \(why, privacy: .public), row \(id, privacy: .public), offset \(Double(self.collection.contentOffset.y), format: .fixed(precision: 0))")
-        }
-    }
-
-    /// The text views shown in `view`: none under a hidden or clear view.
-    private static func texts(in view: UIView) -> [ProseView] {
-        guard !view.isHidden, view.alpha > 0.01 else { return [] }
-        if let text = view as? ProseView { return [text] }
-        return view.subviews.flatMap(texts(in:))
-    }
-
-    /// Why `text`, in `cell`, is blank where `list` shows it inside `seen`; nil when it is not.
-    private static func blank(_ text: ProseView, cell: UIView, in seen: CGRect, of list: UIView) -> String? {
-        guard text.textStorage.length > 0 else { return nil }
-        // The part in sight: inside the list's view and every clipping view between.
-        var part = text.convert(text.bounds, to: list)
-        var view = text.superview
-        while let current = view, current !== cell {
-            if current.clipsToBounds { part = part.intersection(current.convert(current.bounds, to: list)) }
-            view = current.superview
-        }
-        part = part.intersection(seen)
-        guard !part.isNull else { return nil }
-        if text.bounds.height < 1 { return "a text of \(text.textStorage.length) characters 0pt tall" }
-        guard part.height > 0.5, let manager = text.textLayoutManager else { return nil }
-        let local = list.convert(part, to: text)
-        let inset = text.textContainerInset.top
-        let used = manager.usageBoundsForTextContainer
-        let wordsTop = inset + used.minY
-        let wordsBottom = inset + used.maxY
-        let past = local.maxY - max(local.minY, wordsBottom)
-        if past > 24 { return "\(Int(past))pt of its view in sight past its words (words end at \(Int(wordsBottom)) of \(Int(text.bounds.height)))" }
-        let top = max(local.minY, wordsTop)
-        let bottom = min(local.maxY, wordsBottom)
-        guard bottom > top else { return nil }
-        let y = (top + bottom) / 2
-        guard let fragment = manager.textLayoutFragment(for: CGPoint(x: 1, y: y - inset)) else {
-            return "no line laid out at \(Int(y)) of \(Int(text.bounds.height))"
-        }
-        if fragment.state != .layoutAvailable { return "its lines at \(Int(y)) not laid out" }
-        guard let viewport = manager.textViewportLayoutController.viewportRange else { return "no viewport laid out" }
-        let lines = fragment.textElement?.elementRange ?? fragment.rangeInElement
-        if !viewport.intersects(lines) { return "its lines at \(Int(y)) of \(Int(text.bounds.height)) outside its viewport" }
-        return nil
-    }
-}
 #endif
 
 /// Raises a dock surface into view, or lets it go: it rises in over

@@ -164,7 +164,6 @@ final class TabsCell: HomeCell {
             let ground = rgb(badge.pair.ground)
             let ink = rgb(badge.pair.ink)
             let ratio = (max(ground.luminance, ink.luminance) + 0.05) / (min(ground.luminance, ink.luminance) + 0.05)
-            HomeViewController.probeLog.notice("home count \(tab, privacy: .public) \(badge.text, privacy: .public) \(traits.userInterfaceStyle == .dark ? "dark" : "light", privacy: .public): ground \(ground.text, privacy: .public) ink \(ink.text, privacy: .public) \(String(format: "%.2f", ratio), privacy: .public):1")
         }
         #endif
         delegatesGlyph.glyph = delegatesOn ? .structureOn : .structure

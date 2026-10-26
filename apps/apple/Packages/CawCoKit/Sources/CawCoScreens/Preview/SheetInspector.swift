@@ -376,9 +376,6 @@ final class SheetInspectorView: UIView {
         problem.isHidden = inspection.problem == nil
         if inspection.problem != nil { UIAccessibility.post(notification: .announcement, argument: inspection.problem) }
         paintNaming()
-        #if DEBUG
-        PreviewProbe.say("inspector chosen=\(inspection.chosen ?? "-") dirty=\(inspection.isDirty) writing=\(writing.map { "\($0)" } ?? "-") problem=\(inspection.problem ?? "-") props=\(props.keys.sorted().joined(separator: ","))")
-        #endif
     }
 
     // MARK: Add story and Duplicate

@@ -7,7 +7,7 @@ import UIKit.UIGestureRecognizerSubclass
 /// titlebar's 32pt strip as a drag region even with no title and no toolbar,
 /// and AppKit moves the window from a press there before UIKit sees it: the
 /// top of every tab and of Caw's glass group, which stand in that strip, moved
-/// the window instead of taking the click (a `-mac-probe` press on a tab 3pt
+/// the window instead of taking the click (a press on a tab 3pt
 /// below its top called `performWindowDragWithEvent:`; one at its middle did
 /// not). The same failure as Electron's hidden-inset titlebars
 /// (github.com/electron/electron/issues/21632). So each shell window stops
@@ -30,7 +30,7 @@ enum MacWindow {
     }
 
     /// The scene's NSWindow: the one whose frame, in the display's top-left
-    /// points, is the scene's system frame (the -mac-probe pass measured the two as one space).
+    /// points, is the scene's system frame (measured as one space).
     private static func nsWindow(of scene: UIWindowScene) -> NSObject? {
         guard let windows = object("NSApplication", "sharedApplication")?.value(forKey: "windows") as? [NSObject],
               let primary = ((object("NSScreen", "screens") as? [NSObject])?.first?.value(forKey: "frame") as? NSValue)?.cgRectValue else { return nil }
@@ -47,7 +47,7 @@ enum MacWindow {
     /// press in a row does what the reader's titlebar double-click does
     /// (System Settings, Desktop & Dock: "Double-click a window's title bar to").
     #if DEBUG
-    /// What the last press that asked to move saw as AppKit's current event (`-mac-probe`).
+    /// What the last press that asked to move saw as AppKit's current event.
     static var lastAsk = "none"
 
     /// AppKit's current event, as a press sees it: its type (1 a left mouse-down) and whether it has a window.
@@ -108,7 +108,7 @@ final class WindowDragGesture: UIGestureRecognizer {
     }
 
     #if DEBUG
-    /// The last press this saw: its view, its type, whether it was empty (`-mac-probe`).
+    /// The last press this saw: its view, its type, whether it was empty.
     static var lastTouch = "none"
     #endif
 

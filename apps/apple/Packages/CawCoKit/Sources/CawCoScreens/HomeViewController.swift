@@ -389,8 +389,6 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     private var asks: SessionAsks? { sessionMenus?()?.asks }
 
     #if DEBUG
-    /// Each build's tab counts, for a probe to read off the app's log.
-    static let probeLog = Logger(subsystem: "dev.cawco.app", category: "HomeProbe")
     /// Whether the last build drew the status line, so its coming and going are logged once each.
     private var probeStatusDrawn: Bool?
 
@@ -646,7 +644,6 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         // Its leaving is no new words on the line, so it is said here (probe ios-hub-update).
         if statusDrawn != probeStatusDrawn {
             probeStatusDrawn = statusDrawn
-            Self.probeLog.notice("home status line \(statusDrawn ? "drawn" : "gone", privacy: .public)")
         }
         #endif
         if variant == .page {
@@ -659,9 +656,6 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         let working = board.working
         let finished = board.finished
         counts = board.counts
-        #if DEBUG
-        Self.probeLog.notice("home counts: working=\(self.counts.working) finished=\(self.counts.finished) failed=\(self.counts.finishedFailed)")
-        #endif
         rows = [:]
         groups = [:]
         echoing = [:]

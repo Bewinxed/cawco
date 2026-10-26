@@ -374,18 +374,6 @@ final class ConfigureController: ObservedViewController, UICollectionViewDelegat
         move.startAnimation()
     }
 
-    #if DEBUG
-    /// The list as drawn: each group's header and its rows' names, in order;
-    /// then the rows that open a screen in the app.
-    var probeNav: String {
-        guard let source else { return "not drawn" }
-        let snapshot = source.snapshot()
-        let drawn = snapshot.sectionIdentifiers.map { group in
-            "\(group): " + snapshot.itemIdentifiers(inSection: group).compactMap { ConfigSections.section($0)?.label }.joined(separator: ", ")
-        }
-        return drawn.joined(separator: " | ") + " || opens: " + ConfigSections.opening.map(\.label).joined(separator: ", ")
-    }
-    #endif
 
     private func unhost(_ screen: UIViewController) {
         guard screen.parent === self else { return }

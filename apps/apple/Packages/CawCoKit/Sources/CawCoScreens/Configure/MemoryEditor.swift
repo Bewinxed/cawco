@@ -155,14 +155,6 @@ final class MemoryEditorController: ConfigEditorController {
         draw()
     }
 
-    #if DEBUG
-    /// Words typed into the well and a role picked, as a person does them.
-    func probeWrite(_ words: String, role: String) {
-        text = words
-        editor.show(words)
-        pickRole(role)
-    }
-    #endif
 
     private func keepDraft() {
         ConfigDrafts.shared.keep(ConfigDrafts.path("memory", path), dirty ? MemoryDraft(text: text, base: base, scope: scope) : nil)

@@ -127,16 +127,9 @@ final class ArtifactMenuController: KitPopoverController {
             guard let self else { return }
             do {
                 listed = try await hub.listArtifacts(in: instanceId)
-                #if DEBUG
-                PreviewProbe.say("artifact menu listed " + (listed ?? []).map { "\($0.name)@\($0.createdAt)\($0.promoted.map { ":promoted=\($0.commit.prefix(7))" } ?? "")" }.joined(separator: ","))
-                #endif
                 draw()
                 #if DEBUG
                 logRows()
-                if let name = PreviewProbe.menuRemove, !removedAtLaunch, let row = listed?.first(where: { $0.name == name }) {
-                    removedAtLaunch = true
-                    remove(row.id)
-                }
                 #endif
             } catch {
                 Toast.error(error.localizedDescription, in: presentingViewController?.view)
@@ -217,9 +210,6 @@ final class ArtifactMenuController: KitPopoverController {
                 try await hub.removeArtifact(id, in: instanceId)
                 removing.remove(id)
                 listed = listed?.filter { $0.id != id }
-                #if DEBUG
-                PreviewProbe.say("artifact menu removed \(name)")
-                #endif
             } catch {
                 removing.remove(id)
                 Toast.error(Words.Artifacts.notRemoved(name: name, why: error.localizedDescription), in: presentingViewController?.view)
@@ -232,12 +222,10 @@ final class ArtifactMenuController: KitPopoverController {
     }
 
     #if DEBUG
-    private var removedAtLaunch = false
 
     /// The rows as drawn, top to bottom: each name with its promoted tag's words.
     private func logRows() {
         let drawnNames = rowsNow.map { "\($0.name)\($0.promoted.map { "[\(Words.Artifacts.promoted(commit: $0))]" } ?? "")" }
-        PreviewProbe.say("artifact menu rows \(drawnNames.joined(separator: ","))")
     }
     #endif
 }

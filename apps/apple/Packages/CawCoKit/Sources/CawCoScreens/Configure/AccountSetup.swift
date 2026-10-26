@@ -834,29 +834,19 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
     }
 
     #if DEBUG
-    var probeStep: String { at.name }
-    var probeCreated: String? { createdId }
     func probeChoose(_ key: String) {
         guard let row = FleetAccounts.choices(hub)?.first(where: { $0.key == key }) else { return }
         choose(row)
     }
 
-    func probeNext() { goOn() }
     func probeCancel() { cancel() }
     func probeName(_ text: String) {
         nickname = text
         requestRefresh()
     }
 
-    var probeKeyPanel: KeyPanel? { keyPanel }
     var probeRows: [SetupMachineRow] { Array(signinRows.values) }
-    var probeFoot: String {
-        let shown = forward.isHidden ? nextQuiet : forward
-        return "[Back\(back.isEnabled ? "" : " (disabled)")] [\(shown.configuration?.attributedTitle.map { String($0.characters) } ?? "")\(shown.isEnabled ? "" : " (disabled)")]"
-            + (refused.map { " refused: \($0)" } ?? "")
-    }
 
-    var probeContent: [String] { ViewTexts.texts(in: content) }
     /// The picker as drawn: each group's name, then its rows' names, in order
     /// (AccountSetup.svelte `pickGroups`). A row's name alone: a row no
     /// machine can use says why under it, and that is not its name.
@@ -866,16 +856,6 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
         }
     }
 
-    /// The steps as drawn and as VoiceOver reads them: each one's name and state,
-    /// the layout (a list or a row of marks), and where Cancel stands.
-    var probeSteps: String {
-        let read = steps.arrangedSubviews.compactMap { item in
-            item.accessibilityLabel.map { [$0, item.accessibilityValue].compactMap(\.self).joined(separator: " — ") }
-        }
-        let drawn = ViewTexts.texts(in: steps)
-        return "\(wide == true ? "list" : "row of marks"): \(read.joined(separator: " / ")) | drawn: \(drawn.joined(separator: " / "))"
-            + " | cancel \(cancelButton.window == nil ? "not drawn" : "in the card")"
-    }
     #endif
 }
 
@@ -1159,6 +1139,5 @@ final class SetupMachineRow: UIStackView {
 
     #if DEBUG
     var probeState: String { "\(name): " + ViewTexts.texts(in: self).joined(separator: " / ") }
-    func probePress() { signIn?.sendActions(for: .primaryActionTriggered) }
     #endif
 }

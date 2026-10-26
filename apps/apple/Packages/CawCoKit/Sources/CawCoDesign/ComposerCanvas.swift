@@ -599,10 +599,6 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
       .filter((entry) => entry.get("el")?.isDeleted !== true).length;
     """
 
-    /// The page posts `type` to its host, as its rail's boxes do (`cawco:remove`).
-    func probePost(_ type: String) {
-        web.evaluateJavaScript("window.parent.postMessage({ type: \"\(type)\" }, location.origin)", completionHandler: nil)
-    }
 
     /// A PNG pasted on the page, as a paste from the pasteboard arrives: a
     /// `paste` with the file in its clipboard data, where the pen last was;
@@ -667,19 +663,6 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
     return JSON.stringify(read());
     """
 
-    /// A PNG pasted on the page; the doc's image elements and how many have
-    /// their file, where the focus was, and whether WebKit kept the event's data.
-    func probePaste() async throws -> (images: Int, filed: Int, bare: Int, said: String) {
-        let web = web
-        let said = try await withCheckedThrowingContinuation { (done: CheckedContinuation<String, any Error>) in
-            web.__callAsyncJavaScript(Self.paste, arguments: [:], inFrame: nil, in: .page) { value, error in
-                if let error { done.resume(throwing: error) } else { done.resume(returning: value as? String ?? "{}") }
-            }
-        }
-        let read = (try? JSONSerialization.jsonObject(with: Data(said.utf8))) as? [String: Any]
-        return ((read?["images"] as? NSNumber)?.intValue ?? 0, (read?["filed"] as? NSNumber)?.intValue ?? 0,
-                (read?["bare"] as? NSNumber)?.intValue ?? -1, said)
-    }
 
     /// Where the rail's groups stand in the page: the room above the topmost,
     /// below the lowest, left of the leftmost and right of the rightmost,
@@ -731,43 +714,8 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
     })();
     """
 
-    /// The tools' group on the first frame the page drew it visible, the inset it held then, and the frames it stood unseen before.
-    func probeRailFirst() async -> (left: Double, top: Double, width: Double, inset: Double, hiddenFrames: Int)? {
-        let web = web
-        let said = await withCheckedContinuation { (done: CheckedContinuation<String?, Never>) in
-            web.evaluateJavaScript("JSON.stringify(window.__cawcoRailFirst ?? null)") { value, _ in done.resume(returning: value as? String) }
-        }
-        guard let said, let read = (try? JSONSerialization.jsonObject(with: Data(said.utf8))) as? [String: Any],
-              let first = read["first"] as? [String: Double], let left = first["left"], let top = first["top"],
-              let width = first["width"], let inset = first["inset"] else { return nil }
-        return (left, top, width, inset, (read["hiddenFrames"] as? Int) ?? -1)
-    }
 
-    /// What the first-frame watch holds, as the page says it, and the rail's state now.
-    func probeRailFirstRaw() async -> String {
-        let web = web
-        return await withCheckedContinuation { (done: CheckedContinuation<String, Never>) in
-            web.evaluateJavaScript("""
-            JSON.stringify({ watch: window.__cawcoRailFirst ?? "none", marked: document.documentElement.hasAttribute("data-canvas-inset"),
-              visibility: (() => { const t = document.querySelector(".rail-tools"); return t ? getComputedStyle(t).visibility : "no tools"; })(),
-              hidden: document.hidden, state: document.visibilityState })
-            """) { value, error in done.resume(returning: (value as? String) ?? error?.localizedDescription ?? "nothing") }
-        }
-    }
 
-    /// The tools' group as it stands now, in the page's points.
-    func probeToolsBox() async -> (left: Double, top: Double, width: Double)? {
-        let web = web
-        let said = await withCheckedContinuation { (done: CheckedContinuation<String?, Never>) in
-            web.evaluateJavaScript("""
-            (() => { const at = document.querySelector(".rail-tools")?.getBoundingClientRect();
-              return at ? JSON.stringify({ left: at.left, top: at.top, width: at.width }) : null; })()
-            """) { value, _ in done.resume(returning: value as? String) }
-        }
-        guard let said, let read = (try? JSONSerialization.jsonObject(with: Data(said.utf8))) as? [String: Double],
-              let left = read["left"], let top = read["top"], let width = read["width"] else { return nil }
-        return (left, top, width)
-    }
 
     /// A pen stroke on the page; the page's doc's count after it.
     func probeStroke() async throws -> Int {
@@ -1694,39 +1642,9 @@ final class CanvasRoom: NSObject {
     }
 
     #if DEBUG
-    /// The probe's top grab: a drag to `height` released at `speed`, as the finger's.
-    func probeDrag(to height: Double, speed: Double) {
-        guard up, !moving, let sizes else { return }
-        spring.stop()
-        halo?.unsettle()
-        stand(follow(.top, (height, sizes.spread), sizes))
-        guard let now = self.sizes else { return }
-        release(.top, at: (now.height, now.spread), speed: (speed, 0), now)
-    }
 
-    /// The probe's corner: a drag by `moved` (window points) released at
-    /// `speed` (points a second, as the pan's velocity), as the finger's.
-    func probeCorner(_ handle: CanvasHandle, by moved: CGPoint, speed: CGPoint) {
-        guard up, !moving, let sizes else { return }
-        spring.stop()
-        halo?.unsettle()
-        let by = grown(handle, by: moved)
-        stand(follow(handle, (sizes.height + by.height, sizes.spread + by.spread), sizes))
-        guard let now = self.sizes else { return }
-        release(handle, at: (now.height, now.spread), speed: grown(handle, by: speed), now)
-    }
 
-    /// The canvas's box over the field in the window, and how far each side stands past the pill and may.
-    var probeBox: CGRect { stage.convert(stage.bounds, to: nil) }
-    var probeSpread: Double? { sizes?.spread }
-    /// How far in from the page's box the shape's sides stand at its top corners now, from its sizes.
-    var probeShoulder: Double {
-        guard let sizes else { return .nan }
-        return Self.shoulder(Recall.taper(width: sizes.width, extra: extra(sizes), spread: 1, rows: 1))
-    }
     var probeReach: Double? { sizes?.reach }
 
-    var probeSpringRunning: Bool { spring.running }
-    var probeHalo: RecallHalo? { halo }
     #endif
 }

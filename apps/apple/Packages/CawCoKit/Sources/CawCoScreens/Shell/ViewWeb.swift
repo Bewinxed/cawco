@@ -88,7 +88,6 @@ final class ViewWeb: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
                 loaded = url
                 #if DEBUG
                 // A block's page and a tab's are told apart: each says its own page afterwards.
-                ViewsProbe.say("views load \(block ? "block" : "tab") \(url.absoluteString)")
                 #endif
                 // The dashboard reads the person's cookie, as it does a paired browser's.
                 if let pass = hub.passCookie(on: url) {
@@ -250,9 +249,6 @@ final class ViewBlockView: UIView {
         page.onHeight = { [weak self] value in
             guard let self, abs(height.constant - value) >= 0.5 else { return }
             height.constant = value
-            #if DEBUG
-            ViewsProbe.say("views block name=\(name) height=\(Int(value.rounded()))")
-            #endif
             // The page reflows around the block's new height.
             superview?.setNeedsLayout()
             window?.setNeedsLayout()

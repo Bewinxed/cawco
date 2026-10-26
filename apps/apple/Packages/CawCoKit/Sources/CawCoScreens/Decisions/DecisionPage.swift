@@ -362,25 +362,11 @@ final class DecisionPageView: UIView, UITextViewDelegate {
         frameView?.insetBottom = max(0, room)
         records.contentInset.bottom = max(0, room) + Space.space4
         fade.solid = max(0, room)
-        #if DEBUG
-        sayPage(state: state, act: act?.label)
-        #endif
     }
 
     #if DEBUG
     private var said = ""
 
-    /// `decisions page …`: its state, its figure and pill, what its body
-    /// shows, and its act's words and centre in the window, where a touch lands.
-    private func sayPage(state: Components.Schemas.DecisionState?, act: String?) {
-        guard ViewsProbe.on, window != nil else { return }
-        let body = !records.isHidden ? "record" : frameView?.isHidden == false ? "live" : !problem.isHidden ? "problem" : "opening"
-        let acting = act.map { "\($0)@\(ViewsProbe.centre(primary))" } ?? "none"
-        let line = "decisions page name=\(name) state=\(state?.rawValue ?? "") figure=\(figure.text ?? "") pill=\(pill.isHidden ? "none" : pill.accessibilityLabel ?? "") body=\(body) act=\(acting)"
-        guard line != said else { return }
-        said = line
-        ViewsProbe.say(line)
-    }
     #endif
 
     /// The record on the page's own grid: two across from 1024pt, one under.
@@ -424,15 +410,9 @@ final class DecisionPageView: UIView, UITextViewDelegate {
                 let api = try ProjectTasks(hub: hub, projectId: projectId)
                 if state == .picking {
                     let sent = try await api.sendDecision(name)
-                    #if DEBUG
-                    ViewsProbe.say("decisions sent \(name) to=\(sent.to.rawValue)")
-                    #endif
                     _ = sent
                 } else {
                     read = try await api.makeDecisionTasks(name)
-                    #if DEBUG
-                    ViewsProbe.say("decisions tasks \(name) state=\(read?.state.rawValue ?? "")")
-                    #endif
                 }
                 await load()
             } catch {

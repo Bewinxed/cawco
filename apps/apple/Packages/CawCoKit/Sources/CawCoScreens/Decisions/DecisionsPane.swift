@@ -218,9 +218,6 @@ final class DecisionsPane: UIView, UICollectionViewDelegate {
         }
         cawStands = what == "caw-empty"
         tick(what == "grid")
-        #if DEBUG
-        DecisionsProbe.pane(self, what: what)
-        #endif
     }
 
     private func putState(_ key: String, _ make: () -> UIView) {
@@ -304,14 +301,6 @@ final class DecisionsPane: UIView, UICollectionViewDelegate {
     /// Asks the page that holds the pane to draw it again.
     var onChange: () -> Void = {}
 
-    #if DEBUG
-    /// A tile's centre in the window, once laid out on screen.
-    func tileCentre(_ name: String) -> String? {
-        grid.layoutIfNeeded()
-        guard !grid.isHidden, let path = data.indexPath(for: .page(name)), let cell = grid.cellForItem(at: path) else { return nil }
-        return ViewsProbe.centre(cell)
-    }
-    #endif
 }
 
 // MARK: The flight
@@ -483,29 +472,3 @@ final class DecisionTileCell: UICollectionViewCell {
     }
 }
 
-#if DEBUG
-/// `-decisions-probe`: the Decisions tab's pane and its tiles, said in the log for
-/// scripts/probe-kit/specs/ios-views.ts (leg a).
-@MainActor
-enum DecisionsProbe {
-    static let on = ProcessInfo.processInfo.arguments.contains("-views-probe")
-    private static var said = ""
-
-    /// `decisions pane what=… waiting=N tiles=<name>=<figure>|<state>@<x>,<y>;…`: what the pane shows,
-    /// the strip's count, and each tile's figure, state and centre in the window.
-    @MainActor
-    static func pane(_ pane: DecisionsPane, what: String) {
-        guard on, pane.window != nil else { return }
-        pane.layoutIfNeeded()
-        let pages = pane.decisions.list?.pages ?? []
-        let tiles = pages.map { page in
-            let figure = DecisionWords.progress(picked: page.picked, cards: page.cards, decided: page.decided, tasks: page.tasks, state: page.state)
-            return "\(page.name)=\(figure)|\(page.state.rawValue)@\(pane.tileCentre(page.name) ?? "none")"
-        }.joined(separator: ";")
-        let line = "decisions pane what=\(what) waiting=\(pane.decisions.waiting) tiles=\(tiles)"
-        guard line != said else { return }
-        said = line
-        ViewsProbe.say(line)
-    }
-}
-#endif

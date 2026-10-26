@@ -158,18 +158,8 @@ final class DelegateTypesSectionController: ConfigSectionController {
     #if DEBUG
     func probeOpenNew() { open(nil) }
 
-    /// The projects' types have been read and drawn.
-    var probeProjectsDrawn: Bool { types.projectTypes.map { $0.count == projectGroups.arrangedSubviews.count } ?? false }
 
-    /// Each project's group as it reads: its header, each row's name, meta and badge, its files that made no type.
-    func probeProjects() -> String {
-        projectGroups.arrangedSubviews.map { ViewTexts.texts(in: $0).joined(separator: " | ") }.joined(separator: " || ")
-    }
 
-    /// A project type's row tapped: its file opens.
-    func probeOpenFile(_ name: String) {
-        drawnProjects.values.lazy.compactMap { $0.rows.rows[name] }.first?.opens?()
-    }
     #endif
 
     private func open(_ name: String?) {

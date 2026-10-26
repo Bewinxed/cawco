@@ -230,9 +230,6 @@ final class RoutinesPane: UIView {
         ]
         items.merge(viewItems()) { own, _ in own }
         blocksPage.show(items)
-        #if DEBUG
-        RoutinesProbe.pane(self)
-        #endif
     }
 
     private func putState(_ key: String, _ make: () -> UIView) {
@@ -295,7 +292,6 @@ final class RoutinesPane: UIView {
         super.layoutSubviews()
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            RoutinesProbe.pane(self)
         }
     }
     #endif
@@ -334,30 +330,3 @@ final class Held<Value: Equatable>: UIView {
     }
 }
 
-#if DEBUG
-/// `-views-probe`: the Routines page, said in the log for scripts/probe-kit/specs/ios-views.ts (leg b).
-@MainActor
-enum RoutinesProbe {
-    private static var said = ""
-
-    static func pane(_ pane: RoutinesPane) {
-        guard ViewsProbe.on, pane.window != nil, let page = pane.routines.page else { return }
-        pane.layoutIfNeeded()
-        let rows = page.routines.map { routine in
-            let last = routine.runs.first.map { "\($0.state.rawValue):\($0.outcome?.rawValue ?? "")" } ?? "none"
-            return "\(routine.name)|\(routine.enabled ? "on" : "off")|runs=\(routine.runs.count)|last=\(last)@\(pane.menu(of: routine.id).map(ViewsProbe.centre) ?? "none")"
-        }.joined(separator: ";")
-        let line = "routines pane routines=\(rows) sources=\(page.routes.count + page.polls.count) actions=\(page.actions.count)"
-        guard line != said else { return }
-        said = line
-        ViewsProbe.say(line)
-        for routine in page.routines {
-            if let menu = pane.menu(of: routine.id) {
-                let shown = pane.superview?.subviews.filter { !$0.isHidden }.map { "\(type(of: $0))" }.joined(separator: ",") ?? "none"
-                ViewsProbe.say("routines hit \(routine.name)=\(ViewsProbe.hit(menu)) panes-shown=\(shown)")
-            }
-        }
-        BlocksProbe.page(pane.blocksPage)
-    }
-}
-#endif

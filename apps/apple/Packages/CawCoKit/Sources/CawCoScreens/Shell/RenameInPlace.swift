@@ -89,18 +89,12 @@ final class RenameInPlace: UIView, UITextFieldDelegate {
     }
 
     #if DEBUG
-    /// A simulator probe types `text` and presses Return.
-    func probeCommit(_ text: String) {
-        field.text = text
-        commit()
-    }
 
     /// What the field draws now: its text, whether it takes input, and the reason under it.
     var probeState: String {
         "field '\(field.text ?? "")' enabled=\(field.isEnabled) busy=\(spinner.isAnimating) problem=\(problem.isHidden ? "hidden" : "'\(problem.text ?? "")'") inWindow=\(window != nil)"
     }
 
-    func probeEscape() { escape() }
     #endif
 
     override var keyCommands: [UIKeyCommand]? {

@@ -235,20 +235,6 @@ final class NeedsCawButton: UIControl {
         wholeLow.path = UIBezierPath(arcCenter: centre, radius: rim, startAngle: 0, endAngle: .pi, clockwise: true).cgPath
     }
 
-    #if DEBUG
-    /// The rim as laid out: its closed ring's path bounds in
-    /// the button (the circle, or the standing glass's outline), its half
-    /// width (the circle's radius) and half height on the path, and at the
-    /// stroke's outer edge; the path's inset from the glass's edge and the
-    /// stroke's outer edge's; and the glass's own hairline.
-    var probeRim: String {
-        let path = (wholeHigh.path?.boundingBoxOfPath ?? .null).union(wholeLow.path?.boundingBoxOfPath ?? .null)
-        let inset = path.minY - bounds.minY
-        let stroke = wholeHigh.lineWidth
-        let number = { (value: CGFloat) in String(format: "%.1f", Double(value)) }
-        return "standing=\(standing) glass=\(number(bounds.width))x\(number(bounds.height)) path=\(number(path.minX)),\(number(path.minY)),\(number(path.width))x\(number(path.height)) radius=\(number(path.width / 2)) half=\(number(path.height / 2)) halfOuter=\(number(path.height / 2 + stroke / 2)) inset=\(number(inset)) strokeOuter=\(number(inset - stroke / 2)) stroke=\(number(stroke)) glassEdge=\(number(Self.glassEdge))"
-    }
-    #endif
 
     /// The standing glass's arcs (NeedsCaw.svelte `outlinePath`): the outline
     /// drawn half the stroke in, clockwise from 12 o'clock along the top

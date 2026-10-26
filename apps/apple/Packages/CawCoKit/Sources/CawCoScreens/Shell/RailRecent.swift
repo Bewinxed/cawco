@@ -56,19 +56,6 @@ final class RailRecentController: ObservedViewController, UICollectionViewDelega
         dataSource?.indexPath(for: .line(.search)).flatMap { collectionView.cellForItem(at: $0) as? SearchCell }
     }
 
-    #if DEBUG
-    /// Once a second while it stands (`-rail-recent-probe`): the rail's probe reads where it settled.
-    var onProbe: () -> Void = {}
-    private var probeTimer: Timer?
-
-    override func viewDidAppear(_ animated: Bool) {
-        super.viewDidAppear(animated)
-        guard ProcessInfo.processInfo.arguments.contains("-rail-recent-probe") else { return }
-        probeTimer = probeTimer ?? Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.onProbe() }
-        }
-    }
-    #endif
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -218,29 +205,5 @@ final class RailRecentController: ObservedViewController, UICollectionViewDelega
     private static let probe = Logger(subsystem: "dev.cawco.app", category: "RailRecent")
     private var probed = ""
 
-    /// `-rail-recent-probe`: where Recent stands in the rail, what it lists
-    /// against what it holds, and the stored rows by title, each time that moves.
-    func probeLog(rail: UIView, projects: UIView, scroll: UIView, homeSlot: UIView, trial: UILabel, current: [String]) {
-        guard ProcessInfo.processInfo.arguments.contains("-rail-recent-probe"), let dataSource, view.window != nil else { return }
-        let frame = view.convert(view.bounds, to: rail)
-        let above = projects.convert(projects.bounds, to: rail)
-        // Each row where the list laid it, and whether its cell stands there.
-        var drawn = 0
-        let rows = dataSource.snapshot().itemIdentifiers.compactMap { entry -> String? in
-            guard case let .line(.row(id)) = entry, let path = dataSource.indexPath(for: entry),
-                  let laid = collectionView.layoutAttributesForItem(at: path), let item = recent.all.first(where: { $0.id == id }) else { return nil }
-            if collectionView.cellForItem(at: path) != nil { drawn += 1 }
-            let at = collectionView.convert(laid.frame, to: rail)
-            return "\(item.title)@\(Int(at.minY))+\(Int(at.height))\(item.instance == nil ? "[stored]" : "")"
-        }
-        func box(_ r: CGRect) -> String { "\(Int(r.minX)),\(Int(r.minY)),\(Int(r.width))x\(Int(r.height))" }
-        // Where the rail stands in the window, the room its safe area keeps, and its scroller in it.
-        let safe = rail.safeAreaInsets
-        let geometry = "rail.window=\(box(rail.convert(rail.bounds, to: nil))) rail.safe=\(Int(safe.left)),\(Int(safe.top)),\(Int(safe.right)),\(Int(safe.bottom)) scroll=\(box(scroll.convert(scroll.bounds, to: rail))) home=\(box(homeSlot.convert(homeSlot.bounds, to: rail))) current=[\(current.joined(separator: ","))] trial=\(trial.isHidden || trial.window == nil ? "hidden" : "\"\(trial.text ?? "")\"@\(box(trial.convert(trial.bounds, to: rail)))")"
-        let line = "rail recent frame=\(box(frame)) projects=\(box(above)) \(geometry) rail=\(Int(rail.bounds.width)) under=\(frame.minY >= above.maxY) open=\(home.recentOpen) folded=\(empty.isActive) fits=\(Int(fits?.constant ?? -1)) all=\(recent.all.count) stored=\(recent.all.filter { $0.instance == nil }.count) rows=\(rows.count) drawn=\(drawn) style=\(traitCollection.userInterfaceStyle == .dark ? "dark" : "light") | \(rows.joined(separator: " | "))"
-        guard line != probed else { return }
-        probed = line
-        Self.probe.notice("\(line, privacy: .public)")
-    }
     #endif
 }

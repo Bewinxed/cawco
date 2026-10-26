@@ -118,13 +118,6 @@ final class CawPanel: GlassContent {
     /// The last rows asked for, to build again (`probeRebuild`).
     private var probeLast: (() -> Void)?
 
-    /// Builds the rows again from what they were last asked to show, as a
-    /// change in the hub's word builds them: a probe's way to have new rows
-    /// waiting on their first layout.
-    func probeRebuild() {
-        drawn = ""
-        probeLast?()
-    }
     #endif
 
     /// The rows, as the hub says them now. `quiet`: what Caw says with nothing to list.
@@ -152,9 +145,6 @@ final class CawPanel: GlassContent {
         #endif
         guard words != drawn else { return }
         drawn = words
-        #if DEBUG
-        ProbeCounts.panelRows += 1
-        #endif
         for view in list.arrangedSubviews { view.removeFromSuperview() }
         if !needs.isEmpty {
             list.addArrangedSubview(Self.head("Needs you", count: needs.count, glyph: .attention, tint: Palette.statusAttnGlyph))

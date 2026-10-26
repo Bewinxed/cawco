@@ -472,14 +472,6 @@ public final class SessionsStore {
         readers[id] = Task { [weak self] in
             guard let self else { return }
             do {
-                #if DEBUG
-                // The simulator cannot enforce Local Network privacy: every read
-                // fails as a refused path fails it, with -1009 for the hub's
-                // address (`LocalNetwork.denied` injects the path's word).
-                if LocalNetwork.debugDenied, let address = hub.address {
-                    throw URLError(.notConnectedToInternet, userInfo: [NSURLErrorFailingURLErrorKey: address])
-                }
-                #endif
                 let page: Components.Schemas.TranscriptPage
                 switch try await Self.page(client, id: id, before: nil) {
                 case let .read(read): page = read

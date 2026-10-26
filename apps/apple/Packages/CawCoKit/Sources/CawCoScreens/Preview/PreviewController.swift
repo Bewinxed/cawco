@@ -543,9 +543,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         // What changed while it was away; from here the page says (`cawco:doc`).
         refresh()
         sayShown()
-        #if DEBUG
-        startHeartbeat()
-        #endif
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -598,9 +595,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// The page goes: a fresh web view with nothing loaded takes the old
     /// one's place, and the next show loads the page again.
     private func letGo() {
-        #if DEBUG
-        PreviewProbe.say("preview let go appeared=\(appeared) front=\(inFront)")
-        #endif
         asleep = true
         revision = nil
         entering?.cancel()
@@ -626,9 +620,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         web.backgroundColor = Palette.surfaceRecess
         web.translatesAutoresizingMaskIntoConstraints = false
         web.isInspectable = true
-        #if DEBUG
-        PreviewMeter.watch(web)
-        #endif
         // The pencil's double-tap goes to the page, as the person set it (slice 5b).
         let pencil = UIPencilInteraction()
         pencil.delegate = self
@@ -675,9 +666,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         guard webView === web, let frame = hub.previews.byInstance[instanceId], frame.state == .open else { return }
         let first = endedOnce != frame.revision
-        #if DEBUG
-        PreviewProbe.say("preview content ended revision=\(frame.revision) first=\(first)")
-        #endif
         connected = false
         silence?.cancel()
         endedOnce = frame.revision
@@ -705,10 +693,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         }
         stopped.isHidden = !shown
         paintTryAgain(pending: false)
-        #if DEBUG
-        PreviewProbe.say("preview stopped shown=\(shown) tryAgain=\(PreviewProbe.centre(tryAgain))")
-        if shown { PreviewMeter.stopped(stopped, tryAgain: tryAgain) }
-        #endif
     }
 
     private func paintTryAgain(pending: Bool) {
@@ -739,9 +723,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         }
         placeHeadItems()
         placeCard()
-        #if DEBUG
-        probeLayout()
-        #endif
     }
 
     // MARK: The head's room (HIG Toolbars: "Prioritize only the most important items", the rest in a More menu)
@@ -1050,16 +1031,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             return true
         }
         if openPin != nil, card.escape() {
-            #if DEBUG
-            PreviewProbe.say("preview escape ask")
-            #endif
             return true
         }
         if openPin != nil {
             closeCard(by: "escape")
-            #if DEBUG
-            PreviewProbe.say("preview escape card")
-            #endif
             return true
         }
         if mode != .interact {
@@ -1151,11 +1126,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             do {
                 let url = try await hub.previewLoad(place, for: owner ?? .instance(instanceId))
                 guard !Task.isCancelled else { return }
-                #if DEBUG
-                web.load(URLRequest(url: PreviewProbe.loading(url)))
-                #else
                 web.load(URLRequest(url: url))
-                #endif
             } catch {
                 guard !Task.isCancelled else { return }
                 failed("The hub didn't give this preview a pass: \(error.localizedDescription)", of: nil)
@@ -1172,7 +1143,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         let status = (navigationResponse.response as? HTTPURLResponse)?.statusCode ?? 0
         #if DEBUG
         if navigationResponse.isForMainFrame {
-            PreviewProbe.say("preview answered \(status) for \(navigationResponse.response.url?.absoluteString ?? "?")")
         }
         #endif
         guard navigationResponse.isForMainFrame, status == 401, !reentered,
@@ -1192,10 +1162,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// overlay hears it again once it says it is ready (`ready`), so the
     /// head and the page never disagree.
     func webView(_: WKWebView, didCommit _: WKNavigation!) {
-        #if DEBUG
-        PreviewProbe.say("preview document")
-        PreviewProbe.documents += 1
-        #endif
         // A pick the old page asked for has no page left to answer.
         dropPick()
     }
@@ -1261,9 +1227,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         if artifact.kind == .canvas {
             deliver(["type": "cawco:place", "docked": true, "inset": ["top": 0, "side": 0]])
         }
-        #if DEBUG
-        PreviewProbe.say("preview hello theme=\(theme)\(artifact.kind == .canvas ? " place=docked" : "")")
-        #endif
     }
 
     /// The head's +: a new canvas in the session, shown here at once (PreviewPane.svelte `newCanvas`).
@@ -1286,9 +1249,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// The canvas on show goes back to the composer (PreviewPane.svelte `giveBack`): Undock, or Done while it is docked.
     private func giveBack(folded: Bool) {
         guard !ownTab, let frame = hub.previews.byInstance[instanceId], frame.state == .open, frame.artifact.kind == .canvas else { return }
-        #if DEBUG
-        PreviewProbe.say("preview give back \(frame.artifact.id) folded=\(folded)")
-        #endif
         onGiveBack(frame.artifact.id, frame.artifact.name, folded)
     }
 
@@ -1354,9 +1314,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             // Both schemes in one answer, the other drawn off screen (overlay schemes.ts).
             if let revision, let thumbnail = Self.thumbnail(body) {
                 hub.previews.captured(instanceId, revision: revision, thumbnail: thumbnail)
-                #if DEBUG
-                PreviewProbe.say("preview captured revision=\(revision) bytes=\(thumbnail.light?.count ?? 0)+\(thumbnail.dark?.count ?? 0) single=\(thumbnail.single) title=\(hub.previews.pages[instanceId]?.title ?? "")")
-                #endif
             }
         case "cawco:undock":
             // The docked canvas's own rail (CanvasStages.svelte `actions.undock`).
@@ -1366,13 +1323,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         case "cawco:sheet":
             // A sheet's page said its stories and props: the inspector's controls.
             if let said = SheetOnPage(body["sheet"]) {
-                #if DEBUG
-                PreviewProbe.say("inspector heard file=\(said.file) stories=\(said.stories.map(\.name).joined(separator: ",")) components=\(said.components.map { "\($0.name):\($0.props.map(\.name).joined(separator: "+"))" }.joined(separator: ","))")
-                #endif
                 inspection?.heard(said)
-                #if DEBUG
-                inspectAtLaunch()
-                #endif
             }
         case "cawco:doc":
             // A pick, a note, a pin, the agent's patch or a Send's stamp: the pins read again now.
@@ -1405,9 +1356,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             // One of the shell's combos the page left alone (overlay page.ts
             // `leftToShell`): the shell runs it as from its own key command.
             if let command = Self.shellCommand(body["name"]) {
-                #if DEBUG
-                PreviewProbe.say("preview shortcut \(Self.text(body["name"], 40) ?? "")")
-                #endif
                 (view.window?.rootViewController as? RootViewController)?.run(command)
             }
         case "cawco:escape":
@@ -1428,7 +1376,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             answered("delete", body)
         #if DEBUG
         case "cawco:probe":
-            probePage(body)
         #endif
         default:
             break
@@ -1443,15 +1390,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         // Compiled: the cover's "Compiling…" goes.
         paintStage()
         #if DEBUG
-        PreviewProbe.say("preview ready")
         // The artifact's own tab: its page's overlay answered there, for this artifact.
-        if ownTab { PreviewProbe.say("artifact tab ready \(artifactId ?? "-") revision=\(revision ?? "-")") }
-        PreviewMeter.ready(web)
-        PreviewProbe.lapse(web)
-        if PreviewProbe.menuRemove != nil, !menuAtLaunch {
-            menuAtLaunch = true
-            openMenu()
-        }
         #endif
         // The page's mode as the person left it, its pins shown or hidden, and the open card's pin tracked again.
         setMode(mode, place: placing)
@@ -1491,13 +1430,11 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         #if DEBUG
         if next != before {
             let card = next.error.map(SheetStageShown.place) ?? "-"
-            PreviewProbe.say("preview stage status=\((stage?.value1?.status ?? stage?.value2?.status)?.rawValue ?? "-") cover=\(next.waiting ?? "-") card=\(card) down=\(next.down == nil ? "no" : "yes")")
         }
         if next.down != nil {
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 view.layoutIfNeeded()
-                PreviewProbe.say("preview stage-down again=\(PreviewProbe.centre(self.down.again))")
             }
         }
         #endif
@@ -1569,10 +1506,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         paintMode()
         deliver(["type": "cawco:mode", "mode": next.rawValue, "place": placing.map { $0 as Any } ?? NSNull()])
         #if DEBUG
-        PreviewProbe.say("preview mode \(next.rawValue)")
         // The probe's own words for entering and leaving Comment.
-        if next == .comment { PreviewProbe.say("preview comment on") }
-        if was == .comment, next != .comment { PreviewProbe.say("preview comment off") }
         #endif
     }
 
@@ -1597,23 +1531,11 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     }
 
     private func failed(_ message: String, of: String?) {
-        #if DEBUG
-        PreviewProbe.say("preview failed: \(message)")
-        #endif
         failureOf = of
         failure.label.text = message
         failure.isHidden = false
         #if DEBUG
         // Where the band stands once it is laid out, over the well and the page it covers.
-        DispatchQueue.main.async { [weak self] in
-            guard let self, PreviewProbe.on else { return }
-            view.layoutIfNeeded()
-            let box = { (part: UIView) -> String in
-                let frame = part.convert(part.bounds, to: nil)
-                return "\(Double(frame.minX)),\(Double(frame.minY)),\(Double(frame.width)),\(Double(frame.height))"
-            }
-            PreviewProbe.say("preview geometry band=\(box(failure)) web=\(box(web)) well=\(box(well)) shown=\(!failure.isHidden)")
-        }
         #endif
     }
 
@@ -1709,7 +1631,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             guard let self else { return }
             #if DEBUG
             let began = ContinuousClock.now
-            defer { PreviewProbe.say("preview refresh took=\((ContinuousClock.now - began).components.seconds)s") }
             #endif
             do {
                 let read = try await hub.comments(on: artifact, in: instanceId)
@@ -1719,9 +1640,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
                 }
                 if failureOf == "pins" { clearFailure() }
             } catch {
-                #if DEBUG
-                PreviewProbe.say("preview refresh failed: \(error.localizedDescription)")
-                #endif
                 if artifact == artifactId {
                     if pinsHold == .ready {
                         failed("Couldn't read the pins: \(error.localizedDescription)", of: "pins")
@@ -1772,7 +1690,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         // Every read, changed or not, with the card as it stands when it lands.
         defer {
             let card = openPin == nil ? "closed" : self.card.isHidden ? "waiting" : "open:\(self.card.number) writing=\(writing)"
-            PreviewProbe.say("preview read pins=\(read.pins.map { "\($0.label)" }.joined(separator: ",")) card=\(card)")
         }
         #endif
         guard read != comments else { return }
@@ -1786,11 +1703,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         list?.show(read.pins, live: live)
         if held, let openPin, !read.pins.contains(where: { $0.id == openPin }) { closeCard() }
         paintCard()
-        #if DEBUG
-        PreviewProbe.say("preview pins n=\(read.pins.count) open=\(read.open) picks=\(read.unsentPicks) sent=\(read.sentAt ?? "-") " + read.pins.map {
-            "\($0.label)=\($0.moved ? "moved" : $0.resolved ? "resolved" : "open"):\($0.thread.count)\($0.unsent ? ":unsent" : "")"
-        }.joined(separator: " "))
-        #endif
     }
 
     /// Whether the session's turn runs, read from its activity pulse (as the
@@ -1801,10 +1713,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         } onChange: { [weak self] in
             Task { @MainActor in self?.watchWorking() }
         }
-        #if DEBUG
-        // `-preview-working`: the probe's mock session ends its turns at once.
-        if PreviewProbe.workingAtLaunch { working = true }
-        #endif
         guard working != sessionWorking else { return }
         sessionWorking = working
         let next = comments.live(working: working)
@@ -1925,12 +1833,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
                 withdrawn = true
             }
         }
-        #if DEBUG
-        PreviewProbe.say("preview card closed")
-        PreviewProbe.say("preview card dismissed by=\(by) draft=\(drafts[id]?.count ?? 0) withdrawn=\(withdrawn)")
-        #else
         _ = withdrawn
-        #endif
     }
 
     /// A tap outside the open card, anywhere in the window, closes it: the
@@ -2025,10 +1928,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         }
         #if DEBUG
         view.layoutIfNeeded()
-        PreviewProbe.say(card.probeLine())
-        PreviewProbe.say("preview card-draft pin=\(card.number) chars=\((drafts[openPin] ?? "").count)")
         let frame = { (box: CGRect) in "\(Int(box.minX)),\(Int(box.minY)),\(Int(box.width)),\(Int(box.height))" }
-        PreviewProbe.say("preview card-geometry card=\(frame(card.convert(card.bounds, to: nil))) well=\(frame(well.convert(well.bounds, to: nil))) keyboard=\(frame(view.keyboardLayoutGuide.layoutFrame)) view=\(frame(view.convert(view.bounds, to: nil))) \(card.probeScroll)")
         #endif
     }
 
@@ -2182,9 +2082,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             Task { [self] in
                 try? await Task.sleep(for: Self.answerWithin)
                 guard let unanswered = answers.removeValue(forKey: key) else { return }
-                #if DEBUG
-                PreviewProbe.say("preview \(what)-result none")
-                #endif
                 unanswered.resume(returning: silent)
             }
         }
@@ -2197,7 +2094,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         let refused = kept ? nil : Self.text(body["error"], 300) ?? "The page didn't keep it. Try again."
         #if DEBUG
         let number = comments.pins.first { $0.id == pin }?.label ?? 0
-        PreviewProbe.say("preview \(what)-result pin=\(number) \(refused.map { "refused: \($0)" } ?? "ok")")
         #endif
         answer.resume(returning: refused)
     }
@@ -2240,9 +2136,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             guard let self else { return }
             do {
                 try await hub.artifactShown(artifact, in: instanceId, revision: word.revision, failure: word.failure)
-                #if DEBUG
-                PreviewProbe.say("preview shown \(word.failure.map { "failed \($0.rawValue)" } ?? "ok") revision=\(word.revision)")
-                #endif
             } catch {
                 // Unheard: the next appearance says it again.
                 if shownFor == word.revision { shownFor = nil }
@@ -2258,9 +2151,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     func close(refused: @escaping () -> Void = {}) {
         guard !closing else { return }
         closing = true
-        #if DEBUG
-        PreviewProbe.say("preview close")
-        #endif
         // The mode is the person's and stands; a moved pin waiting to be placed again does not.
         if placing != nil { setMode(placingFrom ?? .interact) }
         placingFrom = nil
@@ -2282,52 +2172,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     #if DEBUG
     // MARK: The simulator probe
 
-    /// The header as the probe reads it: what toggles Comment and its centre
-    /// ("Comment" at Comment's segment, or while commenting "Interact" at
-    /// Interact's, the way out), the mode, Draw's centre, the open pins and
-    /// Comments' centre, Reload's, the grabber's, and the web view's frame.
-    private func headLine() -> String {
-        let centre = PreviewProbe.centre
-        let words = mode == .comment ? "Interact" : "Comment"
-        let toggle = segmentCentre(mode == .comment ? 0 : 1)
-        let grab = grabArea.isHidden ? "none" : centre(grabber)
-        let page = web.convert(web.bounds, to: nil)
-        return "preview head comment=\(words)@\(toggle) mode=\(mode.rawValue) draw=\(segmentCentre(2)) pins=\(openPins)@\(centre(pinsButton)) reload=\(centre(reloadButton)) grabber=\(grab) web=\(Int(page.minX.rounded())),\(Int(page.minY.rounded())),\(Int(page.width.rounded())),\(Int(page.height.rounded()))"
-    }
 
-    /// The centre of the mode's segment at `index` in the window: the segmented's width in three.
-    private func segmentCentre(_ index: Int) -> String {
-        guard PreviewProbe.centre(modes) != "none" else { return "none" }
-        let box = modes.convert(modes.bounds, to: nil)
-        let third = Double(box.width) / 3
-        let x = Double(box.minX) + third * (Double(index) + 0.5)
-        return "\(Int(x.rounded())),\(Int(Double(box.midY).rounded()))"
-    }
 
-    /// `-menu-remove` and `-inspect-set` act once a launch.
-    private static var menuDone = false
-    private static var inspectDone = false
-    private var menuAtLaunch: Bool {
-        get { Self.menuDone }
-        set { Self.menuDone = newValue }
-    }
 
-    /// `-inspect-set`: the inspector opened, the prop set to the option named, Save, once.
-    private func inspectAtLaunch() {
-        guard let (name, value) = PreviewProbe.inspectSet, !Self.inspectDone, let inspection,
-              let prop = inspection.component?.props.first(where: { $0.name == name }),
-              let option = prop.options?.first(where: { $0.shown == value }) else { return }
-        Self.inspectDone = true
-        showInspector(true)
-        inspection.set(prop, option)
-        PreviewProbe.say("inspector set \(name)=\(value) story=\(inspection.chosen ?? "-")")
-        Task { await inspection.save() }
-    }
 
-    /// Expand's words and centre and Close's centre, for the session's `split` line.
-    var probeExpand: String {
-        "expand=\(expandButton.accessibilityLabel ?? "?")@\(PreviewProbe.centre(expandButton)) close=\(PreviewProbe.centre(closeButton))"
-    }
 
     // MARK: The probe's reads of the head
 
@@ -2343,176 +2191,27 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         didSet { paintPins() }
     }
 
-    /// The panel as a component canvas's: the inspection `adoptSheet` makes
-    /// for a `.component` frame, so the head wants what it wants for one.
-    func probeAsComponent(name: String) {
-        titleButton.show(kind: .component, name: name)
-        inspection = SheetInspection(post: { [weak self] message in self?.deliver(message) }, write: { _ in })
-        placeHeadItems()
-    }
 
-    var probeCanvasView: CanvasViewControl { canvasView }
 
-    /// The controls standing now, the mode's pick named as the mode.
-    var probeStood: Set<String> {
-        Set(slots.filter { !$0.value.isHidden }.map { $0.key == .modePick ? HeadItem.mode.rawValue : $0.key.rawValue })
-    }
 
-    /// Whether More's count changed what stands: the second fit stood otherwise than the first.
-    var probeRecounted: Bool {
-        laidFirst.map { $0 != Set(slots.filter { !$0.value.isHidden }.map(\.key)) } ?? false
-    }
-    /// More's menu as it would open now.
-    var probeOverflow: [UIMenuElement] { overflowMenu() }
 
-    /// The page said it is ready (`cawco:ready`).
-    func probeReady() { ready() }
 
-    /// The head as it stands: its width, the name's, the room left after
-    /// placing and what the mode's segments cost over its pick, then each
-    /// control standing after the name (its key, its form, its frame in the
-    /// head) and what More holds.
-    func probeStanding() -> String {
-        guard let head = dragArea as? UIStackView else { return "no head" }
-        let room = { (item: HeadItem) in self.slots[item]?.fittingWidth ?? 0 }
-        let shown = head.arrangedSubviews.dropFirst().filter { !$0.isHidden }.map { slot -> String in
-            let key = slots.first { $0.value === slot }?.key
-            let name = key?.rawValue ?? (slot === moreSlot ? "more" : "close")
-            let form = switch key {
-            case .mode: "segments"
-            case .modePick: "pick"
-            case .comments: narrow ? "glyph" : "words"
-            default: "glyph"
-            }
-            let box = slot.frame
-            return "\(name):\(form)@\(Int(box.minX.rounded())),\(Int(box.minY.rounded())),\(Int(box.width.rounded()))x\(Int(box.height.rounded()))"
-        }
-        let more = overflowed.isEmpty ? "-" : overflowed.map(\.rawValue).joined(separator: ",")
-        let first = laidFirst.map { set in HeadItem.allCases.filter(set.contains).map(\.rawValue).joined(separator: ",") } ?? "-"
-        return "width=\(Int(head.bounds.width.rounded())) name=\(Int(titleButton.bounds.width.rounded())) left=\(Int(laidLeft.rounded(.down))) segments=\(Int((room(.mode) - room(.modePick)).rounded(.up))) open=\(openPins) first=\(first.isEmpty ? "none" : first) shown=\(shown.joined(separator: " ")) more=\(more)"
-    }
 
-    /// The header as last logged on a layout: logged again only when it moved.
-    private var laidHead = ""
-    private var laidRoom = ""
 
-    /// The card and its question as last logged on a layout.
-    private var laidCard: [String] = []
 
-    /// A layout that moved the header (a drawer drag, a mode) says so at once,
-    /// whatever the page's own posts do; so does the open card, once the pass
-    /// has laid it out (a keyboard leaving, a sheet put away).
-    private func probeLayout() {
-        guard PreviewProbe.on, view.window != nil else { return }
-        let line = headLine()
-        if line != laidHead {
-            laidHead = line
-            PreviewProbe.say(line)
-        }
-        probeRoom()
-        DispatchQueue.main.async { [weak self] in
-            guard let self, openPin != nil, !card.isHidden else { return }
-            view.layoutIfNeeded()
-            let now = cardLines()
-            guard now != laidCard else { return }
-            laidCard = now
-            now.forEach(PreviewProbe.say)
-        }
-    }
 
-    /// What of the head the name keeps, against the controls standing after
-    /// it (each by its slot's width, More and Close last) and what More holds,
-    /// as laid out: read on each layout and on the page's heartbeat, so a
-    /// head that settled after its first layout is read as it stands.
-    private func probeRoom() {
-        guard PreviewProbe.on, view.window != nil, let head = dragArea as? UIStackView, head.bounds.width > 0 else { return }
-        let shown = head.arrangedSubviews.dropFirst().filter { !$0.isHidden }.map { slot in
-            let name = slots.first { $0.value === slot }?.key.rawValue ?? (slot === moreSlot ? "more" : "close")
-            return "\(name):\(Int(slot.bounds.width.rounded()))x\(Int(slot.bounds.height.rounded()))"
-        }
-        let more = overflowed.isEmpty ? "-" : overflowed.map(\.rawValue).joined(separator: ",")
-        let badge = moreBadge.isHidden || moreSlot.isHidden ? "-" : moreBadge.text ?? "-"
-        let room = "preview head room width=\(Int(head.bounds.width)) title=\(Int(titleButton.bounds.width)) floor=\(Int(nameKept)) shown=\(shown.joined(separator: ",")) more=\(more) badge=\(badge)"
-        if room != laidRoom {
-            laidRoom = room
-            PreviewProbe.say(room)
-        }
-        // Where Open in new tab and More stand in the window, where a simulator touch lands.
-        let at = "preview head open-tab=\(PreviewProbe.centre(openTabButton)) more=\(PreviewProbe.centre(moreButton))"
-        if at != laidOpenTab {
-            laidOpenTab = at
-            PreviewProbe.say(at)
-        }
-    }
 
-    private var laidOpenTab = ""
 
-    /// The open card's lines: its controls, its question, and its footer's
-    /// buttons against the keyboard's top, all in the window's points.
-    private func cardLines() -> [String] {
-        let keyboard = view.convert(view.keyboardLayoutGuide.layoutFrame, to: nil)
-        return [card.probeLine(), card.askLine(), "preview card-keys \(card.probeFooter) keyboardTop=\(Int(keyboard.minY))"]
-    }
 
     /// The probe's page reports where its parts stand (its `report`) on the
     /// app's own clock: the page's timers can stop in WebKit while the app
     /// runs on, and every post is read where the views stand when it lands.
     private var heartbeat: Timer?
 
-    private func startHeartbeat() {
-        guard PreviewProbe.on, heartbeat == nil else { return }
-        heartbeat = Timer.scheduledTimer(withTimeInterval: 0.7, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.web.evaluateJavaScript(Self.docRead) { value, _ in
-                    MainActor.assumeIsolated { self?.sayDoc(value as? String) }
-                }
-                self?.probeRoom()
-            }
-        }
-    }
 
-    /// The probe page's `report`, then the document as it stands: its clock's
-    /// origin (`performance.timeOrigin`, new with every load, so a reload is
-    /// seen even where no navigation is), and its artifact doc's elements,
-    /// drawn and not deleted (a canvas's; 0 on a page, -1 before the overlay joins).
-    private static let docRead = """
-    (() => {
-      if (typeof report === "function") report();
-      const doc = window.cawcoArtifact?.doc;
-      const elements = doc ? doc.getArray("elements").toArray().filter((entry) => entry.get("el")?.isDeleted !== true).length : -1;
-      return `origin=${Math.round(performance.timeOrigin)} elements=${elements} width=${innerWidth} scale=${(visualViewport?.scale ?? 1).toFixed(2)}`;
-    })()
-    """
 
-    private var saidDoc = ""
 
-    /// `preview doc …`, logged when it changed.
-    private func sayDoc(_ read: String?) {
-        guard let read, read != saidDoc else { return }
-        saidDoc = read
-        PreviewProbe.say("preview doc \(read)")
-    }
 
-    /// The probe's page posts `cawco:probe` with its state and the viewport
-    /// rects of what the probe taps: logged with each rect's centre in the
-    /// window's points, where a simulator touch lands, after the header's own
-    /// line (`headLine`: the mode's places, Comments', Reload's, the
-    /// grabber's, and the web view's frame in the window), so every post
-    /// says where everything is now.
-    private func probePage(_ body: [String: Any]) {
-        guard PreviewProbe.on, let web else { return }
-        PreviewProbe.say(headLine())
-        if openPin != nil, !card.isHidden { cardLines().forEach(PreviewProbe.say) }
-        var parts = [Self.text(body["state"], 200) ?? ""]
-        let rects = body["rects"] as? [String: Any] ?? [:]
-        for name in rects.keys.sorted() {
-            guard let rect = rects[name] as? [String: Any], let x = rect["x"] as? Double, let y = rect["y"] as? Double,
-                  let width = rect["width"] as? Double, let height = rect["height"] as? Double else { continue }
-            let at = web.convert(CGPoint(x: x + width / 2, y: y + height / 2), to: nil)
-            parts.append("\(Self.text(name, 40) ?? "")=\(Int(at.x.rounded())),\(Int(at.y.rounded()))")
-        }
-        PreviewProbe.say("preview page \(parts.joined(separator: " "))")
-    }
     #endif
 
     // MARK: What the page says (wire.ts)
@@ -2680,7 +2379,6 @@ extension PreviewController {
                 // The sheet stood: the form whole under its head, not the title alone.
                 guard let content else { return }
                 let box = content.view.convert(content.view.bounds, to: nil)
-                PreviewProbe.say("place pick sheet content=\(Int(box.minY)),\(Int(box.height)) form=\(Int(content.pick.scroll.contentSize.height))")
                 #endif
             }
         } else {
@@ -2696,15 +2394,6 @@ extension PreviewController {
             Motion.easeOut.animator(Motion.durFade) { pick.alpha = 1 }.startAnimation()
             UIAccessibility.post(notification: .screenChanged, argument: pick)
         }
-        #if DEBUG
-        PreviewProbe.say("place pick opened \(ask.json) as=\(drawer ? "sheet" : "well")")
-        if let placed = PreviewProbe.placePick {
-            Task { @MainActor [weak pick] in
-                try? await Task.sleep(for: .seconds(1))
-                pick?.pickForProbe(machineId: placed.machineId, path: placed.path)
-            }
-        }
-        #endif
     }
 
     /// The person's answer to the page, as a JSON-RPC result: the place, or null.
@@ -2715,7 +2404,6 @@ extension PreviewController {
         #if DEBUG
         let said = result.flatMap { try? JSONSerialization.data(withJSONObject: $0, options: [.sortedKeys, .withoutEscapingSlashes]) }
             .map { String(decoding: $0, as: UTF8.self) } ?? "null"
-        PreviewProbe.say("place pick answered \(said)")
         #endif
     }
 
@@ -2756,9 +2444,6 @@ extension PreviewController {
                                          write: { [weak self] change in
                                              guard let self else { return }
                                              try await hub.writeSheet(id, in: instanceId, change: change)
-                                             #if DEBUG
-                                             PreviewProbe.say("inspector wrote \(change)")
-                                             #endif
                                          })
         } else {
             inspection = nil
@@ -2823,7 +2508,6 @@ extension PreviewController {
             self.view.layoutIfNeeded()
             let box = view.convert(view.bounds, to: nil)
             let page = web.convert(web.bounds, to: nil)
-            PreviewProbe.say("inspector layout=\(layout) frame=\(Int(box.minX)),\(Int(box.minY)),\(Int(box.width)),\(Int(box.height)) web=\(Int(page.minX)),\(Int(page.minY)),\(Int(page.width)),\(Int(page.height))")
         }
         #endif
     }
@@ -2861,9 +2545,6 @@ extension PreviewController {
         menu = content
         content.loadViewIfNeeded()
         KitPopover.present(content, from: titleButton, in: self, align: .start, side: .bottom, offset: Space.space1)
-        #if DEBUG
-        PreviewProbe.say("artifact menu open")
-        #endif
     }
 }
 
@@ -3019,53 +2700,3 @@ final class WeakHandler: NSObject, WKScriptMessageHandler {
     }
 }
 
-#if DEBUG
-/// `-preview-lapse` (scripts/probe-kit/specs/ios-preview-enter.ts): host
-/// mode's pass taken away twice. Once the page is first ready its web view's
-/// cookies go and it reloads, so the origin turns it away (401) and the
-/// preview enters again; once ready again the same, with the next ticket
-/// spoiled, so the entry turns it away too: a second 401 in a row, which
-/// stands. Each step is a `preview lapse` line.
-extension PreviewProbe {
-    static let lapseAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-lapse")
-    /// Documents the web view has committed this launch.
-    static var documents = 0
-    /// The document the last lapse was taken on: the overlay can say it is ready more than once a document.
-    private static var lapsedOn = 0
-    /// How many lapses this launch has taken.
-    private static var readies = 0
-    /// The next entry's ticket is spoiled, so the hub refuses it as forged.
-    private static var spoilNext = false
-
-    /// The address a load goes to, said as `preview loads`: the ticket spoiled when the lapse asked.
-    static func loading(_ url: URL) -> URL {
-        var url = url
-        if spoilNext, url.path() == "/__cawco/enter",
-           let spoiled = URL(string: url.absoluteString.replacingOccurrences(of: "ticket=", with: "ticket=spoiled")) {
-            spoilNext = false
-            url = spoiled
-        }
-        say("preview loads \(url.absoluteString)")
-        return url
-    }
-
-    /// The page is ready: on the first and second time, its pass goes and it reloads.
-    static func lapse(_ web: WKWebView) {
-        guard lapseAtLaunch, documents != lapsedOn else { return }
-        lapsedOn = documents
-        readies += 1
-        guard readies <= 2 else { return }
-        let lapse = readies
-        let spoil = lapse == 2
-        Task {
-            try? await Task.sleep(for: .seconds(2))
-            let store = web.configuration.websiteDataStore.httpCookieStore
-            let cookies = await store.allCookies()
-            for cookie in cookies { await store.deleteCookie(cookie) }
-            say("preview lapse \(lapse) deleted \(cookies.map(\.name).joined(separator: ",")) spoil=\(spoil)")
-            spoilNext = spoil
-            web.reload()
-        }
-    }
-}
-#endif

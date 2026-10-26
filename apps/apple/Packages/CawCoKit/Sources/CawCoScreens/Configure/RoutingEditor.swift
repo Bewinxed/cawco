@@ -195,11 +195,6 @@ final class RoutingEditorController: ConfigEditorController {
 
     #if DEBUG
     var probePicker: StrategyPickerView? { picker }
-    var probeLimit: AtLimitView? { limit }
-    func probeTab(_ index: Int) {
-        tabs.select(index, animated: false)
-        switchTab(index)
-    }
 
     func probeSave() async -> Bool { await save() }
     var probeRefusal: String? { refused }
@@ -766,11 +761,5 @@ final class AtLimitView: UIStackView, UITextFieldDelegate {
     var probeFigure: String { figure.probeState }
     /// How the move switch draws: `sliding` or `checkbox`.
     var probeSwitch: String { move.style == .checkbox ? "checkbox" : "sliding" }
-    func probeSet(move on: Bool, wait minutes: Int) {
-        move.setOn(on, animated: false)
-        move.sendActions(for: .valueChanged)
-        wait.text = String(minutes)
-        read()
-    }
     #endif
 }

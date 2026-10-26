@@ -109,17 +109,8 @@ final class SessionViewController: ObservedViewController {
         // Pressed while the plan is on show: in its sheet on a compact width, on the side's front beside the transcript.
         planRing.open = planSheet != nil || (beside != nil && beside === planSide)
         composerBinding.ring = planRing
-        #if DEBUG
-        if PreviewProbe.openPlanAtLaunch, !planOpenedAtLaunch, view.window != nil {
-            planOpenedAtLaunch = true
-            openPlan()
-        }
-        #endif
     }
 
-    #if DEBUG
-    private var planOpenedAtLaunch = false
-    #endif
 
     /// The plan whole: beside the transcript on a regular width, on the
     /// side's front (SideSplit.svelte `openPlan`); on a compact one, in the
@@ -130,9 +121,6 @@ final class SessionViewController: ObservedViewController {
             sideTab = .plan
             syncSide()
             syncPlan()
-            #if DEBUG
-            PreviewProbe.say("plan opened \(sessionId) beside")
-            #endif
             return
         }
         let sheet = PlanSheetController(hub: hub, instanceId: sessionId)
@@ -143,13 +131,9 @@ final class SessionViewController: ObservedViewController {
             // The sheet stood: as tall as the plan it holds, up to its cap (never its title alone).
             guard let sheet else { return }
             let box = sheet.view.convert(sheet.view.bounds, to: nil)
-            PreviewProbe.say("plan sheet \(sessionId) content=\(Int(box.minY)),\(Int(box.height)) plan=\(Int(sheet.scroll.contentSize.height))")
             #endif
         }
         planRing.open = true
-        #if DEBUG
-        PreviewProbe.say("plan opened \(sessionId)")
-        #endif
     }
 
     // MARK: The composer's canvas
@@ -330,9 +314,6 @@ final class SessionViewController: ObservedViewController {
         transcriptHost.additionalSafeAreaInsets.bottom = clearance
         transcriptHost.view.layoutIfNeeded()
         if following { transcriptView.latest() }
-        #if DEBUG
-        PreviewProbe.say("transcript clearance=\(Int(clearance)) composer=\(Int(composerInset)) following=\(following)")
-        #endif
     }
 
     // MARK: Model
@@ -590,9 +571,6 @@ final class SessionViewController: ObservedViewController {
             if planSide.parent === self { unembed(planSide) }
         }
         if closing, expandAsked { keepExpanded(false) }
-        #if DEBUG
-        probeSide(shown: shown, opened: opened, regular: regular)
-        #endif
         guard let shown else { return }
         let card: SideCard = shown == .plan ? (planSide ?? makePlanSide()) : (preview ?? makePreview())
         let asDrawer = shown == .preview && !regular
@@ -615,26 +593,6 @@ final class SessionViewController: ObservedViewController {
         preview?.show()
     }
 
-    #if DEBUG
-    private var probedSide = ""
-    private var sideSwitched = false
-
-    /// What the side holds as a simulator pass reads it, logged when it
-    /// changed; with `-side-switch`, the switch pressed once both stand there.
-    private func probeSide(shown: SideTab?, opened: [SideTab], regular: Bool) {
-        guard PreviewProbe.on else { return }
-        let line = "side \(sessionId) shown=\(shown.map { "\($0)" } ?? "none") opened=\(opened.map { "\($0)" }.joined(separator: ",")) regular=\(regular)"
-        if line != probedSide {
-            probedSide = line
-            PreviewProbe.say(line)
-        }
-        guard PreviewProbe.sideSwitch, opened.count > 1, !sideSwitched, let shown else { return }
-        sideSwitched = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            self?.sideSwitch.choose(shown == .plan ? 1 : 0)
-        }
-    }
-    #endif
 
     private func makePlanSide() -> PlanSideController {
         let controller = PlanSideController(hub: hub, instanceId: sessionId)
@@ -678,9 +636,6 @@ final class SessionViewController: ObservedViewController {
             transcriptShare = share
             onTranscriptShare()
         }
-        #if DEBUG
-        probeSplit()
-        #endif
     }
 
     /// How much of the pane's width, from its leading edge, the transcript
@@ -1093,9 +1048,6 @@ final class SessionViewController: ObservedViewController {
         }
         animator.startAnimation()
         slide = animator
-        #if DEBUG
-        scrubSlide()
-        #endif
     }
 
     /// The head's Expand, or Back to conversation: the same state as the divider at the edge.
@@ -1199,49 +1151,6 @@ final class SessionViewController: ObservedViewController {
         collapse()
     }
 
-    #if DEBUG
-    private var probedSplit = ""
-
-    /// The split as a simulator pass reads it, logged when it moved: the
-    /// pane's bounds, the preview's frame, the transcript's width, the kept
-    /// and shown shares, the state, and the composer's share.
-    private func probeSplit() {
-        guard PreviewProbe.on, let card = beside, split != nil, view.window != nil else { return }
-        let width = view.bounds.width
-        let side = (card as? PreviewController)?.probeExpand ?? "card=plan"
-        let line = "split pane=\(Self.probeRect(view.bounds)) preview=\(Self.probeRect(card.view.frame)) transcript=\(Int(transcriptHost.view.frame.width.rounded())) divider=\(Int(divider.center.x.rounded())),\(Int(divider.bounds.width.rounded())) kept=\(String(format: "%.3f", sideShare)) shown=\(String(format: "%.3f", shownShare(width))) expanded=\(expanded) away=\(!transcriptHost.view.isUserInteractionEnabled) composerShare=\(String(format: "%.3f", transcriptShare)) keys=\(isFirstResponder) \(side) dividerAt=\(PreviewProbe.centre(divider))"
-        guard line != probedSplit else { return }
-        probedSplit = line
-        PreviewProbe.say(line)
-    }
-
-    /// `-split-scrub`: a slide is held still and read at 0, 50 and 100% of
-    /// its clock (the pane's layer at `speed` 0, `timeOffset` stepped from the
-    /// slide's begin), then let go.
-    private func scrubSlide() {
-        guard PreviewProbe.on, ProcessInfo.processInfo.arguments.contains("-split-scrub"), let beside else { return }
-        CATransaction.flush()
-        let pane = view.layer
-        let card = beside.view.layer
-        let begun = card.animationKeys()?.compactMap { card.animation(forKey: $0)?.beginTime }.first { $0 > 0 }
-        let begin = begun ?? pane.convertTime(CACurrentMediaTime(), from: nil)
-        pane.speed = 0
-        for fraction in [0.0, 0.5, 1.0] {
-            pane.timeOffset = begin + Motion.durPanel * fraction
-            CATransaction.flush()
-            let drawn = card.presentation()?.frame ?? card.frame
-            let transcript = transcriptHost.view.layer.presentation()?.bounds.width ?? -1
-            let corner = card.presentation()?.cornerRadius ?? -1
-            PreviewProbe.say("split scrub t=\(fraction) preview=\(Self.probeRect(drawn)) transcript=\(Int(transcript.rounded())) corner=\(String(format: "%.1f", corner)) eased=\(String(format: "%.3f", Motion.easeDrawer.value(at: fraction))) begin=\(begun == nil ? "now" : "animation") keys=\(card.animationKeys()?.joined(separator: ",") ?? "none")")
-        }
-        pane.speed = 1
-        pane.timeOffset = 0
-    }
-
-    private static func probeRect(_ box: CGRect) -> String {
-        "\(Int(box.minX.rounded())),\(Int(box.minY.rounded())),\(Int(box.width.rounded())),\(Int(box.height.rounded()))"
-    }
-    #endif
 
     /// Back to its middle height (client.svelte.ts `revealPreview`).
     private func reveal(_ controller: PreviewController) {
@@ -1326,7 +1235,6 @@ final class SessionViewController: ObservedViewController {
     }
 
     #if DEBUG
-    private static let probeLog = Logger(subsystem: "dev.cawco.app", category: "Probe")
 
     /// `-probe-send <words>`: once this pane can send, its Send sends `words`
     /// with one picture of about 2 MB (noise, which does not compress), once
@@ -1347,7 +1255,6 @@ final class SessionViewController: ObservedViewController {
                                     bytesPerRow: 720 * 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
             return context?.makeImage().flatMap { UIImage(cgImage: $0).pngData() } ?? Data()
         }
-        Self.probeLog.notice("probe send: \(words, privacy: .public) with a picture of \(png.count) bytes")
         send(words, [.image(name: "probe.png", mediaType: "image/png", data: png)])
     }
     #endif
@@ -1359,14 +1266,7 @@ final class SessionViewController: ObservedViewController {
     /// What each card last said to a simulator pass's log.
     private var probeCards: [String: String] = [:]
 
-    /// The asks this pane draws as its card, one at a time, by request id, in their order.
-    var probeAsks: [String] { madeAsks.map(\.requestId) }
 
-    /// A card's Approve (or Deny), as its button answers it.
-    func probeAnswer(_ requestId: String, allow: Bool) {
-        guard let ask = madeAsks.first(where: { $0.requestId == requestId }) else { return }
-        answer(ask, allow ? .allow : .deny, [:])
-    }
     #endif
 
     private func answer(_ ask: ParkedAsk, _ choice: PromptCardView.Choice, _ picks: [String: [String]]) {

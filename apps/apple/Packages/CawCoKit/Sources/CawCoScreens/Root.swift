@@ -41,7 +41,6 @@ public final class RootViewController: ObservedViewController {
         let landing = activity.map(landing(from:)) ?? ShellLanding()
         #if DEBUG
         board.land(Self.probing(landing))
-        if let task = Self.probedTask { board.open(task) }
         #else
         board.land(landing)
         #endif
@@ -50,27 +49,12 @@ public final class RootViewController: ObservedViewController {
     #if DEBUG
     /// A simulator pass's `-open-session <id>[,<id>…]`: these conversations
     /// land the way a restored scene's does, as tabs, the last in front.
-    /// `-open-project <id>`: the shell lands on that project's page.
     private static func probing(_ landing: ShellLanding) -> ShellLanding {
         let arguments = ProcessInfo.processInfo.arguments
         var probed = landing
-        if let at = arguments.firstIndex(of: "-open-project"), arguments.indices.contains(at + 1) {
-            probed.place = .project(arguments[at + 1])
-        }
         guard let at = arguments.firstIndex(of: "-open-session"), arguments.indices.contains(at + 1) else { return probed }
         probed.sessionIds = arguments[at + 1].split(separator: ",").map(String.init)
         return probed
-    }
-
-    /// A simulator pass's `-open-task <projectId>/<taskId>`: the task's sheet
-    /// over its project's page, opened as a tapped `task` push opens it, once
-    /// the fleet is read.
-    private static var probedTask: PushRoute? {
-        let arguments = ProcessInfo.processInfo.arguments
-        guard let at = arguments.firstIndex(of: "-open-task"), arguments.indices.contains(at + 1) else { return nil }
-        let parts = arguments[at + 1].split(separator: "/", maxSplits: 1).map(String.init)
-        guard parts.count == 2 else { return nil }
-        return .task(projectId: parts[0], taskId: parts[1])
     }
     #endif
 
@@ -125,7 +109,6 @@ public final class RootViewController: ObservedViewController {
         notify_register_dispatch("dev.cawco.debug.became-active", &token, .main) { [weak scene] _ in
             MainActor.assumeIsolated { NotificationCenter.default.post(name: UIScene.didActivateNotification, object: scene) }
         }
-        LocalNetwork.allowOnDebugSignal()
         #endif
     }
 

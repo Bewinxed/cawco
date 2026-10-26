@@ -66,9 +66,6 @@ final class PlanView: UIStackView {
             let todos = plan.todos.map { ($0.id, $0.depth, $0.done ? "completed" : "pending", $0.text) }
             addArrangedSubview(PlanTree(Self.tree(todos), landing: []))
         }
-        #if DEBUG
-        PreviewProbe.say("plan drawn \(instanceId) steps=\(plan.steps.map { "\($0.id):\($0.depth):\($0.status)" }.joined(separator: ",")) spec=\(plan.spec != nil) todos=\(plan.todos.count)")
-        #endif
     }
 
     /// A part after the first starts on a seam: more room above its heading than below.
@@ -209,9 +206,6 @@ private final class PlanTree: UIStackView {
         }
         if children.map(\.glyphY) != rail.children.map(\.glyphY) || children.map(\.armEnd) != rail.children.map(\.armEnd) {
             rail.children = children
-            #if DEBUG
-            PreviewProbe.say("plan rail x=\(rail.railX) lead=\(String(format: "%.1f", rail.lead)) children=\(children.map { "\(Int($0.glyphY.rounded())):\(Int($0.armEnd.rounded()))" }.joined(separator: ","))")
-            #endif
         }
     }
 }

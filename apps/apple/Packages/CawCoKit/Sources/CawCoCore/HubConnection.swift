@@ -497,10 +497,6 @@ public final class HubConnection {
             let hubSocket = HubSocket(hub: address)
             live = hubSocket
             do {
-                #if DEBUG
-                // The simulator cannot enforce Local Network privacy: the socket fails as a refused path fails it.
-                if LocalNetwork.debugDenied { throw URLError(.notConnectedToInternet, userInfo: [NSURLErrorFailingURLErrorKey: address]) }
-                #endif
                 for try await event in hubSocket.events {
                     switch event {
                     case .opened:

@@ -179,12 +179,6 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
         // landing, a swipe let go back where it began, or one onto no tab.
         stack.onBegin = { [weak self] in
             self?.dock.held = true
-            #if DEBUG
-            // A simulator pass's `-shell-probe`: which drag took a touch (ShellController `probe edge`).
-            if ProcessInfo.processInfo.arguments.contains("-shell-probe") {
-                Logger(subsystem: "dev.cawco.app", category: "Probe").notice("probe edge pages began")
-            }
-            #endif
         }
         stack.onEnd = { [weak self] in self?.dock.held = false }
         stack.onScroll = { [weak self] position in self?.pagingMoved(position) }
@@ -303,7 +297,6 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
         #if DEBUG
         // An artifact's own tab, as the group holds it: its kind and whether it is the one in front.
         if ArtifactTabs.artifactId(of: id) != nil {
-            PreviewProbe.say("pane mounted \(id) active=\(id == leaf?.active) tabs=\(leaf?.tabs.count ?? 0)")
         }
         #endif
         let slot = UIView()
@@ -439,33 +432,8 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
         super.viewDidLayoutSubviews()
         layoutPanes()
         dock.layout()
-        #if DEBUG
-        runDetailsProbe()
-        #endif
     }
 
-    #if DEBUG
-    private var detailsProbeBegun = false
-
-    /// A simulator pass's `-details-probe`: once the chosen tab stands on
-    /// screen and the opening sessions have settled, its details pinned, and
-    /// once they hang, where the card stands against the tab and its
-    /// surfaces (`TabDetails.probeReading`), on a `details …` Probe line.
-    private func runDetailsProbe() {
-        guard !detailsProbeBegun, ProcessInfo.processInfo.arguments.contains("-details-probe"),
-              let id = leaf?.active, let tab = strip.tabView(id), tab.window != nil else { return }
-        detailsProbeBegun = true
-        Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(6))
-            guard let self, let tab = strip.tabView(id) else { return }
-            tabDetails.pin(id, tab: tab)
-            try? await Task.sleep(for: .seconds(1.2))
-            let probe = Logger(subsystem: "dev.cawco.app", category: "Probe")
-            probe.notice("\(self.tabDetails.probeReading(), privacy: .public)")
-            probe.notice("details done")
-        }
-    }
-    #endif
 
     /// A tab chosen without the finger: the swipe's settle where the group
     /// swipes, the 40pt glide elsewhere; the side is read off the strip as it was.

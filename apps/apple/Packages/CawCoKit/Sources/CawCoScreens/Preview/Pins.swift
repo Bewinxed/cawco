@@ -213,30 +213,9 @@ final class PinListController: UIViewController {
     /// The sheet is in its window and laid out: where its rows stand now.
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        probeLine()
     }
 
-    /// The counts, the filter and each row's number and centre, with the live
-    /// ones; only once in a window, where a centre is a place a touch lands.
-    private func probeLine() {
-        guard view.window != nil else { return }
-        view.layoutIfNeeded()
-        let shown = rows.arrangedSubviews.compactMap { $0 as? PinRow }
-        let away = rows.arrangedSubviews.compactMap { $0 as? MovedRow }.map { "\($0.number)" }.joined(separator: ";")
-        // Where a tap puts the panel away: its head's Close.
-        let scrim = closeControl.map(PreviewProbe.centre) ?? "none"
-        PreviewProbe.say("preview list open=\(pins.count { !$0.resolved }) resolved=\(pins.count(where: \.resolved)) moved=\(pins.count(where: \.moved)) filter=\(resolvedShown ? "resolved" : "open")@\(PreviewProbe.centre(filter)) rows=\(shown.map { "\($0.number)@\(PreviewProbe.centre($0))" }.joined(separator: ";")) live=\(shown.filter(\.live).map { "\($0.number)" }.joined(separator: ";")) scrim=\(scrim) movedRows=\(away) hold=\(holdName)")
-    }
 
-    /// The hold's name, for the probe's line.
-    private var holdName: String {
-        switch hold {
-        case .quiet: "quiet"
-        case .reading: "reading"
-        case .ready: "ready"
-        case .failed: "failed"
-        }
-    }
     #endif
 
     /// Its height fitted to what it holds now, at the width it was given, up to `fitsWithin`.
@@ -286,9 +265,6 @@ final class PinListController: UIViewController {
             }
         }
         fit()
-        #if DEBUG
-        probeLine()
-        #endif
     }
 }
 
@@ -679,7 +655,6 @@ final class PinCard: UIView, UITextViewDelegate {
         // Where the room stands once it has reached its end: the card's
         // geometry line is said before this deferred scroll, so it reads the
         // room where it stood a moment before.
-        PreviewProbe.say("preview card-room pin=\(number) room=\(Int(room.contentSize.height))/\(Int(room.bounds.height))@\(Int(room.contentOffset.y))")
         #endif
     }
 
@@ -731,10 +706,6 @@ final class PinCard: UIView, UITextViewDelegate {
                                  pendingLabel: "Deleting…", destructive: true) { [weak self] in
                 try await self?.onDelete()
             })
-        #if DEBUG
-        PreviewProbe.say(probeLine())
-        PreviewProbe.say(askLine())
-        #endif
     }
 
     /// Esc: a question standing goes first. False when there was none to put away.
@@ -765,9 +736,6 @@ final class PinCard: UIView, UITextViewDelegate {
         moreButton.accessibilityValue = asks.asked != nil ? "Asking" : nil
         window?.layoutIfNeeded()
         keepAskInView()
-        #if DEBUG
-        PreviewProbe.say(askLine())
-        #endif
     }
 
     /// The question in view, at the card's foot (AskHere.svelte `scrollIntoView({ block: "nearest" })`),
@@ -865,17 +833,7 @@ final class PinCard: UIView, UITextViewDelegate {
     }
 
     #if DEBUG
-    /// Where the probe taps: the field, Reply, Resolve or Reopen (its word), Close, ⋯ (`delete`, its menu's Delete pin).
-    /// Its scroll's offset and content height, and whether the field has the keyboard.
-    var probeScroll: String {
-        "offset=\(Int(scroll.contentOffset.y)) content=\(Int(scroll.contentSize.height)) height=\(Int(scroll.bounds.height)) writing=\(field.isFirstResponder) room=\(Int(room.contentSize.height))/\(Int(room.bounds.height))@\(Int(room.contentOffset.y))"
-    }
 
-    func probeLine() -> String {
-        // The head's Resolve is a glyph: its word is what it does.
-        let words = resolved ? "Reopen" : "Resolve"
-        return "preview card pin=\(number) field=\(PreviewProbe.centre(field)) reply=\(PreviewProbe.centre(replyButton)) resolve=\(words)@\(PreviewProbe.centre(resolveButton)) close=\(PreviewProbe.centre(closeButton)) live=\(liveMark.isHidden ? "no" : "yes") thread=\(shownThread.count) delete=\(PreviewProbe.centre(moreButton)) writing=\(field.isFirstResponder) asking=\(asks.asked != nil) problem=\(problem.isHidden ? "none" : problem.text ?? "")"
-    }
 
     /// The head's Resolve and ⋯ and the footer's Reply as frames in the window's points, `x,y,w,h`, to set against the keyboard's top.
     var probeFooter: String {
@@ -885,12 +843,6 @@ final class PinCard: UIView, UITextViewDelegate {
         }.joined(separator: " ")
     }
 
-    /// The card's question as it stands: where Cancel and the confirm are, then its words.
-    func askLine() -> String {
-        guard asks.asked != nil else { return "preview ask pin=\(number) none" }
-        let (cancel, confirm) = asks.probeControls
-        return "preview ask pin=\(number) cancel=\(PreviewProbe.centre(cancel)) confirm=\(confirm.map(PreviewProbe.centre) ?? "none") \(asks.probeWords)"
-    }
     #endif
 }
 
@@ -970,56 +922,3 @@ private final class PinField: UITextView {
     }
 }
 
-#if DEBUG
-/// `-preview-probe`: the preview's
-/// state as `Probe` lines, each control as its centre in the window's
-/// points, where a simulator touch lands.
-enum PreviewProbe {
-    static let on = ProcessInfo.processInfo.arguments.contains("-preview-probe")
-    /// `-preview-working`: the session counts as mid-turn, for the live dot (the probe's mock session ends its turns at once).
-    static let workingAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-working")
-    /// `-inspect-set <prop>=<value>`: once a sheet's page says its sheet, the
-    /// inspector opens, the chosen story's `prop` takes the option `value`,
-    /// and Save runs, as the person's taps would (scripts/probe-kit/specs/ios-sheet-inspector.ts).
-    static let inspectSet: (prop: String, value: String)? = {
-        let arguments = ProcessInfo.processInfo.arguments
-        guard let flag = arguments.firstIndex(of: "-inspect-set"), arguments.indices.contains(flag + 1) else { return nil }
-        let pair = arguments[flag + 1].split(separator: "=", maxSplits: 1).map(String.init)
-        return pair.count == 2 ? (pair[0], pair[1]) : nil
-    }()
-    /// `-open-plan`: the session's plan opens in its sheet the first time its ring shows (scripts/probe-kit/specs/ios-plan.ts).
-    static let openPlanAtLaunch = ProcessInfo.processInfo.arguments.contains("-open-plan")
-    /// `-side-switch`: the first time the plan and the preview stand beside the conversation together, the switch is pressed to the other.
-    static let sideSwitch = ProcessInfo.processInfo.arguments.contains("-side-switch")
-    /// `-thread-carry <words>`: a thread's composer takes a pasted picture and file, then sends `words` with them.
-    static let threadCarry: String? = {
-        let arguments = ProcessInfo.processInfo.arguments
-        guard let at = arguments.firstIndex(of: "-thread-carry"), arguments.indices.contains(at + 1) else { return nil }
-        return arguments[at + 1]
-    }()
-    /// `-place-pick <machineId> <path>`: a page's `cawco.pickPlace()` picker is given the machine, then the folder `path`, and Use this place, as the person's would.
-    static let placePick: (machineId: String, path: String)? = {
-        let arguments = ProcessInfo.processInfo.arguments
-        guard let flag = arguments.firstIndex(of: "-place-pick"), arguments.indices.contains(flag + 2) else { return nil }
-        return (arguments[flag + 1], arguments[flag + 2])
-    }()
-    /// `-menu-remove <name>`: once the page is ready, the title menu opens and its row `name` is removed.
-    static let menuRemove: String? = {
-        let arguments = ProcessInfo.processInfo.arguments
-        guard let flag = arguments.firstIndex(of: "-menu-remove"), arguments.indices.contains(flag + 1) else { return nil }
-        return arguments[flag + 1]
-    }()
-
-    static func say(_ line: String) {
-        guard on else { return }
-        Logger(subsystem: "dev.cawco.app", category: "Probe").notice("\(line, privacy: .public)")
-    }
-
-    /// Where `view` stands in the window; "none" while it or what holds it is hidden (a head control in More).
-    static func centre(_ view: UIView) -> String {
-        guard view.window != nil, sequence(first: view, next: \.superview).allSatisfy({ !$0.isHidden }) else { return "none" }
-        let at = view.convert(CGPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)
-        return "\(Int(at.x.rounded())),\(Int(at.y.rounded()))"
-    }
-}
-#endif

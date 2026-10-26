@@ -37,9 +37,6 @@ public final class HubDiscovery {
     @ObservationIgnored private var browser: NWBrowser?
     @ObservationIgnored private var candidates: [NWEndpoint: Task<Void, Never>] = [:]
     @ObservationIgnored private var answered: [NWEndpoint: Found] = [:]
-    #if DEBUG
-    @ObservationIgnored private var injectedDenial = false
-    #endif
     private let log = Logger(subsystem: "dev.cawco.app", category: "Discovery")
     private nonisolated static let queue = DispatchQueue(label: "dev.cawco.discovery")
     /// How long a found address has to answer as a hub (discovery.ts `PROBE_TIMEOUT_MS`).
@@ -60,17 +57,6 @@ public final class HubDiscovery {
                 self.updatePath(available)
             }
         }
-        #if DEBUG
-        let arguments = ProcessInfo.processInfo.arguments
-        if arguments.contains("--discovery-no-wifi") {
-            updatePath(false)
-            return
-        }
-        if arguments.contains("--discovery-searching") || arguments.contains("--discovery-policy-denied") {
-            updatePath(true)
-            return
-        }
-        #endif
         monitor.start(queue: Self.queue)
     }
 
@@ -108,19 +94,6 @@ public final class HubDiscovery {
             }
         }
         self.browser = browser
-        #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("--discovery-searching") {
-            update(.ready)
-            return
-        }
-        // The simulator cannot enforce Local Network privacy. Inject the
-        // system's state once; returning from Settings then runs a real browse.
-        if !injectedDenial, ProcessInfo.processInfo.arguments.contains("--discovery-policy-denied") {
-            injectedDenial = true
-            update(.waiting(.dns(DNSServiceErrorType(kDNSServiceErr_PolicyDenied))))
-            return
-        }
-        #endif
         log.info("Bonjour browse started")
         browser.start(queue: Self.queue)
     }

@@ -96,85 +96,9 @@ final class SidebarViewController: ObservedViewController {
     private var openTrees = Set<String>()
     private let fold = RailFold()
     #if DEBUG
-    private var probeClock: CADisplayLink?
-    private var probeStart = CACurrentMediaTime()
-    private var probePass = 0
     private var probePhase = "open"
-    private var probeData = Data()
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        if inSheet && ProcessInfo.processInfo.arguments.contains("-sidebar-probe") {
-            probeStart = CACurrentMediaTime()
-            probePass += 1
-            probePhase = probePass == 1 ? "first-open" : "reopen"
-            probeClock = CADisplayLink(target: self, selector: #selector(probeFrame))
-            probeClock?.add(to: .main, forMode: .common)
-        }
-    }
-    override func viewDidAppear(_ animated: Bool) {
-        super.viewDidAppear(animated)
-        guard inSheet, probePass == 1, ProcessInfo.processInfo.arguments.contains("-sidebar-probe") else { return }
-        let project = lists.first { $0.project.name == "patapon" }!
-        let block = blocks[project.project.id]!
-        func after(_ seconds: Double, phase: String, _ action: @escaping () -> Void) {
-            DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in self?.probePhase = phase; action() }
-        }
-        after(1, phase: "project-close") { [self] in
-            let y = block.convert(block.bounds, to: column).minY
-            scroll.setContentOffset(CGPoint(x: 0, y: min(y, max(0, scroll.contentSize.height - scroll.bounds.height))), animated: false)
-            toggleProject(block)
-        }
-        after(1.4, phase: "project-open") { [self] in toggleProject(block) }
-        after(2.5, phase: "project-close-again") { [self] in toggleProject(block) }
-        after(3, phase: "project-open-again") { [self] in toggleProject(block) }
-        let node = project.recent.first { $0.count > 0 }!
-        after(4, phase: "delegate-open") { [self] in toggleTree(node.row.id, row: sessionRows[rowKey(project.project.id, node.row.id)]!) }
-        after(5.5, phase: "delegate-close") { [self] in toggleTree(node.row.id, row: sessionRows[rowKey(project.project.id, node.row.id)]!) }
-        after(6, phase: "delegate-open-again") { [self] in toggleTree(node.row.id, row: sessionRows[rowKey(project.project.id, node.row.id)]!) }
-        after(6.06, phase: "delegate-reverse-close") { [self] in toggleTree(node.row.id, row: sessionRows[rowKey(project.project.id, node.row.id)]!) }
-        after(6.1, phase: "delegate-reverse-open") { [self] in toggleTree(node.row.id, row: sessionRows[rowKey(project.project.id, node.row.id)]!) }
-        after(7, phase: "dismiss") { [self] in
-            probeClock?.invalidate(); probeClock = nil
-            writeProbe()
-            dismiss(animated: true) { [self] in (host as! ShellController).probeReopenRail() }
-        }
-    }
-    private func writeProbe() {
-        let file = URL.documentsDirectory.appendingPathComponent("sidebar-frames-\(probePass).jsonl")
-        try! probeData.write(to: file)
-        probeData = Data()
-    }
-    @objc private func probeFrame() {
-        let rows = sessionRows.values.filter { row in
-            let frame = row.convert(row.bounds, to: view)
-            return frame.intersects(scroll.frame) && row.window != nil
-        }.map { row -> [String: Any] in
-            let frame = row.convert(row.bounds, to: view)
-            let mark = row.mark.superview!.convert(CGRect(x: row.mark.center.x - row.mark.bounds.width / 2,
-                                                         y: row.mark.center.y - row.mark.bounds.height / 2,
-                                                         width: row.mark.bounds.width, height: row.mark.bounds.height), to: view)
-            return ["id": row.id, "view": String(describing: ObjectIdentifier(row)), "title": row.name.text ?? "", "titleWidth": row.name.bounds.width,
-                    "x": frame.minX, "y": frame.minY, "w": frame.width, "h": frame.height, "shift": row.transform.ty,
-                    "mark": [mark.minX, mark.minY, mark.width, mark.height], "ride": [row.mark.transform.tx, row.mark.transform.ty]]
-        }
-        var lines: [[String: Any]] = []
-        func rails(_ part: UIView) {
-            if let rail = part as? NestRailView {
-                let frame = rail.convert(rail.bounds, to: view)
-                lines.append(["x": frame.minX + rail.railX, "y": frame.minY, "head": rail.head.isFinite ? rail.head : -1,
-                              "children": rail.children.map { [frame.minY + $0.glyphY, frame.minX + $0.armEnd] }])
-            }
-            part.subviews.forEach(rails)
-        }
-        rails(projectsBody)
-        let brand = headerRow.arrangedSubviews.first as! RailRow
-        let icon = brand.content.arrangedSubviews[0].convert(brand.content.arrangedSubviews[0].bounds, to: view)
-        let word = brand.content.arrangedSubviews[1].convert(brand.content.arrangedSubviews[1].bounds, to: view)
-        let data = try! JSONSerialization.data(withJSONObject: ["ms": (CACurrentMediaTime() - probeStart) * 1000, "phase": probePhase, "rows": rows,
-                                                              "lines": lines, "viewport": [view.bounds.width, view.bounds.height], "safeTop": view.safeAreaInsets.top,
-                                                              "header": ["icon": [icon.minX, icon.minY, icon.width, icon.height], "word": [word.minX, word.minY, word.width, word.height]]])
-        probeData.append(data); probeData.append(10)
-        if CACurrentMediaTime() - probeStart > 8 { probeClock?.invalidate(); probeClock = nil; writeProbe() }
     }
     #endif
 
@@ -452,12 +376,6 @@ final class SidebarViewController: ObservedViewController {
         column.addArrangedSubview(recent.view)
         recent.didMove(toParent: self)
         self.recent = recent
-        #if DEBUG
-        recent.onProbe = { [weak self, weak recent] in
-            guard let self else { return }
-            recent?.probeLog(rail: view, projects: projectsGroup, scroll: scroll, homeSlot: homeSlot, trial: trialLine, current: currentRows)
-        }
-        #endif
         // A docked keyboard covers the rail's foot: the list scrolls on under it, so Recent's search and results stay in reach.
         NotificationCenter.default.addObserver(self, selector: #selector(keyboardMoved(_:)), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
     }
@@ -910,24 +828,8 @@ final class SidebarViewController: ObservedViewController {
         sessionRows.first { $0.value.id == id && $0.value.window != nil }?.value
     }
 
-    /// Whether the window's question stands in the line right under session `id`'s row here.
-    func probeAskUnder(_ id: String) -> Bool {
-        guard let row = probeRow(id), let slot = host?.sessionMenus.asks.view.superview as? RailAskSlot,
-              let unit = row.superview as? UIStackView, unit === slot.superview,
-              let at = unit.arrangedSubviews.firstIndex(of: row) else { return false }
-        return unit.arrangedSubviews.firstIndex(of: slot) == at + 1
-    }
 
-    /// Where a question about a session in this rail stands.
-    var probeAskPlace: String { askPlace }
 
-    /// The rows drawn as the place in front: a place, a project, a session.
-    private var currentRows: [String] {
-        let places = [(fleetRow, "Fleet")].filter { $0.0.active }.map(\.1)
-        let projects = blocks.values.filter(\.row.active).map(\.project.name)
-        let sessions = sessionRows.values.filter { $0.active && $0.window != nil }.map { $0.name.text ?? $0.id }
-        return places + projects + sessions
-    }
     #endif
 
     /// The session the window's one question stands under in this rail, if it is one of its rows.

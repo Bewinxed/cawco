@@ -36,7 +36,6 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         Pro.shared.start()
         #if DEBUG
         PushRegistry.shared.launch(environment: .sandbox)
-        PushTaps.probe()
         #else
         PushRegistry.shared.launch(environment: .production)
         #endif
@@ -279,45 +278,6 @@ enum PushTaps {
         }
     }
 
-    #if DEBUG
-    /// A simulator pass's tapped push, where `simctl push` and a banner tap
-    /// can't be driven: `-push-route session:<id>`, `task:<projectId>/<taskId>`
-    /// or `push:<the push's cawco data as JSON>` (routed by `PushNote.route`)
-    /// at launch, before any window, as a tap that launched the app; and,
-    /// running, the `debug-push-route` default on `dev.cawco.debug.push-route`
-    /// (notifyutil). Each goes through `deliver`, as the delegate's tap does.
-    static func probe() {
-        let arguments = ProcessInfo.processInfo.arguments
-        if let at = arguments.firstIndex(of: "-push-route"), arguments.indices.contains(at + 1), let route = probed(arguments[at + 1]) {
-            deliver(route, key: "probe-launch", to: nil)
-        }
-        var token: Int32 = 0
-        notify_register_dispatch("dev.cawco.debug.push-route", &token, .main) { _ in
-            MainActor.assumeIsolated {
-                guard let text = UserDefaults.standard.string(forKey: "debug-push-route"), let route = probed(text) else { return }
-                deliver(route, key: "probe-\(Date().timeIntervalSince1970)", to: nil)
-            }
-        }
-    }
-
-    private static func probed(_ text: String) -> PushRoute? {
-        let parts = text.split(separator: ":", maxSplits: 1).map(String.init)
-        guard parts.count == 2 else { return nil }
-        switch parts[0] {
-        // A push's own `cawco` data, as JSON: routed as its tap is (`PushNote.route`).
-        case "push":
-            // Read as a delivered push's are (`PushNote.fields`): its strings, its nulls left out.
-            guard let data = parts[1].data(using: .utf8),
-                  let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return nil }
-            return PushNote.route(object.compactMapValues { $0 as? String })
-        case "session": return .session(parts[1])
-        case "task":
-            let ids = parts[1].split(separator: "/", maxSplits: 1).map(String.init)
-            return ids.count == 2 ? .task(projectId: ids[0], taskId: ids[1]) : nil
-        default: return nil
-        }
-    }
-    #endif
 
     static func take() -> PushRoute? {
         defer { waiting = nil }
@@ -369,12 +329,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         #endif
         let window = ReachWindow(windowScene: scene)
         window.tintColor = Palette.inkStrong
-        #if DEBUG
-        // A simulator pass at the paywall alone, with no hub (PaywallProbe).
-        window.rootViewController = PaywallProbe.asked ? PaywallProbe.root() : RootViewController(restoring: activity)
-        #else
         window.rootViewController = RootViewController(restoring: activity)
-        #endif
         window.makeKeyAndVisible()
         self.window = window
     }

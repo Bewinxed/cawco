@@ -29,13 +29,6 @@ final class BlocksPane: UIView {
         ])
         #if DEBUG
         // Under the probe, who moves the page and to where: the frames that asked.
-        if ViewsProbe.on {
-            scrolled = scroll.observe(\.contentOffset, options: [.old, .new]) { _, change in
-                guard let was = change.oldValue?.y, let now = change.newValue?.y, abs(now - was) > 40 else { return }
-                let asked = Thread.callStackSymbols.dropFirst(2).prefix(14).map { $0.split(separator: " ", omittingEmptySubsequences: true).dropFirst(3).prefix(1).joined() }
-                MainActor.assumeIsolated { ViewsProbe.say("blocks scrolled \(Int(was))->\(Int(now)) by \(asked.joined(separator: "<"))") }
-            }
-        }
         #endif
     }
 

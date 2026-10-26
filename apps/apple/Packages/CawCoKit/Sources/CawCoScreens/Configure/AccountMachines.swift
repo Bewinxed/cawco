@@ -110,10 +110,8 @@ final class PastePanel: UIStackView, UITextFieldDelegate {
     }
 
     #if DEBUG
-    func probeOpenLink() { openLink() }
     /// The flow as it stands: its phase, its problem, its code.
     var probePhase: PasteSignin.Phase { flow.phase }
-    var probeProblem: String? { flow.problem }
     func probeSubmit(_ code: String) {
         field.text = code
         field.sendActions(for: .editingChanged)
@@ -676,7 +674,6 @@ final class AccountMachinesView: UIStackView {
     /// The probe's reads and presses, by machine.
     func probeRow(_ machineId: String) -> AccountMachineRow? { rows[machineId] }
     func probeToggle(_ machineId: String) { toggle(machineId) }
-    func probeSignOut(_ machineId: String) { signOut(machineId) }
     #endif
 }
 

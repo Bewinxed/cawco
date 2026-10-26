@@ -111,24 +111,8 @@ final class MadePane: UIView {
             for _ in row.arrangedSubviews.count ..< columns { row.addArrangedSubview(UIView()) }
             rows.addArrangedSubview(row)
         }
-        say()
     }
 
-    /// `made pane columns=N tiles=<id>=<output>:<state>,…@x,y;…`, for scripts/probe-kit/specs/ios-views.ts.
-    private func say() {
-        #if DEBUG
-        guard ViewsProbe.on, window != nil, !isHidden else { return }
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            layoutIfNeeded()
-            let line = "made pane columns=\(rows.arrangedSubviews.first.map { ($0 as? UIStackView)?.arrangedSubviews.count ?? 0 } ?? 0) tiles="
-                + tasks.compactMap { task in tiles[task.id].map { "\(task.id)=\($0.probe)" } }.joined(separator: ";")
-            guard line != said else { return }
-            said = line
-            ViewsProbe.say(line)
-        }
-        #endif
-    }
 
     #if DEBUG
     private var said = ""
@@ -245,13 +229,4 @@ private final class MadeTile: UIView {
         for view in views.values { view.show(version: task.updatedAt) }
     }
 
-    #if DEBUG
-    /// Each output's name and how it drew, in the task's order; the head's centre.
-    var probe: String {
-        let drawn = outputs.arrangedSubviews.compactMap { view in
-            views.first { $0.value === view }.map { "\($0.key):\($0.value.probeState)" }
-        }
-        return "\(drawn.joined(separator: ","))@\(ViewsProbe.centre(head))"
-    }
-    #endif
 }

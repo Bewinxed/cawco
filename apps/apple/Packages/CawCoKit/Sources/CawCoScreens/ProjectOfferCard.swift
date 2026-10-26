@@ -117,23 +117,9 @@ final class ProjectOfferCard: UIView {
             actions.addArrangedSubview(create)
         }
         shouldGroupAccessibilityChildren = true
-        #if DEBUG
-        PreviewProbe.say("project offer \(instanceId) line=\(line.text ?? "-") joined=\(joined?.project.name ?? "-") pending=\(pending.map { "\($0)" } ?? "-") refused=\(refused.text ?? "-")")
-        // `-offer-accept`: Create project, once, a moment after the offer stands, as its press would.
-        if offer != nil, pending == nil, ProcessInfo.processInfo.arguments.contains("-offer-accept"), !Self.acceptedAtLaunch {
-            Self.acceptedAtLaunch = true
-            Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .seconds(1))
-                self?.answer(.accept)
-            }
-        }
-        #endif
         onHeight()
     }
 
-    #if DEBUG
-    private static var acceptedAtLaunch = false
-    #endif
 
     private func answer(_ which: Pending) {
         guard pending == nil else { return }
@@ -145,9 +131,6 @@ final class ProjectOfferCard: UIView {
             do {
                 let accepted = try await hub.answerProjectOffer(instanceId, accept: which == .accept)
                 self?.pending = nil
-                #if DEBUG
-                PreviewProbe.say("project offer \(instanceId) answered \(which) project=\(accepted?.project.id ?? "-") setup=\(accepted?.setupThread?.id ?? "-")")
-                #endif
                 // A new project: Caw sets it up in its Setup thread, with the session's plan already on its board.
                 if let thread = accepted?.setupThread { self?.onSetupThread(thread.id) }
             } catch {

@@ -118,7 +118,6 @@ final class PlanSideController: ObservedViewController, SideCard {
         let line = "plan side \(instanceId) title=\(titleLabel.text ?? "-") switcher=\(switcher != nil) expanded=\(expanded)"
         if line != said {
             said = line
-            PreviewProbe.say(line)
         }
         #endif
     }

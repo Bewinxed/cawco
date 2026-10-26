@@ -29,11 +29,6 @@ func usageFigure(_ role: TypeRole = TypeScale.typeMeta, ink: UIColor, weight: UI
     return label
 }
 
-#if DEBUG
-/// What `-usage-probe` reads back: the app's own word on what it drew. Debug
-/// builds only, as every line it writes.
-let usageProbe: Logger? = ProcessInfo.processInfo.arguments.contains("-usage-probe") ? Logger(subsystem: "dev.cawco.app", category: "UsageProbe") : nil
-#endif
 
 // MARK: The strip
 
@@ -107,15 +102,6 @@ final class UsageCell: HomeCell {
     }
 
     #if DEBUG
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        guard let usageProbe else { return }
-        // How far in from the card's edge its words start.
-        let line = "card variant=\(variant == .home ? "home" : "rail") card=\(Int(strip.frame.width))x\(Int(strip.frame.height)) words-in=\(face.frame.minX) words-end=\(strip.bounds.width - face.frame.maxX)"
-        guard line != probed else { return }
-        probed = line
-        usageProbe.notice("\(line, privacy: .public)")
-    }
 
     private var probed = ""
     #endif
@@ -291,9 +277,6 @@ private final class StripFace: UIView {
                                                                      context: nil).width ?? 0).rounded(.up)
             let asks = max(14 + 6 + 16 + 6 + backWidth + digitsWidth, captionWidth)
             goShown = goShown && asks + gap + goWidth <= width
-            #if DEBUG
-            usageProbe?.notice("strip wrap asks \(asks, privacy: .public) caption \(captionWidth, privacy: .public) gap \(self.gap, privacy: .public) go \(goWidth, privacy: .public) width \(width, privacy: .public) goShown \(goShown, privacy: .public)")
-            #endif
             claudeWidth = goShown ? width - gap - goWidth : width
             claudeMark.frame = CGRect(x: 0, y: (line - 14) / 2, width: 14, height: 14)
             let room = max(16, min(n * Self.slot - 4, claudeWidth - 14 - 6 - 6 - backWidth - digitsWidth))
@@ -315,9 +298,6 @@ private final class StripFace: UIView {
             backGlyph.frame = CGRect(x: marksX + room + 6, y: 2, width: 12, height: 12)
             digits.frame = CGRect(x: marksX + room + 6 + backWidth, y: 0, width: digitsWidth, height: line)
             caption.frame = CGRect(x: 0, y: capTop, width: claudeWidth, height: capHeight)
-            #if DEBUG
-            usageProbe?.notice("strip marks \(shownCount, privacy: .public) more \(extra, privacy: .public) width \(width, privacy: .public) digits \(self.digits.text ?? "", privacy: .public) caption \(self.caption.text ?? "", privacy: .public)")
-            #endif
         } else {
             claudeWidth = 0
         }
@@ -544,9 +524,6 @@ final class UsageSheetController: ObservedViewController {
                 foldHeight.constant = deepest
             }
         }
-        #if DEBUG
-        usageProbe?.notice("sheet accounts height \(self.scroll.bounds.height, privacy: .public) natural \(self.naturalHeight.constant, privacy: .public)")
-        #endif
     }
 
     override func refreshContent() {
@@ -579,10 +556,6 @@ final class UsageSheetController: ObservedViewController {
             kpiRow.spacing = (kpi.font.pointSize * 0.25).rounded()
             let segments = Rings.segments(usage.spans, accounts: claude.accounts, now: now)
             relay.configure(segments, stopKey: Rings.stopKey(segments, stopAt: claude.stopAt, now: now), names: usage.nameOf)
-            #if DEBUG
-            usageProbe?.notice("now \(Int(now), privacy: .public) kpi \(stop.figure, privacy: .public) back \(stop.back, privacy: .public) bands \(segments.compactMap { seg in seg.ring.map { Rings.bandTip(seg, name: usage.nameOf($0)) } }.joined(separator: " | "), privacy: .public)")
-            usageProbe?.notice("relay \(segments.map { "\($0.ring?.id ?? "blank"):\(Int($0.ms / 60000))" }.joined(separator: ","), privacy: .public) stop \(Rings.stopKey(segments, stopAt: claude.stopAt, now: now) ?? "none", privacy: .public)")
-            #endif
         }
         wall.configure(usage, rankedAt: rankedAt ?? now, lit: lit)
         below.arrangedSubviews.forEach { $0.removeFromSuperview() }
@@ -878,13 +851,6 @@ final class UsageWallView: UIView {
             self.feet = feet
             self.zones = zones
             if height.constant != total { height.constant = total }
-            #if DEBUG
-            if let probe = usageProbe {
-                for item in items {
-                    if case let .cell(cell) = item { probe.notice("\(cell.probeLine(in: self), privacy: .public)") }
-                }
-            }
-            #endif
         }
         return total
     }
@@ -1184,22 +1150,6 @@ final class UsageCellView: UIView {
         return super.hitTest(point, with: event)
     }
 
-    #if DEBUG
-    /// `-usage-probe`'s line for this cell: its x's in the wall, its words and its figures' face.
-    func probeLine(in wall: UIView) -> String {
-        func x(_ view: UIView) -> String { String(format: "%.2f", view.convert(view.bounds, to: wall).minX) }
-        func end(_ view: UIView) -> String { String(format: "%.2f", view.convert(view.bounds, to: wall).maxX) }
-        let shareInk = share.textAlignment == .right ? end(share) : x(share)
-        let shareEnd = share.sizeThatFits(.zero).width
-        _ = shareEnd
-        return "cell \(ring?.id ?? "") name=\(shown.whole) time=\(time.text ?? "") guess=\(!tilde.isHidden) back=\(!status.isHidden) week=\(share.isHidden ? "-" : share.text ?? "") "
-            + "dialX=\(x(dial)) slotX=\(x(status)) timeX=\(x(time)) markX=\(x(weekMark)) shareEnd=\(shareInk) nameX=\(x(name)) "
-            + "y=\(String(format: "%.2f", frame.minY)) h=\(String(format: "%.2f", frame.height)) "
-            + "timeFont=\(time.font.fontName) shareFont=\(share.font.fontName) chipFont=\(chipFigure.font.fontName) nameFont=\(name.attributedText.flatMap { $0.length > 0 ? ($0.attribute(.font, at: 0, effectiveRange: nil) as? UIFont)?.fontName : nil } ?? "") "
-            + "sessions=\(chip.isHidden ? 0 : ring?.sessions.count ?? 0) delegates=\(!delegates.isHidden) carry=\(carrying) "
-            + "dialTip=\((dial.accessibilityLabel ?? "").replacingOccurrences(of: "\n", with: " / ")) statusTip=\(statusTip ?? "-") delegatesTip=\(delegatesTip ?? "-")"
-    }
-    #endif
 }
 
 extension UsageCellView: UIGestureRecognizerDelegate {

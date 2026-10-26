@@ -58,9 +58,6 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
     /// Caw on this screen; when the screen goes, Root lets him fade out over the next one.
     private(set) var caw: CawView?
     private var shownFound: [HubDiscovery.Found] = []
-    #if DEBUG
-    private var lastEvidence = ""
-    #endif
 
     init(hub: HubConnection, mode: Mode, done: @escaping () -> Void = {}) {
         self.hub = hub
@@ -425,30 +422,6 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
         discovery.start()
     }
 
-    #if DEBUG
-    /// Simulator proof reads the laid-out views, including effective hidden
-    /// state, rather than interpreting a screenshot or inventing model output.
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        guard ProcessInfo.processInfo.arguments.contains("--connect-evidence") else { return }
-        func rows(_ node: UIView) -> [String] {
-            guard !node.isHidden else { return [] }
-            let text: String? = if let label = node as? UILabel { label.text }
-                else if let field = node as? UITextField { field.placeholder }
-                else if let button = node as? UIButton { button.configuration?.attributedTitle.map { String($0.characters) } }
-                else if node is KitSpinner { "KitSpinner" }
-                else { nil }
-            let frame = node.convert(node.bounds, to: view)
-            let row = text.map { "\($0) frame=\(frame)" }
-            return (row.map { [$0] } ?? []) + node.subviews.flatMap(rows)
-        }
-        let evidence = rows(view).joined(separator: " | ")
-        if evidence != lastEvidence {
-            lastEvidence = evidence
-            Logger(subsystem: "dev.cawco.app", category: "ConnectEvidence").notice("\(evidence, privacy: .public)")
-        }
-    }
-    #endif
 
     private func fieldChanged() {
         connectButton.isEnabled = !(field.text ?? "").trimmingCharacters(in: .whitespaces).isEmpty

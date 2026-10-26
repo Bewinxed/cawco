@@ -119,39 +119,6 @@ final class AccountsSectionController: ConfigSectionController {
 
     #if DEBUG
     func probeOpen(_ id: String) { openAccount(id) }
-    func probeRouting(_ provider: String) { openRouting(provider) }
-    func probeSetup() { openSetup() }
-    /// Every group's head and row as drawn now.
-    var probeLines: [String] { ViewTexts.texts(in: groups) }
-    /// Where the groups' parts stand: a group's head, then its rows one under
-    /// another with no room between them (the hairline is the only rule),
-    /// the groups `space6` apart. Each place that isn't so, or "none".
-    var probeGaps: String {
-        var out: [String] = []
-        let shown = groups.arrangedSubviews.filter { !$0.isHidden }
-        for (index, box) in shown.enumerated() {
-            if index > 0 {
-                let between = box.frame.minY - shown[index - 1].frame.maxY
-                if abs(between - Space.space6) > 0.5 { out.append("groups \(index - 1)–\(index) \(Int(between))pt apart") }
-            }
-            guard let rows = (box as? UIStackView)?.arrangedSubviews.last as? UIStackView else { continue }
-            let drawn = rows.arrangedSubviews.filter { !$0.isHidden }
-            for (at, row) in drawn.enumerated() where at > 0 {
-                let between = row.frame.minY - drawn[at - 1].frame.maxY
-                if abs(between) > 0.5 { out.append("group \(index) rows \(at - 1)–\(at) \(Int(between))pt apart") }
-            }
-            // A row as tall as its words at this text size, and no taller.
-            for row in drawn {
-                let needs = row.systemLayoutSizeFitting(CGSize(width: row.bounds.width, height: 0),
-                                                        withHorizontalFittingPriority: .required,
-                                                        verticalFittingPriority: .fittingSizeLevel).height
-                if row.frame.height > needs + 0.5 {
-                    out.append("group \(index) row \(Int(row.frame.minY)) is \(Int(row.frame.height))pt tall, its words \(Int(needs))pt")
-                }
-            }
-        }
-        return out.isEmpty ? "none" : out.joined(separator: " / ")
-    }
     #endif
 }
 
@@ -471,7 +438,6 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
     }
 
     #if DEBUG
-    var probeMachines: AccountMachinesView { machines }
     func probeType(nickname text: String) {
         nickname.text = text
         nickname.sendActions(for: .editingChanged)

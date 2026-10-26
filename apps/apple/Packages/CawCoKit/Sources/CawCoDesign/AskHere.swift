@@ -261,8 +261,6 @@ public final class AskHere: UIView {
     }
 
     #if DEBUG
-    /// What a probe taps: Cancel and the confirm.
-    public var probeControls: (cancel: UIView, confirm: UIView?) { (cancel, confirm) }
     /// What it says now: its title, its body and a refusal.
     public var probeWords: String {
         let body = paragraphs.arrangedSubviews.compactMap { ($0 as? KitLabel)?.text }.joined(separator: " ")

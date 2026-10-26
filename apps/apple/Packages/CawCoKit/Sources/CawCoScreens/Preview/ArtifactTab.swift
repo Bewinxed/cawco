@@ -60,9 +60,6 @@ final class ArtifactTabController: ObservedViewController {
         preview.standsExpanded(true)
         self.preview = preview
         requestRefresh()
-        #if DEBUG
-        PreviewProbe.say("artifact tab \(artifactId) of \(instanceId) name=\(name)")
-        #endif
     }
 
     /// The artifact page's empty state (`This artifact didn't open`): the hub's words, and the way back.
@@ -77,9 +74,6 @@ final class ArtifactTabController: ObservedViewController {
             state.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Space.space6),
         ])
         problem = state
-        #if DEBUG
-        PreviewProbe.say("artifact tab \(artifactId) refused: \(why)")
-        #endif
     }
 
     /// The session's preview as the hub says it now: the tab draws what its panel shows.
@@ -91,7 +85,6 @@ final class ArtifactTabController: ObservedViewController {
             let line = "artifact tab \(artifactId) shows \(frame?.artifact.id ?? "-") state=\(frame?.state.rawValue ?? "-")"
             if line != said {
                 said = line
-                PreviewProbe.say(line)
             }
         }
         #endif

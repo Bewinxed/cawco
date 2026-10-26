@@ -478,12 +478,7 @@ final class MachinesListView: UIView {
         }
     }
 
-    /// The unlock standing in this list, if any.
-    var probeUnlockView: UnlockKeychainView? { unlockView }
-    var probeRunning: Bool { askView.running }
 
-    /// Whether `machineId` has a row in this list.
-    func probeHasRow(_ machineId: String) -> Bool { rows[machineId] != nil }
     #endif
 
     private func makeRow(_ machineId: String) -> MachinesListRow {
@@ -744,16 +739,8 @@ final class MachineMenu: NSObject, UIContextMenuInteractionDelegate {
     }
 
     #if DEBUG
-    func probeReload() { runReload() }
-    func probeAccounts() { openAccounts() }
     /// Remove machine…, as its item asks it.
     func probeAskRemove() { askRemove() }
-    /// The menu's first section as it would draw now: each item's title and the words under it.
-    var probeItems: [String] {
-        (menu().children.first as? UIMenu)?.children.compactMap { element in
-            (element as? UIAction).map { "\($0.title)\($0.subtitle.map { " — \($0)" } ?? "")" }
-        } ?? []
-    }
     #endif
 
     /// Signing an account in is Configure → Accounts' work (MachineMenu.svelte): it opens there.

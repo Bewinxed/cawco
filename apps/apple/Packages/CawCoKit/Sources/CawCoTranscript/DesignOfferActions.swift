@@ -25,7 +25,6 @@ final class DesignOfferActionsView: UIStackView {
     private var open: UIButton!
     #if DEBUG
     private static let log = Logger(subsystem: "dev.cawco.app", category: "Transcript")
-    private static var builtAtLaunch = false
     #endif
 
     init(projectId: String, hub: HubConnection?, openTask: @escaping (_ projectId: String, _ taskId: String) -> Void) {
@@ -109,11 +108,6 @@ final class DesignOfferActionsView: UIStackView {
         #if DEBUG
         let state = "design offer \(projectId) answer=\(answer.map { "\($0)" } ?? "-") acting=\(acting.map { "\($0)" } ?? "-") task=\(now?.builtTaskId ?? "-") problem=\(problem ?? "-")"
         Self.log.notice("probe \(state, privacy: .public)")
-        // `-design-offer-build`: Build, once, as its press would, the first time the offer stands open.
-        if answer == .open, acting == nil, ProcessInfo.processInfo.arguments.contains("-design-offer-build"), !Self.builtAtLaunch {
-            Self.builtAtLaunch = true
-            act(.build)
-        }
         #endif
         remeasureRow()
     }

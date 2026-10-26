@@ -243,35 +243,10 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
     }
 
     #if DEBUG
-    /// A service signed in to through the form, as a person fills and sends it.
-    func probeAdd(service name: String, account: String, key: String) {
-        guard let service = Words.Connections.services.first(where: { $0.service == name }),
-              let way = service.ways.first(where: { $0.auth == "bearer" }) else { return }
-        startAdding(service)
-        form.probePick(way.label)
-        form.probeFill(account: account, key: key)
-        form.probeSend()
-    }
 
-    /// The form opened on a service, as its Server address field then reads: shown or not, its words, its problem.
-    func probeOpenAddress(service name: String) -> ConnectionAddressRead? {
-        guard let service = Words.Connections.services.first(where: { $0.service == name }) else { return nil }
-        startAdding(service)
-        form.layoutIfNeeded()
-        return form.probeAddress
-    }
 
-    /// The open form filled with `address`, its account and key, then Sign in pressed.
-    func probeSendAddress(_ address: String, account: String, key: String) -> ConnectionAddressRead {
-        form.probeFill(address: address)
-        form.probeFill(account: account, key: key)
-        form.probeSend()
-        form.layoutIfNeeded()
-        return form.probeAddress
-    }
 
     func probeFill(address typed: String) { form.probeFill(address: typed) }
-    var probeAddressRead: ConnectionAddressRead { form.probeAddress }
 
     /// The form opened on a service with one of its ways picked, as it then reads.
     func probeOpen(service name: String, way label: String) -> String {
@@ -282,9 +257,7 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
         return ViewTexts.texts(in: form).joined(separator: " | ")
     }
 
-    func probeCloseForm() { form.close() }
 
-    var probeAdding: Bool { form.pending }
     func probeRow(_ name: String) -> ConnectionView? { store.rows?.first { $0.name == name } }
     func probeToggle(_ name: String, project: String) { toggle(name, project: project) }
     #endif
@@ -691,17 +664,6 @@ private final class ConnectionForm: UIView {
 
     func probeSend() { send() }
 
-    var probeAddress: ConnectionAddressRead {
-        layoutIfNeeded()
-        // The field's line under its input: the third of its parts, label, control, line.
-        let line = addressField.arrangedSubviews.last.flatMap { $0.isHidden ? nil : $0.convert($0.bounds, to: self) }
-        return ConnectionAddressRead(
-            shown: !addressField.isHidden, value: address.text ?? "",
-            placeholder: address.attributedPlaceholder?.string ?? "", problem: addressProblem,
-            form: bounds, field: address.convert(address.bounds, to: self), line: line,
-            account: account.convert(account.bounds, to: self),
-            inParent: frame, parentWidth: superview?.bounds.width ?? 0)
-    }
     #endif
 
     /// A way picked by its label.

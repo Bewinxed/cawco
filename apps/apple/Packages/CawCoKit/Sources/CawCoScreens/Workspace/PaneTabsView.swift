@@ -249,9 +249,6 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
             for (id, view) in views { view.setChosen(id == next) }
             if !added.isEmpty { reveal(shown, animated: !still) }
         }
-        #if DEBUG
-        probeBegin()
-        #endif
     }
 
     /// A tap's choice, drawn at once on the switch's clock rather than when
@@ -260,9 +257,6 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
     /// `optimisticIndex`). Told again by `configure`, it draws nothing more.
     func choose(_ id: String) {
         guard views[id] != nil, id != active else { return }
-        #if DEBUG
-        probeChose(id)
-        #endif
         pass(to: id, showing: id, animated: window != nil && !UIAccessibility.isReduceMotionEnabled)
     }
 
@@ -416,17 +410,6 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
     /// The tabs from the bottom of the stack up, as last drawn.
     private var stacked: [String] = []
     private let clock = Frames()
-    #if DEBUG
-    /// `-tabs-probe`: the switch being sampled, and a stepped clock's hold per stop, ms.
-    private var probeLabel: String?
-    private var probeHold: Double?
-    private var probeStair = -1.0
-    private var probeBegun = false
-    /// The tab whose tap the takeover waits for, and whether a swipe has carried the switch since.
-    private var probeArmed: String?
-    private var probeRode = false
-    private var probeAttempt = 0
-    #endif
 
     /// The choice moves to `next`, and the strip to show `shown`: on the
     /// switch's clock from wherever every tab stands now, or at once.
@@ -451,25 +434,15 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
         // A takeover's tap runs 6× as long: a simulator's scripted finger
         // reaches the pages only a second after it, so it takes the switch
         // some 40% of the way.
-        if probeLabel?.hasPrefix("takeover") == true { duration *= 6 }
         #endif
         clock.run { [weak self] ms in
             guard let self, passage?.base == nil, passage?.toward == next else { return false }
             var t = min(1, ms / duration)
             var f = Motion.easeCrossfade.value(at: t)
-            #if DEBUG
-            if let held = probeHeld(ms) { (t, f) = held }
-            #endif
             passage?.f = f
             draw()
-            #if DEBUG
-            probeFrame(t)
-            #endif
             guard t < 1 else {
                 land()
-                #if DEBUG
-                probeFrame(nil)
-                #endif
                 return false
             }
             return true
@@ -524,9 +497,6 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
         }
         passage?.f = f
         draw()
-        #if DEBUG
-        probeRide(f)
-        #endif
     }
 
     /// The pages came to rest on `id`. When a swipe carried the choice
@@ -547,9 +517,6 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
         if id != active, views[id] != nil {
             pass(to: id, showing: id, animated: window != nil && !UIAccessibility.isReduceMotionEnabled)
         }
-        #if DEBUG
-        probeSettled(id)
-        #endif
     }
 
     // MARK: Drop caret
@@ -857,338 +824,6 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
 }
 
 #if DEBUG
-/// A simulator pass's `-tabs-probe`: once the strip holds four tabs on
-/// screen it taps them, each by its own tap's handler, through a step to a
-/// neighbour and a jump past one on the switch's clock, logging every frame
-/// (category TabsProbe), then the same two on a stepped clock that holds
-/// each stop (`probeStops`: the clock's quarters, and f = 0.45, 0.5, 0.55
-/// either side of the seam's handover) for 2s, logging and capturing the
-/// window and the strip at each into
-/// tmp/tabs-probe/<idiom>-<style>-<switch>-<stop>[-strip].png. "landed" is
-/// the frame after the passage ends: it matches t=1. Then it arms the
-/// takeover on three working tabs in a row: a real tap on the second of
-/// them (at the point it logs), then a finger's drag on the pages toward the
-/// third, which takes them while that switch runs; every frame of the tap
-/// and of the swipe after it is logged ("takeover<n>", "takeover<n>-ride")
-/// until the pages land.
-extension PaneTabsView {
-    private static let probeLog = Logger(subsystem: "dev.cawco.app", category: "TabsProbe")
-    private static let probeStops: [(name: String, f: Double)] = [
-        ("t0", 0), ("t25", Motion.easeCrossfade.value(at: 0.25)), ("f45", 0.45), ("f49", 0.49), ("t50", 0.5),
-        ("f51", 0.51), ("f55", 0.55), ("t75", Motion.easeCrossfade.value(at: 0.75)), ("t100", 1),
-    ]
-
-    /// The stepped clock at `ms`: its stop's place among the stops (as `t`) and its fraction.
-    private func probeHeld(_ ms: Double) -> (Double, Double)? {
-        guard let hold = probeHold else { return nil }
-        let last = Self.probeStops.count - 1
-        let at = min(last, Int(ms / hold))
-        return (Double(at) / Double(last), Self.probeStops[at].f)
-    }
-
-    private func probeBegin() {
-        guard !probeBegun, ProcessInfo.processInfo.arguments.contains("-tabs-probe"), order.count >= 4, window != nil else { return }
-        probeBegun = true
-        // The opening sessions settle first; each step waits from the one
-        // before it actually ran, so a busy main thread never bunches them.
-        probeStep(0, after: 6)
-    }
-
-    /// The steps: the held step lands on the tab asking (its rim the
-    /// attention ink) from its neighbour, so its seam is read between two
-    /// inks; the held jump goes back past the idle second tab (no rim while
-    /// unchosen), and the last jump past it again on the real clock, every
-    /// frame logged.
-    private var probeSteps: [(label: String?, to: Int, hold: Double?)] {
-        let asking = order.firstIndex { views[$0]?.probeNeeds == true } ?? 2
-        let beside = asking + 1 < order.count ? asking + 1 : asking - 1
-        return [
-            (nil, 0, nil), ("step", 1, nil), ("jump", 3, nil), (nil, beside, nil),
-            ("step-held", asking, 2000), ("jump-held", asking >= 2 ? 0 : 3, 2000),
-            ("jump-idle", asking >= 2 ? 2 : 0, nil),
-        ]
-    }
-
-    private func probeStep(_ index: Int, after delay: Double) {
-        let steps = probeSteps
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-            guard let self else { return }
-            guard steps.indices.contains(index) else {
-                Self.probeLog.notice("tabs probe done")
-                probeArm()
-                return
-            }
-            let step = steps[index]
-            guard order.indices.contains(step.to), let view = views[order[step.to]] else { return }
-            // The strip at rest, the step before landed: its feet as laid out.
-            probeGeometry("rest\(index)-\(self.active.flatMap { self.order.firstIndex(of: $0) } ?? -1)")
-            probeLabel = step.label
-            probeHold = step.hold
-            probeStair = -1
-            Self.probeLog.notice("tabs probe begin \(step.label ?? "home", privacy: .public) from=\(self.active ?? "-", privacy: .public) to=\(view.id, privacy: .public)")
-            if !view.chosen { view.onSelect() }
-            probeStep(index + 1, after: step.hold.map { $0 * Double(Self.probeStops.count) / 1000 + 1.5 } ?? 2)
-        }
-    }
-
-    /// The takeover waits for a real tap on the next tab along from its
-    /// start (`probeTakeoverStart`, which it goes back to first), at the
-    /// point it logs (`tap=`), and a finger on the pages right after it.
-    /// Each attempt is numbered and arms the next once it lands, so a finger
-    /// that took no switch under way can be tried again.
-    private func probeArm() {
-        let start = probeTakeoverStart
-        guard let window, order.indices.contains(start + 2), let first = views[order[start]], let next = views[order[start + 1]] else { return }
-        // From a working tab: the asking one's page holds its ask, which a finger there takes.
-        if !first.chosen {
-            first.onSelect()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in self?.probeArm() }
-            return
-        }
-        probeAttempt += 1
-        probeArmed = next.id
-        let tap = next.convert(CGPoint(x: next.bounds.midX, y: next.bounds.midY), to: window)
-        Self.probeLog.notice("tabs probe armed takeover attempt=\(self.probeAttempt) from=\(self.active ?? "-", privacy: .public) to=\(next.id, privacy: .public) toward=\(self.order[start + 2], privacy: .public) tap=\(Int(tap.x.rounded())),\(Int(tap.y.rounded()))")
-    }
-
-    /// The first of three tabs in a row whose first two are working, for the takeover.
-    private var probeTakeoverStart: Int {
-        let asking = Set(order.indices.filter { views[order[$0]]?.probeNeeds == true })
-        return order.indices.first { $0 + 2 < order.count && !asking.contains($0) && !asking.contains($0 + 1) } ?? 0
-    }
-
-    /// The armed tab was tapped (`choose`, before its switch starts): its
-    /// switch and the swipe that takes it are logged from here.
-    func probeChose(_ id: String) {
-        guard probeArmed == id else { return }
-        probeArmed = nil
-        let attempt = probeAttempt
-        probeLabel = "takeover\(attempt)"
-        probeHold = nil
-        probeRode = false
-        Self.probeLog.notice("tabs probe begin takeover\(attempt) from=\(self.active ?? "-", privacy: .public) to=\(id, privacy: .public)")
-        // Where the choice stands once the tap has had its way: a tap made
-        // while a finger rests on the pages holds (the two-finger check).
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
-            Self.probeLog.notice("tabs probe after tap attempt=\(attempt) active=\(self?.active ?? "-", privacy: .public) tapped=\(id, privacy: .public)")
-        }
-        // A finger the pages never followed lands no swipe: the attempt ends here, and the next is armed.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
-            guard let self, probeLabel == "takeover\(attempt)" else { return }
-            probeLabel = nil
-            Self.probeLog.notice("tabs probe takeover landed attempt=\(attempt) on=- with no swipe")
-            probeArm()
-        }
-    }
-
-    /// A frame a swipe drew, at its fraction `f`, while the takeover is logged.
-    private func probeRide(_ f: Double) {
-        guard let label = probeLabel, label.hasPrefix("takeover") else { return }
-        probeRode = true
-        probeWrite("\(label)-ride", at: String(format: "%.3f", f))
-    }
-
-    /// The pages landed on `id`: once a swipe has carried the takeover, its
-    /// end; then the next attempt is armed (`probeArm` goes back to its start).
-    private func probeSettled(_ id: String) {
-        guard let label = probeLabel, label.hasPrefix("takeover"), probeRode else { return }
-        probeWrite("\(label)-ride", at: "landed")
-        probeLabel = nil
-        Self.probeLog.notice("tabs probe takeover landed attempt=\(self.probeAttempt) on=\(id, privacy: .public)")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.probeArm() }
-    }
-
-    /// One sampled frame at `t` of the clock (nil: landed): the front of the
-    /// two tabs trading the choice, each seam, the scroll, every tab as drawn.
-    private func probeFrame(_ t: Double?) {
-        guard let label = probeLabel else { return }
-        if probeHold != nil, let t {
-            guard t != probeStair else { return }
-            probeStair = t
-        }
-        probeWrite(label, at: t.map { String(format: "%.3f", $0) } ?? "landed")
-        if probeHold != nil, let t {
-            probeCapture("\(label)-\(Self.probeStops[Int((t * Double(Self.probeStops.count - 1)).rounded())].name)")
-        }
-        // A takeover's label outlives its tap, so a swipe that came too late is still seen.
-        if t == nil {
-            probeHold = nil
-            if probeLabel?.hasPrefix("takeover") != true { probeLabel = nil }
-        }
-    }
-
-    private func probeWrite(_ label: String, at: String) {
-        let pair = [passage?.leaving, passage?.toward ?? active].compactMap { $0 }
-        let front = pair.max { (stacked.firstIndex(of: $0) ?? -1) < (stacked.firstIndex(of: $1) ?? -1) }
-        let seams = order.dropLast().map { seamNow[$0].map { String(format: "%.3f", $0.q) } ?? "-" }.joined(separator: ",")
-        let tabs = order.compactMap { id in views[id].map { "\(id.prefix(8)) \($0.probeState)" } }.joined(separator: " | ")
-        let f = passage.map { String(format: "%.3f", $0.f) } ?? "1.000"
-        let toward = passage.map { String($0.toward.prefix(8)) } ?? "-"
-        Self.probeLog.notice("tabs \(label, privacy: .public) t=\(at, privacy: .public) f=\(f, privacy: .public) front=\(String(front?.prefix(8) ?? "-"), privacy: .public) toward=\(toward, privacy: .public) seams=\(seams, privacy: .public) scroll=\(String(format: "%.2f", self.scroll.contentOffset.x), privacy: .public) || \(tabs, privacy: .public)")
-        // Every tab's feet this frame, on a line of their own (the frame's is near the log's 1KB).
-        let feet = order.compactMap { id in views[id].map { "\(id.prefix(8)) \($0.probeFeetNow)" } }.joined(separator: " | ")
-        Self.probeLog.notice("tabs ft \(label, privacy: .public) t=\(at, privacy: .public) seams=\(seams, privacy: .public) || \(feet, privacy: .public)")
-    }
-
-    /// Every tab's feet as laid out, one line a tab (`TabView.probeGeometry`).
-    private func probeGeometry(_ name: String) {
-        for (index, id) in order.enumerated() {
-            guard let view = views[id] else { continue }
-            Self.probeLog.notice("tabs geom \(name, privacy: .public) \(index) \(id.prefix(8), privacy: .public) \(view.probeGeometry, privacy: .public)")
-        }
-    }
-
-    private func probeCapture(_ name: String) {
-        guard let window else { return }
-        let style = traitCollection.userInterfaceStyle == .dark ? "dark" : "light"
-        let idiom = traitCollection.userInterfaceIdiom == .pad ? "pad" : "phone"
-        // The window as drawn, read for the rims and the feet; nothing is kept.
-        let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
-            _ = window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
-        }
-        let file = "\(idiom)-\(style)-\(name)"
-        Self.probeLog.notice("tabs probe hold \(file, privacy: .public)")
-        probeGeometry(name)
-        probeRims(name, in: image, window: window)
-        probeFeet(name, drawn: image, window: window)
-    }
-
-    /// Every tab's flared feet in a held stop's capture (`drawn`), one line a
-    /// tab (PaneTabs.svelte's proof, rule "feet"): its sheet's opacity, each
-    /// side's seam's glide (its flared foot shows 1 less it), and each
-    /// side's foot read in the box its quarter turn stands in, clear of
-    /// the run, against the window captured again with every flared foot
-    /// hidden and with its own tab's drawn whole, so only how much of it is
-    /// drawn is read (its rim's and side's strength, under both, cancel).
-    /// The even tabs' feet are drawn whole without the odd ones', then the
-    /// odd without the even, so a neighbour's foot, which flares out over
-    /// this tab's box, is never read as this one's. A side in front and in
-    /// view: its ink as a share of the whole, and the whole (summed channel
-    /// change, 0 to 3 a pixel). A side under its neighbour's card: whether
-    /// it has a foot to draw, and the pixels its box changes between hidden
-    /// and whole. Else out of view.
-    private func probeFeet(_ name: String, drawn image: UIImage, window: UIWindow) {
-        let tabs = order.compactMap { views[$0] }
-        /// The window with the feet of the tabs `whole` picks drawn whole, every other hidden.
-        func capture(_ whole: (Int) -> Bool) -> ProbePixels? {
-            for (index, tab) in tabs.enumerated() { tab.probeFootOpacity = whole(index) ? 1 : 0 }
-            return ProbePixels(UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
-                _ = window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
-            })
-        }
-        let bare = capture { _ in false }
-        let even = capture { $0 % 2 == 0 }
-        let odd = capture { $0 % 2 == 1 }
-        for tab in tabs { tab.probeFootOpacity = nil }
-        guard let drawnPixels = ProbePixels(image), let barePixels = bare, let evenPixels = even, let oddPixels = odd else { return }
-        let room = fadeRoom
-        let strip = scroll.convert(scroll.bounds, to: window)
-        let shown = CGRect(x: strip.minX + room.start, y: strip.minY, width: max(0, strip.width - room.start - room.end), height: strip.height)
-        for (index, view) in tabs.enumerated() {
-            let id = view.id
-            let wholePixels = index % 2 == 0 ? evenPixels : oddPixels
-            let feet = view.probeFeet(in: window).map { foot -> String in
-                let inView = shown.contains(foot.box)
-                if foot.under {
-                    return "under:path\(foot.path ? 1 : 0):\(inView ? wholePixels.changed(from: barePixels, in: foot.box) : 0)"
-                }
-                guard inView else { return "out" }
-                let full = wholePixels.ink(over: barePixels, in: foot.box)
-                let ink = drawnPixels.ink(over: barePixels, in: foot.box)
-                return String(format: "free:%.3f:%.1f", full > 0 ? ink / full : 0, full)
-            }
-            let glide = String(format: "%.3f,%.3f", view.edges.glide.leading, view.edges.glide.trailing)
-            Self.probeLog.notice("tabs feet \(name, privacy: .public) \(id.prefix(8), privacy: .public) sheet=\(String(format: "%.3f", view.probeSheet), privacy: .public) glide=\(glide, privacy: .public) lead=\(feet[0], privacy: .public) trail=\(feet[1], privacy: .public)")
-        }
-    }
-
-    /// Every rim and seam as drawn in a held stop's capture (`image`, the
-    /// window), one line each. A tab: its tone, whether chosen, its rim's
-    /// strength; how many pixels of its top's stroke band stand off its
-    /// card's fill (0 when it draws no rim); each side's contrast against
-    /// the shelf at mid-height, read off the drawn stroke; its taper's ink at
-    /// 0, 10, 20, 40 and 100% of its length up from the tip, read back from
-    /// its mask, and that length against the shoulder's height. A seam: the
-    /// tab in front, the strength of the side it draws there, and how many
-    /// strokes cross the row at the sides' mid-height there.
-    private func probeRims(_ name: String, in image: UIImage, window: UIWindow) {
-        guard let pixels = ProbePixels(image) else { return }
-        let shelf = Palette.surfaceShelf.resolvedColor(with: traitCollection)
-        // What the strip shows whole: inside its scroll's bounds, clear of each edge's fade.
-        let room = fadeRoom
-        let strip = scroll.convert(scroll.bounds, to: window)
-        let shown = CGRect(x: strip.minX + room.start, y: strip.minY, width: max(0, strip.width - room.start - room.end), height: strip.height)
-        for id in order {
-            guard let view = views[id], let rim = view.probeRim(in: window) else { continue }
-            let card = rim.card
-            // The top's stroke band along the middle 60% of the top, where
-            // the strip shows at least 20pt of it whole (-1 where it does not).
-            let band = CGRect(x: card.minX + card.width * 0.2, y: card.minY, width: card.width * 0.6, height: 1).intersection(shown)
-            var off = -1
-            if band.width >= 20 {
-                off = 0
-                let fill = pixels.at(CGPoint(x: band.midX, y: card.minY + 3))
-                for x in stride(from: band.minX, to: band.maxX, by: 1 / pixels.scale) {
-                    if ProbePixels.distance(pixels.at(CGPoint(x: x, y: card.minY + 0.5)), fill) > 6.0 / 255 { off += 1 }
-                }
-            }
-            // Each side at mid-height, where the strip shows it whole: the
-            // strongest pixel across its stroke (-1 where it is out of view).
-            let mid = card.minY + (card.height + rim.shoulder) / 2
-            func side(_ edge: CGFloat, inward: CGFloat) -> Double {
-                guard edge - 2 >= shown.minX, edge + 2 <= shown.maxX else { return -1 }
-                return stride(from: 0, to: 1.0, by: 1 / Double(pixels.scale)).map { d in
-                    ProbePixels.contrast(pixels.at(CGPoint(x: edge + inward * (d + 0.5 / Double(pixels.scale)), y: mid)), shelf)
-                }.max() ?? 0
-            }
-            let taper = [0, 0.1, 0.2, 0.4, 1].map { String(format: "%.3f", rim.taper($0)) }.joined(separator: ",")
-            Self.probeLog.notice("tabs rim \(name, privacy: .public) \(id.prefix(8), privacy: .public) tone=\(rim.tone, privacy: .public) pick=\(String(format: "%.3f", view.look.pick), privacy: .public) strength=\(String(format: "%.3f", rim.strength), privacy: .public) px=\(off) mid=\(String(format: "%.2f,%.2f", side(card.minX, inward: 1), side(card.maxX, inward: -1)), privacy: .public) taper=\(taper, privacy: .public) length=\(String(format: "%.1f", rim.length), privacy: .public) shoulder=\(String(format: "%.1f", card.height - rim.shoulder), privacy: .public)")
-        }
-        for (index, left) in order.dropLast().enumerated() {
-            let right = order[index + 1]
-            guard let a = views[left], let b = views[right], let ra = a.probeRim(in: window), let rb = b.probeRim(in: window) else { continue }
-            // The front tab draws the seam at its own edge there.
-            let leftFront = (stacked.firstIndex(of: left) ?? 0) > (stacked.firstIndex(of: right) ?? 0)
-            // The side the front tab draws the seam with, at its strength.
-            let strength = leftFront ? ra.sides.trailing : rb.sides.leading
-            let edge = leftFront ? ra.card.maxX : rb.card.minX
-            guard edge - 6 >= shown.minX, edge + 6 <= shown.maxX else { continue }
-            let y = ra.card.minY + (ra.card.height + max(ra.shoulder, rb.shoulder)) / 2
-            let near = pixels.at(CGPoint(x: edge + (leftFront ? -5 : 5), y: y))
-            let far = pixels.at(CGPoint(x: edge + (leftFront ? 5 : -5), y: y))
-            // Each run of ink across the row: where it starts from the edge
-            // (pt, toward the tab behind positive), its length in pixels, and
-            // its strongest pixel.
-            var runs: [(start: CGFloat, length: Int, peak: [Double], off: Double)] = []
-            var inStroke = false
-            for x in stride(from: edge - 4, to: edge + 4, by: 1 / pixels.scale) {
-                let p = pixels.at(CGPoint(x: x, y: y))
-                let off = min(ProbePixels.distance(p, near), ProbePixels.distance(p, far))
-                let ink = off > 8.0 / 255
-                if ink, !inStroke { runs.append((start: (x - edge) * (leftFront ? 1 : -1), length: 0, peak: p, off: 0)) }
-                if ink, var run = runs.popLast() {
-                    run.length += 1
-                    if off > run.off { (run.peak, run.off) = (p, off) }
-                    runs.append(run)
-                }
-                inStroke = ink
-            }
-            let detail = runs.map { String(format: "%.2f:%d:%02x%02x%02x", $0.start, $0.length, Int($0.peak[0] * 255), Int($0.peak[1] * 255), Int($0.peak[2] * 255)) }.joined(separator: ",")
-            Self.probeLog.notice("tabs seam \(name, privacy: .public) \(left.prefix(8), privacy: .public)|\(right.prefix(8), privacy: .public) front=\((leftFront ? left : right).prefix(8), privacy: .public) strength=\(String(format: "%.3f", strength), privacy: .public) strokes=\(runs.count) runs=\(detail.isEmpty ? "-" : detail, privacy: .public)")
-            // The phone's row: the tucked side's square shoulder against the
-            // front's round one. How far inside the front card's edge its
-            // corner stands, and so how far down its side shows before it
-            // runs under the front card (the front's arc there; nothing past
-            // the arc's depth). At rest it meets that arc at the top.
-            guard barRow else { continue }
-            let (front, behind, frontView) = leftFront ? (ra, rb, a) : (rb, ra, b)
-            let r = CGFloat(frontView.radius)
-            let inside = leftFront ? front.card.maxX - behind.card.minX : behind.card.maxX - front.card.minX
-            let shows: CGFloat = inside >= r ? 0 : (inside <= 0 ? r : r - (r * r - (r - inside) * (r - inside)).squareRoot())
-            Self.probeLog.notice("tabs corner \(name, privacy: .public) \(left.prefix(8), privacy: .public)|\(right.prefix(8), privacy: .public) front=\((leftFront ? left : right).prefix(8), privacy: .public) inside=\(String(format: "%.2f", inside), privacy: .public) radius=\(String(format: "%.1f", r), privacy: .public) shows=\(String(format: "%.2f", shows), privacy: .public)")
-        }
-    }
-}
 
 /// A capture's pixels in sRGB, read by the window's points.
 private struct ProbePixels {
@@ -1721,146 +1356,6 @@ final class TabView: UIView {
         paint()
     }
 
-    #if DEBUG
-    /// Its session is parked on the operator, for `-tabs-probe`.
-    var probeNeeds: Bool { tab?.needs == true }
-
-    /// Its rim as drawn, for `-tabs-probe`: its card in `window`'s points,
-    /// its shoulders' radius, its tone, its strength, how far up from the
-    /// tip its fade reaches, and its taper's ink at `s` of `tabRimTaper` up
-    /// from the tip, read back from the mask's own stops as the gradient
-    /// draws them.
-    struct ProbeRim {
-        let card: CGRect
-        let shoulder: Double
-        let tone: String
-        /// The rim's, its top's.
-        let strength: Double
-        /// Each side's: the rim's, leaned at a gliding seam.
-        let sides: TabSides<Double>
-        let length: Double
-        let taper: (Double) -> Double
-    }
-
-    func probeRim(in window: UIWindow) -> ProbeRim? {
-        guard let tone = tab?.face.tone else { return nil }
-        let height = Double(rimHost.bounds.height)
-        let length = min(Effect.tabRimTaper, shoulderHeight)
-        let locations = (rimFade.locations ?? []).map(\.doubleValue)
-        let inks = ((rimFade.colors as? [CGColor]) ?? []).map { Double($0.alpha) }
-        let taper: (Double) -> Double = { s in
-            let at = (height - s * Effect.tabRimTaper) / height
-            guard locations.count == inks.count, let above = locations.firstIndex(where: { $0 >= at }) else { return inks.last ?? 1 }
-            guard above > 0 else { return inks.first ?? 1 }
-            let span = locations[above] - locations[above - 1]
-            let t = span > 0 ? (at - locations[above - 1]) / span : 0
-            return inks[above - 1] + (inks[above] - inks[above - 1]) * t
-        }
-        return ProbeRim(card: convert(cardRect, to: window), shoulder: max(shoulders.leading, shoulders.trailing), tone: "\(tone)",
-                        strength: Double(rim.opacity),
-                        sides: TabSides(leading: Double(rim.opacity * lead.layer.opacity), trailing: Double(rim.opacity * trail.layer.opacity)),
-                        length: length, taper: taper)
-    }
-
-    /// `-tabs-probe`: the flared feet drawn as the choice stands (nil), or
-    /// at this opacity (0 hidden, 1 whole), for a capture.
-    var probeFootOpacity: Float? {
-        didSet { paintFeet() }
-    }
-
-    /// Its sheet's opacity on screen, for `-tabs-probe`.
-    var probeSheet: Double {
-        Double(sheet.presentation()?.opacity ?? sheet.opacity)
-    }
-
-    /// Its feet this frame, for `-tabs-probe`: which sides stand under a
-    /// neighbour, then each side's flared foot's opacity (-1 where it has
-    /// none to draw) over its plain foot's share (its seam's glide).
-    var probeFeetNow: String {
-        func foot(_ side: RimSide) -> Double { side.flared.path == nil ? -1 : Double(side.flared.opacity) }
-        return String(format: "u=%d%d lead=%.3f/%.3f trail=%.3f/%.3f", edges.under.leading ? 1 : 0, edges.under.trailing ? 1 : 0,
-                      foot(lead), edges.glide.leading, foot(trail), edges.glide.trailing)
-    }
-
-    /// Its feet as laid out, for `-tabs-probe`: whether it is chosen and
-    /// hung flush; each side's rim foot, whether it stands under a neighbour,
-    /// its flared foot's box against the card's side and the shelf (how far
-    /// out past the side, how far in from it, how high above the shelf, and
-    /// its gap to the shelf, pt; `none` where it draws none), that foot's
-    /// opacity and the plain foot's share; and how far the card's outline
-    /// and the sheet's stand out past the card's sides at the shelf, pt (the
-    /// flare where the foot flares, 0 folded).
-    var probeGeometry: String {
-        let card = cardRect
-        let tinted = tint.path?.boundingBoxOfPath ?? card
-        let sheeted = layer.convert(sheet.path?.boundingBoxOfPath ?? .zero, from: sheet)
-        func side(_ s: RimSide, under: Bool, glide: Double, trailing: Bool) -> String {
-            guard let path = s.flared.path else { return String(format: "u%d:none:plain=%.3f", under ? 1 : 0, glide) }
-            let box = layer.convert(path.boundingBoxOfPath, from: s.flared)
-            let out = trailing ? box.maxX - card.maxX : card.minX - box.minX
-            let inward = trailing ? card.maxX - box.minX : box.maxX - card.minX
-            return String(format: "u%d:foot=%.2f/%.2f/%.2f/%.2f:op=%.3f:plain=%.3f", under ? 1 : 0, out, inward, card.maxY - box.minY, card.maxY - box.maxY,
-                          s.flared.opacity, glide)
-        }
-        return String(format: "chosen=%d flush=%d lead=%@ trail=%@ card=%.2f,%.2f sheet=%.2f,%.2f", chosen ? 1 : 0, flushLeading ? 1 : 0,
-                      side(lead, under: edges.under.leading, glide: edges.glide.leading, trailing: false),
-                      side(trail, under: edges.under.trailing, glide: edges.glide.trailing, trailing: true),
-                      card.minX - tinted.minX, tinted.maxX - card.maxX, card.minX - sheeted.minX, sheeted.maxX - card.maxX)
-    }
-
-    /// One side's flared foot for `-tabs-probe`: whether it stands under its
-    /// neighbour's card, whether it has a foot to draw, and the box its
-    /// quarter turn stands in, out past the card's side from the run's foot
-    /// to the shelf, in the window's points (clear of the run, which the
-    /// plain foot shares).
-    struct ProbeFoot {
-        let under: Bool
-        let path: Bool
-        let box: CGRect
-    }
-
-    /// Its leading side's flared foot, then its trailing side's.
-    func probeFeet(in window: UIWindow) -> [ProbeFoot] {
-        let card = cardRect
-        let foot = CGFloat(flare)
-        let reach = foot + 0.5
-        func box(_ edge: CGFloat, outward: Bool) -> CGRect {
-            let x: CGFloat = outward ? edge : edge - reach
-            return convert(CGRect(x: x, y: card.maxY - foot, width: reach, height: foot), to: window)
-        }
-        return [
-            ProbeFoot(under: edges.under.leading, path: lead.flared.path != nil, box: box(card.minX, outward: false)),
-            ProbeFoot(under: edges.under.trailing, path: trail.flared.path != nil, box: box(card.maxX, outward: true)),
-        ]
-    }
-
-    /// How the tab is drawn now, for `-tabs-probe`: its look; its sheet's
-    /// opacity (model and on screen) and its card's; its rim's strength; its
-    /// chevron's; whether any transform, mask or running animation moves its
-    /// sheet or the tab; its card's fill; which sides stand under a
-    /// neighbour; its rim's top, leading and trailing ink; its sides'
-    /// strengths over the rim's (1 but at a gliding seam).
-    var probeState: String {
-        func hex(_ color: CGColor?) -> String {
-            guard let color, let rgb = color.converted(to: CGColorSpace(name: CGColorSpace.sRGB)!, intent: .defaultIntent, options: nil)?.components, rgb.count >= 3 else { return "-" }
-            return String(format: "%02x%02x%02x", Int((rgb[0] * 255).rounded()), Int((rgb[1] * 255).rounded()), Int((rgb[2] * 255).rounded()))
-        }
-        /// An ink unclamped (extended sRGB), so a wide-gamut one mixes as drawn.
-        func ink(_ color: CGColor?) -> String {
-            guard let color, let rgb = color.converted(to: CGColorSpace(name: CGColorSpace.extendedSRGB)!, intent: .defaultIntent, options: nil)?.components, rgb.count >= 3 else { return "-" }
-            return String(format: "%.3f,%.3f,%.3f", rgb[0], rgb[1], rgb[2])
-        }
-        let moved = !CATransform3DIsIdentity(sheet.transform) || !CATransform3DIsIdentity(sheet.presentation()?.transform ?? CATransform3DIdentity) || sheet.mask != nil
-        let keys = (sheet.animationKeys() ?? []) + (tint.animationKeys() ?? [])
-        // Short: a frame's line holds every tab, and the log cuts a line at 1KB.
-        return String(format: "pick=%.3f sheet=%.3f/%.3f tint=%.0f rim=%.3f chev=%.3f moved=%d tx=%@ keys=%@ fill=%@ under=%d%d top=%@ lead=%@ trail=%@ sides=%.3f,%.3f",
-                      look.pick, sheet.opacity, sheet.presentation()?.opacity ?? sheet.opacity, tint.opacity,
-                      rim.opacity, details.alpha, moved ? 1 : 0,
-                      transform.isIdentity ? "id" : NSCoder.string(for: transform), keys.isEmpty ? "-" : keys.joined(separator: ","),
-                      hex(tint.fillColor), edges.under.leading ? 1 : 0, edges.under.trailing ? 1 : 0,
-                      ink(rimTop.fillColor), ink(lead.body.fillColor), ink(trail.body.fillColor), lead.layer.opacity, trail.layer.opacity)
-    }
-    #endif
 
     /// The surface the tab stands in, its press aside: its sheet when chosen,
     /// else its card. Its pulled options grow out of it (`TabOptionsSheet`),
@@ -2235,11 +1730,7 @@ final class TabView: UIView {
     /// likewise. They ease nothing of their own: the seam's glide moves them.
     private func paintFeet() {
         let glide = edges.glide
-        #if DEBUG
-        let shown = probeFootOpacity.map(Double.init)
-        #else
         let shown: Double? = nil
-        #endif
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         for (side, g) in [(lead, glide.leading), (trail, glide.trailing)] {

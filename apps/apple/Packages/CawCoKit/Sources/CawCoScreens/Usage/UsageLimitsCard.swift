@@ -50,16 +50,6 @@ final class UsageLimitsCard: UsageCard {
             viewport = width
             render()
         }
-        #if DEBUG
-        if let probe = usageProbe {
-            func resets(_ view: UIView) -> [KitLabel] {
-                view.subviews.flatMap { ($0 as? KitLabel).map { $0.accessibilityIdentifier == "usage-key-reset" ? [$0] : [] } ?? resets($0) }
-            }
-            for label in resets(self).prefix(4) {
-                probe.notice("page key reset width \(label.bounds.width, privacy: .public) needs \(label.sizeThatFits(CGSize(width: 10000, height: 100)).width, privacy: .public) text \(label.attributedText?.string ?? "", privacy: .public)")
-            }
-        }
-        #endif
     }
 
     private func render() {

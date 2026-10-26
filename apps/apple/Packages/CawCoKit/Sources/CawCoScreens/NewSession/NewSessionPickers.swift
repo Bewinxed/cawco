@@ -555,12 +555,6 @@ final class PermissionPopover: NsPopoverController {
     var probeAsk: String { askView.probeState }
     /// The question is the line right after the last mode's row.
     var probeUnder: Bool { askView.asked != nil && rows.arrangedSubviews.last === askView && rows.arrangedSubviews.count == modes.count + 1 }
-    /// Every mode's row still answers while the question stands.
-    var probeRowsLive: Bool {
-        rows.arrangedSubviews.compactMap { $0 as? UIControl }.allSatisfy { $0.isEnabled && $0.isUserInteractionEnabled }
-    }
-    func probeCancelAsk() { askView.probeCancel() }
-    func probeConfirmAsk() { askView.probeConfirm() }
     #endif
 }
 

@@ -62,9 +62,6 @@ final class PaneHost {
             tab.onReturnToFleet = { [weak self] in self?.onReturnToFleet(id) }
             tab.onNamed = { [weak self] name in self?.name(id, name) }
             made = tab
-            #if DEBUG
-            PreviewProbe.say("pane built \(id) kind=artifact")
-            #endif
         } else if ThreadTabs.isThread(id) {
             let thread = ThreadViewController(hub: hub, id: id)
             thread.onReturnToFleet = { [weak self, weak thread] in self?.onReturnToFleet(thread?.viewId ?? id) }

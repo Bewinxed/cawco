@@ -163,9 +163,6 @@ final class SheetErrorCard: UIView {
         frameBox.isHidden = error.frame?.isEmpty ?? true
         foot.text = Words.Sheet.errorNext(more: more)
         accessibilityLabel = [title.attributedText?.string, line.text, foot.text].compactMap(\.self).joined(separator: ". ")
-        #if DEBUG
-        PreviewProbe.say("preview stage-card place=\(place) more=\(more)")
-        #endif
     }
 }
 

@@ -161,30 +161,6 @@ final class ProjectViewController: ObservedViewController {
         buildPane()
         #if DEBUG
         // Under the probe, each touch, where it landed and what took it, and the gestures that held it.
-        if ViewsProbe.on {
-            ReachWindow.touched = { touch in
-                let at = touch.location(in: nil)
-                let phase = switch touch.phase {
-                case .began: "began"
-                case .ended: "ended"
-                default: "cancelled"
-                }
-                let chain = sequence(first: touch.view, next: { $0?.superview }).prefix(4).compactMap { $0.map { "\(type(of: $0))" } }.joined(separator: "<")
-                let gestures = (touch.gestureRecognizers ?? []).map { "\(type(of: $0)):\($0.state.rawValue)" }.joined(separator: ",")
-                ViewsProbe.say("views touch \(phase) \(Int(at.x)),\(Int(at.y)) view=\(chain) gestures=\(gestures)")
-                // A press on a menu's button: whether a menu stands once it has had time to open, and whether it stays.
-                guard touch.phase == .ended, touch.view is UIButton else { return }
-                for wait in [0.8, 2.0, 4.0] {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + wait) {
-                        let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows)
-                        func menus(_ view: UIView) -> Bool {
-                            "\(type(of: view))".contains("ContextMenu") || view.subviews.contains(where: menus)
-                        }
-                        ViewsProbe.say("views menu after \(Int(at.x)),\(Int(at.y)) +\(wait)s shown=\(windows.contains { menus($0) })")
-                    }
-                }
-            }
-        }
         #endif
 
         let safe = view.safeAreaLayoutGuide
@@ -341,9 +317,6 @@ final class ProjectViewController: ObservedViewController {
         ])
         tabsScroll.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         tabsFade = EdgeFade(tabsScroll, axis: .horizontal)
-        #if DEBUG
-        if ViewsProbe.on { tabsScroll.delegate = self }
-        #endif
 
         rule.backgroundColor = Palette.borderHairline
         rule.translatesAutoresizingMaskIntoConstraints = false
@@ -752,9 +725,6 @@ final class ProjectViewController: ObservedViewController {
         newTask.isHidden = !stripped || phone
         askView.isHidden = !canTalk || phone
         rule.isHidden = phone ? waiting == 0 : (waiting == 0 && !stripped && !canTalk)
-        #if DEBUG
-        probeStrip()
-        #endif
     }
 
     private func showPane() {
@@ -873,9 +843,6 @@ final class ProjectViewController: ObservedViewController {
                 for each in [self.board, self.scroller, self.custom!, self.decisionsPane!, self.routinesPane!, self.madePane!, self.blocksPane] as [UIView] {
                     each.isHidden = each.superview === self.pane && each !== showing
                 }
-                #if DEBUG
-                ViewsProbe.say("views panes \(what) shown=" + self.pane.subviews.filter { !$0.isHidden }.map { "\(type(of: $0))" }.joined(separator: ","))
-                #endif
             }
             if !first, view.window != nil, !UIAccessibility.isReduceMotionEnabled {
                 UIView.transition(with: pane, duration: Motion.durFade, options: [.transitionCrossDissolve, .allowUserInteraction], animations: place)
@@ -896,9 +863,6 @@ final class ProjectViewController: ObservedViewController {
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         if arrange() { requestRefresh() }
-        #if DEBUG
-        probePageHeight()
-        #endif
     }
 
     /// The page's gutters and the head's shape for the width: from 900pt the
@@ -960,9 +924,6 @@ final class ProjectViewController: ObservedViewController {
     }
 
     private func open(_ taskId: String) {
-        #if DEBUG
-        ViewsProbe.say("views open-task \(taskId)")
-        #endif
         context.openTask(projectId, taskId)
     }
 
@@ -1103,81 +1064,17 @@ final class ProjectViewController: ObservedViewController {
     #if DEBUG
     // MARK: The simulator probe (scripts/probe-kit/specs/ios-views.ts)
 
-    private var probedStrip = ""
 
-    /// The strip as it stands: each tab's words (a draft's tag after them)
-    /// and its centre in the window, the chosen one; under 640pt the ⋯
-    /// menu's view list as it would draw now. Said again only when it moved.
-    private func probeStrip() {
-        guard ViewsProbe.on, view.window != nil else { return }
-        view.layoutIfNeeded()
-        let items = tabs.items.enumerated().map { index, item in
-            let box = tabs.frame(ofItem: index, in: nil) ?? .zero
-            return "\(item.label)\(item.badge.map { "+\($0)" } ?? "")\(item.count.map { "#\($0)" } ?? "")@\(Int(box.midX.rounded())),\(Int(box.midY.rounded()))"
-        }.joined(separator: ";")
-        let room = tabsScroll.convert(tabsScroll.bounds, to: nil)
-        var line = "views strip chosen=\(shownTab.label) phone=\(phone) room=\(Int(room.minX.rounded()))-\(Int(room.maxX.rounded())) items=\(items)"
-        if !askView.isHidden { line += " ask=\(ViewsProbe.centre(askView))" }
-        if phone, let list = moreMenu().first as? UIMenu {
-            line += " more=\(ViewsProbe.centre(more)) menu=" + list.children.compactMap { $0 as? UIAction }.map {
-                "\($0.title)\($0.subtitle.map { "+\($0)" } ?? "")\($0.state == .on ? "*" : "")"
-            }.joined(separator: ";")
-        }
-        guard line != probedStrip else { return }
-        probedStrip = line
-        ViewsProbe.say(line)
-        probeStretch()
-    }
 
-    private var probedHeight = 0.0
 
-    /// The page's height changed: whether it stands taller than its content.
-    func probePageHeight() {
-        guard ViewsProbe.on, abs(page.bounds.height - probedHeight) > 1 else { return }
-        probedHeight = page.bounds.height
-        probeStretch()
-    }
 
-    /// The head and the strip taller than their content: what holds them so,
-    /// as the engine says (`constraintsAffectingLayout`), with the pane's frame.
-    private func probeStretch() {
-        let natural = page.systemLayoutSizeFitting(CGSize(width: page.bounds.width, height: 0),
-                                                   withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height
-        guard page.bounds.height > natural + 1 else { return }
-        func name(_ item: AnyObject?) -> String {
-            guard let item else { return "-" }
-            if let view = item as? UIView { return view === page ? "page" : view === pane ? "pane" : String(describing: type(of: view)) }
-            return String(describing: type(of: item))
-        }
-        // What can move: below required, a view's own size (hugging, compression,
-        // intrinsic), or the page's and the pane's own edges.
-        let holds = page.constraintsAffectingLayout(for: .vertical).filter { c in
-            c.priority.rawValue < 1000 || "\(type(of: c))".contains("ContentSize")
-                || [c.firstItem, c.secondItem].contains { $0 === page || $0 === pane }
-        }.prefix(60).map { c in
-            "\(name(c.firstItem)).\(c.firstAttribute.rawValue)\(["<=", "==", ">="][c.relation.rawValue + 1])\(name(c.secondItem)).\(c.secondAttribute.rawValue)+\(Int(c.constant))@\(Int(c.priority.rawValue))\("\(type(of: c))".contains("ContentSize") ? "(size)" : "")"
-        }
-        let below = pane.subviews.filter { !$0.isHidden }.map { "\(type(of: $0))[\(Int($0.frame.height))]" }
-        // A wrapping label whose asked height outgrows its box: a stale wrap width.
-        func labels(_ view: UIView) -> [UILabel] {
-            ((view as? UILabel).map { [$0] } ?? []) + view.subviews.flatMap(labels)
-        }
-        let tall = labels(page).filter { $0.numberOfLines != 1 && !$0.isHidden }.map { label in
-            "'\((label.text ?? "").prefix(24))' asks \(Int(label.intrinsicContentSize.height)) box \(Int(label.bounds.width))×\(Int(label.bounds.height)) wrapAt \(Int(label.preferredMaxLayoutWidth))"
-        }
-        ViewsProbe.say("views stretched labels \(tall.joined(separator: " | "))")
-        ViewsProbe.say("views stretched page=\(Int(page.bounds.height)) natural=\(Int(natural)) pane=\(Int(pane.frame.minY))+\(Int(pane.frame.height)) shown=\(below.joined(separator: ",")) holds=\(holds.joined(separator: ", "))")
-    }
     #endif
 }
 
 #if DEBUG
 /// Under the probe, a strip that came to rest says where its tabs stand now.
 extension ProjectViewController: UIScrollViewDelegate {
-    func scrollViewDidEndDecelerating(_: UIScrollView) { probeStrip() }
-    func scrollViewDidEndScrollingAnimation(_: UIScrollView) { probeStrip() }
     func scrollViewDidEndDragging(_: UIScrollView, willDecelerate decelerate: Bool) {
-        if !decelerate { probeStrip() }
     }
 }
 #endif

@@ -263,10 +263,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             followWorkspace()
             applyLanding()
             #if DEBUG
-            openProbeForm()
-            runMacProbe()
             #if !targetEnvironment(macCatalyst)
-            runHangProbe()
             #endif
             #endif
         }
@@ -411,24 +408,6 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         return (destination, destination == .fleet ? currentId : nil)
     }
 
-    #if DEBUG
-    /// A simulator pass's `-new-session <projectId> <machineId>`: the New
-    /// Session form, opened once the fleet's read holds that project, with it
-    /// chosen on that machine (`-new-session-step` and `-new-session-machines`
-    /// take the form on from there: NewSessionViewController).
-    private var probeForm: (projectId: String, machineId: String)? = {
-        let arguments = ProcessInfo.processInfo.arguments
-        guard let at = arguments.firstIndex(of: "-new-session"), arguments.indices.contains(at + 2) else { return nil }
-        return (arguments[at + 1], arguments[at + 2])
-    }()
-
-    private func openProbeForm() {
-        guard let form = probeForm, home.ready, hub.fleet.projects.contains(where: { $0.id == form.projectId }),
-              isViewLoaded, view.window != nil else { return }
-        probeForm = nil
-        DispatchQueue.main.async { [weak self] in self?.startSession(machineId: form.machineId, cwd: nil, projectId: form.projectId) }
-    }
-    #endif
 
     @available(*, unavailable)
     required init?(coder _: NSCoder) {
@@ -584,11 +563,6 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     override func viewIsAppearing(_ animated: Bool) {
         super.viewIsAppearing(animated)
         followWorkspace()
-        #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("-sidebar-probe") {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in self?.showRailSheet() }
-        }
-        #endif
     }
 
     /// The fleet may have been read before the shell was on screen: it lands now.
@@ -600,359 +574,29 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         applyLanding()
         sayCatalogLeftOut()
         #if DEBUG
-        listenForProbeReload()
-        openProbeForm()
-        runMacProbe()
         #if !targetEnvironment(macCatalyst)
-        runHangProbe()
         #endif
-        if ProcessInfo.processInfo.arguments.contains("-shell-probe"), shellProbe == nil {
-            shellProbe = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-                MainActor.assumeIsolated { self?.probeShell() }
-            }
-        }
         #endif
     }
 
     #if DEBUG
-    private var shellProbe: Timer?
 
     /// The split's rail and the panes' screens.
     var probeRail: SidebarViewController { rail }
-    var probePanes: PaneHost { panes }
 
-    /// Whether the rail's column stands beside the page: a regular width
-    /// over the rail's breakpoint (`fitRail`), its view in the window.
-    var probeRailBeside: Bool { !compact && displayMode == .oneBesideSecondary && rail.viewIfLoaded?.window != nil }
 
-    /// What decides `probeRailBeside`, as the split holds it.
-    var probeRailState: String {
-        let mode = switch displayMode {
-        case .oneBesideSecondary: "oneBesideSecondary"
-        case .secondaryOnly: "secondaryOnly"
-        case .oneOverSecondary: "oneOverSecondary"
-        default: "\(displayMode.rawValue)"
-        }
-        return "beside: \(probeRailBeside ? "yes" : "no") | width \(view.bounds.width) | size class \(compact ? "compact" : "regular") | display mode \(mode) | rail in window: \(rail.viewIfLoaded?.window != nil ? "yes" : "no")"
-    }
 
-    /// The bar's sidebar toggle, pressed as a finger presses it: under the
-    /// rail's breakpoint it brings the sidebar over the page as the sheet (`toggleRail`).
-    func probePressRailToggle() { railToggle.sendActions(for: .primaryActionTriggered) }
 
-    /// The sidebar's sheet while it is presented, and its putting away.
-    var probeRailSheet: SidebarViewController? { railSheet }
-    func probeCloseRailSheet() { railSheet?.dismiss(animated: true) }
 
-    /// The machines card, as the bar's Machines button opens it.
-    func probeOpenMachines() {
-        if machinesCard?.open == true { return }
-        openMachines(from: frontCluster.machinesItem)
-    }
 
-    func probeCloseMachines() {
-        if machinesCard?.open == true { machinesCard?.close() }
-    }
 
-    /// The homes this window shows: the rail's and the page's, whichever stand.
-    var probeHomes: [HomeViewController] { [railHome, board] }
 
-    /// A simulator pass's `-shell-probe`: once a second, in the Probe log,
-    /// the tab in front, how many tabs its group has, whether the sidebar's
-    /// sheet is up, and on a phone's conversations Caw's glass and touch
-    /// frame (window points) against the top edge of the transcript's pages;
-    /// then every animation in the scene's windows that repeats for ever and
-    /// every Rive view drawing (`LoopCensus`), on a `probe loops` line.
-    private func probeShell() {
-        let rail = railSheet.map { !$0.isBeingDismissed } ?? false
-        var line = "probe shell tab=\(currentId ?? "none") tabs=\(workspace.focused.tabs.count) rail=\(rail)"
-        let caw = sessionCluster.caw
-        if compact, compactNav.topViewController === workspaceController, let window = caw.window,
-           let pages = Self.firstPages(in: workspaceController.view) {
-            let glass = caw.convert(caw.bounds, to: window)
-            let top = pages.convert(pages.bounds, to: window).minY
-            let box = { (r: CGRect) in "\(r.minX),\(r.minY),\(r.width)x\(r.height)" }
-            line += " caw=\(box(glass)) hit=\(box(caw.accessibilityFrame))"
-            // The row's first tab as drawn: its top and foot against Caw's glass's.
-            if let tab = Self.firstTab(in: workspaceController.view) {
-                line += " firstTab=\(box(tab.convert(tab.bounds, to: window)))"
-            }
-            line += " transcriptTop=\(top) gap=\(top - glass.maxY) label=\(caw.accessibilityLabel ?? "")"
-        }
-        // The phone's board bar: its cluster, his glass and Caw against the window's width.
-        if compact, compactNav.topViewController !== workspaceController, let window = compactCluster.window {
-            let box = { (v: UIView) -> String in
-                let r = v.convert(v.bounds, to: window)
-                return "\(r.minX),\(r.minY),\(r.width)x\(r.height)"
-            }
-            line += " boardBar cluster=\(box(compactCluster)) glass=\(box(compactCluster.glass)) caw=\(box(compactCluster.caw)) window=\(window.bounds.width) safeRight=\(window.safeAreaInsets.right)"
-        }
-        let probe = Logger(subsystem: "dev.cawco.app", category: "Probe")
-        probe.notice("\(line, privacy: .public)")
-        // What keeps the app from going idle this second, and how often the
-        // shell laid out, placed the panel and remade its rows since the last
-        // line: a probe whose read timed out prints these.
-        let loops = LoopCensus.running(in: view.window?.windowScene?.windows ?? [])
-        let counts = "layouts=\(ProbeCounts.shellLayouts) places=\(ProbeCounts.panelPlaces) rows=\(ProbeCounts.panelRows)"
-        ProbeCounts.shellLayouts = 0
-        ProbeCounts.panelPlaces = 0
-        ProbeCounts.panelRows = 0
-        probe.notice("probe loops n=\(loops.count) \(counts, privacy: .public) \(loops.joined(separator: " | "), privacy: .public)")
-    }
 
-    /// A Mac pass's `-mac-probe`: once the fleet is read, at a 1400pt and
-    /// then a 1000pt wide window, it prints, per width: the
-    /// bar as drawn (from the window's top), its height against the web's,
-    /// its controls' centre line against its own; the traffic lights' frame
-    /// against the rail, its header and the bar's first control; each bar
-    /// tab's hit-test at its centre and a rail hit-test; at points on the
-    /// bar's empty space, on a tab and a control in the old titlebar strip
-    /// and on the rail's top, the UIKit view a press lands on, whether the
-    /// shell moves the window from there (`movesWindow`), and whether AppKit
-    /// still moves it by itself (a press queued on NSApplication). Such a
-    /// press reaches UIKit only where a control takes it; there the drag
-    /// gesture prints what it saw, AppKit's current event among it (a left
-    /// mouse-down with its window, the event `MacWindow.move` starts a drag
-    /// from). Then the panel's and the popover's frames against their
-    /// anchors. Last, a 640pt window: whether the rail
-    /// still stands beside the page.
-    private let macProbeOn = ProcessInfo.processInfo.arguments.contains("-mac-probe")
 
-    private var macProbeRan = false
 
-    private func runMacProbe() {
-        #if targetEnvironment(macCatalyst)
-        guard macProbeOn, !macProbeRan, home.ready, let window = view.window, let scene = window.windowScene else { return }
-        macProbeRan = true
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            func say(_ line: String) {
-                Logger(subsystem: "dev.cawco.app", category: "Probe").notice("\(line, privacy: .public)")
-                print("probe mac \(line)")
-            }
-            func box(_ r: CGRect) -> String { String(format: "x %.1f y %.1f w %.1f h %.1f (maxX %.1f)", r.minX, r.minY, r.width, r.height, r.maxX) }
-            func tabs(in view: UIView) -> [TabView] {
-                (view as? TabView).map { [$0] } ?? view.subviews.flatMap { tabs(in: $0) }
-            }
-            let appKit = MacProbeAppKit(window: window)
-            // Each line reaches the log as it is printed, even if the run is stopped.
-            setvbuf(stdout, nil, _IOLBF, 0)
-            try? await Task.sleep(for: .seconds(2))
-            say("windows \(appKit.windows)")
-            for width in [1400.0, 1000.0] {
-                let frame = scene.effectiveGeometry.systemFrame
-                scene.requestGeometryUpdate(.Mac(systemFrame: CGRect(x: frame.minX, y: frame.minY, width: width, height: 820)))
-                try? await Task.sleep(for: .seconds(1))
-                let name = "w\(Int(width))"
-                let bar = macBar
-                let barBox = bar.convert(bar.bounds, to: window)
-                let titlebar = scene.titlebar
-                say("\(name) window \(box(window.bounds)) safe \(window.safeAreaInsets) shell safe \(view.safeAreaInsets) page safe \(mainNav.view.safeAreaInsets) system bar hidden \(mainNav.isNavigationBarHidden)")
-                say("\(name) bar \(box(barBox)) from window top \(abs(barBox.minY) < 0.5) height \(barBox.height) web \(Size.cTopBarH) starts at the rail's edge \(abs(barBox.minX - primaryColumnWidth) < 0.5)")
-                let glassBox = mainCluster.glass.convert(mainCluster.glass.bounds, to: window)
-                let pageTop = mainNav.topViewController.map { $0.view.convert($0.view.safeAreaLayoutGuide.layoutFrame, to: window).minY } ?? -1
-                say("\(name) bar centre \(barBox.midY) cluster glass \(box(glassBox)) centred \(abs(glassBox.midY - barBox.midY) < 0.5) tabs' floor \(tabs(in: bar).first.map { $0.convert($0.bounds, to: window).maxY } ?? -1) bar floor \(barBox.maxY) page content top \(pageTop)")
-                say("\(name) titlebar title hidden \(titlebar?.titleVisibility == .hidden) toolbar \(titlebar?.toolbar == nil ? "none" : "present") railToggle on screen \(railToggle.window != nil)")
-                say("\(name) board takes clicks \(view.isUserInteractionEnabled) alpha \(view.alpha) pro board open \(Pro.shared.boardOpen) access \(String(describing: Pro.shared.access))")
-                var holder = tabs(in: bar).first?.superview
-                while let at = holder, !(at is UIScrollView) { holder = at.superview }
-                let strip = holder as? UIScrollView
-                let shown = strip.map { $0.convert($0.bounds, to: window) } ?? window.bounds
-                let railBox = rail.view.convert(rail.view.bounds, to: window)
-                let lights = appKit.lights
-                // The bar's first control: the strip when it hosts tabs, else the crumb.
-                let first = strip != nil ? shown : mainCrumb.convert(mainCrumb.bounds, to: window)
-                say("\(name) traffic lights \(lights.map(box) ?? "not found") rail \(box(railBox)) rail safe top \(rail.view.safeAreaInsets.top) bar's first control \(box(first))")
-                if let lights {
-                    say("\(name) lights over the rail \(railBox.contains(lights)) clear of the rail's header \(lights.maxY <= railBox.minY + rail.view.safeAreaInsets.top) clear of the bar's first control \(!lights.intersects(first))")
-                }
-                if #available(macCatalyst 26.0, *) {
-                    say("\(name) corner-adapted safe area: window \(window.edgeInsets(for: .safeArea(cornerAdaptation: .horizontal))) bar \(bar.edgeInsets(for: .safeArea(cornerAdaptation: .horizontal)))")
-                }
-                if let strip {
-                    let edge = mainCluster.convert(CGPoint(x: mainCluster.leadingEdge, y: 0), to: window).x
-                    say("\(name) strip \(box(shown)) offset \(strip.contentOffset.x) content \(strip.contentSize.width), cluster's first control at \(edge)")
-                }
-                // Presses: where each lands, whether the shell moves the window from there, whether AppKit still does by itself.
-                var presses: [(String, CGPoint)] = [
-                    ("bar above the tabs", CGPoint(x: shown.midX, y: 4)),
-                    ("bar above the glass", CGPoint(x: glassBox.midX, y: 2)),
-                    ("bar under the glass", CGPoint(x: glassBox.midX, y: 42)),
-                    ("search, on the glass", CGPoint(x: glassBox.minX + 20, y: glassBox.midY)),
-                    ("rail's top", CGPoint(x: railBox.midX, y: 16)),
-                    ("rail's header", CGPoint(x: railBox.midX, y: rail.view.safeAreaInsets.top + 16)),
-                ]
-                if let strip {
-                    presses.append(("strip past the last tab", CGPoint(x: min(shown.maxX - 4, shown.minX + strip.contentSize.width - strip.contentOffset.x + 24), y: barBox.midY)))
-                }
-                if let chosen = tabs(in: bar).first(where: { $0.id == currentId && $0.window != nil }).map({ $0.convert($0.bounds, to: window).intersection(shown) }), !chosen.isNull {
-                    presses += [("chosen tab's top", CGPoint(x: chosen.midX, y: chosen.minY + 3)), ("chosen tab's middle", CGPoint(x: chosen.midX, y: chosen.midY)),
-                                ("chosen tab's foot", CGPoint(x: chosen.midX, y: chosen.maxY - 3))]
-                }
-                let items = mainCluster.glass.content.subviews.flatMap(\.subviews).map { box($0.convert($0.bounds, to: window)) }
-                say("\(name) glass items \(items) presented \(presentedViewController.map { "\(type(of: $0))" } ?? "none")")
-                // Every hit-test first, then the presses: a press may raise a tip or a card over what follows.
-                let landings = presses.map { label, point in
-                    let hit = window.hitTest(point, with: nil)
-                    let onTab = hit.map { landed in tabs(in: bar).contains { landed.isDescendant(of: $0) } } ?? false
-                    let onControl = hit.map { landed in sequence(first: landed, next: \.superview).contains { $0 is UIControl } } ?? false
-                    let shellMoves = movesWindow(hit, at: view.convert(point, from: window))
-                    return "\(name) press on the \(label) \(point): lands on \(hit.map { "\(type(of: $0))" } ?? "nil"), a tab \(onTab), a control \(onControl); the shell moves the window \(shellMoves)"
-                }
-                for ((_, point), landing) in zip(presses, landings) {
-                    MacWindow.lastAsk = "none"
-                    WindowDragGesture.lastTouch = "none"
-                    let appKitMoves = await appKit.press(at: point)
-                    let raised = presentedViewController.map { "\(type(of: $0))" }
-                    if raised != nil { dismiss(animated: false) }
-                    say("\(landing); a window move was asked \(appKitMoves); the drag gesture saw \(WindowDragGesture.lastTouch); the shell's ask saw \(MacWindow.lastAsk); raised \(raised ?? "nothing")")
-                }
-                for tab in tabs(in: bar) where tab.window != nil && !tab.isHidden {
-                    let frame = tab.convert(tab.bounds, to: window)
-                    // A click at the middle of what the strip shows of it.
-                    let seen = frame.intersection(shown)
-                    guard !seen.isEmpty else {
-                        say("\(name) tab \(tab.accessibilityLabel?.prefix(24) ?? "?") scrolled out of the strip")
-                        continue
-                    }
-                    let hit = window.hitTest(CGPoint(x: seen.midX, y: seen.midY), with: nil)
-                    say("\(name) tab \(tab.accessibilityLabel?.prefix(24) ?? "?") \(box(frame)) shown \(Int(seen.width))pt, hit lands on tab \(hit?.isDescendant(of: tab) == true) (\(hit.map { "\(type(of: $0))" } ?? "nil"))")
-                }
-                let railPoint = rail.view.convert(CGPoint(x: rail.view.bounds.midX, y: 160), to: window)
-                let railHit = window.hitTest(railPoint, with: nil)
-                say("\(name) rail \(box(rail.view.convert(rail.view.bounds, to: window))) hit at \(railPoint) lands in rail \(railHit?.isDescendant(of: rail.view) == true) (\(railHit.map { "\(type(of: $0))" } ?? "nil"))")
-                await probeGlassCards(window: window, say: { say("\(name) \($0)") })
-            }
-            let frame = scene.effectiveGeometry.systemFrame
-            scene.requestGeometryUpdate(.Mac(systemFrame: CGRect(x: frame.minX, y: frame.minY, width: 640, height: 820)))
-            try? await Task.sleep(for: .seconds(1))
-            let lights = appKit.lights
-            let bar = macBar
-            say("w640 window \(box(window.bounds)) display mode \(displayMode.rawValue) collapsed \(isCollapsed) compact \(compact) rail \(box(rail.view.convert(rail.view.bounds, to: window))) on screen \(rail.view.window != nil) bar \(box(bar.convert(bar.bounds, to: window))) lights \(lights.map(box) ?? "not found")")
-            say("done")
-        }
-        #endif
-    }
 
-    /// The glass's card through each of its contents, the way a press opens
-    /// each (DESIGN.md, "The glass's cards"): Caw's panel from shut; the
-    /// machines (where the bar has their glass) and then Jump morphed in from
-    /// it; Caw's panel again; ⌘K into Jump from it. Per stop: the card's
-    /// identity (one card throughout), where it hangs against the glass (its
-    /// top on the glass's foot, its trailing edge flush within 1pt, the neck's
-    /// span the glass's) and what it shows. Per morph (`scrubMorph`): the size
-    /// tween's clock against the morph's, every animation key in the card (no
-    /// slide's `transform`), and the card held at 0, 50 and 100% of the tween
-    /// with its trailing edge and top against the glass's flank and foot. Then
-    /// ⌘K: Jump goes at once and stands again at once, read in the same turn
-    /// as the key, with no frame between and no animation in the card.
-    private func probeGlassCards(window: UIWindow, say: (String) -> Void) async {
-        func box(_ r: CGRect) -> String { String(format: "x %.1f y %.1f w %.1f h %.1f (maxX %.1f)", r.minX, r.minY, r.width, r.height, r.maxX) }
-        let card = glassCard
-        let identity = "\(ObjectIdentifier(card))"
-        func row() {
-            guard let glass = card.glass else { return say("\(card.name) not hung") }
-            let cap = view.convert(GlassCard.restingBox(of: glass, under: card.head, in: view), to: window)
-            let drawn = card.convert(card.bounds, to: window)
-            let neck = card.card.neck
-            let edge = compact ? window.bounds.maxX - window.safeAreaInsets.right : cap.maxX
-            say("\(card.name) glass \(box(cap)) card \(box(drawn)) top on the glass's foot \(abs(drawn.minY - (cap.maxY + glass.neck)) < 0.5) (neck \(glass.neck)) trailing flush \(abs(drawn.maxX - cap.maxX) <= 1) (screen edge \(abs(drawn.maxX - edge) <= 1)) neck span \(neck.end - neck.start) glass span \(cap.width) equal \(abs((neck.end - neck.start) - cap.width) < 0.5) flare \(neck.flareStart) flush end \(neck.flush == .end) glass joined \(glass.joined)")
-            say("card \(ObjectIdentifier(card)) the same \("\(ObjectIdentifier(card))" == identity) shows \(card.showing?.name ?? "nothing") open \(card.open)")
-        }
-        let cluster = frontCluster
-        say(Self.glassReading(cluster.glass))
-        card.show(cawPanel, from: cluster.caw, glass: cluster.glass)
-        try? await Task.sleep(for: .seconds(0.8))
-        row()
-        if !compact {
-            await scrubMorph("panel-to-machines", say: say) { openMachines(from: mainCluster.machinesItem) }
-            row()
-            if let machinesCard { say(Self.rulesReading(machinesCard)) }
-        }
-        await scrubMorph(compact ? "panel-to-jump" : "machines-to-jump", say: say) { openJump(.press(compact ? nil : mainCluster.jumpItem)) }
-        row()
-        if let jumpCard {
-            say(Self.rulesReading(jumpCard))
-            say("jump field focused \(jumpCard.fieldFocused)")
-        }
-        await scrubMorph("jump-to-panel", say: say) { card.show(cawPanel, from: cluster.caw, glass: cluster.glass) }
-        row()
-        // ⌘K into Jump while Caw's panel hangs: swapped at once, read in the key's own turn.
-        openJump(.key)
-        let swapKeys = Self.animationKeys(card.layer)
-        say("cmd-k swap: shows \(card.showing?.name ?? "nothing") revealed \(card.card.revealed) switch keys \(swapKeys.filter(Self.switchKeys.contains)) content's own \(swapKeys.filter { !Self.switchKeys.contains($0) }) card the same \("\(ObjectIdentifier(card))" == identity)")
-        try? await Task.sleep(for: .seconds(0.4))
-        // ⌘K: read in the same turn as the key, before any frame is drawn.
-        openJump(.key)
-        say("cmd-k close: jump hidden at once \(card.isHidden) glass joined \(cluster.glass.joined)")
-        openJump(.key)
-        let instant = !card.isHidden && card.card.revealed >= 1 && card.showing === jumpCard
-        say("cmd-k open: jump standing at once \(instant) revealed \(card.card.revealed) glass joined \(cluster.glass.joined) field focused \(jumpCard?.fieldFocused ?? false) animation keys \(Self.animationKeys(card.layer))")
-        try? await Task.sleep(for: .seconds(0.4))
-        jumpCard?.leaveByKey()
-        try? await Task.sleep(for: .seconds(0.6))
-    }
 
-    /// What a switch of the card animates, if it animates: its box, its
-    /// edge and cut, the contents' fades, a slide's transform. Anything else
-    /// in it is a content's own (a field's caret, a row's selection tint).
-    private static let switchKeys: Set<String> = ["bounds", "bounds.size", "bounds.origin", "position", "path", "locations", "opacity", "transform"]
 
-    /// Every session mark in the card and each of its parts as drawn now
-    /// (presentation values, in the card's points); every image the card
-    /// draws: those drawn at another size than their own bounds (`off`, a
-    /// view laid out inside a tween grows from where UIKit first put it, an
-    /// image view from its image's own size) and those wider or taller than
-    /// 40pt (`big`: a glyph is 12-24pt); and any layout animation in the
-    /// contents (`laying`), which only the card's box may have.
-    private static func marksReading(_ card: GlassCard) -> String {
-        func box(_ r: CGRect) -> String { String(format: "%.1f %.1f %.1f %.1f", r.minX, r.minY, r.width, r.height) }
-        let space = card.layer.presentation() ?? card.layer
-        var marks: [String] = []
-        var images = 0
-        var off: [String] = []
-        var big: [String] = []
-        func walk(_ view: UIView) {
-            for sub in view.subviews where !sub.isHidden {
-                if let mark = sub as? SessionMarkView {
-                    marks.append(mark.probeParts(in: card.layer).map { "\($0.name) \(box($0.frame))" }.joined(separator: ", "))
-                }
-                if sub is UIImageView {
-                    images += 1
-                    let shown = sub.layer.presentation() ?? sub.layer
-                    let drawn = shown.convert(shown.bounds, to: space)
-                    let own = sub.layer.bounds.size
-                    if abs(shown.bounds.width - own.width) > 0.5 || abs(shown.bounds.height - own.height) > 0.5 {
-                        off.append("\(type(of: sub)) drawn \(box(drawn)) own \(String(format: "%.1f %.1f", own.width, own.height))")
-                    }
-                    if drawn.width > 40 || drawn.height > 40 { big.append("\(type(of: sub)) \(box(drawn))") }
-                }
-                walk(sub)
-            }
-        }
-        walk(card)
-        let layout: Set<String> = ["bounds", "bounds.size", "bounds.origin", "position", "frame"]
-        // Each layer under a content with a layout animation, named by its view (or its own class);
-        // one inside a text field or view is the system's caret placing itself as the field takes focus.
-        func inField(_ layer: CALayer) -> Bool {
-            var view = layer.delegate as? UIView
-            while let at = view {
-                if at is UITextField || at is UITextView { return true }
-                view = at.superview
-            }
-            return false
-        }
-        func laid(_ layer: CALayer, in content: String) -> [String] {
-            let own = (layer.animationKeys() ?? []).filter(layout.contains).map { key in
-                "\(content) \(layer.delegate.map { "\(type(of: $0))" } ?? "\(type(of: layer))") \(key)\(inField(layer) ? " in its field" : "")"
-            }
-            return own + (layer.sublayers ?? []).flatMap { laid($0, in: content) }
-        }
-        let laying = card.card.content.subviews.compactMap { $0 as? GlassContent }.flatMap { content in
-            content.subviews.flatMap { laid($0.layer, in: content.name) }
-        }
-        return "\(marks.count) marks [\(marks.joined(separator: " | "))] images \(images) off [\(off.joined(separator: " | "))] big [\(big.joined(separator: " | "))] laying [\(Array(Set(laying)).sorted().joined(separator: ", "))]"
-    }
 
     /// Every animation key in `layer` and the layers under it, sorted, once each.
     private static func animationKeys(_ layer: CALayer) -> [String] {
@@ -960,191 +604,11 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         return Array(Set(all(layer))).sorted()
     }
 
-    /// One switch of the glass's card (`start`), read on its own clock: the
-    /// size tween's duration and curve against `durMorph` and `easeDrawer`,
-    /// every animation key in the card (a slide out of or into the glass
-    /// would be the slider's `transform`), then the card's layer held
-    /// (`speed` 0) at 0, 50 and 100% of the tween by `timeOffset`, its
-    /// presentation's trailing edge and top against the glass's flank and
-    /// foot; then let run on, and read at its end.
-    private func scrubMorph(_ label: String, say: (String) -> Void, start: () -> Void) async {
-        let card = glassCard
-        let layer = card.layer
-        let from = card.showing?.name ?? "nothing"
-        // The size it tweens from: as drawn the moment before the switch.
-        let startSize = (layer.presentation() ?? layer).frame.size
-        start()
-        // What a keyboard moving mid-switch does (`keyboardMoved`, Jump's field
-        // letting the keyboard go as Caw's panel comes in): the card placed again
-        // on a tween. Here with the panel's rows just built again, as the hub's
-        // word changing builds them, so a first layout falling inside that tween
-        // shows in the readings below.
-        if card.showing === cawPanel {
-            cawPanel.probeRebuild()
-            card.place(animated: true)
-        }
-        // The tween's begin is stamped on the layer's clock when the transaction
-        // carrying it commits, not when it starts: committed here, so the begin
-        // read below is the tween's own. Left to the run loop, the commit can
-        // come after this reads it (Jump's field raising the keyboard holds the
-        // main thread, 4-127ms seen); the scrub then held a tween not yet begun,
-        // which draws the size it tweens to ("panel-to-jump holds half the size
-        // at time 0.000: … h 160.0 (63.0 to 160.0)").
-        CATransaction.flush()
-        let keys = Self.animationKeys(layer)
-        let tween = (layer.animation(forKey: "bounds.size") ?? layer.animation(forKey: "bounds")) as? CABasicAnimation
-        let curve: String = tween?.timingFunction.map { function in
-            var point: [Float] = [0, 0]
-            var all: [Float] = []
-            for index in 1 ... 2 {
-                function.getControlPoint(at: index, values: &point)
-                all += point
-            }
-            return all.map { String(format: "%.3f", $0) }.joined(separator: ",")
-        } ?? "none"
-        let drawer = [Motion.easeDrawer.x1, Motion.easeDrawer.y1, Motion.easeDrawer.x2, Motion.easeDrawer.y2].map { String(format: "%.3f", $0) }.joined(separator: ",")
-        say("\(label) card \(ObjectIdentifier(card)) from \(from) to \(card.showing?.name ?? "nothing") tween \(tween.map { String(format: "%.3f", $0.duration) } ?? "none") morph \(String(format: "%.3f", Motion.durMorph)) curve \(curve) drawer \(drawer) clock \(tween.map { abs($0.duration - Motion.durMorph) < 0.001 } ?? false && curve == drawer) keys \(keys) slide \(keys.contains("transform"))")
-        guard let tween, let glass = card.glass else { return }
-        let at = (layer.animation(forKey: "bounds.size") ?? layer.animation(forKey: "bounds"))?.beginTime ?? 0
-        guard at > 0 else { return say("\(label) tween has no begin once committed") }
-        // Half the size, not half the time: the drawer curve is front-loaded,
-        // so at half its time the box has come ~97% of the way and reads as
-        // the end. The time the curve reaches half its travel, by bisection.
-        var low = 0.0
-        var high = 1.0
-        for _ in 0 ..< 40 {
-            let mid = (low + high) / 2
-            if Motion.easeDrawer.value(at: mid) < 0.5 { low = mid } else { high = mid }
-        }
-        let half = (low + high) / 2
-        layer.speed = 0
-        // The size it tweens to (the model's).
-        let endSize = layer.frame.size
-        for fraction in [0.0, half, 0.5, 1.0] {
-            layer.timeOffset = at + fraction * tween.duration
-            try? await Task.sleep(for: .milliseconds(150))
-            if fraction == half {
-                // The clock's start can sit a fraction of a millisecond off the tween's (the
-                // card read 426.2pt for 425 at 0, 0.49 of its travel at `half`): the time is
-                // found on the drawn size itself, the side that travels furthest at its midpoint.
-                let wide = abs(endSize.width - startSize.width) >= abs(endSize.height - startSize.height)
-                let mid = wide ? (startSize.width + endSize.width) / 2 : (startSize.height + endSize.height) / 2
-                let rising = wide ? endSize.width > startSize.width : endSize.height > startSize.height
-                var early = at
-                var late = at + tween.duration
-                for _ in 0 ..< 16 {
-                    layer.timeOffset = (early + late) / 2
-                    // The presentation is computed from what is committed: commit each step.
-                    CATransaction.flush()
-                    let size = (layer.presentation() ?? layer).frame.size
-                    if ((wide ? size.width : size.height) < mid) == rising { early = layer.timeOffset } else { late = layer.timeOffset }
-                }
-                try? await Task.sleep(for: .milliseconds(150))
-            }
-            let drawn = layer.presentation()?.frame ?? layer.frame
-            // Every piece the card draws at this stop: they all stand at the card's own size.
-            say(String(format: "\(label) layers at %.3f: ", fraction) + card.card.probeLayers())
-            say(String(format: "\(label) marks at %.3f: ", fraction) + Self.marksReading(card))
-            let cap = GlassCard.restingBox(of: glass, under: card.head, in: view)
-            let foot = cap.maxY + glass.neck
-            say(String(format: "\(label) at %.2f: card w %.1f h %.1f trailing %.2f glass flank %.2f flush %@ top %.2f glass foot %.2f on foot %@ revealed %.2f",
-                       fraction, drawn.width, drawn.height, drawn.maxX, cap.maxX, abs(drawn.maxX - cap.maxX) <= 1 ? "true" : "false",
-                       drawn.minY, foot, abs(drawn.minY - foot) <= 1 ? "true" : "false", card.card.revealed))
-            if fraction == half {
-                say(String(format: "\(label) holds half the size at time %.3f: w %.1f (%.1f to %.1f) h %.1f (%.1f to %.1f)", (layer.timeOffset - at) / tween.duration,
-                           drawn.width, startSize.width, endSize.width, drawn.height, startSize.height, endSize.height))
-            }
-        }
-        let held = layer.timeOffset
-        layer.speed = 1
-        layer.timeOffset = 0
-        layer.beginTime = 0
-        layer.beginTime = layer.convertTime(CACurrentMediaTime(), from: nil) - held
-        // Settled: no switch animation left anywhere in the card (its box, edge, cut, the
-        // contents' fades), polled a frame at a time for up to 2s.
-        var moving = Self.animationKeys(layer).filter(Self.switchKeys.contains)
-        for _ in 0 ..< 120 where !moving.isEmpty {
-            try? await Task.sleep(for: .milliseconds(16))
-            moving = Self.animationKeys(layer).filter(Self.switchKeys.contains)
-        }
-        let drawn = card.convert(card.bounds, to: nil)
-        let contents = card.card.content.subviews.compactMap { $0 as? GlassContent }.map { "\($0.name) \(String(format: "%.2f", $0.alpha))" }
-        say(String(format: "\(label) settled: shows %@ hidden %@ revealed %.2f card x %.1f y %.1f w %.1f h %.1f contents [%@] moving [%@]",
-                   card.showing?.name ?? "nothing", card.isHidden ? "true" : "false", card.card.revealed, drawn.minX, drawn.minY, drawn.width, drawn.height,
-                   contents.joined(separator: ", "), moving.joined(separator: ", ")))
-    }
 
-    /// What stands on the glass at rest, against the glass's own bounds: every
-    /// drawn view that reaches past them (more than half a point), and every
-    /// label drawn narrower than its text, which the glass would show cut off.
-    /// Then each control on it, its frame and any label's text in it.
-    private static func glassReading(_ glass: GlassCapsule) -> String {
-        func box(_ r: CGRect) -> String { String(format: "x %.1f y %.1f w %.1f h %.1f", r.minX, r.minY, r.width, r.height) }
-        var outside: [String] = []
-        var narrow: [String] = []
-        func walk(_ view: UIView) {
-            for sub in view.subviews where !sub.isHidden && sub.alpha > 0.01 {
-                let frame = sub.convert(sub.bounds, to: glass)
-                if !glass.bounds.insetBy(dx: -0.5, dy: -0.5).contains(frame) {
-                    outside.append("\(type(of: sub)) \(box(frame))")
-                }
-                if let label = sub as? UILabel, label.intrinsicContentSize.width > label.bounds.width + 0.5 {
-                    narrow.append("'\(label.text ?? "")' \(box(frame)) needs w \(String(format: "%.1f", label.intrinsicContentSize.width))")
-                }
-                walk(sub)
-            }
-        }
-        walk(glass)
-        let controls = glass.content.subviews.flatMap(\.subviews).map { control in
-            let words = control.subviews.flatMap(\.subviews).compactMap { ($0 as? UILabel)?.text }
-            return "\(type(of: control)) \(box(control.convert(control.bounds, to: glass)))\(words.isEmpty ? "" : " '\(words.joined(separator: " "))'")"
-        }
-        return "glass \(box(glass.bounds)) outside \(outside.isEmpty ? "none" : outside.joined(separator: " | ")) narrow \(narrow.isEmpty ? "none" : narrow.joined(separator: " | ")) controls \(controls.joined(separator: " | "))"
-    }
 
-    /// Every rule drawn in a card (a view a point tall or less with a fill),
-    /// its colour as resolved in the card's scheme, and the two rule tokens
-    /// resolved there: `seam` and `border-hairline`.
-    private static func rulesReading(_ card: GlassContent) -> String {
-        let traits = card.traitCollection
-        func rgb(_ color: UIColor) -> String {
-            var (r, g, b, a) = (CGFloat(0), CGFloat(0), CGFloat(0), CGFloat(0))
-            color.resolvedColor(with: traits).getRed(&r, green: &g, blue: &b, alpha: &a)
-            return String(format: "(%.0f,%.0f,%.0f a %.2f)", r * 255, g * 255, b * 255, a)
-        }
-        var rules: [String] = []
-        func walk(_ view: UIView) {
-            for sub in view.subviews where !sub.isHidden {
-                if sub.bounds.height <= 1.01, sub.bounds.width > 4, let fill = sub.backgroundColor, fill.cgColor.alpha > 0 {
-                    let frame = sub.convert(sub.bounds, to: card)
-                    rules.append(String(format: "y %.1f w %.1f ", frame.minY, frame.width) + rgb(fill) + " seam \(fill == Palette.seam) hairline \(fill == Palette.borderHairline)")
-                }
-                walk(sub)
-            }
-        }
-        walk(card)
-        return "\(card.name) rules \(rules.isEmpty ? "none" : rules.joined(separator: " | ")); tokens seam \(rgb(Palette.seam)) border-hairline \(rgb(Palette.borderHairline))"
-    }
 
     #if !targetEnvironment(macCatalyst)
-    /// A simulator pass's `-hang-probe`: once the fleet is read, the glass's
-    /// cards (`probeGlassCards`), every line in the Probe log.
-    private var hangProbeRan = false
 
-    private func runHangProbe() {
-        guard ProcessInfo.processInfo.arguments.contains("-hang-probe"), !hangProbeRan, home.ready, let window = view.window else { return }
-        hangProbeRan = true
-        let style = traitCollection.userInterfaceStyle == .dark ? "dark" : "light"
-        let device = traitCollection.userInterfaceIdiom == .pad ? "ipad" : "iphone"
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            func say(_ line: String) { Logger(subsystem: "dev.cawco.app", category: "Probe").notice("hang \(line, privacy: .public)") }
-            try? await Task.sleep(for: .seconds(3))
-            say("\(device) \(style) window \(window.bounds) compact \(compact)")
-            await probeGlassCards(window: window, say: say)
-            say("done")
-        }
-    }
     #endif
 
     /// The first tab on screen in the phone's row.
@@ -1172,9 +636,6 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        #if DEBUG
-        ProbeCounts.shellLayouts += 1
-        #endif
         #if targetEnvironment(macCatalyst)
         placeMacBar()
         #endif
@@ -1586,31 +1047,6 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         present(sheet, animated: true)
     }
 
-    #if DEBUG
-    func probeReopenRail() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.showRailSheet() }
-    }
-
-    /// `-rail-recent-probe`: each machine's Reload sessions, as its menu item
-    /// runs it, when the probe posts `dev.cawco.probe.reload` (`notifyutil -p`).
-    private var probeMenus: [MachineMenu] = []
-    private var listensForReload = false
-
-    private func listenForProbeReload() {
-        guard ProcessInfo.processInfo.arguments.contains("-rail-recent-probe"), !listensForReload else { return }
-        listensForReload = true
-        CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), Unmanaged.passUnretained(self).toOpaque(), { _, observer, _, _, _ in
-            guard let observer else { return }
-            let shell = Unmanaged<ShellController>.fromOpaque(observer).takeUnretainedValue()
-            Task { @MainActor in shell.probeReload() }
-        }, "dev.cawco.probe.reload" as CFString, nil, .deliverImmediately)
-    }
-
-    private func probeReload() {
-        probeMenus = hub.fleet.machines.map { MachineMenu(machineId: $0.machineId, host: self) }
-        for menu in probeMenus { menu.probeReload() }
-    }
-    #endif
 
     /// The New Session form, with what the caller knows filled in (Sidebar.svelte `newSession`).
     func startSession(machineId: String?, cwd: String?, projectId: String?) {
@@ -1777,15 +1213,9 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         case let .press(source): (instant, trigger) = (false, source)
         }
         if let open = jumpCard, open.open {
-            #if DEBUG
-            PreviewProbe.say("shell jump close")
-            #endif
             if instant { open.leaveByKey() } else { open.close() }
             return
         }
-        #if DEBUG
-        PreviewProbe.say("shell jump open")
-        #endif
         // One still fading out of the card, or folding back, comes back from where it has reached.
         let card = jumpCard ?? {
             let made = JumpCard(hub: hub, home: home)
@@ -1818,9 +1248,6 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     func perform(_ command: RootViewController.ShellCommand) {
         // ⌘K closes Jump at once, its own field typing or not.
         if command == .jump, let card = jumpCard, card.open {
-            #if DEBUG
-            PreviewProbe.say("shell jump close")
-            #endif
             card.leaveByKey()
             return
         }
@@ -2034,9 +1461,6 @@ private final class RailEdgeGate: NSObject, UIGestureRecognizerDelegate {
     }
 
     #if DEBUG
-    /// A simulator pass's `-shell-probe`: each touch the edge swipe is
-    /// offered, whether it may begin, and its states (ShellController).
-    static let probing = ProcessInfo.processInfo.arguments.contains("-shell-probe")
 
     static func probe(_ line: String) {
         guard probing else { return }
@@ -2273,114 +1697,6 @@ final class FleetDetailController: ObservedViewController {
     }
 }
 
-#if DEBUG && targetEnvironment(macCatalyst)
-/// The Mac pass's view of the window from AppKit's side (ShellController
-/// `runMacProbe`), reached through the Catalyst process's own NSApplication:
-/// the NSWindows and whether they move themselves, the traffic lights'
-/// frame, the view a click is sent to, and whether a press makes AppKit move
-/// the window by itself; the owner's pointer is never moved. Points are the
-/// UIKit window's (an app optimised for Mac draws 1:1).
-@MainActor
-private final class MacProbeAppKit {
-    private weak var window: UIWindow?
-
-    init(window: UIWindow) {
-        self.window = window
-    }
-
-    private static func object(_ name: String, _ key: String) -> NSObject? {
-        (NSClassFromString(name) as? NSObject.Type)?.value(forKey: key) as? NSObject
-    }
-
-    /// This UIWindow's NSWindow: the visible one whose content is its size.
-    private var nsWindow: NSObject? {
-        guard let window, let windows = Self.object("NSApplication", "sharedApplication")?.value(forKey: "windows") as? [NSObject] else { return nil }
-        return windows.first { candidate in
-            guard (candidate.value(forKey: "isVisible") as? Bool) == true,
-                  let size = ((candidate.value(forKey: "contentView") as? NSObject)?.value(forKey: "frame") as? NSValue)?.cgRectValue.size else { return false }
-            return abs(size.width - window.bounds.width) < 1 && abs(size.height - window.bounds.height) < 1
-        }
-    }
-
-    /// Every NSWindow, its class and whether it moves itself.
-    var windows: String {
-        let all = Self.object("NSApplication", "sharedApplication")?.value(forKey: "windows") as? [NSObject] ?? []
-        return all.map { "\(type(of: $0)) movable \($0.value(forKey: "isMovable") as? Bool ?? true)" }.joined(separator: ", ")
-    }
-
-    /// The window's frame view, which every click is hit-tested from.
-    private var frameView: NSObject? {
-        (nsWindow?.value(forKey: "contentView") as? NSObject)?.value(forKey: "superview") as? NSObject
-    }
-
-    private var height: Double? { ((frameView?.value(forKey: "frame") as? NSValue)?.cgRectValue.height).map(Double.init) }
-
-    /// Close, minimise and zoom, as one box in the window's points.
-    var lights: CGRect? {
-        guard let nsWindow else { return nil }
-        let pick = NSSelectorFromString("standardWindowButton:")
-        typealias Button = @convention(c) (NSObject, Selector, Int) -> Unmanaged<NSObject>?
-        let button = unsafeBitCast(nsWindow.method(for: pick), to: Button.self)
-        let boxes = (0 ... 2).compactMap { button(nsWindow, pick, $0)?.takeUnretainedValue() }.compactMap(inWindow)
-        guard let first = boxes.first else { return nil }
-        return boxes.dropFirst().reduce(first) { $0.union($1) }
-    }
-
-    private func inWindow(_ view: NSObject) -> CGRect? {
-        guard let bounds = (view.value(forKey: "bounds") as? NSValue)?.cgRectValue, let height else { return nil }
-        let convert = NSSelectorFromString("convertRect:toView:")
-        typealias Convert = @convention(c) (NSObject, Selector, CGRect, NSObject?) -> CGRect
-        let base = unsafeBitCast(view.method(for: convert), to: Convert.self)(view, convert, bounds, nil)
-        return CGRect(x: base.minX, y: height - base.maxY, width: base.width, height: base.height)
-    }
-
-    /// The NSView AppKit sends a click at `point` to, and whether a press there may move the window.
-    func hitView(at point: CGPoint) -> String {
-        guard let frameView, let height else { return "no window" }
-        let test = NSSelectorFromString("hitTest:")
-        typealias Hit = @convention(c) (NSObject, Selector, CGPoint) -> Unmanaged<NSObject>?
-        guard let hit = unsafeBitCast(frameView.method(for: test), to: Hit.self)(frameView, test, CGPoint(x: point.x, y: height - point.y))?.takeUnretainedValue() else {
-            return "nil"
-        }
-        return "\(type(of: hit)) mouseDownCanMoveWindow \(hit.value(forKey: "mouseDownCanMoveWindow") as? Bool ?? false)"
-    }
-
-    /// Times NSWindow was asked to move with the mouse while `press` ran.
-    private nonisolated(unsafe) static var drags = 0
-
-    /// A left press at `point` and its release, queued on NSApplication
-    /// (`postEvent:atStart:`); true when AppKit asked the window to move on
-    /// its own. Such events reach the NSWindow and never UIKit (a press so
-    /// queued on a tab did not choose it), so this reads AppKit's part alone.
-    func press(at point: CGPoint) async -> Bool {
-        guard let nsWindow, let height, let app = Self.object("NSApplication", "sharedApplication"),
-              let eventClass = NSClassFromString("NSEvent"), let windowClass = NSClassFromString("NSWindow"),
-              let number = nsWindow.value(forKey: "windowNumber") as? Int else { return false }
-        let make = NSSelectorFromString("mouseEventWithType:location:modifierFlags:timestamp:windowNumber:context:eventNumber:clickCount:pressure:")
-        guard let maker = class_getClassMethod(eventClass, make),
-              let drag = class_getInstanceMethod(windowClass, NSSelectorFromString("performWindowDragWithEvent:")) else { return false }
-        typealias Make = @convention(c) (AnyClass, Selector, UInt, CGPoint, UInt, Double, Int, NSObject?, Int, Int, Float) -> Unmanaged<NSObject>?
-        let event = unsafeBitCast(method_getImplementation(maker), to: Make.self)
-        let original = method_getImplementation(drag)
-        let record: @convention(block) (NSObject, NSObject) -> Void = { _, _ in MacProbeAppKit.drags += 1 }
-        method_setImplementation(drag, imp_implementationWithBlock(record))
-        defer { method_setImplementation(drag, original) }
-        Self.drags = 0
-        let post = NSSelectorFromString("postEvent:atStart:")
-        typealias Post = @convention(c) (NSObject, Selector, NSObject, Bool) -> Void
-        let enqueue = unsafeBitCast(app.method(for: post), to: Post.self)
-        // NSEventTypeLeftMouseDown 1, LeftMouseUp 2; window base points.
-        let base = CGPoint(x: point.x, y: height - point.y)
-        for type: UInt in [1, 2] {
-            if let made = event(eventClass, make, type, base, 0, ProcessInfo.processInfo.systemUptime, number, nil, 0, 1, type == 1 ? 1 : 0)?.takeUnretainedValue() {
-                enqueue(app, post, made, false)
-            }
-        }
-        try? await Task.sleep(for: .milliseconds(250))
-        return Self.drags > 0
-    }
-}
-#endif
 
 extension UIResponder {
     private nonisolated(unsafe) static weak var found: UIResponder?

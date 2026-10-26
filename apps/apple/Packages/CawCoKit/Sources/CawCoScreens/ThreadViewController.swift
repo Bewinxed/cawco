@@ -211,61 +211,11 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         shownOnce = true
-        #if DEBUG
-        carryForProbe()
-        #endif
     }
 
     #if DEBUG
     private var carried = false
-    private var carryWaiting = ""
 
-    /// `-thread-carry <words>` (ios-thread-carry): a picture and a file are
-    /// pasted into the composer, as a paste hands them over (ComposerAttacher
-    /// `pasted`: the picture read, the file uploaded to the hub), and once
-    /// both stand ready the words are typed and Send pressed.
-    private func carryForProbe() {
-        guard let words = PreviewProbe.threadCarry, !carried else { return }
-        guard writable, hub.state == .connected, composerBinding.composer != nil else {
-            let waiting = "thread carry waits writable=\(writable) connected=\(hub.state == .connected) composer=\(composerBinding.composer != nil) problem=\(caw?.problem ?? "-")"
-            if waiting != carryWaiting {
-                carryWaiting = waiting
-                PreviewProbe.say(waiting)
-            }
-            return
-        }
-        carried = true
-        let image = UIGraphicsImageRenderer(size: CGSize(width: 64, height: 48)).pngData { context in
-            UIColor.systemRed.setFill()
-            context.fill(CGRect(x: 0, y: 0, width: 64, height: 48))
-        }
-        let picture = NSItemProvider(item: image as NSData, typeIdentifier: UTType.png.identifier)
-        picture.suggestedName = "probe.png"
-        let pdf = Data("%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n".utf8)
-        let file = NSItemProvider()
-        file.registerDataRepresentation(forTypeIdentifier: UTType.pdf.identifier, visibility: .all) { done in
-            done(pdf, nil)
-            return nil
-        }
-        file.suggestedName = "probe-brief"
-        attacher.pasted([picture, file])
-        Task { [weak self] in
-            for _ in 0 ..< 120 {
-                guard let self else { return }
-                let held = composerBinding.attachments
-                let ready = held.contains { if case .image = $0 { true } else { false } }
-                    && held.contains { if case .file(_, _, _, _, .ready) = $0 { true } else { false } }
-                if ready {
-                    PreviewProbe.say("thread carry attached \(held.map(Self.probeName).joined(separator: ","))")
-                    let pressed = composerBinding.probeSend(words)
-                    PreviewProbe.say("thread carry pressed send=\(pressed)")
-                    return
-                }
-                try? await Task.sleep(for: .milliseconds(250))
-            }
-            PreviewProbe.say("thread carry never ready: \(self?.composerBinding.attachments.map(Self.probeName).joined(separator: ",") ?? "-")")
-        }
-    }
 
     /// An attachment as the probe log names it: its kind, its name, and a file's state.
     private static func probeName(_ attachment: ComposerAttachment) -> String {
@@ -394,7 +344,6 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
         #if DEBUG
         probe()
         // The thread becomes writable once the hub's word on Caw is read: the probe's carry waits for it.
-        if view.window != nil { carryForProbe() }
         #endif
     }
 
@@ -728,18 +677,12 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
         sendError = nil
         composerBinding.sent()
         requestRefresh()
-        #if DEBUG
-        PreviewProbe.say("thread send \(id) images=\(carried.images.count) texts=\(carried.texts.count) files=\(carried.files.map(\.name).joined(separator: ","))")
-        #endif
         Task { [weak self, hub, projectId, threadId] in
             do {
                 let said = try await hub.threads.say(projectId: projectId, threadId: threadId, body: words, id: id,
                                                      images: carried.images, texts: carried.texts, files: carried.files)
                 self?.unanswered = nil
                 if threadId == nil { self?.started(said.id) }
-                #if DEBUG
-                PreviewProbe.say("thread send \(id) kept")
-                #endif
             } catch {
                 // The words and what rode with them come back (`draft.restore(text, extras)`).
                 self?.composerBinding.setDraft(words)
@@ -751,7 +694,6 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
                 #if DEBUG
                 if let self {
                     let held = composerBinding.attachments.map(Self.probeName).joined(separator: ",")
-                    PreviewProbe.say("thread send \(id) refused why=\(sendError ?? "-") restored words=\(composerBinding.draft) attachments=\(held)")
                 }
                 #endif
             }
