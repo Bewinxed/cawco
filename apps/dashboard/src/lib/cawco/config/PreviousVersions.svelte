@@ -1,4 +1,17 @@
 <script lang="ts" module>
+  import { machineLabel } from "@cawco/core";
+  import { cawco } from "../client.svelte";
+
+  /** Where a kept version came from, in words: the fleet's own row, or the machine whose edited copy an overwrite took off it. */
+  export function versionSource(source: string): string {
+    if (!source.startsWith("machine:")) {
+      return "the fleet";
+    }
+    const machineId = source.slice("machine:".length);
+    const machine = cawco.machines.find((row) => row.machineId === machineId);
+    return machine ? machineLabel(machine.hostname) : machineId;
+  }
+
   /** One superseded version as a history listing reads it, without its material. */
   export interface ListedVersion {
     createdAt: string;
@@ -20,6 +33,7 @@
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
+  import ShowAllVersions from "./ShowAllVersions.svelte";
 
   const LATEST = 5;
 
@@ -29,7 +43,6 @@
     restoring,
     restoreFailed,
     onrestore,
-    sourceLabel,
   }: {
     versions: ListedVersion[];
     /** Why the list could not be read, when it could not. */
@@ -39,8 +52,6 @@
     /** The version whose last restore failed, and why: said under it. */
     restoreFailed: { id: number; reason: string } | null;
     onrestore: (version: ListedVersion) => void;
-    /** Where a kept version came from, in words. */
-    sourceLabel: (source: string) => string;
   } = $props();
 
   let allVersions = $state(false);
@@ -78,7 +89,7 @@
               class="max-w-c-measure type-meta text-ink-muted"
             >
               {new Date(version.createdAt).toLocaleString()}
-              · from {sourceLabel(version.source)}
+              · from {versionSource(version.source)}
               ·
               <span class="font-(family-name:--font-mono)"
                 >{version.hash.slice(0, 7)}</span
@@ -105,17 +116,7 @@
       {/each}
     </ul>
     {#if versions.length > LATEST}
-      <div data-slot="more" class="self-start" data-flip>
-        <Button
-          onclick={() => {
-            allVersions = !allVersions;
-          }}
-          size="sm"
-          variant="ghost"
-        >
-          {allVersions ? "Show the latest 5" : `Show all ${versions.length}`}
-        </Button>
-      </div>
+      <ShowAllVersions bind:all={allVersions} total={versions.length} />
     {/if}
   {/if}
 </div>

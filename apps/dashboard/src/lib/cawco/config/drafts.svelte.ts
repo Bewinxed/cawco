@@ -18,6 +18,7 @@ import { untrack } from "svelte";
 import { SvelteSet } from "svelte/reactivity";
 import { browser } from "$app/env";
 import { cawco } from "../client.svelte";
+import { result } from "../idb";
 import { keepsDrafts } from "../reload.svelte";
 import { MAIN } from "./memory";
 import type { SectionSlug } from "./sections";
@@ -52,13 +53,6 @@ function database(): Promise<IDBDatabase> {
     request.onerror = () => reject(request.error);
   });
   return opening;
-}
-
-function result<T>(request: IDBRequest<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
 }
 
 /** Every editor's unsaved fields, as read back and as edited since. */

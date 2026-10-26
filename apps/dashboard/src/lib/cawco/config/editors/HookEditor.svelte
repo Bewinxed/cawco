@@ -8,7 +8,6 @@
     hookTakesMatcher,
     machineLabel,
   } from "@cawco/core";
-  import { detach } from "@cawco/core/detach";
   import { untrack } from "svelte";
   import {
     appear,
@@ -28,7 +27,6 @@
     IconPlay,
     IconTuning,
   } from "#lib/icons.js";
-  import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { cawco, type Machine } from "../../client.svelte";
   import { adoptHook, peekHook, pushHook } from "../../fleet";
@@ -51,9 +49,10 @@
   import Choice from "../Choice.svelte";
   import { deleteHook } from "../deletes";
   import { keepDraft, sameFields } from "../drafts.svelte";
-  import { savedShown } from "../EditorFooter.svelte";
   import EditorFrame from "../EditorFrame.svelte";
+  import EditorHead from "../EditorHead.svelte";
   import EditorSection from "../EditorSection.svelte";
+  import { EditorForm, takenName } from "../editor-form.svelte";
   import Field from "../Field.svelte";
   import MachineCopyRow from "../MachineCopyRow.svelte";
   import { MachineCopies } from "../machine-copies.svelte";
@@ -66,7 +65,6 @@
   import RolloutChip from "../RolloutChip.svelte";
   import SwitchField from "../SwitchField.svelte";
   import { configStore, upsert } from "../store.svelte";
-  import TitleInput from "../TitleInput.svelte";
 
   const WHITESPACE = /\s+/u;
 
@@ -85,21 +83,18 @@
     untrack(() => (hook ? draftOf(hook) : blankHook()))
   );
   let sample = $state("");
-  let busy = $state(false);
-  let deleting = $state(false);
-  let failed = $state<string | undefined>(undefined);
-  let touched = $state<Record<string, boolean>>({});
-  let attempted = $state(false);
 
   const id = $derived(hook?.id ?? null);
   const wrong = $derived(hookProblem(draft));
   const shown = (field: string): string | undefined =>
-    attempted || touched[field] ? wrong[field] : undefined;
+    form.seen(field) ? wrong[field] : undefined;
 
   const duplicate = $derived(
-    draft.name.trim() !== "" && taken.includes(draft.name.trim())
-      ? "Another hook already has that name. Two hooks called the same thing are two hooks you cannot tell apart in a machine’s registration."
-      : undefined
+    takenName(
+      draft.name,
+      taken,
+      "Another hook already has that name. Two hooks called the same thing are two hooks you cannot tell apart in a machine’s registration."
+    )
   );
   const ready = $derived(
     Object.keys(wrong).length === 0 && duplicate === undefined
@@ -178,8 +173,6 @@
   });
   /** What is saved: the draft differs from it by what is unsaved. */
   const baseline = $derived(fieldsOf(hook ? draftOf(hook) : blankHook()));
-  /** A new hook was just created: its draft is over, and a second Save would make a second hook. */
-  let created = false;
   const kept = keepDraft(
     page.url.pathname,
     () => {
@@ -193,6 +186,8 @@
       ({ draft, commandArgs } = stored);
     }
   );
+
+  const form = new EditorForm("/config/hooks", kept, store);
 
   const scoped = $derived(draft.scope === "project" || draft.scope === "local");
 
@@ -240,8 +235,7 @@
     try {
       const restored = await restoreHookVersion(version.id);
       draft = draftOf(restored);
-      touched = {};
-      attempted = false;
+      form.reset();
       if (store.hooks.value) {
         upsert(store.hooks.value, restored, (row) => row.id === restored.id);
       }
@@ -286,14 +280,7 @@
    * returns to the list, where it is marked. A refusal stays in the editor.
    */
   async function save() {
-    attempted = true;
-    if (!ready || busy || created) {
-      return;
-    }
-    let made: string | undefined;
-    busy = true;
-    failed = undefined;
-    try {
+    await form.save(ready, async () => {
       const saved = await saveHook(id ?? newId(), {
         ...draft,
         name: draft.name.trim(),
@@ -301,48 +288,23 @@
       if (store.hooks.value) {
         upsert(store.hooks.value, saved, (row) => row.id === saved.id);
       }
-      if (id) {
-        draft = draftOf(saved);
-        ({ commandArgs } = fieldsOf(draft));
-      } else {
-        created = true;
-        kept.drop();
-        made = saved.id;
+      if (!id) {
+        return saved.id;
       }
-    } catch (error) {
-      failed = message(error);
-    } finally {
-      busy = false;
-    }
-    if (made) {
-      await savedShown();
-      store.mark(made);
-      await goto("/config/hooks");
-    }
+      draft = draftOf(saved);
+      ({ commandArgs } = fieldsOf(draft));
+      return null;
+    });
   }
 
-  /** Cancel leaves the edits behind: the draft is dropped, not kept. */
-  function cancel() {
-    kept.drop();
-    detach(goto("/config/hooks"), "goto");
-  }
-
-  /** Delete: at once, with Undo in the toast (deletes.ts). */
   async function remove() {
     if (!id) {
       return;
     }
-    deleting = true;
-    failed = undefined;
-    try {
-      await deleteHook(store, { id, name: hook?.name ?? draft.name }, () => {
-        kept.drop();
-        return goto("/config/hooks");
-      });
-    } catch (error) {
-      deleting = false;
-      failed = message(error);
-    }
+    const hookId = id;
+    await form.remove((gone) =>
+      deleteHook(store, { id: hookId, name: hook?.name ?? draft.name }, gone)
+    );
   }
 
   // ── per machine ──────────────────────────────────────────────────────
@@ -350,16 +312,6 @@
   // on the machine itself waits here until it is adopted or overwritten.
   const machines = $derived(orderMachines(cawco.machines));
   const copies = new MachineCopies();
-
-  /** Where a kept version came from: the fleet's own row, or a machine's edited copy. */
-  function sourceLabel(source: string): string {
-    if (!source.startsWith("machine:")) {
-      return "the fleet";
-    }
-    const machineId = source.slice("machine:".length);
-    const machine = machines.find((row) => row.machineId === machineId);
-    return machine ? machineLabel(machine.hostname) : machineId;
-  }
 
   const stateOn = (machine: Machine) =>
     id ? hooksOf(machine)?.[id] : undefined;
@@ -428,13 +380,13 @@
 
 <EditorFrame
   deleteLabel={id ? "Delete hook" : undefined}
-  {deleting}
-  failed={failed !== undefined}
-  oncancel={cancel}
+  deleting={form.deleting}
+  failed={form.failed !== undefined}
+  oncancel={form.cancel}
   ondelete={id ? remove : undefined}
   onsubmit={save}
   saveLabel={id ? `Write to ${reachCount}` : `Create on ${reachCount}`}
-  saving={busy}
+  saving={form.busy}
   settling={versionsLoading}
   title={id ? draft.name || "Hook" : "New hook"}
 >
@@ -457,33 +409,18 @@
     >
   {/snippet}
   {#snippet header()}
-    <TitleInput
-      invalid={Boolean(shown("name") || duplicate)}
+    <EditorHead
+      {duplicate}
+      bind:enabled={draft.enabled}
+      {form}
       label="Hook name"
-      onblur={() => {
-        touched.name = true;
-      }}
+      bind:name={draft.name}
+      off="Off — nothing is registered"
+      on="Registered on every machine it applies to"
       placeholder="Name this hook"
-      bind:value={draft.name}
+      problem={shown("name")}
+      switchId="hook-enabled"
     />
-    {#if shown("name")}
-      <p class="type-meta text-status-fail-ink" in:appear>{wrong.name}</p>
-    {:else if duplicate}
-      <p class="type-meta text-status-fail-ink" in:appear>{duplicate}</p>
-    {/if}
-    <SwitchField
-      hint={draft.enabled
-        ? "Registered on every machine it applies to"
-        : "Off — nothing is registered"}
-      id="hook-enabled"
-      label="Enabled"
-      bind:checked={draft.enabled}
-    />
-    {#if failed}
-      <p class="type-meta text-status-fail-ink" role="alert" in:appear>
-        {failed}
-      </p>
-    {/if}
   {/snippet}
 
   <!-- The hook read back as one sentence, on the page's column. -->
@@ -499,7 +436,7 @@
         field={{ id: "hook-event" }}
         label="Event"
         onpick={(next) => {
-          touched.event = true;
+          form.touched.event = true;
           setEvent(next as HookEvent);
         }}
         options={HOOK_EVENTS.map((info) => ({
@@ -539,7 +476,7 @@
             autocomplete="off"
             id="hook-matcher"
             onblur={() => {
-              touched.matcher = true;
+              form.touched.matcher = true;
             }}
             placeholder={eventInfo?.suggests?.[0] ?? "*"}
             spellcheck="false"
@@ -591,7 +528,7 @@
               id="hook-script"
               resize="block"
               onblur={() => {
-                touched.script = true;
+                form.touched.script = true;
               }}
               placeholder={SCRIPT_PLACEHOLDER}
               rows={10}
@@ -654,7 +591,7 @@
               face="mono"
               id="hook-url"
               onblur={() => {
-                touched.url = true;
+                form.touched.url = true;
               }}
               placeholder="https://example.com/hooks/cawco"
               spellcheck="false"
@@ -680,7 +617,7 @@
               face="mono"
               id="hook-server"
               onblur={() => {
-                touched.mcp_server_name = true;
+                form.touched.mcp_server_name = true;
               }}
               placeholder="filesystem"
               spellcheck="false"
@@ -694,7 +631,7 @@
               face="mono"
               id="hook-tool"
               onblur={() => {
-                touched.tool_name = true;
+                form.touched.tool_name = true;
               }}
               placeholder="read_file"
               spellcheck="false"
@@ -715,7 +652,7 @@
               id="hook-prompt"
               resize="block"
               onblur={() => {
-                touched.prompt = true;
+                form.touched.prompt = true;
               }}
               placeholder="Decide whether this change needs a changelog entry, and say why."
               rows={4}
@@ -759,7 +696,7 @@
         face="mono"
         id="hook-if"
         onblur={() => {
-          touched.if = true;
+          form.touched.if = true;
         }}
         oninput={(event) => {
           draft.handler.if = event.currentTarget.value || undefined;
@@ -894,7 +831,6 @@
         onrestore={restore}
         {restoreFailed}
         {restoring}
-        {sourceLabel}
         {versions}
       />
     </EditorSection>

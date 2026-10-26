@@ -368,16 +368,6 @@
   let restoring = $state<number | null>(null);
   let restoreFailed = $state<{ id: number; reason: string } | null>(null);
 
-  /** Where a kept version came from: the fleet's own row, or a machine's edited copy. */
-  function sourceLabel(source: string): string {
-    if (!source.startsWith("machine:")) {
-      return words.theFleet;
-    }
-    const machineId = source.slice("machine:".length);
-    const machine = machines.find((row) => row.machineId === machineId);
-    return machine ? machineLabel(machine.hostname) : machineId;
-  }
-
   async function loadVersions(name: string) {
     delete versionsFailed[name];
     try {
@@ -716,7 +706,6 @@
                       onrestore={(version) => restoreSkill(row.name, version)}
                       {restoreFailed}
                       {restoring}
-                      {sourceLabel}
                       versions={versionsOf[row.name] ?? []}
                     />
                   </div>

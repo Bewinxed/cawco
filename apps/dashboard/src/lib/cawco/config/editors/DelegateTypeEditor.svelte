@@ -5,28 +5,25 @@
     HARNESSES,
     delegateTypesWords as words,
   } from "@cawco/core";
-  import { detach } from "@cawco/core/detach";
   import { untrack } from "svelte";
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
   import * as Alert from "#lib/components/ui/alert/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import { IconCpu, IconDocument, IconInfo, IconKey } from "#lib/icons.js";
-  import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import {
     blankDelegateType,
     type DelegateType,
     saveDelegateType,
   } from "../../delegate-types";
-  import { failureWords as message } from "../../hub-read";
   import ModelCombobox from "../../ModelCombobox.svelte";
   import Choice from "../Choice.svelte";
   import { deleteDelegateType } from "../deletes";
   import { keepDraft, sameFields } from "../drafts.svelte";
-  import { savedShown } from "../EditorFooter.svelte";
   import EditorFrame from "../EditorFrame.svelte";
   import EditorSection from "../EditorSection.svelte";
+  import { EditorForm, takenName } from "../editor-form.svelte";
   import Field from "../Field.svelte";
   import SwitchField from "../SwitchField.svelte";
   import { configStore, upsert } from "../store.svelte";
@@ -49,11 +46,6 @@
   let skillsText = $state(untrack(() => (type?.skills ?? []).join(", ")));
   let denyToolsText = $state(untrack(() => (type?.denyTools ?? []).join(", ")));
   let canDelegate = $state(untrack(() => type?.canDelegate === true));
-  let busy = $state(false);
-  let deleting = $state(false);
-  let failed = $state<string | undefined>(undefined);
-  let touched = $state<Record<string, boolean>>({});
-  let attempted = $state(false);
 
   const name = $derived(type?.name ?? null);
 
@@ -65,8 +57,6 @@
   });
   /** What is saved: the fields differ from it by what is unsaved. */
   const baseline = $derived(fieldsOf(type ? { ...type } : blankDelegateType()));
-  /** A new type was just created: its draft is over, and a second Save would write it again. */
-  let created = false;
   const kept = keepDraft(
     page.url.pathname,
     () => {
@@ -77,6 +67,8 @@
       ({ draft, skillsText, denyToolsText, canDelegate } = stored);
     }
   );
+
+  const form = new EditorForm("/config/delegate-types", kept, store);
 
   const parsedList = (text: string): string[] | undefined => {
     const items = text
@@ -97,15 +89,11 @@
   });
 
   const problem = $derived(delegateTypeProblem(submission));
-  const shown = (field: string): boolean =>
-    attempted || touched[field] === true;
   const problemFor = (field: string): string | undefined =>
-    shown(field) && problem?.includes(field) ? problem : undefined;
+    form.seen(field) && problem?.includes(field) ? problem : undefined;
 
   const duplicate = $derived(
-    submission.name !== "" && taken.includes(submission.name)
-      ? words.duplicate
-      : undefined
+    takenName(submission.name, taken, words.duplicate)
   );
 
   const ready = $derived(problem === undefined && duplicate === undefined);
@@ -116,73 +104,39 @@
    * marked.
    */
   async function save() {
-    attempted = true;
-    if (!ready || busy || created) {
-      return;
-    }
-    busy = true;
-    failed = undefined;
-    let made: string | undefined;
-    try {
+    await form.save(ready, async () => {
       const saved = await saveDelegateType(submission);
       if (store.types.value) {
         upsert(store.types.value, saved, (row) => row.name === saved.name);
       }
-      if (name) {
-        ({ draft, skillsText, denyToolsText, canDelegate } = fieldsOf({
-          ...saved,
-        }));
-      } else {
-        created = true;
-        kept.drop();
-        made = saved.name;
+      if (!name) {
+        return saved.name;
       }
-    } catch (error) {
-      failed = message(error);
-    } finally {
-      busy = false;
-    }
-    if (made) {
-      await savedShown();
-      store.mark(made);
-      await goto("/config/delegate-types");
-    }
+      ({ draft, skillsText, denyToolsText, canDelegate } = fieldsOf({
+        ...saved,
+      }));
+      return null;
+    });
   }
 
-  /** Cancel leaves the edits behind: the draft is dropped, not kept. */
-  function cancel() {
-    kept.drop();
-    detach(goto("/config/delegate-types"), "goto");
-  }
-
-  /** Delete: at once, with Undo in the toast (deletes.ts). */
   async function remove() {
     if (!name) {
       return;
     }
-    deleting = true;
-    failed = undefined;
-    try {
-      await deleteDelegateType(store, name, () => {
-        kept.drop();
-        return goto("/config/delegate-types");
-      });
-    } catch (error) {
-      deleting = false;
-      failed = message(error);
-    }
+    const typeName = name;
+    await form.remove((gone) => deleteDelegateType(store, typeName, gone));
   }
 </script>
 
 <EditorFrame
   deleteLabel={name ? words.remove : undefined}
-  {deleting}
-  failed={failed !== undefined}
-  oncancel={cancel}
+  deleting={form.deleting}
+  failed={form.failed !== undefined}
+  oncancel={form.cancel}
   ondelete={name ? remove : undefined}
   onsubmit={save}
   saveLabel={name ? words.save : words.create}
-  saving={busy}
+  saving={form.busy}
   title={name ? draft.name : words.newTitle}
 >
   {#snippet header()}
@@ -191,7 +145,7 @@
       invalid={Boolean(problemFor("name") || duplicate)}
       label={words.nameLabel}
       onblur={() => {
-        touched.name = true;
+        form.touched.name = true;
       }}
       placeholder={words.namePlaceholder}
       bind:value={draft.name}
@@ -204,9 +158,9 @@
     {:else if duplicate}
       <p class="type-meta text-status-fail-ink" in:appear>{duplicate}</p>
     {/if}
-    {#if failed}
+    {#if form.failed}
       <p class="type-meta text-status-fail-ink" role="alert" in:appear>
-        {failed}
+        {form.failed}
       </p>
     {/if}
   {/snippet}
@@ -230,7 +184,7 @@
         id="type-description"
         resize="block"
         onblur={() => {
-          touched.description = true;
+          form.touched.description = true;
         }}
         placeholder={words.descriptionPlaceholder}
         rows={4}
@@ -260,7 +214,7 @@
         harness={draft.harness}
         onchoose={(model) => {
           draft.model = model;
-          touched.model = true;
+          form.touched.model = true;
         }}
         size="default"
         width="capped"

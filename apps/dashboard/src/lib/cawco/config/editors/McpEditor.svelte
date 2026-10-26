@@ -4,9 +4,7 @@
     type FleetMcpServer,
     mcpWords as words,
   } from "@cawco/core";
-  import { detach } from "@cawco/core/detach";
   import { untrack } from "svelte";
-  import { failureWords } from "#lib/cawco/hub-read.js";
   import {
     appear,
     crossIn,
@@ -17,7 +15,6 @@
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { IconKey, IconMapPoint, IconPlay } from "#lib/icons.js";
-  import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import Coded from "../../Coded.svelte";
   import { cawco } from "../../client.svelte";
@@ -34,9 +31,9 @@
   import Choice from "../Choice.svelte";
   import { deleteMcpServer } from "../deletes";
   import { keepDraft, sameFields } from "../drafts.svelte";
-  import { savedShown } from "../EditorFooter.svelte";
   import EditorFrame from "../EditorFrame.svelte";
   import EditorSection from "../EditorSection.svelte";
+  import { EditorForm } from "../editor-form.svelte";
   import Field from "../Field.svelte";
   import McpSignIn from "../McpSignIn.svelte";
   import PickerChip from "../PickerChip.svelte";
@@ -87,9 +84,6 @@
   let headers = $state(recordToPairs(remote?.headers));
   /** One project's only (placed at its checkouts and workspaces); "" for every machine. */
   let projectId = $state(untrack(() => server?.projectId ?? ""));
-  let busy = $state(false);
-  let deleting = $state(false);
-  let failed = $state<string | undefined>(undefined);
 
   const nameProblem = $derived(mcpNameProblem(serverName, taken));
   const filled = $derived.by(() => {
@@ -127,8 +121,6 @@
   let baseline = $state(
     untrack(() => ({ name: serverName.trim(), config: build(), projectId }))
   );
-  /** A new server was just added (or a new name made one): its draft is over, and a second Save would add it again. */
-  let created = false;
   const kept = keepDraft(
     page.url.pathname,
     () =>
@@ -168,6 +160,7 @@
       } = stored);
     }
   );
+  const form = new EditorForm("/config/mcp", kept, store);
 
   /**
    * Saving a server keeps the editor open on it, the Save button saying so
@@ -175,13 +168,7 @@
    * shows the same, then returns to the list, where it is marked.
    */
   async function save() {
-    if (nameProblem || !filled || busy || created) {
-      return;
-    }
-    busy = true;
-    failed = undefined;
-    let made: string | undefined;
-    try {
+    await form.save(!nameProblem && filled, async () => {
       const saved = await saveMcpServer(
         serverName.trim(),
         build(),
@@ -192,60 +179,33 @@
       if (fleet) {
         upsert(fleet.config.mcp, saved, (row) => row.name === saved.name);
       }
-      if (server?.name === saved.name) {
-        baseline = { name: saved.name, config: build(), projectId };
-      } else {
-        created = true;
-        kept.drop();
-        made = saved.name;
+      if (server?.name !== saved.name) {
+        return saved.name;
       }
-    } catch (error) {
-      failed = failureWords(error);
-    } finally {
-      busy = false;
-    }
-    if (made) {
-      await savedShown();
-      store.mark(made);
-      await goto("/config/mcp");
-    }
+      baseline = { name: saved.name, config: build(), projectId };
+      return null;
+    });
   }
 
-  /** Cancel leaves the edits behind: the draft is dropped, not kept. */
-  function cancel() {
-    kept.drop();
-    detach(goto("/config/mcp"), "goto");
-  }
-
-  /** Remove: at once, with Undo in the toast (deletes.ts). */
   async function remove() {
     if (!server) {
       return;
     }
-    deleting = true;
-    failed = undefined;
-    try {
-      await deleteMcpServer(store, server.name, () => {
-        kept.drop();
-        return goto("/config/mcp");
-      });
-    } catch (error) {
-      deleting = false;
-      failed = failureWords(error);
-    }
+    const removed = server.name;
+    await form.remove((gone) => deleteMcpServer(store, removed, gone));
   }
 </script>
 
 <EditorFrame
   canSave={filled && nameProblem === undefined}
   deleteLabel={server ? words.remove : undefined}
-  {deleting}
-  failed={failed !== undefined}
-  oncancel={cancel}
+  deleting={form.deleting}
+  failed={form.failed !== undefined}
+  oncancel={form.cancel}
   ondelete={server ? remove : undefined}
   onsubmit={save}
   saveLabel={server ? words.save : words.add}
-  saving={busy}
+  saving={form.busy}
   title={server ? server.name : words.newTitle}
 >
   {#snippet result()}
@@ -281,9 +241,9 @@
         <Coded text={words.callsAs(serverName || "name")} />
       </p>
     {/if}
-    {#if failed}
+    {#if form.failed}
       <p class="type-meta text-status-fail-ink" role="alert" in:appear>
-        {failed}
+        {form.failed}
       </p>
     {/if}
     {#if server}

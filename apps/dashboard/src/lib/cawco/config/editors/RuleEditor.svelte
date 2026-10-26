@@ -14,7 +14,6 @@
     ruleSentence,
     rulesWords,
   } from "@cawco/core";
-  import { detach } from "@cawco/core/detach";
   import { onMount, untrack } from "svelte";
   import {
     appear,
@@ -35,7 +34,6 @@
     IconPin,
     IconPlain,
   } from "#lib/icons.js";
-  import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { cawco } from "../../client.svelte";
   import { failureWords as message } from "../../hub-read";
@@ -45,16 +43,16 @@
   import Choice from "../Choice.svelte";
   import { deleteRule } from "../deletes";
   import { keepDraft, sameFields } from "../drafts.svelte";
-  import { savedShown } from "../EditorFooter.svelte";
   import EditorFrame from "../EditorFrame.svelte";
+  import EditorHead from "../EditorHead.svelte";
   import EditorSection from "../EditorSection.svelte";
+  import { EditorForm, takenName } from "../editor-form.svelte";
   import Field from "../Field.svelte";
   import PickerChip from "../PickerChip.svelte";
   import ReadingWell from "../ReadingWell.svelte";
   import SwitchField from "../SwitchField.svelte";
   import { sectionOf } from "../sections";
   import { configStore, upsert, withStats } from "../store.svelte";
-  import TitleInput from "../TitleInput.svelte";
 
   /**
    * The rule editor. A rule is a sentence, and this screen is that sentence
@@ -72,8 +70,6 @@
   );
   /** What is saved: the draft differs from it by what is unsaved. */
   const baseline = $derived(rule ? draftOf(rule) : blankRule());
-  /** A new rule was just created: its draft is over, and a second Save would make a second rule. */
-  let created = false;
   const kept = keepDraft(
     page.url.pathname,
     () => (sameFields(draft, baseline) ? null : draft),
@@ -81,12 +77,8 @@
       draft = stored;
     }
   );
+  const form = new EditorForm("/config/rules", kept, store);
   let sample = $state("");
-  let busy = $state(false);
-  let deleting = $state(false);
-  let failed = $state<string | undefined>(undefined);
-  let touched = $state<Record<string, boolean>>({});
-  let attempted = $state(false);
   let jevOn = $state(true);
 
   onMount(() => {
@@ -104,12 +96,14 @@
   const id = $derived(rule?.id ?? null);
   const wrong = $derived(ruleProblem(draft));
   const shown = (field: string): string | undefined =>
-    attempted || touched[field] ? wrong[field] : undefined;
+    form.seen(field) ? wrong[field] : undefined;
 
   const duplicate = $derived(
-    draft.name.trim() !== "" && taken.includes(draft.name.trim())
-      ? "Another rule already has that name. Two rules called the same thing are two rules you cannot tell apart in a transcript."
-      : undefined
+    takenName(
+      draft.name,
+      taken,
+      "Another rule already has that name. Two rules called the same thing are two rules you cannot tell apart in a transcript."
+    )
   );
 
   /** Every model the fleet is actually running, so the filter is not free text. */
@@ -196,14 +190,7 @@
    * it is marked.
    */
   async function save() {
-    attempted = true;
-    if (!ready || busy || created) {
-      return;
-    }
-    busy = true;
-    failed = undefined;
-    let made: string | undefined;
-    try {
+    await form.save(ready, async () => {
       const trimmed = { ...draft, name: draft.name.trim() };
       const saved = withStats(
         await (id ? saveRule(id, trimmed) : createRule(trimmed)),
@@ -213,51 +200,22 @@
       if (rows) {
         upsert(rows, saved, (row) => row.id === saved.id);
       }
-      if (id) {
-        draft = draftOf(saved);
-      } else {
-        created = true;
-        kept.drop();
-        made = saved.id;
+      if (!id) {
+        return saved.id;
       }
-    } catch (error) {
-      failed = message(error);
-    } finally {
-      busy = false;
-    }
-    if (made) {
-      await savedShown();
-      store.mark(made);
-      await goto("/config/rules");
-    }
+      draft = draftOf(saved);
+      return null;
+    });
   }
 
-  /** Cancel leaves the edits behind: the draft is dropped, not kept. */
-  function cancel() {
-    kept.drop();
-    detach(goto("/config/rules"), "goto");
-  }
-
-  /**
-   * Delete: at once, with Undo in the toast (deletes.ts). Back to the
-   * list first, so the row is seen leaving it; a refusal stands in the
-   * editor's head, the rule kept.
-   */
   async function remove() {
     if (!id) {
       return;
     }
-    deleting = true;
-    failed = undefined;
-    try {
-      await deleteRule(store, { id, name: baseline.name }, () => {
-        kept.drop();
-        return goto("/config/rules");
-      });
-    } catch (error) {
-      deleting = false;
-      failed = message(error);
-    }
+    const ruleId = id;
+    await form.remove((gone) =>
+      deleteRule(store, { id: ruleId, name: baseline.name }, gone)
+    );
   }
 
   /** Text-matching options fold away for a meaning rule: a panel's length,
@@ -276,43 +234,28 @@
 
 <EditorFrame
   deleteLabel={id ? "Delete rule" : undefined}
-  {deleting}
-  failed={failed !== undefined}
-  oncancel={cancel}
+  deleting={form.deleting}
+  failed={form.failed !== undefined}
+  oncancel={form.cancel}
   ondelete={id ? remove : undefined}
   onsubmit={save}
   saveLabel={id ? commonWords.saveChanges : "Create rule"}
-  saving={busy}
+  saving={form.busy}
   title={id ? draft.name || "Rule" : "New rule"}
 >
   {#snippet header()}
-    <TitleInput
-      invalid={Boolean(shown("name") || duplicate)}
+    <EditorHead
+      {duplicate}
+      bind:enabled={draft.enabled}
+      {form}
       label={rulesWords.ruleName}
-      onblur={() => {
-        touched.name = true;
-      }}
+      bind:name={draft.name}
+      off="Off — it watches nothing"
+      on="Watching every session it applies to"
       placeholder="Name this rule"
-      bind:value={draft.name}
+      problem={shown("name")}
+      switchId="rule-enabled"
     />
-    {#if shown("name")}
-      <p class="type-meta text-status-fail-ink" in:appear>{wrong.name}</p>
-    {:else if duplicate}
-      <p class="type-meta text-status-fail-ink" in:appear>{duplicate}</p>
-    {/if}
-    <SwitchField
-      hint={draft.enabled
-        ? "Watching every session it applies to"
-        : "Off — it watches nothing"}
-      id="rule-enabled"
-      label="Enabled"
-      bind:checked={draft.enabled}
-    />
-    {#if failed}
-      <p class="type-meta text-status-fail-ink" role="alert" in:appear>
-        {failed}
-      </p>
-    {/if}
   {/snippet}
 
   <!-- The rule read back as one sentence, on the page's column. -->
@@ -361,7 +304,7 @@
             id="rule-pattern"
             resize="block"
             onblur={() => {
-              touched.pattern = true;
+              form.touched.pattern = true;
             }}
             placeholder="Is the agent proposing to keep old behaviour alongside the new, a compatibility shim, or a fallback path?"
             rows={3}
@@ -374,7 +317,7 @@
             face={draft.matchKind === "regex" ? "mono" : undefined}
             id="rule-pattern"
             onblur={() => {
-              touched.pattern = true;
+              form.touched.pattern = true;
             }}
             placeholder={draft.matchKind === "phrase"
               ? "honest caveat"
@@ -443,7 +386,7 @@
           id="rule-reply"
           resize="block"
           onblur={() => {
-            touched.reply = true;
+            form.touched.reply = true;
           }}
           placeholder="if there's an honest caveat that you are aware of and you're just reporting it to the user instead of fixing it, then your work is not done yet"
           rows={4}

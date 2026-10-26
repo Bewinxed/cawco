@@ -57,7 +57,9 @@
   } from "../memory";
   import NoMachines from "../NoMachines.svelte";
   import PickerChip from "../PickerChip.svelte";
+  import { versionSource } from "../PreviousVersions.svelte";
   import RolloutChip from "../RolloutChip.svelte";
+  import ShowAllVersions from "../ShowAllVersions.svelte";
   import { configStore, upsert } from "../store.svelte";
 
   /**
@@ -301,15 +303,6 @@
   $effect(() => {
     detach(untrack(loadHistory), "untrack");
   });
-
-  function sourceLabel(source: string): string {
-    if (!source.startsWith("machine:")) {
-      return words.theFleet;
-    }
-    const machineId = source.slice("machine:".length);
-    const machine = machines.find((row) => row.machineId === machineId);
-    return machine ? machineLabel(machine.hostname) : machineId;
-  }
 
   async function openVersion(row: FleetMemoryVersion) {
     if (shown === row.id) {
@@ -583,7 +576,7 @@
                 <span
                   data-slot="note"
                   class="type-meta max-w-c-measure text-ink-muted"
-                  >{words.from(sourceLabel(row.source))}</span
+                  >{words.from(versionSource(row.source))}</span
                 >
                 <span
                   data-slot="note"
@@ -666,17 +659,7 @@
           {/each}
         </ul>
         {#if versions.length > LATEST}
-          <div data-slot="more" class="self-start" data-flip>
-            <Button
-              onclick={() => {
-                allVersions = !allVersions;
-              }}
-              size="sm"
-              variant="ghost"
-            >
-              {allVersions ? words.showLatest : words.showAll(versions.length)}
-            </Button>
-          </div>
+          <ShowAllVersions bind:all={allVersions} total={versions.length} />
         {/if}
       </div>
     {/if}
